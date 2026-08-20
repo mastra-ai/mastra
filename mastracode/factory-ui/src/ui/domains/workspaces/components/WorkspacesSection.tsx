@@ -43,13 +43,16 @@ function isSettled(item: WorkItem | undefined, pullRequest: WorkItem | undefined
  * Explicit intent first, then whatever still has work in it, newest first inside a tier.
  * Sorting on creation rather than activity is what keeps a row still: every card write bumps
  * `updatedAt` and the board polls, so an activity order reshuffles the sidebar under the reader.
+ * Session id closes it into a total order — the sessions endpoint sorts nothing, so anything
+ * falling through to its order would still shuffle.
  */
 const bySessionPriority = (a: FactoryWorkspaceRow, b: FactoryWorkspaceRow) =>
   Number(b.pinned) - Number(a.pinned) ||
   Number(b.active) - Number(a.active) ||
   Number(a.settled) - Number(b.settled) ||
   Number(isBusy(b)) - Number(isBusy(a)) ||
-  b.createdAt.localeCompare(a.createdAt);
+  b.createdAt.localeCompare(a.createdAt) ||
+  b.workspace.sessionId.localeCompare(a.workspace.sessionId);
 
 function workspaceStatus(row: FactoryWorkspaceRow): SessionRowStatus | undefined {
   // An active thread means work is happening even if the workspace record has

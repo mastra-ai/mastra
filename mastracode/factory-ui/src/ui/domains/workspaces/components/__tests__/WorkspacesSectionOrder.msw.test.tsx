@@ -69,25 +69,18 @@ function reviewCard(session: FactoryUserSession, pullRequestNumber: number, merg
   };
 }
 
-const oldestOpen = reviewSession(101, '2026-07-23T09:00:00.000Z');
-const newestOpen = reviewSession(102, '2026-07-23T11:00:00.000Z');
-const mergedSession = reviewSession(103, '2026-07-23T10:00:00.000Z');
-
-function renderSection() {
+function stubSidebar(sessions: FactoryUserSession[], workItems: ReturnType<typeof reviewCard>[]) {
   server.use(
     http.get(`${TEST_BASE_URL}/web/github/projects/${projectRepositoryId}/sessions`, () =>
-      HttpResponse.json({ sessions: [oldestOpen, newestOpen, mergedSession] }),
+      HttpResponse.json({ sessions }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryProjectId}/work-items`, () =>
-      HttpResponse.json({
-        workItems: [
-          reviewCard(oldestOpen, 101),
-          reviewCard(newestOpen, 102),
-          reviewCard(mergedSession, 103, '2026-07-23T23:00:00.000Z'),
-        ],
-      }),
+      HttpResponse.json({ workItems }),
     ),
   );
+}
+
+function renderSection() {
   return renderWithProviders(
     <MemoryRouter initialEntries={[`/factories/${factoryProjectId}`]}>
       <ChatSessionContext.Provider
@@ -112,17 +105,47 @@ function renderSection() {
   );
 }
 
+async function reviewRowLabels(): Promise<(string | null)[]> {
+  const group = await screen.findByRole('region', { name: 'Review Sessions' });
+  const rows = await within(group).findAllByRole('button', { name: /^factory\/pr-\d+$/ });
+  return rows.map(row => row.getAttribute('aria-label'));
+}
+
 describe('Workspaces sidebar order', () => {
   it('sinks a merged session below the open ones and keeps the rest newest-first', async () => {
+    const oldestOpen = reviewSession(101, '2026-07-23T09:00:00.000Z');
+    const newestOpen = reviewSession(102, '2026-07-23T11:00:00.000Z');
+    const mergedSession = reviewSession(103, '2026-07-23T10:00:00.000Z');
+
+    stubSidebar(
+      [oldestOpen, newestOpen, mergedSession],
+      [
+        reviewCard(oldestOpen, 101),
+        reviewCard(newestOpen, 102),
+        reviewCard(mergedSession, 103, '2026-07-23T23:00:00.000Z'),
+      ],
+    );
+
     renderSection();
 
-    const group = await screen.findByRole('region', { name: 'Review Sessions' });
-    const rows = await within(group).findAllByRole('button', { name: /^factory\/pr-10\d$/ });
+    expect(await reviewRowLabels()).toEqual(['factory/pr-102', 'factory/pr-101', 'factory/pr-103']);
+  });
 
-    expect(rows.map(row => row.getAttribute('aria-label'))).toEqual([
-      'factory/pr-102',
-      'factory/pr-101',
-      'factory/pr-103',
-    ]);
+  it('holds one order for sessions created at the same instant, whichever way the endpoint returns them', async () => {
+    const first = reviewSession(201, '2026-07-23T09:00:00.000Z');
+    const second = reviewSession(202, '2026-07-23T09:00:00.000Z');
+    const cards = [reviewCard(first, 201), reviewCard(second, 202)];
+
+    stubSidebar([first, second], cards);
+    const rendered = renderSection();
+    const forward = await reviewRowLabels();
+    rendered.unmount();
+
+    // The sessions endpoint sorts nothing, so the same rows can come back either way round.
+    stubSidebar([second, first], cards);
+    renderSection();
+
+    expect(await reviewRowLabels()).toEqual(forward);
+    expect(forward).toHaveLength(2);
   });
 });
