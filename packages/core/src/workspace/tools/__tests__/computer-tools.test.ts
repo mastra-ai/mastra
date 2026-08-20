@@ -101,6 +101,16 @@ describe('createWorkspaceTools computer gating', () => {
     expect(tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]).toBeDefined();
   });
 
+  it('emits no computer tools when the computer capability is incomplete', async () => {
+    const workspace = new Workspace({
+      sandbox: createMockSandbox({ computer: createMockComputer({ drag: undefined }) }),
+    });
+    const tools = await createWorkspaceTools(workspace);
+    for (const name of ALL_COMPUTER_TOOL_NAMES) {
+      expect(tools[name], `expected ${name} to be absent`).toBeUndefined();
+    }
+  });
+
   it('emits no computer tools for dynamic sandbox resolvers', async () => {
     const workspace = new Workspace({
       sandbox: async () => createMockSandbox({ computer: createMockComputer() }),

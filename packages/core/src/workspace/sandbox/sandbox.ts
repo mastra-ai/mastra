@@ -180,7 +180,20 @@ export interface SandboxComputer {
 export function supportsComputer(
   sandbox: WorkspaceSandbox,
 ): sandbox is WorkspaceSandbox & { computer: SandboxComputer } {
-  return typeof sandbox.computer?.screenshot === 'function';
+  const computer = sandbox.computer;
+  return (
+    typeof computer?.screenshot === 'function' &&
+    typeof computer.leftClick === 'function' &&
+    typeof computer.rightClick === 'function' &&
+    typeof computer.doubleClick === 'function' &&
+    typeof computer.moveMouse === 'function' &&
+    typeof computer.drag === 'function' &&
+    typeof computer.scroll === 'function' &&
+    typeof computer.type === 'function' &&
+    typeof computer.press === 'function' &&
+    typeof computer.getScreenSize === 'function' &&
+    typeof computer.getCursorPosition === 'function'
+  );
 }
 
 // =============================================================================
