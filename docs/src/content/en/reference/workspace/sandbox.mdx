@@ -55,13 +55,13 @@ A sandbox constructed with a known `id` resolves that id on `start()`: reconnect
 
 Providers that predate the contract return `void`, which the base class treats as unknown.
 
-Concurrent `start()` calls on one instance coalesce onto a single in-flight attempt: joined callers share the attempt's result (all observe `created: true` when the shared attempt created), and the in-flight slot is cleared when the attempt settles, so a failed start can be retried. While the sandbox is already `running`, `start()` resolves `{ created: false }` without re-invoking the provider.
+Concurrent `start()` calls on one instance coalesce onto a single in-flight attempt, and joined callers share that attempt's result (all observe `created: true` when the shared attempt created the VM). The in-flight slot is cleared when the attempt settles, so a failed start can be retried. While the sandbox is already `running`, `start()` resolves `{ created: false }` without re-invoking the provider.
 
 The result is also forwarded to the `onStart` lifecycle hook as `{ sandbox, created }`.
 
 ### `bootstrap` (constructor option)
 
-Sandboxes built on the `MastraSandbox` base class accept a `bootstrap` option: a command that runs once per VM lifetime, immediately after a successful `start()`.
+The `MastraSandbox` base class accepts a `bootstrap` constructor option. The bootstrap is a command that runs once per VM lifetime, immediately after a successful `start()`.
 
 ```typescript
 new E2BSandbox({
@@ -100,10 +100,10 @@ new E2BSandbox({
 Semantics:
 
 - When `start()` reports `created: true`, the bootstrap runs without any probe.
-- Otherwise the base class probes a sentinel file (`~/.mastra-bootstrapped` in the VM filesystem; inside the working directory for `LocalSandbox`) and runs the bootstrap only when the sentinel is absent. The sentinel survives pause/resume and disappears with VM replacement.
-- The sentinel is written only after the command succeeds. A failed bootstrap fails `start()` and leaves the sandbox in `error` status, so a half-bootstrapped VM is never marked running; the next `start()` retries.
+- Otherwise the base class probes a sentinel file (`~/.mastra-bootstrapped` in the VM filesystem, or inside the working directory for `LocalSandbox`) and runs the bootstrap only when the sentinel is absent. The sentinel survives pause/resume and disappears with VM replacement.
+- The sentinel is written only after the command succeeds. A failed bootstrap fails `start()` and leaves the sandbox in `error` status, so a half-bootstrapped VM is never marked running. The next `start()` retries.
 - The sandbox status flips to `running` before the bootstrap executes (the bootstrap runs through the sandbox's own command path), so commands issued concurrently through `ensureRunning()` can interleave with the bootstrap.
-- The bootstrap runs before pending filesystem mounts are processed, so it cannot rely on mounted paths.
+- The bootstrap runs before pending filesystem mounts are processed, so it can't rely on mounted paths.
 
 ### `stop()`
 
