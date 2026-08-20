@@ -21,6 +21,7 @@ const API = `${TEST_BASE_URL}/api/agent-controller/code`;
 const transcript: ChatTranscriptApi = {
   transcript: initialTranscript,
   busy: false,
+  initialHistoryReady: true,
   localUser: vi.fn(),
   reset: vi.fn(),
   resolvePrompt: vi.fn(),

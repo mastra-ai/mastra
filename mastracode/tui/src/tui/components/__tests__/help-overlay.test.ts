@@ -15,6 +15,7 @@ describe('buildHelpText', () => {
     expect(text).toContain('/threads');
     expect(text).toContain('/settings');
     expect(text).toContain('/models');
+    expect(text).toMatch(/\/profile\s+Control process memory diagnostics/);
     expect(text).toContain('/skill/<name>');
     expect(text).toMatch(/\/memory\s+Configure Observational Memory \(\/om alias\)/);
     expect(text).toMatch(/\/knowledge\s+Browse scoped Subconscious knowledge/);

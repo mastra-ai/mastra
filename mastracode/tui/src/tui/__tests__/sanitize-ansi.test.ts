@@ -99,6 +99,19 @@ describe('sanitizeAnsiForRendering', () => {
   it('strips save/restore cursor (CSI s / CSI u)', () => {
     expect(sanitizeAnsiForRendering('before\x1b[safter\x1b[u')).toBe('beforeafter');
   });
+
+  it('preserves supported OSC and APC sequences while stripping unsafe CSI controls', () => {
+    const input = '\x1b]8;;https://example.com\x07link\x1b]8;;\x07\x1b_cursor:data\x1b\\\x1b[2K\x1b[31m red\x1b[0m';
+    const expected = '\x1b]8;;https://example.com\x07link\x1b]8;;\x07\x1b_cursor:data\x1b\\\x1b[31m red\x1b[0m';
+
+    const sanitized = sanitizeAnsiForRendering(input);
+    expect(sanitized).toBe(expected);
+    expect(visibleWidth(sanitized)).toBe('link red'.length);
+  });
+
+  it('removes an incomplete-looking CSI sequence at its first valid final byte', () => {
+    expect(sanitizeAnsiForRendering('before\x1b[31broken')).toBe('beforeroken');
+  });
 });
 
 describe('sanitizeAnsiForRendering integration with pi-tui visibleWidth', () => {

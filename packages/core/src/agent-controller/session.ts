@@ -2659,9 +2659,8 @@ export class SessionBus {
   #displayStatePending = false;
   /**
    * The last workspace lifecycle event group emitted on this bus, replayed to
-   * subscribers that attach after the workspace finished initializing. Without
-   * this, late listeners (the normal pattern: create a session, then subscribe)
-   * would never see the workspace ready/error status.
+   * subscribers that attach after the status changed so they receive the current
+   * workspace ready or error state.
    */
   #lastWorkspaceEvents: AgentControllerEvent[] = [];
 
@@ -2672,8 +2671,7 @@ export class SessionBus {
 
   subscribe(listener: AgentControllerEventListener): () => void {
     // Replay buffered workspace lifecycle events so late subscribers learn the
-    // current workspace status. The workspace is initialized during session
-    // creation, before any external caller can subscribe.
+    // current workspace status regardless of when initialization occurs.
     for (const event of this.#lastWorkspaceEvents) {
       try {
         const result = listener(event);
