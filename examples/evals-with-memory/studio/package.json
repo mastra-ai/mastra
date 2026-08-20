@@ -26,7 +26,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@types/node": "latest",
+    "@types/node": "catalog:",
     "mastra": "catalog:",
     "tsx": "catalog:",
     "typescript": "catalog:"

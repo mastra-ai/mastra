@@ -20,7 +20,13 @@
  * The dev server does load `.env`, so live chat uses the real model. Seeded
  * history: reproducible. Live traffic: real. Both visible in one dashboard.
  *
- * Run:  pnpm seed
+ * Rerunning: safe. The seed is idempotent — it gives the dataset a fixed id
+ * and stops early if that dataset is already there, rather than stacking a
+ * second copy of the items and three more experiments on top of the first run.
+ * `pnpm reset` is the way to rebuild the story from scratch: it drops both
+ * databases and calls this script again.
+ *
+ * Run:  pnpm seed      (or `pnpm reset` to start over)
  */
 import { SUPPORT_QA } from '@workshop/shared/data';
 import { JUDGE_MODEL } from '@workshop/shared/models';
@@ -48,10 +54,52 @@ async function regressedTask({ input }: { input: unknown }) {
   return text;
 }
 
+/**
+ * Stored skills, so the Agent Builder's skill picker has something in it.
+ *
+ * These are the database-backed kind, not the markdown-under-workspace kind —
+ * see src/stored-skills.ts for why both exist. The Builder reads exactly this
+ * list when it decides whether to call `set-agent-skills`, so with none seeded
+ * that step silently never happens and the demo looks like the feature is
+ * missing.
+ *
+ * Idempotent, and run on every seed including one that finds the dataset
+ * already there: adding an entry to STORED_SKILLS and re-running `pnpm seed`
+ * installs just the new one, without disturbing the seeded experiments.
+ */
+async function seedStoredSkills() {
+  for (const skill of STORED_SKILLS) {
+    const existing = await editor.skill.getById(skill.id).catch(() => null);
+    if (existing) {
+      console.log(`  skill "${skill.name.padEnd(20)}" — already present, left alone`);
+      continue;
+    }
+    await editor.skill.create(skill as any);
+    console.log(`  skill "${skill.name.padEnd(20)}" — created`);
+  }
+}
+
 async function main() {
   console.log('Seeding the Evaluation dashboard…\n');
 
+  // A fixed id, so a rerun can find this dataset instead of making another.
+  // Dataset *names* are not unique, so without an id every `pnpm seed` would
+  // add a fresh dataset carrying its own duplicate copy of the items.
+  const DATASET_ID = 'nimbus-support-qa';
+
+  const existing = await mastra.datasets.get({ id: DATASET_ID }).catch(() => null);
+  if (existing) {
+    console.log(`  dataset "${DATASET_ID}" — already seeded, experiments left alone`);
+    await seedStoredSkills();
+    await observability.shutdown();
+    console.log(`
+Nothing else to do. Run \`pnpm reset\` to drop both databases and rebuild the
+baseline → regression → fix story from scratch.`);
+    return;
+  }
+
   const dataset = await mastra.datasets.create({
+    id: DATASET_ID,
     name: 'nimbus-support-qa',
     description: 'Support questions with known-good answers — workshop dataset',
   });
@@ -105,6 +153,8 @@ async function main() {
   // overrides only ever replace instructions and tools, never the model.
   // -------------------------------------------------------------------
   const instructions = await supportAgent.getInstructions();
+  // Reached only on a fresh database (the dataset check above returns early
+  // otherwise), so this fixed id cannot collide with an existing agent row.
   await editor.agent.create({
     id: 'support-agent',
     name: 'Nimbus Support Agent',
@@ -116,30 +166,15 @@ async function main() {
   const agentsStore: any = await (mastra.getStorage() as any).getStore('agents');
   const { versions } = await agentsStore.listVersions({ agentId: 'support-agent' });
   const v1 = versions.find((v: any) => v.versionNumber === 1);
+  if (!v1) {
+    throw new Error(
+      `expected support-agent v1 to exist after create, found: ${versions.map((v: any) => v.versionNumber).join(', ') || 'no versions'}`,
+    );
+  }
   await agentsStore.update({ id: 'support-agent', status: 'published', activeVersionId: v1.id });
   console.log(`  agent "support-agent" — v1 snapshotted from code and published`);
 
-  // -------------------------------------------------------------------
-  // Stored skills, so the Agent Builder's skill picker has something in it.
-  //
-  // These are the database-backed kind, not the markdown-under-workspace
-  // kind — see src/stored-skills.ts for why both exist. The Builder reads
-  // exactly this list when it decides whether to call `set-agent-skills`,
-  // so with none seeded that step silently never happens and the demo looks
-  // like the feature is missing.
-  //
-  // Idempotent: re-running the seed over an existing skill is a no-op rather
-  // than an error, so this is safe to run repeatedly against a live DB.
-  // -------------------------------------------------------------------
-  for (const skill of STORED_SKILLS) {
-    const existing = await editor.skill.getById(skill.id).catch(() => null);
-    if (existing) {
-      console.log(`  skill "${skill.name.padEnd(20)}" — already present, left alone`);
-      continue;
-    }
-    await editor.skill.create(skill as any);
-    console.log(`  skill "${skill.name.padEnd(20)}" — created`);
-  }
+  await seedStoredSkills();
 
   // Flush the trace spans this seed just produced. Spans export in batches and
   // this script is about to exit, so without the flush the Observability →

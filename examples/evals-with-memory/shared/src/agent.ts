@@ -66,6 +66,29 @@ export type AgentBundle = {
   cleanup: () => void;
 };
 
+/**
+ * Resolve where this bundle's database lives, and how to clean it up.
+ *
+ * `'temp'` gets a fresh `mkdtemp` directory removed on exit, so a headless run
+ * leaves nothing behind and two runs never share state. `'persistent'` uses the
+ * caller's path verbatim so Studio can read the file afterwards.
+ */
+function resolveStorage(storageMode: 'temp' | 'persistent', dbPath: string): { url: string; cleanup: () => void } {
+  if (storageMode === 'persistent') return { url: dbPath, cleanup: () => {} };
+
+  const dir = mkdtempSync(join(tmpdir(), 'evals-with-memory-'));
+  return {
+    url: `file:${join(dir, 'eval.db')}`,
+    cleanup: () => {
+      try {
+        rmSync(dir, { recursive: true, force: true });
+      } catch {
+        void 0;
+      }
+    },
+  };
+}
+
 export function buildSupportAgent(opts: BuildOptions = {}): AgentBundle {
   const {
     model = 'mock',
@@ -75,22 +98,7 @@ export function buildSupportAgent(opts: BuildOptions = {}): AgentBundle {
     editor: withEditor = false,
   } = opts;
 
-  let url: string;
-  let cleanup: () => void;
-  if (storageMode === 'persistent') {
-    url = dbPath;
-    cleanup = () => {};
-  } else {
-    const dir = mkdtempSync(join(tmpdir(), 'evals-with-memory-'));
-    url = `file:${join(dir, 'eval.db')}`;
-    cleanup = () => {
-      try {
-        rmSync(dir, { recursive: true, force: true });
-      } catch {
-        void 0;
-      }
-    };
-  }
+  const { url, cleanup } = resolveStorage(storageMode, dbPath);
 
   const storage = new LibSQLStore({ id: `workshop-${storageMode}`, url });
 
@@ -150,6 +158,15 @@ export function buildSupportAgent(opts: BuildOptions = {}): AgentBundle {
 export const SUPPORT_INSTRUCTIONS = INSTRUCTIONS;
 
 /**
+ * The options `buildBillingAgent` honours.
+ *
+ * Narrower than {@link BuildOptions} on purpose: the model is fixed to the
+ * deterministic `toolCallingModel` (see above) and there is no editor, so
+ * accepting `model` or `editor` here would silently ignore them.
+ */
+export type BillingBuildOptions = Pick<BuildOptions, 'storage' | 'dbPath' | 'scorers'>;
+
+/**
  * A second agent, this one with a tool — for the tool-mocking exercise.
  *
  * Kept separate from the support agent rather than bolted onto it, because
@@ -161,25 +178,12 @@ export const SUPPORT_INSTRUCTIONS = INSTRUCTIONS;
  * tool returns. That isolation is the whole point: it makes the tool the
  * single source of non-determinism, which is what mocks then remove.
  */
-export function buildBillingAgent(opts: BuildOptions = {}): AgentBundle {
-  const { storage: storageMode = 'temp', dbPath = 'file:./eval.db', scorers = {} } = opts;
+export function buildBillingAgent(opts: BillingBuildOptions = {}): AgentBundle {
+  // A different default file from the support agent's: under
+  // `storage: 'persistent'` the two would otherwise write to one database.
+  const { storage: storageMode = 'temp', dbPath = 'file:./billing-eval.db', scorers = {} } = opts;
 
-  let url: string;
-  let cleanup: () => void;
-  if (storageMode === 'persistent') {
-    url = dbPath;
-    cleanup = () => {};
-  } else {
-    const dir = mkdtempSync(join(tmpdir(), 'evals-with-memory-'));
-    url = `file:${join(dir, 'eval.db')}`;
-    cleanup = () => {
-      try {
-        rmSync(dir, { recursive: true, force: true });
-      } catch {
-        void 0;
-      }
-    };
-  }
+  const { url, cleanup } = resolveStorage(storageMode, dbPath);
 
   const storage = new LibSQLStore({ id: `workshop-billing-${storageMode}`, url });
 

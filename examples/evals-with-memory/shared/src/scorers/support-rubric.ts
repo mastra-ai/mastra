@@ -98,7 +98,11 @@ ${CRITERIA.map((c, i) => `${i + 1}. ${c}`).join('\n')}`;
   .generateScore(({ results }) => {
     const verdicts = results.analyzeStepResult?.verdicts ?? [];
     if (verdicts.length === 0) return 0;
-    return verdicts.filter((v: { satisfied: boolean }) => v.satisfied).length / verdicts.length;
+    // Divide by the criteria, not by what the judge happened to return. A
+    // short reply would otherwise inflate the score — two passes out of two
+    // verdicts scores 1.0 on a three-criterion rubric — and a long one would
+    // dilute it. The 0.667 quoted above only holds with a fixed denominator.
+    return verdicts.filter((v: { satisfied: boolean }) => v.satisfied).length / CRITERIA.length;
   })
   // Model call: turn the verdicts into something a human wants to read.
   .generateReason({

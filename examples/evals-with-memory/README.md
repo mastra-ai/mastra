@@ -12,7 +12,7 @@ the engineer does.
 Everything here runs on one small support agent for a fictional file-sync
 company, so the domain never gets in the way of the mechanics.
 
-```
+```text
 studio/           persistent DB + seeded dashboard   ← the browser half
   src/mastra/case-file.ts   working memory: the schema, and the rules that fill it
   workspace/skills/   6 markdown skills every agent inherits
@@ -105,7 +105,7 @@ Type the request as the person who wants it would say it:
 About twenty seconds later there is a working agent. What scrolls past while it
 builds is the part worth watching, because every line is a decision:
 
-```
+```text
 Using super-powers: customer-support-agent
 Using super-powers: agent-prompt-quality-bar
 Setting the agent name:        Nimbus Sync Resolver
@@ -153,7 +153,7 @@ The built agent works, and works well enough to be worth chatting with live.
 Ask it *"my iPad stopped syncing a week ago but my laptop and phone are fine,
 account acct-42"* and it walks a real diagnostic chain:
 
-```
+```text
 getAccountOverview → getServiceStatus → listDevices → getSyncHealth → searchKnowledgeBase
 ```
 
@@ -526,7 +526,7 @@ Run them in order; each builds on the last.
 
 The arc is a loop, not a list:
 
-```
+```text
 production traffic → dataset → experiment → compare → gate → fix → back to production
         11              10,9        6,7         8       8,3
 ```
@@ -726,7 +726,7 @@ you omit is preserved — but a field you send as `null` is removed. Models pad
 their tool calls with nulls out of habit, and the result is a case file that
 fills up on turn one and empties on turn two:
 
-```
+```text
 model sent  {"customer":null,"issue":null,"checksRun":null,"nextStep":"…"}
 stored      {"nextStep":"…"}
 ```

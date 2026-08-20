@@ -33,7 +33,7 @@ original folder, and restored files do not count against the quota twice.
 Lead with the number:
 
 > The Free plan includes 15 GB of storage and syncs up to 3 devices.
-
+>
 > Deleted files stay in the trash for 30 days, so you can restore that yourself
 > from Trash → Restore.
 

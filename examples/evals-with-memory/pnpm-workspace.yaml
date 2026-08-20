@@ -4,6 +4,7 @@ packages:
   - 'studio'
 
 catalog:
+  '@types/node': 22.19.15
   '@mastra/core': 1.57.0
   '@mastra/duckdb': 1.6.0
   '@mastra/editor': 0.13.11

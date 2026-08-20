@@ -7,7 +7,7 @@
  * genuinely different agents, and the room watches it reason about which is
  * which:
  *
- *   "customer is out of space"  → lookupAccount, listDevices, searchKnowledgeBase
+ *   "customer is out of space"  → getAccountOverview, listDevices, searchKnowledgeBase
  *   "customer wants a refund"   → getBillingHistory, checkRefundEligibility, createSupportTicket
  *   "sync is broken"            → getSyncHealth, getServiceStatus, listDevices, searchPastTickets
  *

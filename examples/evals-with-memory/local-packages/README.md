@@ -52,7 +52,7 @@ in `src/`:
 - **No database credentials.** `LibSQLStore` points at a `file:` URL inside a
   fresh `mkdtemp` directory per script, removed on exit.
 
-If you swap the mock for a real model (e.g. `model: 'openai/gpt-5.5'`), you
+If you swap the mock for a real model (e.g. `model: 'openai/gpt-5.6-sol'`), you
 will then need that provider's key in the environment — but runs stop being
 deterministic, so the fixed `groundTruth` assertions in these scripts will
 need revisiting.
@@ -185,11 +185,11 @@ per-step scoring, datasets, and a seeded Studio dashboard. Exercise 7 there is
 the memory story told against **published** packages.
 
 These scripts stay in their own workspace because they do the opposite: the
-`pnpm.overrides` in `package.json` point `@mastra/core`, `evals`, `libsql` and
-`memory` at `link:../../../packages/*` in the monorepo, so they run against
-your local `dist/` and catch a regression before it ships. The parent pins
-published versions instead, so a workshop attendee can install from a fresh
-clone without building anything.
+`pnpm.overrides` in `package.json` point `@mastra/core`, `@mastra/evals` and
+`@mastra/memory` at `link:../../../packages/*` and `@mastra/libsql` at
+`link:../../../stores/libsql`, so they run against your local `dist/` and catch
+a regression before it ships. The parent pins published versions instead, so a
+workshop attendee can install from a fresh clone without building anything.
 
 Two opposite dependency strategies cannot share one `package.json`, which is
 the whole reason for the nesting. Install and run them independently:

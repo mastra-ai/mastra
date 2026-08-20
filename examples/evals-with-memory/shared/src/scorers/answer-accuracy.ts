@@ -36,7 +36,16 @@ export function extractText(output: unknown): string {
     const o = output as Record<string, any>;
 
     // MastraDBMessage: { role, content: { parts, content } }
-    if (o.content !== undefined) return extractText(o.content);
+    //
+    // Fall through rather than returning outright: MastraMessageContentV2
+    // carries *both* `parts` and a `content` string, and `content` is
+    // sometimes ''. Returning it here would report `empty` and score 0 for a
+    // message whose text is sitting in `parts` — the silent zero this file
+    // warns about above.
+    if (o.content !== undefined) {
+      const fromContent = extractText(o.content);
+      if (fromContent) return fromContent;
+    }
     // MastraMessageContentV2: { format, parts: [...], content: '...' }
     if (Array.isArray(o.parts)) return extractText(o.parts);
     // A single text part, or an object that simply carries text.
