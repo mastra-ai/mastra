@@ -621,8 +621,8 @@ export class ExperimentsMySQL extends ExperimentsStorage {
           organizationId: input.organizationId ?? null,
           projectId: input.projectId ?? null,
           input: JSON.stringify(input.input),
-          output: input.output ? JSON.stringify(input.output) : null,
-          groundTruth: input.groundTruth ? JSON.stringify(input.groundTruth) : null,
+          output: input.output != null ? JSON.stringify(input.output) : null,
+          groundTruth: input.groundTruth != null ? JSON.stringify(input.groundTruth) : null,
           error: input.error ? JSON.stringify(input.error) : null,
           startedAt: input.startedAt,
           completedAt: input.completedAt,
@@ -726,8 +726,8 @@ export class ExperimentsMySQL extends ExperimentsStorage {
           organizationId: input.organizationId ?? null,
           projectId: input.projectId ?? null,
           input: JSON.stringify(input.input),
-          output: input.output ? JSON.stringify(input.output) : null,
-          groundTruth: input.groundTruth ? JSON.stringify(input.groundTruth) : null,
+          output: input.output != null ? JSON.stringify(input.output) : null,
+          groundTruth: input.groundTruth != null ? JSON.stringify(input.groundTruth) : null,
           error: input.error ? JSON.stringify(input.error) : null,
           startedAt: input.startedAt,
           completedAt: input.completedAt,
@@ -741,7 +741,13 @@ export class ExperimentsMySQL extends ExperimentsStorage {
 
       const updated = await this.getExperimentResultById({ id: existingId });
       if (!updated) {
-        throw new Error(`Experiment result ${existingId} not found after upsert`);
+        throw new MastraError({
+          id: 'MYSQL_UPSERT_EXPERIMENT_RESULT_NOT_FOUND',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: `Experiment result ${existingId} not found after upsert`,
+          details: { experimentId: input.experimentId, itemId: input.itemId, attempt },
+        });
       }
       return updated;
     } catch (error) {

@@ -9,7 +9,7 @@ packages:
 
 The Datasets API exposes Mastra's dataset and experiment routes from `MastraClient`. This page covers the caller-driven experiment methods, which let an orchestrator you own (for example a Temporal workflow) drive the experiment loop while Mastra acts as the system of record. Create the experiment, then either have Mastra execute each item server-side with `runExperimentItem` or ingest results you computed yourself with `submitExperimentResult`, and call finalize when the run is done.
 
-All of the methods are safe to retry:
+Item runs, result submission, and finalization are safe to retry. Creation is safe to retry only when the request includes a caller-supplied `id`; without one, each retry creates a new experiment.
 
 - `createDatasetExperiment` is idempotent on a caller-supplied `id`
 - `runExperimentItem` and `submitExperimentResult` upsert on `(experimentId, itemId, attempt)`

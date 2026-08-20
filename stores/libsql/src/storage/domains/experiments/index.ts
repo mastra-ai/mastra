@@ -11,6 +11,7 @@ import {
   normalizePerPage,
   safelyParseJSON,
   ensureDate,
+  hasErrorCode,
 } from '@mastra/core/storage';
 import type {
   Experiment,
@@ -640,10 +641,30 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
         sql: `SELECT "id" FROM ${TABLE_EXPERIMENT_RESULTS} WHERE "experimentId" = ? AND "itemId" = ? AND COALESCE("attempt", 0) = ?`,
         args: [input.experimentId, input.itemId, attempt],
       });
-      const existingId = existing.rows[0]?.id as string | undefined;
+      let existingId = existing.rows[0]?.id as string | undefined;
 
       if (!existingId) {
-        return await this.addExperimentResult({ ...input, attempt });
+        // The lookup + insert is not atomic: two concurrent submissions can
+        // both miss the read and race into the insert. The unique index on
+        // (experimentId, itemId, attempt) rejects the loser — converge it
+        // onto the winner's row by falling through to the update path.
+        try {
+          return await this.addExperimentResult({ ...input, attempt });
+        } catch (insertError) {
+          if (
+            !hasErrorCode(
+              insertError,
+              new Set(['SQLITE_CONSTRAINT', 'SQLITE_CONSTRAINT_PRIMARYKEY', 'SQLITE_CONSTRAINT_UNIQUE']),
+            )
+          )
+            throw insertError;
+          const winner = await this.#client.execute({
+            sql: `SELECT "id" FROM ${TABLE_EXPERIMENT_RESULTS} WHERE "experimentId" = ? AND "itemId" = ? AND COALESCE("attempt", 0) = ?`,
+            args: [input.experimentId, input.itemId, attempt],
+          });
+          existingId = winner.rows[0]?.id as string | undefined;
+          if (!existingId) throw insertError;
+        }
       }
 
       // Last write wins on the natural key; keep row id + createdAt stable.

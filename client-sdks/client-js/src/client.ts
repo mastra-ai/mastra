@@ -180,6 +180,7 @@ import type {
   DatasetItem,
   DatasetExperiment,
   DatasetExperimentResult,
+  DatasetExperimentResultRow,
   ListExperimentsParams,
   ExperimentReviewCounts,
   CreateDatasetParams,
@@ -2250,7 +2251,7 @@ export class MastraClient extends BaseResource {
    * Submits (or re-submits) one item result for a target-less (ingestion) experiment.
    * Upsert semantics on (experimentId, itemId, attempt) — safe to retry.
    */
-  public submitExperimentResult(params: SubmitExperimentResultParams): Promise<DatasetExperimentResult> {
+  public submitExperimentResult(params: SubmitExperimentResultParams): Promise<DatasetExperimentResultRow> {
     const { datasetId, experimentId, ...body } = params;
     return this.request(
       `/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}/results`,

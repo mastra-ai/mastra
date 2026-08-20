@@ -738,7 +738,7 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
       } = params as {
         start?: boolean;
         id?: string;
-        targetType?: 'agent' | 'workflow' | 'scorer';
+        targetType?: TargetType;
         targetId?: string;
         name?: string;
         description?: string;
@@ -786,7 +786,7 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
           datasetVersion: created.datasetVersion,
           succeededCount: 0,
           failedCount: 0,
-          startedAt: new Date(),
+          startedAt: created.startedAt,
           completedAt: null,
           results: [],
         };

@@ -266,7 +266,7 @@ The exported event types are `ExperimentEvent`, `ExperimentRunStartedEvent`, `Ex
 
 ## Lifecycle hooks
 
-Use lifecycle hooks to prepare state before a target runs and clean it up afterwards. This is useful when an item can't be evaluated against an empty environment. A run might need a fixture file copied into the agent's workspace, or a sandbox provisioned before the agent can touch it.
+Use lifecycle hooks to prepare state before a target runs and clean it up afterward. This is useful when an item can't be evaluated against an empty environment. A run might need a fixture file copied into the agent's workspace, or a sandbox provisioned before the agent can touch it.
 
 Hooks run at two levels. `beforeAll` and `afterAll` run once per experiment, and `beforeEach` and `afterEach` run once per item:
 
@@ -523,7 +523,7 @@ Caller-driven calls are designed to be retried aggressively (for example by a Te
 - **Create is idempotent on `id`.** Calling `createExperiment` again with the same caller-supplied `id` returns the existing experiment. Reusing an `id` that belongs to another dataset or an experiment with a different target fails with `EXPERIMENT_ID_CONFLICT` (HTTP `409`).
 - **Results upsert on `(experimentId, itemId, attempt)`.** Re-submitting the same key updates the existing row, and the last write wins for all mutable fields. A retried worker never creates duplicates.
 - **`attempt` separates deliberate trials from retries.** Retries of the same run should reuse the same `attempt` (default `0`) so they converge. To record repeated trials of an item as separate rows, submit with `attempt: 0`, `attempt: 1`, and so on.
-- **The dataset version is pinned at creation.** Submissions are validated against the items visible at that version, so editing or deleting items afterwards doesn't affect an in-flight experiment. Submitting an `itemId` that isn't visible at the pinned version fails with `404`.
+- **The dataset version is pinned at creation.** Submissions are validated against the items visible at that version, so editing or deleting items afterward doesn't affect an in-flight experiment. Submitting an `itemId` that isn't visible at the pinned version fails with `404`.
 - **Finalize is idempotent and terminal.** Finalizing an already-completed experiment returns the stored record without recomputing. After finalization, further submissions are rejected with `EXPERIMENT_ALREADY_FINALIZED` (HTTP `409`).
 - **Counts are server-computed and per-item.** At finalize time Mastra rolls attempts up per item: `succeededCount` (at least one attempt without an error), `failedCount` (every attempt errored), `skippedCount` (never submitted). `succeededCount + failedCount + skippedCount === totalItems` always holds, and callers keep no completion bookkeeping. Attempt-level rows remain available via `listExperimentResults`.
 

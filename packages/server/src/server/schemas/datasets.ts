@@ -621,7 +621,9 @@ export const experimentSummaryResponseSchema = z.object({
   succeededCount: z.number(),
   failedCount: z.number(),
   datasetVersion: z.number().int().optional().describe('Dataset version pinned on the experiment (create-only)'),
-  startedAt: z.coerce.date(),
+  // Nullable: a create-only request returns the persisted startedAt, which is
+  // null until the experiment transitions to running.
+  startedAt: z.coerce.date().nullable(),
   completedAt: z.coerce.date().nullable(),
   results: z.array(
     z.object({

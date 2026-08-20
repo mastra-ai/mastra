@@ -707,6 +707,12 @@ export class ExperimentsPG extends ExperimentsStorage {
       const row = await this.#db.client.tx(async t => {
         // Natural key lookup under FOR UPDATE so concurrent retries serialize
         // on the same row instead of inserting duplicates.
+        // Note: COALESCE("attempt", 0) is an expression predicate, so the
+        // planner narrows on the ("experimentId", "itemId") index prefix and
+        // filters the attempt term — bounded cost since one item has few
+        // attempts. Once legacy NULL attempts are backfilled to 0 and the
+        // column is NOT NULL DEFAULT 0, this can become "attempt" = $3 for a
+        // full index match.
         const existing = await t.oneOrNone(
           `SELECT "id" FROM ${tableName} WHERE "experimentId" = $1 AND "itemId" = $2 AND COALESCE("attempt", 0) = $3 FOR UPDATE`,
           [input.experimentId, input.itemId, attempt],

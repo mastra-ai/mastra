@@ -5,6 +5,7 @@ import {
   calculatePagination,
   createStorageErrorId,
   ExperimentsStorage,
+  hasErrorCode,
   normalizePerPage,
   TABLE_EXPERIMENTS,
   TABLE_EXPERIMENT_RESULTS,
@@ -188,7 +189,9 @@ export class ExperimentsSpanner extends ExperimentsStorage {
   async createDefaultIndexes(): Promise<void> {
     if (this.skipDefaultIndexes) return;
     // Legacy unique index without `attempt` — superseded by mastra_experiment_results_exp_item_attempt_idx.
-    await this.db.dropIndex('mastra_experiment_results_exp_item_idx');
+    // Best-effort: never let a failed legacy drop (e.g. a concurrent init
+    // dropping it first) block creation of the current indexes.
+    await this.db.dropIndex('mastra_experiment_results_exp_item_idx').catch(() => {});
     await this.db.createIndexes(this.getDefaultIndexDefinitions());
   }
 
@@ -606,10 +609,29 @@ export class ExperimentsSpanner extends ExperimentsStorage {
         params: { experimentId: input.experimentId, itemId: input.itemId, attempt },
         json: true,
       });
-      const existingId = (rows as Array<Record<string, any>>)[0]?.id as string | undefined;
+      let existingId = (rows as Array<Record<string, any>>)[0]?.id as string | undefined;
 
       if (!existingId) {
-        return await this.addExperimentResult({ ...input, attempt });
+        // The lookup + insert is not atomic: two concurrent submissions can
+        // both miss the read and race into the insert. The unique index on
+        // (experimentId, itemId, attempt) rejects the loser with
+        // ALREADY_EXISTS (gRPC code 6) — converge it onto the winner's row
+        // by falling through to the update path.
+        try {
+          return await this.addExperimentResult({ ...input, attempt });
+        } catch (insertError) {
+          if (!hasErrorCode(insertError, new Set([6]))) throw insertError;
+          const [winnerRows] = await this.database.run({
+            sql: `SELECT ${quoteIdent('id', 'column name')} FROM ${quoteIdent(TABLE_EXPERIMENT_RESULTS, 'table name')}
+                  WHERE ${quoteIdent('experimentId', 'column name')} = @experimentId
+                    AND ${quoteIdent('itemId', 'column name')} = @itemId
+                    AND COALESCE(${quoteIdent('attempt', 'column name')}, 0) = @attempt`,
+            params: { experimentId: input.experimentId, itemId: input.itemId, attempt },
+            json: true,
+          });
+          existingId = (winnerRows as Array<Record<string, any>>)[0]?.id as string | undefined;
+          if (!existingId) throw insertError;
+        }
       }
 
       // Last write wins on the natural key; keep row id + createdAt stable.

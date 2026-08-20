@@ -396,7 +396,7 @@ On authenticated servers, the read routes require the `stored-workflows:read` pe
 
 ### Caller-driven experiment routes
 
-Use these routes when your own orchestrator (for example a Temporal workflow) owns the experiment loop and Mastra acts as the system of record. All of them are safe to retry. Create is idempotent on the caller-supplied `id`. Item runs and result submissions upsert on `(experimentId, itemId, attempt)`. Finalize returns the stored record if the experiment is already completed.
+Use these routes when your own orchestrator (for example a Temporal workflow) owns the experiment loop and Mastra acts as the system of record. Item runs, result submission, and finalization are safe to retry. Creation is safe to retry only when the request includes a caller-supplied `id`; without one, each retry creates a new experiment. Item runs and result submissions upsert on `(experimentId, itemId, attempt)`. Finalize returns the stored record if the experiment is already completed.
 
 #### Create experiment request body
 

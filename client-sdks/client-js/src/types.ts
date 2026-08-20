@@ -2795,6 +2795,7 @@ export interface DatasetExperiment {
   totalItems: number;
   succeededCount: number;
   failedCount: number;
+  skippedCount: number;
   startedAt: string | Date | null;
   completedAt: string | Date | null;
   createdAt: string | Date;
@@ -2982,8 +2983,17 @@ export interface RunExperimentItemParams {
   requestContext?: Record<string, unknown>;
 }
 
+/**
+ * A single experiment result row as the server returns it: structured
+ * `error` object and no aggregated `scores` (scores live in the scores
+ * store, keyed by `runId = experimentId`).
+ */
+export type DatasetExperimentResultRow = Omit<DatasetExperimentResult, 'error' | 'scores'> & {
+  error: { message: string; stack?: string; code?: string } | null;
+};
+
 export interface RunExperimentItemResponse {
-  result: Omit<DatasetExperimentResult, 'scores'>;
+  result: DatasetExperimentResultRow;
   scores: Array<{
     scorerId: string;
     scorerName: string;

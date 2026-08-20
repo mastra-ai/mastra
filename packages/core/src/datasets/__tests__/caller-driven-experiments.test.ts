@@ -137,11 +137,9 @@ describe('createExperiment', () => {
 
   it('rejects a caller-supplied id that collides with an experiment of a different shape', async () => {
     const { ds, experimentsStorage } = await setup(THREE_ITEMS);
-    const dsRecord = await ds.getExperiment({ experimentId: 'nope' }); // warm no-op
-    void dsRecord;
     await experimentsStorage.createExperiment({
       id: 'taken-id',
-      datasetId: (ds as any).id,
+      datasetId: ds.id,
       datasetVersion: 1,
       targetType: 'agent',
       targetId: 'agent-1',
@@ -215,6 +213,27 @@ describe('submitExperimentResult', () => {
     expect(scores[0]!.entityId).toBe(itemIds[0]);
   });
 
+  it('does not duplicate inline scores when a submission is retried', async () => {
+    const { ds, itemIds, scoresStorage } = await setup(THREE_ITEMS);
+    const { experimentId } = await ds.createExperiment({});
+
+    const submit = () =>
+      ds.submitExperimentResult({
+        experimentId,
+        itemId: itemIds[0]!,
+        output: 'out',
+        scores: [{ scorerId: 'clinical-accuracy', score: 0.9, reason: 'good' }],
+      });
+    await submit();
+    await submit();
+
+    const { scores } = await scoresStorage.listScoresByRunId({
+      runId: experimentId,
+      pagination: { page: 0, perPage: 10 },
+    });
+    expect(scores).toHaveLength(1);
+  });
+
   it('rejects unknown item ids', async () => {
     const { ds } = await setup(THREE_ITEMS);
     const { experimentId } = await ds.createExperiment({});
@@ -241,7 +260,7 @@ describe('submitExperimentResult', () => {
   it('rejects submissions to an experiment that has a target', async () => {
     const { ds, experimentsStorage, itemIds } = await setup(THREE_ITEMS);
     const native = await experimentsStorage.createExperiment({
-      datasetId: (ds as any).id,
+      datasetId: ds.id,
       datasetVersion: 1,
       targetType: 'agent',
       targetId: 'agent-1',
@@ -501,6 +520,11 @@ describe('runExperimentItem (mode 2: caller drives loop, Mastra runs items)', ()
 
     await expect(ds.runExperimentItem({ experimentId, itemId: 'nonexistent-item' })).rejects.toThrow(/not found/i);
     expect(itemIds).toHaveLength(3);
+
+    // An item added AFTER the experiment pinned its dataset version exists in
+    // the dataset, but is not visible at the pinned version — SCD-2 semantics.
+    const lateItem = await ds.addItem({ input: 'late question', groundTruth: 'late answer' });
+    await expect(ds.runExperimentItem({ experimentId, itemId: lateItem.id })).rejects.toThrow(/not found/i);
   });
 
   it('finalize counts targeted-run items the same as ingested ones', async () => {

@@ -637,7 +637,14 @@ export class Dataset {
     grouping?: { experimentSetId?: string; comparisonId?: string; variantId?: string; trialIndex?: number };
     /** Dataset version to pin. Defaults to the dataset's current version. */
     version?: number;
-  }): Promise<{ experimentId: string; status: ExperimentStatus; totalItems: number; datasetVersion: number }> {
+  }): Promise<{
+    experimentId: string;
+    status: ExperimentStatus;
+    totalItems: number;
+    datasetVersion: number;
+    /** The persisted start timestamp — stable across retried creates with the same `id`. */
+    startedAt: Date | null;
+  }> {
     const experimentsStore = await this.#getExperimentsStore();
     const datasetsStore = await this.#getDatasetsStore();
 
@@ -700,11 +707,23 @@ export class Dataset {
             category: 'USER',
           });
         }
+        // Repair a half-created record: a prior create that crashed between
+        // createExperiment and the status update leaves the row 'pending'.
+        // A retried create finishes the job so the caller never observes a
+        // permanently-pending experiment.
+        let status = existing.status;
+        let startedAt = existing.startedAt ?? null;
+        if (existing.status === 'pending') {
+          startedAt = new Date();
+          await experimentsStore.updateExperiment({ id: existing.id, status: 'running', startedAt });
+          status = 'running';
+        }
         return {
           experimentId: existing.id,
-          status: existing.status,
+          status,
           totalItems: existing.totalItems,
           datasetVersion: existing.datasetVersion ?? dataset.version,
+          startedAt,
         };
       }
     }
@@ -722,31 +741,62 @@ export class Dataset {
 
     const experimentId = args?.id ?? crypto.randomUUID();
 
-    await experimentsStore.createExperiment({
-      id: experimentId,
-      datasetId: this.id,
-      datasetVersion: targetVersion,
-      targetType: args?.targetType ?? null,
-      targetId: args?.targetId ?? null,
-      scorerIds: args?.scorers?.length ? args.scorers : null,
-      totalItems: items.length,
-      name: args?.name,
-      description: args?.description,
-      metadata: args?.metadata,
-      provenance: args?.provenance,
-      experimentSetId: args?.grouping?.experimentSetId,
-      comparisonId: args?.grouping?.comparisonId,
-      variantId: args?.grouping?.variantId,
-      trialIndex: args?.grouping?.trialIndex,
-      organizationId: dataset.organizationId ?? null,
-      projectId: dataset.projectId ?? null,
-    });
+    try {
+      await experimentsStore.createExperiment({
+        id: experimentId,
+        datasetId: this.id,
+        datasetVersion: targetVersion,
+        targetType: args?.targetType ?? null,
+        targetId: args?.targetId ?? null,
+        scorerIds: args?.scorers?.length ? args.scorers : null,
+        totalItems: items.length,
+        name: args?.name,
+        description: args?.description,
+        metadata: args?.metadata,
+        provenance: args?.provenance,
+        experimentSetId: args?.grouping?.experimentSetId,
+        comparisonId: args?.grouping?.comparisonId,
+        variantId: args?.grouping?.variantId,
+        trialIndex: args?.grouping?.trialIndex,
+        organizationId: dataset.organizationId ?? null,
+        projectId: dataset.projectId ?? null,
+      });
+    } catch (createError) {
+      // Concurrent creates with the same caller-supplied id can both miss the
+      // idempotency read and race into createExperiment; the loser hits a
+      // duplicate-id failure. Converge by re-reading the winner's record.
+      if (!args?.id) throw createError;
+      const existing = await experimentsStore.getExperimentById({ id: args.id, filters: this.#scope });
+      if (!existing) throw createError;
+      const sameShape =
+        existing.datasetId === this.id &&
+        existing.targetType === (args.targetType ?? null) &&
+        existing.targetId === (args.targetId ?? null);
+      if (!sameShape) {
+        throw new MastraError({
+          id: 'EXPERIMENT_ID_CONFLICT',
+          text: `Experiment id ${args.id} already exists and does not match this experiment's dataset or target`,
+          domain: 'STORAGE',
+          category: 'USER',
+        });
+      }
+      return {
+        experimentId: existing.id,
+        status: existing.status,
+        totalItems: existing.totalItems,
+        datasetVersion: existing.datasetVersion ?? dataset.version,
+        startedAt: existing.startedAt ?? null,
+      };
+    }
 
     // Caller-driven experiments are "running" from creation: the caller
     // owns the loop and there is no queued/pending phase inside Mastra.
-    await experimentsStore.updateExperiment({ id: experimentId, status: 'running', startedAt: new Date() });
+    // If this update fails after a successful create, a retried create with
+    // the same id repairs the 'pending' status (see the idempotency branch).
+    const startedAt = new Date();
+    await experimentsStore.updateExperiment({ id: experimentId, status: 'running', startedAt });
 
-    return { experimentId, status: 'running', totalItems: items.length, datasetVersion: targetVersion };
+    return { experimentId, status: 'running', totalItems: items.length, datasetVersion: targetVersion, startedAt };
   }
 
   /**
@@ -923,7 +973,34 @@ export class Dataset {
     if (args.scores?.length) {
       const storage = this.#mastra.getStorage();
       if (storage) {
+        // Retry convergence: the result row upserts on (experimentId, itemId,
+        // attempt), but score rows are insert-only. Skip scorers that already
+        // have a row for this (runId, itemId) so a retried submission does not
+        // double-count in aggregation. Best-effort: a dedupe read failure
+        // falls back to writing the scores.
+        const alreadyScored = new Set<string>();
+        try {
+          const scoresStore = await storage.getStore('scores');
+          if (scoresStore) {
+            let scorePage = 0;
+            // eslint-disable-next-line no-constant-condition
+            while (true) {
+              const { scores: existingScores, pagination } = await scoresStore.listScoresByRunId({
+                runId: args.experimentId,
+                pagination: { page: scorePage, perPage: 100 },
+              });
+              for (const row of existingScores) {
+                if (row.entityId === args.itemId) alreadyScored.add(row.scorerId);
+              }
+              if (!pagination.hasMore || existingScores.length === 0) break;
+              scorePage += 1;
+            }
+          }
+        } catch {
+          // fall through — dedupe is best-effort
+        }
         for (const score of args.scores) {
+          if (alreadyScored.has(score.scorerId)) continue;
           try {
             await validateAndSaveScore(storage, {
               scorerId: score.scorerId,

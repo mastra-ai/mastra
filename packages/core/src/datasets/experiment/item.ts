@@ -4,6 +4,7 @@ import type { Mastra } from '../../mastra';
 import type { Experiment, ExperimentResult } from '../../storage/types';
 import { executeTarget } from './executor';
 import type { ExecutionResult } from './executor';
+import { resolveTarget } from './resolve-target';
 import {
   createItemScorerResolver,
   EXPERIMENT_ITEM_SCORER_NOT_FOUND,
@@ -11,7 +12,6 @@ import {
   runScorersForItem,
 } from './scorer';
 import type { ScorerResult } from './types';
-import { resolveTarget } from './index';
 
 /** Item shape consumed by {@link executeExperimentItem}. */
 export interface ExperimentItemInput {
@@ -108,6 +108,20 @@ export async function executeExperimentItem(args: ExecuteExperimentItemArgs): Pr
     scorers = resolveScorers(mastra, [...new Set(args.datasetScorerIds ?? [])]);
   }
 
+  // Resolve the experiments store before executing the target so a
+  // misconfigured storage layer fails fast, before the target is billed or
+  // any score rows are written.
+  const storage = mastra.getStorage();
+  const experimentsStore = await storage?.getStore('experiments');
+  if (!experimentsStore) {
+    throw new MastraError({
+      id: 'EXPERIMENTS_STORAGE_NOT_CONFIGURED',
+      text: 'ExperimentsStorage not configured. Configure storage in the Mastra instance.',
+      domain: 'STORAGE',
+      category: 'USER',
+    });
+  }
+
   const startedAt = new Date();
 
   const mergedRequestContext =
@@ -121,8 +135,6 @@ export async function executeExperimentItem(args: ExecuteExperimentItemArgs): Pr
       });
 
   const completedAt = new Date();
-
-  const storage = mastra.getStorage();
 
   let scores: ScorerResult[] = [];
   if (!scorerConfigError) {
@@ -150,16 +162,6 @@ export async function executeExperimentItem(args: ExecuteExperimentItemArgs): Pr
       workflowData,
       true,
     );
-  }
-
-  const experimentsStore = await storage?.getStore('experiments');
-  if (!experimentsStore) {
-    throw new MastraError({
-      id: 'EXPERIMENTS_STORAGE_NOT_CONFIGURED',
-      text: 'ExperimentsStorage not configured. Configure storage in the Mastra instance.',
-      domain: 'STORAGE',
-      category: 'USER',
-    });
   }
 
   const result = await experimentsStore.upsertExperimentResult({

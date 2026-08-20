@@ -546,6 +546,75 @@ export function createExperimentsTests({
         expect(matching[0]!.output).toEqual({ a: 'v2' });
       });
 
+      it('upsertExperimentResult defaults attempt to 0 when omitted and converges with explicit attempt 0', async () => {
+        const first = await experimentsStorage.upsertExperimentResult({
+          experimentId: exp.id,
+          itemId: 'item-up-default',
+          itemDatasetVersion: null,
+          input: { q: 'hello' },
+          output: { a: 'v1' },
+          groundTruth: null,
+          error: null,
+          startedAt: new Date(),
+          completedAt: new Date(),
+          retryCount: 0,
+        });
+
+        expect(first.attempt).toBe(0);
+
+        const second = await experimentsStorage.upsertExperimentResult({
+          experimentId: exp.id,
+          itemId: 'item-up-default',
+          itemDatasetVersion: null,
+          input: { q: 'hello' },
+          output: { a: 'v2' },
+          groundTruth: null,
+          error: null,
+          startedAt: new Date(),
+          completedAt: new Date(),
+          retryCount: 1,
+          attempt: 0,
+        });
+
+        expect(second.id).toBe(first.id);
+        expect(second.attempt).toBe(0);
+      });
+
+      it('upsertExperimentResult preserves createdAt across retries', async () => {
+        const first = await experimentsStorage.upsertExperimentResult({
+          experimentId: exp.id,
+          itemId: 'item-up-created-at',
+          itemDatasetVersion: null,
+          input: { q: 'hello' },
+          output: { a: 'v1' },
+          groundTruth: null,
+          error: null,
+          startedAt: new Date(),
+          completedAt: new Date(),
+          retryCount: 0,
+          attempt: 0,
+        });
+
+        await new Promise(resolve => setTimeout(resolve, 25));
+
+        const second = await experimentsStorage.upsertExperimentResult({
+          experimentId: exp.id,
+          itemId: 'item-up-created-at',
+          itemDatasetVersion: null,
+          input: { q: 'hello' },
+          output: { a: 'v2' },
+          groundTruth: null,
+          error: null,
+          startedAt: new Date(),
+          completedAt: new Date(),
+          retryCount: 1,
+          attempt: 0,
+        });
+
+        expect(second.id).toBe(first.id);
+        expect(new Date(second.createdAt).getTime()).toBe(new Date(first.createdAt).getTime());
+      });
+
       it('upsertExperimentResult keeps separate rows per attempt', async () => {
         const a0 = await experimentsStorage.upsertExperimentResult({
           experimentId: exp.id,

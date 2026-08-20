@@ -24,7 +24,7 @@ export function ExperimentTopArea({ experiment }: ExperimentTopAreaProps) {
   const { data: scorers } = useScorers();
 
   const targetPath = () => {
-    if (!experiment.targetId) return '#';
+    if (!experiment.targetId) return null;
     switch (experiment.targetType) {
       case 'agent':
         return paths.agentLink(experiment.targetId);
@@ -39,7 +39,7 @@ export function ExperimentTopArea({ experiment }: ExperimentTopAreaProps) {
 
   const targetName = () => {
     const targetId = experiment.targetId;
-    if (!targetId) return targetId;
+    if (!targetId) return 'External (caller-run)';
     switch (experiment.targetType) {
       case 'agent':
         return agents?.[targetId]?.name ?? targetId;
@@ -87,9 +87,16 @@ export function ExperimentTopArea({ experiment }: ExperimentTopAreaProps) {
               </>
             )}
             <DataKeysAndValues.Key>Target</DataKeysAndValues.Key>
-            <DataKeysAndValues.ValueLink href={targetPath()} as={LinkComponent}>
-              {targetName()}
-            </DataKeysAndValues.ValueLink>
+            {(() => {
+              const href = targetPath();
+              return href ? (
+                <DataKeysAndValues.ValueLink href={href} as={LinkComponent}>
+                  {targetName()}
+                </DataKeysAndValues.ValueLink>
+              ) : (
+                <DataKeysAndValues.Value>{targetName()}</DataKeysAndValues.Value>
+              );
+            })()}
             {experiment.agentVersion && (
               <>
                 <DataKeysAndValues.Key>Version</DataKeysAndValues.Key>
