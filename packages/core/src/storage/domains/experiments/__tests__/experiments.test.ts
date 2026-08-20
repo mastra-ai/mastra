@@ -426,6 +426,7 @@ describe('ExperimentsInMemory', () => {
         input: { prompt: 'Hello' },
         output: { text: 'Hi there' },
         groundTruth: { text: 'Hello!' },
+        metadata: { source: 'dataset-v3' },
         error: null,
         startedAt: new Date(),
         completedAt: new Date(),
@@ -437,6 +438,7 @@ describe('ExperimentsInMemory', () => {
       expect(result.itemDatasetVersion).toBe(3);
       expect(result.input).toEqual({ prompt: 'Hello' });
       expect(result.output).toEqual({ text: 'Hi there' });
+      expect(result.metadata).toEqual({ source: 'dataset-v3' });
     });
 
     it('stores itemDatasetVersion as integer', async () => {
