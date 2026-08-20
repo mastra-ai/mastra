@@ -7,14 +7,17 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useApiConfig } from '../../../../api/config';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { useIntakeConfigQuery, useSaveIntakeConfigMutation } from '../../../../hooks/useIntakeConfig';
+import { useJiraProjectsQuery, useJiraStatusQuery } from '../../../../hooks/useJiraData';
 import { useLinearProjectsQuery, useLinearStatusQuery } from '../../../../hooks/useLinearData';
+import { isJiraAuthError } from '../../factory/services/jira';
+import type { JiraProject, JiraStatus } from '../../factory/services/jira';
 import { connectLinear, isLinearReauthError } from '../../factory/services/linear';
 import type { LinearProject, LinearStatus } from '../../factory/services/linear';
 import type { IntakeConfig } from '../../factory/services/intake';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { SourcePicker } from './IntakeSourcePicker';
 import type { SourcePickerGroup } from './IntakeSourcePicker';
-import { LinearRouting } from './LinearRouting';
+import { IntakeSourceRouting } from './LinearRouting';
 import { SettingsCard } from './SettingsCard';
 import { SettingsSubsection } from './SettingsSubsection';
 
@@ -165,6 +168,64 @@ function LinearIntakeSection({
   );
 }
 
+function JiraIntakeSection({
+  config,
+  busy,
+  update,
+  status,
+  projects,
+  authError,
+  showPickers,
+}: SourceSectionProps & {
+  status: JiraStatus | undefined;
+  projects: JiraProject[];
+  authError: boolean;
+  showPickers: boolean;
+}) {
+  const configured = Boolean(status?.enabled);
+  const description = !configured
+    ? 'Jira is not configured on this server. Set JIRA_BASE_URL, JIRA_EMAIL, and JIRA_API_TOKEN to enable it.'
+    : authError
+      ? 'Jira rejected the configured credentials. Ask the operator to check the Jira API token.'
+      : `Connected to ${status?.site ?? 'a Jira site'}.`;
+
+  return (
+    <SettingsSubsection title="Jira issues" description={description}>
+      <SettingsCard>
+        <SettingsRow variant="factory" label="Sync Jira issues">
+          <Switch
+            aria-label="Sync Jira issues"
+            checked={config.jira.enabled}
+            disabled={busy || !configured}
+            onCheckedChange={enabled => update({ ...config, jira: { ...config.jira, enabled } })}
+          />
+        </SettingsRow>
+
+        {showPickers && (
+          <SourcePicker
+            label="Jira projects"
+            groups={[
+              {
+                id: 'projects',
+                items: projects.map(project => ({ id: project.id, label: `${project.key} · ${project.name}` })),
+              },
+            ]}
+            selectedIds={config.jira.sourceIds}
+            disabled={busy}
+            pending={busy}
+            onToggleItem={projectId =>
+              update({
+                ...config,
+                jira: { ...config.jira, sourceIds: toggleId(config.jira.sourceIds, projectId) },
+              })
+            }
+          />
+        )}
+      </SettingsCard>
+    </SettingsSubsection>
+  );
+}
+
 export function IntakeSection() {
   const { baseUrl } = useApiConfig();
   const configQuery = useIntakeConfigQuery();
@@ -175,6 +236,10 @@ export function IntakeSection() {
   const linearStatus = linearStatusQuery.data;
   const linearConnected = Boolean(linearStatus?.enabled && linearStatus.connected);
   const linearProjectsQuery = useLinearProjectsQuery(linearConnected);
+  const jiraStatusQuery = useJiraStatusQuery();
+  const jiraStatus = jiraStatusQuery.data;
+  const jiraConfigured = Boolean(jiraStatus?.enabled);
+  const jiraProjectsQuery = useJiraProjectsQuery(jiraConfigured);
 
   const config = configQuery.data;
   // The same repository can be linked to several factories; Intake picks it once.
@@ -188,7 +253,7 @@ export function IntakeSection() {
   if (configQuery.isError || !config) {
     return (
       <Txt as="p" variant="ui-sm" className="text-icon3">
-        Intake configuration is unavailable. Connect GitHub or Linear first.
+        Intake configuration is unavailable. Connect GitHub, Linear, or Jira first.
       </Txt>
     );
   }
@@ -204,6 +269,10 @@ export function IntakeSection() {
   const reauthRequired = isLinearReauthError(linearProjectsQuery.error);
   const routedProjectIds = config.linear.sourceIds ?? [];
   const linearReady = linearConnected && config.linear.enabled && !reauthRequired && linearProjects.length > 0;
+  const jiraProjects = jiraProjectsQuery.data ?? [];
+  const jiraAuthError = isJiraAuthError(jiraProjectsQuery.error);
+  const jiraSourceIds = config.jira.sourceIds ?? [];
+  const jiraReady = jiraConfigured && config.jira.enabled && !jiraAuthError && jiraProjects.length > 0;
 
   return (
     <div className="flex flex-col gap-8">
@@ -225,9 +294,36 @@ export function IntakeSection() {
           description="Each selected project feeds one factory. Until a project is routed, its issues are not picked up."
         >
           <SettingsCard>
-            <LinearRouting
+            <IntakeSourceRouting
+              integrationId="linear"
+              label="Linear"
               sourceIds={routedProjectIds}
-              projects={linearProjects}
+              sources={linearProjects}
+              factories={factoriesQuery.data ?? []}
+            />
+          </SettingsCard>
+        </SettingsSubsection>
+      )}
+      <JiraIntakeSection
+        config={config}
+        busy={busy}
+        update={update}
+        status={jiraStatus}
+        projects={jiraProjects}
+        authError={jiraAuthError}
+        showPickers={jiraReady}
+      />
+      {jiraReady && jiraSourceIds.length > 0 && (
+        <SettingsSubsection
+          title="Jira routing"
+          description="Each selected project feeds one factory. Until a project is routed, its issues are not picked up."
+        >
+          <SettingsCard>
+            <IntakeSourceRouting
+              integrationId="jira"
+              label="Jira"
+              sourceIds={jiraSourceIds}
+              sources={jiraProjects.map(project => ({ id: project.id, name: `${project.key} · ${project.name}` }))}
               factories={factoriesQuery.data ?? []}
             />
           </SettingsCard>
