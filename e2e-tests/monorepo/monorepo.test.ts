@@ -397,26 +397,29 @@ export const environmentRoute = registerApiRoute('/environment', {
     });
 
     it(
-      'should emit preflight metadata when background tasks are statically enabled',
+      'should emit a worker manifest when background tasks are statically enabled',
       async () => {
         const sourcePath = join(fixturePath, 'apps', 'custom', 'src', 'mastra', 'index.ts');
         const originalSource = await readFile(sourcePath, 'utf-8');
         const enabledSource = originalSource.replace(
           'export const mastra = new Mastra({',
-          'export const mastra = new Mastra({\n  backgroundTasks: { enabled: true },',
+          "export const mastra = new Mastra({\n  backgroundTasks: { enabled: true, globalConcurrency: 20, mode: 'worker' },",
         );
 
         try {
           await writeFile(sourcePath, enabledSource);
           await runBuild(fixturePath);
 
-          const metadataPath = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'preflight-metadata.json');
-          const metadata = JSON.parse(await readFile(metadataPath, 'utf-8'));
-          expect(metadata.backgroundTasksEnabled).toBe(true);
+          const workersPath = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'workers.json');
+          const workersConfig = JSON.parse(await readFile(workersPath, 'utf-8'));
+          expect(workersConfig).toEqual({ enabled: true, globalConcurrency: 20, mode: 'worker' });
         } finally {
           await writeFile(sourcePath, originalSource);
           await runBuild(fixturePath);
         }
+
+        const outputFiles = await readdir(join(fixturePath, 'apps', 'custom', '.mastra', 'output'));
+        expect(outputFiles).not.toContain('workers.json');
       },
       timeout,
     );

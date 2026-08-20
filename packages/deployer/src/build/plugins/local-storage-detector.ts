@@ -41,11 +41,6 @@ export interface PreflightMetadata {
   version: 1;
   localPaths: LocalStorageDetection[];
   userEnvRefs: string[];
-  /**
-   * Best-effort static detection of a top-level Mastra
-   * `backgroundTasks: { enabled: true }` config in rendered user modules.
-   */
-  backgroundTasksEnabled?: boolean;
 }
 
 /**
@@ -68,6 +63,7 @@ const PROCESS_ENV_BRACKET = /\bprocess\.env\[['"]([A-Z_][A-Z0-9_]*)['"]\]/g;
 // deploy-preflight.ts at the same time.
 const LEGACY_LOCAL_PATHS_FILE = 'preflight-local-paths.json';
 const PREFLIGHT_METADATA_FILE = 'preflight-metadata.json';
+const WORKERS_CONFIG_FILE = 'workers.json';
 
 interface ModuleMatch {
   value: string;
@@ -122,25 +118,91 @@ function objectProperty(node: AstNode, name: string): AstNode | undefined {
   return property?.value as AstNode | undefined;
 }
 
+type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+type WorkersConfig = { enabled: true; [key: string]: JsonValue };
+
+function staticJsonValue(node: AstNode): JsonValue | undefined {
+  if (node.type === 'Literal') {
+    const value = node.value;
+    if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      return value;
+    }
+    return undefined;
+  }
+
+  if (node.type === 'UnaryExpression' && node.operator === '-') {
+    const argument = node.argument as AstNode | undefined;
+    const value = argument ? staticJsonValue(argument) : undefined;
+    return typeof value === 'number' ? -value : undefined;
+  }
+
+  if (node.type === 'TemplateLiteral') {
+    const expressions = (node.expressions as AstNode[] | undefined) ?? [];
+    const quasis = (node.quasis as Array<{ value?: { cooked?: string } }> | undefined) ?? [];
+    if (expressions.length === 0) return quasis[0]?.value?.cooked ?? '';
+    return undefined;
+  }
+
+  if (node.type === 'ArrayExpression') {
+    const result: JsonValue[] = [];
+    for (const element of (node.elements as Array<AstNode | null> | undefined) ?? []) {
+      if (!element) return undefined;
+      const value = staticJsonValue(element);
+      if (value === undefined) return undefined;
+      result.push(value);
+    }
+    return result;
+  }
+
+  if (node.type === 'ObjectExpression') {
+    const result: Record<string, JsonValue> = {};
+    for (const property of (node.properties as AstNode[] | undefined) ?? []) {
+      if (property.type !== 'Property' || property.kind !== 'init') return undefined;
+      const name = propertyName(property);
+      const valueNode = property.value as AstNode | undefined;
+      if (!name || !valueNode) return undefined;
+      const value = staticJsonValue(valueNode);
+      if (value === undefined) {
+        delete result[name];
+      } else {
+        result[name] = value;
+      }
+    }
+    return result;
+  }
+
+  return undefined;
+}
+
 /**
- * Best-effort static detection of `new Mastra({ backgroundTasks: { enabled:
- * true } })` in a user module. Dynamic values, spreads, imported config
- * objects, and aliased Mastra imports intentionally fall through; preflight
- * only acts on configurations it can prove are enabled.
+ * Best-effort static extraction of `new Mastra({ backgroundTasks: { enabled:
+ * true } })` in a user module. Dynamic values, callbacks, spreads, imported
+ * config objects, and aliased Mastra imports are omitted. The runtime still
+ * reads the complete config from the user's bundle; this JSON manifest tells
+ * the platform whether to create a worker service and what it can display.
  */
-function findBackgroundTasksEnabled(ast: AstNode): boolean {
-  let enabled = false;
+function findWorkersConfig(ast: AstNode): WorkersConfig | undefined {
+  let workersConfig: WorkersConfig | undefined;
   walkAst(ast, node => {
-    if (enabled || node.type !== 'NewExpression') return;
+    if (workersConfig || node.type !== 'NewExpression') return;
     const callee = node.callee as AstNode | undefined;
     if (callee?.type !== 'Identifier' || callee.name !== 'Mastra') return;
     const config = (node.arguments as AstNode[] | undefined)?.[0];
     if (!config) return;
     const backgroundTasks = objectProperty(config, 'backgroundTasks');
-    const enabledValue = backgroundTasks ? objectProperty(backgroundTasks, 'enabled') : undefined;
-    if (enabledValue?.type === 'Literal' && enabledValue.value === true) enabled = true;
+    if (backgroundTasks?.type !== 'ObjectExpression') return;
+
+    const extracted = staticJsonValue(backgroundTasks);
+    if (
+      typeof extracted === 'object' &&
+      extracted !== null &&
+      !Array.isArray(extracted) &&
+      extracted.enabled === true
+    ) {
+      workersConfig = { ...extracted, enabled: true };
+    }
   });
-  return enabled;
+  return workersConfig;
 }
 
 /** Find the first `process.env.X` / `process.env['X']` read inside an expression. */
@@ -237,7 +299,7 @@ function findGuardedValues(ast: AstNode, values: Set<string>): Map<string, strin
 export function localStorageDetector(rootDir?: string): Plugin {
   const userModuleMatches = new Map<string, ModuleMatch[]>();
   const userModuleEnvRefs = new Map<string, Set<string>>();
-  const backgroundTasksEnabledModules = new Set<string>();
+  const userModuleWorkersConfigs = new Map<string, WorkersConfig>();
   let normalizedRoot: string | undefined;
   if (rootDir) {
     let root = rootDir.replace(/\\/g, '/');
@@ -275,8 +337,9 @@ export function localStorageDetector(rootDir?: string): Plugin {
       // fallback behavior.
       try {
         const ast = this.parse(_code) as unknown as AstNode;
-        if (findBackgroundTasksEnabled(ast)) {
-          backgroundTasksEnabledModules.add(id);
+        const workersConfig = findWorkersConfig(ast);
+        if (workersConfig) {
+          userModuleWorkersConfigs.set(id, workersConfig);
         }
         if (matches.length > 0) {
           const guarded = findGuardedValues(ast, new Set(matches.map(m => m.value)));
@@ -300,7 +363,7 @@ export function localStorageDetector(rootDir?: string): Plugin {
       const detections: LocalStorageDetection[] = [];
       const seen = new Set<string>();
       const userEnvRefs = new Set<string>();
-      let backgroundTasksEnabled = false;
+      let workersConfig: WorkersConfig | undefined;
 
       for (const chunk of Object.values(bundle)) {
         if (chunk.type !== 'chunk') continue;
@@ -311,9 +374,7 @@ export function localStorageDetector(rootDir?: string): Plugin {
           for (const ref of userModuleEnvRefs.get(moduleId) ?? []) {
             userEnvRefs.add(ref);
           }
-          if (backgroundTasksEnabledModules.has(moduleId)) {
-            backgroundTasksEnabled = true;
-          }
+          workersConfig ??= userModuleWorkersConfigs.get(moduleId);
 
           const matches = userModuleMatches.get(moduleId);
           if (!matches) continue;
@@ -332,7 +393,6 @@ export function localStorageDetector(rootDir?: string): Plugin {
         version: 1,
         localPaths: detections,
         userEnvRefs: [...userEnvRefs].sort(),
-        ...(backgroundTasksEnabled ? { backgroundTasksEnabled: true } : {}),
       };
 
       this.emitFile({
@@ -340,6 +400,14 @@ export function localStorageDetector(rootDir?: string): Plugin {
         fileName: PREFLIGHT_METADATA_FILE,
         source: JSON.stringify(metadata),
       });
+
+      if (workersConfig) {
+        this.emitFile({
+          type: 'asset',
+          fileName: WORKERS_CONFIG_FILE,
+          source: JSON.stringify(workersConfig),
+        });
+      }
 
       // Legacy asset — shape unchanged (no `guardedBy`) for older CLIs.
       this.emitFile({

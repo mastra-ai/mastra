@@ -2,4 +2,4 @@
 '@mastra/deployer': minor
 ---
 
-Added background task configuration metadata to deployment builds so platform deploy preflight can detect when dedicated background workers are required.
+Added a `workers.json` manifest to deployment builds when `backgroundTasks` is statically enabled. Mastra Cloud uses this manifest to create a dedicated worker service from the same deploy artifact and display the deployed worker configuration.

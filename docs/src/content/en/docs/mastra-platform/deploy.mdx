@@ -1,10 +1,10 @@
 ---
-title: "Deploy | Mastra platform"
+title: 'Deploy | Mastra platform'
 description: Deploy your Mastra application to the Mastra platform with a single command. Build, validate, provision, and release to any environment with mastra deploy.
 ---
 
-import Steps from "@site/src/components/Steps";
-import StepItem from "@site/src/components/StepItem";
+import Steps from '@site/src/components/Steps';
+import StepItem from '@site/src/components/StepItem';
 
 # Deploy to Mastra platform
 
@@ -76,19 +76,15 @@ A local `.env` file is optional. Environment variables stored on the platform ar
 
     :::
 
-    If the build statically enables `backgroundTasks`, preflight also checks whether the target environment has dedicated background workers enabled. The CLI offers to enable them before deployment:
+    If the build statically finds `backgroundTasks.enabled: true`, the deploy artifact includes a worker manifest. Mastra Cloud automatically provisions or updates a dedicated worker service from the same artifact. No separate toggle or add-on is required.
 
-    ```text
-    Background tasks are enabled in your Mastra config. Enable dedicated background workers for the production environment? (Y/n)
-    ```
-
-    Accept the prompt to enable **Background Workers**. If the environment doesn't have a managed or platform-stored `REDIS_URL`, the CLI creates and attaches a managed Redis database first. Starter and Team projects require the **Scalable Server** add-on. Background workers are included with Enterprise projects.
-
-    Declining the prompt doesn't block the deploy — background tasks run in-process on the API server until dedicated workers are enabled. Non-interactive deploys and deploys that use `--yes` never create this infrastructure; they warn and continue. Enable **Background Workers** in the environment settings to move tasks onto dedicated workers.
+    Removing `backgroundTasks` or setting `enabled: false` in a later deploy removes the manifest and spins down the existing worker service. Values that can't be determined statically are omitted from the manifest display, but the worker process still reads the complete configuration from your bundled code.
   </StepItem>
 
   <StepItem>
-    Run `mastra deploy` again. Preflight passes, the build uploads, and the CLI streams build logs until the deploy is live. Expect the full build and deploy to take between 30 seconds and a few minutes. The success message prints only when the new version is serving traffic.
+    Run `mastra deploy` again. Preflight passes, the build uploads, and the CLI streams build logs until the deploy is
+    live. Expect the full build and deploy to take between 30 seconds and a few minutes. The success message prints only
+    when the new version is serving traffic.
   </StepItem>
 
   <StepItem>
@@ -129,8 +125,6 @@ The region is fixed when the environment is created. Databases attached to an en
 ## Preflight checks
 
 Preflight validates the built output before the deploy uploads and only flags issues in your own code:
-
-- **Background workers disabled**: A warning when the build statically enables `backgroundTasks` but the target environment doesn't have dedicated workers enabled. Interactive deploys offer to enable workers and provision managed Redis when needed; otherwise tasks run in-process on the API server.
 
 - **Local storage paths**: A hard block. File-backed storage (for example `file:./mastra.db`) is lost on every deploy. Preflight passes when the path is guarded by an environment variable that's set locally or stored on the platform, including values provided by a managed database:
 
