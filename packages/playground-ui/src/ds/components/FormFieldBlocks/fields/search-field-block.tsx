@@ -5,7 +5,6 @@ import { Input } from '../../Input';
 import type { InputProps } from '../../Input';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../Tooltip';
 import { FieldBlock } from '../block/field-block';
-import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
 import { cn } from '@/lib/utils';
 
 export type SearchFieldBlockProps = {
@@ -80,15 +79,15 @@ export function SearchFieldBlock({
     <FieldBlock.Layout layout={layout} className={className}>
       {layout === 'horizontal' ? (
         <FieldBlock.Column>
-          <FieldBlock.Label name={name} required={required}>
-            {labelIsHidden ? <VisuallyHidden>{label}</VisuallyHidden> : label}
+          <FieldBlock.Label name={name} required={required} className={labelIsHidden ? 'sr-only' : undefined}>
+            {label}
           </FieldBlock.Label>
         </FieldBlock.Column>
       ) : null}
       <FieldBlock.Column>
         {layout === 'vertical' && label ? (
-          <FieldBlock.Label name={name} required={required}>
-            {labelIsHidden ? <VisuallyHidden>{label}</VisuallyHidden> : label}
+          <FieldBlock.Label name={name} required={required} className={labelIsHidden ? 'sr-only' : undefined}>
+            {label}
           </FieldBlock.Label>
         ) : null}
         <div className="group relative">
