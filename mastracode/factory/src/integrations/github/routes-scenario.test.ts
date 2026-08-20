@@ -88,6 +88,7 @@ function projectRepositoryRow(row: Record<string, any>) {
     sandboxProvider: 'railway',
     sandboxWorkdir: row.sandboxWorkdir,
     setupCommand: null,
+    teardownCommand: null,
     createdAt: now,
     updatedAt: now,
   };
@@ -597,6 +598,7 @@ describe('S2: concurrent pushes', () => {
       orgId,
       userId,
       branch: 'feat/x',
+      title: null,
       baseBranch: 'main',
       sandboxId: `sb-${id}`,
       sandboxWorkdir: `/workspace/${id}`,

@@ -166,6 +166,19 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
   /** Get sandbox status and metadata */
   getInfo?(): SandboxInfo | Promise<SandboxInfo>;
 
+  /**
+   * Persist the sandbox's current state when supported.
+   *
+   * The default implementation is a no-op for providers without snapshot support.
+   */
+  async snapshot(): Promise<void> {}
+
+  /**
+   * Whether `snapshot()` persists real checkpoints. Providers overriding
+   * `snapshot()` with a real implementation should also override this to true.
+   */
+  readonly supportsCheckpoints: boolean = false;
+
   // ---------------------------------------------------------------------------
   // Lifecycle Promise Tracking (prevents race conditions)
   // ---------------------------------------------------------------------------
@@ -216,15 +229,19 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
           this.logger.debug('Executing command', { sandbox: this.name, command: fullCommand, cwd: opts?.cwd });
 
           const handle = await pm.spawn(fullCommand, { ...opts, maxRetainedBytes: opts?.maxRetainedBytes ?? Infinity });
-          const result = await handle.wait();
+          try {
+            const result = await handle.wait();
 
-          this.logger.debug('Command completed', {
-            sandbox: this.name,
-            exitCode: result.exitCode,
-            duration: result.executionTimeMs,
-          });
+            this.logger.debug('Command completed', {
+              sandbox: this.name,
+              exitCode: result.exitCode,
+              duration: result.executionTimeMs,
+            });
 
-          return { ...result, command: fullCommand };
+            return { ...result, command: fullCommand };
+          } finally {
+            pm.release(handle.pid);
+          }
         };
       }
     }

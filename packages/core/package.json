@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "1.56.0-alpha.3",
+  "version": "1.60.1-alpha.0",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -39,6 +39,16 @@
       "require": {
         "types": "./dist/a2a/client.d.ts",
         "default": "./dist/a2a/client.cjs"
+      }
+    },
+    "./a2a/v1": {
+      "import": {
+        "types": "./dist/a2a/v1.d.ts",
+        "default": "./dist/a2a/v1.js"
+      },
+      "require": {
+        "types": "./dist/a2a/v1.d.ts",
+        "default": "./dist/a2a/v1.cjs"
       }
     },
     "./agent": {
@@ -581,6 +591,16 @@
         "default": "./dist/workflows/index.cjs"
       }
     },
+    "./workflows/builder": {
+      "import": {
+        "types": "./dist/workflows/builder/index.d.ts",
+        "default": "./dist/workflows/builder/index.js"
+      },
+      "require": {
+        "types": "./dist/workflows/builder/index.d.ts",
+        "default": "./dist/workflows/builder/index.cjs"
+      }
+    },
     "./workflows/evented": {
       "import": {
         "types": "./dist/workflows/evented/index.d.ts",
@@ -849,17 +869,17 @@
     "test": "npm run test:unit"
   },
   "dependencies": {
-    "@a2a-js/sdk": "~0.3.14",
+    "@a2a-js/sdk-v0_3": "npm:@a2a-js/sdk@~0.3.14",
+    "@a2a-js/sdk-v1": "npm:@a2a-js/sdk@~1.0.1",
     "@ai-sdk/provider-utils-v5": "npm:@ai-sdk/provider-utils@3.0.30",
     "@ai-sdk/provider-utils-v6": "npm:@ai-sdk/provider-utils@4.0.40",
-    "@ai-sdk/provider-utils-v7": "npm:@ai-sdk/provider-utils@5.0.11",
+    "@ai-sdk/provider-utils-v7": "npm:@ai-sdk/provider-utils@5.0.13",
     "@ai-sdk/provider-v5": "npm:@ai-sdk/provider@2.0.3",
     "@ai-sdk/provider-v6": "npm:@ai-sdk/provider@3.0.14",
-    "@ai-sdk/provider-v7": "npm:@ai-sdk/provider@4.0.3",
+    "@ai-sdk/provider-v7": "npm:@ai-sdk/provider@4.0.4",
     "@isaacs/ttlcache": "^2.1.5",
     "@lukeed/uuid": "^2.0.1",
     "@mastra/schema-compat": "workspace:*",
-    "@modelcontextprotocol/sdk": "^1.29.0",
     "@sindresorhus/slugify": "^2.2.1",
     "@standard-schema/spec": "^1.1.0",
     "ajv": "^8.20.0",
@@ -876,39 +896,40 @@
     "p-map": "^7.0.4",
     "p-retry": "^7.1.1",
     "picomatch": "^4.0.3",
-    "posthog-node": "^5.37.0",
+    "posthog-node": "^5.46.1",
     "tokenx": "^1.3.0",
     "ws": "^8.21.0",
-    "xxhash-wasm": "^1.1.0"
+    "xxhash-wasm": "^1.1.0",
+    "@modelcontextprotocol/server": "2.0.0"
   },
   "peerDependencies": {
     "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {
     "@ai-sdk/alibaba-v6": "npm:@ai-sdk/alibaba@1.0.40",
-    "@ai-sdk/anthropic-v5": "npm:@ai-sdk/anthropic@2.0.87",
-    "@ai-sdk/anthropic-v6": "npm:@ai-sdk/anthropic@3.0.98",
-    "@ai-sdk/anthropic-v7": "npm:@ai-sdk/anthropic@4.0.16",
-    "@ai-sdk/azure": "^2.0.119",
+    "@ai-sdk/anthropic-v5": "npm:@ai-sdk/anthropic@2.0.91",
+    "@ai-sdk/anthropic-v6": "npm:@ai-sdk/anthropic@3.0.103",
+    "@ai-sdk/anthropic-v7": "npm:@ai-sdk/anthropic@4.0.22",
+    "@ai-sdk/azure": "^2.0.120",
     "@ai-sdk/cerebras-v6": "npm:@ai-sdk/cerebras@2.0.68",
     "@ai-sdk/deepinfra-v6": "npm:@ai-sdk/deepinfra@2.0.66",
     "@ai-sdk/deepseek-v6": "npm:@ai-sdk/deepseek@2.0.50",
-    "@ai-sdk/google-v5": "npm:@ai-sdk/google@2.0.82",
-    "@ai-sdk/google-v6": "npm:@ai-sdk/google@3.0.95",
-    "@ai-sdk/google-v7": "npm:@ai-sdk/google@4.0.18",
+    "@ai-sdk/google-v5": "npm:@ai-sdk/google@2.0.85",
+    "@ai-sdk/google-v6": "npm:@ai-sdk/google@3.0.101",
+    "@ai-sdk/google-v7": "npm:@ai-sdk/google@4.0.25",
     "@ai-sdk/groq-v6": "npm:@ai-sdk/groq@3.0.53",
-    "@ai-sdk/mistral-v6": "npm:@ai-sdk/mistral@3.0.51",
+    "@ai-sdk/mistral-v6": "npm:@ai-sdk/mistral@3.0.52",
     "@ai-sdk/openai": "^1.3.24",
     "@ai-sdk/openai-compatible-v5": "npm:@ai-sdk/openai-compatible@1.0.46",
     "@ai-sdk/openai-compatible-v6": "npm:@ai-sdk/openai-compatible@2.0.62",
-    "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.114",
-    "@ai-sdk/openai-v6": "npm:@ai-sdk/openai@3.0.86",
-    "@ai-sdk/openai-v7": "npm:@ai-sdk/openai@4.0.16",
+    "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.115",
+    "@ai-sdk/openai-v6": "npm:@ai-sdk/openai@3.0.88",
+    "@ai-sdk/openai-v7": "npm:@ai-sdk/openai@4.0.21",
     "@ai-sdk/perplexity-v6": "npm:@ai-sdk/perplexity@3.0.47",
     "@ai-sdk/provider-utils-v4": "npm:@ai-sdk/provider-utils@2.2.8",
     "@ai-sdk/provider-v4": "npm:@ai-sdk/provider@1.1.3",
-    "@ai-sdk/togetherai-v6": "npm:@ai-sdk/togetherai@2.0.67",
-    "@ai-sdk/xai-v6": "npm:@ai-sdk/xai@3.0.110",
+    "@ai-sdk/togetherai-v6": "npm:@ai-sdk/togetherai@2.0.68",
+    "@ai-sdk/xai-v6": "npm:@ai-sdk/xai@3.0.111",
     "@ast-grep/napi": "^0.40.5",
     "@babel/core": "^8.0.1",
     "@copilotkit/aimock": "^1.29.0",

@@ -37,8 +37,9 @@ Day-to-day configuration (model providers, integrations) happens in the web UI. 
 | GitHub projects & intake | WorkOS + `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, `GITHUB_APP_SLUG` + `APP_DATABASE_URL`      |
 | Linear intake            | WorkOS + `LINEAR_CLIENT_ID`, `LINEAR_CLIENT_SECRET` + `APP_DATABASE_URL` + a state secret (`GITHUB_APP_WEBHOOK_SECRET` or `WORKOS_COOKIE_PASSWORD`) |
 | Jira intake              | WorkOS + `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN` + `APP_DATABASE_URL`                                                                       |
+| Slack channels           | `SLACK_APP_SIGNING_SECRET`, `SLACK_APP_BOT_TOKEN`, `SLACK_APP_CLIENT_ID`, `SLACK_APP_CLIENT_SECRET` + WorkOS + a state secret (see above)           |
 | Distributed event bus    | `REDIS_URL` (only needed for multi-process deployments)                                                                                             |
-| Cloud sandboxes          | `RAILWAY_API_TOKEN` (defaults to a local git sandbox otherwise)                                                                                     |
+| Cloud sandboxes          | `MASTRA_PLATFORM_SECRET_KEY`, `MASTRA_PROJECT_ID`, `MASTRA_ENVIRONMENT_ID` (defaults to a local git sandbox otherwise)                              |
 
 ### Database
 
@@ -77,6 +78,17 @@ Connects a Jira Cloud site (`https://<site>.atlassian.net`) with deployment-glob
 2. Set `JIRA_BASE_URL` (the site origin), `JIRA_EMAIL` (the Atlassian account the token belongs to), and `JIRA_API_TOKEN` in `.env`.
 
 All three variables are required together. Jira projects then become selectable intake sources in Settings → Intake, selected projects' issues appear on the board, and agents get `jira_get_issue` / `jira_create_comment` tools. The token's Jira permissions govern what the integration can read and post.
+
+### Slack (optional)
+
+Talk to the Factory from Slack threads. Create a Slack app at [api.slack.com/apps](https://api.slack.com/apps) with:
+
+- **Event Subscriptions** request URL: `<your app origin>/api/agent-controllers/mastra-code/channels/slack/webhook` (subscribe to bot events for messages and mentions)
+- **OpenID Connect** redirect URL: `<your app origin>/connect/slack/oidc/callback` (used to link Slack users to their Factory accounts)
+
+Install it to your workspace, then copy the credentials into `.env`: `SLACK_APP_SIGNING_SECRET` and the client ID/secret from **Basic Information**, and `SLACK_APP_BOT_TOKEN` from **OAuth & Permissions**.
+
+Slack only delivers events to public HTTPS origins, so local development needs a tunnel (e.g. `cloudflared tunnel --url http://127.0.0.1:4111`); set `MASTRACODE_CHANNELS_PUBLIC_URL` to the tunnel origin.
 
 ## Scripts
 

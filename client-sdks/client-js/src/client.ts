@@ -8,6 +8,7 @@ import type {
   GetSpanResponse,
   ListTracesArgs,
   ListTracesResponse,
+  ListTracesLightResponse,
   ListBranchesArgs,
   ListBranchesResponse,
   GetBranchArgs,
@@ -75,11 +76,13 @@ import {
   Vector,
   BaseResource,
   A2A,
+  A2AV1,
   MCPTool,
   AgentBuilder,
   Conversations,
   Observability,
   StoredAgent,
+  DynamicWorkflow,
   StoredPromptBlock,
   StoredMCPClient,
   StoredScorer,
@@ -108,6 +111,7 @@ import type {
   GetToolResponse,
   GetProcessorResponse,
   GetWorkflowResponse,
+  ListWorkflowRunCountsResponse,
   SaveMessageToMemoryParams,
   SaveMessageToMemoryResponse,
   McpServerListResponse,
@@ -129,6 +133,10 @@ import type {
   ListStoredAgentsResponse,
   CreateStoredAgentParams,
   StoredAgentResponse,
+  ListDynamicWorkflowsParams,
+  ListDynamicWorkflowsResponse,
+  UpsertDynamicWorkflowParams,
+  UpsertDynamicWorkflowResponse,
   ListStoredPromptBlocksParams,
   ListStoredPromptBlocksResponse,
   CreateStoredPromptBlockParams,
@@ -172,6 +180,7 @@ import type {
   DatasetItem,
   DatasetExperiment,
   DatasetExperimentResult,
+  ListExperimentsParams,
   ExperimentReviewCounts,
   CreateDatasetParams,
   UpdateDatasetParams,
@@ -201,8 +210,10 @@ import type {
   CreateScheduleInput,
   UpdateScheduleInput,
   RunScheduleResponse,
+  AgentControllerInfo,
 } from './types';
 import { base64RequestContext, buildTenancyQuery, parseClientRequestContext, requestContextQueryString } from './utils';
+import { createSseJsonTransform } from './utils/stream-transforms';
 
 export class MastraClient extends BaseResource {
   private observability: Observability;
@@ -258,10 +269,10 @@ export class MastraClient extends BaseResource {
 
   /**
    * Lists the agent controllers hosted on the connected Mastra instance.
-   * @returns Promise containing an array of agent controller identifiers
+   * @returns Promise containing one record per agent controller, carrying its id
    */
-  public async listAgentControllers(): Promise<{ id: string }[]> {
-    const body = await this.request<{ agentControllers: { id: string }[] }>('/agent-controller');
+  public async listAgentControllers(): Promise<AgentControllerInfo[]> {
+    const body = await this.request<{ agentControllers: AgentControllerInfo[] }>('/agent-controller');
     return body.agentControllers;
   }
 
@@ -570,6 +581,26 @@ export class MastraClient extends BaseResource {
   }
 
   /**
+   * Retrieves per-workflow counts of running and suspended (awaiting resume) runs
+   * @param requestContext - Optional request context to pass as query parameter
+   * @returns Promise containing map of workflow IDs to run counts
+   */
+  public listWorkflowRunCounts(
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<ListWorkflowRunCountsResponse> {
+    const requestContextParam = base64RequestContext(parseClientRequestContext(requestContext));
+
+    const searchParams = new URLSearchParams();
+
+    if (requestContextParam) {
+      searchParams.set('requestContext', requestContextParam);
+    }
+
+    const queryString = searchParams.toString();
+    return this.request(`/workflows/run-counts${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
    * Gets a workflow instance by ID
    * @param workflowId - ID of the workflow to retrieve
    * @returns Workflow instance
@@ -815,6 +846,14 @@ export class MastraClient extends BaseResource {
   }
 
   /**
+   * Gets an A2A Protocol v1.0 client for an agent.
+   * @param agentId - ID of the agent to interact with
+   */
+  public getA2AV1(agentId: string) {
+    return new A2AV1(this.options, agentId);
+  }
+
+  /**
    * Retrieves the working memory for a specific thread (optionally resource-scoped).
    * @param agentId - ID of the agent.
    * @param threadId - ID of the thread.
@@ -1037,6 +1076,18 @@ export class MastraClient extends BaseResource {
    */
   listTraces(params: ListTracesArgs = {}): Promise<ListTracesResponse> {
     return this.observability.listTraces(params);
+  }
+
+  /**
+   * Retrieves paginated list of traces carrying only the fields a trace list renders.
+   * Same contract as {@link listTraces}, but rows omit the `attributes`/`input`/`output`
+   * blobs and carry a short `inputPreview` instead.
+   *
+   * @param params - Parameters for pagination, filtering, and ordering
+   * @returns Promise containing paginated lightweight traces and pagination info
+   */
+  listTracesLight(params: ListTracesArgs = {}): Promise<ListTracesLightResponse> {
+    return this.observability.listTracesLight(params);
   }
 
   /**
@@ -1282,6 +1333,48 @@ export class MastraClient extends BaseResource {
    */
   public getStoredAgent(storedAgentId: string): StoredAgent {
     return new StoredAgent(this.options, storedAgentId);
+  }
+
+  // ============================================================================
+  // Dynamic Workflows
+  // ============================================================================
+
+  /**
+   * Lists dynamic workflow definitions, optionally filtered by status or author
+   * @param params - Optional filters: `status` ('active' | 'archived') and `authorId`
+   * @returns Promise containing the matching definitions and a total count
+   */
+  public listDynamicWorkflows(params?: ListDynamicWorkflowsParams): Promise<ListDynamicWorkflowsResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.status) searchParams.set('status', params.status);
+    if (params?.authorId) searchParams.set('authorId', params.authorId);
+
+    const queryString = searchParams.toString();
+    return this.request(`/stored/workflows${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Creates or replaces a dynamic workflow definition and live-registers it on the server.
+   * Optional `dependencies` lets helper workflows referenced by the root definition be
+   * saved in the same request; their ids are echoed back as `dependencyIds`.
+   * @param params - The workflow definition (id, schemas, graph) plus optional helper dependencies
+   * @returns Promise containing the persisted definition and any dependency ids
+   */
+  public upsertDynamicWorkflow(params: UpsertDynamicWorkflowParams): Promise<UpsertDynamicWorkflowResponse> {
+    return this.request('/stored/workflows', {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Gets a dynamic workflow instance by ID for further operations (details, delete).
+   * To execute a dynamic workflow, use `getWorkflow(id).createRun()` like any other workflow.
+   * @param dynamicWorkflowId - ID of the dynamic workflow definition
+   * @returns DynamicWorkflow instance
+   */
+  public getDynamicWorkflow(dynamicWorkflowId: string): DynamicWorkflow {
+    return new DynamicWorkflow(this.options, dynamicWorkflowId);
   }
 
   // ============================================================================
@@ -2003,13 +2096,16 @@ export class MastraClient extends BaseResource {
   /**
    * Lists all experiments across all datasets
    */
-  public listExperiments(pagination?: {
-    page?: number;
-    perPage?: number;
-  }): Promise<{ experiments: DatasetExperiment[]; pagination: PaginationInfo }> {
+  public listExperiments(
+    params?: ListExperimentsParams,
+  ): Promise<{ experiments: DatasetExperiment[]; pagination: PaginationInfo }> {
     const searchParams = new URLSearchParams();
-    if (pagination?.page !== undefined) searchParams.set('page', String(pagination.page));
-    if (pagination?.perPage !== undefined) searchParams.set('perPage', String(pagination.perPage));
+    if (params?.page !== undefined) searchParams.set('page', String(params.page));
+    if (params?.perPage !== undefined) searchParams.set('perPage', String(params.perPage));
+    if (params?.experimentSetId !== undefined) searchParams.set('experimentSetId', params.experimentSetId);
+    if (params?.comparisonId !== undefined) searchParams.set('comparisonId', params.comparisonId);
+    if (params?.variantId !== undefined) searchParams.set('variantId', params.variantId);
+    if (params?.trialIndex !== undefined) searchParams.set('trialIndex', String(params.trialIndex));
     const qs = searchParams.toString();
     return this.request(`/experiments${qs ? `?${qs}` : ''}`);
   }
@@ -2026,11 +2122,15 @@ export class MastraClient extends BaseResource {
    */
   public listDatasetExperiments(
     datasetId: string,
-    pagination?: { page?: number; perPage?: number },
+    params?: ListExperimentsParams,
   ): Promise<{ experiments: DatasetExperiment[]; pagination: PaginationInfo }> {
     const searchParams = new URLSearchParams();
-    if (pagination?.page !== undefined) searchParams.set('page', String(pagination.page));
-    if (pagination?.perPage !== undefined) searchParams.set('perPage', String(pagination.perPage));
+    if (params?.page !== undefined) searchParams.set('page', String(params.page));
+    if (params?.perPage !== undefined) searchParams.set('perPage', String(params.perPage));
+    if (params?.experimentSetId !== undefined) searchParams.set('experimentSetId', params.experimentSetId);
+    if (params?.comparisonId !== undefined) searchParams.set('comparisonId', params.comparisonId);
+    if (params?.variantId !== undefined) searchParams.set('variantId', params.variantId);
+    if (params?.trialIndex !== undefined) searchParams.set('trialIndex', String(params.trialIndex));
     const qs = searchParams.toString();
     return this.request(`/datasets/${encodeURIComponent(datasetId)}/experiments${qs ? `?${qs}` : ''}`);
   }
@@ -2191,39 +2291,7 @@ export class MastraClient extends BaseResource {
       throw new Error('Response body is null');
     }
 
-    //using undefined instead of empty string to avoid parsing errors
-    let failedChunk: string | undefined = undefined;
-
-    return response.body.pipeThrough(
-      new TransformStream({
-        async transform(chunk, controller) {
-          try {
-            // Decode binary data to text
-            const decoded = new TextDecoder().decode(chunk);
-
-            // Split by record separator
-            const chunks = decoded.split('\n\n');
-
-            // Process each chunk
-            for (const chunk of chunks) {
-              if (chunk) {
-                const cleanChunk = chunk.substring('data: '.length);
-                const newChunk: string = failedChunk ? failedChunk + cleanChunk : cleanChunk;
-                try {
-                  const parsedChunk = JSON.parse(newChunk);
-                  controller.enqueue(parsedChunk);
-                  failedChunk = undefined;
-                } catch {
-                  failedChunk = newChunk;
-                }
-              }
-            }
-          } catch {
-            // Silently ignore processing errors
-          }
-        },
-      }),
-    );
+    return response.body.pipeThrough(createSseJsonTransform());
   }
 
   /**

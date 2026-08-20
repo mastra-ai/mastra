@@ -223,7 +223,7 @@ const result = await agent.generate('message for agent')
                     type: '(context: DelegationStartContext) => DelegationStartResult | void | Promise<DelegationStartResult | void>',
                     isOptional: true,
                     description:
-                      'Called before delegating to a subagent. Use this to modify the delegation parameters or reject the delegation entirely.',
+                      "Called before delegating to a subagent. Use this to modify the delegation parameters, reject the delegation entirely, or mutate `context.requestContext` to add entries to the subagent run's request context.",
                   },
                 ],
               },
@@ -324,9 +324,10 @@ const result = await agent.generate('message for agent')
           },
           {
             name: 'onAbort',
-            type: '(event: any) => Promise<void> | void',
+            type: '(event: { steps: any[]; text?: string }) => Promise<void> | void',
             isOptional: true,
-            description: 'Callback function called when the generation is aborted.',
+            description:
+              'Callback function called when the generation is aborted. `steps` contains the steps that completed before the abort, and `text` contains the assistant text generated so far for the step that was in flight.',
           },
           {
             name: 'activeTools',
@@ -353,7 +354,7 @@ const result = await agent.generate('message for agent')
             type: 'boolean',
             isOptional: true,
             description:
-              "When true, all tool calls require explicit approval before execution. The generate() method will return with `finishReason: 'suspended'` and include a `suspendPayload` with tool call details (`toolCallId`, `toolName`, `args`). Use `approveToolCallGenerate()` or `declineToolCallGenerate()` to proceed. See [Agent Approval](/docs/agents/agent-approval#tool-approval-with-generate) for details.",
+              "When true, all tool calls require explicit approval before execution. The generate() method will return with `finishReason: 'suspended'` and include a `suspendPayload` with tool call details (`toolCallId`, `toolName`, `args`). Use `approveToolCallGenerate()` or `declineToolCallGenerate()` to proceed. See [Agent Approval](/docs/agents/human-in-the-loop#tool-approval-with-generate) for details.",
           },
           {
             name: 'autoResumeSuspendedTools',
@@ -847,7 +848,7 @@ const result = await agent.generate('message for agent')
             type: 'VersionOverrides',
             isOptional: true,
             description:
-              'Per-invocation version overrides for sub-agent delegation. Merged on top of Mastra instance-level versions and propagated automatically through sub-agent calls via requestContext. Requires the editor package. See [Sub-agent versioning](/docs/editor/overview#sub-agent-versioning).',
+              'Per-invocation version overrides for sub-agent delegation. Merged on top of Mastra instance-level versions and propagated automatically through sub-agent calls via requestContext. Requires the editor package. See [Editor versioning](/docs/studio/editor#versioning).',
             properties: [
               {
                 type: 'VersionOverrides',

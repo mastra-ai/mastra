@@ -14,6 +14,7 @@ const payloadFields = [
   'expectedTrajectory',
   'toolMocks',
   'unmockedToolPolicy',
+  'scorerIds',
   'requestContext',
   'metadata',
   'source',

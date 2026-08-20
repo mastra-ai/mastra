@@ -24,6 +24,7 @@ import { createDurableToolCallStep } from './tool-call';
 vi.mock('../../utils/resolve-runtime', () => ({
   resolveTool: vi.fn(),
   toolRequiresApproval: vi.fn().mockResolvedValue(true),
+  rebuildRunToolsFromMastra: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('../../stream-adapter', () => ({
@@ -62,12 +63,12 @@ function setupRegistry(execute: (...args: any[]) => any) {
   } as any);
 }
 
-function runToolCallStep(resumeData: unknown) {
+function runToolCallStep(resumeData: unknown, args = TOOL_ARGS, suspend = vi.fn()) {
   const step = createDurableToolCallStep();
   return (step as any).execute({
-    inputData: { toolCallId: TOOL_CALL_ID, toolName: TOOL_NAME, args: TOOL_ARGS },
+    inputData: { toolCallId: TOOL_CALL_ID, toolName: TOOL_NAME, args },
     mastra: { getLogger: () => undefined },
-    suspend: vi.fn(),
+    suspend,
     resumeData,
     requestContext: new Map(),
     getInitData: () => makeInitData(),
@@ -149,6 +150,30 @@ afterEach(() => {
 });
 
 describe('issue #17218 (durable engine): tool-call step records the approval decision', () => {
+  it.each([{}, { approved: 'true' }])('re-suspends malformed workflow approval data: %j', async resumeData => {
+    const execute = vi.fn().mockResolvedValue(TOOL_RESULT);
+    const suspend = vi.fn().mockResolvedValue('suspended');
+    setupRegistry(execute);
+
+    const result = await runToolCallStep(resumeData, TOOL_ARGS, suspend);
+
+    expect(result).toBe('suspended');
+    expect(suspend).toHaveBeenCalledTimes(1);
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('does not accept model-authored approval data', async () => {
+    const execute = vi.fn().mockResolvedValue(TOOL_RESULT);
+    const suspend = vi.fn().mockResolvedValue('suspended');
+    setupRegistry(execute);
+
+    const result = await runToolCallStep(undefined, { ...TOOL_ARGS, resumeData: { approved: true } }, suspend);
+
+    expect(result).toBe('suspended');
+    expect(suspend).toHaveBeenCalledTimes(1);
+    expect(execute).not.toHaveBeenCalled();
+  });
+
   it('decline returns approval { approved: false } with the reason and NO result', async () => {
     const execute = vi.fn().mockResolvedValue(TOOL_RESULT);
     setupRegistry(execute);

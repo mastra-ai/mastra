@@ -170,9 +170,37 @@ describe('Observability Handlers', () => {
         traceId: 'test-trace-123',
       });
 
-      expect(result).toEqual(mockTrace);
+      expect(result).toEqual({
+        traceId: 'test-trace-123',
+        spans: [{ ...createSampleSpan(), status: 'success' }],
+      });
       expect(mockObservabilityStore.getTrace).toHaveBeenCalledWith({ traceId: 'test-trace-123' });
       expect(handleErrorSpy).not.toHaveBeenCalled();
+    });
+
+    it('should derive span status from error and endedAt', async () => {
+      const mockTrace: TraceRecord = {
+        traceId: 'test-trace-123',
+        spans: [
+          createSampleSpan({ spanId: 'span-success' }),
+          createSampleSpan({ spanId: 'span-error', error: { message: 'boom' } }),
+          createSampleSpan({ spanId: 'span-running', endedAt: null }),
+        ],
+      };
+
+      (mockObservabilityStore.getTrace as ReturnType<typeof vi.fn>).mockResolvedValue(mockTrace);
+
+      const result = (await GET_TRACE_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        traceId: 'test-trace-123',
+      })) as { spans: Array<{ spanId: string; status: string }> };
+
+      const statuses = Object.fromEntries(result.spans.map(span => [span.spanId, span.status]));
+      expect(statuses).toEqual({
+        'span-success': 'success',
+        'span-error': 'error',
+        'span-running': 'running',
+      });
     });
 
     it('should throw 404 when trace not found', async () => {
@@ -776,6 +804,78 @@ describe('Observability Handlers', () => {
           filters: {},
           pagination: {},
           orderBy: {},
+        });
+      } finally {
+        mockObservabilityStore.listTracesLight = original;
+      }
+    });
+
+    it('should allow delta mode when the store advertises support', async () => {
+      const deltaResponse = {
+        spans: [],
+        delta: { limit: 10, hasMore: false },
+        deltaCursor: 'cursor-1',
+      };
+
+      (mockObservabilityStore.getFeatures as ReturnType<typeof vi.fn>).mockReturnValue(['delta-polling']);
+      (mockObservabilityStore.listTracesLight as ReturnType<typeof vi.fn>).mockResolvedValue(deltaResponse);
+
+      const result = await LIST_TRACES_LIGHT_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        mode: 'delta',
+        after: 'cursor-0',
+        limit: 10,
+      });
+
+      expect(result).toEqual(deltaResponse);
+      expect(mockObservabilityStore.listTracesLight).toHaveBeenCalledWith({
+        mode: 'delta',
+        filters: {},
+        after: 'cursor-0',
+        limit: 10,
+      });
+      expect(mockObservabilityStore.listTraces).not.toHaveBeenCalled();
+    });
+
+    it('should reject delta mode when the store does not advertise delta support', async () => {
+      (mockObservabilityStore.getFeatures as ReturnType<typeof vi.fn>).mockReturnValue([]);
+
+      await expect(
+        LIST_TRACES_LIGHT_ROUTE.handler({
+          ...createTestServerContext({ mastra: mockMastra }),
+          mode: 'delta',
+          after: 'cursor-0',
+          limit: 10,
+        }),
+      ).rejects.toThrow();
+
+      expect(mockObservabilityStore.listTracesLight).not.toHaveBeenCalled();
+    });
+
+    it('falls back to delta on listTraces when the store predates listTracesLight', async () => {
+      const deltaResponse = { spans: [], delta: { limit: 10, hasMore: false }, deltaCursor: 'cursor-1' };
+
+      (mockObservabilityStore.getFeatures as ReturnType<typeof vi.fn>).mockReturnValue(['delta-polling']);
+      (mockObservabilityStore.listTraces as ReturnType<typeof vi.fn>).mockResolvedValue(deltaResponse);
+
+      const original = mockObservabilityStore.listTracesLight;
+      // @ts-expect-error - intentionally remove method to simulate old core
+      delete mockObservabilityStore.listTracesLight;
+
+      try {
+        const result = await LIST_TRACES_LIGHT_ROUTE.handler({
+          ...createTestServerContext({ mastra: mockMastra }),
+          mode: 'delta',
+          after: 'cursor-0',
+          limit: 10,
+        });
+
+        expect(result).toEqual(deltaResponse);
+        expect(mockObservabilityStore.listTraces).toHaveBeenCalledWith({
+          mode: 'delta',
+          filters: {},
+          after: 'cursor-0',
+          limit: 10,
         });
       } finally {
         mockObservabilityStore.listTracesLight = original;

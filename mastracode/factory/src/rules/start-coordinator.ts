@@ -3,7 +3,8 @@ import type { AgentController } from '@mastra/core/agent-controller';
 import { RequestContext } from '@mastra/core/request-context';
 import { formatSkillActivation } from '@mastra/core/workspace';
 
-import type { MemorySettingsRecord, MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
+import { hydrateFactorySession } from '../session/factory-session.js';
+import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { SourceControlSession, SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { CreateWorkItemInput, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { FactoryTransitionService } from './transition-service.js';
@@ -26,6 +27,8 @@ export interface FactoryStartRequest {
     input: CreateWorkItemInput;
   };
   requestContext?: RequestContext;
+  /** Arm the item's autonomy in the same transaction that prepares the run. */
+  armAutonomy?: boolean;
 }
 
 export class FactoryStartTransitionError extends Error {
@@ -64,7 +67,7 @@ async function resolveKickoffMessage(
   if (!invocation) return null;
   if (invocation.type === 'prompt') return invocation.prompt;
 
-  const skills = session.getWorkspace().skills;
+  const skills = session.getWorkspace()?.skills;
   await skills?.maybeRefresh();
   const skill = await skills?.get(invocation.skillName);
   if (!skill || skill['user-invocable'] === false) {
@@ -103,18 +106,6 @@ async function configureThread(session: FactorySession, request: FactoryStartReq
   return threadId;
 }
 
-async function applyMemorySettings(session: FactorySession, record: MemorySettingsRecord | null): Promise<void> {
-  if (record?.observerModelId) await session.om.observer.switchModel({ modelId: record.observerModelId });
-  if (record?.reflectorModelId) await session.om.reflector.switchModel({ modelId: record.reflectorModelId });
-
-  const state = {
-    ...(record?.observationThreshold != null ? { observationThreshold: record.observationThreshold } : {}),
-    ...(record?.reflectionThreshold != null ? { reflectionThreshold: record.reflectionThreshold } : {}),
-    ...(record?.observeAttachments != null ? { observeAttachments: record.observeAttachments } : {}),
-  };
-  if (Object.keys(state).length > 0) await session.state.set(state);
-}
-
 export class FactoryStartCoordinator {
   readonly #controller: FactoryController;
   readonly #storage: WorkItemsStorage;
@@ -141,7 +132,7 @@ export class FactoryStartCoordinator {
     if (!this.#sourceControl) throw new Error('Factory source control storage is unavailable');
     const sourceSession = await resolveSourceSession(this.#sourceControl, request);
     const requestContext = request.requestContext ?? new RequestContext();
-    if (!request.requestContext) {
+    if (!requestContext.get('user')) {
       requestContext.set('user', { workosId: request.userId, organizationId: request.orgId });
     }
     // Sessions kicked off against third-party content (a PR under review, or
@@ -150,7 +141,8 @@ export class FactoryStartCoordinator {
     // or reminders — those files are attacker-writable in a PR branch.
     const untrustedCheckout =
       request.workItem.input.externalSource?.type === 'pull-request' ||
-      (request.invocation?.type === 'skill' && request.invocation.skillName === 'factory-review');
+      (request.invocation?.type === 'skill' &&
+        (request.invocation.skillName === 'factory-review' || request.invocation.skillName === 'factory-rereview'));
     // The trusted ref the SDK may serve project instruction files from on an
     // untrusted checkout (the PR's base branch). Prefer the session record's
     // base branch; fall back to the intake metadata captured from the PR.
@@ -179,28 +171,18 @@ export class FactoryStartCoordinator {
     // boolean so it rides only on state (tags are string-valued).
     await session.state.set({
       ...sessionTags,
+      // The authoritative org id for every downstream identity read (the
+      // memory seam's organizationId): the session owner is a USER id, not an
+      // org, so it must never be improvised from ownerId.
+      factoryOrgId: request.orgId,
       ...(untrustedCheckout ? { untrustedCheckout: true, ...(baseRef ? { baseRef } : {}) } : {}),
     });
-    if (this.#memorySettings) {
-      try {
-        const record = await this.#memorySettings.get({ orgId: request.orgId, userId: request.userId });
-        await applyMemorySettings(session, record);
-      } catch (error) {
-        console.warn('[Factory Start] Failed to apply observational-memory settings', {
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
-    if (request.defaultModelId) {
-      try {
-        await session.model.switch({ modelId: request.defaultModelId });
-      } catch (error) {
-        console.warn('[Factory Start] Failed to apply factory default model', {
-          modelId: request.defaultModelId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
+    await hydrateFactorySession(session, {
+      orgId: request.orgId,
+      userId: request.userId,
+      defaultModelId: request.defaultModelId,
+      memorySettings: this.#memorySettings,
+    });
     const threadId = await configureThread(session, request);
     const kickoffMessage = await resolveKickoffMessage(session, request.invocation);
     const prepared = await storage.prepareRunStart({
@@ -213,6 +195,7 @@ export class FactoryStartCoordinator {
       resourceId: sourceSession.sessionId,
       kickoffKey: request.kickoffKey,
       kickoffMessage,
+      armAutonomy: request.armAutonomy === true,
     });
     await session.thread.setSetting({ key: 'factoryWorkItemId', value: prepared.item.id });
 

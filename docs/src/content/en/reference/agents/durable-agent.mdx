@@ -7,6 +7,12 @@ packages:
 
 # DurableAgent
 
+:::beta
+
+Breaking changes may occur without a major version bump until the API is stable.
+
+:::
+
 `DurableAgent` wraps an existing [`Agent`](/reference/agents/agent) with durable execution and resumable streams. It runs the agentic loop so that a client can disconnect and reconnect without missing events, and it streams those events over [PubSub](/docs/server/pubsub). Use it when a run must outlive a single request or survive a dropped connection.
 
 Create one with the [`createDurableAgent`](#createdurableagentoptions) factory, or use [`createEventedAgent`](#createeventedagentoptions) for fire-and-forget execution on the built-in workflow engine. For Inngest-powered execution, use [`createInngestAgent`](/reference/agents/inngest-agent) from `@mastra/inngest`.
@@ -610,7 +616,8 @@ Returns: [`Promise<DurableAgentStreamResult>`](#durableagentstreamresult)
     name: 'onAbort',
     type: "AgentExecutionOptions['onAbort']",
     isOptional: true,
-    description: 'Called when the run is aborted via `abortSignal` or `result.abort()`.',
+    description:
+      'Called when the run is aborted via `abortSignal` or `result.abort()`. Receives the steps completed before the abort and, in `text`, the assistant text streamed so far.',
   },
   {
     name: 'onIterationComplete',

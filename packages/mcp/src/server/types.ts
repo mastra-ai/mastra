@@ -1,13 +1,52 @@
+import type { MCPServerContext } from '@mastra/core/tools';
 import type { McpUiResourceMeta } from '@modelcontextprotocol/ext-apps';
-import type { RequestHandlerExtra, RequestOptions } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import type {
+  CacheHint,
+  RequestOptions,
   ElicitRequest,
   ElicitResult,
   Prompt,
   PromptMessage,
   Resource,
-  ResourceTemplate,
-} from '@modelcontextprotocol/sdk/types.js';
+  ResourceTemplateType,
+} from '@modelcontextprotocol/server';
+
+/**
+ * MCP protocol revisions the server can be pinned to.
+ *
+ * - `'2025-11-25'` — the legacy (2025) protocol era. This is the default and matches
+ *   the server's behavior when the option is omitted: sessionful streamable HTTP,
+ *   `initialize` handshake, server→client push notifications.
+ * - `'2026-07-28'` — the stateless protocol revision. HTTP and serverless requests are
+ *   served through the SDK's dual-era handler: modern (per-request envelope) clients are
+ *   served natively, and legacy clients are served through the built-in stateless
+ *   fallback on the same endpoint. Stdio serves both eras via the `server/discover`
+ *   probe. List-changed/resource-updated notifications additionally reach modern
+ *   clients via `subscriptions/listen`, tool log emission honors the per-request
+ *   `logLevel` opt-in, and configured {@link MCPServerCacheHints} are advertised.
+ */
+export type MCPServerProtocolVersion = '2025-11-25' | '2026-07-28';
+
+/**
+ * The operations whose results are cacheable on the `2026-07-28` protocol revision.
+ */
+export type MCPServerCacheableMethod =
+  | 'tools/list'
+  | 'prompts/list'
+  | 'resources/list'
+  | 'resources/templates/list'
+  | 'resources/read'
+  | 'server/discover';
+
+/**
+ * Cache hints (`ttlMs` / `cacheScope`) advertised on cacheable results of the
+ * `2026-07-28` protocol revision, keyed by operation.
+ *
+ * Only used when `protocolVersion: '2026-07-28'` is set. Absent hints keep the SDK's
+ * conservative defaults (`ttlMs: 0`, `cacheScope: 'private'`). Responses to legacy
+ * (2025-era) requests are never affected.
+ */
+export type MCPServerCacheHints = Partial<Record<MCPServerCacheableMethod, CacheHint>>;
 
 /**
  * Callback function to retrieve content for a specific resource.
@@ -41,11 +80,11 @@ export type MCPServerResources = {
   /** Function to get content for a specific resource */
   getResourceContent: MCPServerResourceContentCallback;
   /** Optional function to list resource templates */
-  resourceTemplates?: ({ extra }: { extra: MCPRequestHandlerExtra }) => Promise<ResourceTemplate[]>;
+  resourceTemplates?: ({ extra }: { extra: MCPRequestHandlerExtra }) => Promise<ResourceTemplateType[]>;
 };
 
 /**
- * Extends the MCP SDK Prompt type with an optional version field.
+ * Extends the MCP Prompt type with an optional version field.
  *
  * The MCP protocol does not include `version` on prompts, so this field is
  * only used server-side for internal prompt lookup and is not sent over the wire.
@@ -116,16 +155,16 @@ export type ElicitationActions = {
 /**
  * Extra context passed to MCP request handlers.
  */
-export type MCPRequestHandlerExtra = RequestHandlerExtra<any, any>;
+export type MCPRequestHandlerExtra = MCPServerContext;
 
 /**
- * Re-exported MCP SDK types for resource handling.
+ * Re-exported MCP types for resource handling.
  *
  * - `Resource`: Represents a data resource exposed by the server
  * - `ResourceTemplate`: URI template for dynamic resource generation
  * - `RequestOptions`: Options for MCP requests (timeout, signal, etc.)
  */
-export type { Resource, ResourceTemplate, RequestOptions };
+export type { Resource, ResourceTemplateType as ResourceTemplate, RequestOptions };
 
 /**
  * Configuration for a single MCP App resource.

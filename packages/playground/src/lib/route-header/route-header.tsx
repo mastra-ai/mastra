@@ -3,20 +3,23 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Header } from '@mastra/playground-ui/components/Header';
 import { DocsIcon } from '@mastra/playground-ui/icons/DocsIcon';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import { RouteHeaderActionsSlot } from './route-header-actions';
 import { useRouteHeaderCrumbsOverride } from './route-header-crumbs-context';
 import type { CrumbDef } from './types';
 import { useRouteHeader } from './use-route-header';
 
-function RouteHeaderCrumbContent({ def }: { def: CrumbDef }) {
+// Returns content rather than rendering a component, so a plain label reaches
+// Crumb as a string child and gets its truncating box.
+function routeHeaderCrumbContent(def: CrumbDef): ReactNode {
   if ('Component' in def && def.Component) {
     const Component = def.Component;
     return <Component />;
   }
 
-  if ('node' in def) return <>{def.node}</>;
-  return <>{def.label}</>;
+  if ('node' in def) return def.node;
+  return def.label;
 }
 
 export function RouteHeader() {
@@ -42,11 +45,11 @@ export function RouteHeader() {
                 className={isCurrent ? 'max-w-[28rem]' : 'max-w-[18rem]'}
               >
                 {IconComponent && (
-                  <Icon>
+                  <Icon className={isCurrent ? 'flex w-6 justify-center' : undefined}>
                     <IconComponent />
                   </Icon>
                 )}
-                <RouteHeaderCrumbContent def={def} />
+                {routeHeaderCrumbContent(def)}
               </Crumb>
             );
           })}

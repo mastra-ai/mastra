@@ -84,6 +84,15 @@ describe('loadAgentInstructions', () => {
       normalize(join(project, '.acme-code', 'CLAUDE.md')),
     ]);
   });
+
+  it('loads project instructions only when skipGlobal is set', () => {
+    write(join(mocks.home, '.claude', 'CLAUDE.md'), 'global instructions');
+    write(join(project, 'AGENTS.md'), 'project instructions');
+
+    const sources = loadAgentInstructions(project, undefined, undefined, { skipGlobal: true });
+
+    expect(sources).toEqual([{ path: join(project, 'AGENTS.md'), content: 'project instructions', scope: 'project' }]);
+  });
 });
 
 describe('git-ref instruction readers', () => {

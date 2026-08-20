@@ -16,6 +16,7 @@ import { BACKGROUND_TASK_ROUTES } from './background-tasks';
 import { CHANNELS_ROUTES } from './channels';
 import { CONVERSATIONS_ROUTES } from './conversations';
 import { DATASETS_ROUTES } from './datasets';
+import { DYNAMIC_WORKFLOWS_ROUTES } from './dynamic-workflows';
 import { EDITOR_BUILDER_ROUTES } from './editor-builder';
 import { LEGACY_ROUTES } from './legacy';
 import { LOGS_ROUTES } from './logs';
@@ -179,6 +180,7 @@ export const SERVER_ROUTES: readonly ServerRoute[] = [
   ...LEGACY_ROUTES,
   ...MCP_ROUTES,
   ...STORED_AGENTS_ROUTES,
+  ...DYNAMIC_WORKFLOWS_ROUTES,
   ...STORED_MCP_CLIENTS_ROUTES,
   ...STORED_PROMPT_BLOCKS_ROUTES,
   ...STORED_SCORERS_ROUTES,

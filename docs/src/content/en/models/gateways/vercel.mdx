@@ -9,7 +9,7 @@ description: "Use AI models through Vercel."
 
 # <img src="https://models.dev/logos/vercel.svg" alt="Vercel logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Vercel
 
-Vercel aggregates models from multiple providers with enhanced features like rate limiting and failover. Access 308 models through Mastra's model router.
+Vercel aggregates models from multiple providers with enhanced features like rate limiting and failover. Access 350 models through Mastra's model router.
 
 Learn more in the [Vercel documentation](https://ai-sdk.dev/providers/ai-sdk-providers).
 
@@ -26,7 +26,7 @@ const agent = new Agent({
 });
 ```
 
-:::info
+:::note
 
 Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [Vercel documentation](https://ai-sdk.dev/providers/ai-sdk-providers) for details.
 
@@ -76,6 +76,9 @@ ANTHROPIC_API_KEY=ant-...
 | `alibaba/qwen3.7-flash` |
 | `alibaba/qwen3.7-max` |
 | `alibaba/qwen3.7-plus` |
+| `alibaba/qwen3.8-2.4t-a95b` |
+| `alibaba/qwen3.8-27b` |
+| `alibaba/qwen3.8-max` |
 | `alibaba/wan-v2.5-t2v-preview` |
 | `alibaba/wan-v2.6-i2v` |
 | `alibaba/wan-v2.6-i2v-flash` |
@@ -93,7 +96,6 @@ ANTHROPIC_API_KEY=ant-...
 | `anthropic/claude-fable-5` |
 | `anthropic/claude-haiku-4.5` |
 | `anthropic/claude-opus-4` |
-| `anthropic/claude-opus-4.1` |
 | `anthropic/claude-opus-4.5` |
 | `anthropic/claude-opus-4.6` |
 | `anthropic/claude-opus-4.7` |
@@ -112,6 +114,7 @@ ANTHROPIC_API_KEY=ant-...
 | `bfl/flux-2-klein-9b` |
 | `bfl/flux-2-max` |
 | `bfl/flux-2-pro` |
+| `bfl/flux-3-video` |
 | `bfl/flux-kontext-max` |
 | `bfl/flux-kontext-pro` |
 | `bfl/flux-pro-1.0-fill` |
@@ -121,6 +124,7 @@ ANTHROPIC_API_KEY=ant-...
 | `bytedance/seed-1.8` |
 | `bytedance/seedance-2.0` |
 | `bytedance/seedance-2.0-fast` |
+| `bytedance/seedance-2.5` |
 | `bytedance/seedance-v1.0-pro` |
 | `bytedance/seedance-v1.0-pro-fast` |
 | `bytedance/seedance-v1.5-pro` |
@@ -140,7 +144,17 @@ ANTHROPIC_API_KEY=ant-...
 | `deepseek/deepseek-v3.2` |
 | `deepseek/deepseek-v3.2-thinking` |
 | `deepseek/deepseek-v4-flash` |
+| `deepseek/deepseek-v4-flash-0731` |
 | `deepseek/deepseek-v4-pro` |
+| `deepseek/deepseek-v4-pro-0813` |
+| `fish-audio/s1` |
+| `fish-audio/s1-free` |
+| `fish-audio/s2-pro` |
+| `fish-audio/s2-pro-free` |
+| `fish-audio/s2.1-pro` |
+| `fish-audio/s2.1-pro-free` |
+| `fish-audio/transcribe-1` |
+| `fish-audio/transcribe-1-free` |
 | `google/gemini-2.5-flash` |
 | `google/gemini-2.5-flash-image` |
 | `google/gemini-2.5-flash-lite` |
@@ -155,6 +169,7 @@ ANTHROPIC_API_KEY=ant-...
 | `google/gemini-3.5-flash` |
 | `google/gemini-3.5-flash-lite` |
 | `google/gemini-3.6-flash` |
+| `google/gemini-3.7-flash` |
 | `google/gemini-embedding-001` |
 | `google/gemini-embedding-2` |
 | `google/gemini-omni-flash-preview` |
@@ -169,9 +184,10 @@ ANTHROPIC_API_KEY=ant-...
 | `google/veo-3.0-generate-001` |
 | `google/veo-3.1-fast-generate-001` |
 | `google/veo-3.1-generate-001` |
+| `google/veo-3.1-lite-generate-001` |
 | `inception/mercury-2` |
 | `inception/mercury-coder-small` |
-| `inclusionai/ling-3.0-flash-free` |
+| `inclusionai/ling-3.0-flash` |
 | `interfaze/interfaze-beta` |
 | `klingai/kling-v2.5-turbo-i2v` |
 | `klingai/kling-v2.5-turbo-t2v` |
@@ -190,7 +206,11 @@ ANTHROPIC_API_KEY=ant-...
 | `meta/llama-3.3-70b` |
 | `meta/llama-4-maverick` |
 | `meta/llama-4-scout` |
+| `meta/muse-glimmer-30b` |
 | `meta/muse-spark-1.1` |
+| `meta/muse-spark-1.2` |
+| `meta/muse-spark-1.2-contributor` |
+| `minimax/minimax-h3` |
 | `minimax/minimax-m2` |
 | `minimax/minimax-m2.1` |
 | `minimax/minimax-m2.1-lightning` |
@@ -228,42 +248,57 @@ ANTHROPIC_API_KEY=ant-...
 | `nvidia/nemotron-3-nano-30b-a3b` |
 | `nvidia/nemotron-3-super-120b-a12b` |
 | `nvidia/nemotron-3-ultra-550b-a55b` |
+| `nvidia/nemotron-3.5-lightning` |
 | `nvidia/nemotron-nano-12b-v2-vl` |
 | `nvidia/nemotron-nano-9b-v2` |
 | `openai/gpt-3.5-turbo` |
 | `openai/gpt-4-turbo` |
 | `openai/gpt-4.1` |
+| `openai/gpt-4.1-fast` |
 | `openai/gpt-4.1-mini` |
+| `openai/gpt-4.1-mini-fast` |
 | `openai/gpt-4.1-nano` |
+| `openai/gpt-4.1-nano-fast` |
 | `openai/gpt-4o` |
+| `openai/gpt-4o-fast` |
 | `openai/gpt-4o-mini` |
+| `openai/gpt-4o-mini-fast` |
 | `openai/gpt-4o-mini-search-preview` |
 | `openai/gpt-4o-mini-transcribe` |
 | `openai/gpt-4o-transcribe` |
 | `openai/gpt-5` |
 | `openai/gpt-5-codex` |
+| `openai/gpt-5-fast` |
 | `openai/gpt-5-mini` |
+| `openai/gpt-5-mini-fast` |
 | `openai/gpt-5-nano` |
 | `openai/gpt-5-pro` |
 | `openai/gpt-5.1-codex` |
 | `openai/gpt-5.1-codex-max` |
 | `openai/gpt-5.1-codex-mini` |
-| `openai/gpt-5.1-instant` |
 | `openai/gpt-5.1-thinking` |
+| `openai/gpt-5.1-thinking-fast` |
 | `openai/gpt-5.2` |
 | `openai/gpt-5.2-codex` |
+| `openai/gpt-5.2-fast` |
 | `openai/gpt-5.2-pro` |
-| `openai/gpt-5.3-chat` |
 | `openai/gpt-5.3-codex` |
+| `openai/gpt-5.3-codex-fast` |
 | `openai/gpt-5.4` |
+| `openai/gpt-5.4-fast` |
 | `openai/gpt-5.4-mini` |
+| `openai/gpt-5.4-mini-fast` |
 | `openai/gpt-5.4-nano` |
 | `openai/gpt-5.4-pro` |
 | `openai/gpt-5.5` |
+| `openai/gpt-5.5-fast` |
 | `openai/gpt-5.5-pro` |
 | `openai/gpt-5.6-luna` |
+| `openai/gpt-5.6-luna-fast` |
 | `openai/gpt-5.6-sol` |
+| `openai/gpt-5.6-sol-fast` |
 | `openai/gpt-5.6-terra` |
+| `openai/gpt-5.6-terra-fast` |
 | `openai/gpt-image-1` |
 | `openai/gpt-image-1-mini` |
 | `openai/gpt-image-1.5` |
@@ -279,15 +314,19 @@ ANTHROPIC_API_KEY=ant-...
 | `openai/o1` |
 | `openai/o3` |
 | `openai/o3-deep-research` |
+| `openai/o3-fast` |
 | `openai/o3-mini` |
 | `openai/o3-pro` |
 | `openai/o4-mini` |
+| `openai/o4-mini-fast` |
 | `openai/text-embedding-3-large` |
 | `openai/text-embedding-3-small` |
 | `openai/text-embedding-ada-002` |
 | `openai/tts-1` |
 | `openai/tts-1-hd` |
 | `openai/whisper-1` |
+| `perplexity/pplx-embed-v1-0.6b` |
+| `perplexity/pplx-embed-v1-4b` |
 | `perplexity/sonar` |
 | `perplexity/sonar-pro` |
 | `perplexity/sonar-reasoning-pro` |
@@ -304,10 +343,12 @@ ANTHROPIC_API_KEY=ant-...
 | `recraft/recraft-v4.1-utility` |
 | `recraft/recraft-v4.1-utility-pro` |
 | `sakana/fugu-ultra` |
+| `sakana/namazu` |
 | `stepfun/step-3.5-flash` |
 | `stepfun/step-3.7-flash` |
 | `tencent/hy3` |
 | `thinkingmachines/inkling` |
+| `thinkingmachines/inkling-small` |
 | `voyage/rerank-2.5` |
 | `voyage/rerank-2.5-lite` |
 | `voyage/voyage-3-large` |
@@ -330,8 +371,10 @@ ANTHROPIC_API_KEY=ant-...
 | `xai/grok-4.20-reasoning-beta` |
 | `xai/grok-4.3` |
 | `xai/grok-4.5` |
+| `xai/grok-4.6` |
 | `xai/grok-build-0.1` |
 | `xai/grok-imagine-image` |
+| `xai/grok-imagine-image-2.0` |
 | `xai/grok-imagine-video` |
 | `xai/grok-imagine-video-1.5` |
 | `xai/grok-imagine-video-1.5-preview` |
@@ -345,8 +388,6 @@ ANTHROPIC_API_KEY=ant-...
 | `zai/glm-4.5-air` |
 | `zai/glm-4.5v` |
 | `zai/glm-4.6` |
-| `zai/glm-4.6v` |
-| `zai/glm-4.6v-flash` |
 | `zai/glm-4.7` |
 | `zai/glm-4.7-flash` |
 | `zai/glm-4.7-flashx` |
@@ -355,5 +396,6 @@ ANTHROPIC_API_KEY=ant-...
 | `zai/glm-5.1` |
 | `zai/glm-5.2` |
 | `zai/glm-5.2-fast` |
+| `zai/glm-5.3` |
 | `zai/glm-5v-turbo` |
 

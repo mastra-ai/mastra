@@ -13,6 +13,8 @@ import {
   getSpanArgsSchema,
   getSpanResponseSchema,
   dateRangeSchema,
+  toTraceSpans,
+  traceSpanSchema,
 } from '@mastra/core/storage';
 // `branches*`, `listBranches*`, and `getBranch*` schemas are new in
 // @mastra/core@1.32.0; route them through a shim that tolerates older cores
@@ -103,29 +105,23 @@ function transformLegacyParams(params: Record<string, unknown>): Record<string, 
 // Route Definitions (new pattern - handlers defined inline with createRoute)
 // ============================================================================
 
-const listTracesQueryParamSchema = wrapSchemaForQueryParams(
-  tracesFilterSchema
-    .extend(paginationArgsSchema.shape)
-    .extend(tracesOrderBySchema.shape)
-    .extend(legacyQueryParamsSchema.shape) // Accept legacy params for backward compatibility
-    .partial(),
-);
+/** Filter shape shared by the full and lightweight trace list routes. */
+const tracesListFilterSchema = tracesFilterSchema.extend({
+  ...legacyQueryParamsSchema.shape, // Accept legacy params for backward compatibility
+  entityType: z.preprocess(
+    value => (value === 'workflow' ? 'workflow_run' : value),
+    tracesFilterSchema.shape.entityType,
+  ),
+});
+
+const listTracesQueryParamSchema = createObservabilityListQuerySchema(tracesListFilterSchema, tracesOrderBySchema);
 
 /** Route: GET /observability/traces - paginated trace listing with filtering and sorting. */
 export const LIST_TRACES_ROUTE: ServerRoute = createRoute({
   method: 'GET',
   path: '/observability/traces',
   responseType: 'json',
-  queryParamSchema: createObservabilityListQuerySchema(
-    tracesFilterSchema.extend({
-      ...legacyQueryParamsSchema.shape,
-      entityType: z.preprocess(
-        value => (value === 'workflow' ? 'workflow_run' : value),
-        tracesFilterSchema.shape.entityType,
-      ),
-    }),
-    tracesOrderBySchema,
-  ),
+  queryParamSchema: listTracesQueryParamSchema,
   responseSchema: listTracesResponseSchema,
   summary: 'List traces',
   description:
@@ -166,26 +162,42 @@ export const LIST_TRACES_LIGHT_ROUTE = createRoute({
   queryParamSchema: listTracesQueryParamSchema,
   responseSchema: listTracesLightResponseSchema,
   summary: 'List lightweight traces',
-  description: 'Returns a paginated list of lightweight traces with optional filtering and sorting',
+  description:
+    'Returns a paginated list of lightweight traces with optional filtering and sorting. In delta mode, returns only newly listed traces matching the filters.',
   tags: ['Observability'],
   requiresAuth: true,
-  handler: async ({ mastra, ...params }) => {
+  handler: async ({ mastra, mode, after, limit, ...params }) => {
     try {
       const transformedParams = transformLegacyParams(params);
 
       const filters = pickParams(tracesFilterSchema, transformedParams);
+      const observabilityStore = await getObservabilityStore(mastra);
+
+      // Every current store answers `listTracesLight` — stores without a dedicated
+      // implementation inherit the base class's projection fallback. This guard is
+      // only for an older `@mastra/core` whose base class predates the method, where
+      // calling it would throw `TypeError: ... is not a function`; there we fall back
+      // to `listTraces` so consumers still get a response.
+      const store = observabilityStore as { listTracesLight?: unknown };
+      const supportsLight = typeof store.listTracesLight === 'function';
+
+      if (mode === 'delta') {
+        assertObservabilityDeltaSupported(observabilityStore, OBSERVABILITY_LIST_ENDPOINTS.traces);
+        const deltaArgs = {
+          mode,
+          filters,
+          after: typeof after === 'string' ? after : undefined,
+          limit,
+        } as const;
+        return supportsLight
+          ? await observabilityStore.listTracesLight(deltaArgs)
+          : await observabilityStore.listTraces(deltaArgs);
+      }
+
       const pagination = pickParams(paginationArgsSchema, transformedParams);
       const orderBy = pickParams(tracesOrderBySchema, transformedParams);
 
-      const observabilityStore = await getObservabilityStore(mastra);
-      // `listTracesLight` was added in `@mastra/core` alongside this route.
-      // When this `@mastra/server` is paired with an older `@mastra/core`,
-      // the base `ObservabilityStorage` class doesn't declare
-      // `listTracesLight` at all, so calling it on a store instance throws
-      // `TypeError: ... is not a function`. Detect that case and fall back
-      // to the full `listTraces` call so consumers still get a response.
-      const store = observabilityStore as { listTracesLight?: unknown };
-      if (typeof store.listTracesLight !== 'function') {
+      if (!supportsLight) {
         return await observabilityStore.listTraces({ filters, pagination, orderBy });
       }
       return await observabilityStore.listTracesLight({ filters, pagination, orderBy });
@@ -264,7 +276,7 @@ export const GET_TRACE_ROUTE: ServerRoute = createRoute({
   path: '/observability/traces/:traceId',
   responseType: 'json',
   pathParamSchema: getTraceArgsSchema,
-  responseSchema: getTraceResponseSchema,
+  responseSchema: getTraceResponseSchema.extend({ spans: z.array(traceSpanSchema) }),
   summary: 'Get AI trace by ID',
   description: 'Returns a complete AI trace with all spans by trace ID',
   tags: ['Observability'],
@@ -278,7 +290,9 @@ export const GET_TRACE_ROUTE: ServerRoute = createRoute({
         throw new HTTPException(404, { message: `Trace with ID '${traceId}' not found` });
       }
 
-      return trace;
+      // Stored SpanRecords carry no status field; derive it from error/endedAt so
+      // trace-detail spans match the status shown in trace list rows.
+      return { ...trace, spans: toTraceSpans(trace.spans) };
     } catch (error) {
       return handleError(error, 'Error getting trace');
     }

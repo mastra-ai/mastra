@@ -436,6 +436,22 @@ export interface StorageConditionalVariant<T> {
 export type StorageConditionalField<T> = T | StorageConditionalVariant<T>[];
 
 /**
+ * Serializable subset of `AgentDurableOption` that can be persisted on a stored
+ * agent version snapshot. `cache` and `pubsub` are live runtime objects and are
+ * intentionally excluded — they are inherited from the Mastra instance at
+ * hydration time. `id`/`name` are excluded because a stored agent's durable
+ * wrapper must keep the agent's own id/name to stay addressable.
+ */
+export type StorageDurableConfig =
+  | boolean
+  | {
+      /** Maximum steps for the durable agentic loop. */
+      maxSteps?: number;
+      /** Auto-cleanup timer for durable stream state (ms). `0` disables cleanup. */
+      cleanupTimeoutMs?: number;
+    };
+
+/**
  * Agent version snapshot type containing ALL agent configuration fields.
  * These fields live exclusively in version snapshot rows, not on the agent record.
  */
@@ -486,6 +502,12 @@ export interface StorageAgentSnapshotType {
   skills?: StorageConditionalField<Record<string, StorageSkillConfig>>;
   /** Skill format for system message injection (default: 'xml') */
   skillsFormat?: 'xml' | 'json' | 'markdown';
+  /**
+   * Opt the hydrated agent into durable execution. Serializable subset of
+   * `AgentDurableOption` — `cache`/`pubsub` are live objects and stay code-level.
+   * Not conditional: durability is decided at registration time, not per request.
+   */
+  durable?: StorageDurableConfig;
   /** JSON Schema for validating request context values. Stored as JSON Schema since Zod is not serializable. */
   requestContextSchema?: Record<string, unknown>;
 }
@@ -2216,6 +2238,31 @@ export interface UpdateWorkflowStateOptions {
     spanId?: string;
     parentSpanId?: string;
   };
+  /**
+   * Optional compare-and-set guard. When provided, the update is applied only if the
+   * persisted snapshot's status matches one of these values. Otherwise the update is a
+   * no-op and `updateWorkflowState` resolves to `undefined`.
+   *
+   * This is only enforced atomically by stores that report `supportsConcurrentUpdates()`,
+   * because those stores load and write the snapshot inside a single critical section.
+   * Stores without concurrent update support apply it on a best-effort basis.
+   *
+   * This field is a guard only: it is never merged into the persisted snapshot.
+   */
+  expectedStatus?: WorkflowRunStatus | WorkflowRunStatus[];
+}
+
+/**
+ * Returns true when a snapshot's current status satisfies an `expectedStatus` guard.
+ * Stores call this inside their `updateWorkflowState` critical section.
+ */
+export function matchesExpectedWorkflowStatus(
+  currentStatus: WorkflowRunStatus | undefined,
+  expectedStatus: UpdateWorkflowStateOptions['expectedStatus'],
+): boolean {
+  if (expectedStatus === undefined) return true;
+  const expected = Array.isArray(expectedStatus) ? expectedStatus : [expectedStatus];
+  return currentStatus !== undefined && expected.includes(currentStatus);
 }
 
 function unwrapSchema(schema: z.ZodTypeAny): { base: z.ZodTypeAny; nullable: boolean } {
@@ -2490,6 +2537,7 @@ export interface DatasetItem {
   expectedTrajectory?: unknown;
   toolMocks?: DatasetItemToolMock[];
   unmockedToolPolicy?: DatasetUnmockedToolPolicy;
+  scorerIds?: string[];
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
@@ -2514,6 +2562,7 @@ export interface DatasetItemRow {
   expectedTrajectory?: unknown;
   toolMocks?: DatasetItemToolMock[];
   unmockedToolPolicy?: DatasetUnmockedToolPolicy;
+  scorerIds?: string[];
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
@@ -2632,6 +2681,7 @@ export interface DatasetItemPayload {
   toolMocks?: DatasetItemToolMock[];
   /** Overrides the experiment's handling of tool calls not declared in `toolMocks`. */
   unmockedToolPolicy?: DatasetUnmockedToolPolicy;
+  scorerIds?: string[];
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
@@ -2654,9 +2704,10 @@ export interface AddDatasetItemInput extends DatasetItemPayload {
  * The optional `filters` field is a tenancy read-scope for the parent dataset;
  * see {@link AddDatasetItemInput.filters}.
  */
-export interface UpdateDatasetItemInput extends Partial<Omit<DatasetItemPayload, 'externalId'>> {
+export interface UpdateDatasetItemInput extends Partial<Omit<DatasetItemPayload, 'externalId' | 'scorerIds'>> {
   id: string;
   datasetId: string;
+  scorerIds?: string[] | null;
   filters?: DatasetTenancyFilters;
 }
 
@@ -2754,11 +2805,90 @@ export interface BatchDeleteItemsInput {
 
 export type ExperimentStatus = 'pending' | 'running' | 'completed' | 'failed';
 
+/**
+ * Caller-provided information describing the source of an experiment execution.
+ *
+ * A typical mapping is source system, source-owned identifier, and revision. For
+ * example, `source: 'github'`, `sourceId: 'mastra-ai/mastra'`, and
+ * `sourceVersion: '<commit-sha>'`. These values are persisted as unverified
+ * caller claims; use {@link ExperimentRunnerAttestation} for trusted
+ * runner-generated execution identity.
+ *
+ * Provenance is assigned when an experiment is created and cannot be changed
+ * through the experiment update contract.
+ */
+export interface ExperimentProvenance {
+  /** Source system or source kind, such as `github`, `ci`, or `local`. */
+  source?: string;
+  /** Stable identifier owned by the source, such as a repository or benchmark definition. */
+  sourceId?: string;
+  /** Revision of the source, such as a commit SHA, release version, or configuration digest. */
+  sourceVersion?: string;
+  /** Additional caller-defined source context. */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Caller-defined dimensions used to group related experiment executions.
+ *
+ * For a study comparing baseline and candidate variants across repeated trials:
+ * - `experimentSetId` identifies the overall study and is shared by every related run.
+ * - `comparisonId` identifies one controlled comparison within the study and is
+ *   shared by all variants and trials in that comparison.
+ * - `variantId` identifies an alternative within the comparison, such as
+ *   `baseline` or `candidate`.
+ * - `trialIndex` is the zero-based repetition index for that variant.
+ *
+ * The natural caller-defined identity is
+ * `(experimentSetId, comparisonId, variantId, trialIndex)`. Mastra does not
+ * enforce uniqueness or require every dimension, so callers own identifier scope
+ * and consistency. Grouping is assigned when an experiment is created and cannot
+ * be changed through the experiment update contract.
+ *
+ * @example
+ * ```ts
+ * const sharedGrouping = {
+ *   experimentSetId: 'support-agent-benchmark',
+ *   comparisonId: 'prompt-v1-vs-v2',
+ * };
+ *
+ * const runs = [
+ *   { ...sharedGrouping, variantId: 'baseline', trialIndex: 0 },
+ *   { ...sharedGrouping, variantId: 'baseline', trialIndex: 1 },
+ *   { ...sharedGrouping, variantId: 'candidate', trialIndex: 0 },
+ *   { ...sharedGrouping, variantId: 'candidate', trialIndex: 1 },
+ * ];
+ * ```
+ */
+export interface ExperimentGrouping {
+  /** Overall study or benchmark campaign identifier. */
+  experimentSetId?: string;
+  /** Controlled comparison identifier within the experiment set. */
+  comparisonId?: string;
+  /** Alternative identifier within the comparison. */
+  variantId?: string;
+  /** Zero-based repetition index for the variant. */
+  trialIndex?: number;
+}
+
+/** Trusted runner-generated execution identity. Not accepted by caller-facing run APIs. */
+export interface ExperimentRunnerAttestation {
+  runnerId: string;
+  invocationId: string;
+  runnerVersion?: string;
+}
+
 export interface Experiment {
   id: string;
   name?: string;
   description?: string;
   metadata?: Record<string, unknown>;
+  provenance?: ExperimentProvenance | null;
+  runnerAttestation?: ExperimentRunnerAttestation | null;
+  experimentSetId?: string | null;
+  comparisonId?: string | null;
+  variantId?: string | null;
+  trialIndex?: number | null;
   datasetId: string | null;
   datasetVersion: number | null;
   /**
@@ -2827,6 +2957,12 @@ export interface CreateExperimentInput {
   name?: string;
   description?: string;
   metadata?: Record<string, unknown>;
+  provenance?: ExperimentProvenance;
+  runnerAttestation?: ExperimentRunnerAttestation;
+  experimentSetId?: string;
+  comparisonId?: string;
+  variantId?: string;
+  trialIndex?: number;
   datasetId: string | null;
   datasetVersion: number | null;
   agentVersion?: string;
@@ -2948,6 +3084,10 @@ export interface ListExperimentsInput {
   targetId?: string;
   agentVersion?: string;
   status?: ExperimentStatus;
+  experimentSetId?: string;
+  comparisonId?: string;
+  variantId?: string;
+  trialIndex?: number;
   /** Multi-tenant scoping filters. See {@link ExperimentTenancyFilters}. */
   filters?: ExperimentTenancyFilters;
   pagination: StoragePagination;

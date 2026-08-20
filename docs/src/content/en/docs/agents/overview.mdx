@@ -1,5 +1,5 @@
 ---
-title: "Agents overview"
+title: "Agents"
 description: Overview of agents in Mastra, detailing their capabilities and how they interact with tools, workflows, and external systems.
 packages:
   - "@mastra/core"
@@ -9,7 +9,7 @@ import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 import AgentQuickstart from "@site/src/content/en/docs/getting-started/_partial-agent-quickstart.mdx";
 
-# Agents overview
+# Agents
 
 Agents use LLMs and tools to solve open-ended tasks. They reason about goals and decide which tools to use. They retain conversation memory and continue iterating until the model emits a final answer or an optional stop condition is met.
 
@@ -65,11 +65,13 @@ Visit the [agent reference](/reference/agents/agent) for more information on ava
 
 Use [Studio](/docs/studio/overview) to test your agent with different messages and inspect tool calls and responses, plus debug agent behavior.
 
+Use [Agent Builder](https://agent-builder.mastra.ai) to create and manage a fully stored agent through a browser instead of defining it in TypeScript.
+
 :::
 
 ## Use your agent
 
-After registration, retrieve your agent with [`mastra.getAgentById()`](/reference/core/getAgentById). Call `.generate()` for a complete response or `.stream()` to deliver tokens in real time. You can call agents from [workflow steps](/docs/workflows/agents-and-tools), [tools](/docs/agents/using-tools), the [Mastra Client](/reference/client-js/mastra-client), route handlers, [server adapters](/docs/server/server-adapters), or the command line. Visit the [guides section](/guides) to learn how to use agents in your framework of choice.
+After registration, retrieve your agent with [`mastra.getAgentById()`](/reference/core/getAgentById). Call `.generate()` for a complete response or `.stream()` to deliver tokens in real time. You can call agents from [workflow steps](/docs/workflows/agents-and-tools), [tools](/docs/agents/tools), the [Mastra Client](/reference/client-js/mastra-client), route handlers, [server adapters](/docs/server/server-adapters), or the command line. See [Integrations](/integrations) to use agents in your application framework.
 
 When referencing an agent from your Mastra instance, use `mastra.getAgentById()` to ensure it has access to shared services such as instance-level storage, logging, and agent registry. A directly imported agent can still work with its own local configuration, but it won't have access to those shared services.
 
@@ -108,21 +110,21 @@ Once your agent is running, use this table to find the right page for what you w
 
 | Goal | Start here |
 | - | - |
-| Give your agent tools to call external APIs or services | [Tools](/docs/agents/using-tools) |
+| Give your agent tools to call external APIs or services | [Tools](/docs/agents/tools) |
 | Keep context and preferences across conversations | [Memory](/docs/memory/overview) |
 | Get typed objects back instead of plain text | [Structured output](/docs/agents/structured-output) |
-| Human-in-the-loop: Pause execution and wait for human approval | [Approval](/docs/agents/agent-approval) |
-| Build a multi-agent network | [Supervisor agents](/docs/agents/supervisor-agents) |
-| Register subagents | [Tools](/docs/agents/using-tools#agents-as-tools) |
+| Human-in-the-loop: Pause execution and wait for human approval | [Human-in-the-loop](/docs/agents/human-in-the-loop) |
+| Build a multi-agent network | [Supervisor agents](/docs/subagents) |
+| Register subagents | [Tools](/docs/agents/tools#agents-as-tools) |
 | Intercept or transform messages before and after generation | [Processors](/docs/agents/processors) |
 | Keep your agent safe | [Guardrails](/docs/agents/guardrails) |
-| Build agents that correct their work | [Rubric scorer](/docs/agents/supervisor-agents#rubric-scorer) |
+| Build agents that correct their work | [Rubric scorer](/docs/subagents#rubric-scorer) |
 | Swap instructions or models based on request context | [Dynamic configuration](/docs/server/request-context) |
-| Add speech-to-text or text-to-speech | [Voice](/docs/voice/overview) |
-| Connect to Slack, Discord, or Telegram | [Channels](/docs/capabilities/channels/overview) |
+| Add speech-to-text or text-to-speech | [Voice](/reference/voice/overview) |
+| Connect to Slack, Discord, or Telegram | [Channels](/docs/channels) |
 
 ## Multi-agent systems
 
 A multi-agent system uses multiple agents to solve a task that's too broad or too specialized for a single agent. Instead of building one agent with dozens of tools and a long instruction set, you split responsibilities across focused agents and let a coordinator bring results together.
 
-Read the [conceptual overview of multi-agent systems](/guides/concepts/multi-agent-systems) to learn how you can apply different patterns with Mastra.
+Read the [conceptual overview of multi-agent systems](/docs/guides/multi-agent-systems) to learn how you can apply different patterns with Mastra.

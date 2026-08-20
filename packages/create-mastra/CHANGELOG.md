@@ -1,5 +1,161 @@
 # create-mastra
 
+## 1.25.2-alpha.0
+
+## 1.25.1
+
+### Patch Changes
+
+- Reduced create-mastra's runtime dependencies while preserving project creation behavior. ([#21649](https://github.com/mastra-ai/mastra/pull/21649))
+
+- Removed unused starter files and templates from the `create-mastra` package. The command-line tool still clones the starter repository. ([#21644](https://github.com/mastra-ai/mastra/pull/21644))
+
+## 1.25.1-alpha.15
+
+## 1.25.1-alpha.14
+
+## 1.25.1-alpha.13
+
+## 1.25.1-alpha.12
+
+## 1.25.1-alpha.11
+
+## 1.25.1-alpha.10
+
+## 1.25.1-alpha.9
+
+## 1.25.1-alpha.8
+
+### Patch Changes
+
+- Reduced create-mastra's runtime dependencies while preserving project creation behavior. ([#21649](https://github.com/mastra-ai/mastra/pull/21649))
+
+- Removed unused starter files and templates from the `create-mastra` package. The command-line tool still clones the starter repository. ([#21644](https://github.com/mastra-ai/mastra/pull/21644))
+
+## 1.25.1-alpha.7
+
+## 1.25.1-alpha.6
+
+## 1.25.1-alpha.5
+
+## 1.25.1-alpha.4
+
+## 1.25.1-alpha.3
+
+## 1.25.1-alpha.2
+
+## 1.25.1-alpha.1
+
+## 1.25.1-alpha.0
+
+## 1.25.0
+
+## 1.25.0-alpha.5
+
+## 1.25.0-alpha.4
+
+## 1.25.0-alpha.3
+
+## 1.25.0-alpha.2
+
+## 1.25.0-alpha.1
+
+## 1.24.1-alpha.0
+
+## 1.24.0
+
+### Patch Changes
+
+- Fixed generated projects to approve required pnpm native builds and externalize DuckDB bindings for experiment workers. ([#21301](https://github.com/mastra-ai/mastra/pull/21301))
+
+- dependencies updates: ([#19783](https://github.com/mastra-ai/mastra/pull/19783))
+  - Updated dependency [`posthog-node@^5.46.1` ↗︎](https://www.npmjs.com/package/posthog-node/v/5.46.1) (from `^5.37.0`, in `dependencies`)
+
+## 1.24.0-alpha.18
+
+### Patch Changes
+
+- Fixed generated projects to approve required pnpm native builds and externalize DuckDB bindings for experiment workers. ([#21301](https://github.com/mastra-ai/mastra/pull/21301))
+
+## 1.24.0-alpha.17
+
+## 1.24.0-alpha.16
+
+## 1.24.0-alpha.15
+
+## 1.24.0-alpha.14
+
+## 1.24.0-alpha.13
+
+## 1.24.0-alpha.12
+
+## 1.24.0-alpha.11
+
+## 1.24.0-alpha.10
+
+## 1.24.0-alpha.9
+
+## 1.24.0-alpha.8
+
+## 1.24.0-alpha.7
+
+## 1.24.0-alpha.6
+
+## 1.24.0-alpha.5
+
+## 1.24.0-alpha.4
+
+## 1.24.0-alpha.3
+
+## 1.23.1-alpha.2
+
+## 1.23.1-alpha.1
+
+### Patch Changes
+
+- dependencies updates: ([#19783](https://github.com/mastra-ai/mastra/pull/19783))
+  - Updated dependency [`posthog-node@^5.46.1` ↗︎](https://www.npmjs.com/package/posthog-node/v/5.46.1) (from `^5.37.0`, in `dependencies`)
+
+## 1.23.1-alpha.0
+
+## 1.23.0
+
+### Patch Changes
+
+- Fixed prerelease project creation to keep using the running create-mastra release channel when npm dist-tags have not finished updating. ([#20723](https://github.com/mastra-ai/mastra/pull/20723))
+
+## 1.23.0-alpha.2
+
+## 1.23.0-alpha.1
+
+### Patch Changes
+
+- Fixed prerelease project creation to keep using the running create-mastra release channel when npm dist-tags have not finished updating. ([#20723](https://github.com/mastra-ai/mastra/pull/20723))
+
+## 1.22.1-alpha.0
+
+## 1.22.0
+
+### Patch Changes
+
+- Add `--no-install` flag to create command. It allows you to skip dependency installation. ([#20619](https://github.com/mastra-ai/mastra/pull/20619))
+
+- Generated projects now pin every Mastra dependency to the exact version published on the invoked release channel instead of writing the channel tag (for example `alpha`) verbatim. If the CLI cannot resolve exact versions, it warns and falls back to the channel tag. ([#20448](https://github.com/mastra-ai/mastra/pull/20448))
+
+## 1.22.0-alpha.8
+
+## 1.22.0-alpha.7
+
+## 1.22.0-alpha.6
+
+### Patch Changes
+
+- Add `--no-install` flag to create command. It allows you to skip dependency installation. ([#20619](https://github.com/mastra-ai/mastra/pull/20619))
+
+## 1.22.0-alpha.5
+
+## 1.22.0-alpha.4
+
 ## 1.22.0-alpha.3
 
 ## 1.22.0-alpha.2

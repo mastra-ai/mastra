@@ -1,5 +1,5 @@
 import { createPrivateKey, generateKeyPairSync } from 'node:crypto';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, afterEach } from 'vitest';
 
 import { fakeRouteAuth } from '../../routes/test-utils.js';
 import { SandboxFleet } from '../../sandbox/fleet.js';
@@ -559,5 +559,91 @@ describe('GithubIntegration FactoryIntegration surface', () => {
         }),
       ).resolves.toBeNull();
     });
+  });
+});
+
+describe('GithubIntegration merge reconciler', () => {
+  it('maps a merged pull request to a closed reconcile state', async () => {
+    const github = new GithubIntegration(validConfig());
+    const get = vi.fn(async () => ({ data: { ...pullRequestData(), state: 'closed', merged: true } }));
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({ pulls: { get } } as any);
+
+    await expect(
+      github.fetchPullRequestState({ installationId: 7, repository: 'acme/app', number: 34 }),
+    ).resolves.toEqual({
+      title: 'Ship intake',
+      url: 'https://github.com/acme/app/pull/34',
+      state: 'closed',
+      draft: false,
+      merged: true,
+      assignees: [],
+      requestedReviewers: [],
+      labels: [],
+      headBranch: 'feat/intake',
+      baseBranch: 'main',
+      author: 'ada',
+      createdAt: '2026-07-01T00:00:00Z',
+    });
+  });
+
+  // A fabricated merge would move a card to done and fire merge rules.
+  it('returns undefined rather than a state when the pull request cannot be read', async () => {
+    const github = new GithubIntegration(validConfig());
+    const get = vi.fn(async () => {
+      throw new Error('bad credentials');
+    });
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({ pulls: { get } } as any);
+
+    await expect(
+      github.fetchPullRequestState({ installationId: 7, repository: 'acme/app', number: 34 }),
+    ).resolves.toBeUndefined();
+  });
+});
+
+describe('GithubIntegration workers', () => {
+  const originalEnv = { ...process.env };
+
+  function context() {
+    return {
+      controller: {},
+      storage: {
+        generic: {},
+        sourceControl: {
+          projectRepositories: { listConfiguredExternalKeys: async () => [], listByExternalRepository: async () => [] },
+          repositories: { findByExternalId: async () => null },
+        },
+        projects: { listAll: async () => [] },
+        intake: {},
+      },
+      rules: { config: {}, workItems: {} },
+    } as any;
+  }
+
+  afterEach(() => {
+    for (const key of Object.keys(process.env)) {
+      if (!(key in originalEnv)) delete process.env[key];
+    }
+    Object.assign(process.env, originalEnv);
+  });
+
+  it('registers a single reconcile worker that folds PR and issue sweeps', () => {
+    const github = new GithubIntegration(validConfig());
+    expect(github.workers(context()).map(worker => worker.name)).toEqual(['github-pull-request-reconcile']);
+  });
+
+  it('allows issue reconciliation when legacy reconciliation is disabled', () => {
+    process.env.MASTRACODE_GITHUB_RECONCILE_ENABLED = 'false';
+    process.env.MASTRACODE_GITHUB_ISSUE_RECONCILE_ENABLED = 'true';
+    const github = new GithubIntegration(validConfig());
+
+    expect(github.workers(context()).map(worker => worker.name)).toEqual(['github-pull-request-reconcile']);
+  });
+
+  it('does not register a worker when both child reconcilers are disabled', () => {
+    process.env.MASTRACODE_GITHUB_PR_RECONCILE_ENABLED = 'false';
+    process.env.MASTRACODE_GITHUB_ISSUE_RECONCILE_ENABLED = 'false';
+    const github = new GithubIntegration(validConfig());
+
+    expect(github.workers(context())).toEqual([]);
   });
 });

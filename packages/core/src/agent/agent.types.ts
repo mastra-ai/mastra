@@ -1,17 +1,18 @@
 import type { ModelMessage, ToolChoice } from '@internal/ai-sdk-v5';
 import type { ActorSignal } from '../auth/ee';
+import type { WaitUntilFn } from '../channels/wait-until';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
 import type { SystemMessage } from '../llm';
 import type { ProviderOptions } from '../llm/model/provider-options';
 import type { MastraLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
 import type { CompletionConfig, CompletionRunResult } from '../loop/network/validation';
-import type { LoopConfig, LoopOptions, PrepareStepFunction } from '../loop/types';
+import type { LoopConfig, LoopOptions, PrepareStepFunction, ToolCallConcurrency } from '../loop/types';
 import type { VersionOverrides } from '../mastra/types';
 import type { ObservabilityContext, TracingOptions } from '../observability';
 import type { ErrorProcessorOrWorkflow, InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
 import type { MastraStreamTransformOptions } from '../stream/types';
-import type { RequireToolApproval, ToolHooks, ToolPayloadTransformPolicy } from '../tools';
+import type { MCPToolExecutionContext, RequireToolApproval, ToolHooks, ToolPayloadTransformPolicy } from '../tools';
 import type { DynamicArgument } from '../types';
 import type { OutputWriter, WorkflowRunState } from '../workflows/types';
 import type { MessageListInput } from './message-list';
@@ -105,6 +106,14 @@ export interface DelegationStartContext {
   toolCallId: string;
   /** Messages accumulated so far */
   messages: MastraDBMessage[];
+  /**
+   * The request context the delegated run will receive. Entries are shallowly
+   * copied from the parent run's context, excluding `MastraMemory` and the
+   * reserved thread/resource keys. Mutate it with `requestContext.set()` to add
+   * entries without modifying the parent's context map. Values must be
+   * JSON-serializable to work with durable agents.
+   */
+  requestContext: RequestContext;
 }
 
 /**
@@ -186,6 +195,17 @@ export interface DelegationCompleteContext {
 export interface DelegationCompleteResult {
   /** Optional feedback to add to the conversation */
   feedback?: string;
+  /**
+   * Replaces the text the parent model sees as this delegation's tool result,
+   * within the current run.
+   *
+   * `feedback` is persisted to the parent's memory and therefore only reaches the
+   * model on the next turn. Use `resultText` when the sub-agent's own result would
+   * mislead the parent right now — for example when the sub-agent stopped on a
+   * tool-calls step and returned empty text, which reads to the model as a
+   * successful but empty delegation.
+   */
+  resultText?: string;
 }
 
 /**
@@ -194,6 +214,29 @@ export interface DelegationCompleteResult {
 export type OnDelegationCompleteHandler = (
   context: DelegationCompleteContext,
 ) => DelegationCompleteResult | void | Promise<DelegationCompleteResult | void>;
+
+/**
+ * A delegation lifecycle hook that threw.
+ *
+ * Recorded on the run's request context under `__mastra_delegationHookErrors`
+ * whenever a hook throws, regardless of the configured
+ * {@link DelegationConfig.hookErrorStrategy}, so callers can detect
+ * "delegation completed but the hook failed" without inspecting logs.
+ */
+export interface DelegationHookError {
+  /** Which hook threw */
+  hook: 'onDelegationStart' | 'onDelegationComplete' | 'messageFilter';
+  /** The ID of the delegated primitive */
+  primitiveId: string;
+  /** Tool call ID from the LLM */
+  toolCallId: string;
+  /** ID of the current run */
+  runId: string;
+  /** The error name */
+  name: string;
+  /** The error message */
+  message: string;
+}
 
 // ============================================================================
 // Iteration Hook Types
@@ -312,6 +355,20 @@ export interface DelegationConfig {
    * ```
    */
   messageFilter?: (context: MessageFilterContext) => MastraDBMessage[] | Promise<MastraDBMessage[]>;
+
+  /**
+   * How a throwing delegation hook is handled.
+   *
+   * - `'warn'` (default): log the error and continue with unmodified values.
+   * - `'throw'`: fail the delegation. A throwing `onDelegationStart` blocks it,
+   *   and a throwing `messageFilter` or `onDelegationComplete` surfaces as a
+   *   tool failure to the parent agent.
+   *
+   * Regardless of the strategy, hook failures are recorded on the run's request
+   * context under `__mastra_delegationHookErrors` as {@link DelegationHookError}
+   * entries, so a completed-but-hook-failed delegation is always detectable.
+   */
+  hookErrorStrategy?: 'warn' | 'throw';
 }
 /**
  * Configuration for the routing agent's behavior.
@@ -470,17 +527,51 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
   /** Memory configuration for conversation persistence and retrieval */
   memory?: AgentMemoryOption;
 
+  /**
+   * Serverless runtime helpers. Use these when the platform freezes the
+   * isolate after the HTTP response so detached finish-time work (e.g. thread
+   * title generation) would otherwise be dropped.
+   */
+  serverless?: {
+    /**
+     * Platform `waitUntil` (Vercel `@vercel/functions`, Cloudflare
+     * `ExecutionContext.waitUntil`, etc.). Registers fire-and-forget finish
+     * work so the isolate stays alive until it settles.
+     */
+    waitUntil?: WaitUntilFn;
+  };
+
   /** Unique identifier for this execution run */
   runId?: string;
 
   /** Save messages incrementally after each stream step completes (default: false). Is disabled internally when observational memory is enabled, as OM handles its own message saving */
   savePerStep?: boolean;
 
+  /**
+   * Persist non-empty assistant text that was streamed before an abort.
+   *
+   * Disabled by default because abort signals can represent a disconnected caller,
+   * in which case partial output should not be added to memory.
+   * @default false
+   *
+   * @example
+   * ```typescript
+   * const stream = await agent.stream('Hello', {
+   *   memory: { thread: 'my-thread', resource: 'user-123' },
+   *   persistPartialOnAbort: true,
+   * });
+   * ```
+   */
+  persistPartialOnAbort?: boolean;
+
   /** Request Context containing dynamic configuration and state */
   requestContext?: RequestContext<any>; // @TODO: Figure out how to type this without breaking all the inner types
 
   /** Trusted server-side signal for this agent FGA check. */
   actor?: ActorSignal;
+
+  /** MCP protocol context forwarded to tools executed by this agent. */
+  mcp?: MCPToolExecutionContext;
 
   /**
    * Per-invocation version overrides for sub-agents (and future primitives).
@@ -589,8 +680,24 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
   /** Automatically resume suspended tools */
   autoResumeSuspendedTools?: boolean;
 
-  /** Maximum number of tool calls to execute concurrently (default: 1 when approval may be required, otherwise 10) */
-  toolCallConcurrency?: number;
+  /**
+   * Controls how many tool calls execute concurrently.
+   *
+   * Pass a number to set the limit (default: 10). By default ("available"
+   * strategy) any registered approval/suspend-capable tool forces sequential
+   * execution (limit 1) for every step, even when the model did not call it.
+   *
+   * Pass an object to opt into the "called" strategy, which resolves
+   * concurrency from the tools the model actually called each step — a batch of
+   * only safe tools runs concurrently even while an approval/suspend tool stays
+   * registered, while a batch that calls an approval/suspend tool still runs
+   * sequentially:
+   *
+   * ```ts
+   * toolCallConcurrency: { limit: 8, strategy: 'called' }
+   * ```
+   */
+  toolCallConcurrency?: ToolCallConcurrency;
 
   /** Whether to include raw chunks in the stream output (not available on all model providers) */
   includeRawChunks?: boolean;

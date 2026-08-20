@@ -9,6 +9,7 @@ export { fastModePrompt } from './fast.js';
 import { buildBasePrompt } from '@mastra/core/coding-agent';
 import type { PromptContext as BasePromptContext } from '@mastra/core/coding-agent';
 import { hasTavilyKey } from '../../tools/index.js';
+import { getLocalPlansRelativeDir } from '../../utils/plans.js';
 import { loadAgentInstructions, formatAgentInstructions, createGitRefInstructionReader } from './agent-instructions.js';
 import { buildModePromptFn } from './build.js';
 import { fastModePrompt } from './fast.js';
@@ -49,7 +50,12 @@ export function buildFullPrompt(ctx: PromptContext): string {
   }
 
   // Build mode-aware tool guidance
-  const toolGuidance = buildToolGuidance(ctx.modeId, { hasWebSearch, deniedTools });
+  const factoryProjectId = typeof ctx.state?.factoryProjectId === 'string' ? ctx.state.factoryProjectId : undefined;
+  const toolGuidance = buildToolGuidance(ctx.modeId, {
+    hasWebSearch,
+    deniedTools,
+    plansDir: getLocalPlansRelativeDir({ factoryProjectId }),
+  });
 
   // Map new context to base context
   const baseCtx: BasePromptContext = {
@@ -83,17 +89,21 @@ export function buildFullPrompt(ctx: PromptContext): string {
   // attacker-writable and would otherwise land in the system prompt as
   // trusted configuration. When the session carries a trusted base ref, the
   // project instructions are served from that ref instead (`git show`);
-  // without one, project-scope files are skipped entirely. Global (operator
-  // machine) instructions always load.
+  // without one, project-scope files are skipped entirely. Home-directory
+  // (global) instructions belong to whoever owns the machine, so hosts that
+  // run sessions for someone else opt out of them entirely.
   const configDir = ctx.state?.configDir as string | undefined;
   const untrustedCheckout = ctx.state?.untrustedCheckout === true;
+  const skipGlobalInstructions = ctx.state?.skipGlobalInstructions === true;
   const baseRef = typeof ctx.state?.baseRef === 'string' ? ctx.state.baseRef : undefined;
   const projectReader = untrustedCheckout
     ? baseRef
       ? createGitRefInstructionReader(ctx.workingDir, baseRef)
       : { exists: () => false, read: () => '' }
     : undefined;
-  const instructionSources = loadAgentInstructions(ctx.workingDir, configDir, projectReader);
+  const instructionSources = loadAgentInstructions(ctx.workingDir, configDir, projectReader, {
+    skipGlobal: skipGlobalInstructions,
+  });
   const instructionsSection = formatAgentInstructions(instructionSources);
 
   const sections = [base, instructionsSection.trim(), modelSpecific.trim(), modeSpecific.trim()].filter(Boolean);

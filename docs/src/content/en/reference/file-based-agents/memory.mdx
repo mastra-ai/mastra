@@ -9,6 +9,12 @@ packages:
 
 # Memory
 
+:::beta
+
+Breaking changes may occur without a major version bump until the API is stable.
+
+:::
+
 A file-based agent gets [memory](/docs/memory/overview) from a `memory.ts` file that default-exports a [`Memory`](/reference/memory/memory-class) instance. Use this page for the file-based convention; use the memory docs for message history, semantic recall, storage, and processors.
 
 Without `memory.ts` or `config.memory`, the agent has no memory by default. Each `generate()` or `stream()` call starts without remembered conversation state unless you pass the prior context yourself.
@@ -23,7 +29,7 @@ import { Memory } from '@mastra/memory'
 export default new Memory()
 ```
 
-The exported instance becomes the agent's `memory`. If your app configures a storage provider on the main Mastra instance, memory data is stored there. See [storage](/docs/storage/overview) for more information.
+The exported instance becomes the agent's `memory`. If your app configures a storage provider on the main Mastra instance, memory data is stored there. See [storage](/docs/storage) for more information.
 
 Use the same `resource` and `thread` values when calling the agent to continue a conversation:
 
@@ -56,7 +62,7 @@ export default new Memory({
 
 Visit the [`Memory` reference](/reference/memory/memory-class) for constructor options. Use these pages for related memory features:
 
-- [Storage](/docs/storage/overview): configure persistence for memory data.
+- [Storage](/docs/storage): configure persistence for memory data.
 - [Semantic recall](/docs/memory/semantic-recall): retrieve relevant past messages by semantic meaning.
 - [Memory processors](/docs/memory/memory-processors): filter, trim, or transform messages before memory adds them to model context.
 

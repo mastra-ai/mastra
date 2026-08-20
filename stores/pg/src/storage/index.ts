@@ -25,6 +25,7 @@ import { ChannelsPG } from './domains/channels';
 import { DatasetsPG } from './domains/datasets';
 import { ExperimentsPG } from './domains/experiments';
 import { FavoritesPG } from './domains/favorites';
+import { KnowledgePG } from './domains/knowledge';
 import { MCPClientsPG } from './domains/mcp-clients';
 import { MCPServersPG } from './domains/mcp-servers';
 import { MemoryPG } from './domains/memory';
@@ -37,7 +38,9 @@ import { SchedulesPG } from './domains/schedules';
 import { ScorerDefinitionsPG } from './domains/scorer-definitions';
 import { ScoresPG } from './domains/scores';
 import { SkillsPG } from './domains/skills';
+import { ThreadStatePG } from './domains/thread-state';
 import { ToolProviderConnectionsPG } from './domains/tool-provider-connections';
+import { WorkflowDefinitionsPG } from './domains/workflow-definitions';
 import { WorkflowsPG } from './domains/workflows';
 import { WorkspacesPG } from './domains/workspaces';
 
@@ -92,6 +95,7 @@ function createHostPool(config: HostPoolConfig): Pool {
  */
 const ALL_DOMAINS = [
   MemoryPG,
+  KnowledgePG,
   NotificationsPG,
   ObservabilityPG,
   ScoresPG,
@@ -105,12 +109,14 @@ const ALL_DOMAINS = [
   BlobsPG,
   ToolProviderConnectionsPG,
   WorkflowsPG,
+  WorkflowDefinitionsPG,
   DatasetsPG,
   ExperimentsPG,
   BackgroundTasksPG,
   FavoritesPG,
   ChannelsPG,
   SchedulesPG,
+  ThreadStatePG,
 ] as const;
 
 /**
@@ -141,6 +147,7 @@ export {
   ChannelsPG,
   DatasetsPG,
   ExperimentsPG,
+  KnowledgePG,
   MCPClientsPG,
   MCPServersPG,
   MemoryPG,
@@ -153,8 +160,10 @@ export {
   SchedulesPG,
   SkillsPG,
   FavoritesPG,
+  ThreadStatePG,
   ToolProviderConnectionsPG,
   WorkflowsPG,
+  WorkflowDefinitionsPG,
   WorkspacesPG,
 };
 export type { VNextPostgresObservabilityConfig };
@@ -230,7 +239,9 @@ export class PostgresStore extends MastraCompositeStore {
       this.stores = {
         scores: new ScoresPG(domainConfig),
         workflows: new WorkflowsPG(domainConfig),
+        workflowDefinitions: new WorkflowDefinitionsPG(domainConfig),
         memory: new MemoryPG(domainConfig),
+        knowledge: new KnowledgePG(domainConfig),
         notifications: new NotificationsPG(domainConfig),
         observability: new ObservabilityPG(domainConfig),
         agents: new AgentsPG(domainConfig),
@@ -248,6 +259,7 @@ export class PostgresStore extends MastraCompositeStore {
         backgroundTasks: new BackgroundTasksPG(domainConfig),
         channels: new ChannelsPG(domainConfig),
         schedules: new SchedulesPG(domainConfig),
+        threadState: new ThreadStatePG(domainConfig),
       };
     } catch (e) {
       throw new MastraError(

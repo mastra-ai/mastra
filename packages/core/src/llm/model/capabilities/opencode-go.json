@@ -10,9 +10,11 @@
     "mimo-v2-pro",
     "mimo-v2.5",
     "mimo-v2.5-pro",
+    "muse-spark-1.2-contributor",
     "qwen3.5-plus",
     "qwen3.6-plus",
-    "qwen3.7-plus"
+    "qwen3.7-plus",
+    "qwen3.8-max"
   ],
   "temperature": [
     "deepseek-v4-flash",
@@ -20,6 +22,7 @@
     "glm-5",
     "glm-5.1",
     "glm-5.2",
+    "glm-5.3",
     "grok-4.5",
     "hy3",
     "kimi-k2.5",
@@ -31,18 +34,23 @@
     "minimax-m2.5",
     "minimax-m2.7",
     "minimax-m3",
+    "muse-spark-1.2-contributor",
     "qwen3.5-plus",
     "qwen3.6-plus",
     "qwen3.7-max",
-    "qwen3.7-plus"
+    "qwen3.7-plus",
+    "qwen3.8-max"
   ],
   "structuredOutput": [
     "deepseek-v4-flash",
     "deepseek-v4-pro",
     "glm-5.2",
+    "glm-5.3",
     "gpt-5.6-luna",
     "grok-4.5",
     "kimi-k2.7-code",
-    "kimi-k3"
+    "kimi-k3",
+    "muse-spark-1.2-contributor",
+    "qwen3.8-max"
   ]
 }

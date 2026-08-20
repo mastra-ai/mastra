@@ -9,6 +9,8 @@ import { Kbd } from '@mastra/playground-ui/components/Kbd';
 import { useState } from 'react';
 
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
+import { RUN_PHASE_LABELS, itemRunSpec } from '../../factory/boardRunSpecs';
+import { useBoardRuns } from '../../factory/hooks/useBoardRuns';
 import { useGlobalSearchIntake } from '../hooks/useGlobalSearchIntake';
 import { useGlobalSearchNavigation } from '../hooks/useGlobalSearchNavigation';
 import { useGlobalSearchSessions } from '../hooks/useGlobalSearchSessions';
@@ -36,7 +38,14 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
   const sessions = useGlobalSearchSessions(repositoryIds);
   const workItems = useGlobalSearchWorkItems(repositoryIds.length > 0 ? factoryId : undefined);
   // Both boards read `repositories[0]`, so that is the repository whose intake feeds are searchable.
-  const intake = useGlobalSearchIntake(activeFactory?.repositories[0]?.projectRepositoryId);
+  const projectRepositoryId = activeFactory?.repositories[0]?.projectRepositoryId;
+  const intake = useGlobalSearchIntake(projectRepositoryId);
+  const runs = useBoardRuns({
+    factoryProjectId: factoryId,
+    projectRepositoryId,
+    workItems: workItems.items,
+    refetchItems: workItems.refetch,
+  });
   const { selectPath } = useGlobalSearchNavigation(closeSearch);
   const [activeScope, setActiveScope] = useState<GlobalSearchScope>('all');
 
@@ -83,7 +92,35 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
             <GlobalSearchSessionResults title="Review Sessions" results={sessionGroups.review} onSelect={selectPath} />
           )}
           {scopeIncludes(activeScope, 'items') && (
-            <GlobalSearchWorkItemResults results={unstartedItems} onSelect={selectPath} />
+            <GlobalSearchWorkItemResults
+              results={unstartedItems}
+              loadingFor={result => {
+                const target = result.target;
+                const preparing =
+                  target.kind === 'candidate'
+                    ? runs.preparingForSource(target.candidate.sourceKey)
+                    : runs.preparingFor(target.item.id);
+                if (preparing) return preparing;
+                const pendingRoles =
+                  target.kind === 'candidate'
+                    ? runs.pendingRolesForSource(target.candidate.sourceKey)
+                    : runs.pendingRolesFor(target.item.id);
+                const phase = pendingRoles.values().next().value;
+                return phase ? RUN_PHASE_LABELS[phase] : pendingRoles.size > 0 ? 'Starting run…' : undefined;
+              }}
+              onSelect={async result => {
+                if (result.target.kind === 'candidate') {
+                  const [defaultAction] = result.target.candidate.runActions;
+                  await runs.startCandidateRun(result.target.candidate, defaultAction);
+                } else {
+                  const spec = itemRunSpec(result.target.item);
+                  const defaultAction = spec?.actions[0];
+                  if (defaultAction) await runs.openOrStartRun(result.target.item, defaultAction.role);
+                  else await runs.openOrCreateSession(result.target.item, result.target.item.stages[0] ?? 'intake');
+                }
+                closeSearch();
+              }}
+            />
           )}
           {scopeIncludes(activeScope, 'user') && (
             <GlobalSearchSessionResults title="User Sessions" results={sessionGroups.user} onSelect={selectPath} />

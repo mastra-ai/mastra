@@ -11,6 +11,7 @@ import type { TaskItemInput } from '@mastra/core/signals';
 import { safeStringify } from '@mastra/core/utils';
 import { parse as parseJsonRiver } from 'jsonriver';
 
+import { ensureAssistantRenderSegment } from '../assistant-render-registry.js';
 import { reconcileChatBoundarySpacers } from '../chat-boundary-reconciliation.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import { AssistantMessageComponent } from '../components/assistant-message.js';
@@ -30,6 +31,20 @@ import type { EventHandlerContext } from './types.js';
 function getCurrentModeColor(ctx: EventHandlerContext): string | undefined {
   const color = ctx.state.session?.mode?.resolve?.()?.metadata?.color;
   return typeof color === 'string' ? color : undefined;
+}
+
+function createPostToolAssistantComponent(ctx: EventHandlerContext, toolCallId: string): AssistantMessageComponent {
+  const { state } = ctx;
+  const messageId = state.streamingMessage?.id;
+  if (!messageId) {
+    const component = new AssistantMessageComponent(undefined, state.hideThinkingBlock, getMarkdownTheme());
+    state.streamingComponent = component;
+    ctx.addChildBeforeFollowUps(component);
+    return component;
+  }
+
+  state.assistantRenderRegistry.finalizeActive(messageId);
+  return ensureAssistantRenderSegment(state, messageId, ctx.addChildBeforeFollowUps, toolCallId);
 }
 
 export function isTaskMutationTool(toolName: string): boolean {
@@ -225,8 +240,7 @@ export function createStaticSubagentComponent(
   state.allToolComponents.push(component as any);
   ctx.addChildBeforeFollowUps(component);
 
-  state.streamingComponent = new AssistantMessageComponent(undefined, state.hideThinkingBlock, getMarkdownTheme());
-  ctx.addChildBeforeFollowUps(state.streamingComponent);
+  createPostToolAssistantComponent(ctx, toolCallId);
 
   reconcileToolBoundaries(ctx);
   flushRender(state);
@@ -288,8 +302,7 @@ function ensureSubmitPlanComponent(
     state.lastSubmitPlanComponent = component;
     ctx.addChildBeforeFollowUps(component);
 
-    state.streamingComponent = new AssistantMessageComponent(undefined, state.hideThinkingBlock, getMarkdownTheme());
-    ctx.addChildBeforeFollowUps(state.streamingComponent);
+    createPostToolAssistantComponent(ctx, toolCallId);
   }
   component.updateArgs(args);
   reconcileToolBoundaries(ctx);
@@ -349,9 +362,6 @@ export function handleToolApprovalRequired(
   // Compute category label for the dialog
   const category = getToolCategory(toolName);
   const categoryLabel = category ? TOOL_CATEGORIES[category]?.label : undefined;
-
-  // Send notification to alert the user
-  ctx.notify('tool_approval', `Approve ${toolName}?`);
 
   const firePermissionResult = (decision: 'approved' | 'declined' | 'dismissed' | 'auto_approved') => {
     state.hookManager?.runPermissionResult('tool_approval', toolCallId, toolName, decision, args).catch(() => {});
@@ -449,8 +459,7 @@ export function handleToolStart(ctx: EventHandlerContext, toolCallId: string, to
       component.setExpanded(state.toolOutputExpanded);
       state.pendingTools.set(toolCallId, component);
       state.pendingTaskToolIds?.add(toolCallId);
-      state.streamingComponent = new AssistantMessageComponent(undefined, state.hideThinkingBlock, getMarkdownTheme());
-      ctx.addChildBeforeFollowUps(state.streamingComponent);
+      createPostToolAssistantComponent(ctx, toolCallId);
       flushRender(state);
       return;
     }
@@ -469,8 +478,7 @@ export function handleToolStart(ctx: EventHandlerContext, toolCallId: string, to
     reconcileToolBoundaries(ctx);
 
     // Create a new post-tool AssistantMessageComponent so pre-tool text is preserved
-    state.streamingComponent = new AssistantMessageComponent(undefined, state.hideThinkingBlock, getMarkdownTheme());
-    ctx.addChildBeforeFollowUps(state.streamingComponent);
+    createPostToolAssistantComponent(ctx, toolCallId);
 
     flushRender(state);
   }
@@ -575,8 +583,7 @@ export function handleToolInputStart(ctx: EventHandlerContext, toolCallId: strin
     state.pendingAskUserComponents.set(toolCallId, askComponent);
 
     // Create a new post-tool AssistantMessageComponent so pre-tool text is preserved
-    state.streamingComponent = new AssistantMessageComponent(undefined, state.hideThinkingBlock, getMarkdownTheme());
-    ctx.addChildBeforeFollowUps(state.streamingComponent);
+    createPostToolAssistantComponent(ctx, toolCallId);
 
     flushRender(state);
   } else if (isTaskMutationTool(toolName)) {
@@ -595,8 +602,7 @@ export function handleToolInputStart(ctx: EventHandlerContext, toolCallId: strin
     // Create a new post-tool AssistantMessageComponent so pre-tool text is preserved
     // (even though task_write doesn't render a tool component inline, we still need
     // to split the streaming component so getTrailingContentParts doesn't overwrite it)
-    state.streamingComponent = new AssistantMessageComponent(undefined, state.hideThinkingBlock, getMarkdownTheme());
-    ctx.addChildBeforeFollowUps(state.streamingComponent);
+    createPostToolAssistantComponent(ctx, toolCallId);
     flushRender(state);
   } else if (toolName !== 'subagent') {
     if (createStaticSubagentComponent(ctx, toolCallId, toolName, {})) {
@@ -617,8 +623,7 @@ export function handleToolInputStart(ctx: EventHandlerContext, toolCallId: strin
     reconcileToolBoundaries(ctx);
 
     // Create a new post-tool AssistantMessageComponent so pre-tool text is preserved
-    state.streamingComponent = new AssistantMessageComponent(undefined, state.hideThinkingBlock, getMarkdownTheme());
-    ctx.addChildBeforeFollowUps(state.streamingComponent);
+    createPostToolAssistantComponent(ctx, toolCallId);
 
     flushRender(state);
   }

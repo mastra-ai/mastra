@@ -12,6 +12,7 @@ import { DatasetsLibSQL } from './domains/datasets';
 import { ExperimentsLibSQL } from './domains/experiments';
 import { FavoritesLibSQL } from './domains/favorites';
 import { HarnessLibSQL } from './domains/harness';
+import { KnowledgeLibSQL } from './domains/knowledge';
 import { MCPClientsLibSQL } from './domains/mcp-clients';
 import { MCPServersLibSQL } from './domains/mcp-servers';
 import { MemoryLibSQL } from './domains/memory';
@@ -24,6 +25,7 @@ import { ScoresLibSQL } from './domains/scores';
 import { SkillsLibSQL } from './domains/skills';
 import { ThreadStateLibSQL } from './domains/thread-state';
 import { ToolProviderConnectionsLibSQL } from './domains/tool-provider-connections';
+import { WorkflowDefinitionsLibSQL } from './domains/workflow-definitions';
 import { WorkflowsLibSQL } from './domains/workflows';
 import { WorkspacesLibSQL } from './domains/workspaces';
 
@@ -39,6 +41,7 @@ export {
   MCPClientsLibSQL,
   MCPServersLibSQL,
   MemoryLibSQL,
+  KnowledgeLibSQL,
   NotificationsLibSQL,
   ObservabilityLibSQL,
   PromptBlocksLibSQL,
@@ -49,6 +52,7 @@ export {
   FavoritesLibSQL,
   ThreadStateLibSQL,
   ToolProviderConnectionsLibSQL,
+  WorkflowDefinitionsLibSQL,
   WorkflowsLibSQL,
   WorkspacesLibSQL,
 };
@@ -219,7 +223,9 @@ export class LibSQLStore extends MastraCompositeStore {
 
     const scores = new ScoresLibSQL(domainConfig);
     const workflows = new WorkflowsLibSQL(domainConfig);
+    const workflowDefinitions = new WorkflowDefinitionsLibSQL(domainConfig);
     const memory = new MemoryLibSQL(domainConfig);
+    const knowledge = new KnowledgeLibSQL(domainConfig);
     const observability = new ObservabilityLibSQL(domainConfig);
     const agents = new AgentsLibSQL(domainConfig);
     const channels = new ChannelsLibSQL(domainConfig);
@@ -243,7 +249,9 @@ export class LibSQLStore extends MastraCompositeStore {
     this.stores = {
       scores,
       workflows,
+      workflowDefinitions,
       memory,
+      knowledge,
       observability,
       agents,
       channels,

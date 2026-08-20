@@ -13,8 +13,17 @@ export type { InlineLinkEntry } from './inline-media';
 // Agent-side configuration types (consumer-facing)
 // =============================================================================
 
-/** Message content that can be posted to a channel. */
-export type PostableMessage = string | CardElement;
+/**
+ * Message content that can be posted to a channel.
+ *
+ * - `string` - posted as-is; standard markdown is not converted, though the
+ *   platform may still apply its own dialect (e.g. Slack mrkdwn).
+ * - `CardElement` - rendered as a rich card (e.g. Slack Block Kit).
+ * - `{ markdown: string }` - converted by the adapter to its platform format
+ *   (e.g. Slack `markdown_text`); adapters without native markdown rendering
+ *   convert it to their own dialect.
+ */
+export type PostableMessage = string | CardElement | { markdown: string };
 
 /** Per-adapter configuration shared across all `toolDisplay` modes. */
 export interface ChannelAdapterBaseConfig {
@@ -40,6 +49,19 @@ export interface ChannelAdapterBaseConfig {
    * @default `"❌ Error: <error.message>"`
    */
   formatError?: (error: Error) => PostableMessage;
+
+  /**
+   * Dialect for the agent's final reply text.
+   * - `'markdown'` (default) - replies post as `{ markdown }`; adapters with native
+   *   markdown rendering (Slack `markdown_text`) use it, others convert to their
+   *   platform format.
+   * - `'plain'` - replies post as literal plain text (the pre-1.x-behavior escape
+   *   hatch for agents prompted to emit a platform dialect such as Slack mrkdwn).
+   *
+   * Applies to final reply text only; tool cards, error messages, and tripwire
+   * notices are unaffected.
+   */
+  textFormat?: 'markdown' | 'plain';
 
   /**
    * Show platform typing indicators (and adaptive status text where supported,
@@ -104,7 +126,8 @@ export type ToolDisplay = 'cards' | 'text' | 'timeline' | 'grouped' | 'hidden' |
  * result, error, approval). Returns either a postable message (closes the
  * streaming session if open, posts/edits the message, then reopens on the
  * next chunk), a streaming chunk (pushed into the streaming session — opens
- * one lazily if needed), or `undefined` to skip the event.
+ * one lazily if needed unless `openIfEmpty` is `false`), or `undefined` to
+ * skip the event.
  *
  * In static drivers (`streaming: false`), returning `{ kind: 'stream' }`
  * flattens the chunk to a plain-text fallback message.
@@ -173,7 +196,18 @@ export interface ToolDisplayContext {
 /** Return value from a {@link ToolDisplayFn}. */
 export type ToolDisplayResult =
   | { kind: 'post'; message: PostableMessage }
-  | { kind: 'stream'; chunk: StreamChunk }
+  | {
+      kind: 'stream';
+      chunk: StreamChunk;
+      /**
+       * Whether this result may open a streaming session when none is active.
+       * Set to `false` for chunks that only apply to an existing session.
+       * Ignored by the static driver.
+       *
+       * @default true
+       */
+      openIfEmpty?: boolean;
+    }
   | undefined
   | void;
 
@@ -297,15 +331,24 @@ export interface ChannelHandlerContext {
   /** The Mastra instance that owns the channels, resolved from the bound agent or controller. */
   mastra?: Mastra;
   /**
-   * The request context for the run this message will start, constructed fresh
-   * per message.
+   * The request context used when this message starts a run, constructed fresh
+   * per message. A message delivered to an already-active run does not replace
+   * that run's request context.
    *
    * A handler may write to it before calling `defaultHandler` — for example to
    * stamp the tenant a channel sender maps to, so the run resolves that user's
    * credentials. Core adds the channel and render-context entries afterward and
-   * dispatches with this same instance.
+   * uses this same instance when the Signal wakes an idle run.
    */
   requestContext: RequestContext;
+  /**
+   * Metadata attached to this message's Agent Signal, constructed fresh per
+   * message. A handler may add JSON-serializable, non-sensitive values before
+   * calling `defaultHandler`. Signal metadata may be persisted and published
+   * through PubSub. Unlike run-level request context, it follows the message
+   * through both idle `wake` and active `deliver` paths.
+   */
+  readonly signalMetadata: Record<string, unknown>;
 }
 
 /**

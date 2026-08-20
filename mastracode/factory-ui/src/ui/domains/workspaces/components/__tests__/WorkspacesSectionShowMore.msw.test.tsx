@@ -8,10 +8,10 @@ import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
-import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
+import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
 import type { FactoryUserSession } from '../../services/github';
 import { WorkspacesSection } from '../WorkspacesSection';
@@ -25,6 +25,7 @@ function reviewSession(index: number): FactoryUserSession {
     projectRepositoryId,
     orgId: 'org-1',
     userId: 'user-1',
+    visibility: 'org' as const,
     branch: `factory/pr-${20000 + index}`,
     baseBranch: 'main',
     sandboxId: null,
@@ -51,6 +52,10 @@ function renderSection() {
         value={{
           resourceId: 'resource-1',
           sessionEnabled: false,
+          resourceReady: false,
+          sandboxReady: false,
+          sandboxPreparing: false,
+          sandboxProgress: undefined,
           resourceEnabled: false,
           factorySessionState: { factoryProjectId: 'fp-1', projectRepositoryId },
           baseUrl: TEST_BASE_URL,
@@ -66,6 +71,10 @@ function renderSection() {
 }
 
 describe('Workspaces sidebar show more', () => {
+  beforeEach(() => {
+    localStorage.removeItem('mastracode.pinnedSessions');
+  });
+
   it('caps a group at 5 sessions and expands to the full list on demand', async () => {
     stubSessions(Array.from({ length: 8 }, (_, index) => reviewSession(index + 1)));
     const user = userEvent.setup();
@@ -83,6 +92,34 @@ describe('Workspaces sidebar show more', () => {
 
     await user.click(within(group).getByRole('button', { name: 'Show less' }));
     expect(within(group).getAllByRole('button', { name: /^factory\/pr-200\d+$/ })).toHaveLength(5);
+  });
+
+  it('keeps a pinned session visible and persists the pin', async () => {
+    stubSessions(Array.from({ length: 8 }, (_, index) => reviewSession(index + 1)));
+    const user = userEvent.setup();
+
+    const rendered = renderSection();
+    await waitForMutationsIdle(rendered.client);
+    const group = screen.getByRole('region', { name: 'Review Sessions' });
+    await user.click(within(group).getByRole('button', { name: 'Show 3 more' }));
+    await user.click(within(group).getByRole('button', { name: 'Session actions for factory/pr-20001' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Pin session' }));
+
+    expect(within(group).getByLabelText('factory/pr-20001 pinned')).toBeInTheDocument();
+    await user.click(within(group).getByRole('button', { name: 'Show less' }));
+    expect(within(group).getAllByRole('button', { name: /^factory\/pr-200\d+$/ })[0]).toHaveAccessibleName(
+      'factory/pr-20001',
+    );
+
+    rendered.unmount();
+    renderSection();
+    const remountedGroup = await screen.findByRole('region', { name: 'Review Sessions' });
+    expect(within(remountedGroup).getByRole('button', { name: 'factory/pr-20001' })).toBeInTheDocument();
+    expect(within(remountedGroup).getByLabelText('factory/pr-20001 pinned')).toBeInTheDocument();
+
+    await user.click(within(remountedGroup).getByRole('button', { name: 'Session actions for factory/pr-20001' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Unpin' }));
+    expect(within(remountedGroup).queryByRole('button', { name: 'factory/pr-20001' })).not.toBeInTheDocument();
   });
 
   it('shows no toggle when a group fits within the cap', async () => {

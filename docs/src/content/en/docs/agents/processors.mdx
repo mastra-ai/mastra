@@ -18,7 +18,7 @@ You can use individual [`Processor`](/reference/processors/processor-interface) 
 
 Some processors implement both input and output logic and can be used in either array depending on where the transformation should occur.
 
-Some built-in processors also send hidden system reminder signals. These signals are persisted in raw memory history and converted to `<system-reminder>...</system-reminder>` context before the next model call, but standard UI-facing message conversions and default memory recall hide them unless you explicitly opt in.
+Some built-in processors also send hidden system reminder signals. These signals are persisted in raw memory history and converted to `<system-reminder>...</system-reminder>` context before the next model call, but standard UI-facing message conversions and default memory recall hide them unless you explicitly opt in. To deliver a signal for the current call without retaining it, send it with `transient: true`.
 
 ## When to use processors
 
@@ -404,7 +404,7 @@ See the [`TokenLimiterProcessor` reference](/reference/processors/token-limiter-
 
 Removes tool calls and results from messages sent to the LLM, saving tokens on verbose tool interactions. Optionally exclude only specific tools. This filter only affects the LLM input, filtered messages are still saved to memory.
 
-By default, `ToolCallFilter` filters the initial input before the agent loop starts. Use `filterAfterToolSteps` to also filter during each loop step while preserving recent tool-producing steps.
+By default, `ToolCallFilter` filters tool calls from prior history and leaves tool calls made during the current agent loop in place. Use `filterAfterToolSteps` to also filter during the loop while preserving the most recent tool-producing steps.
 
 ```typescript
 new ToolCallFilter({
@@ -432,15 +432,15 @@ See the [`ToolSearchProcessor` reference](/reference/processors/tool-search-proc
 
 Handles provider-specific history incompatibilities when agents reuse messages across model providers. It can rewrite the outbound LLM request before the provider call, or recover from known provider API errors and retry.
 
-Add `ProviderHistoryCompat` explicitly when you need provider history compatibility rules, reactive API error recovery, custom compatibility rules, or predictable processor ordering.
+Add `ProviderHistoryCompat` explicitly when you need provider history compatibility rules, reactive API error recovery, custom compatibility rules, or predictable processor ordering. For Azure OpenAI agents that use observational memory, the processor rewrites `<system-reminder>` wrappers in outbound prompts to avoid content moderation refusals. Stored history remains unchanged.
 
 See the [`ProviderHistoryCompat` reference](/reference/processors/provider-history-compat) for setup, built-in rules, and custom rule options.
 
 ## Response caching
 
-:::experimental
+:::beta
 
-This feature is in beta. Breaking changes may occur without a major version bump until the API is stable.
+Breaking changes may occur without a major version bump until the API is stable.
 
 :::
 
@@ -504,7 +504,7 @@ These fields are overridable per call:
 
 ### Tenant scoping
 
-By default, `ResponseCache` looks up `MASTRA_RESOURCE_ID_KEY` on the request context and uses it as the cache scope. This means an agent that already populates the resource id (e.g. via memory) gets per-user isolation automatically. Users never see each other's cached responses.
+By default, `ResponseCache` looks up `MASTRA_RESOURCE_ID_KEY` on the request context and uses it as the cache scope. An agent that already populates the resource id (e.g. via memory) gets per-user isolation automatically. Users never see each other's cached responses.
 
 Override explicitly when you need a different scope:
 
@@ -548,11 +548,13 @@ For a custom backend, extend `MastraServerCache` and implement its abstract meth
 
 `ResponseCache` hooks into `processLLMRequest` (cache lookup, short-circuits on hit) and `processLLMResponse` (cache write on completion). Both run inside the agentic loop _after_ memory has loaded and earlier input processors have transformed the prompt.
 
-This means the cache key is derived from the resolved `LanguageModelV2Prompt` Mastra is about to send to the model. The key is created _after_ memory has loaded and earlier input processors have run, and each step in an agentic tool loop is independently cached.
+The cache key is derived from the resolved `LanguageModelV2Prompt` Mastra is about to send to the model. The key is created _after_ memory has loaded and earlier input processors have run, and each step in an agentic tool loop is independently cached.
 
 ### What's in the cache key
 
 When you don't supply `key`, the processor derives one deterministically from the inputs that change the LLM's response at this step: `agentId`, `stepNumber` (so each step in a tool loop has its own cache entry), `scope`, model identity (`provider`, `modelId`, spec version), and the resolved `prompt` (post-memory + post-processors). Any change to these inputs automatically invalidates the cache.
+
+Multimodal prompts are included too. Image and file parts reach the key by value: the key includes a URL's full href, and a digest of the bytes for inline binary data (`Uint8Array`, `ArrayBuffer`). Requests that differ only in which image they reference therefore get different cache entries.
 
 #### Customize the cache key
 
@@ -649,8 +651,32 @@ await agent.generate('Your prompt', { maxSteps: MAX_STEPS })
 ```
 
 :::note
-Reactive signals default to `tagName: 'system-reminder'`. Visit [Signals](/docs/long-running-agents/signals#send-processor-context) for more on processor-emitted signals.
+Reactive signals default to `tagName: 'system-reminder'`. Visit [Signals](/docs/harness/signals#send-processor-context) for more on processor-emitted signals.
 :::
+
+### Deliver a reminder without retaining it
+
+By default, a signal sent from a processor becomes part of the conversation: it's written to storage and re-enters the prompt on later turns. For an instruction you re-inject on every turn, that's unwanted, because copies pile up and the model starts treating its own past reminders as prior context to imitate. Set `transient: true` to deliver the signal to the model for the current call only, without retaining it.
+
+**When to use it:** you want to keep a short steering instruction in the model's recency window as the conversation grows, for example "stay on the current task", "keep answers under three sentences", or a per-turn constraint that depends on live application state. Re-inject it each turn so it stays near the latest message.
+
+```typescript title="src/mastra/processors/steering-reminder.ts" {10}
+import type { Processor, ProcessInputStepArgs } from '@mastra/core/processors'
+
+export class SteeringReminderProcessor implements Processor {
+  readonly id = 'steering-reminder'
+
+  async processInputStep({ sendSignal }: ProcessInputStepArgs) {
+    await sendSignal?.({
+      type: 'reactive',
+      contents: 'Stay on the current task and keep answers under three sentences.',
+      transient: true,
+    })
+  }
+}
+```
+
+A transient signal is still in the prompt for the current call, so the model sees it near the latest turn. It's not retained, so re-sending it each turn keeps a single fresh copy in context instead of an accumulating history, and stored thread history never includes it. Because nothing is written, it also keeps a stable prompt cache prefix across turns.
 
 ### Emit custom stream events
 
@@ -771,7 +797,7 @@ For streaming, access metadata from the `finish` chunk payload or the `stream.re
 
 ### Use workflows as processors
 
-You can use Mastra workflows as processors to create complex processing pipelines with parallel execution, conditional branching, and error handling:
+You can use Mastra workflows as processors to create complex processing pipelines with parallel execution and conditional branching, plus error handling:
 
 ```typescript title="src/mastra/processors/moderation-workflow.ts"
 import { createWorkflow, createStep } from '@mastra/core/workflows'
@@ -828,7 +854,7 @@ When an agent is registered with Mastra, processor workflows are automatically r
 
 ### Retry mechanism
 
-Processors can request that the LLM retry its response with feedback. This is useful for implementing quality checks, output validation, or iterative refinement:
+Processors can request that the LLM retry its response with feedback. This is useful for implementing quality checks or output validation, including iterative refinement:
 
 ```typescript title="src/mastra/processors/quality-checker.ts"
 import type { Processor } from '@mastra/core/processors'
@@ -878,7 +904,7 @@ For `StreamErrorRetryProcessor`, also set its `maxRetries` to the same value. It
 All processors expose an `onViolation` property that fires whenever a policy violation is detected, both when `abort()` is called (block strategy) and when a processor issues a warning (warn strategy). Use it for alerting, logging, or side effects without affecting the processor's main logic:
 
 ```typescript title="src/mastra/processors/violation-logging.ts"
-import { ModerationProcessor, CostGuardProcessor } from '@mastra/core/processors'
+import { ModerationProcessor, TokenCostControl } from '@mastra/core/processors'
 
 const moderation = new ModerationProcessor({
   model: '__GATEWAY_OPENAI_MODEL_NANO__',
@@ -890,13 +916,13 @@ moderation.onViolation = ({ processorId, message, detail }) => {
   monitor.track('processor_violation', { processorId, message, detail })
 }
 
-const costGuard = new CostGuardProcessor({
+const tokenCostControl = new TokenCostControl({
   maxCost: 10.0,
   scope: 'resource',
   window: '30d',
 })
 
-costGuard.onViolation = ({ processorId, message, detail }) => {
+tokenCostControl.onViolation = ({ processorId, message, detail }) => {
   alertSystem.notify(`[${processorId}] ${message}`)
 }
 ```
@@ -907,7 +933,7 @@ The callback receives a `ProcessorViolation` object with:
 - `message`: A human-readable description of what was violated
 - `detail`: Processor-specific metadata (e.g. cost usage, detected PII types, moderation categories)
 
-`onViolation` is part of the base [`Processor` interface](/reference/processors/processor-interface), so any custom processor can use it too. The runner automatically invokes it when any processor calls `abort()`. Errors thrown inside the callback are silently caught to prevent interfering with the processor pipeline.
+`onViolation` is part of the base [`Processor` interface](/reference/processors/processor-interface), so any custom processor can use it too. The runner automatically invokes it when any processor calls `abort()`. Errors thrown inside the callback are caught to prevent interfering with the processor pipeline.
 
 ### Abort and tripwire chunks
 

@@ -23,6 +23,8 @@ export interface ThemeSnapshot {
   snapshotId: string;
   ordinal: number;
   total: number;
+  /** When this snapshot became the current cross-signal state. Drives time-axis placement. */
+  cutoffAt?: string;
   startedAt: string;
   endedAt: string;
   traceCount: number;
@@ -63,9 +65,12 @@ export interface ThemeFlowResponse {
   }>;
 }
 
+export type ThemeSnapshotLandmarkReason = 'range_start' | 'range_end' | 'time_sample';
+
 export interface ThemeSnapshotsResponse {
-  snapshots: Array<ThemeSnapshot & { availableSignals: TraceSignalName[] }>;
+  snapshots: Array<ThemeSnapshot & { availableSignals: TraceSignalName[]; reason?: ThemeSnapshotLandmarkReason }>;
   nextCursor?: string;
+  totalSnapshots?: number;
 }
 
 export interface ThemeEntitiesResponse {

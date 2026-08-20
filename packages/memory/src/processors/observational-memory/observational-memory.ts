@@ -1,4 +1,5 @@
 import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { coreFeatures } from '@mastra/core/features';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { resolveModelConfig } from '@mastra/core/llm';
@@ -20,7 +21,7 @@ import {
   OBSERVATIONAL_MEMORY_DEFAULTS,
   OBSERVATION_CONTEXT_PROMPT,
   OBSERVATION_CONTEXT_INSTRUCTIONS,
-  OBSERVATION_RETRIEVAL_INSTRUCTIONS,
+  getRetrievalInstructions,
 } from './constants';
 
 /**
@@ -201,6 +202,7 @@ import {
   findLastCompletedObservationBoundary,
   getUnobservedParts,
   getBufferedChunks,
+  getObservableMessages,
   stripThreadTags,
 } from './message-utils';
 import { ModelByInputTokens } from './model-by-input-tokens';
@@ -287,6 +289,11 @@ export class ObservationalMemory {
   readonly scope: 'resource' | 'thread';
   /** Whether retrieval-mode observation groups are enabled. */
   readonly retrieval: boolean;
+  /** Scope the recall tool was registered with — controls which retrieval instructions are injected. */
+  readonly retrievalScope: 'thread' | 'resource';
+  /** Application-provided guidance appended after the native retrieval instructions. */
+  private retrievalInstructions?: string;
+  private retrievalSearch: boolean;
   private observationConfig: ResolvedObservationConfig;
   private reflectionConfig: ResolvedReflectionConfig;
   private onDebugEvent?: (event: ObservationDebugEvent) => void;
@@ -314,6 +321,7 @@ export class ObservationalMemory {
   private hasher = xxhash();
   private mastra?: Mastra;
   private memory?: Memory;
+  private curationCadence?: number;
 
   /**
    * Track message IDs observed during this instance's lifetime.
@@ -339,6 +347,56 @@ export class ObservationalMemory {
    * accept eventual consistency (acceptable for v1).
    */
   private locks = new Map<string, Promise<void>>();
+
+  /**
+   * Initial record lookup/creation promises keyed by the effective storage scope.
+   * Concurrent callers share the full read-or-create operation so a stale read
+   * cannot create another generation-zero record after the first insert finishes.
+   * Entries are removed after both success and failure so later calls always
+   * re-read storage and transient failures can be retried.
+   */
+  private recordInitializations = new Map<string, Promise<ObservationalMemoryRecord>>();
+
+  /**
+   * In-flight fire-and-forget background cycles (buffered observation, reflection).
+   * Tracked so callers can join them via `settled()` before closing a storage
+   * connection they own — otherwise a background cycle's tail statements race the close.
+   */
+  private pendingBackgroundWork = new Set<Promise<unknown>>();
+
+  /**
+   * Register fire-and-forget background work so `settled()` can join it.
+   * Returns the original promise so callers keep their own rejection handling.
+   */
+  trackBackgroundWork<T>(work: Promise<T>): Promise<T> {
+    const tracked: Promise<unknown> = work
+      .catch(() => {})
+      .finally(() => {
+        this.pendingBackgroundWork.delete(tracked);
+      });
+    this.pendingBackgroundWork.add(tracked);
+    return work;
+  }
+
+  /**
+   * Resolve once all background observational-memory work started so far has finished.
+   *
+   * Background cycles enqueue further background work (a buffered observation can
+   * trigger a reflection, which runs nested agent streams), so this drains repeatedly
+   * until nothing is left rather than joining a single snapshot.
+   */
+  async settled(): Promise<void> {
+    // Bounded so a pathologically self-retriggering cycle degrades to a warning
+    // instead of hanging the caller's teardown.
+    const maxDrainRounds = 100;
+    for (let round = 0; round < maxDrainRounds; round++) {
+      if (this.pendingBackgroundWork.size === 0) return;
+      await Promise.allSettled([...this.pendingBackgroundWork]);
+    }
+    // Work that finished on the final round has drained; only warn if any is genuinely left.
+    if (this.pendingBackgroundWork.size === 0) return;
+    omError(`[OM:settled] background work still pending after ${maxDrainRounds} drain rounds; giving up waiting`);
+  }
 
   /**
    * Acquire a lock for the given key, execute the callback, then release.
@@ -393,10 +451,14 @@ export class ObservationalMemory {
     this.storage = config.storage;
     this.scope = config.scope ?? 'thread';
     this.retrieval = Boolean(config.retrieval);
+    this.retrievalScope = typeof config.retrieval === 'object' ? (config.retrieval.scope ?? 'resource') : 'resource';
+    this.retrievalInstructions = typeof config.retrieval === 'object' ? config.retrieval.instructions : undefined;
+    this.retrievalSearch = typeof config.retrieval === 'object' && Boolean(config.retrieval.vector);
     this.onIndexObservations = config.onIndexObservations;
     this.hooks = config.hooks;
     this.mastra = config.mastra;
     this.memory = config.memory;
+    this.curationCadence = config.curationCadence;
 
     // Resolve "default" to the model default for the agent being configured.
     const resolveModel = (model: ObservationalMemoryModel | undefined, defaultModel: string) =>
@@ -524,6 +586,7 @@ export class ObservationalMemory {
       extractors: composeObservationExtractors({
         threadTitle: config.observation?.threadTitle ?? false,
         extract: config.observation?.extract,
+        continuationHints: config.observation?.continuationHints,
       }),
     };
 
@@ -556,7 +619,10 @@ export class ObservationalMemory {
             config.reflection?.observationTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.observationTokens,
           ),
       instruction: config.reflection?.instruction,
-      extractors: composeReflectionExtractors({ extract: config.reflection?.extract }),
+      extractors: composeReflectionExtractors({
+        extract: config.reflection?.extract,
+        continuationHints: config.reflection?.continuationHints,
+      }),
     };
 
     this.tokenCounter = new TokenCounter({
@@ -598,6 +664,7 @@ export class ObservationalMemory {
       resolveModel: inputTokens => this.resolveReflectionModel(inputTokens),
       mastra: config.mastra,
       memory: this.memory,
+      onReflectionCommitted: config.onReflectionCommitted,
     });
 
     // Validate buffer configuration
@@ -1060,13 +1127,29 @@ export class ObservationalMemory {
    */
   async getOrCreateRecord(threadId: string, resourceId?: string): Promise<ObservationalMemoryRecord> {
     const ids = this.getStorageIds(threadId, resourceId);
-    let record = await this.storage.getObservationalMemory(ids.threadId, ids.resourceId);
+    // Storage adapters identify thread-scoped records by threadId alone and
+    // resource-scoped records by resourceId alone. The single-flight key must
+    // mirror that identity so optional resourceId differences cannot split a
+    // thread-scoped initialization into separate operations.
+    const initializationKey = ids.threadId === null ? `resource:${ids.resourceId}` : `thread:${ids.threadId}`;
+    const pendingInitialization = this.recordInitializations.get(initializationKey);
+    if (pendingInitialization) {
+      return pendingInitialization;
+    }
 
-    if (!record) {
+    // Defer the storage read to the next microtask so the complete operation is
+    // registered before any adapter code runs. This prevents an already-started
+    // read from returning a stale null after another caller has finished inserting.
+    const initialization = Promise.resolve().then(async () => {
+      const record = await this.storage.getObservationalMemory(ids.threadId, ids.resourceId);
+      if (record) {
+        return record;
+      }
+
       // Capture the timezone used for Observer date formatting
       const observedTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-      record = await this.storage.initializeObservationalMemory({
+      return this.storage.initializeObservationalMemory({
         threadId: ids.threadId,
         resourceId: ids.resourceId,
         scope: this.scope,
@@ -1077,9 +1160,16 @@ export class ObservationalMemory {
         },
         observedTimezone,
       });
-    }
+    });
+    this.recordInitializations.set(initializationKey, initialization);
 
-    return record;
+    try {
+      return await initialization;
+    } finally {
+      if (this.recordInitializations.get(initializationKey) === initialization) {
+        this.recordInitializations.delete(initializationKey);
+      }
+    }
   }
 
   // ════════════════════════════════════════════════════════════════════════════
@@ -1121,7 +1211,7 @@ export class ObservationalMemory {
     resourceId?: string,
   ): Promise<void> {
     if (!messageList) return;
-    const allMsgs = messageList.get.all.db();
+    const allMsgs = getObservableMessages(messageList);
     // Find the last assistant message to attach the marker to
     for (let i = allMsgs.length - 1; i >= 0; i--) {
       const msg = allMsgs[i];
@@ -1609,7 +1699,7 @@ export class ObservationalMemory {
     }
 
     const messages = [
-      `${OBSERVATION_CONTEXT_PROMPT}\n\n${OBSERVATION_CONTEXT_INSTRUCTIONS}${retrieval ? `\n\n${OBSERVATION_RETRIEVAL_INSTRUCTIONS}` : ''}`,
+      `${OBSERVATION_CONTEXT_PROMPT}\n\n${OBSERVATION_CONTEXT_INSTRUCTIONS}${retrieval ? `\n\n${getRetrievalInstructions(this.retrievalScope, this.retrievalInstructions, this.retrievalSearch)}` : ''}`,
     ];
 
     // Add unobserved context from other threads (resource scope only)
@@ -1696,10 +1786,15 @@ export class ObservationalMemory {
     // fall back to a resource-keyed record which causes deadlocks when
     // multiple threads share the same resourceId.
     if (this.scope === 'thread') {
-      throw new Error(
-        `ObservationalMemory (scope: 'thread') requires a threadId, but none was found in RequestContext or MessageList. ` +
+      throw new MastraError({
+        id: 'OBSERVATIONAL_MEMORY_THREAD_ID_REQUIRED',
+        domain: ErrorDomain.MASTRA_MEMORY,
+        category: ErrorCategory.USER,
+        details: { status: 400 },
+        text:
+          `ObservationalMemory (scope: 'thread') requires a threadId, but none was found in RequestContext or MessageList. ` +
           `Ensure the agent is configured with Memory and a valid threadId is provided.`,
-      );
+      });
     }
 
     return null;
@@ -2209,14 +2304,16 @@ ${formattedMessages}
     );
 
     if (shouldTrigger) {
-      void this.startAsyncBufferedObservation(
-        opts.record,
-        opts.threadId,
-        opts.unobservedMessages,
-        lockKey,
-        opts.writer,
-        opts.unbufferedPendingTokens,
-        opts.requestContext,
+      void this.trackBackgroundWork(
+        this.startAsyncBufferedObservation(
+          opts.record,
+          opts.threadId,
+          opts.unobservedMessages,
+          lockKey,
+          opts.writer,
+          opts.unbufferedPendingTokens,
+          opts.requestContext,
+        ),
       );
     }
 
@@ -2253,8 +2350,11 @@ ${formattedMessages}
     messages: MastraDBMessage[];
     observedMessageIds?: string[];
     retentionFloor?: number;
+    /** Message ids that must never be removed (e.g. the in-flight turn's pending messages). */
+    preserveMessageIds?: string[];
   }): Promise<string[]> {
     const { threadId, resourceId, messages, observedMessageIds, retentionFloor } = opts;
+    const preserveSet = opts.preserveMessageIds?.length ? new Set(opts.preserveMessageIds) : null;
 
     const record = await this.getOrCreateRecord(threadId, resourceId);
     const effectiveObservedIds =
@@ -2277,6 +2377,10 @@ ${formattedMessages}
 
     for (const msg of messages) {
       if (!msg?.id || msg.id === 'om-continuation' || !observedSet.has(msg.id)) continue;
+      if (preserveSet?.has(msg.id)) {
+        skipped += 1;
+        continue;
+      }
 
       const unobservedParts = getUnobservedParts(msg);
       const totalParts = msg.content?.parts?.length ?? 0;
@@ -2340,10 +2444,14 @@ ${formattedMessages}
     messages: MessageList | MastraDBMessage[];
     observedMessageIds?: string[];
     retentionFloor?: number;
+    /** Message ids that must never be removed (e.g. the in-flight turn's pending messages). */
+    preserveMessageIds?: string[];
   }): Promise<MastraDBMessage[]> {
-    const { threadId, resourceId, observedMessageIds, retentionFloor } = opts;
+    const { threadId, resourceId, observedMessageIds, retentionFloor, preserveMessageIds } = opts;
     const messageList = this.isMessageList(opts.messages) ? opts.messages : undefined;
-    const allMsgs: MastraDBMessage[] = messageList ? messageList.get.all.db() : (opts.messages as MastraDBMessage[]);
+    const allMsgs: MastraDBMessage[] = messageList
+      ? getObservableMessages(messageList)
+      : (opts.messages as MastraDBMessage[]);
 
     let markerIdx = -1;
     let markerMsg: MastraDBMessage | null = null;
@@ -2369,6 +2477,7 @@ ${formattedMessages}
         messages: allMsgs,
         observedMessageIds,
         retentionFloor,
+        preserveMessageIds,
       });
 
       if (messageList) {
@@ -2386,9 +2495,10 @@ ${formattedMessages}
       const idsToRemove: string[] = [];
       const messagesToSave: MastraDBMessage[] = [];
 
+      const preserveSet = preserveMessageIds?.length ? new Set(preserveMessageIds) : null;
       for (let i = 0; i < markerIdx; i++) {
         const msg = allMsgs[i];
-        if (msg?.id && msg.id !== 'om-continuation') {
+        if (msg?.id && msg.id !== 'om-continuation' && !preserveSet?.has(msg.id)) {
           idsToRemove.push(msg.id);
           messagesToSave.push(msg);
         }
@@ -2396,11 +2506,16 @@ ${formattedMessages}
 
       messagesToSave.push(markerMsg);
 
-      const unobservedParts = getUnobservedParts(markerMsg);
-      if (unobservedParts.length === 0) {
-        if (markerMsg.id) idsToRemove.push(markerMsg.id);
-      } else if (unobservedParts.length < (markerMsg.content?.parts?.length ?? 0)) {
-        markerMsg.content.parts = unobservedParts;
+      // The marker anchor itself may be an in-flight message (e.g. the step-0
+      // seeded response message) — preserved ids must never be trimmed or removed.
+      const preserveMarker = Boolean(markerMsg.id && preserveSet?.has(markerMsg.id));
+      if (!preserveMarker) {
+        const unobservedParts = getUnobservedParts(markerMsg);
+        if (unobservedParts.length === 0) {
+          if (markerMsg.id) idsToRemove.push(markerMsg.id);
+        } else if (unobservedParts.length < (markerMsg.content?.parts?.length ?? 0)) {
+          markerMsg.content.parts = unobservedParts;
+        }
       }
 
       if (messageList) {
@@ -2519,13 +2634,27 @@ ${formattedMessages}
     const { threadId, resourceId, unobservedContextBlocks } = opts;
     const record = opts.record ?? (await this.getOrCreateRecord(threadId, resourceId));
 
-    if (!record.activeObservations) return undefined;
+    if (!record.activeObservations) {
+      // Resource-scoped recall can browse and search other threads even before any
+      // observation group exists, so the actor still needs to know how to use it.
+      if (this.retrieval && this.retrievalScope === 'resource') {
+        return [getRetrievalInstructions(this.retrievalScope, this.retrievalInstructions, this.retrievalSearch)];
+      }
+      return undefined;
+    }
 
-    // Read thread metadata for continuation hints
+    // Read thread metadata for continuation hints. A persisted hint is only injected while a
+    // pipeline can still produce it — once observation and reflection both disable a section,
+    // a stale value stored by an earlier configuration must not keep steering the actor.
     const thread = await this.storage.getThreadById({ threadId });
     const omMetadata = getThreadOMMetadata(thread?.metadata);
-    const currentTask = omMetadata?.currentTask;
-    const suggestedResponse = omMetadata?.suggestedResponse;
+    const activeExtractors = [...this.observationConfig.extractors, ...this.reflectionConfig.extractors];
+    const currentTask = activeExtractors.some(extractor => extractor.slug === 'current-task')
+      ? omMetadata?.currentTask
+      : undefined;
+    const suggestedResponse = activeExtractors.some(extractor => extractor.slug === 'suggested-response')
+      ? omMetadata?.suggestedResponse
+      : undefined;
     const currentDate = opts.currentDate ?? new Date();
 
     return this.formatObservationsForContext(
@@ -2674,7 +2803,7 @@ ${formattedMessages}
       omDebug(
         `[OM:status] step=${stepNumber} msgs=${pendingTokens}/${threshold} obs=${currentObservationTokens}/${effectiveObservationTokensThreshold} gen=${record.generationCount}`,
       );
-      await writer.custom(statusPart).catch(() => {});
+      await writer.custom({ ...statusPart, transient: true }).catch(() => {});
     }
   }
 
@@ -2700,7 +2829,13 @@ ${formattedMessages}
    * }
    * ```
    */
-  async getStatus(opts: { threadId: string; resourceId?: string; messages?: MastraDBMessage[] }): Promise<{
+  async getStatus(opts: {
+    threadId: string;
+    resourceId?: string;
+    messages?: MastraDBMessage[];
+    /** Pre-loaded record to skip the initial storage read. */
+    record?: ObservationalMemoryRecord;
+  }): Promise<{
     record: ObservationalMemoryRecord;
     pendingTokens: number;
     threshold: number;
@@ -2716,14 +2851,14 @@ ${formattedMessages}
     asyncReflectionEnabled: boolean;
     scope: 'resource' | 'thread';
   }> {
-    const { threadId, resourceId } = opts;
-    const record = await this.getOrCreateRecord(threadId, resourceId);
+    const { threadId, resourceId, record: providedRecord, messages } = opts;
+    const record = providedRecord ?? (await this.getOrCreateRecord(threadId, resourceId));
     const currentObservationTokens = record.observationTokenCount ?? 0;
 
     // Use provided messages or load from storage
     let unobservedMessages: MastraDBMessage[];
-    if (opts.messages) {
-      unobservedMessages = this.getUnobservedMessages(opts.messages, record);
+    if (messages) {
+      unobservedMessages = this.getUnobservedMessages(messages, record);
     } else {
       const rawMessages = await this.loadMessagesFromStorage(
         threadId,
@@ -2932,11 +3067,12 @@ ${formattedMessages}
     pendingTokens?: number;
     /** Pre-loaded record to skip the initial getOrCreateRecord() fetch.
      *  When called fire-and-forget, passing the record avoids an async gap
-     *  before lastBufferedBoundary is set. */
+     *  before lastBufferedBoundary is set and exposes buffering state to same-step callers. */
     record?: ObservationalMemoryRecord;
     writer?: ProcessorStreamWriter;
     agent?: ProcessorContext['agent'];
     sendSignal?: ProcessorContext['sendSignal'];
+    sendStateSignal?: ProcessorContext['sendStateSignal'];
     requestContext?: RequestContext;
     currentModel?: ObservationModelContext;
     observabilityContext?: ObservabilityContext;
@@ -2952,6 +3088,7 @@ ${formattedMessages}
     const { threadId, resourceId, requestContext, observabilityContext } = opts;
 
     let record = opts.record ?? (await this.getOrCreateRecord(threadId, resourceId));
+    const inMemoryRecord = record;
 
     // Check if buffering is enabled
     if (!this.buffering.isAsyncObservationEnabled()) {
@@ -2992,6 +3129,8 @@ ${formattedMessages}
 
     // Set persistent flag and register op
     registerOp(record.id, 'bufferingObservation');
+    inMemoryRecord.isBufferingObservation = true;
+    inMemoryRecord.lastBufferedAtTokens = currentTokens;
     this.storage.setBufferingObservationFlag(record.id, true, currentTokens).catch(err => {
       omError('[OM] Failed to set buffering observation flag', err);
     });
@@ -3003,8 +3142,17 @@ ${formattedMessages}
     });
     BufferingCoordinator.asyncBufferingOps.set(bufferKey, opPromise);
 
-    // Re-fetch record after mutex wait to get the latest state
+    // Keep the caller's turn-scoped record current while using a fresh storage snapshot
+    // for the asynchronous write path.
     record = (await this.storage.getObservationalMemory(record.threadId, record.resourceId)) ?? record;
+    const setBufferingState = (isBufferingObservation: boolean, lastBufferedAtTokens?: number) => {
+      inMemoryRecord.isBufferingObservation = isBufferingObservation;
+      record.isBufferingObservation = isBufferingObservation;
+      if (lastBufferedAtTokens !== undefined) {
+        inMemoryRecord.lastBufferedAtTokens = lastBufferedAtTokens;
+        record.lastBufferedAtTokens = lastBufferedAtTokens;
+      }
+    };
 
     let flagCleared = false;
 
@@ -3047,6 +3195,7 @@ ${formattedMessages}
       const newTokens = await this.tokenCounter.countMessagesAsync(candidateMessages);
 
       if (candidateMessages.length === 0 || (!opts.skipMinimumTokenCheck && newTokens < minNewTokens)) {
+        setBufferingState(false);
         return { buffered: false, record };
       }
 
@@ -3096,6 +3245,7 @@ ${formattedMessages}
             writer,
             agent: opts.agent,
             sendSignal: opts.sendSignal,
+            sendStateSignal: opts.sendStateSignal,
             requestContext,
             currentModel: opts.currentModel,
             observabilityContext,
@@ -3123,6 +3273,7 @@ ${formattedMessages}
       // Update the boundary tokens in storage + in-memory cache for interval tracking
       await this.storage.setBufferingObservationFlag(record.id, false, newTokens).catch(() => {});
       flagCleared = true;
+      setBufferingState(false, newTokens);
       BufferingCoordinator.lastBufferedBoundary.set(bufferKey, newTokens);
 
       // Update lastBufferedAtTime in-memory cache so subsequent buffer() calls filter correctly
@@ -3130,7 +3281,7 @@ ${formattedMessages}
       const cursor = new Date(maxTimestamp.getTime() + 1);
       BufferingCoordinator.lastBufferedAtTime.set(bufferKey, cursor);
 
-      const updatedRecord = await this.getOrCreateRecord(threadId, resourceId);
+      const updatedRecord = (await this.storage.getObservationalMemory(record.threadId, record.resourceId)) ?? record;
       return { buffered: true, record: updatedRecord };
     } catch (error) {
       omError('[OM] buffer() failed', error);
@@ -3141,6 +3292,7 @@ ${formattedMessages}
       resolveOp!();
       // Only clear the flag if the success path didn't already clear it (with token count)
       if (!flagCleared) {
+        setBufferingState(false);
         await this.storage.setBufferingObservationFlag(record.id, false).catch(() => {});
       }
     }
@@ -3174,6 +3326,8 @@ ${formattedMessages}
     checkThreshold?: boolean;
     /** Messages to use for threshold check (in-memory). If omitted, loads from storage. */
     messages?: MastraDBMessage[];
+    /** Pre-loaded record to skip the initial storage read. */
+    record?: ObservationalMemoryRecord;
     /** Current actor model for provider-change activation checks. */
     currentModel?: ObservationModelContext;
     /** Stream writer for emitting activation markers to the UI. */
@@ -3187,7 +3341,7 @@ ${formattedMessages}
   }> {
     const { threadId, resourceId } = opts;
 
-    const record = await this.getOrCreateRecord(threadId, resourceId);
+    const record = opts.record ?? (await this.getOrCreateRecord(threadId, resourceId));
 
     // Reset stale lastBufferedBoundary at the start of a new turn.
     // If the stored boundary is far above the current context size, it's
@@ -3253,7 +3407,7 @@ ${formattedMessages}
         activationActivateAfterIdle = activateAfterIdle;
         activateAfterIdleExpiredMs = ttlExpiredMs;
       } else {
-        const status = await this.getStatus({ threadId, resourceId, messages: thresholdMessages });
+        const status = await this.getStatus({ threadId, resourceId, record, messages: thresholdMessages });
         if (status.pendingTokens < status.threshold) {
           return { activated: false, record };
         }
@@ -3373,9 +3527,9 @@ ${formattedMessages}
         const oldTitle = thread.title?.trim();
         const newTitle = chunkThreadTitle?.trim();
         const shouldUpdateThreadTitle = !!newTitle && newTitle.length >= 3 && newTitle !== oldTitle;
-        await this.storage.updateThread({
+        await this.storage.patchThread({
           id: threadId,
-          title: shouldUpdateThreadTitle ? newTitle : (thread.title ?? ''),
+          ...(shouldUpdateThreadTitle ? { title: newTitle } : {}),
           metadata: newMetadata,
         });
       }
@@ -3493,10 +3647,14 @@ ${formattedMessages}
     threadId: string;
     resourceId?: string;
     messages?: MastraDBMessage[];
+    /** Live MessageList for the in-flight turn — lets markers land on the pending assistant message. */
+    messageList?: MessageList;
     hooks?: ObserveHooks;
     /** Which pipeline path initiated this cycle; defaults to 'manual'. */
     trigger?: ObserveTrigger;
     agent?: ProcessorContext['agent'];
+    sendSignal?: ProcessorContext['sendSignal'];
+    sendStateSignal?: ProcessorContext['sendStateSignal'];
     requestContext?: RequestContext;
     writer?: ProcessorStreamWriter;
     observabilityContext?: ObservabilityContext;
@@ -3546,8 +3704,11 @@ ${formattedMessages}
           threadId,
           resourceId,
           messages: unobservedMessages,
+          messageList: opts.messageList,
           reflectionHooks,
           agent: opts.agent,
+          sendSignal: opts.sendSignal,
+          sendStateSignal: opts.sendStateSignal,
           requestContext,
           writer: opts.writer,
           observabilityContext: opts.observabilityContext,
@@ -3570,7 +3731,50 @@ ${formattedMessages}
     // Fetch the latest record after lock release
     const record = await this.getOrCreateRecord(threadId, resourceId);
     const reflected = record.generationCount > generationBefore && generationBefore >= 0;
+
+    if (observed) {
+      // Fire-and-forget; a curation failure must never fail the observation.
+      void this.maybeTriggerCadenceCuration(threadId, resourceId, record, requestContext).catch(error => {
+        omDebug(`[OM:observe] cadence curation failed: ${error instanceof Error ? error.message : String(error)}`);
+      });
+    }
+
     return { observed, reflected, record };
+  }
+
+  /**
+   * Count committed observation runs on the sync observe path and run the curator every
+   * `curationCadence` runs. The counter is persisted at `record.config.subconscious.observationRuns`
+   * (the OM record's config jsonb, deep-merged; threshold resolution only reads `_overrides`, so the
+   * sibling key is inert). Concurrent commits can miscount — the curator run is advisory, and the
+   * curation cursor is the real serializer. The async-buffer lane bypasses observe(); deployments
+   * that gate on this cadence (factory's resource scope) disable async buffering.
+   */
+  private async maybeTriggerCadenceCuration(
+    threadId: string,
+    resourceId: string | undefined,
+    record: ObservationalMemoryRecord,
+    requestContext?: RequestContext,
+  ): Promise<void> {
+    const cadence = this.curationCadence;
+    const memory = this.memory;
+    if (!cadence || cadence < 1 || !memory) return;
+
+    const config = (record.config ?? {}) as { subconscious?: { observationRuns?: number } };
+    const runs = (config.subconscious?.observationRuns ?? 0) + 1;
+    const fire = runs >= cadence;
+    await this.storage.updateObservationalMemoryConfig({
+      id: record.id,
+      config: { subconscious: { observationRuns: fire ? 0 : runs } },
+    });
+    if (!fire) return;
+
+    const result = await memory.runCuration({
+      threadId,
+      resourceId: resourceId ?? threadId,
+      requestContext,
+    });
+    omDebug(`[OM:observe] cadence curation outcome=${result.outcome} thread=${threadId}`);
   }
 
   /**
@@ -3599,6 +3803,18 @@ ${formattedMessages}
 
     if (!record.activeObservations) {
       return { reflected: false, record, usage: undefined };
+    }
+
+    // LOCKING: same guard as the turn-driven path (reflector-runner maybeReflect).
+    // An in-flight reflection in this process skips quietly; a flag left behind
+    // by a dead process is stale — clear it and proceed.
+    if (record.isReflecting) {
+      if (isOpActiveInProcess(record.id, 'reflecting')) {
+        omDebug(`[OM:reflect] isReflecting=true and active in this process, skipping`);
+        return { reflected: false, record, usage: undefined };
+      }
+      omDebug(`[OM:reflect] isReflecting=true but NOT active in this process — stale flag from dead process, clearing`);
+      await this.storage.setReflectingFlag(record.id, false);
     }
 
     await this.storage.setReflectingFlag(record.id, true);
@@ -3647,9 +3863,8 @@ ${formattedMessages}
           threadTitle: metadataUpdate.threadTitle ?? previousOmMetadata?.threadTitle,
           extracted: { ...(previousOmMetadata?.extracted ?? {}), ...(metadataUpdate.extracted ?? {}) },
         });
-        await this.storage.updateThread({
+        await this.storage.patchThread({
           id: threadId,
-          title: thread.title ?? '',
           metadata: newMetadata,
         });
       }
@@ -3819,6 +4034,8 @@ ${formattedMessages}
     resourceId?: string;
     messageList: MessageList;
     agent?: ProcessorContext['agent'];
+    sendSignal?: ProcessorContext['sendSignal'];
+    sendStateSignal?: ProcessorContext['sendStateSignal'];
     observabilityContext?: ObservabilityContext;
     hooks?: ObservationTurnHooks;
   }): ObservationTurn {
@@ -3828,6 +4045,8 @@ ${formattedMessages}
       resourceId: opts.resourceId,
       messageList: opts.messageList,
       agent: opts.agent,
+      sendSignal: opts.sendSignal,
+      sendStateSignal: opts.sendStateSignal,
       observabilityContext: opts.observabilityContext,
       hooks: opts.hooks,
     });

@@ -7,6 +7,12 @@ packages:
 
 # Tools
 
+:::beta
+
+Breaking changes may occur without a major version bump until the API is stable.
+
+:::
+
 A file-based agent discovers tools from `.ts` and `.js` files directly under its `tools/` directory. Each discovered file is imported at build time, the file must default-export a [`createTool()`](/reference/tools/create-tool) result, and the filename without its extension becomes the tool key the model can call.
 
 Use this page for the file-based convention. For tool schemas, execution options, output shaping, and approval options, see the [`createTool()` reference](/reference/tools/create-tool).
@@ -56,7 +62,7 @@ The file-based convention only controls where the tool lives and how it's regist
 - Use `toModelOutput` when the model should see a different shape than the raw value returned from `execute`.
 - Use `requireApproval` when a tool needs human confirmation before execution.
 
-See the [`createTool()` reference](/reference/tools/create-tool) for all options and [tool approval](/docs/agent-controller/tool-approvals) for the approval flow.
+See the [`createTool()` reference](/reference/tools/create-tool) for all options and [tool approval](/docs/harness/agent-controller#approve-tools-and-resume-suspensions) for the approval flow.
 
 ## Runtime boundary
 

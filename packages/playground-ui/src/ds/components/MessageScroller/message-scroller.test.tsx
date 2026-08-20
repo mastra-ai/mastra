@@ -11,6 +11,7 @@ import {
   MessageScrollerProvider,
   MessageScrollerViewport,
 } from './message-scroller';
+import type { MessageScrollerDefaultScrollPosition } from './message-scroller';
 
 if (!Element.prototype.getAnimations) {
   Object.defineProperty(Element.prototype, 'getAnimations', { configurable: true, value: () => [] });
@@ -374,6 +375,15 @@ const setScrollMetrics = (
   element.scrollTop = metrics.scrollTop;
 };
 
+// Only a scroll back up detaches a reader, so detaching one takes two moves: end, then up.
+const scrollReaderTo = (
+  element: HTMLElement,
+  metrics: { scrollHeight: number; clientHeight: number; scrollTop: number },
+) => {
+  setScrollMetrics(element, metrics);
+  fireEvent.scroll(element);
+};
+
 const installScrollTo = (element: HTMLElement) => {
   const scrollTo = vi.fn((options?: ScrollToOptions | number) => {
     if (typeof options === 'object' && typeof options.top === 'number') element.scrollTop = options.top;
@@ -385,16 +395,49 @@ const installScrollTo = (element: HTMLElement) => {
 
 const HistoryHarness = ({
   autoScroll = false,
+  defaultScrollPosition,
   messageIds,
   onReachStart,
+  replyIds = [],
 }: {
   autoScroll?: boolean;
+  defaultScrollPosition?: MessageScrollerDefaultScrollPosition;
   messageIds: string[];
   onReachStart?: () => void;
+  replyIds?: string[];
 }) => (
-  <MessageScrollerProvider autoScroll={autoScroll} preserveScrollOnPrepend onReachStart={onReachStart}>
+  <MessageScrollerProvider
+    autoScroll={autoScroll}
+    defaultScrollPosition={defaultScrollPosition}
+    preserveScrollOnPrepend
+    onReachStart={onReachStart}
+  >
     <MessageScrollerViewport data-testid="history-viewport">
       <MessageScrollerContent>
+        {messageIds.map(messageId => (
+          <MessageScrollerItem key={messageId} messageId={messageId} scrollAnchor>
+            <div>{messageId}</div>
+          </MessageScrollerItem>
+        ))}
+        {replyIds.map(replyId => (
+          <MessageScrollerItem key={replyId} messageId={replyId}>
+            <div>{replyId}</div>
+          </MessageScrollerItem>
+        ))}
+      </MessageScrollerContent>
+    </MessageScrollerViewport>
+  </MessageScrollerProvider>
+);
+
+const MarkerHarness = ({ markerIds = [], messageIds }: { markerIds?: string[]; messageIds: string[] }) => (
+  <MessageScrollerProvider autoScroll>
+    <MessageScrollerViewport data-testid="marker-viewport">
+      <MessageScrollerContent>
+        {markerIds.map(markerId => (
+          <MessageScrollerItem key={markerId} messageId={markerId}>
+            <div>{markerId}</div>
+          </MessageScrollerItem>
+        ))}
         {messageIds.map(messageId => (
           <MessageScrollerItem key={messageId} messageId={messageId} scrollAnchor>
             <div>{messageId}</div>
@@ -405,6 +448,67 @@ const HistoryHarness = ({
   </MessageScrollerProvider>
 );
 
+const HistoryRailHarness = ({ messageIds }: { messageIds: string[] }) => (
+  <MessageScrollerProvider>
+    <MessageScrollerViewport data-testid="history-rail-viewport">
+      <MessageScrollerContent>
+        {messageIds.map(messageId => (
+          <MessageScrollerItem key={messageId} messageId={messageId} scrollAnchor>
+            <div>{messageId}</div>
+          </MessageScrollerItem>
+        ))}
+      </MessageScrollerContent>
+    </MessageScrollerViewport>
+    <ThreadRail
+      turns={messageIds.map(messageId => ({
+        key: messageId,
+        messageId,
+        prompt: messageId,
+        files: [],
+        hiddenFileCount: 0,
+      }))}
+    />
+  </MessageScrollerProvider>
+);
+
+const TurnHarness = ({ messageIds, replyIds = [] }: { messageIds: string[]; replyIds?: string[] }) => (
+  <MessageScrollerProvider defaultScrollPosition="last-anchor">
+    <MessageScrollerViewport data-testid="turn-viewport">
+      <MessageScrollerContent>
+        {messageIds.map(messageId => (
+          <MessageScrollerItem key={messageId} messageId={messageId} scrollAnchor>
+            <div>{messageId}</div>
+          </MessageScrollerItem>
+        ))}
+        {replyIds.map(replyId => (
+          <MessageScrollerItem key={replyId} messageId={replyId}>
+            <div>{replyId}</div>
+          </MessageScrollerItem>
+        ))}
+      </MessageScrollerContent>
+    </MessageScrollerViewport>
+  </MessageScrollerProvider>
+);
+
+const ReconciledTurnHarness = ({ messageId }: { messageId: string }) => (
+  <MessageScrollerProvider defaultScrollPosition="last-anchor">
+    <MessageScrollerViewport data-testid="reconciled-turn-viewport">
+      <MessageScrollerContent>
+        <MessageScrollerItem key="stable-turn" messageId={messageId} scrollAnchor>
+          <div>{messageId}</div>
+        </MessageScrollerItem>
+      </MessageScrollerContent>
+    </MessageScrollerViewport>
+  </MessageScrollerProvider>
+);
+
+const stubLayout = (tops: Record<string, number>) => {
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+    const top = this.dataset.messageId ? tops[this.dataset.messageId] : undefined;
+    return createRect({ top: top ?? 0 });
+  });
+};
+
 const contentResizeObserver = () => {
   const content = document.querySelector<HTMLElement>('[data-slot="message-scroller-content"]');
   if (!content) throw new Error('No scroller content');
@@ -414,6 +518,33 @@ const contentResizeObserver = () => {
 };
 
 describe('MessageScroller older history', () => {
+  it('tracks the active anchor in document order after older messages are prepended', async () => {
+    vi.stubGlobal('IntersectionObserver', undefined);
+    const { rerender } = render(<HistoryRailHarness messageIds={['message-3', 'message-4']} />);
+    const viewport = screen.getByTestId('history-rail-viewport');
+    installScrollTo(viewport);
+    setScrollMetrics(viewport, { scrollHeight: 1000, clientHeight: 400, scrollTop: 200 });
+    setTop(viewport, 100);
+    setTop(getItem('message-3'), 80);
+    setTop(getItem('message-4'), 180);
+    fireEvent.scroll(viewport);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Jump to message-3' }).getAttribute('aria-current')).toBe('location');
+    });
+
+    rerender(<HistoryRailHarness messageIds={['message-1', 'message-2', 'message-3', 'message-4']} />);
+    setTop(getItem('message-1'), -120);
+    setTop(getItem('message-2'), -20);
+    setTop(getItem('message-3'), 80);
+    setTop(getItem('message-4'), 180);
+    fireEvent.scroll(viewport);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Jump to message-3' }).getAttribute('aria-current')).toBe('location');
+    });
+  });
+
   it('does not request older history before the transcript has settled at the end', () => {
     const onReachStart = vi.fn();
     render(<HistoryHarness messageIds={['message-1']} onReachStart={onReachStart} />);
@@ -508,6 +639,77 @@ describe('MessageScroller older history', () => {
   });
 });
 
+describe('MessageScroller turn anchoring', () => {
+  it('opens an asynchronously loaded transcript at its latest turn after layout settles', () => {
+    let layoutReady = false;
+    const scheduledScrolls: FrameRequestCallback[] = [];
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => {
+      scheduledScrolls.push(callback);
+      return scheduledScrolls.length;
+    });
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      const top = layoutReady && this.dataset.messageId === 'message-1' ? 100 : 0;
+      if (layoutReady && this.dataset.messageId === 'message-2') return createRect({ top: 700 });
+      return createRect({ top });
+    });
+    const { rerender } = render(<TurnHarness messageIds={[]} />);
+
+    const viewport = screen.getByTestId('turn-viewport');
+    const scrollTo = installScrollTo(viewport);
+    setScrollMetrics(viewport, { scrollHeight: 1200, clientHeight: 400, scrollTop: 250 });
+
+    rerender(<TurnHarness messageIds={['message-1', 'message-2']} />);
+    expect(scrollTo).not.toHaveBeenCalled();
+
+    act(() => scheduledScrolls.shift()?.(0));
+    expect(scrollTo).not.toHaveBeenCalled();
+
+    layoutReady = true;
+    act(() => scheduledScrolls.shift()?.(16));
+
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 950, behavior: 'auto' });
+  });
+
+  it('parks a turn that opens below the ones already read at the top of the viewport', () => {
+    stubLayout({ 'message-2': 300 });
+    const { rerender } = render(<TurnHarness messageIds={['message-1']} />);
+
+    const viewport = screen.getByTestId('turn-viewport');
+    const scrollTo = installScrollTo(viewport);
+    setScrollMetrics(viewport, { scrollHeight: 1000, clientHeight: 400, scrollTop: 0 });
+
+    rerender(<TurnHarness messageIds={['message-1', 'message-2']} />);
+
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 300, behavior: 'smooth' });
+  });
+
+  it('does not re-anchor a turn when reconciliation replaces its message id', () => {
+    stubLayout({ 'client-message': 300, 'server-message': 300 });
+    const { rerender } = render(<ReconciledTurnHarness messageId="client-message" />);
+
+    const viewport = screen.getByTestId('reconciled-turn-viewport');
+    setScrollMetrics(viewport, { scrollHeight: 1000, clientHeight: 400, scrollTop: 300 });
+    const scrollTo = installScrollTo(viewport);
+
+    rerender(<ReconciledTurnHarness messageId="server-message" />);
+
+    expect(scrollTo).not.toHaveBeenCalled();
+  });
+
+  it('stays put while the reply streams in below the turn', () => {
+    stubLayout({ 'message-1': 300 });
+    const { rerender } = render(<TurnHarness messageIds={['message-1']} />);
+
+    const viewport = screen.getByTestId('turn-viewport');
+    setScrollMetrics(viewport, { scrollHeight: 1000, clientHeight: 400, scrollTop: 300 });
+    const scrollTo = installScrollTo(viewport);
+
+    rerender(<TurnHarness messageIds={['message-1']} replyIds={['reply-1']} />);
+
+    expect(scrollTo).not.toHaveBeenCalled();
+  });
+});
+
 describe('MessageScroller autoScroll', () => {
   it('follows content that grows while the reader sits at the end', async () => {
     vi.stubGlobal('ResizeObserver', MockResizeObserver);
@@ -529,14 +731,226 @@ describe('MessageScroller autoScroll', () => {
     expect(scrollTo).toHaveBeenLastCalledWith({ top: 1000, behavior: 'auto' });
   });
 
+  it('stays attached when a scroll lands behind a reply that is still growing', async () => {
+    vi.stubGlobal('ResizeObserver', MockResizeObserver);
+    render(<HistoryHarness autoScroll messageIds={['message-1']} />);
+
+    const viewport = screen.getByTestId('history-viewport');
+    installScrollTo(viewport);
+    scrollReaderTo(viewport, { scrollHeight: 1000, clientHeight: 400, scrollTop: 600 });
+
+    const { content, observer } = contentResizeObserver();
+    Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 1400 });
+    await act(async () => {
+      observer.trigger([{ target: content }]);
+    });
+
+    // The follow lands on the end of the frame it measured, and the scroll event
+    // for it arrives once the reply has already grown past that.
+    Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 1800 });
+    fireEvent.scroll(viewport);
+
+    const scrollTo = installScrollTo(viewport);
+    Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 2200 });
+    await act(async () => {
+      observer.trigger([{ target: content }]);
+    });
+
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 1800, behavior: 'auto' });
+  });
+
+  it('leaves a reopened thread on the turn it restored instead of following the stream', () => {
+    stubLayout({ 'message-1': 0, 'message-2': 300 });
+    const { rerender } = render(
+      <HistoryHarness autoScroll defaultScrollPosition="last-anchor" messageIds={['message-1', 'message-2']} />,
+    );
+
+    const viewport = screen.getByTestId('history-viewport');
+    const scrollTo = installScrollTo(viewport);
+    setScrollMetrics(viewport, { scrollHeight: 1000, clientHeight: 400, scrollTop: 300 });
+
+    // Rows registering after the restore must not be read as the reader riding the stream.
+    Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 1400 });
+    rerender(
+      <HistoryHarness
+        autoScroll
+        defaultScrollPosition="last-anchor"
+        messageIds={['message-1', 'message-2']}
+        replyIds={['reply-1']}
+      />,
+    );
+
+    expect(scrollTo).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { defaultScrollPosition: 'start', landsOn: 0 },
+    { defaultScrollPosition: 'last-anchor', landsOn: 550 },
+  ] as const)(
+    'opens an asynchronously loaded transcript at its $defaultScrollPosition before following anything',
+    ({ defaultScrollPosition, landsOn }) => {
+      const frames: FrameRequestCallback[] = [];
+      vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => frames.push(callback));
+      stubLayout({ 'message-1': 0, 'message-2': 300 });
+      const { rerender } = render(
+        <HistoryHarness autoScroll defaultScrollPosition={defaultScrollPosition} messageIds={[]} />,
+      );
+
+      const viewport = screen.getByTestId('history-viewport');
+      const scrollTo = installScrollTo(viewport);
+      setScrollMetrics(viewport, { scrollHeight: 1200, clientHeight: 400, scrollTop: 250 });
+
+      rerender(
+        <HistoryHarness
+          autoScroll
+          defaultScrollPosition={defaultScrollPosition}
+          messageIds={['message-1', 'message-2']}
+        />,
+      );
+      expect(scrollTo).not.toHaveBeenCalled();
+
+      act(() => frames.shift()?.(0));
+      act(() => frames.shift()?.(16));
+      expect(scrollTo).toHaveBeenLastCalledWith({ top: landsOn, behavior: 'auto' });
+
+      scrollTo.mockClear();
+      Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 1600 });
+      rerender(
+        <HistoryHarness
+          autoScroll
+          defaultScrollPosition={defaultScrollPosition}
+          messageIds={['message-1', 'message-2']}
+          replyIds={['reply-1']}
+        />,
+      );
+
+      expect(scrollTo).not.toHaveBeenCalled();
+    },
+  );
+
+  it('lets the turn itself carry a reader who is already at the end', () => {
+    stubLayout({ 'message-2': 300 });
+    const { rerender } = render(<HistoryHarness autoScroll messageIds={['message-1']} />);
+
+    const viewport = screen.getByTestId('history-viewport');
+    installScrollTo(viewport);
+    setScrollMetrics(viewport, { scrollHeight: 1000, clientHeight: 400, scrollTop: 600 });
+    fireEvent.scroll(viewport);
+
+    const scrollTo = installScrollTo(viewport);
+    Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 1400 });
+    rerender(<HistoryHarness autoScroll messageIds={['message-1', 'message-2']} />);
+
+    // `auto`: the turn's own curve is the motion, pinning to the end each frame rides it.
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 1000, behavior: 'auto' });
+  });
+
+  it('brings a reader who left back to the end when they open a turn', () => {
+    stubLayout({ 'message-2': 300 });
+    const { rerender } = render(<HistoryHarness autoScroll messageIds={['message-1']} />);
+
+    const viewport = screen.getByTestId('history-viewport');
+    installScrollTo(viewport);
+    scrollReaderTo(viewport, { scrollHeight: 1000, clientHeight: 400, scrollTop: 600 });
+    scrollReaderTo(viewport, { scrollHeight: 1000, clientHeight: 400, scrollTop: 200 });
+
+    const scrollTo = installScrollTo(viewport);
+    Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 1400 });
+    rerender(<HistoryHarness autoScroll messageIds={['message-1', 'message-2']} />);
+
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 1000, behavior: 'smooth' });
+  });
+
+  it('holds the reading position when a marker lands above the reader', async () => {
+    vi.stubGlobal('ResizeObserver', MockResizeObserver);
+    const { rerender } = render(<MarkerHarness messageIds={['message-1']} />);
+
+    const viewport = screen.getByTestId('marker-viewport');
+    installScrollTo(viewport);
+    setScrollMetrics(viewport, { scrollHeight: 1000, clientHeight: 400, scrollTop: 600 });
+    fireEvent.scroll(viewport);
+
+    const scrollTo = installScrollTo(viewport);
+    // A temporal marker persisted mid-run lands above the turn the reader is on:
+    // the transcript gets taller without them having moved.
+    Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 1040 });
+    rerender(<MarkerHarness markerIds={['marker-1']} messageIds={['message-1']} />);
+
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 640, behavior: 'auto' });
+  });
+
+  it('keeps carrying the reader while a smooth scroll is still travelling', async () => {
+    vi.stubGlobal('ResizeObserver', MockResizeObserver);
+    const { rerender } = render(<HistoryHarness autoScroll messageIds={['message-1']} />);
+
+    const viewport = screen.getByTestId('history-viewport');
+    installScrollTo(viewport);
+    scrollReaderTo(viewport, { scrollHeight: 1000, clientHeight: 400, scrollTop: 600 });
+    scrollReaderTo(viewport, { scrollHeight: 1000, clientHeight: 400, scrollTop: 200 });
+
+    // A real smooth scroll spends frames travelling, so the position stays
+    // behind the end while the reply already grows into it.
+    const scrollTo = vi.fn();
+    viewport.scrollTo = scrollTo;
+    Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 1400 });
+    rerender(<HistoryHarness autoScroll messageIds={['message-1', 'message-2']} />);
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 1000, behavior: 'smooth' });
+
+    const { content, observer } = contentResizeObserver();
+    Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 1800 });
+    await act(async () => {
+      observer.trigger([{ target: content }]);
+    });
+
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 1400, behavior: 'smooth' });
+  });
+
+  it('never offers to jump to an end it is already carrying the reader to', () => {
+    const { rerender } = render(<HistoryHarness autoScroll messageIds={['message-1']} />);
+
+    const viewport = screen.getByTestId('history-viewport');
+    installScrollTo(viewport);
+    setScrollMetrics(viewport, { scrollHeight: 1000, clientHeight: 400, scrollTop: 600 });
+    fireEvent.scroll(viewport);
+
+    // The turn opens and the reply grows into a smooth scroll still in flight: the
+    // end sits far below, but the reader is already on their way to it.
+    viewport.scrollTo = vi.fn();
+    Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 1400 });
+    rerender(<HistoryHarness autoScroll messageIds={['message-1', 'message-2']} />);
+
+    expect(viewport.getAttribute('data-scrollable')).toBe('start');
+
+    setScrollMetrics(viewport, { scrollHeight: 1400, clientHeight: 400, scrollTop: 200 });
+    fireEvent.scroll(viewport);
+
+    expect(viewport.getAttribute('data-scrollable')).toBe('start end');
+  });
+
+  it('takes the button back in the same frame a new turn re-attaches the reader', () => {
+    const { rerender } = render(<HistoryHarness autoScroll messageIds={['message-1']} />);
+
+    const viewport = screen.getByTestId('history-viewport');
+    installScrollTo(viewport);
+    scrollReaderTo(viewport, { scrollHeight: 1000, clientHeight: 400, scrollTop: 600 });
+    scrollReaderTo(viewport, { scrollHeight: 1000, clientHeight: 400, scrollTop: 200 });
+    expect(viewport.getAttribute('data-scrollable')).toBe('start end');
+
+    viewport.scrollTo = vi.fn();
+    Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 1400 });
+    rerender(<HistoryHarness autoScroll messageIds={['message-1', 'message-2']} />);
+
+    expect(viewport.getAttribute('data-scrollable')).toBe('start');
+  });
+
   it('leaves the reader alone once they have scrolled away from the end', async () => {
     vi.stubGlobal('ResizeObserver', MockResizeObserver);
     render(<HistoryHarness autoScroll messageIds={['message-1']} />);
 
     const viewport = screen.getByTestId('history-viewport');
     installScrollTo(viewport);
-    setScrollMetrics(viewport, { scrollHeight: 1000, clientHeight: 400, scrollTop: 200 });
-    fireEvent.scroll(viewport);
+    scrollReaderTo(viewport, { scrollHeight: 1000, clientHeight: 400, scrollTop: 600 });
+    scrollReaderTo(viewport, { scrollHeight: 1000, clientHeight: 400, scrollTop: 200 });
 
     const { content, observer } = contentResizeObserver();
     const scrollTo = installScrollTo(viewport);

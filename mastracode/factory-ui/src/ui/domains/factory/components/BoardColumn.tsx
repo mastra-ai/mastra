@@ -215,16 +215,15 @@ function ColumnBody({
           </Txt>
           {loading ? (
             <Skeleton className="h-6 w-12 shrink-0 rounded-full" />
-          ) : (
+          ) : totalTaskCount > 0 ? (
             <ColumnTaskBadge count={taskCount} total={totalTaskCount} label={label} />
-          )}
+          ) : null}
         </div>
         {headerAction ? (
           <div className={cn('flex h-8 shrink-0 items-center', COLUMN_ACTION_REVEAL_CLASS)}>{headerAction}</div>
         ) : null}
       </div>
       {headerExtras}
-      {/* Cards scroll inside the swimlane; the page stays fixed. */}
       <div className="min-h-16 flex-1">
         <ScrollArea className="h-full">
           <div ref={cardListRef} className="relative flex flex-col gap-2.5 pb-2">

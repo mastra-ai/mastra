@@ -25,6 +25,7 @@
 
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
+import type { MastraWorker } from '@mastra/core/worker';
 import { createAppAuth } from '@octokit/auth-app';
 import { Octokit } from '@octokit/rest';
 
@@ -45,10 +46,14 @@ import type {
   ReviewComment,
   VersionControl,
 } from '../../capabilities/version-control.js';
+import { withBaseCheckpointWebhookTrigger } from '../../sandbox/base-checkpoint-triggers.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
-import { runGithubIssueTriage } from './issue-triage.js';
+import { attachGithubIssueReconciler } from './issue-reconciler.js';
+import { GithubReconcileWorker } from './reconcile-worker.js';
+import { reconcileInterval, reconciliationEnabled } from './reconciliation-config.js';
 import { buildGithubRoutes } from './routes.js';
-import { attachGithubRules } from './rules.js';
+import { attachGithubReconciler, attachGithubRules } from './rules.js';
+import type { ReconcileIssueState, ReconcilePullRequestState } from './rules.js';
 import {
   createGithubSubscriptionTools,
   parseCreatedPullRequest,
@@ -100,6 +105,7 @@ export interface IssueSummary {
   title: string;
   url: string;
   author: string | null;
+  assignees: string[];
   labels: string[];
   comments: number;
   createdAt: string;
@@ -139,6 +145,13 @@ export interface GithubIntegrationConfig {
    * replica-stable OAuth/install `state` secret (see `./config.ts`).
    */
   webhookSecret?: string;
+  /**
+   * Extra bot logins authorized to trigger author-gated PR notifications
+   * (reviews and comments). Merged over the built-in defaults, matched
+   * case-insensitively. Deployments running their own reviewer bots opt them
+   * in here; every other bot stays gated.
+   */
+  authorizedBots?: string[];
 }
 
 /** Human-readable names of the required config fields, for construction errors. */
@@ -312,6 +325,7 @@ export class GithubIntegration implements FactoryIntegration {
   readonly #clientSecret: string;
   readonly #slug: string;
   readonly #webhookSecret: string | undefined;
+  readonly #authorizedBots: readonly string[];
   #storage: IntegrationContext['storage'] | undefined;
   #sourceControlStorage: IntegrationContext['storage']['sourceControl'] | undefined;
 
@@ -330,11 +344,17 @@ export class GithubIntegration implements FactoryIntegration {
     this.#clientSecret = config.clientSecret;
     this.#slug = config.slug;
     this.#webhookSecret = config.webhookSecret || undefined;
+    this.#authorizedBots = (config.authorizedBots ?? []).map(bot => bot.trim()).filter(Boolean);
   }
 
   /** App slug — the URL name used to build the install URL. */
   get slug(): string {
     return this.#slug;
+  }
+
+  /** Extra bot logins authorized to trigger author-gated PR notifications. */
+  get authorizedBots(): readonly string[] {
+    return this.#authorizedBots;
   }
 
   get genericStorage(): IntegrationContext['storage']['generic'] {
@@ -525,7 +545,8 @@ export class GithubIntegration implements FactoryIntegration {
         state: 'open',
         stateType: 'open',
         priority: null,
-        assignee: null,
+        assignee: issue.assignees[0] ?? null,
+        assignees: issue.assignees,
         source: repoFullName,
         labels: issue.labels,
         commentCount: issue.comments,
@@ -564,6 +585,7 @@ export class GithubIntegration implements FactoryIntegration {
         stateType: issue.state,
         priority: null,
         assignee: issue.assignee?.login ?? null,
+        assignees: (issue.assignees ?? []).map(user => user.login).filter((login): login is string => Boolean(login)),
         source: repoFullName,
         labels: issue.labels.map(label => (typeof label === 'string' ? label : (label.name ?? ''))).filter(Boolean),
         commentCount: issue.comments,
@@ -630,6 +652,7 @@ export class GithubIntegration implements FactoryIntegration {
         stateType: issue.state,
         priority: null,
         assignee: issue.assignee?.login ?? null,
+        assignees: (issue.assignees ?? []).map(user => user.login).filter((login): login is string => Boolean(login)),
         source: repoFullName,
         labels: issue.labels.map(label => (typeof label === 'string' ? label : (label.name ?? ''))).filter(Boolean),
         commentCount: issue.comments,
@@ -983,6 +1006,25 @@ export class GithubIntegration implements FactoryIntegration {
     });
   }
 
+  /** Remove one label from an issue. */
+  async removeIssueLabel(
+    installationId: number,
+    repoFullName: string,
+    issueNumber: number,
+    label: string,
+  ): Promise<void> {
+    const parts = splitRepoFullName(repoFullName);
+    const labelName = label.trim();
+    if (!parts || !labelName) return;
+    const octokit = this.getInstallationOctokit(installationId);
+    await octokit.issues.removeLabel({
+      owner: parts.owner,
+      repo: parts.repo,
+      issue_number: issueNumber,
+      name: labelName,
+    });
+  }
+
   /**
    * List one page of a repo's open issues through an installation token. The
    * issues API also returns pull requests, so those are filtered out (the
@@ -1013,6 +1055,7 @@ export class GithubIntegration implements FactoryIntegration {
         title: issue.title,
         url: issue.html_url,
         author: issue.user?.login ?? null,
+        assignees: issue.assignees?.flatMap(assignee => (assignee.login ? [assignee.login] : [])) ?? [],
         labels: issue.labels.map(label => (typeof label === 'string' ? label : (label.name ?? ''))).filter(Boolean),
         comments: issue.comments,
         createdAt: issue.created_at,
@@ -1076,7 +1119,9 @@ export class GithubIntegration implements FactoryIntegration {
    */
   routes(ctx: IntegrationContext): ApiRoute[] {
     this.#storage = ctx.storage;
-    const ingestFactoryEvent = attachGithubRules(this, ctx);
+    // Every parsed webhook also feeds the base-checkpoint triggers (merged
+    // PRs / pushes to the default branch rebuild the repo's warm checkpoint).
+    const ingestFactoryEvent = withBaseCheckpointWebhookTrigger(attachGithubRules(this, ctx), ctx.baseCheckpoints);
     return buildGithubRoutes({
       github: this,
       auth: ctx.auth,
@@ -1085,13 +1130,122 @@ export class GithubIntegration implements FactoryIntegration {
       stateSigner: ctx.stateSigner,
       baseUrl: ctx.baseUrl,
       controller: ctx.controller,
-      runIssueTriage: ctx.controller
-        ? input => runGithubIssueTriage({ controller: ctx.controller!, input })
-        : undefined,
       emitAudit: ctx.hooks?.emitAudit,
       projects: ctx.storage.projects,
       ingestFactoryEvent,
+      sessionRetirement: ctx.sessionRetirement,
     });
+  }
+
+  /**
+   * Pull-request and issue sweeps share a worker and lease, but can be enabled
+   * and paced independently. The legacy combined controls remain the fallback.
+   */
+  workers(ctx: IntegrationContext): MastraWorker[] {
+    const pullRequestEnabled = reconciliationEnabled(
+      process.env.MASTRACODE_GITHUB_PR_RECONCILE_ENABLED,
+      process.env.MASTRACODE_GITHUB_RECONCILE_ENABLED,
+    );
+    const issueEnabled = reconciliationEnabled(
+      process.env.MASTRACODE_GITHUB_ISSUE_RECONCILE_ENABLED,
+      process.env.MASTRACODE_GITHUB_RECONCILE_ENABLED,
+    );
+    if (!pullRequestEnabled && !issueEnabled) return [];
+
+    const reconcile = pullRequestEnabled
+      ? attachGithubReconciler(this, ctx, input => this.fetchPullRequestState(input))
+      : undefined;
+    const issues = issueEnabled ? attachGithubIssueReconciler(this, ctx, input => this.fetchIssueState(input)) : undefined;
+    if (!reconcile && !issues) return [];
+
+    const legacyInterval = reconcileInterval(process.env.MASTRACODE_GITHUB_RECONCILE_INTERVAL_MS);
+    const intervalMs = reconcileInterval(process.env.MASTRACODE_GITHUB_PR_RECONCILE_INTERVAL_MS) ?? legacyInterval;
+    const issueIntervalMs = reconcileInterval(process.env.MASTRACODE_GITHUB_ISSUE_RECONCILE_INTERVAL_MS) ?? legacyInterval;
+    return [
+      new GithubReconcileWorker({
+        ...(reconcile ? { reconcile } : {}),
+        ...(issues ? { reconcileIssues: issues } : {}),
+        sourceControl: ctx.storage.sourceControl,
+        ...(ctx.baseCheckpoints ? { sweepBaseCheckpoints: () => ctx.baseCheckpoints!.sweep() } : {}),
+        ...(intervalMs ? { intervalMs } : {}),
+        ...(issueIntervalMs ? { issueIntervalMs } : {}),
+      }),
+    ];
+  }
+
+  /**
+   * Reads live PR state for the merge reconciler. Returns undefined when the PR
+   * cannot be resolved so a sweep never fabricates a merge.
+   */
+  async fetchPullRequestState(input: {
+    installationId: number;
+    repository: string;
+    number: number;
+  }): Promise<ReconcilePullRequestState | undefined> {
+    try {
+      const pullRequest = await this.#getPullRequest({
+        connection: { type: 'app-installation', installationId: input.installationId },
+        sourceId: input.repository,
+        pullRequestId: String(input.number),
+      });
+      if (!pullRequest) return undefined;
+      return {
+        title: pullRequest.title,
+        url: pullRequest.url,
+        state: pullRequest.state === 'closed' ? 'closed' : 'open',
+        draft: pullRequest.draft,
+        merged: pullRequest.merged,
+        assignees: pullRequest.assignees ?? [],
+        requestedReviewers: pullRequest.requestedReviewers ?? [],
+        labels: pullRequest.labels ?? [],
+        headBranch: pullRequest.headBranch,
+        baseBranch: pullRequest.baseBranch,
+        ...(pullRequest.author ? { author: pullRequest.author } : {}),
+        ...(pullRequest.createdAt ? { createdAt: pullRequest.createdAt } : {}),
+      };
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * Reads live issue state for the reconciler. Returns undefined when the
+   * issue cannot be resolved (missing, is actually a PR, API error) so a
+   * sweep never fabricates a close.
+   */
+  async fetchIssueState(input: {
+    installationId: number;
+    repository: string;
+    number: number;
+  }): Promise<ReconcileIssueState | undefined> {
+    const parts = splitRepoFullName(input.repository);
+    if (!parts) return undefined;
+    try {
+      const octokit = this.getInstallationOctokit(input.installationId);
+      const { data: issue } = await octokit.issues.get({
+        owner: parts.owner,
+        repo: parts.repo,
+        issue_number: input.number,
+      });
+      if (issue.pull_request) return undefined;
+      return {
+        title: issue.title,
+        url: issue.html_url,
+        state: issue.state === 'closed' ? 'closed' : 'open',
+        ...(issue.state_reason ? { stateReason: issue.state_reason } : {}),
+        assignees: (issue.assignees ?? [])
+          .map(user => user.login)
+          .filter((login): login is string => Boolean(login)),
+        labels: (issue.labels ?? [])
+          .map(label => (typeof label === 'string' ? label : label.name))
+          .filter((name): name is string => Boolean(name)),
+        ...(issue.user?.login ? { author: issue.user.login } : {}),
+        createdAt: issue.created_at,
+        updatedAt: issue.updated_at,
+      };
+    } catch {
+      return undefined;
+    }
   }
 
   /**
@@ -1125,6 +1279,9 @@ interface GithubPullRequestData {
   title: string;
   html_url: string;
   user: { login?: string } | null;
+  assignees?: Array<{ login?: string }> | null;
+  requested_reviewers?: Array<{ login?: string }> | null;
+  labels?: Array<{ name?: string } | string> | null;
   body?: string | null;
   state: string;
   draft?: boolean | null;
@@ -1170,6 +1327,11 @@ function parsePullRequest(pr: GithubPullRequestData): PullRequest {
     title: pr.title,
     url: pr.html_url,
     author: pr.user?.login ?? null,
+    assignees: (pr.assignees ?? []).flatMap(assignee => (assignee.login ? [assignee.login] : [])),
+    requestedReviewers: (pr.requested_reviewers ?? []).flatMap(reviewer => (reviewer.login ? [reviewer.login] : [])),
+    labels: (pr.labels ?? []).flatMap(label =>
+      typeof label === 'string' ? [label] : label.name ? [label.name] : [],
+    ),
     body: pr.body?.trim() ? pr.body : null,
     state: pr.state === 'closed' ? 'closed' : 'open',
     draft: pr.draft ?? false,

@@ -13,9 +13,12 @@ export type ScenarioName =
   | 'api-key-multi-provider-delete'
   | 'api-key-prompt'
   | 'api-key-reopen-stored'
+  | 'approval-overlay-focus'
   | 'ask-user-advanced-prompts'
   | 'automated-chat'
   | 'browser-active-pending-status'
+  | 'browser-model-picker'
+  | 'browser-viewport'
   | 'browser-profile-provider-mismatch'
   | 'browser-settings-persistence'
   | 'browser-startup-restore'
@@ -50,6 +53,7 @@ export type ScenarioName =
   | 'github-signals-unsubscribe-reload'
   | 'goal-api-error-stops-loop'
   | 'goal-duration-tool-approval'
+  | 'goal-fresh-thread-persistence'
   | 'goal-judge-om-model-isolation'
   | 'goal-judge-single-render'
   | 'controller-api-config'
@@ -58,6 +62,7 @@ export type ScenarioName =
   | 'plan-approval-goal-handoff'
   | 'plan-approval-handoff'
   | 'plan-approval-request-changes'
+  | 'permission-request-hook'
   | 'persistent-goal-commands'
   | 'persistent-goal-judge-decision'
   | 'persistent-goal-reload'
@@ -68,6 +73,7 @@ export type ScenarioName =
   | 'plugins-github-install-missing-corepack'
   | 'plugins-github-install-invalid-package-manager'
   | 'plugins-github-poll-update'
+  | 'plugins-github-provider-swap'
   | 'plugins-blocked-config'
   | 'plugins-scaffold-install-tool'
   | 'plugins-assets-loading'
@@ -77,15 +83,19 @@ export type ScenarioName =
   | 'provider-history-rejection-retry'
   | 'prompt-context-instructions'
   | 'prompt-queue-interleave'
+  | 'profile-command'
   | 'prune-command'
+  | 'prune-render-state'
   | 'visible-commands'
   | 'integration-commands'
+  | 'knowledge-browser'
   | 'lifecycle-hooks-configured'
   | 'lifecycle-hooks-events'
   | 'login-dialog-masked-input'
   | 'login-preserves-model-pack'
   | 'login-seeds-om-default'
   | 'modal-and-shell'
+  | 'mcp-disable-enable'
   | 'mcp-http-tool-call'
   | 'mcp-long-running-tool'
   | 'mcp-reload-config'
@@ -101,6 +111,7 @@ export type ScenarioName =
   | 'notification-inbox-reload'
   | 'notification-inbox-tool-flow'
   | 'notification-signal-rendering'
+  | 'notify-input-request-hook'
   | 'om-settings'
   | 'om-attachment-observation'
   | 'om-global-settings-persistence'
@@ -119,6 +130,7 @@ export type ScenarioName =
   | 'state-signal-browser-processor'
   | 'state-signal-reload'
   | 'state-signal-rendering'
+  | 'subconscious-activity-rendering'
   | 'setup-completion-persistence'
   | 'setup-custom-pack-completion'
   | 'setup-login-refresh'
@@ -136,6 +148,7 @@ export type ScenarioName =
   | 'storage-settings'
   | 'storage-startup-pg-fallback'
   | 'stream-error-retry'
+  | 'streaming-render-stability'
   | 'streaming-tool-args'
   | 'subagent-delegation'
   | 'subagent-plan-execute-tools'
@@ -157,6 +170,7 @@ export type ScenarioName =
   | 'workspace-plan-mode-tools'
   | 'workspace-tool-names'
   | 'workspace-tool-output-rendering'
+  | 'workflows-command'
   | 'work-idle-status'
   | 'worktree-cross-thread-resume'
   | 'worktree-thread-scoping'
@@ -209,7 +223,9 @@ export type McE2eStartMastraCodeAppOptions = {
   onTuiCreated?: (tui: unknown) => Promise<void> | void;
   setupDebugLogging?: boolean;
   startupWarnings?: string[];
-  tui?: Partial<Pick<MastraTUIOptions, 'appName' | 'initialMessage' | 'inlineQuestions' | 'verbose'>>;
+  tui?: Partial<
+    Pick<MastraTUIOptions, 'appName' | 'initialMessage' | 'inlineQuestions' | 'processMemoryDiagnostics' | 'verbose'>
+  >;
 };
 
 export type McE2eInProcessAppContext = McE2ePrepareContext & {

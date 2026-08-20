@@ -1,6 +1,6 @@
 {
   "name": "@mastra/vercel",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Vercel serverless sandbox provider for Mastra workspaces",
   "type": "module",
   "main": "dist/index.js",
@@ -31,7 +31,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@vercel/sandbox": "2.0.2"
+    "@vercel/sandbox": "2.9.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

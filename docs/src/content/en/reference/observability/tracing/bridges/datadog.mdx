@@ -183,7 +183,7 @@ Force-flushes any buffered LLM Observability data to Datadog without shutting do
 async shutdown(): Promise<void>
 ```
 
-Force-finishes any APM spans that weren't properly closed, flushes pending LLM Observability data, disables the LLM Observability integration, and clears all internal state.
+Force-finishes any APM spans that weren't properly closed and flushes pending LLM Observability data. It then disables the integration and clears all internal state.
 
 ## Usage examples
 
@@ -264,7 +264,7 @@ Don't combine `DatadogBridge` with `DatadogExporter` in the same configuration. 
 
 The DatadogBridge requires `dd-trace` to be initialized before any other imports so its auto-instrumentation can patch HTTP, database, and framework libraries at load time.
 
-See the [DatadogBridge Guide](/docs/observability/integrations/bridges/datadog#configuration) for complete setup instructions, including dd-trace initialization, bundler externals, and agent configuration.
+See the [DatadogBridge Guide](/integrations/observability/datadog#bridge) for complete setup instructions, including dd-trace initialization, bundler externals, and agent configuration.
 
 ## Span mapping
 
@@ -315,6 +315,6 @@ The bridge reads configuration from these environment variables:
 
 ## Related
 
-- [DatadogBridge Guide](/docs/observability/integrations/bridges/datadog) - Setup guide with examples
+- [DatadogBridge Guide](/integrations/observability/datadog#bridge) - Setup guide with examples
 - [Tracing Overview](/docs/observability/tracing/overview) - General tracing concepts
 - [DatadogExporter Reference](/reference/observability/tracing/exporters/datadog) - LLM Observability only, no `dd-trace` APM

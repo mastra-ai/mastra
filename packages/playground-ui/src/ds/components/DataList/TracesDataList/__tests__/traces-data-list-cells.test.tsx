@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import { EntityType } from '@mastra/core/observability';
-import { cleanup, render } from '@testing-library/react';
+import { TraceStatus } from '@mastra/core/storage';
+import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { TracesDataListEntityCell } from '../traces-data-list-cells';
+import { TracesDataListEntityCell, TracesDataListStatusCell } from '../traces-data-list-cells';
 
 afterEach(cleanup);
 
@@ -28,5 +29,19 @@ describe('TracesDataListEntityCell entity icon', () => {
 
   it('renders no icon for entity types that are neither agent nor workflow', () => {
     expect(renderCell('memory').container.querySelector('svg')).toBeNull();
+  });
+});
+
+describe('TracesDataListStatusCell', () => {
+  describe('when the trace API returns a computed status', () => {
+    it('renders a successful trace', () => {
+      render(<TracesDataListStatusCell status={TraceStatus.SUCCESS} />);
+      expect(screen.getByText('OK').style.color).toBe('var(--accent1)');
+    });
+
+    it('renders a running trace', () => {
+      render(<TracesDataListStatusCell status={TraceStatus.RUNNING} />);
+      expect(screen.getByText('RUN')).toBeTruthy();
+    });
   });
 });

@@ -3,7 +3,11 @@ import { useEffect, useRef } from 'react';
 
 import { queryKeys } from '../../../api/keys';
 
-export function useInvalidateWorkspaceChangesOnRunCompletion(workspacePath: string | undefined, busy: boolean) {
+export function useInvalidateWorkspaceChangesOnRunCompletion(
+  workspacePath: string | undefined,
+  threadId: string | undefined,
+  busy: boolean,
+) {
   const queryClient = useQueryClient();
   const previous = useRef({ workspacePath, busy });
 
@@ -13,6 +17,9 @@ export function useInvalidateWorkspaceChangesOnRunCompletion(workspacePath: stri
 
     if (runCompleted && workspacePath) {
       void queryClient.invalidateQueries({ queryKey: queryKeys.workspaceChanges(workspacePath) });
+      if (threadId) {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.workspaceFiles(workspacePath, threadId) });
+      }
     }
-  }, [busy, queryClient, workspacePath]);
+  }, [busy, queryClient, threadId, workspacePath]);
 }

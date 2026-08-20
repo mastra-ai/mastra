@@ -1,9 +1,11 @@
 import type { ToolBackgroundConfig } from '../background-tasks';
 import type { Mastra } from '../mastra';
 import { RequestContext } from '../request-context';
+import { getRequestContextInputSource, REQUEST_CONTEXT_INPUT_SOURCE } from '../request-context/input-source';
 import { toStandardSchema } from '../schema';
 import type { PublicSchema, StandardSchemaWithJSON, InferPublicSchema } from '../schema';
 import type { SuspendOptions } from '../workflows';
+import { consumeBuilderValidatedInput } from './builder-validation-context';
 import type {
   McpMetadata,
   MCPToolProperties,
@@ -23,6 +25,118 @@ import { validateToolInput, validateToolOutput, validateToolSuspendData, validat
  * Follows the naming convention: <org>.<product>.<category>.<className>
  */
 export const MASTRA_TOOL_MARKER = Symbol.for('mastra.core.tool.Tool');
+
+type RequestContextEncoder = (values: Record<string, unknown>) => Record<string, unknown> | undefined;
+type RequestContextInputValidator = (values: Record<string, unknown>) => boolean;
+
+function getRequestContextInputValidator(schema: PublicSchema): RequestContextInputValidator {
+  const standardSchema = toStandardSchema(schema);
+
+  return values => {
+    try {
+      const result = standardSchema['~standard'].validate(values);
+      if (result instanceof Promise) {
+        throw new Error('Your schema is async, which is not supported. Please use a sync schema.');
+      }
+      return !('issues' in result) || !result.issues?.length;
+    } catch {
+      return false;
+    }
+  };
+}
+
+function getRequestContextEncoder(schema: PublicSchema | undefined): RequestContextEncoder | undefined {
+  if (!schema || (typeof schema !== 'object' && typeof schema !== 'function')) {
+    return undefined;
+  }
+
+  const encodableSchema = schema as {
+    safeEncode?: (value: unknown) => { success: boolean; data?: unknown };
+    '~standard'?: { vendor?: string };
+  };
+  if (encodableSchema['~standard']?.vendor !== 'zod' || typeof encodableSchema.safeEncode !== 'function') {
+    return undefined;
+  }
+
+  return values => {
+    try {
+      const result = encodableSchema.safeEncode!(values);
+      if (result.success && result.data && typeof result.data === 'object' && !Array.isArray(result.data)) {
+        return result.data as Record<string, unknown>;
+      }
+    } catch {
+      // Unidirectional transforms cannot encode.
+    }
+
+    return undefined;
+  };
+}
+
+/**
+ * Exposes schema-transformed values for one tool execution while keeping
+ * explicit mutations connected to the shared request context.
+ */
+class TransformedRequestContext extends RequestContext<Record<string, any>> {
+  readonly #source: RequestContext;
+  readonly #acceptsInput: RequestContextInputValidator;
+  readonly #encode?: RequestContextEncoder;
+
+  constructor(
+    source: RequestContext,
+    transformedValues: Record<string, unknown>,
+    acceptsInput: RequestContextInputValidator,
+    encode?: RequestContextEncoder,
+  ) {
+    super(Object.entries({ ...source.all, ...transformedValues }));
+    this.#source = source;
+    this.#acceptsInput = acceptsInput;
+    this.#encode = encode;
+    Object.defineProperty(this, REQUEST_CONTEXT_INPUT_SOURCE, { value: source });
+  }
+
+  #getSourceValue(key: string, value: unknown): unknown {
+    const nextSourceValues = { ...this.#source.all, [key]: value };
+    if (this.#acceptsInput(nextSourceValues)) {
+      return value;
+    }
+
+    const encodedValues = this.#encode?.({ ...this.all, [key]: value });
+    if (encodedValues && Object.prototype.hasOwnProperty.call(encodedValues, key)) {
+      return encodedValues[key];
+    }
+
+    throw new Error(
+      `Unable to persist request context key "${key}": the value is not valid schema input and cannot be encoded from the schema output.`,
+    );
+  }
+
+  public override set(key: string, value: any): void {
+    const sourceValue = this.#getSourceValue(key, value);
+    this.#source.setRaw(key, sourceValue);
+    super.set(key, value);
+  }
+
+  public override setRaw(key: string, value: unknown): void {
+    const sourceValue = this.#getSourceValue(key, value);
+    this.#source.setRaw(key, sourceValue);
+    super.setRaw(key, value);
+  }
+
+  public override delete(key: string): boolean {
+    this.#source.deleteRaw(key);
+    return super.delete(key);
+  }
+
+  public override deleteRaw(key: string): boolean {
+    this.#source.deleteRaw(key);
+    return super.deleteRaw(key);
+  }
+
+  public override clear(): void {
+    super.clear();
+    this.#source.clear();
+  }
+}
 
 /**
  * A type-safe tool that agents and workflows can call to perform specific actions.
@@ -316,9 +430,11 @@ export class Tool<
         // execution, and during resume the tool's execute function checks resumeData
         // and returns early without using the input args.
         const isResuming = !!(context?.resumeData || context?.agent?.resumeData);
+        const wasBuilderValidated = consumeBuilderValidatedInput(context);
+        const skipInputValidation = isResuming || wasBuilderValidated;
 
         let data: any = inputData;
-        if (!isResuming) {
+        if (!skipInputValidation) {
           // Validate input if schema exists
           const validationResult = validateToolInput(this.inputSchema, inputData, this.id);
           if (validationResult.error) {
@@ -327,15 +443,26 @@ export class Tool<
           data = validationResult.data;
         }
 
+        const sourceRequestContext = getRequestContextInputSource(context?.requestContext);
+
         // Validate request context if schema exists
-        const { error: requestContextError } = validateRequestContext(
+        const { data: validatedRequestContext, error: requestContextError } = validateRequestContext(
           this.requestContextSchema,
-          context?.requestContext,
+          sourceRequestContext,
           this.id,
         );
         if (requestContextError) {
           return requestContextError as any;
         }
+
+        const executionRequestContext = this.requestContextSchema
+          ? new TransformedRequestContext(
+              sourceRequestContext ?? new RequestContext(),
+              validatedRequestContext as Record<string, unknown>,
+              getRequestContextInputValidator(this.requestContextSchema),
+              getRequestContextEncoder(this.requestContextSchema),
+            )
+          : context?.requestContext;
 
         let suspendData = null;
 
@@ -358,7 +485,7 @@ export class Tool<
         if (!context) {
           // No context provided - create a minimal context with requestContext
           organizedContext = {
-            requestContext: new RequestContext(),
+            requestContext: executionRequestContext ?? new RequestContext(),
             mastra: undefined,
           };
         } else {
@@ -395,7 +522,7 @@ export class Tool<
                 writableStream,
               },
               // Ensure requestContext is always present
-              requestContext: rest.requestContext || new RequestContext(),
+              requestContext: executionRequestContext ?? new RequestContext(),
             };
           } else if (isWorkflowExecution && !baseContext.workflow) {
             // Reorganize workflow context - nest workflow-specific properties under 'workflow' key
@@ -411,7 +538,7 @@ export class Tool<
                 resumeData,
               },
               // Ensure requestContext is always present
-              requestContext: rest.requestContext || new RequestContext(),
+              requestContext: executionRequestContext ?? new RequestContext(),
             };
           } else {
             // Ensure requestContext is always present even for direct execution
@@ -436,7 +563,7 @@ export class Tool<
                     },
                   }
                 : baseContext.workflow,
-              requestContext: baseContext.requestContext || new RequestContext(),
+              requestContext: executionRequestContext ?? new RequestContext(),
             };
           }
         }

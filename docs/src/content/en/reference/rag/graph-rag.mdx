@@ -14,10 +14,7 @@ The `GraphRAG` class implements a graph-based approach to retrieval augmented ge
 ```typescript
 import { GraphRAG } from '@mastra/rag'
 
-const graphRag = new GraphRAG({
-  dimension: 1536,
-  threshold: 0.7,
-})
+const graphRag = new GraphRAG(1536, 0.7)
 
 // Create the graph from chunks and embeddings
 graphRag.createGraph(documentChunks, embeddings)
@@ -162,13 +159,107 @@ Returns an array of `RankedNode` objects, where each node contains:
 ]}
 />
 
+### `serialize`
+
+Returns a JSON-safe snapshot of the graph so it can be persisted and restored later instead of rebuilt with `createGraph`.
+
+```typescript prettier:false
+serialize(): GraphRAGSnapshot
+```
+
+#### Returns
+
+Returns a `GraphRAGSnapshot` object containing:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'version',
+    type: 'number',
+    description: "Snapshot format version, used to reject snapshots this version of the class can't load",
+  },
+  {
+    name: 'dimension',
+    type: 'number',
+    description: 'Dimension of the embedding vectors the graph was built with',
+  },
+  {
+    name: 'threshold',
+    type: 'number',
+    description: 'Similarity threshold the graph was built with',
+  },
+  {
+    name: 'nodes',
+    type: 'GraphNode[]',
+    description: 'All nodes in the graph, each including its full embedding',
+  },
+  {
+    name: 'edges',
+    type: 'GraphEdge[]',
+    description: 'All edges in the graph',
+  },
+]}
+/>
+
+The snapshot is a deep copy, so mutating it doesn't affect the graph it came from. Every node carries its full embedding, so snapshots are large: a 1,000-node graph built with 1536-dimension embeddings serializes to about 20 MB of JSON. Size your storage column accordingly.
+
+### `deserialize`
+
+Rebuilds a `GraphRAG` instance from a snapshot produced by `serialize`.
+
+```typescript prettier:false
+static deserialize(snapshot: GraphRAGSnapshot): GraphRAG
+```
+
+#### Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'snapshot',
+    type: 'GraphRAGSnapshot',
+    description: 'A snapshot previously returned by serialize',
+  },
+]}
+/>
+
+Throws if the snapshot version is unsupported, if a node embedding doesn't match the snapshot dimension, or if an edge references a node that isn't in the snapshot. A bad snapshot therefore fails at load time instead of during a later query.
+
+## Persisting a graph
+
+Building a graph is O(n²) in the number of chunks, so rebuilding it on every process start is wasteful. Serialize the graph once and store the snapshot wherever you already keep state. A snapshot is plain JSON, so any store works (a file, a blob column, a key-value cache), and `GraphRAG` doesn't depend on a storage backend.
+
+```typescript
+import { readFile, writeFile } from 'node:fs/promises'
+import { GraphRAG } from '@mastra/rag'
+import type { GraphRAGSnapshot } from '@mastra/rag'
+
+const SNAPSHOT_PATH = './docs-graph.json'
+
+async function loadOrBuildGraph() {
+  try {
+    const snapshot = JSON.parse(await readFile(SNAPSHOT_PATH, 'utf8')) as GraphRAGSnapshot
+    return GraphRAG.deserialize(snapshot)
+  } catch {
+    // No usable snapshot yet, so build the graph from scratch
+  }
+
+  const graphRag = new GraphRAG(1536, 0.7)
+  graphRag.createGraph(documentChunks, embeddings)
+
+  await writeFile(SNAPSHOT_PATH, JSON.stringify(graphRag.serialize()))
+
+  return graphRag
+}
+```
+
+A snapshot reflects the chunks it was built from and isn't updated incrementally. When the underlying documents change, build the graph again and store a new snapshot.
+
 ## Advanced example
 
 ```typescript
-const graphRag = new GraphRAG({
-  dimension: 1536,
-  threshold: 0.8, // Stricter similarity threshold
-})
+// Stricter similarity threshold
+const graphRag = new GraphRAG(1536, 0.8)
 
 // Create graph from chunks and embeddings
 graphRag.createGraph(documentChunks, embeddings)

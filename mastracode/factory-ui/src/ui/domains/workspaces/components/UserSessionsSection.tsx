@@ -1,27 +1,48 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
-import { Input } from '@mastra/playground-ui/components/Input';
 import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
 import { useState } from 'react';
-import type { FormEvent } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 
 import { useApiConfig } from '../../../../api/config';
-import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../../../../api/keys';
+import { queryKeys } from '../../../../api/keys';
+import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
-import { removeCachedSession, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
-import { createAgentControllerClient, requireAgentControllerSession } from '../../chat/services/agentControllerClient';
+import { useActiveRunResources } from '../../../../hooks/useActiveRunResources';
+import { useWorkspaceAttention } from '../../../../hooks/useWorkspaceAttention';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
-import { USER_SESSION_BRANCH_PREFIX, createUserSession, deleteUserSession } from '../services/github';
+import { removeCachedSession, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
+import { usePinnedSessions } from '../hooks/usePinnedSessions';
+import { deleteUserSession } from '../services/github';
 import type { FactoryUserSession } from '../services/github';
-import { getUserSessionLabel } from '../services/sessionPresentation';
+import { getUserSessionLabel, getUserSessionTooltip } from '../services/sessionPresentation';
 import { SessionNavRow } from './SessionNavRow';
+import type { SessionRowStatus } from './SessionNavRow';
 
-/** Personal sessions whose isolated repository workspace is prepared lazily by AgentController. */
+function userSessionStatus({
+  session,
+  running,
+  attention,
+}: {
+  session: FactoryUserSession;
+  running: boolean;
+  attention: boolean;
+}): SessionRowStatus | undefined {
+  if (running) return 'working';
+  if (!session.materializedAt) return 'initializing';
+  if (attention) return 'ready';
+  return undefined;
+}
+
+/** WorkOS user ids are long and opaque; keep enough to tell owners apart. */
+function truncateOwnerId(userId: string): string {
+  return userId.length > 13 ? `${userId.slice(0, 13)}…` : userId;
+}
+
 export function UserSessionsSection() {
   const { baseUrl } = useApiConfig();
   const { factoryId } = useParams<{ factoryId: string }>();
@@ -29,73 +50,44 @@ export function UserSessionsSection() {
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
-  const [creating, setCreating] = useState(false);
-  const [name, setName] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<FactoryUserSession | null>(null);
+  const { pinnedSessions, setPinned } = usePinnedSessions();
 
   const repository = factoryQuery.data?.repositories[0];
   const sessionsEnabled = Boolean(repository);
   const sessionsQuery = useWorkspacesQuery(repository?.projectRepositoryId);
-  const sessions = sessionsQuery.data?.userSessions ?? [];
+  const auth = useFactoryAuth();
+  const viewerUserId = auth.data?.user?.userId;
+  // Pinned rows stay on top; within each pin group the viewer's own sessions
+  // sort before sessions started by other org members.
+  const isOwn = (session: FactoryUserSession) => Boolean(viewerUserId) && session.userId === viewerUserId;
+  const sessions = [...(sessionsQuery.data?.userSessions ?? [])].sort(
+    (a, b) =>
+      Number(pinnedSessions.has(b.sessionId)) - Number(pinnedSessions.has(a.sessionId)) ||
+      Number(isOwn(b)) - Number(isOwn(a)),
+  );
+  const runningBySessionId = useActiveRunResources({
+    agentControllerId: AGENT_CONTROLLER_ID,
+    resourceIds: sessions.map(session => session.sessionId),
+  });
+  const { attentionByPath: attentionBySessionId, clearAttention } = useWorkspaceAttention(runningBySessionId);
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.sessions(repository?.projectRepositoryId) });
   };
 
-  const controllerSession = (sessionId: string) => {
-    const { session } = createAgentControllerClient({
-      agentControllerId: AGENT_CONTROLLER_ID,
-      resourceId: sessionId,
-      baseUrl,
-    });
-    return requireAgentControllerSession(session);
-  };
-
-  const createSession = useMutation({
-    mutationFn: async (rawName: string) => {
-      if (!repository) throw new Error('Link a repository to this factory first');
-      const slug = rawName.trim().toLowerCase().replace(/\s+/g, '-');
-      if (!slug) throw new Error('Session name is required');
-      const userSession = await createUserSession(
-        baseUrl,
-        repository.projectRepositoryId,
-        `${USER_SESSION_BRANCH_PREFIX}${slug}`,
-      );
-      const chatSession = controllerSession(userSession.sessionId);
-      await chatSession.create({ threadId: userSession.sessionId });
-      await chatSession.renameThread(userSession.sessionId, rawName.trim());
-      queryClient.setQueryData(
-        queryKeys.agentControllerThreadMessages(
-          AGENT_CONTROLLER_ID,
-          userSession.sessionId,
-          userSession.sessionId,
-          INITIAL_THREAD_MESSAGE_LIMIT,
-        ),
-        [],
-      );
-      return userSession;
-    },
-    onSuccess: session => {
-      setCreating(false);
-      setName('');
-      invalidate();
-      void navigate(`/factories/${factoryId}/user/threads/${session.sessionId}`);
-    },
-  });
-
   const deleteSession = useMutation({
     mutationFn: async (session: FactoryUserSession) => {
-      const chatSession = controllerSession(session.sessionId);
-      try {
-        await chatSession.deleteThread(session.sessionId);
-      } finally {
-        await deleteUserSession(baseUrl, session.sessionId);
-      }
+      // The thread is deliberately left behind: its transcript is the record of
+      // what was worked on here, and a new session always gets a fresh id, so it
+      // can never be re-attached to a later session.
+      await deleteUserSession(baseUrl, session.sessionId);
       return session;
     },
     onSuccess: session => {
       setConfirmDelete(null);
       removeCachedSession(queryClient, repository?.projectRepositoryId, session.sessionId);
+      queryClient.removeQueries({ queryKey: queryKeys.userSession(session.sessionId) });
       invalidate();
       toast('Session deleted');
       if (location.pathname === `/factories/${factoryId}/user/threads/${session.sessionId}`) {
@@ -109,25 +101,7 @@ export function UserSessionsSection() {
   });
 
   if (!sessionsEnabled) return null;
-  const pending = createSession.isPending || deleteSession.isPending;
-
-  const openSession = (session: FactoryUserSession) => {
-    // A user session's thread id is its own id (created with that binding in
-    // `createSession`), so navigate straight to it instead of blocking on a
-    // session create round-trip first — the thread page brings the session
-    // online on mount and shows a skeleton while its messages load.
-    void navigate(`/factories/${factoryId}/user/threads/${session.sessionId}`);
-  };
-
-  const closeCreateDialog = () => {
-    setCreating(false);
-    setName('');
-    createSession.reset();
-  };
-  const submitCreate = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (name.trim()) createSession.mutate(name);
-  };
+  const pending = deleteSession.isPending;
 
   return (
     <section className="flex flex-col gap-2" aria-label="User sessions">
@@ -139,7 +113,7 @@ export function UserSessionsSection() {
           variant="ghost"
           size="icon-sm"
           aria-label="New user session"
-          onClick={() => setCreating(true)}
+          onClick={() => void navigate(`/factories/${factoryId}/user/new/${crypto.randomUUID()}`)}
           disabled={pending}
         >
           <Plus size={15} />
@@ -153,59 +127,54 @@ export function UserSessionsSection() {
             const url = `/factories/${factoryId}/user/threads/${session.sessionId}`;
             const active = location.pathname === url;
 
+            const status = userSessionStatus({
+              session,
+              running: runningBySessionId[session.sessionId] === true,
+              attention: attentionBySessionId[session.sessionId] === true,
+            });
             return (
               <SessionNavRow
                 key={session.sessionId}
                 name={name}
-                title={session.branch}
+                title={getUserSessionTooltip(session)}
+                // No org-member display-name lookup exists in factory-ui yet, so
+                // non-owned sessions show a truncated owner id.
+                owner={viewerUserId && !isOwn(session) ? truncateOwnerId(session.userId) : undefined}
                 url={url}
                 active={active}
                 disabled={pending}
-                onSelect={() => openSession(session)}
-                onDelete={() => setConfirmDelete(session)}
+                status={status}
+                pinned={pinnedSessions.has(session.sessionId)}
+                onSelect={() => {
+                  clearAttention(session.sessionId);
+                  void navigate(url);
+                }}
+                onPinChange={pinned => setPinned(session.sessionId, pinned)}
+                // The DELETE route is owner-only and 404s for non-owners, which
+                // deleteUserSession treats as an idempotent success; offering
+                // delete on a known non-owned row would fake-succeed and the
+                // row would reappear. Unknown viewer (auth disabled) keeps it.
+                onDelete={viewerUserId && !isOwn(session) ? undefined : () => setConfirmDelete(session)}
               />
             );
           })}
         </MainSidebar.NavList>
-        {sessions.length === 0 && (
+        {sessionsQuery.isError && (
+          <div className="flex items-center gap-2 px-2 py-1">
+            <Txt as="p" variant="ui-xs" className="text-error m-0">
+              Couldn’t load sessions
+            </Txt>
+            <Button variant="ghost" size="xs" onClick={() => void sessionsQuery.refetch()}>
+              Retry
+            </Button>
+          </div>
+        )}
+        {sessionsQuery.isSuccess && sessions.length === 0 && (
           <Txt as="p" variant="ui-xs" className="text-icon3 m-0 px-2 py-1">
             No sessions yet
           </Txt>
         )}
       </div>
-
-      {creating && (
-        <Dialog open onOpenChange={open => !open && closeCreateDialog()}>
-          <DialogContent className="w-full max-w-sm" aria-label="New user session">
-            <DialogHeader className="px-5 pt-4 pb-2">
-              <DialogTitle>New user session</DialogTitle>
-            </DialogHeader>
-            <form aria-label="Create user session" className="flex flex-col gap-4 px-5 pb-4" onSubmit={submitCreate}>
-              <Input
-                aria-label="Session name"
-                autoFocus
-                value={name}
-                onChange={event => setName(event.target.value)}
-                placeholder="session-name"
-                disabled={createSession.isPending}
-              />
-              {createSession.error && (
-                <Txt as="p" variant="ui-xs" className="m-0 text-red-400">
-                  {createSession.error instanceof Error ? createSession.error.message : 'Failed to create session'}
-                </Txt>
-              )}
-              <div className="flex justify-end gap-2">
-                <Button type="button" variant="ghost" onClick={closeCreateDialog} disabled={createSession.isPending}>
-                  Cancel
-                </Button>
-                <Button type="submit" variant="primary" disabled={createSession.isPending || !name.trim()}>
-                  {createSession.isPending ? 'Creating…' : 'Create'}
-                </Button>
-              </div>
-            </form>
-          </DialogContent>
-        </Dialog>
-      )}
 
       {confirmDelete && (
         <Dialog open onOpenChange={open => !open && setConfirmDelete(null)}>
@@ -215,8 +184,8 @@ export function UserSessionsSection() {
             </DialogHeader>
             <div className="flex flex-col gap-4 px-5 pb-4">
               <Txt as="p" variant="ui-sm" className="text-icon4 m-0">
-                This deletes the <span className="text-icon6">{getUserSessionLabel(confirmDelete)}</span> session, its
-                checkout with any uncommitted changes, and its conversation. This can’t be undone.
+                This deletes the <span className="text-icon6">{getUserSessionLabel(confirmDelete)}</span> session and
+                its checkout with any uncommitted changes. This can’t be undone. Its conversation is kept.
               </Txt>
               <div className="flex justify-end gap-2">
                 <Button variant="ghost" onClick={() => setConfirmDelete(null)} disabled={deleteSession.isPending}>

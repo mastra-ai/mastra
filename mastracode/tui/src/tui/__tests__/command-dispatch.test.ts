@@ -7,14 +7,17 @@ const mocks = vi.hoisted(() => ({
   handleModelsPackCommand: vi.fn().mockResolvedValue(undefined),
   handleCustomProvidersCommand: vi.fn().mockResolvedValue(undefined),
   handleGoalCommand: vi.fn().mockResolvedValue(undefined),
+  handleWorkflowsCommand: vi.fn().mockResolvedValue(undefined),
   handleSkillCommand: vi.fn().mockResolvedValue(undefined),
   handleJudgeCommand: vi.fn().mockResolvedValue(undefined),
   handleGithubCommand: vi.fn().mockResolvedValue(undefined),
   handleReportIssueCommand: vi.fn().mockResolvedValue(undefined),
   handleMcpCommand: vi.fn().mockResolvedValue(undefined),
   handleOMCommand: vi.fn().mockResolvedValue(undefined),
+  handleKnowledgeCommand: vi.fn().mockResolvedValue(undefined),
   handleMastraGatewayCommand: vi.fn().mockResolvedValue(undefined),
   handlePluginsCommand: vi.fn().mockResolvedValue(undefined),
+  handleProfileCommand: vi.fn().mockResolvedValue(undefined),
   processSlashCommand: vi.fn().mockResolvedValue('custom output'),
   startGoalWithDefaults: vi.fn().mockResolvedValue(undefined),
   showError: vi.fn(),
@@ -45,6 +48,7 @@ vi.mock('../commands/index.js', () => ({
   handleCustomProvidersCommand: mocks.handleCustomProvidersCommand,
   handleSubagentsCommand: vi.fn(),
   handleOMCommand: mocks.handleOMCommand,
+  handleKnowledgeCommand: mocks.handleKnowledgeCommand,
   handleSettingsCommand: vi.fn(),
   handleLoginCommand: vi.fn(),
   handleReviewCommand: vi.fn(),
@@ -60,7 +64,9 @@ vi.mock('../commands/index.js', () => ({
   handleObservabilityCommand: vi.fn(),
   handleGithubCommand: mocks.handleGithubCommand,
   handleGoalCommand: mocks.handleGoalCommand,
+  handleWorkflowsCommand: mocks.handleWorkflowsCommand,
   handleJudgeCommand: mocks.handleJudgeCommand,
+  handleProfileCommand: mocks.handleProfileCommand,
 }));
 
 vi.mock('../display.js', () => ({
@@ -87,14 +93,17 @@ describe('dispatchSlashCommand models routing', () => {
     mocks.handleModelsPackCommand.mockClear();
     mocks.handleCustomProvidersCommand.mockClear();
     mocks.handleGoalCommand.mockClear();
+    mocks.handleWorkflowsCommand.mockClear();
     mocks.handleSkillCommand.mockClear();
     mocks.handleJudgeCommand.mockClear();
     mocks.handleGithubCommand.mockClear();
     mocks.handleReportIssueCommand.mockClear();
     mocks.handleMcpCommand.mockClear();
     mocks.handleOMCommand.mockClear();
+    mocks.handleKnowledgeCommand.mockClear();
     mocks.handleMastraGatewayCommand.mockClear();
     mocks.handlePluginsCommand.mockClear();
+    mocks.handleProfileCommand.mockClear();
     mocks.processSlashCommand.mockClear();
     mocks.startGoalWithDefaults.mockClear();
     mocks.showError.mockClear();
@@ -124,6 +133,23 @@ describe('dispatchSlashCommand models routing', () => {
       resourceId: 'resource-1',
       mode: 'build',
     });
+  });
+
+  it('routes /profile subcommands to handleProfileCommand', async () => {
+    const state = {
+      customSlashCommands: [],
+      session: {
+        identity: { getResourceId: vi.fn(() => 'resource-1') },
+        thread: { getId: vi.fn(() => 'thread-1') },
+        mode: { get: vi.fn(() => 'build') },
+      },
+    } as any;
+    const ctx = {} as any;
+
+    const handled = await dispatchSlashCommand('/profile capture', state, () => ctx);
+
+    expect(handled).toBe(true);
+    expect(mocks.handleProfileCommand).toHaveBeenCalledWith(ctx, ['capture']);
   });
 
   it('routes /custom-providers to handleCustomProvidersCommand', async () => {
@@ -161,6 +187,14 @@ describe('dispatchSlashCommand models routing', () => {
     expect(mocks.handleOMCommand).toHaveBeenNthCalledWith(1, ctx);
     expect(mocks.handleOMCommand).toHaveBeenNthCalledWith(2, ctx);
     expect(mocks.handleMastraGatewayCommand).not.toHaveBeenCalled();
+  });
+
+  it('routes /knowledge to the scoped knowledge browser', async () => {
+    const state = { customSlashCommands: [] } as any;
+    const ctx = {} as any;
+
+    expect(await dispatchSlashCommand('/knowledge', state, () => ctx)).toBe(true);
+    expect(mocks.handleKnowledgeCommand).toHaveBeenCalledWith(ctx);
   });
 
   it('routes /gateway and the legacy /memory-gateway alias separately from Observational Memory settings', async () => {
@@ -262,6 +296,21 @@ describe('dispatchSlashCommand models routing', () => {
     expect(mocks.handleSkillCommand).toHaveBeenCalledTimes(1);
     expect(mocks.handleSkillCommand).toHaveBeenCalledWith(ctx, 'github-triage', ['focus', 'tests']);
     expect(mocks.showError).not.toHaveBeenCalled();
+  });
+
+  it.each(['/workflows', '/workflow'])('preserves whitespace in %s run JSON input', async commandName => {
+    const state = { customSlashCommands: [] } as any;
+    const ctx = {} as any;
+    const command = `${commandName} run greeting {"name":"Ada  Lovelace"}`;
+
+    const handled = await dispatchSlashCommand(command, state, () => ctx);
+
+    expect(handled).toBe(true);
+    expect(mocks.handleWorkflowsCommand).toHaveBeenCalledWith(
+      ctx,
+      ['run', 'greeting', '{"name":"Ada', 'Lovelace"}'],
+      'run greeting {"name":"Ada  Lovelace"}',
+    );
   });
 
   it('routes multiline /goal objectives as a single goal argument', async () => {

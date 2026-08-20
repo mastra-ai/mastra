@@ -42,7 +42,14 @@ export async function resolveTarget(
   const apiPrefix = resolveApiPrefix(options);
 
   if (options.url) {
-    return { baseUrl: options.url, headers: customHeaders, timeoutMs, apiPrefix };
+    const headers = { ...customHeaders };
+    if (isPlatformHostedInstance(options.url) && !getHeader(customHeaders, AUTHORIZATION_HEADER)) {
+      const token = await getOptionalToken();
+      if (token) {
+        headers[AUTHORIZATION_HEADER] = `Bearer ${token}`;
+      }
+    }
+    return { baseUrl: options.url, headers, timeoutMs, apiPrefix };
   }
 
   if (isObservabilityPath(path)) {
@@ -143,6 +150,31 @@ async function resolvePlatformServiceTarget(
     timeoutMs,
     fallbackHeaders,
   };
+}
+
+/**
+ * True when a URL points at a platform-hosted Mastra Studio or Factory instance
+ * (production or staging). Excludes `*.server.mastra.cloud` — those are
+ * user-provided instances that authenticate with their own credentials, not the
+ * stored CLI user token.
+ */
+export function isPlatformHostedInstance(url: string): boolean {
+  let hostname: string;
+  try {
+    const parsed = new URL(url);
+    // Only attach the stored bearer token over HTTPS to avoid leaking
+    // credentials on unencrypted connections.
+    if (parsed.protocol !== 'https:') return false;
+    hostname = parsed.hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+  return (
+    hostname.endsWith('.studio.mastra.cloud') ||
+    hostname.endsWith('.factory.mastra.cloud') ||
+    hostname.endsWith('.studio.staging.mastra.cloud') ||
+    hostname.endsWith('.factory.staging.mastra.cloud')
+  );
 }
 
 function isObservabilityPath(path?: string): boolean {

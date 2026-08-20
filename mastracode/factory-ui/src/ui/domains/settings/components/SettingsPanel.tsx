@@ -1,5 +1,7 @@
 import type { AgentControllerSessionSettings } from '@mastra/client-js';
 import { useTheme } from '@mastra/playground-ui/components/ThemeProvider';
+import { useEffect } from 'react';
+import { useLocation } from 'react-router';
 import { useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -20,12 +22,14 @@ import { CustomProvidersSection } from './CustomProvidersSection';
 import { SettingsHeader } from './SettingsHeader';
 import { FactoryManagementSection } from './FactoryManagementSection';
 import { FactoryDefaultModelSection } from './FactoryDefaultModelSection';
+import { FactorySkillsSection } from './FactorySkillsSection';
 import { IntakeSection } from './IntakeSection';
 import { ModelPacksSection } from './ModelPacksSection';
 import { RepositoriesSection } from './RepositoriesSection';
 import { SettingsCard } from './SettingsCard';
 import { SettingsSubsection } from './SettingsSubsection';
 import { OMSection } from './OMSection';
+import { ThinkingDefaultsSection } from './ThinkingDefaultsSection';
 import { ProviderAccessSection } from './ProviderAccessSection';
 import { BehaviorSettings, GeneralSettings, ModelSettings } from './SettingsPanel.parts';
 
@@ -37,7 +41,14 @@ function getSettingsUpdateErrorMessage(error: unknown): string {
 
 export function SettingsPanel() {
   const section = useSettingsSection();
+  const { hash } = useLocation();
   const { theme, setTheme } = useTheme();
+
+  // Deep links like `/settings/models#model-packs` scroll to the subsection.
+  useEffect(() => {
+    if (!hash) return;
+    document.getElementById(hash.slice(1))?.scrollIntoView?.({ block: 'start' });
+  }, [hash, section]);
   const { resourceId, resourceEnabled, projectPath, baseUrl } = useChatSessionContext();
   const { isMobile } = useMainSidebar();
   const { permissions, pendingPermissionCategory, setPermissionForCategory } = useChatPermissions();
@@ -95,6 +106,14 @@ export function SettingsPanel() {
                 />
               </SettingsCard>
             </SettingsSubsection>
+            <SettingsSubsection
+              title="Thinking defaults"
+              description="Reasoning-effort applied to runs without a session override — including automated Factory runs. The session thinking level above takes precedence."
+            >
+              <SettingsCard>
+                <ThinkingDefaultsSection />
+              </SettingsCard>
+            </SettingsSubsection>
             <SettingsSubsection title="Provider access">
               <SettingsCard className="p-4">
                 <ProviderAccessSection />
@@ -106,11 +125,12 @@ export function SettingsPanel() {
               </SettingsCard>
             </SettingsSubsection>
             <SettingsSubsection
-              title="Model packs"
-              description="A pack sets a model for each mode (build / plan / fast)."
+              id="model-packs"
+              title="Chat model packs"
+              description="Set your personal Build, Plan and Fast defaults for interactive chats. Factory work runs are unaffected."
             >
               <SettingsCard className="p-4">
-                <ModelPacksSection resourceId={sessionResourceId} scope={sessionScope} models={models} />
+                <ModelPacksSection models={models} />
               </SettingsCard>
             </SettingsSubsection>
             <SettingsSubsection
@@ -123,6 +143,7 @@ export function SettingsPanel() {
             </SettingsSubsection>
           </div>
         )}
+        {section === 'skills' && <FactorySkillsSection />}
         {section === 'behavior' && (
           <BehaviorSettings
             settings={settings}

@@ -9,6 +9,11 @@ import {
   isToolUIPart,
 } from '@internal/ai-v6';
 import type { UIMessageStreamOptions as UIMessageStreamOptionsV6 } from '@internal/ai-v6';
+import {
+  createUIMessageStream as createUIMessageStreamV7,
+  createUIMessageStreamResponse as createUIMessageStreamResponseV7,
+} from '@internal/ai-v7';
+import type { UIMessageStreamOptions as UIMessageStreamOptionsV7 } from '@internal/ai-v7';
 import type { AgentExecutionOptions, AgentExecutionOptionsBase } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -21,8 +26,11 @@ import type {
   V5UIMessageStream,
   V6UIMessage,
   V6UIMessageStream,
+  V7UIMessage,
+  V7UIMessageStream,
 } from './public-types';
 import type { MastraStreamTransformOptions } from './smooth-stream';
+import { assertValidHeartbeatMs, withSseHeartbeat } from './sse-heartbeat';
 
 export interface V6NativeApprovalResponse {
   resumeData: Record<string, unknown>;
@@ -69,8 +77,9 @@ export function extractV6NativeApprovals(messages: V6UIMessage[]): V6NativeAppro
   return [...byTarget.values()];
 }
 
-/** Streams exact approval targets sequentially as one v6 UI-message response. */
+/** Streams exact approval targets sequentially as one v6/v7 UI-message response. */
 function streamV6ApprovalResumes(args: {
+  version: 'v6' | 'v7';
   agent: { resumeStream: (resumeData: unknown, options: unknown) => Promise<unknown> };
   approvals: V6NativeApprovalResponse[];
   baseOptions: Record<string, unknown>;
@@ -88,7 +97,11 @@ function streamV6ApprovalResumes(args: {
   const { agent, approvals, baseOptions, structuredOutput, messages, lastMessageId } = args;
   const { sendStart, sendFinish, sendReasoning, sendSources, onError, messageMetadata, experimentalTransform } = args;
 
-  return createUIMessageStreamV6<any>({
+  const createUIMessageStream = (
+    args.version === 'v7' ? createUIMessageStreamV7 : createUIMessageStreamV6
+  ) as typeof createUIMessageStreamV6;
+
+  return createUIMessageStream<any>({
     originalMessages: messages,
     onError,
     execute: async ({ writer }) => {
@@ -194,7 +207,7 @@ export type ChatStreamHandlerOptions<UI_MESSAGE extends SupportedUIMessage = Sup
   defaultOptions?: ChatStreamDefaultOptions<OUTPUT>;
   /** Experimental transforms applied before converting Mastra chunks to AI SDK UI chunks. */
   experimentalTransform?: MastraStreamTransformOptions<OUTPUT>;
-  version?: 'v5' | 'v6';
+  version?: 'v5' | 'v6' | 'v7';
   sendStart?: boolean;
   sendFinish?: boolean;
   sendReasoning?: boolean;
@@ -221,6 +234,14 @@ type ChatStreamHandlerOptionsV6<UI_MESSAGE extends V6UIMessage = V6UIMessage, OU
 > & {
   version: 'v6';
   messageMetadata?: UIMessageStreamOptionsV6<UI_MESSAGE>['messageMetadata'];
+};
+
+type ChatStreamHandlerOptionsV7<UI_MESSAGE extends V7UIMessage = V7UIMessage, OUTPUT = undefined> = Omit<
+  ChatStreamHandlerOptions<UI_MESSAGE, OUTPUT>,
+  'version' | 'messageMetadata'
+> & {
+  version: 'v7';
+  messageMetadata?: UIMessageStreamOptionsV7<UI_MESSAGE>['messageMetadata'];
 };
 
 /**
@@ -251,6 +272,9 @@ export function handleChatStream<UI_MESSAGE extends V5UIMessage = V5UIMessage, O
 export function handleChatStream<UI_MESSAGE extends V6UIMessage = V6UIMessage, OUTPUT = undefined>(
   options: ChatStreamHandlerOptionsV6<UI_MESSAGE, OUTPUT>,
 ): Promise<V6UIMessageStream<UI_MESSAGE>>;
+export function handleChatStream<UI_MESSAGE extends V7UIMessage = V7UIMessage, OUTPUT = undefined>(
+  options: ChatStreamHandlerOptionsV7<UI_MESSAGE, OUTPUT>,
+): Promise<V7UIMessageStream<UI_MESSAGE>>;
 export async function handleChatStream<OUTPUT = undefined>({
   mastra,
   agentId,
@@ -265,7 +289,9 @@ export async function handleChatStream<OUTPUT = undefined>({
   sendSources = false,
   onError,
   messageMetadata,
-}: ChatStreamHandlerOptions<any, OUTPUT>): Promise<ReadableStream<any>> {
+}: Omit<ChatStreamHandlerOptions<any, OUTPUT>, 'messageMetadata'> & {
+  messageMetadata?: any;
+}): Promise<ReadableStream<any>> {
   const { messages, resumeData, runId, requestContext, trigger, ...rest } = params;
 
   if (resumeData && !runId) {
@@ -340,15 +366,21 @@ export async function handleChatStream<OUTPUT = undefined>({
     ...(Object.keys(mergedProviderOptions).length > 0 && { providerOptions: mergedProviderOptions }),
   };
 
-  // AI SDK v6 re-submits approval responses on assistant tool parts. Scan the
+  // AI SDK v6/v7 re-submit approval responses on assistant tool parts. Scan the
   // whole request because the answered card may be on an earlier assistant
   // message, then resume every exact run/tool-call target in request order.
   // A trailing user message remains a normal chat turn; consuming it as an
   // approval resume would silently drop the user's new request.
-  if (version === 'v6' && !resumeData && trigger !== 'regenerate-message' && messages.at(-1)?.role === 'assistant') {
+  if (
+    (version === 'v6' || version === 'v7') &&
+    !resumeData &&
+    trigger !== 'regenerate-message' &&
+    messages.at(-1)?.role === 'assistant'
+  ) {
     const approvals = extractV6NativeApprovals(messages as V6UIMessage[]);
     if (approvals.length > 0) {
       return streamV6ApprovalResumes({
+        version,
         agent: agentObj as unknown as Parameters<typeof streamV6ApprovalResumes>[0]['agent'],
         approvals,
         baseOptions,
@@ -374,10 +406,15 @@ export async function handleChatStream<OUTPUT = undefined>({
       ? await agentObj.stream(messagesToSend, { ...baseOptions, structuredOutput })
       : await agentObj.stream(messagesToSend, baseOptions as AgentExecutionOptionsBase<unknown>);
 
-  if (version === 'v6') {
-    return createUIMessageStreamV6<any>({
+  if (version === 'v6' || version === 'v7') {
+    const createUIMessageStream = (
+      version === 'v7' ? createUIMessageStreamV7 : createUIMessageStreamV6
+    ) as typeof createUIMessageStreamV6;
+    return createUIMessageStream<any>({
       originalMessages: messages,
       execute: async ({ writer }) => {
+        // v7 UI chunks are structurally identical to v6 at runtime, so both
+        // versions share the v6 transformer and are re-typed at the boundary.
         for await (const part of toAISdkStream(result, {
           from: 'agent',
           version: 'v6',
@@ -420,7 +457,7 @@ export type chatRouteOptions<OUTPUT = undefined> = {
   defaultOptions?: ChatStreamDefaultOptions<OUTPUT>;
   /** Experimental transforms applied before converting Mastra chunks to AI SDK UI chunks. */
   experimentalTransform?: MastraStreamTransformOptions<OUTPUT>;
-  version?: 'v5' | 'v6';
+  version?: 'v5' | 'v6' | 'v7';
   agentVersion?: AgentVersionOptions;
 } & (
   | {
@@ -436,6 +473,8 @@ export type chatRouteOptions<OUTPUT = undefined> = {
     sendFinish?: boolean;
     sendReasoning?: boolean;
     sendSources?: boolean;
+    /** Target interval for periodic SSE comment heartbeats. Values up to 0 disable heartbeats. `NaN`, positive infinity, and values above 2,147,483,647 throw a `RangeError`. */
+    heartbeatMs?: number;
     onError?: (error: unknown) => string;
   };
 
@@ -452,11 +491,13 @@ export type chatRouteOptions<OUTPUT = undefined> = {
  * @param {boolean} [options.sendFinish=true] - Whether to send finish events in the stream
  * @param {boolean} [options.sendReasoning=false] - Whether to include reasoning steps in the stream
  * @param {boolean} [options.sendSources=false] - Whether to include source citations in the stream
+ * @param {number} [options.heartbeatMs] - Target interval for periodic SSE comment heartbeats. Already-buffered source events and stream lifecycle signals take priority. Values up to 0 disable heartbeats. `NaN`, positive infinity, and values above 2,147,483,647 throw a `RangeError`.
  * @param {(error: unknown) => string} [options.onError] - Custom error serializer streamed to the client. When omitted, errors are passed through a default serializer that strips sensitive fields (e.g. `APICallError.requestBodyValues`, which holds the system prompt) before they reach the client.
  *
  * @returns {ReturnType<typeof registerApiRoute>} A registered API route handler
  *
  * @throws {Error} When path doesn't include `:agentId` and no fixed agent is specified
+ * @throws {RangeError} When `heartbeatMs` is `NaN`, positive infinity, or greater than 2,147,483,647
  * @throws {Error} When agent ID is missing at runtime
  * @throws {Error} When specified agent is not found in Mastra instance
  *
@@ -479,7 +520,7 @@ export type chatRouteOptions<OUTPUT = undefined> = {
  * @remarks
  * - The route handler expects a JSON body with a `messages` array
  * - Messages should follow the format: `{ role: 'user' | 'assistant' | 'system', content: string }`
- * - The response is a Server-Sent Events (SSE) stream compatible with AI SDK v5
+ * - The response is a Server-Sent Events (SSE) stream compatible with the selected AI SDK version
  * - If both `agent` and `:agentId` are present, a warning is logged and the fixed `agent` takes precedence
  * - Request context from the incoming request overrides `defaultOptions.requestContext` if both are present
  */
@@ -494,11 +535,13 @@ export function chatRoute<OUTPUT = undefined>({
   sendFinish = true,
   sendReasoning = false,
   sendSources = false,
+  heartbeatMs,
   onError,
 }: chatRouteOptions<OUTPUT>): ReturnType<typeof registerApiRoute> {
   if (!agent && !path.includes('/:agentId')) {
     throw new Error('Path must include :agentId to route to the correct agent or pass the agent explicitly');
   }
+  assertValidHeartbeatMs(heartbeatMs);
 
   return registerApiRoute(path, {
     method: 'POST',
@@ -694,17 +737,25 @@ export function chatRoute<OUTPUT = undefined>({
         onError,
       };
 
-      if (version === 'v6') {
+      let response: Response;
+      if (version === 'v7') {
+        const uiMessageStream = await handleChatStream({
+          ...handlerOptions,
+          version: 'v7',
+        });
+        response = createUIMessageStreamResponseV7({ stream: uiMessageStream });
+      } else if (version === 'v6') {
         const uiMessageStream = await handleChatStream({
           ...handlerOptions,
           version: 'v6',
         });
-
-        return createUIMessageStreamResponseV6({ stream: uiMessageStream });
+        response = createUIMessageStreamResponseV6({ stream: uiMessageStream });
+      } else {
+        const uiMessageStream = await handleChatStream(handlerOptions);
+        response = createUIMessageStreamResponseV5({ stream: uiMessageStream });
       }
 
-      const uiMessageStream = await handleChatStream(handlerOptions);
-      return createUIMessageStreamResponseV5({ stream: uiMessageStream });
+      return withSseHeartbeat(response, heartbeatMs);
     },
   });
 }

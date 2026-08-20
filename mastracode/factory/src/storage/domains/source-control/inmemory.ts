@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { UniqueViolationError } from '@mastra/core/storage';
 
 import type {
   ConfiguredExternalRepositoryKey,
@@ -8,6 +9,7 @@ import type {
   LinkProjectRepositoryInput,
   PooledSandbox,
   ProjectRepository,
+  ProjectRepositoryBaseCheckpoint,
   ProjectRepositorySandbox,
   ProjectSourceControlConnection,
   ReleasePooledSandboxInput,
@@ -300,6 +302,8 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         sandboxProvider: input.sandboxProvider,
         sandboxWorkdir: input.sandboxWorkdir,
         setupCommand: input.setupCommand ?? null,
+        baseCheckpoint: null,
+        teardownCommand: input.teardownCommand ?? null,
         createdAt: now,
         updatedAt: now,
       };
@@ -317,8 +321,21 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
     }): Promise<ProjectRepository | null> => {
       const row = await this.projectRepositories.get({ orgId, id });
       if (!row) return null;
+      if (input.setupCommand !== undefined && input.setupCommand !== row.setupCommand) {
+        row.baseCheckpoint = null;
+      }
       Object.assign(row, input, { updatedAt: new Date() });
       return row;
+    },
+    setBaseCheckpoint: async (
+      args:
+        | { id: string; checkpoint: null }
+        | { id: string; checkpoint: ProjectRepositoryBaseCheckpoint; expectedSetupCommand: string | null },
+    ): Promise<void> => {
+      const row = this.projectRepositoriesRows.find(candidate => candidate.id === args.id);
+      if (!row) throw new Error('Project repository not found');
+      if (args.checkpoint && row.setupCommand !== args.expectedSetupCommand) return;
+      row.baseCheckpoint = args.checkpoint;
     },
     unlink: async ({ orgId, id }: { orgId: string; id: string }): Promise<boolean> => {
       if (!(await this.projectRepositories.get({ orgId, id }))) return false;
@@ -462,8 +479,14 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
   };
 
   readonly sessions = {
-    list: async ({ projectRepositoryId, userId }: { projectRepositoryId: string; userId: string }) =>
-      this.sessionsRows.filter(row => row.projectRepositoryId === projectRepositoryId && row.userId === userId),
+    list: async ({ projectRepositoryId, viewerUserId }: { projectRepositoryId: string; viewerUserId: string }) =>
+      this.sessionsRows.filter(
+        row =>
+          row.projectRepositoryId === projectRepositoryId &&
+          (row.visibility !== 'private' || row.userId === viewerUserId),
+      ),
+    listByProjectRepository: async ({ projectRepositoryId }: { projectRepositoryId: string }) =>
+      this.sessionsRows.filter(row => row.projectRepositoryId === projectRepositoryId),
     getBySessionId: async (sessionId: string): Promise<SourceControlSession | null> =>
       this.sessionsRows.find(row => row.sessionId === sessionId) ?? null,
     getForBranch: async ({
@@ -481,13 +504,20 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
     create: async (input: CreateSourceControlSessionInput): Promise<SourceControlSession> => {
       const existing = await this.sessions.getForBranch(input);
       if (existing) return existing;
+      if (this.sessionsRows.some(row => row.sessionId === input.sessionId)) {
+        throw new UniqueViolationError('Source-control session ID already exists');
+      }
       const now = new Date();
       const session: SourceControlSession = {
         id: randomUUID(),
         ...input,
+        title: input.title ?? null,
+        visibility: input.visibility ?? 'org',
         sandboxId: null,
         sandboxWorkdir: null,
         materializedAt: null,
+        firstMessageAt: null,
+        firstMeaningfulExecAt: null,
         createdAt: now,
         updatedAt: now,
       };
@@ -508,7 +538,17 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
     },
     markMaterialized: async ({ id }: { id: string }) => {
       const row = this.sessionsRows.find(candidate => candidate.id === id);
-      if (row) Object.assign(row, { materializedAt: new Date(), updatedAt: new Date() });
+      if (row && row.materializedAt === null) Object.assign(row, { materializedAt: new Date(), updatedAt: new Date() });
+    },
+    markFirstMessage: async ({ sessionId }: { sessionId: string }) => {
+      const row = this.sessionsRows.find(candidate => candidate.sessionId === sessionId);
+      if (row && row.firstMessageAt === null) Object.assign(row, { firstMessageAt: new Date(), updatedAt: new Date() });
+    },
+    markFirstMeaningfulExec: async ({ sessionId }: { sessionId: string }) => {
+      const row = this.sessionsRows.find(candidate => candidate.sessionId === sessionId);
+      if (row && row.firstMeaningfulExecAt === null) {
+        Object.assign(row, { firstMeaningfulExecAt: new Date(), updatedAt: new Date() });
+      }
     },
     delete: async (id: string) => {
       this.sessionsRows.splice(0, this.sessionsRows.length, ...this.sessionsRows.filter(row => row.id !== id));

@@ -180,6 +180,7 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
     try {
       // Determine parent context
       let parentOtelContext = otelContext.active();
+      let usedPersistedParent = false;
 
       // Get external parent ID (walks up chain to find non-internal parent)
       const externalParentId = getExternalParentId(options);
@@ -189,6 +190,24 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
         if (parentEntry) {
           parentOtelContext = parentEntry.otelContext;
         }
+      } else if (options.traceId && options.parentSpanId) {
+        // Root spans restored from persisted state (e.g. workflow suspend/resume)
+        // carry the original trace ID and parent span ID, but the parent OTEL span
+        // is no longer alive — it ended when the run suspended, possibly in another
+        // process. Parent under a remote span context built from the persisted IDs
+        // so the span continues the original trace instead of joining whatever
+        // context happens to be active. Skip malformed IDs; injecting them would
+        // surface as garbage trace links downstream.
+        const candidate = {
+          traceId: options.traceId,
+          spanId: options.parentSpanId,
+          traceFlags: TraceFlags.SAMPLED,
+          isRemote: true,
+        };
+        if (isSpanContextValid(candidate)) {
+          parentOtelContext = otelTrace.setSpanContext(parentOtelContext, candidate);
+          usedPersistedParent = true;
+        }
       }
 
       // Create OTEL span with SpanKind (must be set at creation, immutable)
@@ -196,6 +215,7 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
         options.name,
         {
           kind: getSpanKind(options.type),
+          ...(options.startTime ? { startTime: options.startTime } : {}),
         },
         parentOtelContext,
       );
@@ -229,12 +249,25 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
       const parentSpanId =
         parentSpanContext && isSpanContextValid(parentSpanContext) ? parentSpanContext.spanId : undefined;
 
+      // Declare which kind of parent was used: a span this bridge created for
+      // a Mastra span is part of the Mastra trace, while anything else in the
+      // ambient OTEL context belongs to the external tracing system. A parent
+      // restored from persisted state is a Mastra span in storage — it ended at
+      // suspend (possibly in another process), so it is absent from the live map.
+      const parentIsMastraSpan =
+        parentSpanId !== undefined && (this.otelSpanMap.has(parentSpanId) || usedPersistedParent);
+
       this.logger.debug(
         `[OtelBridge.createSpan] Created span [spanId=${spanId}] [traceId=${traceId}] ` +
-          `[parentSpanId=${parentSpanId}] [type=${options.type}] [mapSize=${this.otelSpanMap.size}]`,
+          `[parentSpanId=${parentSpanId}] [parentIsMastraSpan=${parentIsMastraSpan}] ` +
+          `[type=${options.type}] [mapSize=${this.otelSpanMap.size}]`,
       );
 
-      return { spanId, traceId, parentSpanId };
+      return {
+        spanId,
+        traceId,
+        ...(parentIsMastraSpan ? { parentSpanId } : { externalParentSpanId: parentSpanId }),
+      };
     } catch (error) {
       this.logger.error('[OtelBridge] Failed to create span:', error);
       return undefined;

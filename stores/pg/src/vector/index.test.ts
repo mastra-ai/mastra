@@ -3317,4 +3317,157 @@ describe('PgVector', () => {
       });
     });
   });
+
+  // Batched multi-row upsert (Issue #17393)
+  describe('Batched upsert', () => {
+    const batchIndexName = 'test_batched_upsert';
+    const dimension = 8;
+
+    const makeVector = (seed: number) => Array.from({ length: dimension }, (_, i) => (i === seed % dimension ? 1 : 0));
+
+    beforeEach(async () => {
+      await vectorDB.createIndex({ indexName: batchIndexName, dimension });
+    });
+
+    afterEach(async () => {
+      await vectorDB.deleteIndex({ indexName: batchIndexName });
+    });
+
+    it('should insert a multi-vector batch in a single statement and preserve id order', async () => {
+      const count = 100;
+      const vectors = Array.from({ length: count }, (_, i) => makeVector(i));
+      const metadata = Array.from({ length: count }, (_, i) => ({ idx: i }));
+      const ids = Array.from({ length: count }, (_, i) => `batch-${i}`);
+
+      const executed: string[] = [];
+      const patched: Array<{ client: any; originalQuery: any }> = [];
+      const originalConnect = vectorDB.pool.connect.bind(vectorDB.pool);
+      const connectSpy = vi.spyOn(vectorDB.pool, 'connect').mockImplementation(async () => {
+        const client: any = await originalConnect();
+        const originalQuery = client.query.bind(client);
+        patched.push({ client, originalQuery });
+        client.query = (...args: any[]) => {
+          if (typeof args[0] === 'string') executed.push(args[0]);
+          return originalQuery(...args);
+        };
+        return client;
+      });
+
+      let returnedIds: string[];
+      try {
+        returnedIds = await vectorDB.upsert({ indexName: batchIndexName, vectors, metadata, ids });
+      } finally {
+        connectSpy.mockRestore();
+        for (const { client, originalQuery } of patched) {
+          client.query = originalQuery;
+        }
+      }
+
+      expect(returnedIds).toEqual(ids);
+      expect(executed.filter(sql => sql.includes('INSERT INTO'))).toHaveLength(1);
+
+      const results = await vectorDB.query({
+        indexName: batchIndexName,
+        queryVector: makeVector(3),
+        topK: 1,
+        includeVector: true,
+      });
+      expect(results[0]?.id).toBe('batch-3');
+      expect(results[0]?.metadata).toEqual({ idx: 3 });
+      expect(results[0]?.vector).toEqual(makeVector(3));
+    });
+
+    it('should default metadata to an empty object for batched vectors', async () => {
+      const ids = await vectorDB.upsert({
+        indexName: batchIndexName,
+        vectors: [makeVector(0), makeVector(1)],
+      });
+
+      expect(ids).toHaveLength(2);
+
+      const results = await vectorDB.query({ indexName: batchIndexName, queryVector: makeVector(1), topK: 1 });
+      expect(results[0]?.metadata).toEqual({});
+    });
+
+    it('should update existing rows when a batch conflicts with stored ids', async () => {
+      await vectorDB.upsert({
+        indexName: batchIndexName,
+        vectors: [makeVector(0), makeVector(1)],
+        metadata: [{ v: 'old' }, { v: 'old' }],
+        ids: ['a', 'b'],
+      });
+
+      await vectorDB.upsert({
+        indexName: batchIndexName,
+        vectors: [makeVector(2), makeVector(3)],
+        metadata: [{ v: 'new' }, { v: 'new' }],
+        ids: ['a', 'b'],
+      });
+
+      const results = await vectorDB.query({
+        indexName: batchIndexName,
+        queryVector: makeVector(2),
+        topK: 2,
+        includeVector: true,
+      });
+      expect(results).toHaveLength(2);
+      expect(results.every(r => r.metadata?.v === 'new')).toBe(true);
+      expect(results[0]?.id).toBe('a');
+      expect(results[0]?.vector).toEqual(makeVector(2));
+    });
+
+    it('should keep last-write-wins semantics for duplicate ids within one call', async () => {
+      const ids = await vectorDB.upsert({
+        indexName: batchIndexName,
+        vectors: [makeVector(0), makeVector(1)],
+        metadata: [{ v: 'first' }, { v: 'second' }],
+        ids: ['dup', 'dup'],
+      });
+
+      expect(ids).toEqual(['dup', 'dup']);
+
+      const results = await vectorDB.query({
+        indexName: batchIndexName,
+        queryVector: makeVector(1),
+        topK: 5,
+        includeVector: true,
+      });
+      expect(results).toHaveLength(1);
+      expect(results[0]?.metadata).toEqual({ v: 'second' });
+      expect(results[0]?.vector).toEqual(makeVector(1));
+    });
+
+    it('should delete matching vectors and insert the batch atomically with deleteFilter', async () => {
+      await vectorDB.upsert({
+        indexName: batchIndexName,
+        vectors: [makeVector(0), makeVector(1)],
+        metadata: [{ doc: 'old' }, { doc: 'keep' }],
+        ids: ['old-1', 'keep-1'],
+      });
+
+      await vectorDB.upsert({
+        indexName: batchIndexName,
+        vectors: [makeVector(2), makeVector(3)],
+        metadata: [{ doc: 'new' }, { doc: 'new' }],
+        ids: ['new-1', 'new-2'],
+        deleteFilter: { doc: 'old' },
+      });
+
+      const results = await vectorDB.query({ indexName: batchIndexName, queryVector: makeVector(2), topK: 10 });
+      expect(results.map(r => r.id).sort()).toEqual(['keep-1', 'new-1', 'new-2']);
+    });
+
+    it('should roll back the whole batch when one vector has the wrong dimension', async () => {
+      await expect(
+        vectorDB.upsert({
+          indexName: batchIndexName,
+          vectors: [makeVector(0), [1, 2, 3]],
+          ids: ['good', 'bad'],
+        }),
+      ).rejects.toThrow(/dimension/i);
+
+      const results = await vectorDB.query({ indexName: batchIndexName, queryVector: makeVector(0), topK: 10 });
+      expect(results).toHaveLength(0);
+    });
+  });
 });

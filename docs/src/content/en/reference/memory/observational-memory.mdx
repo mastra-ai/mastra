@@ -98,9 +98,9 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
   },
   {
     name: 'retrieval',
-    type: "boolean | { vector?: boolean; scope?: 'thread' | 'resource' }",
+    type: "boolean | { vector?: boolean; scope?: 'thread' | 'resource'; instructions?: string }",
     description:
-      "Let the agent look up the raw message history behind its observations. Observation groups keep durable pointers to the original messages, and a `recall` tool is registered so the agent can browse them. `true` enables cross-thread browsing by default. `{ vector: true }` also enables semantic search using Memory's vector store and embedder. `{ scope: 'thread' }` restricts the recall tool to the current thread only. Default scope is `'resource'`.",
+      "Let the agent look up the raw message history behind its observations. Observation groups keep durable pointers to the original messages, and a `recall` tool is registered so the agent can browse them. `true` enables cross-thread browsing by default. `{ vector: true }` also enables semantic search using Memory's vector store and embedder. `{ scope: 'thread' }` restricts the recall tool to the current thread only. Default scope is `'resource'`. `{ instructions: '...' }` appends application-specific recall guidance after Mastra's built-in retrieval instructions.",
     isOptional: true,
     defaultValue: 'false',
   },
@@ -133,6 +133,14 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
             description:
               "Custom instruction appended to the Observer's system prompt. Use this to customize what the Observer focuses on, such as domain-specific preferences or priorities.",
             isOptional: true,
+          },
+          {
+            name: 'continuationHints',
+            type: 'boolean | { currentTask?: boolean; suggestedResponse?: boolean }',
+            description:
+              'Which continuation-hint sections the Observer emits. Pass `false` to disable both, or an object to disable them individually. Agents that drive their own control flow generally want `{ suggestedResponse: false }` so memory does not compete for what the agent says next. A previously stored hint stops being injected into context once both observation and reflection disable its section.',
+            isOptional: true,
+            defaultValue: 'true',
           },
           {
             name: 'threadTitle',
@@ -261,7 +269,7 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
             name: 'blockAfter',
             type: 'number',
             description:
-              "Safety net that forces a synchronous (blocking) observation when background buffering can't keep up. Values from `1` up to (but not including) `100` are multipliers of `messageTokens`: `1.2` forces a blocking observation at 120% of the threshold (36k tokens with the default 30k). Values of `100` or more are absolute token counts and must be greater than `messageTokens`. Between `messageTokens` and `blockAfter`, only async buffering and activation run; buffered activation still preserves a minimum remaining context (the smaller of 1000 tokens or the retention floor). Only relevant when `bufferTokens` is set. Defaults to `1.2` when async buffering is enabled.",
+              "Safety net for when background buffering can't keep up. Values from `1` up to (but not including) `100` are multipliers of `messageTokens`: `1.2` resolves to 120% of the threshold (36k tokens with the default 30k). Values of `100` or more are absolute token counts and must be greater than `messageTokens`. Above this point, activation uses the smallest set of buffered chunks that reaches the retention target, even when that overshoots the target by more than the usual safeguard allows. It never activates more chunks than are needed to reach the retention target, so it removes only slightly more history than a normal activation. It changes the result only when the retention floor is above roughly 20,000 tokens; with the default `bufferActivation` (a 6k floor) it has no observable effect. Activation usually keeps a minimum remaining context (the smaller of 1000 tokens or the retention floor), but a single buffered chunk that covers the whole pending window still activates and can leave less. Crossing `blockAfter` does not trigger a blocking observation. A synchronous (blocking) observation runs when the `messageTokens` threshold is reached and buffered activation did not happen. Only relevant when `bufferTokens` is set. Defaults to `1.2` when async buffering is enabled.",
             isOptional: true,
             defaultValue: '1.2 (when bufferTokens is set)',
           },
@@ -299,6 +307,14 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
             description:
               "Custom instruction appended to the Reflector's system prompt. Use this to customize how the Reflector consolidates observations, such as prioritizing certain types of information.",
             isOptional: true,
+          },
+          {
+            name: 'continuationHints',
+            type: 'boolean | { currentTask?: boolean; suggestedResponse?: boolean }',
+            description:
+              'Which continuation-hint sections the Reflector emits. Pass `false` to disable both, or an object to disable them individually. A previously stored hint stops being injected into context once both observation and reflection disable its section.',
+            isOptional: true,
+            defaultValue: 'true',
           },
           {
             name: 'extract',
@@ -669,7 +685,7 @@ export const agent = new Agent({
 
 Async buffering is **enabled by default**. It pre-computes observations in the background as the conversation grows: when the `messageTokens` threshold is reached, buffered observations activate instantly with no blocking LLM call.
 
-The lifecycle follows **buffer → activate → remove messages → repeat**. Background Observer calls run at `bufferTokens` intervals, each producing a chunk of observations. At threshold, chunks activate: observations move into the log, raw messages are removed from context. The `blockAfter` threshold forces a synchronous fallback if buffering can't keep up.
+The lifecycle follows **buffer → activate → remove messages → repeat**. Background Observer calls run at `bufferTokens` intervals, each producing a chunk of observations. At threshold, chunks activate: observations move into the log, raw messages are removed from context. Above the `blockAfter` threshold, activation may overshoot the retention target instead of activating fewer chunks. If the threshold is reached and no buffered chunk activates, a synchronous observation runs instead.
 
 Default settings:
 
@@ -699,7 +715,7 @@ export const agent = new Agent({
           bufferTokens: 5_000,
           // Activate to retain 30% of threshold
           bufferActivation: 0.7,
-          // Force synchronous observation at 1.5x threshold
+          // Above 1.5x the threshold, let activation overshoot the retention target
           blockAfter: 1.5,
         },
         reflection: {
@@ -1156,6 +1172,8 @@ The standalone `ObservationalMemory` class accepts all the same options as the `
 
 When `retrieval` is set (any truthy value), a `recall` tool is registered so the agent can page through raw messages behind observation group ranges. By default (scope `'resource'`), the tool supports listing threads (`mode: "threads"`), browsing other threads (`threadId`), and cross-thread search. With `retrieval: { vector: true }`, semantic search is available (`mode: "search"`). Set `scope: 'thread'` to restrict the tool to the current thread only. The tool is automatically added to the agent's tool list.
 
+Mastra also injects scope-aware usage instructions into the agent's context. For resource scope with `vector: true`, these cover routing between `search`, `threads`, and `messages`, including fallback to thread discovery when search results are unsuitable. Without `vector: true`, the instructions only cover `threads` and `messages` browsing, so the agent isn't steered toward a search mode that isn't configured. Resource-scoped instructions are injected even before any observation group exists, so the agent can browse other threads from the first message. Use `retrieval: { instructions: '...' }` to append application-specific guidance after the built-in instructions.
+
 ### Parameters
 
 <PropertiesTable
@@ -1241,6 +1259,14 @@ When `retrieval` is set (any truthy value), a `recall` tool is registered so the
       'Fetch a single message part at full detail by its positional index. Use this when a low-detail recall shows an interesting part at `[p1]` — call again with `partIndex: 1` to see the full content without loading every part.',
   },
   {
+    name: 'charOffset',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '0',
+    description:
+      'Character position to continue reading a truncated single part. Only applies with `cursor` and `partIndex`. When a part is larger than the token budget, the result includes `nextCharOffset` — pass that exact value here in the next call to read the following chunk. The chunks concatenate to the original part text.',
+  },
+  {
     name: 'before',
     type: 'string',
     isOptional: true,
@@ -1306,13 +1332,33 @@ When `retrieval` is set (any truthy value), a `recall` tool is registered so the
     type: 'boolean',
     isOptional: true,
     description:
-      'Present and `true` when the output was capped by the token budget. The agent can paginate or use `partIndex` to access remaining content.',
+      'Present and `true` when the output was capped by the token budget. The agent can paginate or use `partIndex` to access remaining content. When a single part is itself too large, the `partIndex` result includes `nextCharOffset` for continuing within the part.',
   },
   {
     name: 'tokenOffset',
     type: 'number',
     isOptional: true,
     description: 'Approximate number of tokens that were trimmed when `truncated` is true.',
+  },
+  {
+    name: 'charOffset',
+    type: 'number',
+    isOptional: true,
+    description:
+      'On single-part results (`partIndex`), the character position this chunk starts at. `0` unless the call passed a `charOffset`.',
+  },
+  {
+    name: 'nextCharOffset',
+    type: 'number',
+    isOptional: true,
+    description:
+      'On single-part results, present when the part was truncated and more content remains. Pass this value as `charOffset` in the next call to continue reading from where this chunk ended.',
+  },
+  {
+    name: 'note',
+    type: 'string',
+    isOptional: true,
+    description: 'On truncated single-part results, the exact follow-up call for retrieving the next chunk.',
   },
 ]}
 />

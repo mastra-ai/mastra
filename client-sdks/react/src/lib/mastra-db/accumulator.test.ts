@@ -165,6 +165,24 @@ const toolErrorChunk = (toolCallId: string, error: string): ChunkType =>
     payload: { toolCallId, error },
   }) as unknown as ChunkType;
 
+const toolOutputDeniedChunk = (
+  toolCallId: string,
+  toolName: string,
+  args: Record<string, unknown>,
+  reason?: string,
+): ChunkType =>
+  ({
+    type: 'tool-output-denied',
+    runId: RUN_ID,
+    from: 'AGENT',
+    payload: {
+      toolCallId,
+      toolName,
+      args,
+      approval: { id: 'approval-1', approved: false, ...(reason ? { reason } : {}) },
+    },
+  }) as unknown as ChunkType;
+
 const toolCallApprovalChunk = (toolCallId: string, toolName: string, args: Record<string, unknown>): ChunkType =>
   ({
     type: 'tool-call-approval',
@@ -596,6 +614,126 @@ describe('accumulateChunk - text streaming', () => {
 });
 
 // =============================================================================
+// INTERLEAVED TEXT + TOOL ORDERING (regression: live view merged text segments
+// across a tool call — https://github.com/mastra-ai/mastra/issues/18964)
+// =============================================================================
+
+describe('accumulateChunk - interleaved text and tool calls', () => {
+  it('keeps text → tool → text ordering with distinct textIds', () => {
+    const out = reduce([
+      startChunk(),
+      textStartChunk('t1'),
+      textDeltaChunk('t1', 'Before'),
+      textEndChunk('t1'),
+      toolCallChunk('tc-1', 'search', { q: 'x' }),
+      textStartChunk('t2'),
+      textDeltaChunk('t2', 'After'),
+      textEndChunk('t2'),
+    ]);
+
+    const types = out[0].content.parts.map(p => p.type);
+    expect(types).toEqual(['text', 'tool-invocation', 'text']);
+    expect((out[0].content.parts[0] as MastraTextPart).text).toBe('Before');
+    expect((out[0].content.parts[2] as MastraTextPart).text).toBe('After');
+  });
+
+  it('does not merge the second text segment into the first when the textId is reused across a tool call', () => {
+    const out = reduce([
+      startChunk(),
+      textStartChunk('t1'),
+      textDeltaChunk('t1', 'Before'),
+      textEndChunk('t1'),
+      toolCallChunk('tc-1', 'search', { q: 'x' }),
+      // Some providers reuse the same text id for the post-tool continuation.
+      textStartChunk('t1'),
+      textDeltaChunk('t1', 'After'),
+      textEndChunk('t1'),
+    ]);
+
+    const types = out[0].content.parts.map(p => p.type);
+    expect(types).toEqual(['text', 'tool-invocation', 'text']);
+    expect((out[0].content.parts[0] as MastraTextPart).text).toBe('Before');
+    expect((out[0].content.parts[2] as MastraTextPart).text).toBe('After');
+  });
+
+  it('does not merge the second text segment into the first when text-delta carries no textId', () => {
+    const out = reduce([
+      startChunk(),
+      textDeltaChunk(undefined as unknown as string, 'Before'),
+      toolCallChunk('tc-1', 'search', { q: 'x' }),
+      textDeltaChunk(undefined as unknown as string, 'After'),
+    ]);
+
+    const types = out[0].content.parts.map(p => p.type);
+    expect(types).toEqual(['text', 'tool-invocation', 'text']);
+    expect((out[0].content.parts[0] as MastraTextPart).text).toBe('Before');
+    expect((out[0].content.parts[2] as MastraTextPart).text).toBe('After');
+  });
+});
+
+describe('accumulateChunk - interleaved text and non-text parts (general closing rule)', () => {
+  // A tool call is not special: any non-text part (reasoning, citation, file,
+  // step marker, …) closes the current text run. A reused text id after one of
+  // them must open a NEW text part rather than merging back into the earlier one.
+
+  it('keeps text → reasoning → text ordering when the textId is reused', () => {
+    const out = reduce([
+      startChunk(),
+      textStartChunk('t1'),
+      textDeltaChunk('t1', 'Before'),
+      textEndChunk('t1'),
+      reasoningStartChunk(),
+      reasoningDeltaChunk('thinking'),
+      reasoningEndChunk(),
+      // Reused text id for the post-reasoning continuation.
+      textStartChunk('t1'),
+      textDeltaChunk('t1', 'After'),
+      textEndChunk('t1'),
+    ]);
+
+    const types = out[0].content.parts.map(p => p.type);
+    expect(types).toEqual(['text', 'reasoning', 'text']);
+    expect((out[0].content.parts[0] as MastraTextPart).text).toBe('Before');
+    expect((out[0].content.parts[2] as MastraTextPart).text).toBe('After');
+  });
+
+  it('splits the text run when a reused-id continuation arrives as a bare delta after reasoning (no second text-start)', () => {
+    const out = reduce([
+      startChunk(),
+      textStartChunk('t1'),
+      textDeltaChunk('t1', 'Before'),
+      reasoningStartChunk(),
+      reasoningDeltaChunk('thinking'),
+      // Continuation reuses t1 but never re-announces text-start.
+      textDeltaChunk('t1', 'After'),
+    ]);
+
+    const types = out[0].content.parts.map(p => p.type);
+    expect(types).toEqual(['text', 'reasoning', 'text']);
+    expect((out[0].content.parts[0] as MastraTextPart).text).toBe('Before');
+    expect((out[0].content.parts[2] as MastraTextPart).text).toBe('After');
+  });
+
+  it('keeps text → citation → text ordering when the textId is reused', () => {
+    const out = reduce([
+      startChunk(),
+      textStartChunk('t1'),
+      textDeltaChunk('t1', 'Before'),
+      textEndChunk('t1'),
+      sourceUrlChunk('s-1', 'https://example.com', 'Example'),
+      textStartChunk('t1'),
+      textDeltaChunk('t1', 'After'),
+      textEndChunk('t1'),
+    ]);
+
+    const types = out[0].content.parts.map(p => p.type);
+    expect(types).toEqual(['text', 'source-url', 'text']);
+    expect((out[0].content.parts[0] as MastraTextPart).text).toBe('Before');
+    expect((out[0].content.parts[2] as MastraTextPart).text).toBe('After');
+  });
+});
+
+// =============================================================================
 // REASONING STREAMING
 // =============================================================================
 
@@ -699,6 +837,22 @@ describe('accumulateChunk - tool calls', () => {
       state: 'output-error',
       toolCallId: 'tc-1',
       errorText: 'boom',
+    });
+  });
+
+  it('tool-output-denied transitions to output-denied with approval details', () => {
+    const out = reduce([
+      startChunk(),
+      toolCallChunk('tc-1', 'sendMail', { to: 'x' }),
+      toolOutputDeniedChunk('tc-1', 'sendMail', { to: 'x' }, 'Not now'),
+    ]);
+    const toolPart = out[0].content.parts.find(p => p.type === 'tool-invocation') as MastraToolInvocationPart;
+    expect(toolPart.toolInvocation).toMatchObject({
+      state: 'output-denied',
+      toolCallId: 'tc-1',
+      toolName: 'sendMail',
+      args: { to: 'x' },
+      approval: { id: 'approval-1', approved: false, reason: 'Not now' },
     });
   });
 

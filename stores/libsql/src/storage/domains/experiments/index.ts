@@ -70,7 +70,17 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
     await this.#db.alterTable({
       tableName: TABLE_EXPERIMENTS,
       schema: EXPERIMENTS_SCHEMA,
-      ifNotExists: ['agentVersion', 'organizationId', 'projectId'],
+      ifNotExists: [
+        'agentVersion',
+        'organizationId',
+        'projectId',
+        'provenance',
+        'runnerAttestation',
+        'experimentSetId',
+        'comparisonId',
+        'variantId',
+        'trialIndex',
+      ],
     });
     await this.#db.alterTable({
       tableName: TABLE_EXPERIMENT_RESULTS,
@@ -83,6 +93,10 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
       [
         {
           sql: `CREATE INDEX IF NOT EXISTS idx_experiments_datasetid ON "${TABLE_EXPERIMENTS}" ("datasetId")`,
+          args: [],
+        },
+        {
+          sql: `CREATE INDEX IF NOT EXISTS idx_experiments_grouping ON "${TABLE_EXPERIMENTS}" ("experimentSetId", "comparisonId", "variantId", "trialIndex")`,
           args: [],
         },
         {
@@ -187,6 +201,12 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
       name: (row.name as string) ?? undefined,
       description: (row.description as string) ?? undefined,
       metadata: row.metadata ? safelyParseJSON(row.metadata as string) : undefined,
+      provenance: row.provenance ? safelyParseJSON(row.provenance as string) : null,
+      runnerAttestation: row.runnerAttestation ? safelyParseJSON(row.runnerAttestation as string) : null,
+      experimentSetId: (row.experimentSetId as string | null) ?? null,
+      comparisonId: (row.comparisonId as string | null) ?? null,
+      variantId: (row.variantId as string | null) ?? null,
+      trialIndex: row.trialIndex != null ? (row.trialIndex as number) : null,
       status: row.status as Experiment['status'],
       totalItems: row.totalItems as number,
       succeededCount: row.succeededCount as number,
@@ -245,6 +265,12 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
           name: input.name ?? null,
           description: input.description ?? null,
           metadata: input.metadata ?? null,
+          provenance: input.provenance ?? null,
+          runnerAttestation: input.runnerAttestation ?? null,
+          experimentSetId: input.experimentSetId ?? null,
+          comparisonId: input.comparisonId ?? null,
+          variantId: input.variantId ?? null,
+          trialIndex: input.trialIndex ?? null,
           status: 'pending',
           totalItems: input.totalItems,
           succeededCount: 0,
@@ -269,6 +295,12 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
         name: input.name,
         description: input.description,
         metadata: input.metadata,
+        provenance: input.provenance ?? null,
+        runnerAttestation: input.runnerAttestation ?? null,
+        experimentSetId: input.experimentSetId ?? null,
+        comparisonId: input.comparisonId ?? null,
+        variantId: input.variantId ?? null,
+        trialIndex: input.trialIndex ?? null,
         status: 'pending',
         totalItems: input.totalItems,
         succeededCount: 0,
@@ -418,6 +450,22 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
       if (args.status) {
         conditions.push('status = ?');
         queryParams.push(args.status);
+      }
+      if (args.experimentSetId !== undefined) {
+        conditions.push('experimentSetId = ?');
+        queryParams.push(args.experimentSetId);
+      }
+      if (args.comparisonId !== undefined) {
+        conditions.push('comparisonId = ?');
+        queryParams.push(args.comparisonId);
+      }
+      if (args.variantId !== undefined) {
+        conditions.push('variantId = ?');
+        queryParams.push(args.variantId);
+      }
+      if (args.trialIndex !== undefined) {
+        conditions.push('trialIndex = ?');
+        queryParams.push(args.trialIndex);
       }
       if (args.filters) {
         const { organizationId, projectId } = args.filters;

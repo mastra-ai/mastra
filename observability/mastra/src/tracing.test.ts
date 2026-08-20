@@ -2281,7 +2281,7 @@ describe('Tracing', () => {
       span.end();
     });
 
-    it('should use the span-safe representation of requestContext values', () => {
+    it('should preserve nested requestContext values by walking them through deepClean', () => {
       const observability = new DefaultObservabilityInstance({
         serviceName: 'test-service',
         name: 'test',
@@ -2300,10 +2300,13 @@ describe('Tracing', () => {
         requestContext,
       });
 
+      // Plain objects are handed to deepClean and walked (nested data stays
+      // visible in the trace); functions and other non-plain types are
+      // collapsed by serializeForSpan rather than walked.
       expect(span.requestContext).toEqual({
         userId: 'user-123',
         callback: '[function]',
-        nested: '[object]',
+        nested: { data: 'value' },
       });
 
       span.end();
@@ -2565,6 +2568,71 @@ describe('Tracing', () => {
 
       const endedEvent = testExporter.events.find(e => e.type === TracingEventType.SPAN_ENDED);
       expect(endedEvent?.exportedSpan.metadata).toMatchObject({ environment: 'production' });
+    });
+
+    it('injects the Mastra-pushed environment without reading metadata getters', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+      const metadata: Record<string, unknown> = {
+        tenantId: 'tenant-1',
+      };
+
+      Object.defineProperty(metadata, 'computed', {
+        enumerable: true,
+        get() {
+          throw new Error('computed metadata getter failed');
+        },
+      });
+
+      observability.__setMastraEnvironment('production');
+
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: { agentId: 'agent-1' },
+        tracingOptions: { metadata },
+      });
+
+      expect(span.metadata).toEqual({
+        tenantId: 'tenant-1',
+        computed: '[computed metadata getter failed]',
+        environment: 'production',
+      });
+      expect(span.getCorrelationContext().environment).toBe('production');
+    });
+
+    it('preserves non-plain metadata instead of replacing it with the injected environment', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      class SpanMetadata {
+        tenantId = 'tenant-1';
+        region = 'us-east-1';
+      }
+
+      observability.__setMastraEnvironment('production');
+
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: { agentId: 'agent-1' },
+        tracingOptions: { metadata: new SpanMetadata() },
+      });
+
+      // The class-instance metadata must not be discarded in favor of
+      // `{ environment: 'production' }`; user fields are retained.
+      expect(span.metadata).toMatchObject({
+        tenantId: 'tenant-1',
+        region: 'us-east-1',
+      });
+
+      span.end();
     });
 
     it('lets per-span metadata.environment override the Mastra-pushed environment', () => {

@@ -199,6 +199,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         typeof row.expectedTrajectory === 'string' ? safelyParseJSON(row.expectedTrajectory) : row.expectedTrajectory,
       toolMocks: (typeof row.toolMocks === 'string' ? safelyParseJSON(row.toolMocks) : row.toolMocks) ?? undefined,
       unmockedToolPolicy: row.unmockedToolPolicy ?? undefined,
+      scorerIds: (typeof row.scorerIds === 'string' ? safelyParseJSON(row.scorerIds) : row.scorerIds) ?? undefined,
       requestContext: typeof row.requestContext === 'string' ? safelyParseJSON(row.requestContext) : row.requestContext,
       metadata: typeof row.metadata === 'string' ? safelyParseJSON(row.metadata) : row.metadata,
       source: typeof row.source === 'string' ? safelyParseJSON(row.source) : row.source,
@@ -515,6 +516,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
             expectedTrajectory: args.expectedTrajectory ?? null,
             toolMocks: args.toolMocks ?? null,
             unmockedToolPolicy: args.unmockedToolPolicy ?? null,
+            scorerIds: args.scorerIds ?? null,
             requestContext: args.requestContext ?? null,
             metadata: args.metadata ?? null,
             source: args.source ?? null,
@@ -546,6 +548,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         expectedTrajectory: args.expectedTrajectory,
         toolMocks: args.toolMocks,
         unmockedToolPolicy: args.unmockedToolPolicy,
+        scorerIds: args.scorerIds,
         requestContext: args.requestContext,
         metadata: args.metadata,
         source: args.source,
@@ -592,6 +595,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         args.expectedTrajectory !== undefined ||
         args.toolMocks !== undefined ||
         args.unmockedToolPolicy !== undefined ||
+        args.scorerIds !== undefined ||
         args.requestContext !== undefined ||
         args.metadata !== undefined ||
         args.source !== undefined;
@@ -610,6 +614,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       const mergedToolMocks = args.toolMocks !== undefined ? args.toolMocks : existing.toolMocks;
       const mergedUnmockedToolPolicy =
         args.unmockedToolPolicy !== undefined ? args.unmockedToolPolicy : existing.unmockedToolPolicy;
+      const mergedScorerIds = args.scorerIds !== undefined ? (args.scorerIds ?? undefined) : existing.scorerIds;
       const mergedRequestContext = args.requestContext !== undefined ? args.requestContext : existing.requestContext;
       const mergedMetadata = args.metadata !== undefined ? args.metadata : existing.metadata;
       const mergedSource = args.source !== undefined ? args.source : existing.source;
@@ -663,6 +668,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
             expectedTrajectory: mergedExpectedTrajectory ?? null,
             toolMocks: mergedToolMocks ?? null,
             unmockedToolPolicy: mergedUnmockedToolPolicy ?? null,
+            scorerIds: mergedScorerIds ?? null,
             requestContext: mergedRequestContext,
             metadata: mergedMetadata,
             source: mergedSource,
@@ -693,6 +699,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         expectedTrajectory: mergedExpectedTrajectory,
         toolMocks: mergedToolMocks,
         unmockedToolPolicy: mergedUnmockedToolPolicy,
+        scorerIds: mergedScorerIds,
         requestContext: mergedRequestContext,
         metadata: mergedMetadata,
         source: mergedSource,
@@ -774,6 +781,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
             expectedTrajectory: existing.expectedTrajectory ?? null,
             toolMocks: existing.toolMocks ?? null,
             unmockedToolPolicy: existing.unmockedToolPolicy ?? null,
+            scorerIds: existing.scorerIds ?? null,
             requestContext: existing.requestContext,
             metadata: existing.metadata,
             source: existing.source,
@@ -880,6 +888,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
               expectedTrajectory: insert.item.expectedTrajectory,
               toolMocks: insert.item.toolMocks,
               unmockedToolPolicy: insert.item.unmockedToolPolicy,
+              scorerIds: insert.item.scorerIds,
               requestContext: insert.item.requestContext,
               metadata: insert.item.metadata,
               source: insert.item.source,
@@ -979,6 +988,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
           expectedTrajectory: item.expectedTrajectory ?? null,
           toolMocks: item.toolMocks ?? null,
           unmockedToolPolicy: item.unmockedToolPolicy ?? null,
+          scorerIds: item.scorerIds ?? null,
           requestContext: item.requestContext,
           metadata: item.metadata,
           source: item.source,

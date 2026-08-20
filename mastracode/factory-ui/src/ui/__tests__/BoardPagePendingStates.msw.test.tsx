@@ -10,7 +10,9 @@ import { createMemoryRouter, matchRoutes, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
+import type { GithubIssue } from '../domains/factory/services/factory';
+import type { LinearIssue } from '../domains/factory/services/linear';
 import { createAppRoutes } from '../router';
 
 const FACTORY_ID = 'fp-1';
@@ -43,6 +45,23 @@ const workItem = {
   revision: 1,
   createdAt: '2026-07-18T00:00:00.000Z',
   updatedAt: '2026-07-18T00:00:00.000Z',
+};
+
+const relatedPullRequest = {
+  ...workItem,
+  id: 'review-1',
+  factoryProjectId: FACTORY_ID,
+  externalSource: {
+    integrationId: 'github',
+    type: 'pull-request',
+    externalId: 'github-pr:21565',
+    url: 'https://github.com/acme/app/pull/21565',
+  },
+  parentWorkItemId: ITEM_ID,
+  title: 'Review login fix',
+  stages: ['review'],
+  sessions: {},
+  metadata: { number: 21565, state: 'open' },
 };
 
 const manualWorkItem = {
@@ -183,6 +202,101 @@ function renderWorkBoard() {
 }
 
 describe('Board card pending states', () => {
+  it('shows only Linear candidates after switching Work intake from Issues to Linear', async () => {
+    const githubIssue: GithubIssue = {
+      number: 42,
+      title: 'Investigate GitHub intake failure',
+      url: 'https://github.com/acme/app/issues/42',
+      author: 'octocat',
+      labels: ['status: auto-triaged'],
+      comments: 0,
+      createdAt: '2026-08-01T00:00:00Z',
+      updatedAt: '2026-08-01T00:00:00Z',
+    };
+    const linearIssue: LinearIssue = {
+      id: 'linear-issue-1',
+      identifier: 'ENG-42',
+      title: 'Fix Linear intake sync',
+      url: 'https://linear.app/acme/issue/ENG-42',
+      state: 'Todo',
+      stateType: 'unstarted',
+      priorityLabel: 'High',
+      assignee: 'ada',
+      team: 'ENG',
+      labels: ['bug'],
+      createdAt: '2026-08-01T00:00:00Z',
+      updatedAt: '2026-08-01T00:00:00Z',
+    };
+
+    const githubWorkItem = {
+      ...manualWorkItem,
+      id: 'github-intake-item',
+      externalSource: {
+        integrationId: 'github',
+        type: 'issue',
+        externalId: 'github-issue:99',
+        url: 'https://github.com/acme/app/issues/99',
+      },
+      title: 'Persisted GitHub intake item',
+    };
+    const linearWorkItem = {
+      ...manualWorkItem,
+      id: 'linear-intake-item',
+      externalSource: {
+        integrationId: 'linear',
+        type: 'issue',
+        externalId: 'linear-issue:ENG-99',
+        url: 'https://linear.app/acme/issue/ENG-99',
+      },
+      title: 'Persisted Linear intake item',
+    };
+
+    stubBoardEndpoints();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({ workItems: [githubWorkItem, linearWorkItem, manualWorkItem] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
+        HttpResponse.json({
+          config: {
+            github: { enabled: true, sourceIds: ['acme/app'] },
+            linear: { enabled: true, sourceIds: ['linear-project-1'] },
+          },
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
+        HttpResponse.json({ enabled: true, connected: true, workspace: { name: 'Acme', urlKey: 'acme' } }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, ({ request }) =>
+        HttpResponse.json({
+          issues: new URL(request.url).searchParams.has('label') ? [githubIssue] : [],
+          nextPage: null,
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/linear/issues`, () =>
+        HttpResponse.json({ issues: [linearIssue], nextCursor: null }),
+      ),
+    );
+
+    const user = userEvent.setup();
+    const { client } = renderWorkBoard();
+
+    await waitForMutationsIdle(client);
+    expect(screen.getByText('Investigate GitHub intake failure')).toBeVisible();
+    expect(screen.getByText('Persisted GitHub intake item')).toBeVisible();
+    expect(screen.queryByText('Persisted Linear intake item')).not.toBeInTheDocument();
+    expect(screen.getByText('Plan onboarding')).toBeVisible();
+
+    await user.click(screen.getByRole('button', { name: 'Linear' }));
+
+    await waitForMutationsIdle(client);
+    expect(screen.getByText('Fix Linear intake sync')).toBeVisible();
+    expect(screen.getByText('Persisted Linear intake item')).toBeVisible();
+    expect(screen.queryByText('Persisted GitHub intake item')).not.toBeInTheDocument();
+    expect(screen.getByText('Plan onboarding')).toBeVisible();
+    await waitFor(() => expect(screen.queryByText('Investigate GitHub intake failure')).not.toBeInTheDocument());
+  });
+
   it('shows "Moving to …" on the card while a menu move is in flight, then clears it', async () => {
     const { transitionGate } = stubBoardEndpoints();
     const user = userEvent.setup();
@@ -203,7 +317,45 @@ describe('Board card pending states', () => {
     await waitFor(() => expect(screen.queryByText('Moving to Planning…')).not.toBeInTheDocument());
   });
 
-  it('uses the whole card as the thread link without rendering a separate thread action', async () => {
+  it('re-queues a failed rule effect from the card', async () => {
+    stubBoardEndpoints();
+    const retried: string[] = [];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions`, () =>
+        HttpResponse.json({
+          decisions: [
+            {
+              id: 'decision-1',
+              evaluationId: 'evaluation-1',
+              workItemId: ITEM_ID,
+              type: 'invokeSkill',
+              status: 'failed',
+              attempts: 5,
+              lastError: 'Command failed with ENOENT',
+              createdAt: '2026-07-18T00:00:00.000Z',
+              updatedAt: '2026-07-18T00:01:00.000Z',
+              completedAt: null,
+            },
+          ],
+        }),
+      ),
+      http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions/decision-1/retry`, () => {
+        retried.push('decision-1');
+        return HttpResponse.json({ decision: { id: 'decision-1', status: 'retry' } });
+      }),
+    );
+    const user = userEvent.setup();
+    const { client } = renderWorkBoard();
+
+    // A terminal rule effect is only recoverable from the card, so the failure
+    // row has to carry the action out of it.
+    await user.click(await screen.findByRole('button', { name: 'Retry' }));
+
+    await waitFor(() => expect(retried).toEqual(['decision-1']));
+    await waitForMutationsIdle(client);
+  });
+
+  it('links the whole card to its attached thread', async () => {
     stubBoardEndpoints();
     renderWorkBoard();
 
@@ -213,16 +365,130 @@ describe('Board card pending states', () => {
     expect(titleText.closest('a, button')).toBeNull();
 
     const threadLink = within(card).getByRole('link', { name: 'Open session for Fix login bug' });
-    expect(within(card).getByText('Open session')).toBeInTheDocument();
-    // The link itself is an invisible overlay — a visible indicator must tell
-    // the user this card already has a work session.
-    expect(within(card).getByText('Session · fix-login')).toBeInTheDocument();
     expect(threadLink).toHaveAttribute(
       'href',
       `/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`,
     );
+    expect(within(card).getByText('Open session')).toBeInTheDocument();
+    expect(card.querySelector('[data-live-session-indicator]')).toBeInTheDocument();
     const matches = matchRoutes(createAppRoutes(), threadLink.getAttribute('href') ?? '');
     expect(matches?.at(-1)?.route.path).toBe('threads/:threadId');
+  });
+
+  it('shows a related PR as a compact link to the exact source item', async () => {
+    const user = userEvent.setup();
+    stubBoardEndpoints();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({ workItems: [workItem, relatedPullRequest] }),
+      ),
+    );
+    renderWorkBoard();
+
+    const card = await screen.findByRole('article', { name: 'Fix login bug' });
+
+    const relatedLink = within(card).getByRole('link', {
+      name: 'Open in GitHub: Review: PR #21565 — Review login fix, Open pull request',
+    });
+    expect(relatedLink).toHaveTextContent('PR #21565');
+    expect(relatedLink).not.toHaveTextContent('Review:');
+    expect(relatedLink).toHaveAttribute('href', relatedPullRequest.externalSource.url);
+    expect(relatedLink).toHaveAttribute('target', '_blank');
+    expect(relatedLink).not.toHaveAttribute('title');
+
+    await user.hover(relatedLink);
+    expect(await screen.findByText('Review: PR #21565 · Review login fix · Open pull request')).toBeVisible();
+
+    await user.unhover(relatedLink);
+    await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument());
+    relatedLink.focus();
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      'Review: PR #21565 · Review login fix · Open pull request',
+    );
+  });
+
+  it('names an internal related item without repeating its title', async () => {
+    stubBoardEndpoints();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({
+          workItems: [workItem, { ...manualWorkItem, parentWorkItemId: ITEM_ID }],
+        }),
+      ),
+    );
+    renderWorkBoard();
+
+    const card = await screen.findByRole('article', { name: 'Fix login bug' });
+    const relatedLink = within(card).getByRole('link', { name: 'Open Work item: Plan onboarding' });
+    expect(relatedLink).toHaveAttribute('href', `/factories/${FACTORY_ID}/work`);
+    expect(relatedLink).not.toHaveAttribute('target');
+  });
+
+  it('keeps an unresolved related session on the board, then opens its thread once liveness resolves', async () => {
+    const workspacesGate = deferred();
+    const liveRelatedPullRequest = {
+      ...relatedPullRequest,
+      sessions: {
+        review: {
+          sessionId: 'review-session',
+          branch: 'review-pr',
+          threadId: 'review-thread',
+          startedBy: 'user-1',
+        },
+      },
+    };
+    stubBoardEndpoints();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({ workItems: [workItem, liveRelatedPullRequest] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, async () => {
+        await workspacesGate.promise;
+        return HttpResponse.json({
+          sessions: [
+            {
+              id: 'review-session-row',
+              sessionId: 'review-session',
+              projectRepositoryId: REPO_ID,
+              orgId: 'org-1',
+              userId: 'user-1',
+              branch: 'review-pr',
+              baseBranch: 'main',
+              sandboxId: null,
+              sandboxWorkdir: '/repo-review',
+              materializedAt: '2026-07-18T00:00:00.000Z',
+              createdAt: '2026-07-18T00:00:00.000Z',
+              updatedAt: '2026-07-18T00:00:00.000Z',
+            },
+          ],
+        });
+      }),
+    );
+    const user = userEvent.setup();
+    const { client } = renderWorkBoard();
+    const card = await screen.findByRole('article', { name: 'Fix login bug' });
+    const unresolvedLink = within(card).getByRole('link', {
+      name: 'Open Review: PR #21565 — Review login fix, Open pull request',
+    });
+    expect(unresolvedLink).toHaveAttribute('href', `/factories/${FACTORY_ID}/review`);
+    expect(unresolvedLink).not.toHaveAttribute('target');
+
+    workspacesGate.resolve();
+    await waitForMutationsIdle(client);
+    const relatedLink = await within(card).findByRole('link', {
+      name: 'Open live session for Review: PR #21565 — Review login fix, Open pull request',
+    });
+    expect(relatedLink).toHaveAttribute(
+      'href',
+      `/factories/${FACTORY_ID}/workspaces/review-session/threads/review-thread`,
+    );
+    expect(relatedLink).not.toHaveAttribute('target');
+    expect(relatedLink.querySelector('[data-live-session-indicator]')).toBeInTheDocument();
+
+    await user.hover(relatedLink);
+    expect(
+      await screen.findByText('Review: PR #21565 · Review login fix · Open pull request · Live session'),
+    ).toBeVisible();
   });
 
   it('names the click outcome differently for cards that have a session and cards that do not', async () => {
@@ -242,11 +508,13 @@ describe('Board card pending states', () => {
     );
     if (!started || !unstarted) throw new Error('Expected both work item cards');
 
-    // The consequence of the click differs per card, so the card has to say which one it is.
+    expect(within(started).getByRole('link', { name: 'Open session for Fix login bug' })).toBeInTheDocument();
     expect(within(started).getByText('Open session')).toBeInTheDocument();
+    expect(started.querySelector('[data-live-session-indicator]')).toBeInTheDocument();
     expect(within(started).queryByText('Start session')).not.toBeInTheDocument();
     expect(within(unstarted).getByText('Start session')).toBeInTheDocument();
-    expect(within(unstarted).queryByText('Open session')).not.toBeInTheDocument();
+    expect(within(unstarted).queryByRole('link', { name: /Open session for/ })).not.toBeInTheDocument();
+    expect(unstarted.querySelector('[data-live-session-indicator]')).not.toBeInTheDocument();
   });
 
   it('acknowledges a session-starting card click while it is still resolving the session', async () => {
@@ -312,7 +580,7 @@ describe('Board card pending states', () => {
     // once the button goes disabled: the handler itself has to refuse it, since
     // the disabled attribute alone wouldn't stop a programmatic re-dispatch.
     const user = userEvent.setup({ pointerEventsCheck: 0 });
-    const { router } = renderWorkBoard();
+    const { client } = renderWorkBoard();
 
     const card = await screen.findByTestId('work-item-card');
     await waitFor(() => expect(within(card).getByRole('button', { name: /Start session/ })).toBeEnabled());
@@ -326,15 +594,10 @@ describe('Board card pending states', () => {
     await waitFor(() => expect(screen.queryByText('Preparing session…')).not.toBeInTheDocument());
     await waitFor(() => expect(runStarts).toHaveLength(1));
 
-    // Both clicks would unblock on the same gate release, so a duplicate start
-    // is already in flight by the time the first one navigates. Waiting on that
-    // navigation is deterministic, unlike a fixed sleep that a slower duplicate
-    // can outrun.
-    await waitFor(() =>
-      expect(router.state.location.pathname).toBe(
-        `/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`,
-      ),
-    );
+    // Both clicks unblock on the same gate release, so a duplicate start would
+    // already be in flight here. Draining to a settled cache is deterministic,
+    // unlike a fixed sleep that a slower duplicate can outrun.
+    await waitForMutationsIdle(client);
     expect(runStarts).toHaveLength(1);
   });
 
@@ -375,6 +638,18 @@ describe('Board card pending states', () => {
   it('opens GitHub and Linear intake issues in their external provider', async () => {
     stubBoardEndpoints();
     server.use(
+      http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
+        HttpResponse.json({
+          config: {
+            github: { enabled: true, sourceIds: ['acme/app'] },
+            linear: { enabled: true, sourceIds: ['linear-project-1'] },
+          },
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
+        HttpResponse.json({ enabled: true, connected: true, workspace: { name: 'Acme', urlKey: 'acme' } }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/linear/issues`, () => HttpResponse.json({ issues: [], nextCursor: null })),
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
         HttpResponse.json({
           workItems: [
@@ -419,10 +694,43 @@ describe('Board card pending states', () => {
     expect(githubLink).toHaveAttribute('target', '_blank');
     await user.keyboard('{Escape}');
 
-    await user.click(screen.getByRole('button', { name: 'Actions for Linear intake issue' }));
+    await user.click(screen.getByRole('button', { name: 'Linear' }));
+    await user.click(await screen.findByRole('button', { name: 'Actions for Linear intake issue' }));
     const linearLink = await screen.findByRole('menuitem', { name: 'Open in Linear' });
     expect(linearLink).toHaveAttribute('href', 'https://linear.app/acme/issue/ENG-42/linear-intake-issue');
     expect(linearLink).toHaveAttribute('target', '_blank');
+  });
+
+  it('offers "Open in GitHub" on unfiled Intake candidates', async () => {
+    stubBoardEndpoints();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, ({ request }) =>
+        HttpResponse.json({
+          issues: new URL(request.url).searchParams.has('label')
+            ? []
+            : [
+                {
+                  number: 43,
+                  title: 'Unfiled GitHub intake issue',
+                  url: 'https://github.com/acme/app/issues/43',
+                  author: 'octocat',
+                  labels: [],
+                  comments: 0,
+                  createdAt: '2026-07-28T00:00:00.000Z',
+                  updatedAt: '2026-07-28T00:00:00.000Z',
+                },
+              ],
+          nextPage: null,
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderWorkBoard();
+
+    await user.click(await screen.findByRole('button', { name: 'Actions for Unfiled GitHub intake issue' }));
+    const githubLink = await screen.findByRole('menuitem', { name: 'Open in GitHub' });
+    expect(githubLink).toHaveAttribute('href', 'https://github.com/acme/app/issues/43');
+    expect(githubLink).toHaveAttribute('target', '_blank');
   });
 
   it('identifies Slack-created work items as Slack instead of Manual', async () => {
@@ -454,8 +762,8 @@ describe('Board card pending states', () => {
     const title = await screen.findByText('Slack request');
     const card = title.closest<HTMLElement>('[data-testid="work-item-card"]');
     if (!card) throw new Error('Expected the title inside its work item card');
-    expect(within(card).getByText(/^Slack · added /)).toBeInTheDocument();
-    expect(within(card).queryByText(/^Manual · added /)).not.toBeInTheDocument();
+    expect(within(card).getByText(/^Slack · /)).toBeInTheDocument();
+    expect(within(card).queryByText(/^Manual · /)).not.toBeInTheDocument();
   });
 
   it('ignores a card dropped back into its current column', async () => {

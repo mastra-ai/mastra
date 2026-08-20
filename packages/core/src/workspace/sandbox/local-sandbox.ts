@@ -28,7 +28,13 @@ import { MastraSandbox } from './mastra-sandbox';
 import type { MastraSandboxOptions } from './mastra-sandbox';
 import type { MountManager } from './mount-manager';
 import type { IsolationBackend, NativeSandboxConfig } from './native-sandbox';
-import { detectIsolation, isIsolationAvailable, generateSeatbeltProfile, wrapCommand } from './native-sandbox';
+import {
+  detectIsolation,
+  isIsolationAvailable,
+  generateSeatbeltProfile,
+  isGeneratedSeatbeltProfile,
+  wrapCommand,
+} from './native-sandbox';
 import type { SandboxCloneOptions } from './sandbox';
 import type { SandboxInfo } from './types';
 
@@ -129,6 +135,26 @@ export interface LocalSandboxOptions extends Omit<MastraSandboxOptions, 'process
    *   optional request context so you can extend or customise per-request.
    */
   instructions?: InstructionsOption;
+  /**
+   * Named checkpoint to seed the working directory from on `start()` and to
+   * persist to on `snapshot()`. When set and a matching checkpoint exists
+   * under `checkpointsDirectory`, an empty/missing working directory is seeded
+   * from it before start. A missing checkpoint falls back to a normal empty
+   * working directory.
+   */
+  checkpointName?: string;
+  /**
+   * Fallback checkpoint used to seed the working directory when
+   * `checkpointName` has no stored checkpoint yet (e.g. a repo-level warm base
+   * image for a brand-new session). Boot-only: `snapshot()` keeps writing to
+   * `checkpointName`.
+   */
+  seedCheckpointName?: string;
+  /**
+   * Directory where named checkpoints are stored.
+   * Defaults to `<parent of workingDirectory>/.checkpoints`.
+   */
+  checkpointsDirectory?: string;
 }
 
 /**
@@ -163,10 +189,16 @@ export class LocalSandbox extends MastraSandbox {
   declare readonly mounts: MountManager;
   private readonly env: NodeJS.ProcessEnv;
   private _nativeSandboxConfig: NativeSandboxConfig;
-  private _seatbeltProfile?: string;
+  /**
+   * SBPL the user wrote, read from `seatbeltProfilePath` at start. Set only when that file
+   * already existed and does not carry our generated-profile marker. While it is undefined,
+   * `wrapCommand()` generates the profile from the live `_nativeSandboxConfig` on every call,
+   * so the profile always tracks the allowlist.
+   */
+  private _customSeatbeltProfile?: string;
+  /** Where the profile file lives on disk: the configured path, or one we generated. */
   private _seatbeltProfilePath?: string;
   private _sandboxFolderPath?: string;
-  private _userProvidedProfilePath = false;
   private readonly _createdAt: Date;
   private readonly _instructionsOverride?: InstructionsOption;
   private _activeMountPaths: Set<string> = new Set();
@@ -176,6 +208,14 @@ export class LocalSandbox extends MastraSandbox {
   private _mountIsolationRefCount = new Map<string, number>();
   /** Normalized mount path → canonical isolation path recorded for that mount. */
   private _mountPathToIsolationPath = new Map<string, string>();
+  /** Named checkpoint to seed from on start and persist to on snapshot. */
+  private readonly _checkpointName?: string;
+  /** Boot-only fallback checkpoint used when `_checkpointName` has no state. */
+  private readonly _seedCheckpointName?: string;
+  /** Directory where named checkpoints live. */
+  private readonly _checkpointsDirectory: string;
+  /** Chains snapshot() calls so concurrent captures never interleave. */
+  private _snapshotChain: Promise<void> = Promise.resolve();
 
   constructor(options: LocalSandboxOptions = {}) {
     // Validate isolation backend before super (fail fast)
@@ -203,6 +243,11 @@ export class LocalSandbox extends MastraSandbox {
     this._initialReadWritePaths = new Set(this._nativeSandboxConfig.readWritePaths ?? []);
     this.isolation = requestedIsolation;
     this._instructionsOverride = options.instructions;
+    this._checkpointName = options.checkpointName;
+    this._seedCheckpointName = options.seedCheckpointName;
+    this._checkpointsDirectory = options.checkpointsDirectory
+      ? expandTilde(options.checkpointsDirectory)
+      : path.join(path.dirname(this.workingDirectory), '.checkpoints');
   }
 
   // ---------------------------------------------------------------------------
@@ -231,6 +276,13 @@ export class LocalSandbox extends MastraSandbox {
         readOnlyPaths: [...(this._nativeSandboxConfig.readOnlyPaths ?? [])],
       },
       ...(this._instructionsOverride !== undefined && { instructions: this._instructionsOverride }),
+      ...((options.checkpointName ?? this._checkpointName) !== undefined && {
+        checkpointName: options.checkpointName ?? this._checkpointName,
+      }),
+      ...((options.seedCheckpointName ?? this._seedCheckpointName) !== undefined && {
+        seedCheckpointName: options.seedCheckpointName ?? this._seedCheckpointName,
+      }),
+      checkpointsDirectory: this._checkpointsDirectory,
     });
   }
 
@@ -251,6 +303,8 @@ export class LocalSandbox extends MastraSandbox {
 
     await fs.mkdir(this.workingDirectory, { recursive: true });
 
+    await this._seedFromCheckpoint();
+
     // Set up seatbelt profile for macOS sandboxing
     if (this.isolation === 'seatbelt') {
       const userProvidedPath = this._nativeSandboxConfig.seatbeltProfilePath;
@@ -258,24 +312,35 @@ export class LocalSandbox extends MastraSandbox {
       if (userProvidedPath) {
         // User provided a custom path
         this._seatbeltProfilePath = userProvidedPath;
-        this._userProvidedProfilePath = true;
 
         // Check if file exists at user's path
+        let existingProfile: string | undefined;
         try {
-          this._seatbeltProfile = await fs.readFile(userProvidedPath, 'utf-8');
+          existingProfile = await fs.readFile(userProvidedPath, 'utf-8');
         } catch (err: unknown) {
           if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code !== 'ENOENT') {
             throw err;
           }
-          // File doesn't exist, generate default and write to user's path
-          this._seatbeltProfile = generateSeatbeltProfile(this.workingDirectory, this._nativeSandboxConfig);
+        }
+
+        if (existingProfile !== undefined && !isGeneratedSeatbeltProfile(existingProfile)) {
+          // The user wrote this SBPL. Keep it and pass it to sandbox-exec exactly as written.
+          this._customSeatbeltProfile = existingProfile;
+        } else {
+          // The file is missing, or it carries our marker from an earlier run. Either way the
+          // profile is ours, so generate it again and clear `_customSeatbeltProfile`: it must
+          // keep tracking the allowlist that mounts change. Clearing matters when this instance
+          // was started before with a user-authored profile that has since been removed or taken
+          // over by us, because `stop()` leaves the cached profile in place for a later `start()`.
+          this._customSeatbeltProfile = undefined;
+          const generatedProfile = generateSeatbeltProfile(this.workingDirectory, this._nativeSandboxConfig);
           // Ensure parent directory exists
           await fs.mkdir(path.dirname(userProvidedPath), { recursive: true });
-          await fs.writeFile(userProvidedPath, this._seatbeltProfile, 'utf-8');
+          await fs.writeFile(userProvidedPath, generatedProfile, 'utf-8');
         }
       } else {
         // No custom path, use default location
-        this._seatbeltProfile = generateSeatbeltProfile(this.workingDirectory, this._nativeSandboxConfig);
+        const generatedProfile = generateSeatbeltProfile(this.workingDirectory, this._nativeSandboxConfig);
 
         // Generate a deterministic hash from workspace path and config
         // This allows identical sandboxes to share profiles while preventing collisions
@@ -291,11 +356,129 @@ export class LocalSandbox extends MastraSandbox {
         this._sandboxFolderPath = path.join(process.cwd(), '.sandbox-profiles');
         await fs.mkdir(this._sandboxFolderPath, { recursive: true });
         this._seatbeltProfilePath = path.join(this._sandboxFolderPath, `seatbelt-${configHash}.sb`);
-        await fs.writeFile(this._seatbeltProfilePath, this._seatbeltProfile, 'utf-8');
+        await fs.writeFile(this._seatbeltProfilePath, generatedProfile, 'utf-8');
       }
     }
 
     this.logger.debug('Sandbox started', { workingDirectory: this.workingDirectory });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Checkpoints
+  // ---------------------------------------------------------------------------
+
+  /** LocalSandbox persists real filesystem-backed checkpoints. */
+  readonly supportsCheckpoints = true;
+
+  /** Resolve the on-disk directory for a named checkpoint, rejecting unsafe names. */
+  private _checkpointPath(name: string): string {
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name) || name.includes('..')) {
+      throw new Error(`Invalid checkpoint name: ${name}`);
+    }
+    return path.join(this._checkpointsDirectory, name);
+  }
+
+  /**
+   * Seed an empty/missing working directory from the configured checkpoint.
+   * Missing checkpoint or already-populated workdir → no-op (normal start).
+   */
+  private async _seedFromCheckpoint(): Promise<void> {
+    if (!this._checkpointName && !this._seedCheckpointName) return;
+
+    // Only seed an empty working directory; a populated one wins.
+    const entries = await fs.readdir(this.workingDirectory).catch(() => []);
+    if (entries.length > 0) return;
+
+    // Prefer the primary checkpoint; fall back to the boot-only seed checkpoint.
+    const candidates = [this._checkpointName, this._seedCheckpointName].filter(
+      (name): name is string => name !== undefined,
+    );
+    for (const name of candidates) {
+      const checkpointDir = this._checkpointPath(name);
+      if (!(await this._checkpointReadable(checkpointDir))) {
+        // Missing checkpoint → try the next candidate (same contract as provider 404).
+        continue;
+      }
+
+      this.logger.debug('Seeding working directory from checkpoint', {
+        checkpointName: name,
+        checkpointDir,
+      });
+      try {
+        await fs.cp(checkpointDir, this.workingDirectory, { recursive: true });
+      } catch (error) {
+        // The checkpoint was swapped away mid-copy by a concurrent
+        // `_captureCheckpoint`. Wait for the replacement and copy that instead.
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+        await fs.rm(this.workingDirectory, { recursive: true, force: true }).catch(() => {});
+        await fs.mkdir(this.workingDirectory, { recursive: true });
+        if (!(await this._checkpointReadable(checkpointDir))) continue;
+        await fs.cp(checkpointDir, this.workingDirectory, { recursive: true });
+      }
+      return;
+    }
+  }
+
+  /**
+   * Check that a checkpoint directory exists, retrying briefly to cover the
+   * instant in `_captureCheckpoint` where the old checkpoint has been renamed
+   * away but the replacement has not yet been renamed into place. The window
+   * is two atomic renames, so a couple of short retries close it.
+   */
+  private async _checkpointReadable(checkpointDir: string): Promise<boolean> {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) await new Promise(resolve => setTimeout(resolve, 25));
+      try {
+        const stat = await fs.stat(checkpointDir);
+        if (stat.isDirectory()) return true;
+        return false;
+      } catch {
+        // Missing right now — may be mid-swap; retry.
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Persist the working directory as the configured named checkpoint.
+   * Copies to a temp sibling, then swaps it into place with rename so a
+   * concurrent boot always observes a complete checkpoint. No-op when no
+   * checkpoint name is set.
+   */
+  async snapshot(): Promise<void> {
+    if (!this._checkpointName) return;
+    const run = this._snapshotChain.then(() => this._captureCheckpoint(this._checkpointName!));
+    // Keep the chain alive even if this capture fails.
+    this._snapshotChain = run.catch(() => {});
+    return run;
+  }
+
+  private async _captureCheckpoint(name: string): Promise<void> {
+    const target = this._checkpointPath(name);
+    await fs.mkdir(this._checkpointsDirectory, { recursive: true });
+    const tmp = path.join(this._checkpointsDirectory, `.tmp-${name}-${crypto.randomBytes(6).toString('hex')}`);
+    const backup = path.join(this._checkpointsDirectory, `.bak-${name}-${crypto.randomBytes(6).toString('hex')}`);
+    let targetMoved = false;
+    try {
+      await fs.cp(this.workingDirectory, tmp, { recursive: true });
+      try {
+        await fs.rename(target, backup);
+        targetMoved = true;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      }
+      await fs.rename(tmp, target);
+    } catch (error) {
+      await fs.rm(tmp, { recursive: true, force: true }).catch(() => {});
+      if (targetMoved) {
+        await fs.rename(backup, target).catch(() => {});
+      }
+      throw error;
+    }
+    if (targetMoved) {
+      await fs.rm(backup, { recursive: true, force: true }).catch(() => {});
+    }
+    this.logger.debug('Captured checkpoint', { checkpointName: name, target });
   }
 
   /**
@@ -339,8 +522,9 @@ export class LocalSandbox extends MastraSandbox {
     this._activeMountPaths.clear();
     this.mounts.clear();
 
-    // Clean up seatbelt profile only if it was auto-generated (not user-provided)
-    if (this._seatbeltProfilePath && !this._userProvidedProfilePath) {
+    // Clean up the profile file only when we chose its location. A path the user configured
+    // belongs to the user, so never unlink it.
+    if (this._seatbeltProfilePath && !this._nativeSandboxConfig.seatbeltProfilePath) {
       try {
         await fs.unlink(this._seatbeltProfilePath);
       } catch {
@@ -348,8 +532,7 @@ export class LocalSandbox extends MastraSandbox {
       }
     }
     this._seatbeltProfilePath = undefined;
-    this._seatbeltProfile = undefined;
-    this._userProvidedProfilePath = false;
+    this._customSeatbeltProfile = undefined;
 
     // Try to remove .sandbox folder if empty
     if (this._sandboxFolderPath) {
@@ -698,7 +881,7 @@ export class LocalSandbox extends MastraSandbox {
   /**
    * Dynamically add a mount path to the sandbox isolation allowlist.
    *
-   * - Seatbelt: pushes to readWritePaths, regenerates inline profile
+   * - Seatbelt: pushes to readWritePaths (wrapCommand reads config each call)
    * - Bwrap: pushes to readWritePaths (buildBwrapCommand reads config each call)
    *
    * Local mounts are symlinks under `workingDirectory`. Bubblewrap cannot
@@ -733,12 +916,7 @@ export class LocalSandbox extends MastraSandbox {
       this._mountIsolationRefCount.set(isolationPath, (this._mountIsolationRefCount.get(isolationPath) ?? 0) + 1);
     }
     this._mountPathToIsolationPath.set(normMount, isolationPath);
-
-    // Seatbelt: regenerate the inline profile so the next executeCommand() picks it up
-    if (this.isolation === 'seatbelt') {
-      this._seatbeltProfile = generateSeatbeltProfile(this.workingDirectory, this._nativeSandboxConfig);
-    }
-    // Bwrap: buildBwrapCommand reads config.readWritePaths each call, so no extra work needed
+    // Both backends read config.readWritePaths on every wrapCommand() call, so no extra work needed
   }
 
   /**
@@ -769,9 +947,6 @@ export class LocalSandbox extends MastraSandbox {
         if (idx !== -1) {
           paths.splice(idx, 1);
         }
-      }
-      if (this.isolation === 'seatbelt') {
-        this._seatbeltProfile = generateSeatbeltProfile(this.workingDirectory, this._nativeSandboxConfig);
       }
     } else {
       this._mountIsolationRefCount.set(isolationPath, next);
@@ -805,7 +980,9 @@ export class LocalSandbox extends MastraSandbox {
     return wrapCommand(command, {
       backend: this.isolation,
       workspacePath: this.workingDirectory,
-      seatbeltProfile: this._seatbeltProfile,
+      // Undefined unless the user wrote their own profile file. wrapCommand() then generates
+      // one from the current config, so mounts added after start() are in the allowlist.
+      seatbeltProfile: this._customSeatbeltProfile,
       config: this._nativeSandboxConfig,
     });
   }

@@ -5,6 +5,7 @@ import type { Mock } from 'vitest';
 import { z } from 'zod/v4';
 import { MODEL_TOKENS } from '../../../../../../docs/src/plugins/remark-model-tokens/models';
 import { MessageList } from '../../../agent/message-list';
+import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import { SpanType } from '../../../observability';
 import { StreamErrorRetryProcessor } from '../../../processors';
 import { ProviderHistoryCompat } from '../../../processors/provider-history-compat';
@@ -1617,6 +1618,83 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     });
   });
 
+  it('preserves a structured error when fallback execution is exhausted', async () => {
+    // Mirrors the observational-memory case: an input processor throws a
+    // structured USER error before the model is ever called. The fallback loop
+    // must rethrow the original MastraError (with details.status) instead of
+    // wrapping it in a plain "Exhausted all fallback models" Error.
+    const structuredError = new MastraError({
+      id: 'TEST_USER_INPUT_ERROR',
+      domain: ErrorDomain.AGENT,
+      category: ErrorCategory.USER,
+      details: { status: 400 },
+      text: 'Invalid agent input',
+    });
+    const doStream = vi.fn(async () => ({
+      stream: convertArrayToReadableStream([
+        {
+          type: 'finish',
+          finishReason: 'stop',
+          usage: testUsage,
+        },
+      ]),
+      request: {},
+      response: { headers: undefined },
+      warnings: [],
+    }));
+
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      models: [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'mock-provider',
+            modelId: 'mock-model-id',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream,
+          } as any,
+        },
+      ],
+      inputProcessors: [
+        {
+          id: 'structured-error-processor',
+          processLLMRequest: vi.fn(async () => {
+            throw structuredError;
+          }),
+        },
+      ],
+      tools: {},
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: {
+        generateId: () => 'generated-id',
+        threadId: 'thread-123',
+        resourceId: 'resource-456',
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+    } as unknown as OuterLLMRun<{}>);
+
+    await expect(llmExecutionStep.execute(createExecuteParams(createIterationInput()))).rejects.toBe(structuredError);
+    expect(doStream).not.toHaveBeenCalled();
+  });
+
   it('preserves fallback model index when processAPIError requests a retry', async () => {
     const firstModelStream = vi.fn(async () => {
       throw new APICallError({
@@ -1812,7 +1890,95 @@ describe('createLLMExecutionStep gateway provider tools', () => {
 
     expect(doStream).toHaveBeenCalledTimes(1);
     expect(onAbort).toHaveBeenCalledOnce();
+    // Nothing streamed before the abort, so the partial text is an empty string
+    // rather than undefined.
+    expect(onAbort).toHaveBeenCalledWith(expect.objectContaining({ text: '' }));
     expect(result.stepResult).toMatchObject({ reason: 'tripwire', isContinued: false });
+  });
+
+  it('hands onAbort the text streamed before the abort', async () => {
+    const abortController = new AbortController();
+    const onAbort = vi.fn();
+    let pullCalls = 0;
+    const doStream = vi.fn(async () => ({
+      // One chunk per pull so the deltas are consumed before the abort fires,
+      // mirroring how a provider streams a partial response the caller sees.
+      stream: new ReadableStream({
+        async pull(streamController) {
+          await new Promise(resolve => setTimeout(resolve, 0));
+          switch (pullCalls++) {
+            case 0:
+              streamController.enqueue({ type: 'stream-start', warnings: [] });
+              break;
+            case 1:
+              streamController.enqueue({ type: 'text-start', id: '1' });
+              break;
+            case 2:
+              streamController.enqueue({ type: 'text-delta', id: '1', delta: 'Hello ' });
+              break;
+            case 3:
+              streamController.enqueue({ type: 'text-delta', id: '1', delta: 'world' });
+              break;
+            case 4:
+              abortController.abort();
+              streamController.error(new DOMException('The user aborted a request.', 'AbortError'));
+              break;
+          }
+        },
+      }),
+      request: {},
+      response: { headers: undefined },
+      warnings: [],
+    }));
+
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      models: [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'mock-provider',
+            modelId: 'test-model',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream,
+          } as any,
+        },
+      ],
+      tools: {},
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: {
+        generateId: () => 'generated-id',
+        threadId: 'thread-123',
+        resourceId: 'resource-456',
+      },
+      options: {
+        abortSignal: abortController.signal,
+        onAbort,
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+    } as unknown as OuterLLMRun<{}>);
+
+    await llmExecutionStep.execute(createExecuteParams(createIterationInput()));
+
+    expect(onAbort).toHaveBeenCalledOnce();
+    expect(onAbort).toHaveBeenCalledWith(expect.objectContaining({ steps: [], text: 'Hello world' }));
   });
 
   it('emits a processor_run span when an error processor handles an API error', async () => {
@@ -2012,7 +2178,17 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     });
   });
 
-  it('syncs outputStream.messageId with the rotated id on the API-error retry path', async () => {
+  it('rotates and seals the failed response on the API-error retry path', async () => {
+    messageList.add(
+      {
+        id: 'msg-0',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: { format: 2, parts: [{ type: 'text', text: 'half a sentence' }] },
+      },
+      'response',
+    );
+
     const doStream = vi.fn(async () => {
       throw new APICallError({
         message: 'upstream failed',
@@ -2061,6 +2237,10 @@ describe('createLLMExecutionStep gateway provider tools', () => {
         serialize: vi.fn(),
         deserialize: vi.fn(),
       },
+      rotateResponseMessageId: (sealMessageId?: string) => {
+        messageList.markResponseMessageBoundary(sealMessageId);
+        return 'rotated-response-id';
+      },
       _internal: {
         generateId: () => 'rotated-response-id',
         threadId: 'thread-123',
@@ -2080,6 +2260,23 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     // subsequent chunks written through the stream would split across two ids.
     expect(result.stepResult.reason).toBe('retry');
     expect(result.messageId).toBe('rotated-response-id');
+
+    // The rotated id only splits the transcript if the failed response was
+    // sealed; without the boundary the retry merges back under `msg-0`.
+    messageList.add(
+      {
+        id: result.messageId,
+        role: 'assistant',
+        createdAt: new Date(),
+        content: { format: 2, parts: [{ type: 'text', text: 'the retried answer' }] },
+      },
+      'response',
+    );
+    const assistantIds = messageList.get.all
+      .db()
+      .filter(message => message.role === 'assistant')
+      .map(message => message.id);
+    expect(assistantIds).toEqual(['msg-0', 'rotated-response-id']);
   });
 
   it('passes the rotated response message id to processor custom data writers', async () => {
@@ -2134,6 +2331,10 @@ describe('createLLMExecutionStep gateway provider tools', () => {
       streamState: {
         serialize: vi.fn(),
         deserialize: vi.fn(),
+      },
+      rotateResponseMessageId: (sealMessageId?: string) => {
+        messageList.markResponseMessageBoundary(sealMessageId);
+        return 'rotated-response-id';
       },
       _internal: {
         generateId: () => 'rotated-response-id',
@@ -2598,5 +2799,354 @@ describe('PROVIDER_TOOL_CALL observability spans', () => {
       ([opts]: any[]) => opts.type === SpanType.PROVIDER_TOOL_CALL,
     );
     expect(serverToolCalls).toHaveLength(0);
+  });
+
+  it('parents the PROVIDER_TOOL_CALL span under the span active when the result arrives', async () => {
+    // Fake only Date so the backdated startTime is exactly observable; stream
+    // machinery timers stay real.
+    const callTime = new Date('2026-01-01T00:00:00.000Z');
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(callTime);
+
+    const providerToolSpan = {
+      id: 'server-span-1',
+      type: SpanType.PROVIDER_TOOL_CALL,
+      end: vi.fn(),
+    };
+    const agentRunSpan = {
+      id: 'agent-span',
+      type: SpanType.AGENT_RUN,
+      createChildSpan: vi.fn(),
+      findParent: vi.fn(),
+    };
+    const modelStepSpan = {
+      id: 'step-span',
+      type: SpanType.MODEL_STEP,
+      createChildSpan: vi.fn(() => providerToolSpan),
+      findParent: vi.fn(() => agentRunSpan),
+    };
+
+    const tools = {
+      web_search: {
+        type: 'provider' as const,
+        id: 'anthropic.web_search',
+        args: {},
+      },
+    };
+
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      models: [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'anthropic',
+            modelId: 'claude-sonnet-4-20250514',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream: vi.fn(async () => ({
+              stream: convertArrayToReadableStream([
+                {
+                  type: 'response-metadata',
+                  id: 'resp-1',
+                  modelId: 'claude-sonnet-4-20250514',
+                  timestamp: new Date(0),
+                },
+                {
+                  type: 'tool-call',
+                  toolCallId: 'srvtoolu_123',
+                  toolName: 'web_search',
+                  input: '{"query":"AI news"}',
+                },
+                {
+                  type: 'tool-result',
+                  toolCallId: 'srvtoolu_123',
+                  toolName: 'web_search',
+                  result: { answer: 'Latest AI news results' },
+                },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: testUsage,
+                },
+              ]),
+              request: {},
+              response: { headers: undefined },
+              warnings: [],
+            })),
+          } as any,
+        },
+      ],
+      tools,
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: {
+        generateId: () => 'generated-id',
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+      modelSpanTracker: {
+        startStep: vi.fn(),
+        updateGeneration: vi.fn(),
+        getTracingContext: vi.fn(() => ({ currentSpan: modelStepSpan })),
+      },
+    } as unknown as OuterLLMRun<typeof tools>);
+
+    const executeParams = createExecuteParams(createIterationInput());
+    executeParams.tracingContext = { currentSpan: modelStepSpan } as any;
+
+    await llmExecutionStep.execute(executeParams);
+
+    // The span is created under the live step from the tracker, not hoisted to AGENT_RUN,
+    // backdated to the exact tool-call chunk time, with the stashed args as input.
+    expect(modelStepSpan.createChildSpan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: SpanType.PROVIDER_TOOL_CALL,
+        name: "provider_tool: 'web_search'",
+        startTime: callTime,
+        input: { query: 'AI news' },
+      }),
+    );
+    expect(agentRunSpan.createChildSpan).not.toHaveBeenCalled();
+    expect(providerToolSpan.end).toHaveBeenCalledWith({
+      output: { answer: 'Latest AI news results' },
+      attributes: { success: true },
+    });
+
+    vi.useRealTimers();
+  });
+
+  it('anchors to the AGENT_RUN fallback when no live model step is available', async () => {
+    const providerToolSpan = {
+      id: 'server-span-1',
+      type: SpanType.PROVIDER_TOOL_CALL,
+      end: vi.fn(),
+    };
+    const agentRunSpan = {
+      id: 'agent-span',
+      type: SpanType.AGENT_RUN,
+      createChildSpan: vi.fn(() => providerToolSpan),
+      findParent: vi.fn(),
+    };
+    const modelStepSpan = {
+      id: 'step-span',
+      type: SpanType.MODEL_STEP,
+      createChildSpan: vi.fn(),
+      findParent: vi.fn(() => agentRunSpan),
+    };
+
+    const tools = {
+      web_search: {
+        type: 'provider' as const,
+        id: 'anthropic.web_search',
+        args: {},
+      },
+    };
+
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      models: [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'anthropic',
+            modelId: 'claude-sonnet-4-20250514',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream: vi.fn(async () => ({
+              stream: convertArrayToReadableStream([
+                {
+                  type: 'response-metadata',
+                  id: 'resp-1',
+                  modelId: 'claude-sonnet-4-20250514',
+                  timestamp: new Date(0),
+                },
+                {
+                  type: 'tool-call',
+                  toolCallId: 'srvtoolu_123',
+                  toolName: 'web_search',
+                  input: '{"query":"AI news"}',
+                },
+                {
+                  type: 'tool-result',
+                  toolCallId: 'srvtoolu_123',
+                  toolName: 'web_search',
+                  result: { answer: 'Latest AI news results' },
+                },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: testUsage,
+                },
+              ]),
+              request: {},
+              response: { headers: undefined },
+              warnings: [],
+            })),
+          } as any,
+        },
+      ],
+      tools,
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: {
+        generateId: () => 'generated-id',
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+    } as unknown as OuterLLMRun<typeof tools>);
+
+    const executeParams = createExecuteParams(createIterationInput());
+    executeParams.tracingContext = { currentSpan: modelStepSpan } as any;
+
+    await llmExecutionStep.execute(executeParams);
+
+    // Without a step tracker there is no live step to parent under — the span
+    // anchors to the AGENT_RUN fallback recorded at call time.
+    expect(modelStepSpan.createChildSpan).not.toHaveBeenCalled();
+    expect(agentRunSpan.createChildSpan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: SpanType.PROVIDER_TOOL_CALL,
+        name: "provider_tool: 'web_search'",
+      }),
+    );
+    expect(providerToolSpan.end).toHaveBeenCalledWith({
+      output: { answer: 'Latest AI news results' },
+      attributes: { success: true },
+    });
+  });
+
+  it('anchors PROVIDER_TOOL_CALL spans to AGENT_RUN when the result never arrives', async () => {
+    const providerToolSpan = {
+      id: 'server-span-1',
+      type: SpanType.PROVIDER_TOOL_CALL,
+      end: vi.fn(),
+    };
+    const agentRunSpan = {
+      id: 'agent-span',
+      type: SpanType.AGENT_RUN,
+      createChildSpan: vi.fn(() => providerToolSpan),
+      findParent: vi.fn(),
+    };
+    const modelStepSpan = {
+      id: 'step-span',
+      type: SpanType.MODEL_STEP,
+      createChildSpan: vi.fn(),
+      findParent: vi.fn(() => agentRunSpan),
+    };
+
+    const tools = {
+      web_search: {
+        type: 'provider' as const,
+        id: 'anthropic.web_search',
+        args: {},
+      },
+    };
+
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      models: [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'anthropic',
+            modelId: 'claude-sonnet-4-20250514',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream: vi.fn(async () => ({
+              stream: convertArrayToReadableStream([
+                {
+                  type: 'response-metadata',
+                  id: 'resp-1',
+                  modelId: 'claude-sonnet-4-20250514',
+                  timestamp: new Date(0),
+                },
+                {
+                  type: 'tool-call',
+                  toolCallId: 'srvtoolu_123',
+                  toolName: 'web_search',
+                  input: '{"query":"AI news"}',
+                },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: testUsage,
+                },
+              ]),
+              request: {},
+              response: { headers: undefined },
+              warnings: [],
+            })),
+          } as any,
+        },
+      ],
+      tools,
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: {
+        generateId: () => 'generated-id',
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+    } as unknown as OuterLLMRun<typeof tools>);
+
+    const executeParams = createExecuteParams(createIterationInput());
+    executeParams.tracingContext = { currentSpan: modelStepSpan } as any;
+
+    await llmExecutionStep.execute(executeParams);
+
+    // With no tool-result, terminal cleanup materializes the span under AGENT_RUN
+    // (resolved via findParent at call time) and ends it without output.
+    expect(agentRunSpan.createChildSpan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: SpanType.PROVIDER_TOOL_CALL,
+        name: "provider_tool: 'web_search'",
+        startTime: expect.any(Date),
+      }),
+    );
+    expect(modelStepSpan.createChildSpan).not.toHaveBeenCalled();
+    expect(providerToolSpan.end).toHaveBeenCalledWith(undefined);
   });
 });

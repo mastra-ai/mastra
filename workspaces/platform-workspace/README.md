@@ -12,18 +12,17 @@ npm install @mastra/platform-workspace
 
 All options can be passed to the constructor or read from environment variables:
 
-| Option          | Env var                       | Required         |
-| --------------- | ----------------------------- | ---------------- |
-| `accessToken`   | `MASTRA_PLATFORM_SECRET_KEY`  | Yes              |
-| `projectId`     | `MASTRA_PROJECT_ID`           | Yes              |
-| `environmentId` | `MASTRA_ENVIRONMENT_ID`       | Yes (sandbox)    |
-| `bucketName`    | `MASTRA_PLATFORM_BUCKET_NAME` | Yes (filesystem) |
-
-`MASTRA_PLATFORM_ACCESS_TOKEN` is still read as a deprecated fallback for `accessToken`.
+| Option          | Env var                        | Required         |
+| --------------- | ------------------------------ | ---------------- |
+| `accessToken`   | `MASTRA_PLATFORM_ACCESS_TOKEN` | Yes              |
+| `projectId`     | `MASTRA_PROJECT_ID`            | Yes              |
+| `environmentId` | `MASTRA_ENVIRONMENT_ID`        | Yes (sandbox)    |
+| `actingUserId`  | —                              | No (sandbox)     |
+| `bucketName`    | `MASTRA_PLATFORM_BUCKET_NAME`  | Yes (filesystem) |
 
 The proxy URL defaults to `https://workspaces.mastra.ai` and can be overridden with the `MASTRA_WORKSPACE_PROXY_URL` env var (useful for staging).
 
-Requests to the proxy are authenticated with `Authorization: Bearer <accessToken>`.
+Requests to the proxy are authenticated with `Authorization: Bearer <accessToken>`. For sandbox requests authenticated with a project access token, set `actingUserId` to the stable opaque user subject from your authentication system. It is sent as `x-acting-user-id` for token partitioning and attribution; it is not an authorization claim.
 
 ## Usage
 

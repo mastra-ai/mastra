@@ -76,6 +76,7 @@ describe('workspace_lsp_inspect', () => {
 
   it('should parse cursor position from <<< marker', async () => {
     await fs.writeFile(path.join(tempDir, 'test.ts'), 'const foo = 1');
+    const mockRelease = vi.fn();
 
     // Mock the LSP manager
     const mockClient = {
@@ -96,6 +97,7 @@ describe('workspace_lsp_inspect', () => {
         uri: `file://${tempDir}/test.ts`,
         languageId: 'typescript',
         serverName: 'typescript',
+        release: mockRelease,
       }),
     };
 
@@ -111,8 +113,9 @@ describe('workspace_lsp_inspect', () => {
     // Verify prepareQuery was called with correct path
     expect(mockLsp.prepareQuery).toHaveBeenCalled();
 
-    // Verify notifyClose was called
+    // Verify the document and client lease were released
     expect(mockClient.notifyClose).toHaveBeenCalled();
+    expect(mockRelease).toHaveBeenCalledOnce();
   });
 
   it('should return hover information when available', async () => {
@@ -141,6 +144,7 @@ describe('workspace_lsp_inspect', () => {
         uri: `file://${tempDir}/test.ts`,
         languageId: 'typescript',
         serverName: 'typescript',
+        release: vi.fn(),
       }),
     };
 
@@ -185,6 +189,7 @@ describe('workspace_lsp_inspect', () => {
         uri: `file://${tempDir}/test.ts`,
         languageId: 'typescript',
         serverName: 'typescript',
+        release: vi.fn(),
       }),
     };
 
@@ -216,6 +221,11 @@ describe('workspace_lsp_inspect', () => {
           source: 'typescript',
         },
         {
+          message: 'Diagnostic without severity',
+          range: { start: { line: 0, character: 0 } },
+          source: 'typescript',
+        },
+        {
           severity: 2,
           message: 'Unused variable bar',
           range: { start: { line: 1, character: 6 } },
@@ -233,6 +243,7 @@ describe('workspace_lsp_inspect', () => {
         uri: `file://${tempDir}/test.ts`,
         languageId: 'typescript',
         serverName: 'typescript',
+        release: vi.fn(),
       }),
     };
 
@@ -248,6 +259,11 @@ describe('workspace_lsp_inspect', () => {
         {
           severity: 'error',
           message: "Type 'number' is not assignable to type 'string'.",
+          source: 'typescript',
+        },
+        {
+          severity: 'error',
+          message: 'Diagnostic without severity',
           source: 'typescript',
         },
       ],
@@ -323,6 +339,7 @@ describe('workspace_lsp_inspect', () => {
         uri: `file://${tempDir}/test.ts`,
         languageId: 'typescript',
         serverName: 'typescript',
+        release: vi.fn(),
       }),
     };
 
@@ -362,6 +379,7 @@ describe('workspace_lsp_inspect', () => {
         uri: `file://${absolutePath}`,
         languageId: 'typescript',
         serverName: 'typescript',
+        release: vi.fn(),
       }),
     };
 
@@ -408,6 +426,7 @@ describe('workspace_lsp_inspect', () => {
         uri: fileUri,
         languageId: 'typescript',
         serverName: 'typescript',
+        release: vi.fn(),
       }),
     };
 
@@ -462,6 +481,7 @@ describe('workspace_lsp_inspect', () => {
         uri: fileUri,
         languageId: 'typescript',
         serverName: 'typescript',
+        release: vi.fn(),
       }),
     };
 

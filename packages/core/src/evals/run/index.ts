@@ -18,8 +18,16 @@ import type { WorkflowResult, WorkflowRunStartOptions, StepResult } from '../../
 import type { AnyWorkflow } from '../../workflows/workflow';
 import { Workflow } from '../../workflows/workflow';
 import type { MastraScorer } from '../base';
+import { checkThresholdPassed, isScorerWithThreshold, validateThresholdConfig } from '../thresholds';
+import type {
+  ScorerEntry as ThresholdScorerEntry,
+  ScorerWithThreshold as GenericScorerWithThreshold,
+  ThresholdConfig,
+} from '../thresholds';
 import { extractTrajectory, extractTrajectoryFromTrace, extractWorkflowTrajectory } from '../types';
 import { ScoreAccumulator } from './scorerAccumulator';
+
+export type { ThresholdConfig } from '../thresholds';
 
 type WorkflowRunOptions = WorkflowRunStartOptions & {
   initialState?: any;
@@ -75,34 +83,29 @@ type RunEvalsDataItem<TTarget = unknown> = TTarget extends Agent
     ? RunEvalsDataItemBase & { input: any; inputs?: never; turns?: never }
     : RunEvalsDataItemBase & { input: unknown; inputs?: never; turns?: never };
 
-export type WorkflowScorerConfig = {
+type RunEvalsScorer = MastraScorer<any, any, any, any>;
+
+export type WorkflowScorerConfig<TScorer = RunEvalsScorer> = {
   /** Scorers that evaluate the overall workflow input/output */
-  workflow?: MastraScorer<any, any, any, any>[];
+  workflow?: TScorer[];
   /** Scorers that evaluate individual workflow steps by step ID */
-  steps?: Record<string, MastraScorer<any, any, any, any>[]>;
+  steps?: Record<string, TScorer[]>;
   /** Scorers that evaluate the workflow's step execution trajectory */
-  trajectory?: MastraScorer<any, any, any, any>[];
+  trajectory?: TScorer[];
 };
 
-export type AgentScorerConfig = {
+export type AgentScorerConfig<TScorer = RunEvalsScorer> = {
   /** Scorers that evaluate the full agent input/output */
-  agent?: MastraScorer<any, any, any, any>[];
+  agent?: TScorer[];
   /** Scorers that evaluate the agent's tool call trajectory */
-  trajectory?: MastraScorer<any, any, any, any>[];
+  trajectory?: TScorer[];
 };
-
-/** Threshold configuration: a number implies minimum, or an object with min/max bounds. */
-export type ThresholdConfig = number | { min?: number; max?: number };
 
 /** A scorer with an associated pass/fail threshold. */
-export type ScorerWithThreshold = {
-  scorer: MastraScorer<any, any, any, any>;
-  /** A number implies minimum threshold. Use { min, max } for range-based checks. */
-  threshold: ThresholdConfig;
-};
+export type ScorerWithThreshold = GenericScorerWithThreshold<RunEvalsScorer>;
 
 /** A scorer entry: either a bare scorer or one with a threshold. */
-export type ScorerEntry = MastraScorer<any, any, any, any> | ScorerWithThreshold;
+export type ScorerEntry = ThresholdScorerEntry<RunEvalsScorer>;
 
 /** Result of a gate evaluation for a single data item. */
 export type GateResult = {
@@ -135,7 +138,7 @@ type ScoredTurn = {
 };
 type ItemTurnResults = ScoredTurn[];
 
-type RunEvalsResult = {
+export type RunEvalsResult = {
   scores: Record<string, any>;
   summary: {
     totalItems: number;
@@ -199,8 +202,10 @@ export function runEvals<TAgent extends Agent>(config: {
 // Workflow with scorers array
 export function runEvals<TWorkflow extends AnyWorkflow>(config: {
   data: RunEvalsDataItem<TWorkflow>[];
-  scorers: MastraScorer<any, any, any, any>[];
+  scorers: ScorerEntry[];
   target: TWorkflow;
+  /** Gates: scorers that must score 1.0 for the run to pass. */
+  gates?: MastraScorer<any, any, any, any>[];
   targetOptions?: WorkflowRunOptions;
   onItemComplete?: (params: {
     item: RunEvalsDataItem<TWorkflow>;
@@ -215,6 +220,8 @@ export function runEvals<TWorkflow extends AnyWorkflow>(config: {
   data: RunEvalsDataItem<TWorkflow>[];
   scorers: WorkflowScorerConfig;
   target: TWorkflow;
+  /** Gates: scorers that must score 1.0 for the run to pass. */
+  gates?: MastraScorer<any, any, any, any>[];
   targetOptions?: WorkflowRunOptions;
   onItemComplete?: (params: {
     item: RunEvalsDataItem<TWorkflow>;
@@ -233,6 +240,8 @@ export function runEvals<TAgent extends Agent>(config: {
   data: RunEvalsDataItem<TAgent>[];
   scorers: AgentScorerConfig;
   target: TAgent;
+  /** Gates: scorers that must score 1.0 for the run to pass. */
+  gates?: MastraScorer<any, any, any, any>[];
   targetOptions?: RunEvalsAgentOptions;
   onItemComplete?: (params: {
     item: RunEvalsDataItem<TAgent>;
@@ -606,51 +615,6 @@ function aggregateTurnResults(perItemTurnResults: ItemTurnResults[]): {
   }
 
   return { turnResults, turnGatesPassed, turnThresholdsPassed, hasTurnGates, hasTurnThresholds };
-}
-
-function checkThresholdPassed(score: number, threshold: ThresholdConfig): boolean {
-  if (typeof threshold === 'number') {
-    return score >= threshold;
-  }
-  if (threshold.min !== undefined && score < threshold.min) return false;
-  if (threshold.max !== undefined && score > threshold.max) return false;
-  return true;
-}
-
-function isScorerWithThreshold(entry: ScorerEntry): entry is ScorerWithThreshold {
-  return typeof entry === 'object' && 'scorer' in entry && 'threshold' in entry;
-}
-
-function validateThresholdBound(value: number, label: string, scorerId: string): void {
-  if (!Number.isFinite(value) || value < 0 || value > 1) {
-    throw new MastraError({
-      domain: 'SCORER',
-      id: 'INVALID_SCORER_THRESHOLD',
-      category: 'USER',
-      text: `${label} threshold for scorer "${scorerId}" must be a finite number between 0 and 1, got ${value}`,
-    });
-  }
-}
-
-function validateThresholdConfig(threshold: ThresholdConfig, scorerId: string): void {
-  if (typeof threshold === 'number') {
-    validateThresholdBound(threshold, 'Minimum', scorerId);
-    return;
-  }
-  if (threshold.min !== undefined) {
-    validateThresholdBound(threshold.min, 'Minimum', scorerId);
-  }
-  if (threshold.max !== undefined) {
-    validateThresholdBound(threshold.max, 'Maximum', scorerId);
-  }
-  if (threshold.min !== undefined && threshold.max !== undefined && threshold.min > threshold.max) {
-    throw new MastraError({
-      domain: 'SCORER',
-      id: 'INVALID_SCORER_THRESHOLD',
-      category: 'USER',
-      text: `Threshold for scorer "${scorerId}" has min (${threshold.min}) greater than max (${threshold.max})`,
-    });
-  }
 }
 
 function normalizeScorerEntries(

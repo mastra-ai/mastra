@@ -127,7 +127,7 @@ Configuration options for native OS sandboxing (used with `isolation: 'seatbelt'
     name: 'seatbeltProfilePath',
     type: 'string',
     description:
-      "Path to a custom seatbelt profile file (macOS only). If the file exists, it's used; if not, a default profile is generated and written to this path.",
+      "Path to a custom seatbelt profile file (macOS only). If you wrote the file, it's used exactly as written: Mastra doesn't add mounted paths to it, so the profile must already allow every path you mount. If the file doesn't exist, a default profile is generated and written to this path, and that generated profile allows mounted paths. Mastra marks the profiles it generates, so a later run regenerates them instead of reading them back as your own. To edit a generated profile and keep your edits, delete its marker comment: the file then counts as yours, and mounted paths are no longer added to it.",
     isOptional: true,
   },
   {
@@ -223,10 +223,11 @@ await sandbox.start()
 // Spawn a background process
 const handle = await sandbox.processes.spawn('node server.js')
 
-// Read output, send stdin, kill
+// Read output, send stdin, signal EOF, and wait for completion
 console.log(handle.stdout)
 await handle.sendStdin('input\n')
-await handle.kill()
+await handle.closeStdin()
+await handle.wait()
 ```
 
 When native isolation is enabled (`seatbelt` or `bwrap`), spawned processes are also wrapped with the same isolation backend.
@@ -246,7 +247,7 @@ const detection = LocalSandbox.detectIsolation()
 
 ## Environment isolation
 
-By default, `LocalSandbox` only includes `PATH` in the environment. This allows commands to run while preventing accidental exposure of API keys and secrets.
+By default, `LocalSandbox` only includes `PATH` in the environment. Commands can run without accidental exposure of API keys and secrets.
 
 ```typescript
 // Default: only PATH is available (commands work, secrets protected)
@@ -323,4 +324,4 @@ This separation prevents sandboxed processes from reading or modifying their own
 - [SandboxProcessManager reference](/reference/workspace/process-manager)
 - [WorkspaceSandbox Interface](/reference/workspace/sandbox)
 - [Workspace Class](/reference/workspace/workspace-class)
-- [Workspace Overview](/docs/workspace/overview)
+- [Sandbox](/docs/sandbox/overview)

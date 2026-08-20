@@ -3,6 +3,7 @@ import { getLLMTestMode } from '@internal/llm-recorder';
 import { setupDummyApiKeys } from '@internal/test-utils';
 import { describe, it, expect, vi } from 'vitest';
 import { createAgentTestRun, createTestMessage } from '../../utils';
+import { createAnalyzePrompt, createReasonPrompt } from './prompts';
 import { createPromptAlignmentScorerLLM } from '.';
 
 setupDummyApiKeys(getLLMTestMode(), ['openai']);
@@ -29,6 +30,76 @@ describe('Prompt Alignment Scorer', () => {
       });
 
       expect(scorer.name).toBe('Prompt Alignment (LLM)');
+    });
+
+    it('should create scorer with conversation history enabled', () => {
+      expect(
+        createPromptAlignmentScorerLLM({ model: mockModel, options: { includeConversationHistory: true } }).name,
+      ).toBe('Prompt Alignment (LLM)');
+      expect(
+        createPromptAlignmentScorerLLM({
+          model: mockModel,
+          options: { includeConversationHistory: { maxMessages: 4 } },
+        }).name,
+      ).toBe('Prompt Alignment (LLM)');
+    });
+  });
+
+  describe('Conversation history in prompts', () => {
+    const analysis = {
+      intentAlignment: { score: 1, primaryIntent: 'pick option A', isAddressed: true, reasoning: 'ok' },
+      requirementsFulfillment: { requirements: [], overallScore: 1 },
+      completeness: { score: 1, missingElements: [], reasoning: 'ok' },
+      responseAppropriateness: { score: 1, formatAlignment: true, toneAlignment: true, reasoning: 'ok' },
+      overallAssessment: 'aligned',
+    };
+
+    it('should include the transcript before the current user prompt when provided', () => {
+      const prompt = createAnalyzePrompt({
+        userPrompt: 'A',
+        agentResponse: 'Booking Option A for you.',
+        evaluationMode: 'user',
+        conversationHistory: 'user: Which option?\nassistant: Option A or Option B?',
+      });
+
+      expect(prompt).toContain('Conversation History (prior turns, for context only):');
+      expect(prompt).toContain('assistant: Option A or Option B?');
+      expect(prompt.indexOf('Conversation History')).toBeLessThan(prompt.indexOf('User Prompt:'));
+      expect(prompt).toContain('Evaluate only the agent response to the current prompt');
+    });
+
+    it('should leave the analyze prompt unchanged when no history is provided', () => {
+      const args = {
+        userPrompt: 'A',
+        systemPrompt: 'Be helpful',
+        agentResponse: 'Booking Option A for you.',
+        evaluationMode: 'both' as const,
+      };
+
+      const baseline = createAnalyzePrompt(args);
+
+      expect(createAnalyzePrompt({ ...args, conversationHistory: undefined })).toBe(baseline);
+      expect(createAnalyzePrompt({ ...args, conversationHistory: '' })).toBe(baseline);
+      expect(baseline).not.toContain('Conversation History');
+    });
+
+    it('should include the transcript in the reason prompt when provided', () => {
+      const args = {
+        userPrompt: 'A',
+        score: 1,
+        scale: 1,
+        analysis,
+        evaluationMode: 'user' as const,
+      };
+
+      const withHistory = createReasonPrompt({
+        ...args,
+        conversationHistory: 'user: Which option?\nassistant: Option A or Option B?',
+      });
+
+      expect(withHistory).toContain('Conversation History (prior turns, for context only):');
+      expect(withHistory.indexOf('Conversation History')).toBeLessThan(withHistory.indexOf('User Prompt:'));
+      expect(createReasonPrompt(args)).not.toContain('Conversation History');
     });
   });
 

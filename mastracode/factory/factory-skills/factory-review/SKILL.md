@@ -80,6 +80,8 @@ For each significantly changed file: `git log --oneline -20 -- <file>`, `git bla
 
 Read around the changed lines: the module architecture, the contracts the changed code participates in, callers and data flow, and any AGENTS.md/README conventions in the touched packages. Then judge the approach: does it fit the existing design, or fight it? If the history shows a simpler or more consistent approach, flag it.
 
+For behavior-changing code, find the nearest analogous implementation and compare where it lives and how it follows existing abstractions, APIs, and test patterns. Flag deviations that are not justified by the codebase or its history.
+
 ## Phase 5: Verdict
 
 Weigh the findings — yours and the confirmed ones inherited from existing reviewers — and commit to one verdict:
@@ -115,13 +117,13 @@ First, compose the **review handoff** — don't send it to the conversation yet;
 
 - **Findings** — correctness assessment, test assessment, scope assessment, pattern-consistency notes, each grounded in the history you traced. Distill — this is a handoff, not a transcript.
 - **Verification** — every command you executed (tests, typecheck, repros) with its outcome, or an explicit statement that nothing was executed and why.
-- **Existing review disposition** — every substantive finding from prior reviewers (bots included) with its classification: confirmed, addressed, or refuted with evidence. A major bot comment must never be silently dropped.
+- **Existing review disposition** — every substantive finding from prior reviewers (bots included, your own earlier passes included) with its classification: confirmed, addressed, or refuted with evidence. A major bot comment must never be silently dropped. Name each by subject and `file:line`, and remember the body lands as GitHub markdown — `#1` publishes as a link to issue 1.
 - **Adversarial check** (approve only) — the one-line record of why the strongest request-changes case fails.
 - **Requested changes** — one entry per change, concrete enough to act on (for a request-changes verdict).
 - **Assumptions** — every recorded judgment call from the run.
 - **Open questions** — any decision that genuinely needs a human.
 
-Next, publish the review on the PR itself — this is part of every pass, not something to wait to be asked for. Write the handoff body to a temp file (avoids shell-quoting breakage) and submit a PR review matching the verdict:
+Next, publish the review on the PR itself — this is part of every pass, not something to wait to be asked for. Write the handoff body to `.artifacts/factory-review/pr-<number>.md` and submit a PR review matching the verdict:
 
 - approve → `gh pr review <number> --approve --body-file <file>`
 - request changes → `gh pr review <number> --request-changes --body-file <file>`
@@ -131,9 +133,9 @@ If GitHub rejects the review submission (e.g. the token authored the PR and cann
 **Non-blocking follow-ups become a PR, not homework.** After publishing the review, if it produced non-blocking findings with concrete mechanical fixes — typos, small hardening, a supplemental test case, doc touch-ups — implement them yourself instead of leaving them as a burden on the author. Supplemental means coverage beyond what the behavior-tested gate required: a test gap that failed that gate is a requested change on the reviewed PR, never follow-up work:
 
 1. Branch from the reviewed PR's head: `git fetch origin pull/<number>/head && git checkout -b factory/review-followups-pr-<number> FETCH_HEAD`.
-2. Apply the fixes, run the narrowest tests covering them, and commit.
+2. Apply the fixes, run the narrowest tests covering them, and commit. **Credit the human whose work these commits build on.** The reviewed PR's `author` (from the Phase 1 `gh pr view --json` call) tells you who: when `is_bot` is false, add a `Co-Authored-By: <login> <ID+<login>@users.noreply.github.com>` trailer to every commit, resolving `ID` with `gh api users/<login> --jq .id`. When the author is a bot — the Factory's own pull requests are — credit the reporter of the issue the PR closes instead, if it links one. Credit nobody rather than guess at an identity: a trailer naming the wrong account is worse than no trailer.
 3. Push the branch and open a follow-up PR with `gh pr create`: target the reviewed PR's head branch when it lives in this repository, so the author can merge the follow-ups into their PR with one click; when the reviewed PR comes from a fork, target its base branch instead and state in the body that it lands after PR <number>.
-4. The follow-up PR body links the review and lists each finding it addresses; the handoff links the follow-up PR.
+4. Write the follow-up body to `.artifacts/factory-review/follow-up-pr-<number>.md`; it links the review and lists each finding it addresses, and the handoff links the follow-up PR.
 
 Keep it strictly non-blocking and low-risk. A fix that demands design judgment, changes behavior, or grows beyond the mechanical stays a recorded finding — don't ship your own guess. **Never mix blocking findings into a follow-up PR**: those are requested changes on the reviewed PR, and implementing them yourself would review your own code. If tests fail on a follow-up fix, drop that fix and keep it a finding. If there are no such findings, skip this step entirely.
 

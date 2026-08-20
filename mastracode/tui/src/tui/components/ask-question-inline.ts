@@ -21,7 +21,7 @@ import {
   wrapTextWithAnsi,
 } from '@earendil-works/pi-tui';
 import type { Focusable, SelectItem, TUI } from '@earendil-works/pi-tui';
-import { BOX_INDENT_STR, theme, getSelectListTheme, getEditorTheme } from '../theme.js';
+import { BOX_INDENT_STR, theme, getSelectListTheme, getEditorTheme, getThemeGeneration } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
 import { MultilineInput } from './multiline-input.js';
 import { WrappingSelectList } from './wrapping-select-list.js';
@@ -65,8 +65,11 @@ export interface AskQuestionInlineOptions {
  * A renderable that wraps the ask-question content in a full bordered box
  * (┌─┐ / │ │ / └─┘) including the interactive SelectList or Input.
  */
-class AskQuestionBorderedBox {
+export class AskQuestionBorderedBox {
   questionLines: string[];
+  private cachedLines?: string[];
+  private cachedWidth?: number;
+  private cachedThemeGeneration?: number;
   private selectList?: WrappingSelectList;
   private input?: Input | MultilineInput;
   private hintText: string;
@@ -97,7 +100,14 @@ class AskQuestionBorderedBox {
   }
 
   invalidate() {
+    this.dropCache();
     this.selectList?.invalidate();
+  }
+
+  private dropCache() {
+    this.cachedLines = undefined;
+    this.cachedWidth = undefined;
+    this.cachedThemeGeneration = undefined;
   }
 
   setInteractive(selectList?: WrappingSelectList, input?: Input | MultilineInput, hintText?: string) {
@@ -105,6 +115,7 @@ class AskQuestionBorderedBox {
     this.selectList = selectList;
     this.input = input;
     if (hintText) this.hintText = hintText;
+    this.dropCache();
   }
 
   setAnswered(selectedValue: string, isNegative: boolean) {
@@ -112,6 +123,7 @@ class AskQuestionBorderedBox {
     this.answered = true;
     this.selectedValue = selectedValue;
     this.answerIsNegative = isNegative;
+    this.dropCache();
   }
 
   setAnsweredMulti(selectedValues: string[]) {
@@ -119,15 +131,35 @@ class AskQuestionBorderedBox {
     this.answered = true;
     this.selectedValues = selectedValues;
     this.answerIsNegative = false;
+    this.dropCache();
   }
 
   setCancelled() {
     this.streaming = false;
     this.answered = true;
     this.cancelled = true;
+    this.dropCache();
   }
 
   render(width: number): string[] {
+    // Only settled (answered/cancelled) boxes are cached: their content can no
+    // longer change (updateArgs and activate guard on `answered`), and long
+    // threads are full of them. Streaming and interactive states render live so
+    // option-list selection and partial args always reflect current state.
+    if (this.answered) {
+      if (this.cachedLines && this.cachedWidth === width && this.cachedThemeGeneration === getThemeGeneration()) {
+        return this.cachedLines;
+      }
+      const result = this.renderSafe(width);
+      this.cachedLines = result;
+      this.cachedWidth = width;
+      this.cachedThemeGeneration = getThemeGeneration();
+      return result;
+    }
+    return this.renderSafe(width);
+  }
+
+  private renderSafe(width: number): string[] {
     try {
       return this._render(width);
     } catch {

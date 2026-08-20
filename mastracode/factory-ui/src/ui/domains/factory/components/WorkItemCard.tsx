@@ -1,63 +1,117 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import {
-  ArrowUpRight,
-  CircleDot,
-  EllipsisVertical,
-  Link2,
-  MessageSquare,
-  MessagesSquare,
-  Play,
-  Trash2,
-} from 'lucide-react';
+import { ArrowUpRight, CircleSlash, EllipsisVertical, Trash2 } from 'lucide-react';
 import { Link, useParams } from 'react-router';
 
 import type { FactoryRunPhase } from '../../../../hooks/useStartFactoryRun';
+import { boardCardStatus } from '../boardCardStatus';
 import { setDragPayload } from '../boardDrag';
-import { externalLinkLabel, itemThreadSession, liveSessions, metadataLabels, workItemMeta } from '../boardItems';
-import { RUN_PHASE_LABELS, itemRunSpec, itemSessionSpec } from '../boardRunSpecs';
+import {
+  externalLinkLabel,
+  itemThreadSession,
+  liveSessions,
+  metadataLabels,
+  pullRequestStatusForItem,
+  workItemMeta,
+} from '../boardItems';
+import { itemRunSpec, itemSessionSpec } from '../boardRunSpecs';
 import type { ItemRunSpec, RunAction } from '../boardRunSpecs';
 import { itemStageLabel, itemStageOptions } from '../boardStages';
+import type { AuditEventPage } from '../services/audit';
 import type { FactoryDecisionSummary } from '../services/decisions';
-import { relatedWorkItems, relationshipLabel, relationshipPath } from '../services/relationships';
+import { relatedWorkItems, relationshipPath } from '../services/relationships';
 import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
-import { CardLabels, CardTitleTooltip, SourceTitle } from './BoardCardParts';
-import { BoardStageIcon, SOURCE_ICONS } from './BoardIcons';
-import { actionIcon } from './FactoryItemActions';
+import { workItemActivity } from '../workItemActivity';
+import {
+  CardIdleOverlay,
+  CardLabels,
+  CardStatus,
+  CardTitleTooltip,
+  REVEAL_ON_CARD_HOVER,
+  SourceTitle,
+} from './BoardCardParts';
+import { BoardStageIcon, SourceIcon, actionIcon } from './BoardIcons';
+import { PullRequestStatusIcon } from './PullRequestStatusIcon';
+import { RelatedWorkItemLink } from './RelatedWorkItemLink';
+import { WorkItemActivity } from './WorkItemActivity';
 
-function decisionStatusText(decision: FactoryDecisionSummary): string {
-  if (decision.status === 'pending') return `Rule effect pending · ${decision.type}`;
-  if (decision.status === 'leased') return `Rule effect dispatching · ${decision.type} · attempt ${decision.attempts}`;
-  if (decision.status === 'retry') return `Rule effect retrying · ${decision.type} · attempt ${decision.attempts}`;
-  return decision.lastError ? `Rule effect failed: ${decision.lastError}` : `Rule effect failed · ${decision.type}`;
+interface CardPrimaryAction {
+  label: string;
+  ariaLabel: string;
+  start: () => void;
+}
+
+/** A proposed run wins the click: releasing it beats starting a rival run beside it. */
+function cardPrimaryAction({
+  item,
+  runSpec,
+  runAction,
+  proposal,
+  onApproveProposal,
+  onStartRun,
+  onCreateSession,
+}: {
+  item: WorkItem;
+  runSpec?: ItemRunSpec;
+  runAction?: RunAction;
+  proposal?: FactoryDecisionSummary;
+  onApproveProposal: (decisionId: string) => void;
+  onStartRun: (spec: ItemRunSpec, action: RunAction) => void;
+  onCreateSession: (spec: { branch: string; threadTitle: string }) => void;
+}): CardPrimaryAction {
+  if (proposal !== undefined) {
+    const proposed = runSpec?.actions.find(action => action.role === proposal.role) ?? runAction;
+    const label = proposed?.label ?? 'Start run';
+    return { label, ariaLabel: `${label} ${item.title}`, start: () => onApproveProposal(proposal.id) };
+  }
+  if (runSpec !== undefined && runAction !== undefined) {
+    return {
+      label: runAction.label,
+      ariaLabel: `${runAction.label} ${item.title}`,
+      start: () => onStartRun(runSpec, runAction),
+    };
+  }
+  return {
+    label: 'Start session',
+    ariaLabel: `Start session for ${item.title}`,
+    start: () => onCreateSession(itemSessionSpec(item)),
+  };
 }
 
 export function WorkItemCard({
   item,
   columnStage,
   allItems,
+  activityPage,
   liveWorktreePaths,
+  sessionLivenessResolved,
   runDisabled,
   preparing,
   evaluatingStage,
   transitionReason,
   decision,
+  proposal,
+  approvingDecisionId,
   retryingDecisionId,
+  onApproveProposal,
+  onDismissProposal,
   onRetryDecision,
   pendingRunRoles,
   onCreateSession,
   onStartRun,
+  onRestartRun,
   onMove,
   onRemove,
 }: {
   item: WorkItem;
   columnStage: BoardStageId;
   allItems: WorkItem[];
+  activityPage?: AuditEventPage;
   /** Worktrees that still exist; session refs outside this set are stale. */
   liveWorktreePaths: ReadonlySet<string>;
+  sessionLivenessResolved: boolean;
   runDisabled: boolean;
   /** Status text while the click is resolving, before the run mutation starts. */
   preparing?: string;
@@ -65,31 +119,100 @@ export function WorkItemCard({
   evaluatingStage?: string;
   transitionReason?: string;
   decision?: FactoryDecisionSummary;
+  /** Run a rule wants to start on this card, waiting for someone to release it. */
+  proposal?: FactoryDecisionSummary;
+  approvingDecisionId?: string;
   retryingDecisionId?: string;
+  onApproveProposal: (decisionId: string) => void;
+  onDismissProposal: (decisionId: string) => void;
   onRetryDecision: (decisionId: string) => void;
   pendingRunRoles: ReadonlyMap<string, FactoryRunPhase | undefined>;
   /** Card click fallback when the item has no run spec: open an empty session (no run). */
   onCreateSession: (spec: { branch: string; threadTitle: string }) => void;
   onStartRun: (spec: ItemRunSpec, action: RunAction) => void;
+  /** Re-run an action whose session slot is already used (e.g. re-review an updated PR). */
+  onRestartRun: (spec: ItemRunSpec, action: RunAction) => void;
   onMove: (toStage: string) => void;
   onRemove: () => void;
 }) {
   const { factoryId = '' } = useParams<{ factoryId: string }>();
-  const { icon: Icon, className: iconClassName } = SOURCE_ICONS[item.source] ?? {
-    icon: CircleDot,
-    className: 'text-icon3',
-  };
   const evaluating = evaluatingStage !== undefined;
-  const runPending = pendingRunRoles.size > 0 || preparing !== undefined;
+  const busyLabel = proposal !== undefined && approvingDecisionId === proposal.id ? 'Starting…' : preparing;
+  const runPending = pendingRunRoles.size > 0 || busyLabel !== undefined;
   const otherStages = item.stages.filter(stage => stage !== columnStage);
   const runSpec = itemRunSpec(item);
   const sessions = liveSessions(item.sessions, liveWorktreePaths);
   // Offer only runs whose session slot hasn't been used yet on this card.
   const runActions = runSpec === undefined ? [] : runSpec.actions.filter(action => !(action.role in sessions));
   const defaultRunAction = runActions[0];
+  // A Done-lane PR that's still open likely picked up commits after its
+  // review; offer a manual re-review even though the review slot is used. The
+  // run re-enters Reviewing and follows up in the existing thread.
+  const reReviewAction =
+    columnStage === 'done' &&
+    item.source === 'github-pr' &&
+    ['open', 'draft'].includes(pullRequestStatusForItem(item)) &&
+    runSpec !== undefined
+      ? runSpec.actions.find(action => action.role === 'review' && action.role in sessions)
+      : undefined;
+  // A card can land in a lane without its run ever starting — an approved plan
+  // transitions to Building and writes the `work` session ref itself, so the
+  // slot looks used and `runActions` filters Build out. Offer the lane's own
+  // run from the menu so the card is never a dead end.
+  const laneAction =
+    runSpec !== undefined && reReviewAction === undefined
+      ? runSpec.actions.find(action => action.stage === columnStage && action.role in sessions)
+      : undefined;
+  const primaryAction = cardPrimaryAction({
+    item,
+    runSpec,
+    runAction: defaultRunAction,
+    proposal,
+    onApproveProposal,
+    onStartRun,
+    onCreateSession,
+  });
   const threadSession = itemThreadSession(sessions);
+  const proposedRunLabel =
+    proposal === undefined
+      ? undefined
+      : (runSpec?.actions.find(action => action.role === proposal.role)?.label ??
+        defaultRunAction?.label ??
+        'Start run');
+  // A run parked on a PR that has since closed or merged is dead work nobody
+  // needs to answer. It stays in the menu so it can still be dismissed, but it
+  // does not get to claim the status row and ask for a decision.
+  const proposalNeedsAnswer =
+    proposal !== undefined &&
+    (item.source !== 'github-pr' || ['open', 'draft'].includes(pullRequestStatusForItem(item)));
+
   const relatedItems = relatedWorkItems(item, allItems);
   const labels = metadataLabels(item.metadata);
+  const activity = workItemActivity(item, activityPage);
+  const status = boardCardStatus({
+    idle:
+      threadSession !== undefined
+        ? { label: 'Open session', affordance: 'open' }
+        : { label: primaryAction.label, affordance: 'run' },
+    proposal:
+      proposal === undefined || proposedRunLabel === undefined || !proposalNeedsAnswer
+        ? undefined
+        : { label: proposedRunLabel, decisionId: proposal.id },
+    moving:
+      evaluatingStage === undefined
+        ? undefined
+        : { stage: evaluatingStage, label: itemStageLabel(item, evaluatingStage) },
+    runs: [...pendingRunRoles].map(([role, phase]) => ({
+      label: runSpec?.actions.find(action => action.role === role)?.label ?? 'Starting run',
+      phase,
+    })),
+    preparing: busyLabel,
+    decision,
+    transitionReason,
+  });
+  const retryDecisionId = status.kind === 'error' ? status.retryDecisionId : undefined;
+  const showIdleAction = status.kind === 'idle';
+  const showStatusRow = activity.lastWorker !== undefined || status.kind !== 'idle';
 
   return (
     <CardTitleTooltip title={item.title}>
@@ -113,28 +236,17 @@ export function WorkItemCard({
             to={`/factories/${factoryId}/workspaces/${threadSession.sessionId}/threads/${threadSession.threadId}`}
             draggable={false}
             aria-label={`Open session for ${item.title}`}
-            className="focus-visible:outline-accent1 absolute inset-0 z-10 cursor-pointer rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
+            className="focus-visible:outline-accent1 absolute inset-0 cursor-pointer rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
           />
         ) : (
-          // Card click starts the default run (first unused action, e.g. Review
-          // for PRs) so clicking a card kicks off its work; cards with no run
-          // spec fall back to opening a plain chat session on the item's branch.
           <button
             type="button"
             draggable={false}
             disabled={runDisabled || runPending}
             aria-busy={runPending || undefined}
-            aria-label={
-              runSpec !== undefined && defaultRunAction !== undefined
-                ? `${defaultRunAction.label} ${item.title}`
-                : `Start session for ${item.title}`
-            }
-            className="focus-visible:outline-accent1 absolute inset-0 z-10 cursor-pointer rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed"
-            onClick={() =>
-              runSpec !== undefined && defaultRunAction !== undefined
-                ? onStartRun(runSpec, defaultRunAction)
-                : onCreateSession(itemSessionSpec(item))
-            }
+            aria-label={primaryAction.ariaLabel}
+            className="focus-visible:outline-accent1 absolute inset-0 cursor-pointer rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed"
+            onClick={primaryAction.start}
           />
         )}
         <div className="absolute top-2 right-2 z-20">
@@ -147,6 +259,7 @@ export function WorkItemCard({
                   size="icon-xs"
                   disabled={evaluating}
                   aria-label={`Actions for ${item.title}`}
+                  className={REVEAL_ON_CARD_HOVER}
                 >
                   <EllipsisVertical size={13} aria-hidden />
                 </Button>
@@ -167,6 +280,41 @@ export function WorkItemCard({
                     </DropdownMenu.Item>
                   );
                 })}
+              {runSpec !== undefined && reReviewAction !== undefined && (
+                <DropdownMenu.Item
+                  disabled={runDisabled || pendingRunRoles.has(reReviewAction.role)}
+                  onClick={() => onRestartRun(runSpec, reReviewAction)}
+                >
+                  {actionIcon(reReviewAction.label)}
+                  <span>{pendingRunRoles.has(reReviewAction.role) ? 'Starting…' : 'Re-review'}</span>
+                </DropdownMenu.Item>
+              )}
+              {runSpec !== undefined && laneAction !== undefined && (
+                <DropdownMenu.Item
+                  disabled={runDisabled || pendingRunRoles.has(laneAction.role)}
+                  onClick={() => onRestartRun(runSpec, laneAction)}
+                >
+                  {actionIcon(laneAction.label)}
+                  <span>{pendingRunRoles.has(laneAction.role) ? 'Starting…' : laneAction.label}</span>
+                </DropdownMenu.Item>
+              )}
+              {/* Once the card has a live session it renders as a link, so the
+                  menu is the only place left to release a proposed run. */}
+              {proposal !== undefined && (
+                <DropdownMenu.Item
+                  disabled={runDisabled || approvingDecisionId === proposal.id}
+                  onClick={() => onApproveProposal(proposal.id)}
+                >
+                  {actionIcon(proposedRunLabel ?? 'Start run')}
+                  <span>{approvingDecisionId === proposal.id ? 'Starting…' : 'Start suggested run'}</span>
+                </DropdownMenu.Item>
+              )}
+              {proposal !== undefined && (
+                <DropdownMenu.Item onClick={() => onDismissProposal(proposal.id)}>
+                  <CircleSlash aria-hidden />
+                  <span>Dismiss suggested run</span>
+                </DropdownMenu.Item>
+              )}
               {item.url !== null && (
                 <DropdownMenu.Item render={<a href={item.url} target="_blank" rel="noreferrer" />}>
                   <ArrowUpRight aria-hidden />
@@ -189,40 +337,53 @@ export function WorkItemCard({
           </DropdownMenu>
         </div>
         <div className="flex min-w-0 flex-col gap-1.5">
-          <span className="text-ui-xs text-icon2 truncate pr-8">{workItemMeta(item)}</span>
+          <div className="flex min-w-0 items-center gap-1.5 pr-8">
+            <span className="text-ui-xs text-icon2 min-w-0 truncate">{workItemMeta(item)}</span>
+            {threadSession !== undefined && (
+              <span data-live-session-indicator aria-hidden className="bg-accent1 size-2 shrink-0 rounded-full" />
+            )}
+            {relatedItems.map(related => {
+              const relatedSession = sessionLivenessResolved
+                ? itemThreadSession(liveSessions(related.sessions, liveWorktreePaths))
+                : undefined;
+
+              if (relatedSession !== undefined) {
+                return (
+                  <RelatedWorkItemLink
+                    key={related.id}
+                    item={related}
+                    href={`/factories/${factoryId}/workspaces/${relatedSession.sessionId}/threads/${relatedSession.threadId}`}
+                    kind="session"
+                  />
+                );
+              }
+
+              if (sessionLivenessResolved && related.url !== null) {
+                return <RelatedWorkItemLink key={related.id} item={related} href={related.url} kind="external" />;
+              }
+
+              return (
+                <RelatedWorkItemLink
+                  key={related.id}
+                  item={related}
+                  href={relationshipPath(related, factoryId)}
+                  kind="board"
+                />
+              );
+            })}
+          </div>
           <div className="flex min-w-0 items-center gap-1.5">
-            <Icon size={16} className={cn('shrink-0', iconClassName)} aria-hidden />
+            {item.source === 'github-pr' ? (
+              <PullRequestStatusIcon status={pullRequestStatusForItem(item)} />
+            ) : (
+              <SourceIcon source={item.source} />
+            )}
             <span className="text-ui-smd text-icon6 min-w-0 flex-1 truncate font-semibold">
               <SourceTitle source={item.source} title={item.title} />
             </span>
           </div>
         </div>
         <CardLabels labels={labels} />
-        {threadSession !== undefined && (
-          <span className="text-ui-xs text-accent1 flex items-center gap-1">
-            <MessagesSquare size={11} aria-hidden />
-            <span className="truncate">Session · {threadSession.branch}</span>
-          </span>
-        )}
-        {relatedItems.map(related => {
-          const relationText = relationshipLabel(related);
-          const relatedSession = itemThreadSession(liveSessions(related.sessions, liveWorktreePaths));
-          return (
-            <Link
-              key={related.id}
-              to={
-                relatedSession
-                  ? `/factories/${factoryId}/workspaces/${relatedSession.sessionId}/threads/${relatedSession.threadId}`
-                  : relationshipPath(related, factoryId)
-              }
-              className="text-ui-xs text-icon4 hover:text-icon6 relative z-20 flex items-center gap-1 hover:underline"
-              aria-label={`Open ${relationText}`}
-            >
-              <Link2 size={11} aria-hidden />
-              <span className="truncate">{relationText}</span>
-            </Link>
-          );
-        })}
         {otherStages.length > 0 && (
           <div className="flex flex-wrap items-center gap-1.5">
             {otherStages.map(stage => (
@@ -232,69 +393,22 @@ export function WorkItemCard({
             ))}
           </div>
         )}
-        {evaluatingStage !== undefined && (
-          <span role="status" aria-live="polite" className="text-ui-xs text-icon4 flex items-center gap-1.5">
-            <Spinner size="sm" aria-hidden className="size-3" />
-            {evaluatingStage === 'done' ? 'Marking done…' : `Moving to ${itemStageLabel(item, evaluatingStage)}…`}
-          </span>
-        )}
-        {pendingRunRoles.size === 0 && preparing !== undefined && (
-          <span role="status" aria-live="polite" className="text-ui-xs text-icon4 flex items-center gap-1.5">
-            <Spinner size="sm" aria-hidden className="size-3" />
-            {preparing}
-          </span>
-        )}
-        {[...pendingRunRoles].map(([role, phase]) => (
-          <span key={role} role="status" aria-live="polite" className="text-ui-xs text-icon4 flex items-center gap-1.5">
-            <Spinner size="sm" aria-hidden className="size-3" />
-            {runSpec?.actions.find(action => action.role === role)?.label ?? 'Starting run'} —{' '}
-            {phase !== undefined ? RUN_PHASE_LABELS[phase] : 'starting…'}
-          </span>
-        ))}
-        {!evaluating && !runPending && (
-          <span
-            aria-hidden
-            className="text-ui-xs text-icon3 group-hover:text-icon5 group-focus-within:text-icon5 flex items-center gap-1.5 transition-colors motion-reduce:transition-none"
-          >
-            {threadSession !== undefined ? (
-              <>
-                <MessageSquare size={11} aria-hidden />
-                Open session
-              </>
-            ) : (
-              <>
-                <Play size={11} aria-hidden />
-                {runSpec !== undefined && defaultRunAction !== undefined ? defaultRunAction.label : 'Start session'}
-              </>
+        {showIdleAction && <CardIdleOverlay status={status} />}
+        {showStatusRow && (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+            <WorkItemActivity activity={activity} actors={activityPage?.actors ?? {}} />
+            {status.kind !== 'idle' && (
+              <CardStatus
+                status={status}
+                onApprove={
+                  status.kind === 'waiting' && !runDisabled ? () => onApproveProposal(status.decisionId) : undefined
+                }
+                approving={status.kind === 'waiting' && approvingDecisionId === status.decisionId}
+                onRetry={retryDecisionId === undefined ? undefined : () => onRetryDecision(retryDecisionId)}
+                retrying={retryDecisionId !== undefined && retryDecisionId === retryingDecisionId}
+              />
             )}
-          </span>
-        )}
-        {!evaluating && decision !== undefined && (
-          <div className="flex items-center justify-between gap-2">
-            <span
-              role={decision.status === 'failed' ? 'alert' : 'status'}
-              className={cn('text-ui-xs', decision.status === 'failed' ? 'text-error' : 'text-icon4')}
-            >
-              {decisionStatusText(decision)}
-            </span>
-            {decision.status === 'failed' ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="relative z-20"
-                disabled={retryingDecisionId === decision.id}
-                onClick={() => onRetryDecision(decision.id)}
-              >
-                {retryingDecisionId === decision.id ? 'Retrying…' : 'Retry'}
-              </Button>
-            ) : null}
           </div>
-        )}
-        {!evaluating && transitionReason !== undefined && (
-          <span role="alert" className="text-ui-xs text-error">
-            {transitionReason}
-          </span>
         )}
       </article>
     </CardTitleTooltip>

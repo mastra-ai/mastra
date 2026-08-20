@@ -37,6 +37,9 @@ export interface ExternalWorkItemSource {
   url?: string;
 }
 
+/** Dispatcher upsert idempotency token — server bookkeeping, dropped from the read wire. */
+export const FACTORY_RULE_MATERIALIZATION_KEY = 'factoryRuleMaterializationKey';
+
 export interface WorkItemStageEntry {
   stage: WorkItemStage;
   enteredAt: string;
@@ -50,29 +53,18 @@ export interface WorkItemStageEntry {
 }
 
 /**
- * Sentinel actor ids that mark a stage transition as automation-driven (vs a
- * human's WorkOS user id): generic sentinels plus the system ids the Factory
- * rules engine stamps (see `actorId` in factory/rules/transition-service.ts).
- * Metrics treat any other actor — including a missing `exitedBy` on
- * pre-existing entries — as human.
+ * Whether an actor id marks a move an agent run performed: the binding id the
+ * transition tool stamps (`agent:*`), or the rule that fires off a bound run's
+ * tool result (see `factory/rules/processor.ts`).
+ *
+ * Deliberately narrower than "not a human": the poller stamps
+ * `factory-rule-dispatcher` / `github:*` on every card it syncs from the
+ * upstream repo, so counting those as machine work reports the repo's activity
+ * as the Factory's and pins any such ratio near 100%.
  */
-export const AUTOMATION_ACTORS = new Set([
-  'factory',
-  'system',
-  'automation',
-  'factory-rule-dispatcher',
-  'factory-tool-result-rule',
-]);
-
-/**
- * Whether an actor id marks a transition no human performed on the Factory
- * board: a sentinel automation id, an agent binding (`agent:*`), or an
- * external-webhook actor (`github:*` — a human may have acted on GitHub, but
- * the board move itself was automated).
- */
-export function isAutomationActor(by: string | undefined): boolean {
+export function isAgentActor(by: string | undefined): boolean {
   if (by === undefined) return false;
-  return AUTOMATION_ACTORS.has(by) || by.startsWith('agent:') || by.startsWith('github:');
+  return by.startsWith('agent:') || by === 'factory-tool-result-rule';
 }
 
 export interface WorkItemSessionRef {
@@ -134,7 +126,8 @@ export interface FactoryRuleEvaluationRecord {
   createdAt: Date;
 }
 
-export type FactoryDispatchStatus = 'pending' | 'leased' | 'retry' | 'succeeded' | 'failed';
+/** `proposed` is parked awaiting approval and never claimed; `dismissed` is a proposal turned down. */
+export type FactoryDispatchStatus = 'pending' | 'proposed' | 'dismissed' | 'leased' | 'retry' | 'succeeded' | 'failed';
 
 export interface FactoryDeferredDecisionPageInput {
   orgId: string;
@@ -167,6 +160,8 @@ export interface FactoryDeferredDecisionRecord {
   leaseOwner: string | null;
   leaseExpiresAt: Date | null;
   lastError: string | null;
+  /** When a human released this run; set once, so the gate never parks it again. */
+  approvedAt: Date | null;
   completedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -187,6 +182,26 @@ export interface RevokeFactoryRunBindingInput {
   orgId: string;
   factoryProjectId: string;
   bindingId: string;
+  revokedAt: Date;
+}
+
+export interface RevokeStaleFactoryRunBindingsInput {
+  /** Active bindings created before this instant are revoked regardless of item state. */
+  olderThan: Date;
+  now: Date;
+}
+
+/**
+ * Stages in which a bound run can still act on its work item. Mirrors the
+ * non-terminal subset of `FACTORY_RULE_STAGES` (rules/types.ts); bindings for
+ * items outside these stages are dead weight in the reconcile walk.
+ */
+const ACTIVE_RUN_BINDING_STAGES: ReadonlySet<string> = new Set(['intake', 'triage', 'planning', 'execute', 'review']);
+
+export interface RevokeFactoryRunBindingsForWorkItemInput {
+  orgId: string;
+  factoryProjectId: string;
+  workItemId: string;
   revokedAt: Date;
 }
 
@@ -257,6 +272,8 @@ export interface CommitFactoryTransitionInput {
   evaluation:
     | { outcome: 'accepted'; decisions: Record<string, unknown>[] }
     | { outcome: 'rejected'; code: string; reason: string };
+  /** Arm autonomy in the same revision-checked update that commits the transition. */
+  armAutonomy?: boolean;
 }
 
 export type CommitFactoryTransitionResult =
@@ -274,6 +291,8 @@ export interface PrepareFactoryRunStartInput {
   resourceId: string;
   kickoffKey: string;
   kickoffMessage: string | null;
+  /** Arm the item's autonomy in the same transaction that prepares the run. */
+  armAutonomy?: boolean;
 }
 
 export interface PrepareFactoryRunStartResult {
@@ -303,6 +322,13 @@ export interface WorkItemRow {
   stageHistory: WorkItemStageEntry[];
   sessions: WorkItemSessions;
   metadata: Record<string, unknown> | null;
+  /**
+   * When a person first committed this item to the Factory, by starting a run
+   * on it or releasing one that was proposed. Projects that withhold auto-run
+   * are asking to decide what the Factory picks up, not to approve each step of
+   * work they already asked for, so runs on an armed item skip the gate.
+   */
+  autonomyArmedAt: Date | null;
   revision: number;
   createdBy: string;
   createdAt: Date;
@@ -351,6 +377,7 @@ export const WORK_ITEMS_SCHEMA: CollectionSchema = {
     stage_history: { type: 'json' },
     sessions: { type: 'json' },
     metadata: { type: 'json', nullable: true },
+    autonomy_armed_at: { type: 'timestamp', nullable: true },
     revision: { type: 'integer', default: 1 },
     created_by: { type: 'text' },
     created_at: { type: 'timestamp' },
@@ -386,6 +413,7 @@ interface WorkItemDbRow extends Record<string, unknown> {
   stage_history: WorkItemStageEntry[];
   sessions: WorkItemSessions;
   metadata: Record<string, unknown> | null;
+  autonomy_armed_at: Date | null;
   revision: number;
   created_by: string;
   created_at: Date;
@@ -408,6 +436,7 @@ function toWorkItem(row: WorkItemDbRow): WorkItemRow {
     stageHistory: row.stage_history,
     sessions: row.sessions,
     metadata: row.metadata,
+    autonomyArmedAt: row.autonomy_armed_at ?? null,
     revision: row.revision,
     createdBy: row.created_by,
     createdAt: row.created_at,
@@ -425,6 +454,9 @@ function patchColumns(changes: Partial<WorkItemRow>): Partial<WorkItemDbRow> {
     ...(changes.stageHistory !== undefined ? { stage_history: changes.stageHistory } : {}),
     ...(changes.sessions !== undefined ? { sessions: changes.sessions } : {}),
     ...(changes.metadata !== undefined ? { metadata: changes.metadata } : {}),
+    ...(changes.autonomyArmedAt !== undefined && changes.autonomyArmedAt !== null
+      ? { autonomy_armed_at: changes.autonomyArmedAt }
+      : {}),
     ...(changes.revision !== undefined ? { revision: changes.revision } : {}),
     ...(changes.updatedAt !== undefined ? { updated_at: changes.updatedAt } : {}),
   };
@@ -546,6 +578,14 @@ function withInProcessProjectLock<T>(key: string, fn: () => Promise<T>): Promise
   return result;
 }
 
+/** Source key a decision materializes, used to purge governance rows when the item is deleted. */
+function decisionSourceKey(decision: unknown): string | null {
+  if (typeof decision !== 'object' || decision === null) return null;
+  const record = decision as Record<string, unknown>;
+  if (record.type !== 'upsertLinkedWorkItem' || typeof record.sourceKey !== 'string') return null;
+  return record.sourceKey;
+}
+
 const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
   {
     name: 'factory_rule_ingress',
@@ -586,6 +626,7 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
       factory_project_id: { type: 'text' },
       evaluation_id: { type: 'text' },
       work_item_id: { type: 'text', nullable: true },
+      source_key: { type: 'text', nullable: true },
       idempotency_key: { type: 'text' },
       effect_ordinal: { type: 'integer' },
       effect_hash: { type: 'text' },
@@ -598,6 +639,7 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
       lease_owner: { type: 'text', nullable: true },
       lease_expires_at: { type: 'timestamp', nullable: true },
       last_error: { type: 'text', nullable: true },
+      approved_at: { type: 'timestamp', nullable: true },
       completed_at: { type: 'timestamp', nullable: true },
       created_at: { type: 'timestamp' },
       updated_at: { type: 'timestamp' },
@@ -720,6 +762,7 @@ function toDeferredDecision(row: GovernanceDbRow): FactoryDeferredDecisionRecord
     leaseOwner: (row.lease_owner as string | null) ?? null,
     leaseExpiresAt: (row.lease_expires_at as Date | null) ?? null,
     lastError: (row.last_error as string | null) ?? null,
+    approvedAt: (row.approved_at as Date | null) ?? null,
     completedAt: (row.completed_at as Date | null) ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at as Date,
@@ -971,8 +1014,14 @@ export class WorkItemsStorage extends FactoryStorageDomain {
               reason = input.evaluation.reason;
               return null;
             }
-            if (existing.stages.length === 1 && existing.stages[0] === input.destinationStage) return null;
+            const arm = input.armAutonomy === true && !existing.autonomyArmedAt;
+            if (existing.stages.length === 1 && existing.stages[0] === input.destinationStage) {
+              // No stage change to commit; still honor arming without a revision
+              // bump, matching armAutonomy's standalone semantics.
+              return arm ? patchColumns({ autonomyArmedAt: now }) : null;
+            }
             return patchColumns({
+              ...(arm ? { autonomyArmedAt: now } : {}),
               stages: [input.destinationStage],
               stageHistory: applyStageTransition(
                 existing.stageHistory,
@@ -1032,6 +1081,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
                 factory_project_id: input.factoryProjectId,
                 evaluation_id: evaluation.id,
                 work_item_id: item.id,
+                source_key: decisionSourceKey(decision),
                 idempotency_key: String(decision.idempotencyKey),
                 effect_ordinal: index,
                 effect_hash: factoryDecisionHash(decision),
@@ -1166,6 +1216,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             factory_project_id: input.factoryProjectId,
             evaluation_id: evaluation.id,
             work_item_id: item?.id ?? null,
+            source_key: decisionSourceKey(decision),
             idempotency_key: String(decision.idempotencyKey),
             effect_ordinal: effectOrdinal,
             effect_hash: factoryDecisionHash(decision),
@@ -1280,6 +1331,126 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return row ? toDeferredDecision(row) : null;
   }
 
+  /** Park a claimed effect for human approval; the dispatcher never claims `proposed` rows. */
+  async proposeDeferredDecision(
+    identity: FactoryLeaseIdentity,
+    now: Date,
+  ): Promise<FactoryDeferredDecisionRecord | null> {
+    let proposed = false;
+    const row = await this.#db.updateAtomic<GovernanceDbRow>(
+      'factory_deferred_decisions',
+      { id: identity.id, org_id: identity.orgId, factory_project_id: identity.factoryProjectId },
+      current => {
+        if (current.status !== 'leased' || current.lease_owner !== identity.ownerId) return null;
+        proposed = true;
+        return {
+          status: 'proposed',
+          // The claim that parked it spent no effect, so it costs no attempt.
+          attempts: 0,
+          lease_owner: null,
+          lease_expires_at: null,
+          updated_at: now,
+        };
+      },
+    );
+    return proposed && row ? toDeferredDecision(row) : null;
+  }
+
+  /**
+   * Release an approved effect back to the dispatcher; only `proposed` rows are
+   * approvable. Approval is a person taking the item on, so the item's autonomy
+   * is armed in the same transaction — a crash cannot release the run while
+   * leaving its follow-up work parked for re-approval.
+   */
+  async approveDeferredDecision(
+    orgId: string,
+    factoryProjectId: string,
+    decisionId: string,
+    now: Date,
+  ): Promise<FactoryDeferredDecisionRecord | null> {
+    return this.storage.withTransaction(async ops => {
+      let settled = false;
+      const row = await ops.updateAtomic<GovernanceDbRow>(
+        'factory_deferred_decisions',
+        { id: decisionId, org_id: orgId, factory_project_id: factoryProjectId },
+        current => {
+          if (current.status !== 'proposed') return null;
+          settled = true;
+          return { status: 'pending', attempts: 0, available_at: now, approved_at: now, updated_at: now };
+        },
+      );
+      if (!settled || !row) return null;
+      const record = toDeferredDecision(row);
+      if (record.workItemId) {
+        await ops.updateAtomic<WorkItemDbRow>('work_items', { org_id: orgId, id: record.workItemId }, current =>
+          current.autonomy_armed_at ? null : { autonomy_armed_at: now },
+        );
+      }
+      return record;
+    });
+  }
+
+  /** Retire a proposal nobody wants: `dismissed` is terminal, so the run never happens. */
+  async dismissDeferredDecision(
+    orgId: string,
+    factoryProjectId: string,
+    decisionId: string,
+    now: Date,
+  ): Promise<FactoryDeferredDecisionRecord | null> {
+    return this.#settleProposedDecision(
+      { orgId, factoryProjectId, decisionId },
+      { status: 'dismissed', updated_at: now, completed_at: now },
+    );
+  }
+
+  /**
+   * Retire proposals parked on a work item. A merged pull request (or an item
+   * closed out any other way) leaves its queued runs with nothing left to do,
+   * and they would otherwise sit on the card forever asking to be answered.
+   *
+   * Pass `role` to retire only the proposals a run now starting has overtaken:
+   * a parked "start triage" is moot the moment triage is actually running.
+   */
+  async dismissProposalsForWorkItem(input: {
+    orgId: string;
+    factoryProjectId: string;
+    workItemId: string;
+    role?: string;
+    dismissedAt: Date;
+  }): Promise<FactoryDeferredDecisionRecord[]> {
+    const rows = await this.#db.findMany<GovernanceDbRow>('factory_deferred_decisions', {
+      org_id: input.orgId,
+      factory_project_id: input.factoryProjectId,
+      work_item_id: input.workItemId,
+      status: 'proposed',
+    });
+    const dismissed: FactoryDeferredDecisionRecord[] = [];
+    for (const row of rows) {
+      if (input.role !== undefined && toDeferredDecision(row).decision.role !== input.role) continue;
+      // Re-settled atomically: an approval racing this sweep keeps the run.
+      const record = await this.dismissDeferredDecision(input.orgId, input.factoryProjectId, row.id, input.dismissedAt);
+      if (record) dismissed.push(record);
+    }
+    return dismissed;
+  }
+
+  async #settleProposedDecision(
+    { orgId, factoryProjectId, decisionId }: { orgId: string; factoryProjectId: string; decisionId: string },
+    patch: Partial<GovernanceDbRow>,
+  ): Promise<FactoryDeferredDecisionRecord | null> {
+    let settled = false;
+    const row = await this.#db.updateAtomic<GovernanceDbRow>(
+      'factory_deferred_decisions',
+      { id: decisionId, org_id: orgId, factory_project_id: factoryProjectId },
+      current => {
+        if (current.status !== 'proposed') return null;
+        settled = true;
+        return patch;
+      },
+    );
+    return settled && row ? toDeferredDecision(row) : null;
+  }
+
   /** Requeue the same idempotent terminal effect; non-failed decisions are never rerun. */
   async retryDeferredDecision(
     orgId: string,
@@ -1322,6 +1493,29 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return row ? toBinding(row) : null;
   }
 
+  /**
+   * Recover the active binding for a thread when session state lost
+   * `factoryProjectId` (e.g. crash-resume recreated the session empty).
+   * Ambiguous matches across factory projects never authorize.
+   */
+  async findActiveRunBindingByThread(input: {
+    orgId: string;
+    threadId: string;
+    resourceId: string;
+    sessionId: string;
+  }): Promise<FactoryRunBindingRecord | null> {
+    const rows = await this.#db.findMany<GovernanceDbRow>('factory_run_bindings', {
+      org_id: input.orgId,
+      thread_id: input.threadId,
+      resource_id: input.resourceId,
+      session_id: input.sessionId,
+      status: 'active',
+    });
+    if (new Set(rows.map(row => row.factory_project_id)).size !== 1) return null;
+    const row = rows.sort((left, right) => right.created_at.getTime() - left.created_at.getTime())[0];
+    return row ? toBinding(row) : null;
+  }
+
   /** Resolve exact bound-session state for processor awareness; ambiguous cross-tenant matches return null. */
   async findRunBindingBySession(address: FactoryRunBindingSessionAddress): Promise<FactoryRunBindingRecord | null> {
     const rows = await this.#db.findMany<GovernanceDbRow>('factory_run_bindings', {
@@ -1352,6 +1546,61 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       },
     );
     return revoked && row ? toBinding(row) : null;
+  }
+
+  /**
+   * Revoke every active binding for one work item (all roles). Called from
+   * terminal-stage cleanup so completed items stop paying the reconcile walk.
+   * Returns the number of bindings revoked.
+   */
+  async revokeRunBindingsForWorkItem(input: RevokeFactoryRunBindingsForWorkItemInput): Promise<number> {
+    return this.#db.updateMany(
+      'factory_run_bindings',
+      {
+        org_id: input.orgId,
+        factory_project_id: input.factoryProjectId,
+        work_item_id: input.workItemId,
+        status: 'active',
+      },
+      { status: 'revoked', revoked_at: input.revokedAt },
+    );
+  }
+
+  /**
+   * Revoke leaked/legacy active bindings: older than `olderThan`, or whose
+   * work item is gone, malformed, or already terminal. Terminal-stage cleanup
+   * handles bindings go-forward; this sweep drains anything that slipped past
+   * it. Returns the number of bindings revoked.
+   */
+  async revokeStaleRunBindings(input: RevokeStaleFactoryRunBindingsInput): Promise<number> {
+    const bindings = await this.listActiveRunBindings();
+    const itemCache = new Map<string, WorkItemRow | null>();
+    let revoked = 0;
+    for (const binding of bindings) {
+      let stale = binding.createdAt.getTime() < input.olderThan.getTime();
+      if (!stale) {
+        const key = `${binding.orgId}:${binding.workItemId}`;
+        let item = itemCache.get(key);
+        if (item === undefined) {
+          item = await this.get({ orgId: binding.orgId, id: binding.workItemId });
+          itemCache.set(key, item);
+        }
+        stale =
+          !item ||
+          item.stages.length !== 1 ||
+          !ACTIVE_RUN_BINDING_STAGES.has(item.stages[0]!) ||
+          item.factoryProjectId !== binding.factoryProjectId;
+      }
+      if (!stale) continue;
+      const result = await this.revokeRunBinding({
+        orgId: binding.orgId,
+        factoryProjectId: binding.factoryProjectId,
+        bindingId: binding.id,
+        revokedAt: input.now,
+      });
+      if (result) revoked += 1;
+    }
+    return revoked;
   }
 
   /** Enumerate active bindings for the server-owned restart reconciler. */
@@ -1488,6 +1737,24 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           });
           item = toRow(row);
         }
+        if (input.armAutonomy && !item.autonomyArmedAt) {
+          const armedRow = await ops.updateAtomic<WorkItemDbRow>('work_items', { id: item.id }, current =>
+            current.autonomy_armed_at ? null : { autonomy_armed_at: now },
+          );
+          if (armedRow) item = toRow(armedRow);
+        }
+        await ops.updateMany(
+          'factory_run_bindings',
+          {
+            org_id: input.orgId,
+            factory_project_id: input.factoryProjectId,
+            thread_id: input.session.threadId,
+            resource_id: input.resourceId,
+            session_id: input.session.sessionId,
+            status: 'active',
+          },
+          { status: 'revoked', revoked_at: now },
+        );
         await ops.updateMany(
           'factory_run_bindings',
           {
@@ -1710,6 +1977,54 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return this.#withProjectRelationTransaction(orgId, candidate.factory_project_id, run);
   }
 
+  /**
+   * Record that a person committed this item to the Factory. Only the first
+   * time counts: the timestamp marks when the item stopped needing permission,
+   * so later runs must not push it forward. Bumps no revision, because arming
+   * is not a change anyone is editing against.
+   */
+  async armAutonomy({ orgId, id, now }: { orgId: string; id: string; now: Date }): Promise<void> {
+    await this.#db.updateAtomic<WorkItemDbRow>('work_items', { org_id: orgId, id }, current =>
+      current.autonomy_armed_at ? null : { autonomy_armed_at: now },
+    );
+  }
+
+  /**
+   * Drop the governance rows that materialized a source key so a deleted work item
+   * is not resurrected by the prior-ingress replay path on the next intake poll.
+   */
+  async #purgeRuleState(
+    ops: FactoryStorageOps,
+    { orgId, factoryProjectId, sourceKey }: { orgId: string; factoryProjectId: string; sourceKey: string },
+  ): Promise<void> {
+    const decisions = await ops.findMany<GovernanceDbRow>('factory_deferred_decisions', {
+      org_id: orgId,
+      factory_project_id: factoryProjectId,
+      source_key: sourceKey,
+    });
+    if (decisions.length === 0) return;
+
+    const evaluationIds = [...new Set(decisions.map(decision => String(decision.evaluation_id)))];
+    const ingressIds = new Set<string>();
+    for (const evaluationId of evaluationIds) {
+      const evaluation = await ops.findOne<GovernanceDbRow>('factory_rule_evaluations', { id: evaluationId });
+      if (evaluation) ingressIds.add(String(evaluation.ingress_id));
+    }
+
+    await ops.deleteMany('factory_deferred_decisions', {
+      org_id: orgId,
+      factory_project_id: factoryProjectId,
+      source_key: sourceKey,
+    });
+    for (const evaluationId of evaluationIds) {
+      await ops.deleteMany('factory_rule_evaluations', { id: evaluationId });
+    }
+    for (const ingressId of ingressIds) {
+      const remaining = await ops.findMany<GovernanceDbRow>('factory_rule_evaluations', { ingress_id: ingressId });
+      if (remaining.length === 0) await ops.deleteMany('factory_rule_ingress', { id: ingressId });
+    }
+  }
+
   async delete({ orgId, id }: { orgId: string; id: string }): Promise<WorkItemRow | null> {
     const candidate = await this.#db.findOne<WorkItemDbRow>('work_items', { org_id: orgId, id });
     if (!candidate) return null;
@@ -1719,6 +2034,13 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       if (!existing) return null;
       const deleted = await ops.deleteMany('work_items', { org_id: orgId, id });
       if (deleted === 0) return null;
+      if (existing.source_key) {
+        await this.#purgeRuleState(ops, {
+          orgId,
+          factoryProjectId: existing.factory_project_id,
+          sourceKey: existing.source_key,
+        });
+      }
       await ops.updateMany(
         'work_items',
         { org_id: orgId, parent_work_item_id: id },

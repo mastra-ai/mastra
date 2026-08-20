@@ -5,22 +5,47 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 
-import { useWorkspaceActivity, useWorkspaceThreadTitles } from '../../../../hooks/useWorkspaceActivity';
+import { useQueryClient } from '@tanstack/react-query';
+
+import { queryKeys } from '../../../../api/keys';
+import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
+import { useActiveRunResources } from '../../../../hooks/useActiveRunResources';
 import { useWorkspaceAttention } from '../../../../hooks/useWorkspaceAttention';
 import { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
+import { useWorkspacePullRequestMerges } from '../../../../hooks/useWorkspacePullRequestMerges';
 import { useDeleteWorkspaceMutation, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
-import { createAgentControllerClient } from '../../chat/services/agentControllerClient';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
-import { relationshipLabel } from '../../factory/services/relationships';
+import { githubNumberForItem } from '../../factory/boardItems';
+import { pullRequestCandidateIndex, relatedWorkItems, relationshipLabel } from '../../factory/services/relationships';
+import type { WorkItem } from '../../factory/services/workItems';
+import { usePinnedSessions } from '../hooks/usePinnedSessions';
 import type { FactoryUserSession } from '../services/github';
 import { getFactorySessionKind } from '../services/sessionPresentation';
 import { SessionNavRow } from './SessionNavRow';
+import type { SessionRowStatus } from './SessionNavRow';
 import type { SessionPreviewDetails } from './SessionPreviewCard';
 
-function workspaceStatus(row: FactoryWorkspaceRow): 'running' | 'attention' | undefined {
-  if (row.running) return 'running';
-  if (row.attention) return 'attention';
+const COLLAPSED_ROW_COUNT = 5;
+
+const byPinnedThenRecent = (a: FactoryWorkspaceRow, b: FactoryWorkspaceRow) =>
+  Number(b.pinned) - Number(a.pinned) || b.updatedAt.localeCompare(a.updatedAt);
+
+const stillUnfolding = (row: FactoryWorkspaceRow) => row.active || row.initializing || row.running || row.attention;
+
+// Who keeps one of the collapsed slots. A pin is an explicit request, so it wins
+// over a session that merely happens to be busy.
+const bySlotPriority = (a: FactoryWorkspaceRow, b: FactoryWorkspaceRow) =>
+  Number(b.pinned) - Number(a.pinned) ||
+  Number(stillUnfolding(b)) - Number(stillUnfolding(a)) ||
+  b.updatedAt.localeCompare(a.updatedAt);
+
+function workspaceStatus(row: FactoryWorkspaceRow): SessionRowStatus | undefined {
+  // An active thread means work is happening even if the workspace record has
+  // not yet been stamped materialized — surface the more informative state.
+  if (row.running) return 'working';
+  if (row.initializing) return 'initializing';
+  if (row.attention) return 'ready';
   return undefined;
 }
 
@@ -32,75 +57,98 @@ export function WorkspacesSection() {
   const navigate = useNavigate();
   const location = useLocation();
   const scope = { agentControllerId: AGENT_CONTROLLER_ID, resourceId };
-  const { session } = createAgentControllerClient({
-    agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
-    scope: sessionId,
-    baseUrl,
-    enabled: sessionEnabled,
-  });
-  const deleteWorkspace = useDeleteWorkspaceMutation(factoryId, projectRepositoryId, session, scope);
+  const deleteWorkspace = useDeleteWorkspaceMutation(factoryId, projectRepositoryId, scope);
   const [confirmDelete, setConfirmDelete] = useState<FactoryUserSession | null>(null);
+  const auth = useFactoryAuth();
+  const viewerUserId = auth.data?.user?.userId;
+  const { pinnedSessions, setPinned } = usePinnedSessions();
   const workItems = useWorkItemsQuery(factoryId);
   const workspaceRows = workspaces.data?.workspaces ?? [];
-  const activityOptions = {
+  const workspaceIds = workspaceRows.map(workspace => workspace.sessionId);
+  const runningByPath = useActiveRunResources({
     agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
-    scope: sessionId,
-    worktreePaths: workspaceRows.map(workspace => workspace.sessionId),
-    baseUrl,
-    enabled: sessionEnabled && Boolean(sessionId),
-  };
-  const runningByPath = useWorkspaceActivity(activityOptions);
-  const titleByPath = useWorkspaceThreadTitles(activityOptions);
-  const { attentionByPath, clearAttention } = useWorkspaceAttention(runningByPath);
+    resourceIds: workspaceIds,
+  });
+  const queryClient = useQueryClient();
+  // The server re-derives session titles at the end of a run.
+  const { attentionByPath, clearAttention } = useWorkspaceAttention(
+    runningByPath,
+    () => void queryClient.invalidateQueries({ queryKey: queryKeys.sessions(projectRepositoryId) }),
+  );
 
   const allWorkItems = workItems.data ?? [];
   const workItemByPath = new Map(
     allWorkItems.flatMap(item =>
-      Object.values(item.sessions ?? {}).map(sessionRef => [sessionRef.sessionId, item] as const),
+      Object.values(item.sessions ?? {}).map(
+        sessionRef => [sessionRef.sessionId, { item, threadId: sessionRef.threadId }] as const,
+      ),
     ),
   );
+  const pullRequestCandidates = pullRequestCandidateIndex(allWorkItems);
+  const latestPullRequestFor = (item: WorkItem) => {
+    if (item.source === 'github-pr') return item;
+    return [...relatedWorkItems(item, pullRequestCandidates(item))].sort((a, b) =>
+      b.updatedAt.localeCompare(a.updatedAt),
+    )[0];
+  };
+
   const rows = workspaceRows.flatMap(workspace => {
-    const item = workItemByPath.get(workspace.sessionId);
+    const workItemSession = workItemByPath.get(workspace.sessionId);
+    const item = workItemSession?.item;
+    const pullRequest = item && latestPullRequestFor(item);
+    const pullRequestNumber = pullRequest ? githubNumberForItem(pullRequest) : undefined;
     const active = workspace.sessionId === sessionId;
     const running = runningByPath[workspace.sessionId] === true;
+    const initializing = !workspace.materializedAt;
     const factorySession = !workspace.branch.startsWith('user/');
     if (!item && !active && !running && (!factorySession || !workItems.isFetched)) return [];
     return [
       {
         workspace,
         url: `/factories/${factoryId}/workspaces/${workspace.sessionId}`,
-        label: titleByPath[workspace.sessionId],
+        label: workspace.title,
         active,
+        initializing,
         running,
         attention: attentionByPath[workspace.sessionId] === true,
         review: getFactorySessionKind(workspace, item) === 'review',
         itemLabel: item && item.source !== 'manual' ? relationshipLabel(item) : undefined,
         itemTitle: item?.title,
         updatedAt: item?.updatedAt ?? workspace.updatedAt,
+        threadId: workItemSession?.threadId,
+        pullRequestNumber,
+        knownMerged: pullRequest?.metadata.merged === true,
+        pinned: pinnedSessions.has(workspace.sessionId),
       },
     ];
   });
   const latestRows = (review: boolean) => {
-    const sorted = [...rows.filter(row => row.review === review)].sort((a, b) =>
-      b.updatedAt.localeCompare(a.updatedAt),
-    );
-    const visible = sorted.slice(0, 5);
-    for (const pinned of sorted.slice(5).filter(row => row.active || row.running || row.attention)) {
-      let replaceIndex = visible.length - 1;
-      while (
-        replaceIndex >= 0 &&
-        (visible[replaceIndex]?.active || visible[replaceIndex]?.running || visible[replaceIndex]?.attention)
-      ) {
-        replaceIndex -= 1;
-      }
-      if (replaceIndex >= 0) visible[replaceIndex] = pinned;
-    }
-    return { visible: visible.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)), all: sorted };
+    const all = rows.filter(row => row.review === review).sort(byPinnedThenRecent);
+    // The cap holds either way — priority only decides which rows fill the slots.
+    const visible = [...all].sort(bySlotPriority).slice(0, COLLAPSED_ROW_COUNT).sort(byPinnedThenRecent);
+    return { visible, all };
   };
   const workRows = latestRows(false);
   const reviewRows = latestRows(true);
+  const pullRequestTargets = [...workRows.visible, ...reviewRows.visible].flatMap(row =>
+    row.threadId && row.pullRequestNumber !== undefined
+      ? [
+          {
+            sessionId: row.workspace.sessionId,
+            threadId: row.threadId,
+            projectPath: row.workspace.sessionId,
+            pullRequestNumber: row.pullRequestNumber,
+            knownMerged: row.knownMerged,
+          },
+        ]
+      : [],
+  );
+  const mergedByPath = useWorkspacePullRequestMerges({
+    baseUrl,
+    resourceId,
+    targets: pullRequestTargets,
+    enabled: sessionEnabled && Boolean(sessionId) && Boolean(resourceId),
+  });
   const pending = deleteWorkspace.isPending;
 
   const openWorkspaceThread = (workspace: FactoryUserSession) => {
@@ -132,7 +180,10 @@ export function WorkspacesSection() {
           allRows={workRows.all}
           kind="Work session"
           pending={pending}
+          mergedByPath={mergedByPath}
+          viewerUserId={viewerUserId}
           onSelect={openWorkspaceThread}
+          onPinChange={setPinned}
           onDelete={setConfirmDelete}
         />
       )}
@@ -144,7 +195,10 @@ export function WorkspacesSection() {
           allRows={reviewRows.all}
           kind="Review session"
           pending={pending}
+          mergedByPath={mergedByPath}
+          viewerUserId={viewerUserId}
           onSelect={openWorkspaceThread}
+          onPinChange={setPinned}
           onDelete={setConfirmDelete}
         />
       )}
@@ -157,8 +211,8 @@ export function WorkspacesSection() {
             </DialogHeader>
             <div className="flex flex-col gap-4 px-5 pb-4">
               <Txt as="p" variant="ui-sm" className="text-icon4 m-0">
-                This deletes the <span className="text-icon6">{confirmDelete.branch}</span> checkout, its uncommitted
-                changes, and every thread in this workspace. This can’t be undone.
+                This deletes the <span className="text-icon6">{confirmDelete.branch}</span> checkout and its uncommitted
+                changes. This can’t be undone. Threads from this workspace are kept.
               </Txt>
               <div className="flex justify-end gap-2">
                 <Button variant="ghost" onClick={() => setConfirmDelete(null)} disabled={deleteWorkspace.isPending}>
@@ -186,12 +240,17 @@ interface FactoryWorkspaceRow {
   url: string;
   label?: string;
   active: boolean;
+  initializing: boolean;
   running: boolean;
   attention: boolean;
   review: boolean;
   itemLabel?: string;
   itemTitle?: string;
   updatedAt: string;
+  threadId?: string;
+  pullRequestNumber?: number;
+  knownMerged: boolean;
+  pinned: boolean;
 }
 
 function WorkspaceGroup({
@@ -200,7 +259,10 @@ function WorkspaceGroup({
   allRows,
   kind,
   pending,
+  mergedByPath,
+  viewerUserId,
   onSelect,
+  onPinChange,
   onDelete,
 }: {
   title: 'Work Sessions' | 'Review Sessions';
@@ -208,7 +270,10 @@ function WorkspaceGroup({
   allRows: FactoryWorkspaceRow[];
   kind: SessionPreviewDetails['kind'];
   pending: boolean;
+  mergedByPath: Record<string, boolean>;
+  viewerUserId: string | undefined;
   onSelect: (workspace: FactoryUserSession) => void;
+  onPinChange: (sessionId: string, pinned: boolean) => void;
   onDelete: (workspace: FactoryUserSession) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -233,7 +298,9 @@ function WorkspaceGroup({
             url={row.url}
             active={row.active}
             disabled={pending}
+            merged={mergedByPath[row.workspace.sessionId] === true}
             status={workspaceStatus(row)}
+            pinned={row.pinned}
             preview={{
               kind,
               itemLabel: row.itemLabel,
@@ -243,7 +310,12 @@ function WorkspaceGroup({
               updatedAt: row.updatedAt,
             }}
             onSelect={() => onSelect(row.workspace)}
-            onDelete={() => onDelete(row.workspace)}
+            onPinChange={pinned => onPinChange(row.workspace.sessionId, pinned)}
+            // The DELETE route is owner-only and 404s for non-owners, which the
+            // delete service treats as an idempotent success; offering delete
+            // on a known non-owned row would fake-succeed and the row would
+            // reappear. Unknown viewer (auth disabled) keeps it.
+            onDelete={viewerUserId && row.workspace.userId !== viewerUserId ? undefined : () => onDelete(row.workspace)}
           />
         ))}
       </MainSidebar.NavList>

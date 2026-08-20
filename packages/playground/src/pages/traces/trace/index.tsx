@@ -10,11 +10,13 @@ import { TracesErrorContent } from '@mastra/playground-ui/domains/traces/compone
 import { useSpanDetail } from '@mastra/playground-ui/domains/traces/hooks/use-span-detail';
 import { useTraceLightSpans } from '@mastra/playground-ui/domains/traces/hooks/use-trace-light-spans';
 import { useTraceSpanNavigation } from '@mastra/playground-ui/domains/traces/hooks/use-trace-span-navigation';
+import { useTraceUsage } from '@mastra/playground-ui/domains/traces/hooks/use-trace-usage';
 import type { SpanTab } from '@mastra/playground-ui/domains/traces/types';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { CircleGaugeIcon, SaveIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
+import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
 import { TraceAsItemDialog } from '@/domains/observability/components/trace-as-item-dialog';
 import { useScorers } from '@/domains/scores';
 import { useTraceSpanScores } from '@/domains/scores/hooks/use-trace-span-scores';
@@ -44,6 +46,13 @@ export default function TracePage() {
   const { data: traceLight, isLoading: isTraceLoading, error: traceError } = useTraceLightSpans(traceId);
   const lightSpans = useMemo(() => traceLight?.spans ?? [], [traceLight?.spans]);
   const rootSpan = useMemo(() => lightSpans.find(s => s.parentSpanId == null), [lightSpans]);
+
+  const observabilityCapabilities = useObservabilityStorageCapabilities();
+  const traceUsage = useTraceUsage({
+    traceIds: [traceId],
+    enabled: !observabilityCapabilities.isLoading && observabilityCapabilities.supportsMetrics,
+    autoRefetch: false,
+  });
 
   const { data: spanDetailData, isLoading: isLoadingSpanDetail } = useSpanDetail(traceId, featuredSpanId ?? '');
 
@@ -141,7 +150,7 @@ export default function TracePage() {
   }, [updateSearchParams]);
 
   const handleTraceClose = useCallback(() => {
-    void navigate('/observability');
+    void navigate('/traces');
   }, [navigate]);
 
   const handleEvaluateTrace = useCallback(() => {
@@ -177,7 +186,7 @@ export default function TracePage() {
   const traceTopAreaSharedContent = rootSpan ? (
     <PageLayout.Row>
       <PageLayout.Column>
-        <TraceKeysAndValues rootSpan={rootSpan} numOfCol={3} />
+        <TraceKeysAndValues rootSpan={rootSpan} usage={traceUsage.data?.get(traceId)} numOfCol={3} />
       </PageLayout.Column>
     </PageLayout.Row>
   ) : null;

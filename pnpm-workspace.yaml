@@ -13,6 +13,7 @@ packages:
   - deployers/*
   - stores/*
   - browser/*
+  - code-mode/*
   - voice/*
   - examples/voice/aws-nova-sonic-test
   - workflows/*
@@ -37,6 +38,8 @@ enableGlobalVirtualStore: true
 
 catalog:
   '@microsoft/api-extractor': ^7.57.7
+  '@stryker-mutator/core': 10.0.0
+  '@stryker-mutator/vitest-runner': 10.0.0
   '@vitest/coverage-v8': 4.1.10
   '@vitest/ui': 4.1.10
   date-fns: 4.4.0
@@ -51,8 +54,16 @@ catalog:
 patchedDependencies:
   '@changesets/get-dependents-graph@2.1.4': patches/@changesets__get-dependents-graph@2.1.4.patch
   '@earendil-works/pi-tui@0.80.6': patches/@earendil-works__pi-tui@0.80.6.patch
+  '@manypkg/tools@2.1.1': patches/@manypkg__tools@2.1.1.patch
+  gray-matter@4.0.3: patches/gray-matter@4.0.3.patch
+  read-yaml-file@1.1.0: patches/read-yaml-file@1.1.0.patch
 
 packageExtensions:
+  # Stryker core dynamically imports TypeScript without declaring it. The
+  # global virtual store has no fallback hoist, so make that dependency explicit.
+  '@stryker-mutator/core@10.0.0':
+    dependencies:
+      typescript: ^6.0.3
   '@ai-sdk/provider-utils@3.0.25':
     dependencies:
       msw: ^2.12.11
@@ -133,18 +144,22 @@ minimumReleaseAgeExclude:
   - webpack-dev-server@5.2.6
   # Renovate security update: dompurify@3.4.12
   - dompurify@3.4.12
-  # Renovate security update: fast-uri@3.1.4
-  - fast-uri@3.1.4
   # Renovate security update: fast-xml-parser@5.10.1
   - fast-xml-parser@5.10.1
   # Renovate security update: svgo@3.3.4
   - svgo@3.3.4
-  # Renovate security update: @hono/node-server@2.0.10
-  - "@hono/node-server@2.0.10"
-  # Renovate security update: brace-expansion@2.1.2
-  - brace-expansion@2.1.2
+  # Renovate security update: @hono/node-server@2.0.10 || 2.0.5
+  - "@hono/node-server@2.0.10 || 2.0.5"
+  # Renovate security update: brace-expansion@2.1.2 || 5.0.8
+  - brace-expansion@2.1.2 || 5.0.8
   # Renovate security update: react-router@7.18.0
   - react-router@7.18.0
+  # Renovate security update: js-yaml@5.2.2
+  - js-yaml@5.2.2
+  # Renovate security update: better-auth@1.6.23
+  - better-auth@1.6.23
+  # Renovate security update: valibot@1.4.2
+  - valibot@1.4.2
 trustPolicyExclude:
   # Security fix for GHSA middleware-based route protection bypass (CVE).
   # 3.47.4 is published with provenance attestation rather than trusted publisher,
@@ -175,16 +190,9 @@ overrides:
   client-js-e2e-tests-zod-v4>zod: ^4.3.6
   # >=1.6.13 fixes stored XSS via javascript: redirect_uri in oidc-provider/mcp
   # (GHSA Dependabot alert #2266).
-  better-auth: ^1.6.13
-  js-yaml: ^3.15.0
+  better-auth: ^1.6.23
+  js-yaml: ^5.2.2
   glob@<=10.5.0: 10.5.0
-  # image-size 2.x (incl. 2.0.2 latest) has unpatched DoS infinite-loop flaws
-  # (CVE-2025-71330 / GHSA-w3rx-r6r6-pgpr). No fixed 2.x exists, so pin to the
-  # maintained legacy 1.2.1 release, which predates the vulnerable code paths
-  # and is API-compatible (default imageSize(buffer) usage). See issue #17975.
-  # Scoped to @mastra/memory only — a global override breaks the docs build,
-  # which relies on the `image-size/fromFile` subpath export added in 2.x.
-  '@mastra/memory>image-size': 1.2.1
   body-parser@<=2.2.1: 2.3.0
   inngest: ^4.2.2
   fast-xml-parser@<5.5.7: ^5.10.1
@@ -203,11 +211,11 @@ overrides:
   ws@>=8.0.0 <8.21.0: 8.21.0
   webpack-dev-server@<5.2.5: 5.2.6
   qs@>=6.7.0 <6.15.2: 6.15.2
-  fast-uri@<3.1.2: 3.1.4
+  fast-uri@<3.1.5: 3.1.5
   form-data@<2.5.6: 2.5.6
   form-data@>=4.0.0 <4.0.6: 4.0.6
-  brace-expansion@<1.1.13: 1.1.13
-  brace-expansion@>=2.0.0 <2.0.3: 2.1.2
+  brace-expansion@<1.1.13: 5.0.8
+  brace-expansion@>=2.0.0 <2.0.3: 5.0.8
   '@clerk/shared@>=3.0.0 <3.47.5': 3.47.8
   js-cookie@>=3.0.0 <3.0.7: 3.0.7
   path-to-regexp@<0.1.13: 0.1.13
@@ -221,9 +229,9 @@ overrides:
   undici@>=7.0.0 <7.28.0: 7.28.0
   multer@<2.2.0: 2.2.0
   '@hey-api/openapi-ts@<0.97.3': 0.97.3
-  '@opentelemetry/core@>=2.0.0 <2.8.0': 2.8.0
-  '@opentelemetry/sdk-node@<0.217.0': 0.217.0
-  '@opentelemetry/exporter-prometheus@<0.217.0': 0.217.0
+  '@opentelemetry/core@>=2.0.0 <2.8.0': 2.10.0
+  '@opentelemetry/sdk-node@<0.217.0': 0.221.0
+  '@opentelemetry/exporter-prometheus@<0.217.0': 0.221.0
   uuid@>=13.0.0 <13.0.1: 13.0.1
   # uuid <11.1.1 and tar <7.5.16 are pinned by transitive parents on old
   # majors (msal-node/google-gax/etc. declare uuid ^8-^10; the sqlite3
@@ -370,4 +378,7 @@ allowBuilds:
   node-liblzma: false
   workerd: false
   braintrust: false
+  # node-oracledb runs in Thin mode (pure JS); its install script is a no-op stub.
+  oracledb: false
   isolated-vm: true
+  '@types/koa-compose': false

@@ -21,6 +21,12 @@ export async function executeHook(hook: HookDefinition, stdinPayload: HookStdin)
     const child = spawn(shell, shellArgs, {
       stdio: ['pipe', 'pipe', 'pipe'],
       cwd: stdinPayload.cwd,
+      // Without this, Node's default Windows argument escaping re-quotes
+      // hook.command before cmd.exe ever sees it, so a quoted path (or any
+      // path containing spaces) reaches the child process with literal "
+      // characters embedded in it. mastracode/tui's shell-runner.ts already
+      // sets this for its own cmd invocations; this call site just missed it.
+      ...(isWindows ? { windowsVerbatimArguments: true } : {}),
       env: {
         ...process.env,
         MASTRA_HOOK_EVENT: stdinPayload.hook_event_name,
@@ -83,11 +89,18 @@ export async function executeHook(hook: HookDefinition, stdinPayload: HookStdin)
       });
     });
 
+    // A hook that never reads stdin (or exits before we finish writing) closes
+    // the pipe under us. That surfaces asynchronously as an EPIPE 'error' event
+    // on the socket, which Node escalates to an unhandled error — taking the
+    // whole host process down — unless something is listening. The hook's real
+    // outcome still arrives via 'close', so absorb it.
+    child.stdin?.on('error', () => {});
+
     try {
       child.stdin?.write(JSON.stringify(stdinPayload));
       child.stdin?.end();
     } catch {
-      // stdin write failure — process continues
+      // Synchronous stdin write failure — process continues
     }
   });
 }

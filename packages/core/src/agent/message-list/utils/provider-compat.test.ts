@@ -1,6 +1,6 @@
 import type { ModelMessage } from '@internal/ai-sdk-v5';
 import { describe, expect, it } from 'vitest';
-import { sanitizeOrphanedToolPairs } from './provider-compat';
+import { pairOrphanedToolCalls, sanitizeOrphanedToolPairs } from './provider-compat';
 
 const assistantWithToolCalls = (...callIds: string[]): ModelMessage => ({
   role: 'assistant',
@@ -178,5 +178,91 @@ describe('sanitizeOrphanedToolPairs', () => {
       { role: 'assistant', content: 'reconsidered' },
       { role: 'user', content: 'continue' },
     ]);
+  });
+});
+
+const pendingResult = (toolCallId: string) => ({
+  type: 'tool-result',
+  toolCallId,
+  toolName: 'fetch',
+  output: { type: 'json', value: { status: 'pending' } },
+});
+
+describe('pairOrphanedToolCalls', () => {
+  it('keeps a suspended tool call and pairs it with a pending result', () => {
+    const messages: ModelMessage[] = [
+      { role: 'user', content: 'transfer 1000000' },
+      assistantWithToolCalls('A'),
+      { role: 'user', content: 'thanks' },
+    ];
+
+    expect(pairOrphanedToolCalls(messages)).toEqual([
+      { role: 'user', content: 'transfer 1000000' },
+      assistantWithToolCalls('A'),
+      { role: 'tool', content: [pendingResult('A')] },
+      { role: 'user', content: 'thanks' },
+    ]);
+  });
+
+  it('leaves an already-paired tool call untouched', () => {
+    const messages: ModelMessage[] = [assistantWithToolCalls('A'), toolMessageWithResults('A')];
+
+    expect(pairOrphanedToolCalls(messages)).toEqual(messages);
+  });
+
+  it('fills in only the missing half of a parallel tool-call group', () => {
+    const messages: ModelMessage[] = [assistantWithToolCalls('A', 'B'), toolMessageWithResults('A')];
+
+    expect(pairOrphanedToolCalls(messages)).toEqual([
+      assistantWithToolCalls('A', 'B'),
+      { role: 'tool', content: [...toolMessageWithResults('A').content, pendingResult('B')] },
+    ]);
+  });
+
+  it('does not resolve deferred provider-executed calls', () => {
+    const messages: ModelMessage[] = [
+      {
+        role: 'assistant',
+        content: [
+          { type: 'tool-call', toolCallId: 'web-1', toolName: 'web_search', input: {}, providerExecuted: true },
+        ],
+      },
+    ];
+
+    expect(pairOrphanedToolCalls(messages)).toEqual(messages);
+  });
+
+  it('still drops a tool_result whose tool_use is gone', () => {
+    const messages: ModelMessage[] = [
+      { role: 'user', content: 'hi' },
+      toolMessageWithResults('orphan-A'),
+      { role: 'assistant', content: 'ok' },
+    ];
+
+    expect(pairOrphanedToolCalls(messages)).toEqual([
+      { role: 'user', content: 'hi' },
+      { role: 'assistant', content: 'ok' },
+    ]);
+  });
+
+  it('never emits a tool call without a matching result', () => {
+    const messages: ModelMessage[] = [
+      assistantWithToolCalls('A'),
+      { role: 'user', content: 'turn 2' },
+      assistantWithToolCalls('B', 'C'),
+      toolMessageWithResults('B'),
+      { role: 'user', content: 'turn 3' },
+    ];
+
+    const result = pairOrphanedToolCalls(messages);
+    const callIds = result.flatMap(m =>
+      Array.isArray(m.content) ? m.content.filter(p => p.type === 'tool-call').map(p => p.toolCallId) : [],
+    );
+    const resultIds = result.flatMap(m =>
+      Array.isArray(m.content) ? m.content.filter(p => p.type === 'tool-result').map(p => p.toolCallId) : [],
+    );
+
+    expect(callIds).toEqual(['A', 'B', 'C']);
+    expect(resultIds.sort()).toEqual(['A', 'B', 'C']);
   });
 });
