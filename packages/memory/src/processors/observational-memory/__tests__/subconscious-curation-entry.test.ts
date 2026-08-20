@@ -265,6 +265,65 @@ describe('observation-cadence curation trigger', () => {
     expect(runCuration).toHaveBeenCalledWith(expect.objectContaining({ threadId, requestContext: context }));
   });
 
+  it('counts mixed successful observation cycles once each', async () => {
+    const runCuration = vi.fn(async () => ({ outcome: 'ran' }));
+    const om = createEngine({ cadence: 3, memory: { runCuration }, bufferTokens: 50 });
+    const threadId = 'mixed-cadence-thread';
+
+    expect((await om.observe({ threadId, messages: createBulkMessages(10, threadId) })).observed).toBe(true);
+    await vi.waitFor(async () => {
+      const record = await om.getRecord(threadId);
+      expect((record?.config as any)?.subconscious?.observationRuns).toBe(1);
+    });
+
+    expect(
+      (
+        await om.buffer({
+          threadId,
+          messages: createBulkMessages(10, threadId, 10),
+          skipMinimumTokenCheck: true,
+        })
+      ).buffered,
+    ).toBe(true);
+    await vi.waitFor(async () => {
+      const record = await om.getRecord(threadId);
+      expect((record?.config as any)?.subconscious?.observationRuns).toBe(2);
+    });
+    expect(runCuration).not.toHaveBeenCalled();
+
+    expect((await om.observe({ threadId, messages: createBulkMessages(10, threadId, 20) })).observed).toBe(true);
+    await vi.waitFor(() => expect(runCuration).toHaveBeenCalledOnce());
+  });
+
+  it('does not account again when buffered knowledge is only activated', async () => {
+    const runCuration = vi.fn(async () => ({ outcome: 'ran' }));
+    const om = createEngine({ cadence: 1, memory: { runCuration }, bufferTokens: 50 });
+    const threadId = 'activation-only-cadence-thread';
+
+    expect(
+      (
+        await om.buffer({
+          threadId,
+          messages: createBulkMessages(10, threadId),
+          skipMinimumTokenCheck: true,
+        })
+      ).buffered,
+    ).toBe(true);
+    await vi.waitFor(() => expect(runCuration).toHaveBeenCalledOnce());
+
+    expect((await om.activate({ threadId })).activated).toBe(true);
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(runCuration).toHaveBeenCalledOnce();
+  });
+
+  it('does not account for a no-op observation', async () => {
+    const runCuration = vi.fn(async () => ({ outcome: 'ran' }));
+    const om = createEngine({ cadence: 1, memory: { runCuration } });
+
+    expect((await om.observe({ threadId: 'no-op-cadence-thread', messages: [] })).observed).toBe(false);
+    expect(runCuration).not.toHaveBeenCalled();
+  });
+
   it('does not fail buffered observation when cadence curation rejects', async () => {
     const runCuration = vi.fn(async () => {
       throw new Error('curation failed');
