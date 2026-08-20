@@ -9,11 +9,15 @@ import type { InlineSkill, InlineSkillInput } from '@mastra/core/skills';
 const bundleDirectory = dirname(fileURLToPath(import.meta.url));
 const bundledFactorySkillsPath = join(bundleDirectory, 'factory-skills');
 
-export const FACTORY_SKILLS_SOURCE_PATH =
+const FACTORY_SKILLS_SOURCE_PATH =
   [
+    // Assets copied next to the built module (bundled dist layout).
     bundledFactorySkillsPath,
+    // Assets one level up from `dist/skills/` in the packed npm tarball.
     join(bundleDirectory, '..', 'factory-skills'),
+    // Assets at the package root when running from `src/skills/`.
     join(bundleDirectory, '..', '..', 'factory-skills'),
+    // Local dev server layout (`mastra factory dev` public assets).
     join(process.cwd(), 'src', 'mastra', 'public', 'factory-skills'),
   ].find(existsSync) ?? bundledFactorySkillsPath;
 
