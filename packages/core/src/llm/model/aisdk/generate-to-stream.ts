@@ -2,7 +2,15 @@ import { randomUUID } from 'node:crypto';
 
 /**
  * Converts a doGenerate result to a ReadableStream format.
- * This is shared between V2 and V3 model wrappers since the content/result structure is compatible.
+ *
+ * Shared by the V2, V3 and V4 model wrappers (AISDKV5/V6/V7LanguageModel) since
+ * the content/result structure is compatible across those spec versions.
+ *
+ * Text and reasoning parts are expanded into their start/delta/end triples and
+ * tool calls into their tool-input triple, because doStream() emits them that
+ * way. Every other content part is already shaped like its stream-part
+ * counterpart and is forwarded unchanged, so the generate path stays in sync
+ * with the stream path as the AI SDK content union grows.
  */
 export function createStreamFromGenerateResult(result: {
   warnings: unknown[];
