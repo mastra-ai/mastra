@@ -153,7 +153,11 @@ describe('FactoryStartCoordinator', () => {
     });
     expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('pending');
     const requestContext = vi.mocked(controller.createSession).mock.calls[0]?.[0].requestContext;
-    expect(requestContext?.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+    expect(requestContext?.get('user')).toEqual({
+      workosId: 'user-1',
+      organizationId: 'org-1',
+      orgFirstCredentials: true,
+    });
     expect(sendMessage).not.toHaveBeenCalled();
     const item = await storage.get({ orgId: 'org-1', id: prepared.workItemId });
     expect(item?.sessions.work).toMatchObject({
@@ -177,10 +181,14 @@ describe('FactoryStartCoordinator', () => {
 
     await coordinator.prepare({ ...startRequest(), requestContext });
 
-    expect(requestContext.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+    expect(requestContext.get('user')).toEqual({
+      workosId: 'user-1',
+      organizationId: 'org-1',
+      orgFirstCredentials: true,
+    });
   });
 
-  it('leaves an authenticated identity on the request context untouched', async () => {
+  it('keeps an authenticated identity but marks the run org-first for credentials', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { controller } = makeController();
     const coordinator = new FactoryStartCoordinator(
@@ -194,7 +202,11 @@ describe('FactoryStartCoordinator', () => {
 
     await coordinator.prepare({ ...startRequest(), requestContext });
 
-    expect(requestContext.get('user')).toEqual({ workosId: 'authenticated-user', organizationId: 'org-1' });
+    expect(requestContext.get('user')).toEqual({
+      workosId: 'authenticated-user',
+      organizationId: 'org-1',
+      orgFirstCredentials: true,
+    });
   });
 
   it('applies the Factory default model before preparing a board run', async () => {

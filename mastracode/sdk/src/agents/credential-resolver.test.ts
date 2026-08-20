@@ -92,6 +92,26 @@ describe('credential store provider registry', () => {
     expect(resolveTenantFromRequestContext(ctx)).toEqual({ orgId: undefined, userId: 'prov_4' });
   });
 
+  it('carries the org-first flag only when it is exactly true', () => {
+    const flagged = new RequestContext();
+    flagged.set('user', { workosId: 'user_1', organizationId: 'org_1', orgFirstCredentials: true });
+    expect(resolveTenantFromRequestContext(flagged)).toEqual({ orgId: 'org_1', userId: 'user_1', orgFirst: true });
+
+    const truthy = new RequestContext();
+    truthy.set('user', { workosId: 'user_1', organizationId: 'org_1', orgFirstCredentials: 'yes' });
+    expect(resolveTenantFromRequestContext(truthy)).toEqual({ orgId: 'org_1', userId: 'user_1' });
+  });
+
+  it('reads the org-first flag stamped on a session-shaped wrapper', () => {
+    const ctx = new RequestContext();
+    ctx.set('user', {
+      session: { activeOrganizationId: 'org_1' },
+      user: { id: 'prov_6' },
+      orgFirstCredentials: true,
+    });
+    expect(resolveTenantFromRequestContext(ctx)).toEqual({ orgId: 'org_1', userId: 'prov_6', orgFirst: true });
+  });
+
   it('ignores malformed user values', () => {
     const ctx = new RequestContext();
     ctx.set('user', 'not-a-user');

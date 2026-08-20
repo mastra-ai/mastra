@@ -21,6 +21,12 @@ export interface CredentialTenant {
   orgId?: string;
   /** Stable user id from the web auth adapter. */
   userId: string;
+  /**
+   * Resolve org-shared credentials over the user's personal ones. Set by
+   * trusted server code for automated (factory) runs so they ride the org's
+   * shared keys first and only fall back to the acting user's credentials.
+   */
+  orgFirst?: boolean;
 }
 
 /**
@@ -66,6 +72,8 @@ interface RequestContextUser {
   workosId?: string;
   id?: string;
   organizationId?: string;
+  /** Trusted server code marks automated runs to resolve org > user credentials. */
+  orgFirstCredentials?: boolean;
 }
 
 /**
@@ -104,7 +112,11 @@ export function resolveTenantFromRequestContext(requestContext?: RequestContext)
   // (fail closed), not flow onward as a mistyped key.
   if (typeof userId !== 'string' || !userId) return undefined;
   if (orgId !== undefined && typeof orgId !== 'string') return undefined;
-  return { orgId, userId };
+  // Only an exact `true` flips precedence — anything else keeps user > org.
+  // Server code stamps the flag on the stashed value itself, so read it from
+  // the top level as well as the unwrapped user (better-auth wrapper shape).
+  const orgFirst = raw.orgFirstCredentials === true || user.orgFirstCredentials === true;
+  return { orgId, userId, ...(orgFirst ? { orgFirst } : {}) };
 }
 
 /**

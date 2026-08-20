@@ -69,6 +69,23 @@ describe('ModelCredentialsStorage', () => {
     expect(bobList[0]!.scope).toBe('org');
   });
 
+  it("resolves org > user when precedence is 'org' (factory runs)", async () => {
+    const store = await makeStore();
+    await store.setCredential({ orgId: 'org1' }, 'openai', { type: 'api_key', key: 'sk-org' });
+    await store.setCredential({ orgId: 'org1', userId: 'alice' }, 'openai', { type: 'api_key', key: 'sk-alice' });
+    await store.setCredential({ orgId: 'org1', userId: 'alice' }, 'google', { type: 'api_key', key: 'sk-alice-g' });
+
+    expect(await store.resolveCredential('org1', 'alice', 'openai', 'org')).toMatchObject({
+      scope: 'org',
+      credential: { key: 'sk-org' },
+    });
+    // No org row — falls back to the user's personal key.
+    expect(await store.resolveCredential('org1', 'alice', 'google', 'org')).toMatchObject({
+      scope: 'user',
+      credential: { key: 'sk-alice-g' },
+    });
+  });
+
   it('removes only the addressed scope', async () => {
     const store = await makeStore();
     await store.setCredential({ orgId: 'org1' }, 'openai', { type: 'api_key', key: 'sk-org' });

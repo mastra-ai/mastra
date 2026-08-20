@@ -267,23 +267,33 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
   }
 
   /**
-   * Resolve the credential a caller should use for a provider: the user's own
-   * row wins over the org's shared row.
+   * Resolve the credential a caller should use for a provider. By default the
+   * user's own row wins over the org's shared row; `precedence: 'org'`
+   * (automated factory runs) checks the org's shared row first.
    */
-  async resolveCredential(orgId: string, userId: string, provider: string): Promise<ResolvedCredential | undefined> {
-    const userRow = await this.#db.findOne<CredentialDbRow>('model_provider_credentials', {
-      org_id: orgId,
-      provider,
-      user_id: userId,
-    });
-    if (userRow) return { provider: userRow.provider, scope: 'user', credential: userRow.data };
-    const orgRow = await this.#db.findOne<CredentialDbRow>('model_provider_credentials', {
-      org_id: orgId,
-      provider,
-      user_id: null,
-    });
-    if (orgRow) return { provider: orgRow.provider, scope: 'org', credential: orgRow.data };
-    return undefined;
+  async resolveCredential(
+    orgId: string,
+    userId: string,
+    provider: string,
+    precedence: CredentialScope = 'user',
+  ): Promise<ResolvedCredential | undefined> {
+    const readUser = async (): Promise<ResolvedCredential | undefined> => {
+      const row = await this.#db.findOne<CredentialDbRow>('model_provider_credentials', {
+        org_id: orgId,
+        provider,
+        user_id: userId,
+      });
+      return row ? { provider: row.provider, scope: 'user', credential: row.data } : undefined;
+    };
+    const readOrg = async (): Promise<ResolvedCredential | undefined> => {
+      const row = await this.#db.findOne<CredentialDbRow>('model_provider_credentials', {
+        org_id: orgId,
+        provider,
+        user_id: null,
+      });
+      return row ? { provider: row.provider, scope: 'org', credential: row.data } : undefined;
+    };
+    return precedence === 'org' ? ((await readOrg()) ?? (await readUser())) : ((await readUser()) ?? (await readOrg()));
   }
 
   /**
