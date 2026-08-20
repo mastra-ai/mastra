@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import { queryKeys } from '../../../../../api/keys';
 import { server } from '../../../../../../e2e/ui/msw-server';
-import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
+import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { WorkspaceViewerPanel } from '../WorkspaceViewerPanel';
 
 const FILES_URL = `${TEST_BASE_URL}/web/workspace/files`;
@@ -77,7 +77,7 @@ describe('WorkspaceViewerPanel', () => {
     it('refreshes the selected file and preserves the expanded folder', async () => {
       const fileRequests = installHandlers();
       const user = userEvent.setup();
-      renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} threadId={THREAD} />);
+      const { client } = renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} threadId={THREAD} />);
       await user.click(await screen.findByRole('button', { name: /Files/ }));
 
       await user.click(await screen.findByRole('button', { name: 'src' }));
@@ -89,6 +89,7 @@ describe('WorkspaceViewerPanel', () => {
 
       await user.click(screen.getByRole('button', { name: 'Refresh file' }));
       await waitFor(() => expect(fileRequests).toHaveLength(2));
+      await waitForMutationsIdle(client);
       await user.click(screen.getByRole('button', { name: 'Back to workspace files' }));
 
       expect(screen.getByRole('button', { name: 'src' })).toHaveAttribute('aria-expanded', 'true');

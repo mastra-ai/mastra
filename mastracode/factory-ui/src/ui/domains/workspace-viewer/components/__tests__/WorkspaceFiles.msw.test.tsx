@@ -146,10 +146,12 @@ describe('WorkspaceFiles', () => {
     it('resets the popover to the compact overview', async () => {
       stubContainerWidth(1200);
       const user = userEvent.setup();
-      renderPanel();
+      const { client } = renderPanel();
 
       await user.click(screen.getByRole('button', { name: 'Workspace files' }));
+      await waitForMutationsIdle(client);
       await user.click(await screen.findByRole('button', { name: /^Changes/ }));
+      await waitForMutationsIdle(client);
       expect(screen.getByTestId('workspace-panel-size')).toHaveTextContent('expanded');
 
       const observer = PanelResizeObserver.instances.find(instance => instance.observed.size > 0);
