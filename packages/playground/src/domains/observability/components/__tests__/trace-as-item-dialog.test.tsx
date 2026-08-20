@@ -92,7 +92,60 @@ function getEditors() {
   return screen.getAllByRole('textbox') as HTMLTextAreaElement[];
 }
 
+function renderLazyDialog(props: { initialGroundTruthOverride?: string } = {}) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+
+  return render(
+    <MastraReactProvider baseUrl={BASE_URL}>
+      <QueryClientProvider client={queryClient}>
+        <TraceAsItemDialog traceId="trace-1" isOpen onClose={vi.fn()} {...props} />
+      </QueryClientProvider>
+    </MastraReactProvider>,
+  );
+}
+
+function useLazyTraceHandlers(input: unknown, output: unknown) {
+  const span = createTraceDetails(input, output);
+  server.use(
+    http.get(`${BASE_URL}/api/observability/traces/trace-1`, () =>
+      HttpResponse.json({ traceId: 'trace-1', spans: [{ ...span, parentSpanId: null }] }),
+    ),
+    http.get(`${BASE_URL}/api/observability/traces/trace-1/spans/span-1`, () => HttpResponse.json({ span })),
+    http.get(`${BASE_URL}/api/observability/traces/trace-1/trajectory`, () =>
+      HttpResponse.json({ traceId: 'trace-1', steps: [] }),
+    ),
+  );
+}
+
 describe('TraceAsItemDialog', () => {
+  describe('when only a traceId is provided (e.g. from a feedback record)', () => {
+    it('resolves the root span from the trace and seeds input/ground truth', async () => {
+      useLazyTraceHandlers({ prompt: 'hello' }, { answer: 'world' });
+
+      renderLazyDialog();
+
+      await waitFor(() => {
+        const [inputEditor, groundTruthEditor] = getEditors();
+        expect(inputEditor.value).toContain('"prompt": "hello"');
+        expect(groundTruthEditor.value).toContain('"answer": "world"');
+      });
+    });
+
+    it('uses the ground truth override (correction feedback) instead of the trace output', async () => {
+      useLazyTraceHandlers({ prompt: 'hello' }, { answer: 'world' });
+
+      renderLazyDialog({ initialGroundTruthOverride: '"the corrected answer"' });
+
+      await waitFor(() => {
+        const [inputEditor, groundTruthEditor] = getEditors();
+        expect(inputEditor.value).toContain('"prompt": "hello"');
+        expect(groundTruthEditor.value).toBe('"the corrected answer"');
+      });
+    });
+  });
+
   describe('when trace input and output contain circular references', () => {
     it('prepares JSON-safe dataset fields instead of crashing', async () => {
       const input: Record<string, unknown> = { prompt: 'hello' };

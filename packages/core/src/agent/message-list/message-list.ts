@@ -943,10 +943,47 @@ export class MessageList {
   };
 
   public drainUnsavedMessages(): MastraDBMessage[] {
+    const responseMessages = new Set(this.messages.filter(m => this.newResponseMessages.has(m)));
     const messages = this.messages.filter(m => this.newUserMessages.has(m) || this.newResponseMessages.has(m));
     this.newUserMessages.clear();
     this.newResponseMessages.clear();
-    return messages.map(message => this.transformMessageForTranscript(message));
+    return messages.map(message => {
+      const transformed = this.transformMessageForTranscript(message);
+      if (this.responseTraceContext && responseMessages.has(message)) {
+        return this.stampTraceMetadata(transformed);
+      }
+      return transformed;
+    });
+  }
+
+  private responseTraceContext?: { traceId: string; agentRunSpanId: string };
+
+  /**
+   * Sets the trace context used to stamp response messages with
+   * `content.metadata.mastra = { traceId, agentRunSpanId }` at save time,
+   * bridging persisted messages back to their originating trace.
+   */
+  public setResponseTraceContext(ctx: { traceId: string; agentRunSpanId: string }) {
+    this.responseTraceContext = ctx;
+  }
+
+  private stampTraceMetadata(message: MastraDBMessage): MastraDBMessage {
+    const existingMetadata = message.content.metadata;
+    const existingMastra = isPlainRecord(existingMetadata?.mastra) ? existingMetadata.mastra : {};
+    return {
+      ...message,
+      content: {
+        ...message.content,
+        metadata: {
+          ...existingMetadata,
+          mastra: {
+            ...existingMastra,
+            traceId: this.responseTraceContext!.traceId,
+            agentRunSpanId: this.responseTraceContext!.agentRunSpanId,
+          },
+        },
+      },
+    };
   }
 
   private transformToolStateDataForTranscript(data: unknown, phase: 'approval' | 'suspend'): unknown {

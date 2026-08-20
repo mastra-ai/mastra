@@ -32,6 +32,8 @@ import type {
   BatchCreateSpansArgs,
   BatchDeleteTracesArgs,
   CreateFeedbackArgs,
+  DeleteFeedbackArgs,
+  DeleteFeedbackByTraceIdsArgs,
   CreateScoreArgs,
   CreateSpanArgs,
   GetEntityNamesArgs,
@@ -427,6 +429,18 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
     });
   }
 
+  override async deleteFeedback(args: DeleteFeedbackArgs): Promise<void> {
+    await this.#run('DELETE_FEEDBACK', () => feedbackOps.deleteFeedback(this.#client, this.#schema, args));
+  }
+
+  override async deleteFeedbackByTraceIds(args: DeleteFeedbackByTraceIdsArgs): Promise<void> {
+    await this.#run(
+      'DELETE_FEEDBACK_BY_TRACE_IDS',
+      () => feedbackOps.deleteFeedbackByTraceIds(this.#client, this.#schema, args),
+      { count: args.traceIds.length },
+    );
+  }
+
   // -------------------------------------------------------------------------
   // Logs / metrics / scores / feedback — list reads
   // -------------------------------------------------------------------------
@@ -579,6 +593,7 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
     await this.#run('BATCH_DELETE_TRACES', () => tracingOps.batchDeleteTraces(this.#client, this.#schema, args), {
       count: args.traceIds.length,
     });
+    await this.deleteFeedbackByTraceIds({ traceIds: args.traceIds });
   }
 
   override async dangerouslyClearAll(): Promise<void> {

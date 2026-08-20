@@ -26,6 +26,8 @@ import { listFeedbackArgsSchema } from './feedback';
 import type {
   BatchCreateFeedbackArgs,
   CreateFeedbackArgs,
+  DeleteFeedbackArgs,
+  DeleteFeedbackByTraceIdsArgs,
   FeedbackFilter,
   GetFeedbackAggregateArgs,
   GetFeedbackAggregateResponse,
@@ -1129,6 +1131,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       }
       this.db.traces.delete(traceId);
     }
+    await this.deleteFeedbackByTraceIds({ traceIds: args.traceIds });
   }
 
   // ============================================================================
@@ -2183,6 +2186,25 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     }
   }
 
+  async deleteFeedback(args: DeleteFeedbackArgs): Promise<void> {
+    this.removeFeedbackRecords(fb => fb.feedbackId === args.feedbackId);
+  }
+
+  async deleteFeedbackByTraceIds(args: DeleteFeedbackByTraceIdsArgs): Promise<void> {
+    const traceIds = new Set(args.traceIds);
+    this.removeFeedbackRecords(fb => fb.traceId != null && traceIds.has(fb.traceId));
+  }
+
+  private removeFeedbackRecords(predicate: (fb: FeedbackRecord) => boolean): void {
+    for (let i = this.db.feedbackRecords.length - 1; i >= 0; i--) {
+      const record = this.db.feedbackRecords[i]!;
+      if (predicate(record)) {
+        this.db.feedbackCursorIds.delete(record);
+        this.db.feedbackRecords.splice(i, 1);
+      }
+    }
+  }
+
   async listFeedback(args: ListFeedbackArgs): Promise<ListFeedbackResponse> {
     const { mode, filters, pagination, orderBy, after, limit } = listFeedbackArgsSchema.parse(args);
 
@@ -2483,6 +2505,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     if (filters.source !== undefined && feedbackSource !== filters.source) return false;
     if (filters.experimentId !== undefined && fb.experimentId !== filters.experimentId) return false;
     if (filters.feedbackUserId !== undefined && fb.feedbackUserId !== filters.feedbackUserId) return false;
+    if (filters.sourceId !== undefined && fb.sourceId !== filters.sourceId) return false;
     if (filters.tags != null && filters.tags.length > 0) {
       if (fb.tags == null) return false;
       for (const tag of filters.tags) {

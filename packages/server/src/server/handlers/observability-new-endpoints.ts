@@ -28,6 +28,9 @@ import {
   listFeedbackResponseSchema,
   createFeedbackBodySchema,
   createFeedbackResponseSchema,
+  deleteFeedbackArgsSchema,
+  deleteFeedbackByTraceIdsArgsSchema,
+  deleteFeedbackResponseSchema,
   getFeedbackAggregateArgsSchema,
   getFeedbackAggregateResponseSchema,
   getFeedbackBreakdownArgsSchema,
@@ -280,6 +283,26 @@ export const CREATE_FEEDBACK = createNewRoute(NEW_ROUTE_DEFS.CREATE_FEEDBACK, {
   },
 });
 
+export const DELETE_FEEDBACK = createNewRoute(NEW_ROUTE_DEFS.DELETE_FEEDBACK, {
+  pathParamSchema: deleteFeedbackArgsSchema,
+  responseSchema: deleteFeedbackResponseSchema,
+  handler: async ({ mastra, feedbackId }) => {
+    const observabilityStore = await getObservabilityStore(mastra);
+    await observabilityStore.deleteFeedback({ feedbackId });
+    return { success: true };
+  },
+});
+
+export const DELETE_FEEDBACK_BY_TRACE_IDS = createNewRoute(NEW_ROUTE_DEFS.DELETE_FEEDBACK_BY_TRACE_IDS, {
+  bodySchema: deleteFeedbackByTraceIdsArgsSchema,
+  responseSchema: deleteFeedbackResponseSchema,
+  handler: async ({ mastra, traceIds }) => {
+    const observabilityStore = await getObservabilityStore(mastra);
+    await observabilityStore.deleteFeedbackByTraceIds({ traceIds });
+    return { success: true };
+  },
+});
+
 export const GET_FEEDBACK_AGGREGATE = createNewRoute(NEW_ROUTE_DEFS.GET_FEEDBACK_AGGREGATE, {
   bodySchema: getFeedbackAggregateArgsSchema,
   responseSchema: getFeedbackAggregateResponseSchema,
@@ -486,6 +509,8 @@ export const NEW_ROUTES = {
   GET_SCORE_PERCENTILES,
   LIST_FEEDBACK,
   CREATE_FEEDBACK,
+  DELETE_FEEDBACK,
+  DELETE_FEEDBACK_BY_TRACE_IDS,
   GET_FEEDBACK_AGGREGATE,
   GET_FEEDBACK_BREAKDOWN,
   GET_FEEDBACK_TIME_SERIES,

@@ -5,6 +5,7 @@ import { parseMemoryRequestContext } from '../../memory';
 import { removeWorkingMemoryTags } from '../../memory/working-memory-utils';
 import { SpanType, EntityType } from '../../observability';
 import type { ObservabilityContext, MemoryOperationAttributes } from '../../observability';
+import { getRootExportSpan } from '../../observability/utils';
 import type { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage';
 
@@ -226,6 +227,41 @@ export class MessageHistory implements Processor {
       .filter((m): m is NonNullable<typeof m> => Boolean(m));
   }
 
+  /**
+   * Stamp response messages with the trace context of the agent run that produced them,
+   * enabling message → trace correlation (e.g., attaching feedback to a specific response).
+   * Merged under a namespaced `mastra` key so user-supplied metadata is never clobbered.
+   */
+  private stampTraceMetadata(
+    messages: MastraDBMessage[],
+    observabilityContext: Partial<ObservabilityContext>,
+  ): MastraDBMessage[] {
+    const rootSpan = getRootExportSpan(observabilityContext?.tracingContext?.currentSpan);
+    if (!rootSpan) {
+      return messages;
+    }
+
+    const traceId = rootSpan.externalTraceId ?? rootSpan.traceId;
+    const agentRunSpanId = rootSpan.id;
+
+    return messages.map(message => ({
+      ...message,
+      content: {
+        ...message.content,
+        metadata: {
+          ...message.content.metadata,
+          mastra: {
+            ...(message.content.metadata?.mastra && typeof message.content.metadata.mastra === 'object'
+              ? message.content.metadata.mastra
+              : {}),
+            traceId,
+            agentRunSpanId,
+          },
+        },
+      },
+    }));
+  }
+
   async processOutputResult(
     args: {
       messages: MastraDBMessage[];
@@ -251,7 +287,7 @@ export class MessageHistory implements Processor {
     const { threadId, resourceId } = context;
 
     const newInput = messageList.get.input.db();
-    const newOutput = messageList.get.response.db();
+    const newOutput = this.stampTraceMetadata(messageList.get.response.db(), observabilityContext);
     const messagesToSave = [...newInput, ...newOutput];
 
     if (messagesToSave.length === 0) {

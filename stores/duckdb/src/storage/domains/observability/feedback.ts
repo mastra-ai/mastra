@@ -1,6 +1,8 @@
 import type {
   BatchCreateFeedbackArgs,
   CreateFeedbackArgs,
+  DeleteFeedbackArgs,
+  DeleteFeedbackByTraceIdsArgs,
   GetFeedbackAggregateArgs,
   GetFeedbackAggregateResponse,
   GetFeedbackBreakdownArgs,
@@ -358,6 +360,20 @@ export async function batchCreateFeedback(db: DuckDBConnection, args: BatchCreat
      VALUES ${tuples.join(',\n       ')}
      ON CONFLICT DO NOTHING`,
   );
+}
+
+/** Delete a single feedback record by feedbackId. */
+export async function deleteFeedback(db: DuckDBConnection, args: DeleteFeedbackArgs): Promise<void> {
+  await db.execute(`DELETE FROM feedback_events WHERE feedbackId = ${v(args.feedbackId)}`);
+}
+
+/** Delete all feedback linked to the given trace IDs. */
+export async function deleteFeedbackByTraceIds(
+  db: DuckDBConnection,
+  args: DeleteFeedbackByTraceIdsArgs,
+): Promise<void> {
+  if (args.traceIds.length === 0) return;
+  await db.execute(`DELETE FROM feedback_events WHERE traceId IN (${args.traceIds.map(id => v(id)).join(', ')})`);
 }
 
 /** Query feedback events with filtering, ordering, and pagination. */

@@ -1349,6 +1349,41 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
         expect(result.feedback[0]!.userId).toBe('app-user-123');
         expect(result.feedback[0]!.feedbackUserId).toBe('evaluator-456');
       });
+
+      it('filters feedback by sourceId', async () => {
+        if (!feedbackSupported) return;
+
+        const feedbackA = createFeedbackRecord({
+          feedbackId: `feedback-source-a-${Date.now()}`,
+          sourceId: 'message-abc',
+        });
+        const feedbackB = createFeedbackRecord({
+          feedbackId: `feedback-source-b-${Date.now()}`,
+          sourceId: 'message-def',
+        });
+        await observabilityStorage.batchCreateFeedback({ feedbacks: [feedbackA, feedbackB] });
+
+        const result = await observabilityStorage.listFeedback({ filters: { sourceId: 'message-abc' } });
+        expect(result.feedback).toHaveLength(1);
+        expect(result.feedback[0]!.feedbackId).toBe(feedbackA.feedbackId);
+        expect(result.feedback[0]!.sourceId).toBe('message-abc');
+      });
+
+      it('deduplicates retried submissions with the same feedbackId', async () => {
+        if (!feedbackSupported) return;
+
+        const feedbackId = `feedback-idempotent-${Date.now()}`;
+        const original = createFeedbackRecord({ feedbackId, comment: 'first submission' });
+        await observabilityStorage.createFeedback({ feedback: original });
+        // Retry carries a fresh timestamp — must not create a duplicate record.
+        await observabilityStorage.createFeedback({
+          feedback: { ...original, timestamp: new Date(original.timestamp.getTime() + 5000) },
+        });
+
+        const result = await observabilityStorage.listFeedback({});
+        const matching = result.feedback.filter(fb => fb.feedbackId === feedbackId);
+        expect(matching).toHaveLength(1);
+      });
     });
   });
 }

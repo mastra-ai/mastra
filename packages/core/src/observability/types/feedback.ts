@@ -11,6 +11,14 @@ import type { CorrelationContext } from './core';
  */
 export interface FeedbackInput {
   /**
+   * Optional client-supplied unique identifier for this feedback.
+   * Provide a deterministic ID to make feedback submission idempotent —
+   * retries with the same `feedbackId` will not create duplicate records.
+   * Generated at emission time when omitted.
+   */
+  feedbackId?: string;
+
+  /**
    * @deprecated Use `feedbackSource` instead.
    * Source of the feedback (e.g., "user", "admin", "qa")
    */

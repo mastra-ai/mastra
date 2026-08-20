@@ -37,4 +37,10 @@ export {
   type GetFeedbackPercentilesArgs,
   getFeedbackPercentilesResponseSchema,
   type GetFeedbackPercentilesResponse,
+  deleteFeedbackArgsSchema,
+  type DeleteFeedbackArgs,
+  deleteFeedbackByTraceIdsArgsSchema,
+  type DeleteFeedbackByTraceIdsArgs,
+  deleteFeedbackResponseSchema,
+  type DeleteFeedbackResponse,
 } from '@internal/core/storage';

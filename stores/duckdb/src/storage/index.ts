@@ -418,6 +418,20 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
     return delegate.batchCreateFeedback(...args);
   }
 
+  async deleteFeedback(
+    ...args: Parameters<ObservabilityStoreImpl['deleteFeedback']>
+  ): ReturnType<ObservabilityStoreImpl['deleteFeedback']> {
+    const delegate = await this.requireDelegate();
+    return delegate.deleteFeedback(...args);
+  }
+
+  async deleteFeedbackByTraceIds(
+    ...args: Parameters<ObservabilityStoreImpl['deleteFeedbackByTraceIds']>
+  ): ReturnType<ObservabilityStoreImpl['deleteFeedbackByTraceIds']> {
+    const delegate = await this.requireDelegate();
+    return delegate.deleteFeedbackByTraceIds(...args);
+  }
+
   async listFeedback(
     ...args: Parameters<ObservabilityStoreImpl['listFeedback']>
   ): ReturnType<ObservabilityStoreImpl['listFeedback']> {

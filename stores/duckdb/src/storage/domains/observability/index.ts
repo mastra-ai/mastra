@@ -39,6 +39,8 @@ import type {
   GetScorePercentilesResponse,
   CreateFeedbackArgs,
   BatchCreateFeedbackArgs,
+  DeleteFeedbackArgs,
+  DeleteFeedbackByTraceIdsArgs,
   ListFeedbackArgs,
   ListFeedbackResponse,
   GetFeedbackAggregateArgs,
@@ -216,7 +218,8 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
     return tracingOps.batchCreateSpans(this.db, args);
   }
   async batchDeleteTraces(args: BatchDeleteTracesArgs): Promise<void> {
-    return tracingOps.batchDeleteTraces(this.db, args);
+    await tracingOps.batchDeleteTraces(this.db, args);
+    await feedbackOps.deleteFeedbackByTraceIds(this.db, { traceIds: args.traceIds });
   }
   async getSpan(args: GetSpanArgs): Promise<GetSpanResponse | null> {
     return tracingOps.getSpan(this.db, args);
@@ -333,6 +336,12 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
   }
   async batchCreateFeedback(args: BatchCreateFeedbackArgs): Promise<void> {
     return feedbackOps.batchCreateFeedback(this.db, args);
+  }
+  async deleteFeedback(args: DeleteFeedbackArgs): Promise<void> {
+    return feedbackOps.deleteFeedback(this.db, args);
+  }
+  async deleteFeedbackByTraceIds(args: DeleteFeedbackByTraceIdsArgs): Promise<void> {
+    return feedbackOps.deleteFeedbackByTraceIds(this.db, args);
   }
   async listFeedback(args: ListFeedbackArgs): Promise<ListFeedbackResponse> {
     return feedbackOps.listFeedback(this.db, args);

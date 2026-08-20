@@ -53,6 +53,7 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
   { route: '/metrics', permission: 'observability:read', name: 'Metrics' },
   { route: '/intelligence', permission: 'observability:read', name: 'Intelligence' },
   { route: '/traces', permission: 'observability:read', name: 'Traces' },
+  { route: '/feedback', permission: 'observability:read', name: 'Feedback' },
   { route: '/logs', permission: 'logs:read', name: 'Logs' },
 
   // Evaluation - uses 'scores' resource (not 'scorers')

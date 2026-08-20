@@ -58,6 +58,8 @@ const createMockObservabilityStore = () => ({
   getScorePercentiles: vi.fn(),
   listFeedback: vi.fn(),
   createFeedback: vi.fn(),
+  deleteFeedback: vi.fn(),
+  deleteFeedbackByTraceIds: vi.fn(),
   getFeedbackAggregate: vi.fn(),
   getFeedbackBreakdown: vi.fn(),
   getFeedbackTimeSeries: vi.fn(),
@@ -1837,6 +1839,52 @@ describe('Observability Handlers', () => {
       ).rejects.toThrow();
 
       expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'create feedback'");
+    });
+  });
+
+  describe('DELETE_FEEDBACK_ROUTE', () => {
+    it('should delete feedback by feedbackId', async () => {
+      (mockObservabilityStore.deleteFeedback as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+
+      const result = await NEW_ROUTES.DELETE_FEEDBACK.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        feedbackId: 'feedback-123',
+      });
+
+      expect(result).toEqual({ success: true });
+      expect(mockObservabilityStore.deleteFeedback).toHaveBeenCalledWith({ feedbackId: 'feedback-123' });
+      expect(handleErrorSpy).not.toHaveBeenCalled();
+    });
+
+    it('should call handleError when storage throws', async () => {
+      const storageError = new Error('Database delete failed');
+      (mockObservabilityStore.deleteFeedback as ReturnType<typeof vi.fn>).mockRejectedValue(storageError);
+
+      await expect(
+        NEW_ROUTES.DELETE_FEEDBACK.handler({
+          ...createTestServerContext({ mastra: mockMastra }),
+          feedbackId: 'feedback-123',
+        }),
+      ).rejects.toThrow();
+
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'delete feedback'");
+    });
+  });
+
+  describe('DELETE_FEEDBACK_BY_TRACE_IDS_ROUTE', () => {
+    it('should delete feedback linked to trace IDs', async () => {
+      (mockObservabilityStore.deleteFeedbackByTraceIds as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+
+      const result = await NEW_ROUTES.DELETE_FEEDBACK_BY_TRACE_IDS.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        traceIds: ['trace-1', 'trace-2'],
+      });
+
+      expect(result).toEqual({ success: true });
+      expect(mockObservabilityStore.deleteFeedbackByTraceIds).toHaveBeenCalledWith({
+        traceIds: ['trace-1', 'trace-2'],
+      });
+      expect(handleErrorSpy).not.toHaveBeenCalled();
     });
   });
 

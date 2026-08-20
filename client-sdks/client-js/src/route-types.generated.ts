@@ -17,7 +17,7 @@ type Shared_Auxiliary_298 =
       [key: string]: Shared_Auxiliary_298;
     };
 
-type Shared_Auxiliary_1095 =
+type Shared_Auxiliary_1098 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -62,19 +62,19 @@ type Shared_Auxiliary_1095 =
     }
   | {
       op: 'and' | 'or';
-      args: Shared_Auxiliary_1095[];
+      args: Shared_Auxiliary_1098[];
     }
   | {
       op: 'not';
-      arg: Shared_Auxiliary_1095;
+      arg: Shared_Auxiliary_1098;
     };
 
-type Shared_Auxiliary_1236 = {
+type Shared_Auxiliary_1239 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_1236[] | undefined;
+  children?: Shared_Auxiliary_1239[] | undefined;
 };
 
 type Shared_Type_0 = {
@@ -1867,6 +1867,8 @@ type Shared_Type_79 = {
   source?: string | undefined;
   /** User who provided the feedback */
   feedbackUserId?: string | undefined;
+  /** Filter by source record linkage (e.g. message ID or experiment result ID) */
+  sourceId?: string | undefined;
 };
 
 type Shared_Type_80 =
@@ -2476,13 +2478,13 @@ type Shared_Type_107 =
   | {
       type: 'conditional';
       steps: Shared_Type_105[];
-      predicates: Shared_Auxiliary_1095[];
+      predicates: Shared_Auxiliary_1098[];
     }
   | {
       type: 'loop';
       step: Shared_Type_105;
       loopType: 'dowhile' | 'dountil';
-      predicate: Shared_Auxiliary_1095;
+      predicate: Shared_Auxiliary_1098;
     };
 
 type Shared_Type_108 = {
@@ -2819,7 +2821,7 @@ type Shared_Type_120 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1236[] | undefined;
+  files?: Shared_Auxiliary_1239[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -9612,6 +9614,8 @@ export type GetObservabilityFeedback_QueryParams = {
   feedbackSource?: (string | undefined) | undefined;
   source?: (string | undefined) | undefined;
   feedbackUserId?: (string | undefined) | undefined;
+  /** Filter by source record linkage (e.g. message ID or experiment result ID) */
+  sourceId?: (string | undefined) | undefined;
   page?: (number | undefined) | undefined;
   perPage?: (number | undefined) | undefined;
   /** Field to order by: 'timestamp' */
@@ -9783,6 +9787,62 @@ export interface PostObservabilityFeedback_RouteContract {
   body: PostObservabilityFeedback_Body;
   request: PostObservabilityFeedback_Request;
   response: PostObservabilityFeedback_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: DELETE /observability/feedback/:feedbackId
+// ============================================================================
+export type DeleteObservabilityFeedbackFeedbackId_PathParams = {
+  /** ID of the feedback record to delete */
+  feedbackId: string;
+};
+
+export type DeleteObservabilityFeedbackFeedbackId_Response = PostAuthRefresh_Response;
+
+export type DeleteObservabilityFeedbackFeedbackId_Request = Simplify<
+  (DeleteObservabilityFeedbackFeedbackId_PathParams extends never
+    ? {}
+    : { params: DeleteObservabilityFeedbackFeedbackId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface DeleteObservabilityFeedbackFeedbackId_RouteContract {
+  pathParams: DeleteObservabilityFeedbackFeedbackId_PathParams;
+  queryParams: never;
+  body: never;
+  request: DeleteObservabilityFeedbackFeedbackId_Request;
+  response: DeleteObservabilityFeedbackFeedbackId_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /observability/feedback/delete-by-trace-ids
+// ============================================================================
+export type PostObservabilityFeedbackDeleteByTraceIds_Body = {
+  /** Trace IDs whose linked feedback should be deleted */
+  traceIds: string[];
+};
+
+export type PostObservabilityFeedbackDeleteByTraceIds_Response = PostAuthRefresh_Response;
+
+export type PostObservabilityFeedbackDeleteByTraceIds_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostObservabilityFeedbackDeleteByTraceIds_Body extends never
+      ? {}
+      : {} extends PostObservabilityFeedbackDeleteByTraceIds_Body
+        ? { body?: PostObservabilityFeedbackDeleteByTraceIds_Body }
+        : { body: PostObservabilityFeedbackDeleteByTraceIds_Body })
+>;
+
+export interface PostObservabilityFeedbackDeleteByTraceIds_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: PostObservabilityFeedbackDeleteByTraceIds_Body;
+  request: PostObservabilityFeedbackDeleteByTraceIds_Request;
+  response: PostObservabilityFeedbackDeleteByTraceIds_Response;
   responseType: 'json';
 }
 
@@ -16411,7 +16471,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1236[] | undefined;
+  files?: Shared_Auxiliary_1239[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -16469,7 +16529,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (Shared_Auxiliary_1236[] | undefined) | undefined;
+  files?: (Shared_Auxiliary_1239[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
@@ -21587,6 +21647,8 @@ export interface RouteTypes {
   'POST /observability/scores/percentiles': PostObservabilityScoresPercentiles_RouteContract;
   'GET /observability/feedback': GetObservabilityFeedback_RouteContract;
   'POST /observability/feedback': PostObservabilityFeedback_RouteContract;
+  'DELETE /observability/feedback/:feedbackId': DeleteObservabilityFeedbackFeedbackId_RouteContract;
+  'POST /observability/feedback/delete-by-trace-ids': PostObservabilityFeedbackDeleteByTraceIds_RouteContract;
   'POST /observability/feedback/aggregate': PostObservabilityFeedbackAggregate_RouteContract;
   'POST /observability/feedback/breakdown': PostObservabilityFeedbackBreakdown_RouteContract;
   'POST /observability/feedback/timeseries': PostObservabilityFeedbackTimeseries_RouteContract;
@@ -22414,11 +22476,17 @@ export interface Client {
     GET: GetObservabilityFeedback_RouteContract;
     POST: PostObservabilityFeedback_RouteContract;
   };
+  '/observability/feedback/:feedbackId': {
+    DELETE: DeleteObservabilityFeedbackFeedbackId_RouteContract;
+  };
   '/observability/feedback/aggregate': {
     POST: PostObservabilityFeedbackAggregate_RouteContract;
   };
   '/observability/feedback/breakdown': {
     POST: PostObservabilityFeedbackBreakdown_RouteContract;
+  };
+  '/observability/feedback/delete-by-trace-ids': {
+    POST: PostObservabilityFeedbackDeleteByTraceIds_RouteContract;
   };
   '/observability/feedback/percentiles': {
     POST: PostObservabilityFeedbackPercentiles_RouteContract;

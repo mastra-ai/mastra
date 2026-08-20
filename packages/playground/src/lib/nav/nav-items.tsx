@@ -14,7 +14,7 @@ import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { WorkspacesIcon } from '@mastra/playground-ui/icons/WorkspacesIcon';
-import { BookIcon, LayoutGrid } from 'lucide-react';
+import { BookIcon, LayoutGrid, MessageSquareIcon } from 'lucide-react';
 import type { ComponentType, SVGProps } from 'react';
 
 export type NavIcon = ComponentType<SVGProps<SVGSVGElement>>;
@@ -178,6 +178,16 @@ export const mainNav: NavSection[] = [
         isOnMastraPlatform: true,
       },
       signalsNavItem,
+      {
+        name: 'Feedback',
+        url: '/feedback',
+        Icon: MessageSquareIcon,
+        docs: {
+          href: 'https://mastra.ai/en/docs/observability/tracing/feedback',
+          label: 'Feedback documentation',
+        },
+        isOnMastraPlatform: true,
+      },
       {
         name: 'Logs',
         url: '/logs',

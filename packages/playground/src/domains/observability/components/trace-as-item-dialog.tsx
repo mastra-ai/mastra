@@ -17,6 +17,8 @@ type TraceAsItemDialogProps = {
   /** Root span ID for lazy-loading when traceDetails is not available. */
   rootSpanId?: string | null;
   traceId?: string;
+  /** Overrides the trace output as the seeded ground truth (e.g. a correction feedback value). */
+  initialGroundTruthOverride?: string;
   isOpen: boolean;
   onClose: () => void;
   level?: SideDialogRootProps['level'];
@@ -42,16 +44,26 @@ export function TraceAsItemDialog({
   traceDetails: externalTraceDetails,
   rootSpanId,
   traceId,
+  initialGroundTruthOverride,
   isOpen,
   onClose,
   level = 2,
 }: TraceAsItemDialogProps) {
   const client = useMastraClient();
 
+  // When only a traceId is known (e.g. from a feedback record), resolve the root span ID from the trace
+  const shouldResolveRootSpan = !externalTraceDetails && !rootSpanId && !!traceId && isOpen;
+  const { data: traceRecord } = useQuery({
+    queryKey: ['trace-record', traceId],
+    queryFn: () => client.getTrace(traceId!),
+    enabled: shouldResolveRootSpan,
+  });
+  const resolvedRootSpanId = rootSpanId ?? traceRecord?.spans?.find(span => span.parentSpanId == null)?.spanId ?? null;
+
   // Lazy-load the root span details when dialog opens and no traceDetails provided
   const { data: lazySpanDetail } = useSpanDetail(
     !externalTraceDetails && isOpen ? traceId : null,
-    !externalTraceDetails && isOpen ? rootSpanId : null,
+    !externalTraceDetails && isOpen ? resolvedRootSpanId : null,
   );
 
   const traceDetails = externalTraceDetails ?? lazySpanDetail?.span;
@@ -90,7 +102,9 @@ export function TraceAsItemDialog({
   return (
     <SaveAsDatasetItemDialog
       initialInput={getInitialInput(traceDetails)}
-      initialGroundTruth={traceDetails?.output != null ? safeStringify(traceDetails.output, 2) : ''}
+      initialGroundTruth={
+        initialGroundTruthOverride ?? (traceDetails?.output != null ? safeStringify(traceDetails.output, 2) : '')
+      }
       initialTrajectory={initialTrajectory}
       trajectoryLoading={isTrajectoryLoading}
       initialToolMocks={initialToolMocks}

@@ -65,6 +65,8 @@ import type {
   GetScorePercentilesResponse,
   CreateFeedbackArgs,
   BatchCreateFeedbackArgs,
+  DeleteFeedbackArgs,
+  DeleteFeedbackByTraceIdsArgs,
   ListFeedbackArgs,
   ListFeedbackResponse,
   GetFeedbackAggregateArgs,
@@ -998,6 +1000,39 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
     }
   }
 
+  override async deleteFeedback(args: DeleteFeedbackArgs): Promise<void> {
+    try {
+      await feedbackOps.deleteFeedback(this.#client, args);
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'DELETE_FEEDBACK', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  override async deleteFeedbackByTraceIds(args: DeleteFeedbackByTraceIdsArgs): Promise<void> {
+    try {
+      await feedbackOps.deleteFeedbackByTraceIds(this.#client, args);
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'DELETE_FEEDBACK_BY_TRACE_IDS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { count: args.traceIds.length },
+        },
+        error,
+      );
+    }
+  }
+
   override async listFeedback(args: ListFeedbackArgs): Promise<ListFeedbackResponse> {
     try {
       return await feedbackOps.listFeedback(this.#client, args, this.#deltaCursorStrategy);
@@ -1361,6 +1396,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
   override async batchDeleteTraces(args: BatchDeleteTracesArgs): Promise<void> {
     try {
       await tracingOps.batchDeleteTraces(this.#client, args);
+      await feedbackOps.deleteFeedbackByTraceIds(this.#client, args);
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(

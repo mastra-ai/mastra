@@ -1,10 +1,12 @@
 import type { FeedbackRecord } from '@mastra/core/storage';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { KeyValueList } from '@mastra/playground-ui/components/KeyValueList';
 import { Sections } from '@mastra/playground-ui/components/Sections';
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import { TextAndIcon } from '@mastra/playground-ui/components/Text';
 import { format } from 'date-fns/format';
-import { HashIcon, MessageSquareIcon } from 'lucide-react';
+import { DatabaseIcon, HashIcon, MessageSquareIcon } from 'lucide-react';
+import { Link } from 'react-router';
 
 type FeedbackDialogProps = {
   feedback?: FeedbackRecord;
@@ -12,6 +14,10 @@ type FeedbackDialogProps = {
   onClose: () => void;
   onNext?: () => void;
   onPrevious?: () => void;
+  /** Show a "View trace" deep-link to the feedback's trace (used outside the trace detail view). */
+  showTraceLink?: boolean;
+  /** Called to promote the feedback's trace into a dataset item. Rendered only when the feedback has a traceId. */
+  onAddToDataset?: () => void;
 };
 
 function formatValue(fb: FeedbackRecord): string {
@@ -29,7 +35,15 @@ function formatValue(fb: FeedbackRecord): string {
   return String(fb.value ?? '-');
 }
 
-export function FeedbackDialog({ feedback, isOpen, onClose, onNext, onPrevious }: FeedbackDialogProps) {
+export function FeedbackDialog({
+  feedback,
+  isOpen,
+  onClose,
+  onNext,
+  onPrevious,
+  showTraceLink,
+  onAddToDataset,
+}: FeedbackDialogProps) {
   const metadataStr =
     feedback?.metadata && Object.keys(feedback.metadata).length > 0
       ? JSON.stringify(feedback.metadata, null, 2)
@@ -60,6 +74,18 @@ export function FeedbackDialog({ feedback, isOpen, onClose, onNext, onPrevious }
             <TextAndIcon>
               <HashIcon /> {feedback.traceId}
             </TextAndIcon>
+          )}
+          {showTraceLink && feedback?.traceId && (
+            <Button as={Link} to={`/traces/${feedback.traceId}?tab=feedback`} size="sm">
+              View trace
+            </Button>
+          )}
+          {onAddToDataset && feedback?.traceId && (
+            <Button size="sm" onClick={onAddToDataset}>
+              <TextAndIcon>
+                <DatabaseIcon /> Add to dataset
+              </TextAndIcon>
+            </Button>
           )}
         </SideDialog.Header>
 
