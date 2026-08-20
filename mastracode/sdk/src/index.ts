@@ -46,6 +46,8 @@ import {
 } from '@mastra/observability';
 import { PostgresStore } from '@mastra/pg';
 
+import { AgentConnectionsSignalProvider } from './agent-connections/signal-provider.js';
+import type { AgentConnectionsSignalProviderOptions } from './agent-connections/signal-provider.js';
 import { hasCredentialStoreProvider } from './agents/credential-resolver.js';
 import { getDynamicInstructions } from './agents/instructions.js';
 import { getDynamicMemory } from './agents/memory.js';
@@ -95,8 +97,6 @@ import { setAuthStorage as setGitHubCopilotAuthStorage } from './providers/githu
 import { setAuthStorage as setOpenAIAuthStorage } from './providers/openai-codex.js';
 import { setAuthStorage as setXAIAuthStorage } from './providers/xai.js';
 
-import { AgentConnectionsSignalProvider } from './agent-connections/signal-provider.js';
-import type { AgentConnectionsSignalProviderOptions } from './agent-connections/signal-provider.js';
 import { stateSchema } from './schema.js';
 import type { MastraCodeState } from './schema.js';
 
@@ -145,7 +145,8 @@ function getInjectorSessionState(
   requestContext: { get: (key: string) => unknown } | undefined,
 ): { untrustedCheckout?: boolean; baseRef?: string; projectPath?: string } | undefined {
   const agentControllerContext = requestContext?.get('controller') as
-    AgentControllerRequestContext<{ untrustedCheckout?: boolean; baseRef?: string; projectPath?: string }> | undefined;
+    | AgentControllerRequestContext<{ untrustedCheckout?: boolean; baseRef?: string; projectPath?: string }>
+    | undefined;
   return agentControllerContext?.getState();
 }
 
