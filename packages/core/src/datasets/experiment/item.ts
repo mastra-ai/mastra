@@ -5,7 +5,12 @@ import type { Experiment, ExperimentResult } from '../../storage/types';
 import { executeTarget } from './executor';
 import type { ExecutionResult } from './executor';
 import { resolveTarget } from './index';
-import { createItemScorerResolver, EXPERIMENT_ITEM_SCORER_NOT_FOUND, resolveScorers, runScorersForItem } from './scorer';
+import {
+  createItemScorerResolver,
+  EXPERIMENT_ITEM_SCORER_NOT_FOUND,
+  resolveScorers,
+  runScorersForItem,
+} from './scorer';
 import type { ScorerResult } from './types';
 
 /** Item shape consumed by {@link executeExperimentItem}. */

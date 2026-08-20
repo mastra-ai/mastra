@@ -24,6 +24,7 @@ export function ExperimentTopArea({ experiment }: ExperimentTopAreaProps) {
   const { data: scorers } = useScorers();
 
   const targetPath = () => {
+    if (!experiment.targetId) return '#';
     switch (experiment.targetType) {
       case 'agent':
         return paths.agentLink(experiment.targetId);
