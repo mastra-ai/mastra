@@ -8,37 +8,59 @@ import { Segmented, THINKING_LEVELS } from './SettingsPanel.parts';
 /** Sentinel for "no per-mode override — use the global default". */
 const USE_GLOBAL = '__global__';
 
-/**
- * Deployment-wide thinking (reasoning-effort) defaults. These apply to every
- * run that has no explicit session override — including automated Factory runs
- * (triage, board work items) nobody opens interactively. A mode row set to
- * "Global" inherits the global default.
- */
-export function ThinkingDefaultsSection() {
+function useThinkingSection() {
   const configQuery = useThinkingConfigQuery();
   const update = useUpdateThinkingMutation();
   const config = configQuery.data;
   const error = update.error ?? configQuery.error;
   const disabled = !config || update.isPending;
+  return { config, update, error, disabled };
+}
 
-  const modeOptions = [{ value: USE_GLOBAL, label: 'Global' }, ...THINKING_LEVELS];
+function ThinkingError({ error }: { error: unknown }) {
+  if (!error) return null;
+  return (
+    <Txt as="p" variant="ui-xs" className="text-notice-destructive-fg px-4 pt-3">
+      {error instanceof Error ? error.message : String(error)}
+    </Txt>
+  );
+}
 
+/**
+ * The deployment-wide base thinking (reasoning-effort) level. Applied to every
+ * run without a session or mode override — including automated Factory runs
+ * (triage, board work items) nobody opens interactively.
+ */
+export function BaseThinkingSection() {
+  const { config, update, error, disabled } = useThinkingSection();
   return (
     <>
-      {error && (
-        <Txt as="p" variant="ui-xs" className="text-notice-destructive-fg px-4 pt-3">
-          {error instanceof Error ? error.message : String(error)}
-        </Txt>
-      )}
-      <SettingsRow label="Global default" hint="Used by every run without a session or mode override">
+      <ThinkingError error={error} />
+      <SettingsRow label="Base thinking level" hint="Used by every run without a session or mode override">
         <Segmented
-          ariaLabel="Global default thinking level"
+          ariaLabel="Base thinking level"
           value={config?.globalDefault ?? 'off'}
           disabled={disabled}
           options={THINKING_LEVELS}
           onChange={level => update.mutate({ globalDefault: level as ThinkingLevelValue })}
         />
       </SettingsRow>
+    </>
+  );
+}
+
+/**
+ * Per-mode thinking (reasoning-effort) defaults for interactive chats. A mode
+ * row set to "Global" inherits the base level from the Factory tab.
+ */
+export function ModeThinkingDefaultsSection() {
+  const { config, update, error, disabled } = useThinkingSection();
+
+  const modeOptions = [{ value: USE_GLOBAL, label: 'Global' }, ...THINKING_LEVELS];
+
+  return (
+    <>
+      <ThinkingError error={error} />
       {(config?.modes ?? []).map(mode => (
         <SettingsRow key={mode} label={`${mode[0]?.toUpperCase()}${mode.slice(1)} mode`}>
           <Segmented

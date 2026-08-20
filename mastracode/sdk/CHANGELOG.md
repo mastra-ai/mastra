@@ -1,5 +1,89 @@
 # @mastra/code-sdk
 
+## 1.4.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`7c60df5`](https://github.com/mastra-ai/mastra/commit/7c60df5c7872343fbac5c3e5b1175c8076a5abfd)]:
+  - @mastra/core@1.61.0-alpha.5
+
+## 1.4.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`1d41dd0`](https://github.com/mastra-ai/mastra/commit/1d41dd06a001c6fee3aab1cdf1ec759f2070df3e)]:
+  - @mastra/mcp@1.17.1-alpha.1
+  - @mastra/core@1.61.0-alpha.4
+
+## 1.4.0-alpha.3
+
+### Patch Changes
+
+- Factory runs now resolve provider credentials with org > user precedence, so an org-wide "Everyone in org" key takes priority over a run's acting user's personal key. This means factory automation always bills against the org's shared credentials when they exist, regardless of who triggered the run. Interactive (non-factory) sessions keep the existing user > org precedence, so personal plan subscriptions and keys still take priority there. ([#21899](https://github.com/mastra-ai/mastra/pull/21899))
+
+- Interactive messages and model switches on factory sessions now resolve provider credentials org-first (org > user), matching board-run kickoff. The credential resolver keys off the session's `factoryProjectId` in controller state, so any run on a factory-owned session rides the org's shared keys with the caller's personal credentials as fallback — switching to a personal-only model still works through that fallback. Repo-backed Slack channel sessions now stamp the owning factory project onto session state so they get the same behavior. ([#21899](https://github.com/mastra-ai/mastra/pull/21899))
+
+- Fixed shared threads running with a stale model in multi-server deployments. The model selected for a mode is now re-read from the thread's persisted settings at the start of every run, so a model switch made in one browser session or server replica is picked up by all others instead of silently diverging until the next mode switch. ([#21899](https://github.com/mastra-ai/mastra/pull/21899))
+
+- Updated dependencies [[`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`acc3471`](https://github.com/mastra-ai/mastra/commit/acc3471de5f3fde8027ee4e355af292b2bc1bc30), [`b6a771e`](https://github.com/mastra-ai/mastra/commit/b6a771ef23d203ddb348efca8065eff65def8191), [`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`acc3471`](https://github.com/mastra-ai/mastra/commit/acc3471de5f3fde8027ee4e355af292b2bc1bc30), [`26d4016`](https://github.com/mastra-ai/mastra/commit/26d40160ff7f7d8bf95fee2039a52cbc83863533), [`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`57c5103`](https://github.com/mastra-ai/mastra/commit/57c51035a2a36e3df3c4f32f46bb789a66ed5946), [`acc3471`](https://github.com/mastra-ai/mastra/commit/acc3471de5f3fde8027ee4e355af292b2bc1bc30)]:
+  - @mastra/core@1.61.0-alpha.3
+  - @mastra/libsql@1.21.1-alpha.1
+  - @mastra/pg@1.21.1-alpha.1
+
+## 1.4.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`480e491`](https://github.com/mastra-ai/mastra/commit/480e491588bd6a7a1c9ee4407590ad625dd33952), [`3bb88dd`](https://github.com/mastra-ai/mastra/commit/3bb88ddf07fb98f3cd16d3bff94e51cd3b45d011), [`d378d75`](https://github.com/mastra-ai/mastra/commit/d378d7511f71309ed61a8f6b93cd0361dc6cb70f), [`cad4208`](https://github.com/mastra-ai/mastra/commit/cad42082e6aa1776168a94914f523334be45d929), [`d378d75`](https://github.com/mastra-ai/mastra/commit/d378d7511f71309ed61a8f6b93cd0361dc6cb70f)]:
+  - @mastra/core@1.61.0-alpha.2
+
+## 1.4.0-alpha.1
+
+### Minor Changes
+
+- Fixed credential failures that told every interface to run `/login`, a command only the terminal UI has. A provider fetch without a usable credential now throws `ProviderAuthRequiredError`, which states the fact and leaves the remedy to the host running the agent. ([#21860](https://github.com/mastra-ai/mastra/pull/21860))
+
+  ```ts
+  import { ProviderAuthRequiredError } from '@mastra/code-sdk/auth/provider-auth-error';
+
+  try {
+    await run();
+  } catch (error) {
+    // Before: the message hardcoded "Run /login first."
+    // Now: match the error and point the user at whatever sign-in path your host offers.
+    if (error instanceof ProviderAuthRequiredError) showSignIn();
+  }
+  ```
+
+  The error name is stable across serialization, so a client that only receives `{ name, message }` over the wire can match it too.
+
+- Added opt-in process memory diagnostics for SDK process adapters. The service records process and V8 heap-space samples, naturally occurring garbage collection events, and periodic allocation profiles without forcing garbage collection or writing heap snapshots. ([#21821](https://github.com/mastra-ai/mastra/pull/21821))
+
+  Start diagnostics before creating Mastra Code, then await the final capture after work-producing services stop:
+
+  ```ts
+  import {
+    createProcessMemoryDiagnosticsFromEnvironment,
+    startConfiguredProcessMemoryDiagnostics,
+  } from '@mastra/code-sdk/process-memory-diagnostics';
+
+  const setup = createProcessMemoryDiagnosticsFromEnvironment(process.env);
+  const diagnostics = await startConfiguredProcessMemoryDiagnostics(setup, console.warn);
+
+  try {
+    // Create and run the process adapter.
+  } finally {
+    await diagnostics.stop();
+  }
+  ```
+
+  Allocation profiles remain local and may contain prompts, credentials, file contents, and tool arguments. Keep them private and delete them after analysis.
+
+### Patch Changes
+
+- Updated dependencies [[`d23e75d`](https://github.com/mastra-ai/mastra/commit/d23e75d57cc7cf5b9bfdbee896bf5a6a2484fed7), [`c8faa4e`](https://github.com/mastra-ai/mastra/commit/c8faa4e1cfebaec56b65e754e90b9fe46d153359), [`f2031a4`](https://github.com/mastra-ai/mastra/commit/f2031a47445e8f67a89ba1309036816f97ab7a65), [`8e529d4`](https://github.com/mastra-ai/mastra/commit/8e529d4ac754efef04b225841349e0da9edf89a6)]:
+  - @mastra/core@1.61.0-alpha.1
+
 ## 1.3.1-alpha.0
 
 ### Patch Changes

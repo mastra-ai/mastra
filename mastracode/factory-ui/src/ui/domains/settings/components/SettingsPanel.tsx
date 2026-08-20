@@ -1,7 +1,10 @@
 import type { AgentControllerSessionSettings } from '@mastra/client-js';
 import { useTheme } from '@mastra/playground-ui/components/ThemeProvider';
 import { useEffect } from 'react';
-import { useLocation } from 'react-router';
+import { Link, useLocation, useParams } from 'react-router';
+import { Brain } from 'lucide-react';
+import { buttonVariants } from '@mastra/playground-ui/components/Button';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -9,8 +12,12 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useChatPermissions } from '../../chat/context/useChatPermissions';
 import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
 import { useSettingsSection } from '../hooks/useSettingsSection';
+import { settingsSectionPath } from '../settingsSections';
 import { useAgentControllerSettings } from '../../../../hooks/useAgentControllerSettings';
 import { useAvailableModelsQuery } from '../../../../hooks/useAvailableModels';
+import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
+import { useProvidersQuery } from '../../../../hooks/use-providers';
+import { useCustomProvidersQuery } from '../../../../hooks/use-custom-providers';
 import {
   SettingsUpdateVerificationError,
   useUpdateAgentControllerSettingsMutation,
@@ -29,7 +36,7 @@ import { RepositoriesSection } from './RepositoriesSection';
 import { SettingsCard } from './SettingsCard';
 import { SettingsSubsection } from './SettingsSubsection';
 import { OMSection } from './OMSection';
-import { ThinkingDefaultsSection } from './ThinkingDefaultsSection';
+import { BaseThinkingSection, ModeThinkingDefaultsSection } from './ThinkingDefaultsSection';
 import { ProviderAccessSection } from './ProviderAccessSection';
 import { BehaviorSettings, GeneralSettings, ModelSettings } from './SettingsPanel.parts';
 
@@ -42,6 +49,7 @@ function getSettingsUpdateErrorMessage(error: unknown): string {
 export function SettingsPanel() {
   const section = useSettingsSection();
   const { hash } = useLocation();
+  const { factoryId } = useParams<{ factoryId: string }>();
   const { theme, setTheme } = useTheme();
 
   // Deep links like `/settings/models#model-packs` scroll to the subsection.
@@ -95,53 +103,20 @@ export function SettingsPanel() {
         {section === 'repositories' && <RepositoriesSection />}
         {section === 'intake' && <IntakeSection />}
         {section === 'models' && (
-          <div className="flex flex-col gap-8">
-            <SettingsSubsection title="Defaults">
-              <SettingsCard>
-                <FactoryDefaultModelSection models={models} />
-                <ModelSettings
-                  settings={settings}
-                  updating={updateSettingsMutation.isPending}
-                  onBehaviorChange={onBehaviorChange}
-                />
-              </SettingsCard>
-            </SettingsSubsection>
-            <SettingsSubsection
-              title="Thinking defaults"
-              description="Reasoning-effort applied to runs without a session override — including automated Factory runs. The session thinking level above takes precedence."
-            >
-              <SettingsCard>
-                <ThinkingDefaultsSection />
-              </SettingsCard>
-            </SettingsSubsection>
-            <SettingsSubsection title="Provider access">
-              <SettingsCard className="p-4">
-                <ProviderAccessSection />
-              </SettingsCard>
-            </SettingsSubsection>
-            <SettingsSubsection title="Custom providers">
-              <SettingsCard className="p-4">
-                <CustomProvidersSection />
-              </SettingsCard>
-            </SettingsSubsection>
-            <SettingsSubsection
-              id="model-packs"
-              title="Chat model packs"
-              description="Set your personal Build, Plan and Fast defaults for interactive chats. Factory work runs are unaffected."
-            >
-              <SettingsCard className="p-4">
-                <ModelPacksSection models={models} />
-              </SettingsCard>
-            </SettingsSubsection>
-            <SettingsSubsection
-              title="Observational memory"
-              description="Choose the models and token thresholds used to summarize and retain conversation context."
-            >
-              <SettingsCard className="p-4">
-                <OMSection resourceId={sessionResourceId} scope={sessionScope} models={models} />
-              </SettingsCard>
-            </SettingsSubsection>
-          </div>
+          <ModelsSettingsSection
+            models={models}
+            settings={settings}
+            updating={updateSettingsMutation.isPending}
+            onBehaviorChange={onBehaviorChange}
+          />
+        )}
+        {section === 'memory' && (
+          <MemorySettingsSection
+            factoryId={factoryId}
+            models={models}
+            sessionResourceId={sessionResourceId}
+            sessionScope={sessionScope}
+          />
         )}
         {section === 'skills' && <FactorySkillsSection />}
         {section === 'behavior' && (
@@ -156,5 +131,138 @@ export function SettingsPanel() {
         )}
       </div>
     </section>
+  );
+}
+
+interface ModelsSettingsSectionProps {
+  models: AvailableModelOption[];
+  settings: AgentControllerSessionSettings | null;
+  updating: boolean;
+  onBehaviorChange: (updates: Partial<AgentControllerSessionSettings>) => void;
+}
+
+interface MemorySettingsSectionProps {
+  factoryId: string | undefined;
+  models: AvailableModelOption[];
+  sessionResourceId: string | undefined;
+  sessionScope: string | undefined;
+}
+
+/**
+ * Observational-memory settings, split by scope. OM models are useless
+ * without a provider credential, so until one is connected the page is a
+ * zero state pointing at the Models page.
+ */
+function MemorySettingsSection({ factoryId, models, sessionResourceId, sessionScope }: MemorySettingsSectionProps) {
+  const providersQuery = useProvidersQuery();
+  const customProvidersQuery = useCustomProvidersQuery();
+  const anyConnected =
+    (providersQuery.data ?? []).some(p => p.source !== 'none') || (customProvidersQuery.data ?? []).length > 0;
+  const providersKnown = providersQuery.isSuccess && customProvidersQuery.isSuccess;
+
+  if (providersKnown && !anyConnected) {
+    return (
+      <EmptyState
+        as="h2"
+        iconSlot={<Brain size={40} className="text-icon3" />}
+        titleSlot="No models configured"
+        descriptionSlot="Observational memory needs a model to summarize and retain context. Connect a provider on the Models page first."
+        actionSlot={
+          factoryId ? (
+            <Link to={settingsSectionPath(factoryId, 'models')} className={buttonVariants({ variant: 'primary' })}>
+              Open Models settings
+            </Link>
+          ) : undefined
+        }
+      />
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-8">
+      {/* Without a factory id an unscoped OM request would resolve — and let
+          this section edit — the caller's personal row as if it were shared. */}
+      {factoryId && (
+        <SettingsSubsection
+          title="Factory observational memory"
+          description="Models and token thresholds used to summarize and retain context in Factory runs."
+        >
+          <SettingsCard className="p-4">
+            <OMSection factoryId={factoryId} models={models} />
+          </SettingsCard>
+        </SettingsSubsection>
+      )}
+      <SettingsSubsection
+        title="Your observational memory"
+        description="Models and token thresholds used to summarize and retain context in your interactive chats."
+      >
+        <SettingsCard className="p-4">
+          <OMSection resourceId={sessionResourceId} scope={sessionScope} models={models} />
+        </SettingsCard>
+      </SettingsSubsection>
+    </div>
+  );
+}
+
+/**
+ * Layered setup: until at least one provider credential is usable, model and
+ * OM pickers are pointless, so the page leads with the connect step alone.
+ * Once connected, model selection moves to the top and provider management
+ * drops to the bottom.
+ */
+function ModelsSettingsSection({ models, settings, updating, onBehaviorChange }: ModelsSettingsSectionProps) {
+  const providersQuery = useProvidersQuery();
+  const customProvidersQuery = useCustomProvidersQuery();
+  const anyConnected =
+    (providersQuery.data ?? []).some(p => p.source !== 'none') || (customProvidersQuery.data ?? []).length > 0;
+  const providersKnown = providersQuery.isSuccess && customProvidersQuery.isSuccess;
+
+  const providerSubsections = (
+    <>
+      <SettingsSubsection
+        title="Provider access"
+        description={
+          anyConnected ? undefined : 'Connect a provider to unlock model selection and observational-memory settings.'
+        }
+      >
+        <SettingsCard className="p-4">
+          <ProviderAccessSection />
+        </SettingsCard>
+      </SettingsSubsection>
+      <SettingsSubsection title="Custom providers">
+        <SettingsCard className="p-4">
+          <CustomProvidersSection />
+        </SettingsCard>
+      </SettingsSubsection>
+    </>
+  );
+
+  // Nothing connected yet: show only the connect step.
+  if (providersKnown && !anyConnected) {
+    return <div className="flex flex-col gap-8">{providerSubsections}</div>;
+  }
+
+  return (
+    <div className="flex flex-col gap-8">
+      <SettingsSubsection
+        title="Factory defaults"
+        description="Applied to Factory runs (triage, board work items) and channel sessions."
+      >
+        <SettingsCard>
+          <FactoryDefaultModelSection models={models} />
+          <BaseThinkingSection />
+        </SettingsCard>
+      </SettingsSubsection>
+      <SettingsSubsection id="model-packs" title="Your defaults" description="Applied to your interactive chats.">
+        <SettingsCard>
+          <div className="p-4">
+            <ModelPacksSection models={models} />
+          </div>
+          <ModelSettings settings={settings} updating={updating} onBehaviorChange={onBehaviorChange} />
+          <ModeThinkingDefaultsSection />
+        </SettingsCard>
+      </SettingsSubsection>
+      {providerSubsections}
+    </div>
   );
 }

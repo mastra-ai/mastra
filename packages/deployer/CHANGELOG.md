@@ -1,5 +1,53 @@
 # @mastra/deployer
 
+## 1.61.0-alpha.5
+
+### Patch Changes
+
+- Sweep idle HTTP connections periodically during graceful shutdown. A keep-alive socket whose in-flight response finished after the initial `closeIdleConnections()` call would stall the drain until the full `server.drainTimeout` expired; the server now exits as soon as in-flight work actually completes. ([#21996](https://github.com/mastra-ai/mastra/pull/21996))
+
+- Updated dependencies [[`7c60df5`](https://github.com/mastra-ai/mastra/commit/7c60df5c7872343fbac5c3e5b1175c8076a5abfd)]:
+  - @mastra/core@1.61.0-alpha.5
+  - @mastra/server@1.61.0-alpha.5
+
+## 1.61.0-alpha.4
+
+### Patch Changes
+
+- Fix `ERR_INVALID_ARG_VALUE` during bundling when a bare import is resolved from a Rollup virtual module. `nodeModulesExtensionResolver` now skips NUL-prefixed importers (e.g. `\0virtual:#entry`) instead of treating them as filesystem paths. ([#21998](https://github.com/mastra-ai/mastra/pull/21998))
+
+- Updated dependencies:
+  - @mastra/core@1.61.0-alpha.4
+  - @mastra/server@1.61.0-alpha.4
+
+## 1.61.0-alpha.3
+
+### Minor Changes
+
+- Improved generated server shutdown to drain in-flight HTTP requests before closing Mastra resources ([#20678](https://github.com/mastra-ai/mastra/issues/20678)). Refresh streams now close during shutdown, drain failures no longer skip resource cleanup, and a second shutdown signal exits immediately. ([#21990](https://github.com/mastra-ai/mastra/pull/21990))
+
+### Patch Changes
+
+- Updated dependencies [[`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`acc3471`](https://github.com/mastra-ai/mastra/commit/acc3471de5f3fde8027ee4e355af292b2bc1bc30), [`b6a771e`](https://github.com/mastra-ai/mastra/commit/b6a771ef23d203ddb348efca8065eff65def8191), [`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`26d4016`](https://github.com/mastra-ai/mastra/commit/26d40160ff7f7d8bf95fee2039a52cbc83863533), [`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`57c5103`](https://github.com/mastra-ai/mastra/commit/57c51035a2a36e3df3c4f32f46bb789a66ed5946)]:
+  - @mastra/server@1.61.0-alpha.3
+  - @mastra/core@1.61.0-alpha.3
+
+## 1.61.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`480e491`](https://github.com/mastra-ai/mastra/commit/480e491588bd6a7a1c9ee4407590ad625dd33952), [`3bb88dd`](https://github.com/mastra-ai/mastra/commit/3bb88ddf07fb98f3cd16d3bff94e51cd3b45d011), [`d378d75`](https://github.com/mastra-ai/mastra/commit/d378d7511f71309ed61a8f6b93cd0361dc6cb70f), [`cad4208`](https://github.com/mastra-ai/mastra/commit/cad42082e6aa1776168a94914f523334be45d929), [`d378d75`](https://github.com/mastra-ai/mastra/commit/d378d7511f71309ed61a8f6b93cd0361dc6cb70f)]:
+  - @mastra/core@1.61.0-alpha.2
+  - @mastra/server@1.61.0-alpha.2
+
+## 1.61.0-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`d23e75d`](https://github.com/mastra-ai/mastra/commit/d23e75d57cc7cf5b9bfdbee896bf5a6a2484fed7), [`c8faa4e`](https://github.com/mastra-ai/mastra/commit/c8faa4e1cfebaec56b65e754e90b9fe46d153359), [`f2031a4`](https://github.com/mastra-ai/mastra/commit/f2031a47445e8f67a89ba1309036816f97ab7a65), [`8e529d4`](https://github.com/mastra-ai/mastra/commit/8e529d4ac754efef04b225841349e0da9edf89a6)]:
+  - @mastra/core@1.61.0-alpha.1
+  - @mastra/server@1.61.0-alpha.1
+
 ## 1.60.1-alpha.0
 
 ### Patch Changes
