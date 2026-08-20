@@ -1,5 +1,21 @@
 # @mastra/factory
 
+## 0.8.1-alpha.0
+
+### Patch Changes
+
+- Fixed the chat jumping every time a session's stream hiccuped. Losing the connection used to push a banner above the transcript and shove every message down; the reconnect state now lives only in the status line under the composer, where the model and token readouts already are. ([#21850](https://github.com/mastra-ai/mastra/pull/21850))
+
+  The state is also honest during a run: a drop while the agent works used to stay hidden behind the working indicator, and now shows as `Reconnecting…`. A connection lost for good reads as `Disconnected` in the alert color.
+
+- Fixed assistant turns showing up twice in the chat transcript, with the first copy stripped of the tool cards that belong to it. ([#21851](https://github.com/mastra-ai/mastra/pull/21851))
+
+  Tool cards stay attached to the text they ran under. The double came from the same turn arriving under a second identity after a stream gap; the transcript now recognises that copy as the turn it is already drawing and updates it in place.
+
+- Updated dependencies [[`88d14ca`](https://github.com/mastra-ai/mastra/commit/88d14cac008582a618fecc3d5c7fd3bdf4f6ddc3), [`84a5b69`](https://github.com/mastra-ai/mastra/commit/84a5b699f84d6bae0a34efe5a970d891090b9f41), [`84a5b69`](https://github.com/mastra-ai/mastra/commit/84a5b699f84d6bae0a34efe5a970d891090b9f41), [`84a5b69`](https://github.com/mastra-ai/mastra/commit/84a5b699f84d6bae0a34efe5a970d891090b9f41), [`038b7b4`](https://github.com/mastra-ai/mastra/commit/038b7b405cb4ac25ab3f3031334111b1f87ac112), [`4132d61`](https://github.com/mastra-ai/mastra/commit/4132d61f8367077120ee9e6420d3224dffd93c93)]:
+  - @mastra/core@1.60.1-alpha.0
+  - @mastra/code-sdk@1.3.1-alpha.0
+
 ## 0.8.0
 
 ### Minor Changes

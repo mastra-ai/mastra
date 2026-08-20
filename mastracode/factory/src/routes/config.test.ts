@@ -659,7 +659,7 @@ describe('model pack routes with a tenant', () => {
     expect(await response.json()).toEqual({ error: 'target must be "default" or "session"' });
   });
 
-  it('applies a pack to one session without changing the personal default', async () => {
+  it('applies a pack to a no-scope user session without changing the personal default', async () => {
     const created = await postPack(buildApp(userA), packBody);
     const { pack } = await created.json();
     const modelSwitch = vi.fn().mockResolvedValue(undefined);
@@ -682,7 +682,7 @@ describe('model pack routes with a tenant', () => {
       {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ target: 'session', resourceId: 'session-1', scope: '/tmp/session-1' }),
+        body: JSON.stringify({ target: 'session', resourceId: 'session-1' }),
       },
     );
 
@@ -692,9 +692,7 @@ describe('model pack routes with a tenant', () => {
     expect(setSetting).toHaveBeenCalledWith({ key: 'activeModelPackId', value: pack.id });
     expect(await seed.modelPacks.getActive({ orgId: 'org1', userId: 'user-a' })).toBeNull();
 
-    const listed = await buildApp(userA, sessionController).request(
-      '/web/config/model-packs?resourceId=session-1&scope=%2Ftmp%2Fsession-1',
-    );
+    const listed = await buildApp(userA, sessionController).request('/web/config/model-packs?resourceId=session-1');
     expect(await listed.json()).toMatchObject({ activePackId: null, sessionPackId: pack.id });
   });
 
@@ -710,6 +708,25 @@ describe('model pack routes with a tenant', () => {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ target: 'session', resourceId: 'session-1', scope: '/tmp/session-1' }),
+    });
+
+    expect(listed.status).toBe(404);
+    expect(activated.status).toBe(404);
+    expect(sessionController.getSessionByResource).not.toHaveBeenCalled();
+  });
+
+  it("does not expose or mutate another user's session pack when scope is omitted", async () => {
+    const sessionController = {
+      ...controller,
+      getSessionByResource: vi.fn().mockResolvedValue({}),
+    };
+    const app = buildApp(userB, sessionController);
+
+    const listed = await app.request('/web/config/model-packs?resourceId=session-1');
+    const activated = await app.request('/web/config/model-packs/anthropic/activate', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ target: 'session', resourceId: 'session-1' }),
     });
 
     expect(listed.status).toBe(404);

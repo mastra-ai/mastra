@@ -1,5 +1,7 @@
 # create-mastra
 
+## 1.25.2-alpha.0
+
 ## 1.25.1
 
 ### Patch Changes
