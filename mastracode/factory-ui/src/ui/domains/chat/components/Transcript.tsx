@@ -503,12 +503,80 @@ const HISTORY_ENTRY_STAGGER_LIMIT = 10;
 
 interface PreparedTranscriptEntry {
   entry: TimelineEntry;
-  content: ReactNode;
+  visible: boolean;
 }
 
 function createHistoryRevealDelays(entries: PreparedTranscriptEntry[]): Record<string, number> {
-  const visibleEntries = entries.filter(({ content }) => content !== null).slice(-HISTORY_ENTRY_STAGGER_LIMIT);
+  const visibleEntries = entries.filter(({ visible }) => visible).slice(-HISTORY_ENTRY_STAGGER_LIMIT);
   return Object.fromEntries(visibleEntries.map(({ entry }, index) => [entry.id, index * HISTORY_ENTRY_STAGGER_MS]));
+}
+
+function messageDrawsContent(entry: MessageEntry, suspensions: ReadonlyMap<string, SuspensionPrompt>): boolean {
+  const parts = entry.message.content.parts.filter(part => isRenderablePart(part, suspensions, entry.runtimeTools));
+  const skillActivation =
+    entry.message.role === 'user' && parts.length === 1 && parts[0].type === 'text'
+      ? parseSkillActivation(parts[0].text)
+      : undefined;
+  if (skillActivation) return true;
+  if (isSkillNotificationSignal(entry)) return false;
+  if (notificationMetadata(entry).length > 0) return true;
+
+  const signalRow = signalRowView(entry);
+  if (signalRow) {
+    if (signalRow.kind === 'state') return !SUPPRESSED_STATE_SIGNAL_IDS.has(signalRow.stateId);
+    if (signalRow.kind === 'gap' || signalRow.kind === 'reminder') return true;
+    return Boolean(signalRow.tagName && !HIDDEN_REACTIVE_SIGNAL_TAGS.has(signalRow.tagName));
+  }
+
+  const status = statusMetadata(entry);
+  return Boolean(status?.text.trim()) || parts.length > 0;
+}
+
+function transcriptEntryDrawsContent(
+  entry: TimelineEntry,
+  suspensions: ReadonlyMap<string, SuspensionPrompt>,
+  canonicalToolCallIds: ReadonlySet<string>,
+): boolean {
+  if (entry.kind === 'message') return messageDrawsContent(entry, suspensions);
+  if (entry.kind === 'suspension') {
+    return entry.toolName === 'request_access' || !canonicalToolCallIds.has(entry.toolCallId);
+  }
+  return true;
+}
+
+function TranscriptEntryContent({
+  entry,
+  suspensions,
+  isSubmitting,
+  onApprove,
+  onRespond,
+}: {
+  entry: TimelineEntry;
+  suspensions: ReadonlyMap<string, SuspensionPrompt>;
+  isSubmitting: boolean;
+  onApprove: (toolCallId: string, approved: boolean, promptId: string) => void;
+  onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
+}) {
+  switch (entry.kind) {
+    case 'message':
+      return (
+        <MessageBubble entry={entry} suspensions={suspensions} isSubmitting={isSubmitting} onRespond={onRespond} />
+      );
+    case 'notice':
+      return <NoticeCard entry={entry} />;
+    case 'approval':
+      return <ApprovalCard prompt={entry} isSubmitting={isSubmitting} onApprove={onApprove} />;
+    case 'notification':
+      return <NotificationCard entry={entry} />;
+    case 'notification_summary':
+      return <NotificationSummaryCard entry={entry} />;
+    case 'suspension':
+      return <SuspensionCard prompt={entry} isSubmitting={isSubmitting} onRespond={onRespond} />;
+    case 'subagent':
+      return <SubagentCard entry={entry} />;
+    default:
+      return null;
+  }
 }
 
 export function Transcript({ tail }: { tail?: ReactNode }) {
@@ -578,30 +646,10 @@ export function TranscriptEntries({
     ),
   );
 
-  const renderEntry = (entry: TimelineEntry): ReactNode => {
-    switch (entry.kind) {
-      case 'message':
-        return renderMessageBubble({ entry, suspensions, isSubmitting, onRespond });
-      case 'notice':
-        return <NoticeCard entry={entry} />;
-      case 'approval':
-        return <ApprovalCard prompt={entry} isSubmitting={isSubmitting} onApprove={onApprove} />;
-      case 'notification':
-        return <NotificationCard entry={entry} />;
-      case 'notification_summary':
-        return <NotificationSummaryCard entry={entry} />;
-      case 'suspension':
-        return entry.toolName === 'request_access' || !canonicalToolCallIds.has(entry.toolCallId) ? (
-          <SuspensionCard prompt={entry} isSubmitting={isSubmitting} onRespond={onRespond} />
-        ) : null;
-      case 'subagent':
-        return <SubagentCard entry={entry} />;
-      default:
-        return null;
-    }
-  };
-
-  const preparedEntries = entries.map(entry => ({ entry, content: renderEntry(entry) }));
+  const preparedEntries = entries.map(entry => ({
+    entry,
+    visible: transcriptEntryDrawsContent(entry, suspensions, canonicalToolCallIds),
+  }));
   const [historyRevealDelays] = useState(() =>
     revealInitialEntries ? createHistoryRevealDelays(preparedEntries) : {},
   );
@@ -642,7 +690,8 @@ export function TranscriptEntries({
             key={group.key}
             className={cn('flex flex-col', group.opensTurn && 'turn-room', holdsRoom && 'turn-room-open')}
           >
-            {group.entries.map(({ entry, content }) => {
+            {group.entries.map(({ entry, visible }) => {
+              if (!visible) return null;
               const historyRevealDelay = historyRevealDelays[entry.id];
 
               return (
@@ -650,15 +699,19 @@ export function TranscriptEntries({
                   key={entry.id}
                   messageId={entry.id}
                   scrollAnchor={opensTurn(entry)}
-                  // Estimated off-screen heights would make the prepend anchor restore
-                  // the wrong offset — measure the real thing.
                   className={cn(
                     '[content-visibility:visible]',
                     historyRevealDelay !== undefined && 'transcript-history-enter',
                   )}
                   style={historyRevealDelay === undefined ? undefined : { animationDelay: `${historyRevealDelay}ms` }}
                 >
-                  {content}
+                  <TranscriptEntryContent
+                    entry={entry}
+                    suspensions={suspensions}
+                    isSubmitting={isSubmitting}
+                    onApprove={onApprove}
+                    onRespond={onRespond}
+                  />
                 </MessageScrollerItem>
               );
             })}
@@ -711,7 +764,7 @@ export function ChannelOriginBadge({ origin }: { origin: { platform: string; aut
   );
 }
 
-function renderMessageBubble({
+function MessageBubble({
   entry,
   suspensions,
   isSubmitting,

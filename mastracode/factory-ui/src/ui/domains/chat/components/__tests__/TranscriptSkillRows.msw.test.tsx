@@ -207,7 +207,7 @@ describe('TranscriptEntries skill rows', () => {
       },
     ]);
 
-    expect(document.querySelector('[data-message-id="msg-step"]')).toBeEmptyDOMElement();
+    expect(document.querySelector('[data-message-id="msg-step"]')).not.toBeInTheDocument();
   });
 
   it('renders an ordinary user text message as a right-aligned chat bubble', () => {
