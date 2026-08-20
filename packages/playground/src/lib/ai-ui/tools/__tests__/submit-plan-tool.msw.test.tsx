@@ -143,7 +143,7 @@ describe('SubmitPlanTool', () => {
       expect(screen.queryByRole('button', { name: 'Expand plan' })).toBeNull();
     });
 
-    it('shows a secondary expand action when the plan body exceeds 500 characters', async () => {
+    it('keeps three control cells when a long plan does not overflow', async () => {
       server.use(
         http.get(`${BASE_URL}/api/agents/:agentId/plans/file`, () =>
           HttpResponse.json({
@@ -155,12 +155,11 @@ describe('SubmitPlanTool', () => {
 
       renderSubmitPlan(pendingProps);
 
-      const expandButton = await screen.findByRole('button', { name: 'Expand plan' });
-      expect(expandButton.getAttribute('data-variant')).toBe('default');
+      await screen.findByRole('heading', { name: 'Long plan' });
+      expect(screen.queryByRole('button', { name: 'Expand plan' })).toBeNull();
 
-      const primaryButtons = document.querySelectorAll('button[data-variant="primary"]');
-      expect(primaryButtons).toHaveLength(1);
-      expect(primaryButtons[0]?.getAttribute('aria-label')).toBe('Approve the plan and switch to build');
+      const controls = document.querySelector('[data-slot="plan-controls"] > div');
+      expect(controls?.children).toHaveLength(3);
     });
 
     it('resumes the tool with the displayed plan when approved', async () => {

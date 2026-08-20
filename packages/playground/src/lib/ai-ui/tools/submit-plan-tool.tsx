@@ -182,7 +182,7 @@ function PendingPlanCard({ agentId, agentVersionId, requestContext, toolCallId, 
                 Approve &amp; build
               </Button>
             </PlanActionGroup>
-            {canExpand ? <PlanExpandButton /> : <span aria-hidden="true" />}
+            <span>{canExpand ? <PlanExpandButton /> : null}</span>
             <PlanActionGroup>
               <Button
                 type="button"
