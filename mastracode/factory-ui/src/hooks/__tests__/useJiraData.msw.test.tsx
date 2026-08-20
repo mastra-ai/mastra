@@ -155,7 +155,10 @@ describe('useJiraIssuesQuery', () => {
   it('given the credentials are rejected, when the hook resolves, then the error is recognized as a Jira auth error', async () => {
     server.use(
       http.get(ISSUES_URL, () =>
-        HttpResponse.json({ error: 'jira_auth_failed', message: 'Jira rejected the configured credentials' }, { status: 409 }),
+        HttpResponse.json(
+          { error: 'jira_auth_failed', message: 'Jira rejected the configured credentials' },
+          { status: 409 },
+        ),
       ),
     );
 
@@ -210,7 +213,9 @@ describe('intake config and bindings drive the Jira issue cache', () => {
     let issueHits = 0;
     server.use(
       http.get(CONFIG_URL, () => HttpResponse.json({ config })),
-      http.put(CONFIG_URL, async ({ request }) => HttpResponse.json({ config: (await request.json()) as IntakeConfig })),
+      http.put(CONFIG_URL, async ({ request }) =>
+        HttpResponse.json({ config: (await request.json()) as IntakeConfig }),
+      ),
       http.get(ISSUES_URL, () => {
         issueHits += 1;
         return HttpResponse.json({ issues: [issue], nextCursor: null });
