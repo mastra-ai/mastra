@@ -213,25 +213,53 @@ describe('submitExperimentResult', () => {
     expect(scores[0]!.entityId).toBe(itemIds[0]);
   });
 
-  it('does not duplicate inline scores when a submission is retried', async () => {
+  it('retried submissions converge on one score per scorer, latest wins', async () => {
     const { ds, itemIds, scoresStorage } = await setup(THREE_ITEMS);
     const { experimentId } = await ds.createExperiment({});
 
-    const submit = () =>
+    const submit = (score: number) =>
       ds.submitExperimentResult({
         experimentId,
         itemId: itemIds[0]!,
         output: 'out',
-        scores: [{ scorerId: 'clinical-accuracy', score: 0.9, reason: 'good' }],
+        scores: [{ scorerId: 'clinical-accuracy', score, reason: 'good' }],
       });
-    await submit();
-    await submit();
+    // Worker submits 0.4, times out, retries with an updated 0.8.
+    await submit(0.4);
+    await submit(0.8);
 
     const { scores } = await scoresStorage.listScoresByRunId({
       runId: experimentId,
       pagination: { page: 0, perPage: 10 },
     });
     expect(scores).toHaveLength(1);
+    expect(scores[0]!.score).toBe(0.8);
+  });
+
+  it('distinct attempts keep separate score rows', async () => {
+    const { ds, itemIds, scoresStorage } = await setup(THREE_ITEMS);
+    const { experimentId } = await ds.createExperiment({});
+
+    await ds.submitExperimentResult({
+      experimentId,
+      itemId: itemIds[0]!,
+      attempt: 0,
+      output: 'out',
+      scores: [{ scorerId: 'clinical-accuracy', score: 0.4 }],
+    });
+    await ds.submitExperimentResult({
+      experimentId,
+      itemId: itemIds[0]!,
+      attempt: 1,
+      output: 'out',
+      scores: [{ scorerId: 'clinical-accuracy', score: 0.8 }],
+    });
+
+    const { scores } = await scoresStorage.listScoresByRunId({
+      runId: experimentId,
+      pagination: { page: 0, perPage: 10 },
+    });
+    expect(scores.map(s => s.score).sort()).toEqual([0.4, 0.8]);
   });
 
   it('rejects unknown item ids', async () => {
@@ -432,6 +460,27 @@ describe('runExperimentItem (mode 2: caller drives loop, Mastra runs items)', ()
     expect(second.result.id).toBe(first.result.id);
     const listed = await ds.listExperimentResults({ experimentId });
     expect(listed.results).toHaveLength(1);
+  });
+
+  it('retried call converges scores on one row per scorer', async () => {
+    const agent = createMockAgent('answer');
+    const scorer = createMockScorer('accuracy', 0.75);
+    const { ds, itemIds, scoresStorage } = await setup(THREE_ITEMS, { agent, scorers: [scorer] });
+    const { experimentId } = await ds.createExperiment({
+      targetType: 'agent',
+      targetId: 'test-agent',
+      scorers: ['accuracy'],
+    });
+
+    await ds.runExperimentItem({ experimentId, itemId: itemIds[0]! });
+    await ds.runExperimentItem({ experimentId, itemId: itemIds[0]! });
+
+    const { scores } = await scoresStorage.listScoresByRunId({
+      runId: experimentId,
+      pagination: { page: 0, perPage: 10 },
+    });
+    expect(scores).toHaveLength(1);
+    expect(scores[0]!.score).toBe(0.75);
   });
 
   it('separates rows per attempt for repeated trials', async () => {

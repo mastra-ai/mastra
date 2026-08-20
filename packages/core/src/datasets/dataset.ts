@@ -27,6 +27,7 @@ import type {
   UpdateExperimentResultInput,
 } from '../storage/types.js';
 import { runExperiment, resolveTarget, executeExperimentItem } from './experiment/index.js';
+import { experimentScoreId } from './experiment/scorer.js';
 import type { ExperimentConfig, StartExperimentConfig, ExperimentSummary } from './experiment/types.js';
 
 /**
@@ -974,35 +975,13 @@ export class Dataset {
       const storage = this.#mastra.getStorage();
       if (storage) {
         // Retry convergence: the result row upserts on (experimentId, itemId,
-        // attempt), but score rows are insert-only. Skip scorers that already
-        // have a row for this (runId, itemId) so a retried submission does not
-        // double-count in aggregation. Best-effort: a dedupe read failure
-        // falls back to writing the scores.
-        const alreadyScored = new Set<string>();
-        try {
-          const scoresStore = await storage.getStore('scores');
-          if (scoresStore) {
-            let scorePage = 0;
-            // eslint-disable-next-line no-constant-condition
-            while (true) {
-              const { scores: existingScores, pagination } = await scoresStore.listScoresByRunId({
-                runId: args.experimentId,
-                pagination: { page: scorePage, perPage: 100 },
-              });
-              for (const row of existingScores) {
-                if (row.entityId === args.itemId) alreadyScored.add(row.scorerId);
-              }
-              if (!pagination.hasMore || existingScores.length === 0) break;
-              scorePage += 1;
-            }
-          }
-        } catch {
-          // fall through — dedupe is best-effort
-        }
+        // attempt); score rows use a deterministic id derived from the same
+        // natural key plus the scorer, so a retried submission replaces the
+        // previous score (latest wins) instead of accumulating duplicates.
         for (const score of args.scores) {
-          if (alreadyScored.has(score.scorerId)) continue;
           try {
             await validateAndSaveScore(storage, {
+              id: experimentScoreId(args.experimentId, args.itemId, args.attempt ?? 0, score.scorerId),
               scorerId: score.scorerId,
               score: score.score,
               reason: score.reason,

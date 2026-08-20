@@ -8,6 +8,7 @@ import { resolveTarget } from './resolve-target';
 import {
   createItemScorerResolver,
   EXPERIMENT_ITEM_SCORER_NOT_FOUND,
+  experimentScoreKey,
   resolveScorers,
   runScorersForItem,
 } from './scorer';
@@ -161,6 +162,9 @@ export async function executeExperimentItem(args: ExecuteExperimentItemArgs): Pr
       execResult.traceId ?? undefined,
       workflowData,
       true,
+      // Retried runs of the same (experiment, item, attempt) overwrite their
+      // previous score rows instead of accumulating duplicates.
+      experimentScoreKey(experiment.id, item.id, attempt),
     );
   }
 

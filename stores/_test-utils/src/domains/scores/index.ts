@@ -53,6 +53,26 @@ export function createScoresTest({
       await scoresStorage.dangerouslyClearAll();
     });
 
+    it('saveScore with a caller-supplied id upserts (latest score wins)', async () => {
+      const scorerId = `scorer-${randomUUID()}`;
+      const id = `expscore-${randomUUID()}`;
+
+      const first = createSampleScore({ scorerId });
+      await scoresStorage.saveScore({ ...first, id, score: 0.4 });
+      await scoresStorage.saveScore({ ...first, id, score: 0.8 });
+
+      const listed = await scoresStorage.listScoresByScorerId({
+        scorerId,
+        pagination: { page: 0, perPage: 10 },
+      });
+      expect(listed.scores).toHaveLength(1);
+      expect(listed.scores[0]!.id).toBe(id);
+      expect(listed.scores[0]!.score).toBe(0.8);
+
+      const byId = await scoresStorage.getScoreById({ id });
+      expect(byId?.score).toBe(0.8);
+    });
+
     it('should retrieve scores by scorer id', async () => {
       const scorerId = `scorer-${randomUUID()}`;
 
