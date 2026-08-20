@@ -5,15 +5,19 @@ import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import { useApiConfig } from '../../../../api/config';
-import { SkeletonRows } from '../../../ui/SkeletonRows';
+import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { useIntakeConfigQuery, useSaveIntakeConfigMutation } from '../../../../hooks/useIntakeConfig';
+import { useJiraProjectsQuery, useJiraStatusQuery } from '../../../../hooks/useJiraData';
 import { useLinearProjectsQuery, useLinearStatusQuery } from '../../../../hooks/useLinearData';
+import { SkeletonRows } from '../../../ui/SkeletonRows';
+import { isJiraAuthError } from '../../factory/services/jira';
+import type { JiraProject, JiraStatus } from '../../factory/services/jira';
+import type { IntakeConfig } from '../../factory/services/intake';
 import { connectLinear, isLinearReauthError } from '../../factory/services/linear';
 import type { LinearProject, LinearStatus } from '../../factory/services/linear';
-import type { IntakeConfig } from '../../factory/services/intake';
-import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { SourcePicker } from './IntakeSourcePicker';
 import type { SourcePickerGroup } from './IntakeSourcePicker';
+import { JiraRouting } from './JiraRouting';
 import { LinearRouting } from './LinearRouting';
 import { SettingsCard } from './SettingsCard';
 import { SettingsSubsection } from './SettingsSubsection';
@@ -25,7 +29,7 @@ import { SettingsSubsection } from './SettingsSubsection';
  */
 function toggleId(ids: string[] | null, id: string): string[] | null {
   const current = ids ?? [];
-  const next = current.includes(id) ? current.filter(v => v !== id) : [...current, id];
+  const next = current.includes(id) ? current.filter(value => value !== id) : [...current, id];
   return next.length ? next : null;
 }
 
@@ -165,21 +169,90 @@ function LinearIntakeSection({
   );
 }
 
+function JiraIntakeSection({
+  config,
+  busy,
+  update,
+  status,
+  configured,
+  projects,
+  authError,
+  showPickers,
+}: SourceSectionProps & {
+  status: JiraStatus | undefined;
+  configured: boolean;
+  projects: JiraProject[];
+  authError: boolean;
+  showPickers: boolean;
+}) {
+  const description = !configured
+    ? 'Jira is not configured on this server. Set JIRA_BASE_URL, JIRA_EMAIL, and JIRA_API_TOKEN to enable it.'
+    : authError
+      ? 'Jira rejected the configured credentials. Ask the operator to check the Jira API token.'
+      : 'Active issues from the selected projects.';
+  const action = configured ? (
+    <Txt as="span" variant="ui-sm" className="text-icon3">
+      Connected to {status?.site ?? 'a Jira site'}
+    </Txt>
+  ) : undefined;
+
+  return (
+    <SettingsSubsection title="Jira issues" description={description} action={action}>
+      <SettingsCard>
+        <SettingsRow variant="factory" label="Sync Jira issues">
+          <Switch
+            aria-label="Sync Jira issues"
+            checked={config.jira.enabled}
+            disabled={busy || !configured}
+            onCheckedChange={enabled => update({ ...config, jira: { ...config.jira, enabled } })}
+          />
+        </SettingsRow>
+
+        {showPickers && (
+          <SourcePicker
+            label="Jira projects"
+            groups={[
+              {
+                id: 'projects',
+                items: projects.map(project => ({ id: project.id, label: `${project.key} · ${project.name}` })),
+              },
+            ]}
+            selectedIds={config.jira.sourceIds}
+            disabled={busy}
+            pending={busy}
+            onToggleItem={projectId =>
+              update({
+                ...config,
+                jira: { ...config.jira, sourceIds: toggleId(config.jira.sourceIds, projectId) },
+              })
+            }
+          />
+        )}
+      </SettingsCard>
+    </SettingsSubsection>
+  );
+}
+
 export function IntakeSection() {
   const { baseUrl } = useApiConfig();
   const configQuery = useIntakeConfigQuery();
   const saveMutation = useSaveIntakeConfigMutation();
   const factoriesQuery = useFactoriesQuery();
   const linearStatusQuery = useLinearStatusQuery();
+  const jiraStatusQuery = useJiraStatusQuery();
 
   const linearStatus = linearStatusQuery.data;
   const linearConnected = Boolean(linearStatus?.enabled && linearStatus.connected);
   const linearProjectsQuery = useLinearProjectsQuery(linearConnected);
 
+  const jiraStatus = jiraStatusQuery.data;
+  const jiraConfigured = Boolean(jiraStatus?.enabled);
+  const jiraProjectsQuery = useJiraProjectsQuery(jiraConfigured);
+
   const config = configQuery.data;
   // The same repository can be linked to several factories; Intake picks it once.
   const linkedSlugs = [
-    ...new Set((factoriesQuery.data ?? []).flatMap(factory => factory.repositories.map(r => r.slug))),
+    ...new Set((factoriesQuery.data ?? []).flatMap(factory => factory.repositories.map(repository => repository.slug))),
   ];
 
   if (configQuery.isPending) {
@@ -188,7 +261,7 @@ export function IntakeSection() {
   if (configQuery.isError || !config) {
     return (
       <Txt as="p" variant="ui-sm" className="text-icon3">
-        Intake configuration is unavailable. Connect GitHub or Linear first.
+        Intake configuration is unavailable. Connect GitHub, Linear, or Jira first.
       </Txt>
     );
   }
@@ -196,14 +269,18 @@ export function IntakeSection() {
   const update = (next: IntakeConfig) => {
     saveMutation.mutate(next, {
       onSuccess: () => toast.success('Intake sources updated'),
-      onError: err => toast.error(err instanceof Error ? err.message : 'Failed to save intake sources'),
+      onError: error => toast.error(error instanceof Error ? error.message : 'Failed to save intake sources'),
     });
   };
   const busy = saveMutation.isPending;
   const linearProjects = linearProjectsQuery.data ?? [];
-  const reauthRequired = isLinearReauthError(linearProjectsQuery.error);
-  const routedProjectIds = config.linear.sourceIds ?? [];
-  const linearReady = linearConnected && config.linear.enabled && !reauthRequired && linearProjects.length > 0;
+  const linearReauthRequired = isLinearReauthError(linearProjectsQuery.error);
+  const linearSourceIds = config.linear.sourceIds ?? [];
+  const linearReady = linearConnected && config.linear.enabled && !linearReauthRequired && linearProjects.length > 0;
+  const jiraProjects = jiraProjectsQuery.data ?? [];
+  const jiraAuthError = isJiraAuthError(jiraProjectsQuery.error);
+  const jiraSourceIds = config.jira.sourceIds ?? [];
+  const jiraReady = jiraConfigured && config.jira.enabled && !jiraAuthError && jiraProjects.length > 0;
 
   return (
     <div className="flex flex-col gap-8">
@@ -215,19 +292,43 @@ export function IntakeSection() {
         status={linearStatus}
         connected={linearConnected}
         projects={linearProjects}
-        reauthRequired={reauthRequired}
+        reauthRequired={linearReauthRequired}
         showPickers={linearReady}
         baseUrl={baseUrl}
       />
-      {linearReady && routedProjectIds.length > 0 && (
+      {linearReady && linearSourceIds.length > 0 && (
         <SettingsSubsection
           title="Linear routing"
           description="Each selected project feeds one factory. Until a project is routed, its issues are not picked up."
         >
           <SettingsCard>
             <LinearRouting
-              sourceIds={routedProjectIds}
+              sourceIds={linearSourceIds}
               projects={linearProjects}
+              factories={factoriesQuery.data ?? []}
+            />
+          </SettingsCard>
+        </SettingsSubsection>
+      )}
+      <JiraIntakeSection
+        config={config}
+        busy={busy}
+        update={update}
+        status={jiraStatus}
+        configured={jiraConfigured}
+        projects={jiraProjects}
+        authError={jiraAuthError}
+        showPickers={jiraReady}
+      />
+      {jiraReady && jiraSourceIds.length > 0 && (
+        <SettingsSubsection
+          title="Jira routing"
+          description="Each selected project feeds one factory. Until a project is routed, its issues are not picked up."
+        >
+          <SettingsCard>
+            <JiraRouting
+              sourceIds={jiraSourceIds}
+              projects={jiraProjects}
               factories={factoriesQuery.data ?? []}
             />
           </SettingsCard>
@@ -236,6 +337,7 @@ export function IntakeSection() {
     </div>
   );
 }
+
 /**
  * Group Linear projects under each team they belong to (shared projects appear
  * in every team), sorted by team name. Team-less projects land in a trailing
@@ -255,7 +357,7 @@ function groupLinearProjectsByTeam(projects: LinearProject[]): SourcePickerGroup
       byTeam.set(team.id, group);
     }
   }
-  const groups = [...byTeam.values()].sort((a, b) => (a.label ?? '').localeCompare(b.label ?? ''));
+  const groups = [...byTeam.values()].toSorted((left, right) => (left.label ?? '').localeCompare(right.label ?? ''));
   if (orphans.length) {
     groups.push({
       id: 'no-team',
