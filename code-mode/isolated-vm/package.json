@@ -1,6 +1,6 @@
 {
   "name": "@mastra/isolated-vm",
-  "version": "0.1.0",
+  "version": "0.1.1-alpha.0",
   "description": "In-process V8 isolate Code Mode transport for Mastra, backed by isolated-vm",
   "type": "module",
   "main": "dist/index.js",
