@@ -57,6 +57,7 @@ function buildApp(
       jira: (options.withJira ?? true) ? jira : undefined,
       auth: fakeRouteAuth({ enabled: options.authEnabled ?? true }),
       intake: (options.withIntake ?? true) ? seed.intake : undefined,
+      projects: seed.projects,
     }),
   );
   return app;
@@ -217,5 +218,93 @@ describe('issues route', () => {
   it('rejects unauthenticated users', async () => {
     const res = await buildApp(null).request('/web/jira/issues');
     expect(res.status).toBe(401);
+  });
+
+  it('rejects malformed factory project ids', async () => {
+    const res = await buildApp(org1()).request('/web/jira/issues?factoryProjectId=not-a-uuid');
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: 'invalid_factory_project_id' });
+    expect(listActiveJiraIssues).not.toHaveBeenCalled();
+  });
+});
+
+describe('issues route — Factory source bindings', () => {
+  const projectA = '11111111-1111-4111-8111-111111111111';
+  const projectB = '22222222-2222-4222-8222-222222222222';
+
+  const seedProjects = async (count: number) => {
+    for (let i = 0; i < count; i += 1) {
+      await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: `project-${i}` } });
+    }
+  };
+
+  const bind = (sourceId: string, factoryProjectId: string) =>
+    seed.intake.setBinding({ orgId: 'org1', integrationId: 'jira', sourceId, factoryProjectId });
+
+  beforeEach(async () => {
+    await seed.intake.saveConfig({
+      orgId: 'org1',
+      userId: 'u1',
+      config: { jira: { enabled: true, sourceIds: ['1', '2'] } },
+    });
+  });
+
+  it('narrows the selection to the sources bound to the viewed Factory', async () => {
+    await seedProjects(2);
+    await bind('1', projectA);
+    await bind('2', projectB);
+
+    const res = await buildApp(org1()).request(`/web/jira/issues?factoryProjectId=${projectA}`);
+
+    expect(res.status).toBe(200);
+    expect(listActiveJiraIssues).toHaveBeenCalledWith(undefined, ['1']);
+  });
+
+  it('hides sources routed to another Factory from this board', async () => {
+    await seedProjects(2);
+    await bind('1', projectA);
+
+    const res = await buildApp(org1()).request(`/web/jira/issues?factoryProjectId=${projectB}`);
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ issues: [], nextCursor: null });
+    expect(listActiveJiraIssues).not.toHaveBeenCalled();
+  });
+
+  it('hides an unbound selection in a multi-Factory org with no bindings', async () => {
+    await seedProjects(2);
+
+    const res = await buildApp(org1()).request(`/web/jira/issues?factoryProjectId=${projectA}`);
+
+    expect(await res.json()).toEqual({ issues: [], nextCursor: null });
+    expect(listActiveJiraIssues).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the full selection for a single-Factory org with no bindings', async () => {
+    await seedProjects(1);
+
+    const res = await buildApp(org1()).request(`/web/jira/issues?factoryProjectId=${projectA}`);
+
+    expect(res.status).toBe(200);
+    expect(listActiveJiraIssues).toHaveBeenCalledWith(undefined, ['1', '2']);
+  });
+
+  it('forwards the pagination cursor together with the scoped selection', async () => {
+    await seedProjects(2);
+    await bind('1', projectA);
+
+    await buildApp(org1()).request(`/web/jira/issues?factoryProjectId=${projectA}&after=page-2`);
+
+    expect(listActiveJiraIssues).toHaveBeenCalledWith('page-2', ['1']);
+  });
+
+  it('keeps the unscoped selection for callers that omit the Factory project', async () => {
+    await seedProjects(2);
+    await bind('1', projectA);
+
+    const res = await buildApp(org1()).request('/web/jira/issues');
+
+    expect(res.status).toBe(200);
+    expect(listActiveJiraIssues).toHaveBeenCalledWith(undefined, ['1', '2']);
   });
 });

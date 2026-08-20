@@ -24,6 +24,8 @@ import type { JiraIntegration } from './integration.js';
 
 type RouteContext = Context;
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /** Erase a route handler's path-parameterized context to a plain `Context`. */
 function loose(c: unknown): RouteContext {
   return c as RouteContext;
@@ -52,6 +54,48 @@ export interface MountJiraRoutesOptions {
    * project filter; when absent, only the disabled `status` route is served.
    */
   intake?: IntakeStorage;
+  /**
+   * Factory project domain, used to keep single-project installs working
+   * without any source binding. When absent, unbound sources are treated as
+   * belonging to no project.
+   */
+  projects?: { list(input: { orgId: string }): Promise<unknown[]> };
+}
+
+/**
+ * Narrow the caller's selected Jira projects to the ones that feed this
+ * Factory project.
+ *
+ * A Jira issue carries no Factory project of its own, so without a binding
+ * every board view would show every selected project's issues on whichever
+ * Factory happened to be on screen. Bound sources win; when the org has no
+ * bindings at all we fall back to the full selection for single-project
+ * installs, where "which project" is unambiguous. Mirrors the Linear routes'
+ * scoping semantics locally — the generic binding storage is provider-neutral.
+ */
+async function scopeSourceIdsToProject({
+  intake,
+  projects,
+  orgId,
+  factoryProjectId,
+  selectedIds,
+}: {
+  intake: IntakeStorage;
+  projects: MountJiraRoutesOptions['projects'];
+  orgId: string;
+  factoryProjectId: string;
+  selectedIds: string[];
+}): Promise<string[]> {
+  const bound = await intake.listBoundSourceIds({ orgId, integrationId: 'jira', factoryProjectId });
+  if (bound.length > 0) {
+    const boundSet = new Set(bound);
+    return selectedIds.filter(id => boundSet.has(id));
+  }
+  const orgBindings = await intake.listBindings({ orgId, integrationId: 'jira' });
+  if (orgBindings.length > 0) return [];
+  if (!projects) return [];
+  const all = await projects.list({ orgId });
+  return all.length <= 1 ? selectedIds : [];
 }
 
 /**
@@ -207,6 +251,10 @@ export function buildJiraRoutes(options: MountJiraRoutesOptions): ApiRoute[] {
 
         const after = parseAfterCursor(c.req.query('after'));
         if (after === null) return c.json({ error: 'invalid_cursor' }, 400);
+        const factoryProjectId = c.req.query('factoryProjectId');
+        if (factoryProjectId && !UUID_RE.test(factoryProjectId)) {
+          return c.json({ error: 'invalid_factory_project_id' }, 400);
+        }
 
         await intake.ensureReady();
         const config = await intake.getConfig({
@@ -220,7 +268,19 @@ export function buildJiraRoutes(options: MountJiraRoutesOptions): ApiRoute[] {
         }
 
         // No projects selected means nothing is synced — don't fan out to Jira.
-        const projectIds = selection.sourceIds ?? [];
+        const selectedIds = selection.sourceIds ?? [];
+        // A board request only ever sees the sources bound (routed) to that
+        // Factory project; unscoped listing stays available to callers that
+        // don't view a specific board.
+        const projectIds = factoryProjectId
+          ? await scopeSourceIdsToProject({
+              intake,
+              projects: options.projects,
+              orgId: resolved.tenant.orgId,
+              factoryProjectId,
+              selectedIds,
+            })
+          : selectedIds;
         if (projectIds.length === 0) {
           return c.json({ issues: [], nextCursor: null });
         }
