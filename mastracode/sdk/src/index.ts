@@ -100,7 +100,7 @@ import type { MastraCodeState } from './schema.js';
 
 import { mastraBrand } from './theme-palette.js';
 import { syncGateways } from './utils/gateway-sync.js';
-import { PeerBus } from './utils/peer-bus.js';
+import { PeerBus, derivePeerInstanceId } from './utils/peer-bus.js';
 import { PeerSignalProvider } from './utils/peer-signal-provider.js';
 import {
   detectProject,
@@ -818,7 +818,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
           bus: new PeerBus({
             pubsub: signalsPubSub,
             self: {
-              instanceId: `${project.name}-${process.pid}`,
+              // Stable across restarts of the same terminal pane (tty-derived),
+              // so peers can keep addressing "the instance in that pane" after
+              // it restarts; falls back to pid when not attached to a TTY.
+              instanceId: derivePeerInstanceId(project.name),
               pid: process.pid,
               cwd: project.rootPath,
               ...(project.gitBranch ? { branch: project.gitBranch } : {}),
@@ -826,8 +829,8 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
             },
           }),
           // Deliver into whatever thread the local session currently has open.
-          // No session or no thread yet → drop (notification storage already
-          // covers offline delivery for targeted sends; presence is live-only).
+          // No session or no thread yet → the provider queues the message and
+          // flushes when `wireSessionConcerns` sees a thread come into being.
           getTarget: () => {
             const session = activeSession;
             const threadId = session?.thread.getId();
@@ -1354,11 +1357,25 @@ export type MastraCodeAgentController = Awaited<ReturnType<typeof createMastraCo
  * call this for any session it mints if it wants the same background wiring.
  */
 export async function wireSessionConcerns(
-  base: Pick<MastraCodeAgentController, 'hookManager' | 'githubSignals' | 'setActiveSession'>,
+  base: Pick<MastraCodeAgentController, 'hookManager' | 'githubSignals' | 'peerSignalProvider' | 'setActiveSession'>,
   session: Session<MastraCodeState>,
 ): Promise<void> {
-  const { hookManager, githubSignals } = base;
+  const { hookManager, githubSignals, peerSignalProvider } = base;
   base.setActiveSession(session);
+
+  // Keep peer-message delivery honest about which thread the user is looking
+  // at: a detach (e.g. `/new` before the first message) leaves the old thread
+  // binding readable, so suspend delivery — inbound peer messages queue — and
+  // flush once a real thread exists again.
+  if (peerSignalProvider) {
+    session.subscribe((event: AgentControllerEvent) => {
+      if (event.type === 'thread_detached') {
+        peerSignalProvider.suspendDelivery();
+      } else if (event.type === 'thread_created' || event.type === 'thread_changed') {
+        peerSignalProvider.resumeDelivery();
+      }
+    });
+  }
 
   // Sync hookManager session ID on thread changes
   if (hookManager) {

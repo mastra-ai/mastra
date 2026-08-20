@@ -556,6 +556,10 @@ export class SessionThread {
   detachFromCurrent(): void {
     this.#owner.abort();
     this.cleanupSubscription();
+    // The binding itself is intentionally left in place (a later message may
+    // resume it), but consumers targeting "the current thread" must know it is
+    // no longer what the user is looking at.
+    this.#owner.emit({ type: 'thread_detached', threadId: this.#threadId });
   }
 
   /** Create a new thread, bind the session to it, and rebind the agent stream. */

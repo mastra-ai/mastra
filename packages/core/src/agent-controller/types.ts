@@ -782,6 +782,15 @@ export type AgentControllerEvent =
   | { type: 'thread_changed'; threadId: string; previousThreadId: string | null }
   | { type: 'thread_created'; thread: AgentControllerThread }
   | { type: 'thread_deleted'; threadId: string }
+  /**
+   * The session detached from its current thread (run aborted, stream
+   * subscription torn down) without binding to another one yet — e.g. a UI
+   * "new conversation" action before the first message creates the thread.
+   * The stale binding may still be readable via `thread.getId()`; consumers
+   * that target "the thread the user is looking at" should treat the target
+   * as unknown until the next `thread_created`/`thread_changed`.
+   */
+  | { type: 'thread_detached'; threadId: string | null }
   | { type: 'state_changed'; state: Record<string, unknown>; changedKeys: string[] }
   | { type: 'agent_start' }
   | { type: 'agent_end'; reason?: 'complete' | 'aborted' | 'error' | 'suspended' }

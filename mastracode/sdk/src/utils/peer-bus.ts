@@ -1,4 +1,6 @@
+import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import path from 'node:path';
 
 import type { PubSub, Event } from '@mastra/core/events';
 
@@ -30,8 +32,33 @@ export type PeerMessage = {
   body: string;
   /** Optional id of the message this replies to. */
   replyTo?: string;
+  /**
+   * The sender's active thread at send time. Receivers targeting the same
+   * thread skip delivery — the sender's own transcript already has the
+   * message, so notifying that thread would just echo it back.
+   */
+  originThreadId?: string;
   sentAt: number;
 };
+
+/**
+ * Derive a peer instanceId that is stable across restarts of the same
+ * terminal: `<name>-<tty basename>` when the process is attached to a TTY
+ * (each terminal pane has its own device, and a restarted mc in the same
+ * pane keeps it), falling back to `<name>-<pid>` for non-interactive runs.
+ */
+export function derivePeerInstanceId(name: string): string {
+  if (process.stdin.isTTY) {
+    try {
+      // `tty` prints the device of fd 0 (e.g. /dev/ttys014).
+      const device = execFileSync('tty', { stdio: ['inherit', 'pipe', 'ignore'] }).toString().trim();
+      if (device.startsWith('/dev/')) return `${name}-${path.basename(device)}`;
+    } catch {
+      // Fall through to the pid-based id.
+    }
+  }
+  return `${name}-${process.pid}`;
+}
 
 type PresenceData = PeerIdentity & {
   /** Set on first announce — asks existing peers to re-announce immediately. */
@@ -161,13 +188,14 @@ export class PeerBus {
   }
 
   /** Send a message to one peer by instanceId, or to all with 'broadcast'. */
-  async send(to: string, body: string, options?: { replyTo?: string }): Promise<PeerMessage> {
+  async send(to: string, body: string, options?: { replyTo?: string; originThreadId?: string }): Promise<PeerMessage> {
     const message: PeerMessage = {
       id: randomUUID(),
       from: this.#self,
       to,
       body,
       ...(options?.replyTo ? { replyTo: options.replyTo } : {}),
+      ...(options?.originThreadId ? { originThreadId: options.originThreadId } : {}),
       sentAt: Date.now(),
     };
     const topic = to === 'broadcast' ? BROADCAST_TOPIC : inboxTopic(to);
