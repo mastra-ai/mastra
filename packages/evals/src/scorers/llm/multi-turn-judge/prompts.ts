@@ -19,13 +19,7 @@ export interface AssistantTurn {
   text: string;
 }
 
-export function createAnalyzePrompt({
-  criterion,
-  turns,
-}: {
-  criterion: string;
-  turns: AssistantTurn[];
-}): string {
+export function createAnalyzePrompt({ criterion, turns }: { criterion: string; turns: AssistantTurn[] }): string {
   const transcript = turns.map((turn, i) => `Assistant turn ${i + 1}: ${turn.text}`).join('\n\n');
 
   return `Grade the conversation below against the criterion.
