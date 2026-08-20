@@ -11,6 +11,7 @@ import type {
   MastraToolInvocationPart,
 } from '../state/types';
 import type { AIV5Type, AIV6Type, MessageSource } from '../types';
+import { getResponseResultProviderMetadata, preserveResponseItemIdsOnMerge } from '../utils/response-item-metadata';
 import { sanitizeToolName } from '../utils/tool-name';
 import { AIV5Adapter } from './AIV5Adapter';
 
@@ -80,12 +81,25 @@ function getToolNameFromUIPart(part: AIV6Type.ToolUIPart | AIV6Type.DynamicToolU
 }
 
 function createToolInvocationPartFromUIPart(part: AIV6Type.ToolUIPart | AIV6Type.DynamicToolUIPart) {
+  const callProviderMetadata =
+    'callProviderMetadata' in part ? toMastraProviderMetadata(part.callProviderMetadata) : undefined;
+  // Some hosted tools (e.g. OpenAI tool_search) give the call and its output
+  // distinct Responses item ids (tsc_… call / tso_… output). Output states carry
+  // the result id in `resultProviderMetadata`; merge both back onto the single
+  // merged tool part so a toUIMessage → fromUIMessage round trip keeps each id.
+  // A no-op for call-only states, which have no result metadata.
+  const resultProviderMetadata =
+    'resultProviderMetadata' in part ? toMastraProviderMetadata(part.resultProviderMetadata) : undefined;
   const base = {
     toolCallId: part.toolCallId,
     toolName: getToolNameFromUIPart(part),
     args: normalizeToolArgs(part.input),
     approval: 'approval' in part ? toMastraApproval(part.approval) : undefined,
-    providerMetadata: 'callProviderMetadata' in part ? toMastraProviderMetadata(part.callProviderMetadata) : undefined,
+    providerMetadata: preserveResponseItemIdsOnMerge(
+      callProviderMetadata as Record<string, unknown> | undefined,
+      resultProviderMetadata as Record<string, unknown> | undefined,
+      callProviderMetadata as Record<string, unknown> | undefined,
+    ) as MastraProviderMetadata | undefined,
     providerExecuted: part.providerExecuted,
     title: part.title,
     preliminary: 'preliminary' in part ? part.preliminary : undefined,
@@ -666,6 +680,11 @@ export class AIV6Adapter {
             },
             {
               preliminary: part.preliminary,
+              // AIV6 has a dedicated slot for result-side metadata; surface the
+              // result's Responses item id there when it differs from the call's.
+              resultProviderMetadata: getResponseResultProviderMetadata(
+                part.providerMetadata as Record<string, unknown> | undefined,
+              ),
               approval:
                 part.toolInvocation.approval?.approved === true
                   ? {

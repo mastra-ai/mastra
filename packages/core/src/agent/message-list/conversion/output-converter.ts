@@ -14,7 +14,12 @@ import {
   pairOrphanedToolCalls,
   sanitizeOrphanedToolPairs,
 } from '../utils/provider-compat';
-import { getResponseProviderItemKey } from '../utils/response-item-metadata';
+import {
+  getResponseProviderItemId,
+  getResponseProviderItemKey,
+  RESPONSE_ITEM_ID_PROVIDERS,
+  RESPONSE_RESULT_ITEM_ID_KEY,
+} from '../utils/response-item-metadata';
 
 /**
  * Merges text parts that share the same OpenAI-compatible itemId.
@@ -85,6 +90,78 @@ function mergeTextPartsWithDuplicateItemIds<T extends { type: string }>(parts: T
   }
 
   return result;
+}
+
+/**
+ * Detects a hosted OpenAI `tool_search` part that can no longer be replayed.
+ *
+ * A hosted (provider-executed) `tool_search` call only replays as a pair of
+ * `item_reference`s built from its Responses item ids. When those ids are
+ * gone (e.g. a UI round-trip stripped providerMetadata), the provider instead
+ * rebuilds a full `tool_search_call` without its required `arguments` and an
+ * orphaned `function_call_output` — both rejected by the API. Such parts are
+ * dropped from prompts; the model re-discovers tools on the next turn.
+ *
+ * Client-executed `tool_search` (non-null `call_id` in the input) replays as
+ * a plain function call and is never dropped here.
+ */
+function isUnreplayableHostedToolSearchPart(part: AIV5Type.ToolUIPart): boolean {
+  if (AIV5.getToolName(part) !== 'tool_search') return false;
+
+  const callProviderMetadata =
+    'callProviderMetadata' in part ? (part.callProviderMetadata as Record<string, unknown> | undefined) : undefined;
+  if (getResponseProviderItemId(callProviderMetadata)) return false;
+
+  const input = part.input;
+  if (input && typeof input === 'object' && typeof (input as Record<string, unknown>).call_id === 'string') {
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Splits merged Responses item ids back onto their own tool parts.
+ *
+ * A stored tool part holds the result's item id under `resultItemId` when it
+ * differs from the call's (see {@link RESPONSE_RESULT_ITEM_ID_KEY}), and UI →
+ * model conversion copies the same metadata onto both the tool-call and the
+ * tool-result part. Rewrite each side to carry only its own id — call keeps
+ * `itemId`, result gets `resultItemId` as its `itemId` — so the provider emits
+ * two distinct `item_reference`s instead of the same one twice ("Duplicate
+ * item found").
+ */
+function splitResponsesToolItemReferences(modelMessages: AIV5Type.ModelMessage[]): AIV5Type.ModelMessage[] {
+  return modelMessages.map(msg => {
+    if (typeof msg.content === 'string') return msg;
+
+    let modified = false;
+    const content = msg.content.map(part => {
+      if (part.type !== 'tool-call' && part.type !== 'tool-result') return part;
+      const providerOptions = (part as { providerOptions?: Record<string, Record<string, unknown>> }).providerOptions;
+      if (!providerOptions) return part;
+
+      let rewritten: Record<string, Record<string, unknown>> | undefined;
+      for (const provider of RESPONSE_ITEM_ID_PROVIDERS) {
+        const namespace = providerOptions[provider];
+        if (!namespace) continue;
+        const resultItemId = namespace[RESPONSE_RESULT_ITEM_ID_KEY];
+        if (typeof resultItemId !== 'string') continue;
+
+        const { [RESPONSE_RESULT_ITEM_ID_KEY]: _removed, ...rest } = namespace;
+        rewritten = {
+          ...(rewritten ?? providerOptions),
+          [provider]: part.type === 'tool-result' ? { ...rest, itemId: resultItemId } : rest,
+        };
+      }
+      if (!rewritten) return part;
+
+      modified = true;
+      return { ...part, providerOptions: rewritten } as typeof part;
+    });
+
+    return modified ? ({ ...msg, content } as AIV5Type.ModelMessage) : msg;
+  });
 }
 
 /**
@@ -177,6 +254,10 @@ export function sanitizeV5UIMessages(
       // Filter out incomplete client-side tool calls (input-available without providerExecuted)
       // and input-streaming states.
       if (mode !== 'response') {
+        // Hosted tool_search parts whose Responses item ids were lost cannot be
+        // replayed in any state — drop them before the state-based checks below.
+        if (isUnreplayableHostedToolSearchPart(p)) return false;
+
         // Completed tools (client or provider) — keep them
         if (p.state === 'output-available' || p.state === 'output-error') return true;
         if (p.state === 'input-available') {
@@ -567,7 +648,8 @@ export function aiV5UIMessagesToAIV5ModelMessages(
     converted.push(...produced);
   }
 
-  const withFileMetadata = restoreAssistantFileProviderMetadata(converted, preprocessed);
+  const withSplitItemReferences = splitResponsesToolItemReferences(converted);
+  const withFileMetadata = restoreAssistantFileProviderMetadata(withSplitItemReferences, preprocessed);
   const withMcpContentOutputs = applyMcpContentToolResultOutputs(withFileMetadata, dbMessages);
 
   // Add input field to tool-result parts for Anthropic API compatibility (fixes issue #11376)
