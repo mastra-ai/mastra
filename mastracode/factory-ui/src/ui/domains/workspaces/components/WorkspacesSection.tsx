@@ -16,9 +16,10 @@ import { useWorkspacePullRequestMerges } from '../../../../hooks/useWorkspacePul
 import { useDeleteWorkspaceMutation, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
-import { githubNumberForItem } from '../../factory/boardItems';
+import { githubNumberForItem, pullRequestStatusForItem } from '../../factory/boardItems';
 import { pullRequestCandidateIndex, relatedWorkItems, relationshipLabel } from '../../factory/services/relationships';
 import type { WorkItem } from '../../factory/services/workItems';
+import { isTerminalStage } from '../../factory/stages';
 import { usePinnedSessions } from '../hooks/usePinnedSessions';
 import type { FactoryUserSession } from '../services/github';
 import { getFactorySessionKind } from '../services/sessionPresentation';
@@ -28,17 +29,27 @@ import type { SessionPreviewDetails } from './SessionPreviewCard';
 
 const COLLAPSED_ROW_COUNT = 5;
 
-const byPinnedThenRecent = (a: FactoryWorkspaceRow, b: FactoryWorkspaceRow) =>
-  Number(b.pinned) - Number(a.pinned) || b.updatedAt.localeCompare(a.updatedAt);
+const isBusy = (row: FactoryWorkspaceRow) => row.initializing || row.running || row.attention;
 
-const stillUnfolding = (row: FactoryWorkspaceRow) => row.active || row.initializing || row.running || row.attention;
+/** Nothing left to watch: the card is done or canceled, or its pull request is merged or closed. */
+function isSettled(item: WorkItem | undefined, pullRequest: WorkItem | undefined): boolean {
+  if (item?.stages.some(isTerminalStage)) return true;
+  if (!pullRequest) return false;
+  const status = pullRequestStatusForItem(pullRequest);
+  return status === 'merged' || status === 'closed';
+}
 
-// Who keeps one of the collapsed slots. A pin is an explicit request, so it wins
-// over a session that merely happens to be busy.
-const bySlotPriority = (a: FactoryWorkspaceRow, b: FactoryWorkspaceRow) =>
+/**
+ * Explicit intent first, then whatever still has work in it, newest first inside a tier.
+ * Sorting on creation rather than activity is what keeps a row still: every card write bumps
+ * `updatedAt` and the board polls, so an activity order reshuffles the sidebar under the reader.
+ */
+const bySessionPriority = (a: FactoryWorkspaceRow, b: FactoryWorkspaceRow) =>
   Number(b.pinned) - Number(a.pinned) ||
-  Number(stillUnfolding(b)) - Number(stillUnfolding(a)) ||
-  b.updatedAt.localeCompare(a.updatedAt);
+  Number(b.active) - Number(a.active) ||
+  Number(a.settled) - Number(b.settled) ||
+  Number(isBusy(b)) - Number(isBusy(a)) ||
+  b.createdAt.localeCompare(a.createdAt);
 
 function workspaceStatus(row: FactoryWorkspaceRow): SessionRowStatus | undefined {
   // An active thread means work is happening even if the workspace record has
@@ -114,6 +125,8 @@ export function WorkspacesSection() {
         review: getFactorySessionKind(workspace, item) === 'review',
         itemLabel: item && item.source !== 'manual' ? relationshipLabel(item) : undefined,
         itemTitle: item?.title,
+        settled: isSettled(item, pullRequest),
+        createdAt: workspace.createdAt,
         updatedAt: item?.updatedAt ?? workspace.updatedAt,
         threadId: workItemSession?.threadId,
         pullRequestNumber,
@@ -123,10 +136,8 @@ export function WorkspacesSection() {
     ];
   });
   const latestRows = (review: boolean) => {
-    const all = rows.filter(row => row.review === review).sort(byPinnedThenRecent);
-    // The cap holds either way — priority only decides which rows fill the slots.
-    const visible = [...all].sort(bySlotPriority).slice(0, COLLAPSED_ROW_COUNT).sort(byPinnedThenRecent);
-    return { visible, all };
+    const all = rows.filter(row => row.review === review).sort(bySessionPriority);
+    return { visible: all.slice(0, COLLAPSED_ROW_COUNT), all };
   };
   const workRows = latestRows(false);
   const reviewRows = latestRows(true);
@@ -246,6 +257,8 @@ interface FactoryWorkspaceRow {
   review: boolean;
   itemLabel?: string;
   itemTitle?: string;
+  settled: boolean;
+  createdAt: string;
   updatedAt: string;
   threadId?: string;
   pullRequestNumber?: number;
@@ -298,7 +311,7 @@ function WorkspaceGroup({
             url={row.url}
             active={row.active}
             disabled={pending}
-            merged={mergedByPath[row.workspace.sessionId] === true}
+            merged={mergedByPath[row.workspace.sessionId] ?? row.knownMerged}
             status={workspaceStatus(row)}
             pinned={row.pinned}
             preview={{

@@ -31,8 +31,9 @@ function reviewSession(index: number): FactoryUserSession {
     sandboxId: null,
     sandboxWorkdir: null,
     materializedAt: null,
-    createdAt: '2026-07-23T00:00:00.000Z',
-    updatedAt: `2026-07-23T00:00:${String(index).padStart(2, '0')}.000Z`,
+    createdAt: `2026-07-23T00:00:${String(index).padStart(2, '0')}.000Z`,
+    // Inverted on purpose: activity must not decide who keeps a slot.
+    updatedAt: `2026-07-23T00:01:${String(60 - index).padStart(2, '0')}.000Z`,
   };
 }
 
@@ -82,7 +83,7 @@ describe('Workspaces sidebar show more', () => {
     renderSection();
 
     const group = await screen.findByRole('region', { name: 'Review Sessions' });
-    // Latest 5 by updatedAt are visible; the oldest 3 are collapsed.
+    // Latest 5 by createdAt are visible; the oldest 3 are collapsed.
     expect(await within(group).findAllByRole('button', { name: /^factory\/pr-200\d+$/ })).toHaveLength(5);
     expect(within(group).queryByRole('button', { name: 'factory/pr-20001' })).not.toBeInTheDocument();
 

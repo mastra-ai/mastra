@@ -1,0 +1,127 @@
+/**
+ * BDD coverage for the sidebar's session order: a session whose pull request is
+ * merged sinks below the ones still open, and the rest hold their place by
+ * creation. Before this, rows were ordered by card activity — merging a pull
+ * request bumped `updatedAt`, so the finished session jumped to the top and
+ * every poll could reshuffle the list under the reader.
+ */
+import { screen, within } from '@testing-library/react';
+import { http, HttpResponse } from 'msw';
+import { MemoryRouter, Route, Routes } from 'react-router';
+import { describe, expect, it } from 'vitest';
+
+import { server } from '../../../../../../e2e/ui/msw-server';
+import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
+import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
+import type { FactoryUserSession } from '../../services/github';
+import { WorkspacesSection } from '../WorkspacesSection';
+
+const factoryProjectId = 'fp-1';
+const projectRepositoryId = 'ghp-1';
+
+function reviewSession(pullRequestNumber: number, createdAt: string): FactoryUserSession {
+  return {
+    id: `row-${pullRequestNumber}`,
+    sessionId: `sess-${pullRequestNumber}`,
+    projectRepositoryId,
+    orgId: 'org-1',
+    userId: 'user-1',
+    visibility: 'org' as const,
+    branch: `factory/pr-${pullRequestNumber}`,
+    baseBranch: 'main',
+    sandboxId: null,
+    sandboxWorkdir: null,
+    materializedAt: createdAt,
+    createdAt,
+    updatedAt: createdAt,
+  };
+}
+
+function reviewCard(session: FactoryUserSession, pullRequestNumber: number, merged: boolean, updatedAt: string) {
+  return {
+    id: `item-${pullRequestNumber}`,
+    orgId: 'org-1',
+    createdBy: 'user-1',
+    factoryProjectId,
+    externalSource: {
+      integrationId: 'github',
+      type: 'pull-request',
+      externalId: `pr-${pullRequestNumber}`,
+    },
+    parentWorkItemId: null,
+    title: `Review #${pullRequestNumber}`,
+    stages: ['review'],
+    stageHistory: [],
+    sessions: {
+      review: {
+        sessionId: session.sessionId,
+        branch: session.branch,
+        threadId: `${session.sessionId}-thread`,
+        startedBy: 'user-1',
+      },
+    },
+    metadata: { githubPullRequestNumber: pullRequestNumber, state: merged ? 'closed' : 'open', merged },
+    revision: 1,
+    createdAt: session.createdAt,
+    updatedAt,
+  };
+}
+
+const oldestOpen = reviewSession(101, '2026-07-23T09:00:00.000Z');
+const newestOpen = reviewSession(102, '2026-07-23T11:00:00.000Z');
+const merged = reviewSession(103, '2026-07-23T10:00:00.000Z');
+
+function renderSection() {
+  server.use(
+    http.get(`${TEST_BASE_URL}/web/github/projects/${projectRepositoryId}/sessions`, () =>
+      HttpResponse.json({ sessions: [oldestOpen, newestOpen, merged] }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryProjectId}/work-items`, () =>
+      HttpResponse.json({
+        workItems: [
+          reviewCard(oldestOpen, 101, false, '2026-07-23T09:00:00.000Z'),
+          reviewCard(newestOpen, 102, false, '2026-07-23T11:00:00.000Z'),
+          // The merge is the freshest activity on the board.
+          reviewCard(merged, 103, true, '2026-07-23T23:00:00.000Z'),
+        ],
+      }),
+    ),
+  );
+  return renderWithProviders(
+    <MemoryRouter initialEntries={[`/factories/${factoryProjectId}`]}>
+      <ChatSessionContext.Provider
+        value={{
+          resourceId: 'resource-1',
+          sessionEnabled: false,
+          resourceReady: false,
+          sandboxReady: false,
+          sandboxPreparing: false,
+          sandboxProgress: undefined,
+          resourceEnabled: false,
+          factorySessionState: { factoryProjectId, projectRepositoryId },
+          baseUrl: TEST_BASE_URL,
+          kind: 'factory',
+        }}
+      >
+        <Routes>
+          <Route path="/factories/:factoryId" element={<WorkspacesSection />} />
+        </Routes>
+      </ChatSessionContext.Provider>
+    </MemoryRouter>,
+  );
+}
+
+describe('Workspaces sidebar order', () => {
+  it('sinks a merged session below the open ones and keeps the rest newest-first', async () => {
+    renderSection();
+
+    const group = await screen.findByRole('region', { name: 'Review Sessions' });
+    const rows = await within(group).findAllByRole('button', { name: /^factory\/pr-10\d$/ });
+
+    expect(rows.map(row => row.getAttribute('aria-label'))).toEqual([
+      'factory/pr-102',
+      'factory/pr-101',
+      'factory/pr-103',
+    ]);
+  });
+});
