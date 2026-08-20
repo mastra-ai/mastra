@@ -32,7 +32,8 @@
     "check": "tsc --noEmit",
     "test": "vitest run",
     "lint": "oxlint . && eslint .",
-    "lint:fix": "oxlint --fix . && eslint --fix ."
+    "lint:fix": "oxlint --fix . && eslint --fix .",
+    "verify:pi-ecosystem": "tsx src/plugins/pi/compatibility-fixtures/refresh.ts --verify --offline"
   },
   "keywords": [],
   "author": "",

@@ -1,0 +1,529 @@
+{
+  "schemaVersion": 1,
+  "targetApiVersion": "0.84.2",
+  "refreshedAt": "2026-08-20",
+  "popularityWindow": {
+    "source": "https://api.npmjs.org/downloads/point/2026-07-21:2026-08-19/{package}",
+    "start": "2026-07-21",
+    "end": "2026-08-19"
+  },
+  "packages": [
+    {
+      "name": "pi-mcp-adapter",
+      "version": "2.26.1",
+      "specifier": "npm:pi-mcp-adapter@2.26.1",
+      "provenance": {
+        "integrity": "sha512-6/KDXIEPXTVM77274jAloxAo9AQSEy5EJ/7afIlUK2T8HOfeVapTJvwImvyChiIH+0gGShbFgnBK2BXFrjbj2w==",
+        "tarball": "https://registry.npmjs.org/pi-mcp-adapter/-/pi-mcp-adapter-2.26.1.tgz",
+        "repository": "https://github.com/nicobailon/pi-mcp-adapter.git",
+        "sourceCommit": null,
+        "sourceCommitEvidence": "npm metadata omits gitHead",
+        "license": "MIT",
+        "unpackedSize": 2416514,
+        "fileCount": 68,
+        "downloadsInWindow": 548514
+      },
+      "manifest": {
+        "observedApiVersion": "^0.84.1",
+        "lifecycleScripts": {},
+        "resources": {
+          "extensions": ["index.ts"],
+          "skills": ["skills/mcp-scripting/SKILL.md"],
+          "prompts": [],
+          "themes": []
+        }
+      },
+      "characterization": {
+        "outcome": "report",
+        "status": "pi-compatible",
+        "capabilities": {
+          "event:input": "adapted",
+          "event:session_shutdown": "adapted",
+          "event:session_start": "adapted",
+          "event:tool_result": "adapted",
+          "registerCommand": "adapted",
+          "registerFlag": "adapted",
+          "registerTool": "adapted"
+        },
+        "diagnostics": []
+      },
+      "coverage": [
+        "abort",
+        "commands",
+        "external-dependencies",
+        "lifecycle-cleanup",
+        "progress",
+        "skills",
+        "typebox-tools"
+      ]
+    },
+    {
+      "name": "pi-web-access",
+      "version": "0.24.0",
+      "specifier": "npm:pi-web-access@0.24.0",
+      "provenance": {
+        "integrity": "sha512-BVosva1tGDhHveaGpFnc++YS5+pzmWVzJ/5B+1xBavkRjAgyDvMpA1EfVL+GYIviAxXKck9JyRGVzo4ASV7snA==",
+        "tarball": "https://registry.npmjs.org/pi-web-access/-/pi-web-access-0.24.0.tgz",
+        "repository": "https://github.com/nicobailon/pi-web-access.git",
+        "sourceCommit": "3b875f574840eebae39e5fede0d99a5f7c71f482",
+        "license": "MIT",
+        "unpackedSize": 7465072,
+        "fileCount": 68,
+        "downloadsInWindow": 305789
+      },
+      "manifest": {
+        "observedApiVersion": "*",
+        "lifecycleScripts": {},
+        "resources": { "extensions": ["index.ts"], "skills": [], "prompts": [], "themes": [] }
+      },
+      "characterization": {
+        "outcome": "report",
+        "status": "pi-partial",
+        "capabilities": {
+          "event:session_shutdown": "adapted",
+          "event:session_start": "adapted",
+          "event:session_tree": "unsupported",
+          "registerCommand": "adapted",
+          "registerShortcut": "version-gated",
+          "registerTool": "adapted"
+        },
+        "diagnostics": ["registerShortcut is version-gated", "event:session_tree is unsupported"]
+      },
+      "coverage": ["commands", "progress", "shortcuts", "tree-events", "typebox-tools"]
+    },
+    {
+      "name": "pi-subagents",
+      "version": "0.52.1",
+      "specifier": "npm:pi-subagents@0.52.1",
+      "provenance": {
+        "integrity": "sha512-9K9tICAbDBJ82op5wvFAIZFhg7K5Cv6du5hEsnf4o6/qhoslla1WcV11cOyB4tzKAHUIXA2GLA6kfxxLXzIpyg==",
+        "tarball": "https://registry.npmjs.org/pi-subagents/-/pi-subagents-0.52.1.tgz",
+        "repository": "https://github.com/nicobailon/pi-subagents.git",
+        "sourceCommit": "afa22c811f81883acdb248c84f116ac7534e2fb4",
+        "license": "MIT",
+        "unpackedSize": 3853257,
+        "fileCount": 240,
+        "downloadsInWindow": 276014
+      },
+      "manifest": {
+        "observedApiVersion": "*",
+        "lifecycleScripts": {},
+        "resources": {
+          "extensions": ["index.ts"],
+          "skills": ["skills/pi-subagents/SKILL.md"],
+          "prompts": [
+            "prompts/gather-context-and-clarify.md",
+            "prompts/parallel-cleanup.md",
+            "prompts/parallel-research.md",
+            "prompts/parallel-review.md",
+            "prompts/review-loop.md"
+          ],
+          "themes": []
+        }
+      },
+      "characterization": {
+        "outcome": "report",
+        "status": "pi-partial",
+        "capabilities": {
+          "event:agent_end": "adapted",
+          "event:agent_settled": "adapted",
+          "event:agent_start": "adapted",
+          "event:before_agent_start": "adapted",
+          "event:session_before_compact": "unsupported",
+          "event:session_before_fork": "unsupported",
+          "event:session_before_switch": "unsupported",
+          "event:session_compact": "unsupported",
+          "event:session_shutdown": "adapted",
+          "event:session_start": "adapted",
+          "event:tool_result": "adapted",
+          "event:turn_end": "adapted",
+          "events": "direct",
+          "registerCommand": "adapted",
+          "registerMessageRenderer": "adapted",
+          "registerShortcut": "version-gated",
+          "registerTool": "adapted"
+        },
+        "diagnostics": [
+          "event:session_before_switch is unsupported",
+          "event:session_before_fork is unsupported",
+          "event:session_compact is unsupported",
+          "registerShortcut is version-gated",
+          "event:session_before_compact is unsupported"
+        ]
+      },
+      "coverage": [
+        "commands",
+        "lifecycle-cleanup",
+        "message-renderers",
+        "prompts",
+        "shortcuts",
+        "skills",
+        "typebox-tools"
+      ]
+    },
+    {
+      "name": "pi-multiagent",
+      "version": "0.9.8",
+      "specifier": "npm:pi-multiagent@0.9.8",
+      "provenance": {
+        "integrity": "sha512-Et5hacAVa+67X4JdHe4mk0e7h2qnXn5Ph0l7M4shGp4wRrfuG5gjvl5aAmxsfc8VEQW74DBIqbG4Jidvo8FM/w==",
+        "tarball": "https://registry.npmjs.org/pi-multiagent/-/pi-multiagent-0.9.8.tgz",
+        "repository": "https://github.com/Tiziano-AI/pi-multiagent.git",
+        "sourceCommit": "8a3c40d106aaf94107246fdfa21b12c88157dbed",
+        "license": "MIT",
+        "unpackedSize": 628718,
+        "fileCount": 116,
+        "downloadsInWindow": 555
+      },
+      "manifest": {
+        "packageManager": "pnpm@11.1.2",
+        "observedApiVersion": ">=0.74.0",
+        "lifecycleScripts": {},
+        "resources": {
+          "extensions": ["extensions/multiagent/index.ts"],
+          "skills": ["skills/pi-multiagent/SKILL.md"],
+          "prompts": [],
+          "themes": []
+        }
+      },
+      "characterization": {
+        "outcome": "report",
+        "status": "pi-partial",
+        "capabilities": {
+          "event:session_shutdown": "adapted",
+          "event:tool_result": "adapted",
+          "pi-api-version": "version-gated",
+          "registerFlag": "adapted",
+          "registerMessageRenderer": "adapted",
+          "registerTool": "adapted"
+        },
+        "diagnostics": ["Pi API range >=0.74.0 is version-gated"]
+      },
+      "coverage": ["abort", "flags", "message-renderers", "progress", "skills", "typebox-tools"]
+    },
+    {
+      "name": "@gotgenes/pi-permission-system",
+      "version": "26.3.1",
+      "specifier": "npm:@gotgenes/pi-permission-system@26.3.1",
+      "provenance": {
+        "integrity": "sha512-dyVeTuj4QXl1FCJK1v1xJFyyRXYv/K2lAXM8U0BD+P51naGDZuh0UtjPrFbdF6WmVI0bUHfOwQ8DU4aP3rioNQ==",
+        "tarball": "https://registry.npmjs.org/@gotgenes/pi-permission-system/-/pi-permission-system-26.3.1.tgz",
+        "repository": "https://github.com/gotgenes/pi-packages.git#packages/pi-permission-system",
+        "sourceCommit": null,
+        "sourceCommitEvidence": "npm metadata omits gitHead",
+        "license": "MIT",
+        "unpackedSize": 1326863,
+        "fileCount": 165,
+        "downloadsInWindow": 29481
+      },
+      "manifest": {
+        "observedApiVersion": ">=0.79.0",
+        "lifecycleScripts": {},
+        "resources": { "extensions": ["src/index.ts"], "skills": [], "prompts": [], "themes": [] }
+      },
+      "characterization": {
+        "outcome": "rejected",
+        "stage": "factory",
+        "diagnostic": "factory requires unsupported getAgentDir filesystem surface",
+        "errorMatch": "getAgentDir"
+      },
+      "coverage": ["permissions", "tool-policy"]
+    },
+    {
+      "name": "@plannotator/pi-extension",
+      "version": "0.27.4",
+      "specifier": "npm:@plannotator/pi-extension@0.27.4",
+      "provenance": {
+        "integrity": "sha512-9aK4v4AcjV/UwvAYvcT46fngIeMKmclv2glIYhzCIJiWKC0tfr4UQ5Aido7iveSfKlmbQuggCB/M018PxdbqnA==",
+        "tarball": "https://registry.npmjs.org/@plannotator/pi-extension/-/pi-extension-0.27.4.tgz",
+        "repository": "https://github.com/backnotprop/plannotator.git#apps/pi-extension",
+        "sourceCommit": null,
+        "sourceCommitEvidence": "npm metadata omits gitHead",
+        "license": "MIT OR Apache-2.0",
+        "unpackedSize": 41158908,
+        "fileCount": 196,
+        "downloadsInWindow": 45624
+      },
+      "manifest": {
+        "observedApiVersion": ">=0.79.1",
+        "lifecycleScripts": {},
+        "resources": { "extensions": ["index.ts"], "skills": [], "prompts": [], "themes": [] }
+      },
+      "characterization": {
+        "outcome": "report",
+        "status": "pi-partial",
+        "capabilities": {
+          "event:agent_end": "adapted",
+          "event:before_agent_start": "adapted",
+          "event:context": "adapted",
+          "event:session_compact": "unsupported",
+          "event:session_shutdown": "adapted",
+          "event:session_start": "adapted",
+          "event:session_tree": "unsupported",
+          "event:tool_call": "adapted",
+          "event:turn_end": "adapted",
+          "events": "direct",
+          "pi-api-version": "version-gated",
+          "registerCommand": "adapted",
+          "registerFlag": "adapted",
+          "registerShortcut": "version-gated",
+          "registerTool": "adapted"
+        },
+        "diagnostics": [
+          "registerShortcut is version-gated",
+          "event:session_compact is unsupported",
+          "event:session_tree is unsupported",
+          "Pi API range >=0.79.1 is version-gated"
+        ]
+      },
+      "coverage": ["commands", "flags", "lifecycle-cleanup", "shortcuts", "tui", "typebox-tools"]
+    },
+    {
+      "name": "pi-lens",
+      "version": "4.0.1",
+      "specifier": "npm:pi-lens@4.0.1",
+      "provenance": {
+        "integrity": "sha512-JmkZr9aJf7oEn1K+Vj34wPc6nMUQF6Hj6mm5jo38Ic+zLAXRV9AFuac8ydexvU8vnGdWW3Wn8oAfU1MEIcWaGQ==",
+        "tarball": "https://registry.npmjs.org/pi-lens/-/pi-lens-4.0.1.tgz",
+        "repository": "https://github.com/apmantza/pi-lens.git",
+        "sourceCommit": "d35b7279301c5573de8f11916a005f424e5db399",
+        "license": "MIT",
+        "unpackedSize": 21092036,
+        "fileCount": 1355,
+        "downloadsInWindow": 42866
+      },
+      "manifest": {
+        "observedApiVersion": "*",
+        "lifecycleScripts": {
+          "prepare": "npm run build:dist && node scripts/download-grammars.js --core --dest grammars"
+        },
+        "declaredResources": { "extensions": ["./dist/index.js"], "skills": ["../../skills"] }
+      },
+      "characterization": {
+        "outcome": "rejected",
+        "stage": "inspection",
+        "diagnostic": "skills pattern escapes package root: ../../skills",
+        "errorMatch": "skills pattern must stay inside the package root"
+      },
+      "coverage": ["external-dependencies", "skills", "typebox-tools"]
+    },
+    {
+      "name": "pi-memory",
+      "version": "0.4.2",
+      "specifier": "npm:pi-memory@0.4.2",
+      "provenance": {
+        "integrity": "sha512-voH+1MalADyVN23p79g4atdtPxzr1bDcfk1y0uCJL0xfodiSzNA5V5CcmODBTtHlrQzDT+AgasYPlgNWg8YPRQ==",
+        "tarball": "https://registry.npmjs.org/pi-memory/-/pi-memory-0.4.2.tgz",
+        "repository": "https://github.com/jayzeng/pi-memory.git",
+        "sourceCommit": "39e6b998a2279c8fad4a2c6c64e26828c1d6023e",
+        "license": "MIT",
+        "unpackedSize": 106973,
+        "fileCount": 6,
+        "downloadsInWindow": 31616
+      },
+      "manifest": {
+        "observedApiVersion": ">=0.81.1",
+        "lifecycleScripts": { "postinstall": "node scripts/postinstall.cjs" },
+        "resources": { "extensions": ["index.ts"], "skills": [], "prompts": [], "themes": [] }
+      },
+      "characterization": {
+        "outcome": "report",
+        "status": "pi-partial",
+        "capabilities": {
+          "event:before_agent_start": "adapted",
+          "event:input": "adapted",
+          "event:session_before_compact": "unsupported",
+          "event:session_shutdown": "adapted",
+          "event:session_start": "adapted",
+          "pi-api-version": "version-gated",
+          "registerTool": "adapted"
+        },
+        "diagnostics": ["event:session_before_compact is unsupported", "Pi API range >=0.81.1 is version-gated"]
+      },
+      "coverage": ["compaction", "lifecycle-scripts", "state", "typebox-tools"]
+    },
+    {
+      "name": "pi-powerline-footer",
+      "version": "0.15.1",
+      "specifier": "npm:pi-powerline-footer@0.15.1",
+      "provenance": {
+        "integrity": "sha512-+IJed4v/4pEyXw0eMnRR23ZDHbFdAXS6vdLsOtar2HJL3NMqeAy9+BDzF02dV/LbsC5wvLLMrolrS0BcAUplVA==",
+        "tarball": "https://registry.npmjs.org/pi-powerline-footer/-/pi-powerline-footer-0.15.1.tgz",
+        "repository": "https://github.com/nicobailon/pi-powerline-footer.git",
+        "sourceCommit": "aee1564dfbf347a749af7d4423890e54eae05a79",
+        "license": "MIT",
+        "unpackedSize": 438420,
+        "fileCount": 36,
+        "downloadsInWindow": 23252
+      },
+      "manifest": {
+        "observedApiVersion": ">=0.81.0 <0.85.0",
+        "lifecycleScripts": {},
+        "resources": { "extensions": ["index.ts"], "skills": [], "prompts": [], "themes": [] }
+      },
+      "characterization": {
+        "outcome": "rejected",
+        "stage": "factory",
+        "diagnostic": "factory requires unsupported raw Pi TUI component superclass",
+        "errorMatch": "Class extends value undefined"
+      },
+      "coverage": ["footer", "theme", "tui"]
+    },
+    {
+      "name": "@braintrust/pi-extension",
+      "version": "1.0.0",
+      "specifier": "npm:@braintrust/pi-extension@1.0.0",
+      "provenance": {
+        "integrity": "sha512-wOvN9GlZ5vfR0WXo6GwShWWybyQDsY1lYHMg0pB17Tt/ZVlAaMKYOnkUPKorD4ZvRH/tCObDnxKrzQL4+e7RJA==",
+        "tarball": "https://registry.npmjs.org/@braintrust/pi-extension/-/pi-extension-1.0.0.tgz",
+        "repository": "https://github.com/braintrustdata/braintrust-coding-agent-plugins.git#src/plugins/pi/content",
+        "sourceCommit": null,
+        "sourceCommitEvidence": "npm metadata omits gitHead",
+        "license": "MIT",
+        "unpackedSize": 58681,
+        "fileCount": 6,
+        "downloadsInWindow": 25789
+      },
+      "manifest": {
+        "observedApiVersion": "*",
+        "lifecycleScripts": {},
+        "resources": { "extensions": ["dist/index.mjs"], "skills": [], "prompts": [], "themes": [] }
+      },
+      "characterization": {
+        "outcome": "report",
+        "status": "pi-incompatible",
+        "capabilities": {},
+        "diagnostics": [
+          "extension is disabled by default and contributes no portable surfaces without its package-specific config"
+        ]
+      },
+      "coverage": ["conditional-lifecycle", "external-service", "widgets"]
+    },
+    {
+      "name": "context-mode",
+      "version": "1.0.169",
+      "specifier": "npm:context-mode@1.0.169",
+      "provenance": {
+        "integrity": "sha512-94JIaFuLjF9SO2BsGTrbGtyT44K95+9OC8BdbaL/UT76xOkanJLfUR5CzmNw+GELXZQqH4nBrKg9wjBnSFkVnQ==",
+        "tarball": "https://registry.npmjs.org/context-mode/-/context-mode-1.0.169.tgz",
+        "repository": "https://github.com/mksglu/context-mode.git",
+        "sourceCommit": null,
+        "sourceCommitEvidence": "npm metadata omits gitHead",
+        "license": "Elastic-2.0",
+        "unpackedSize": 4249752,
+        "fileCount": 354,
+        "downloadsInWindow": 82046
+      },
+      "manifest": {
+        "packageManager": "pnpm@10.23.0+sha512.21c4e5698002ade97e4efe8b8b4a89a8de3c85a37919f957e7a0f30f38fbc5bbdd05980ffe29179b2fb6e6e691242e098d945d1601772cad0fef5fb6411e2a4b",
+        "observedApiVersion": "*",
+        "lifecycleScripts": { "postinstall": "node scripts/postinstall.mjs" },
+        "resources": {
+          "extensions": ["build/adapters/pi/extension.js"],
+          "skills": [
+            "skills/context-mode/SKILL.md",
+            "skills/ctx-doctor/SKILL.md",
+            "skills/ctx-index/SKILL.md",
+            "skills/ctx-insight/SKILL.md",
+            "skills/ctx-purge/SKILL.md",
+            "skills/ctx-search/SKILL.md",
+            "skills/ctx-stats/SKILL.md",
+            "skills/ctx-upgrade/SKILL.md"
+          ],
+          "prompts": [],
+          "themes": []
+        }
+      },
+      "characterization": {
+        "outcome": "report",
+        "status": "pi-partial",
+        "capabilities": {
+          "event:before_agent_start": "adapted",
+          "event:before_provider_response": "unsupported",
+          "event:context": "adapted",
+          "event:session_before_compact": "unsupported",
+          "event:session_compact": "unsupported",
+          "event:session_shutdown": "adapted",
+          "event:session_start": "adapted",
+          "event:tool_call": "adapted",
+          "event:tool_result": "adapted",
+          "event:turn_end": "adapted",
+          "registerCommand": "adapted"
+        },
+        "diagnostics": [
+          "event:before_provider_response is unsupported",
+          "event:session_before_compact is unsupported",
+          "event:session_compact is unsupported"
+        ]
+      },
+      "coverage": ["commands", "compaction", "external-dependencies", "lifecycle-scripts", "skills"]
+    },
+    {
+      "name": "pi-ds-web-search",
+      "version": "0.1.0",
+      "specifier": "npm:pi-ds-web-search@0.1.0",
+      "provenance": {
+        "integrity": "sha512-zleaPMScxCbw43qg3cNl9OADZS8RDAbkryj3pIEwzOsxHQnOd/JEU5MVpkctKMx3iobeQgQ7wGnbmBtMOKq7yQ==",
+        "tarball": "https://registry.npmjs.org/pi-ds-web-search/-/pi-ds-web-search-0.1.0.tgz",
+        "repository": "https://github.com/Lan-zk/pi-ds-web-search.git",
+        "sourceCommit": "67641a27d3205bad00526d79b23fa7205944c077",
+        "license": "MIT",
+        "unpackedSize": 66543,
+        "fileCount": 12,
+        "downloadsInWindow": 153
+      },
+      "manifest": {
+        "observedApiVersion": "*",
+        "lifecycleScripts": {},
+        "resources": {
+          "extensions": ["extensions/pi-ds-web-search/index.ts"],
+          "skills": [],
+          "prompts": [],
+          "themes": []
+        }
+      },
+      "characterization": {
+        "outcome": "report",
+        "status": "pi-compatible",
+        "capabilities": {
+          "event:before_provider_request": "adapted",
+          "event:session_start": "adapted",
+          "registerCommand": "adapted",
+          "registerProvider": "adapted",
+          "registerTool": "adapted"
+        },
+        "diagnostics": []
+      },
+      "coverage": ["commands", "credentialed-provider", "declarative-provider", "typebox-tools"],
+      "credential": { "envVar": "DEEPSEEK_API_KEY", "provider": "deepseek", "requiredFor": "live-provider-proof" }
+    },
+    {
+      "name": "pi-mimo-provider",
+      "version": "1.0.0",
+      "specifier": "npm:pi-mimo-provider@1.0.0",
+      "provenance": {
+        "integrity": "sha512-I3AossyjtxfT3kV1/6fQua0vtiebnq+ulJnFG97sG26uKzVLrTFvz41c70wNWk2WBOsZNT6Rgr1Ioq+NmoWVvg==",
+        "tarball": "https://registry.npmjs.org/pi-mimo-provider/-/pi-mimo-provider-1.0.0.tgz",
+        "repository": "https://github.com/cad0p/pi-mimo-provider.git",
+        "sourceCommit": "9b2424ef9674364046c6cbf164726a2f9e3e466d",
+        "license": "MIT",
+        "unpackedSize": 17079,
+        "fileCount": 11,
+        "downloadsInWindow": 51
+      },
+      "manifest": {
+        "observedApiVersion": ">=0.52.0",
+        "lifecycleScripts": {},
+        "declaredResources": { "extensions": ["./src/extension.ts"] }
+      },
+      "characterization": {
+        "outcome": "rejected",
+        "stage": "inspection",
+        "diagnostic": "published package omits declared extension ./src/extension.ts",
+        "errorMatch": "extensions path does not exist"
+      },
+      "coverage": ["declarative-provider"],
+      "credential": { "envVar": "XIAOMI_MIMO_API_KEY", "provider": "xiaomi-mimo", "requiredFor": "live-provider-proof" }
+    }
+  ]
+}
