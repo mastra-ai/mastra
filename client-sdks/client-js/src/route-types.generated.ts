@@ -18180,7 +18180,7 @@ export type PostDatasetsDatasetIdExperiments_Response = {
   failedCount: number;
   /** Dataset version pinned on the experiment (create-only) */
   datasetVersion?: number | undefined;
-  startedAt: Date;
+  startedAt: Date | null;
   completedAt: Date | null;
   results: {
     itemId: string;
