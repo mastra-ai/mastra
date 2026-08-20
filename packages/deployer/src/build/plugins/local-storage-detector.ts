@@ -290,8 +290,9 @@ function findGuardedValues(ast: AstNode, values: Set<string>): Map<string, strin
  * expression, `guardedBy: "X"` is recorded so the CLI preflight can apply
  * deploy-time env context instead of hard-erroring on a dead fallback.
  *
- * Two assets are emitted into the output directory for the CLI preflight:
+ * Three assets are emitted into the output directory:
  * - `preflight-metadata.json` — unified metadata (local paths + user env refs)
+ * - `workers.json` — statically extracted background-task config, or `null`
  * - `preflight-local-paths.json` — legacy shape, kept for one release so an
  *   older globally-installed CLI paired with a newer project-local deployer
  *   doesn't lose the LOCAL_STORAGE_PATH check.
@@ -401,13 +402,11 @@ export function localStorageDetector(rootDir?: string): Plugin {
         source: JSON.stringify(metadata),
       });
 
-      if (workersConfig) {
-        this.emitFile({
-          type: 'asset',
-          fileName: WORKERS_CONFIG_FILE,
-          source: JSON.stringify(workersConfig),
-        });
-      }
+      this.emitFile({
+        type: 'asset',
+        fileName: WORKERS_CONFIG_FILE,
+        source: JSON.stringify(workersConfig ?? null),
+      });
 
       // Legacy asset — shape unchanged (no `guardedBy`) for older CLIs.
       this.emitFile({

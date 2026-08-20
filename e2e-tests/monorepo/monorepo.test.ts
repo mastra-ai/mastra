@@ -418,8 +418,8 @@ export const environmentRoute = registerApiRoute('/environment', {
           await runBuild(fixturePath);
         }
 
-        const outputFiles = await readdir(join(fixturePath, 'apps', 'custom', '.mastra', 'output'));
-        expect(outputFiles).not.toContain('workers.json');
+        const workersPath = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'workers.json');
+        expect(JSON.parse(await readFile(workersPath, 'utf-8'))).toBeNull();
       },
       timeout,
     );
