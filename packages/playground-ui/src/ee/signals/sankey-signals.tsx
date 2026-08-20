@@ -65,11 +65,6 @@ const VIEW_DESCRIPTIONS: Record<SignalsViewMode, string> = {
   lifelines: "Each theme's share of traces across the whole selected range.",
 };
 
-function resolveControlledThemeSelection(flow: ThemeFlowResponse | undefined, selectedThemeId: string | undefined) {
-  if (!flow || !selectedThemeId) return undefined;
-  return findThemeSelectionById(flow, selectedThemeId);
-}
-
 export function SankeySignals({
   entityId,
   entityType = 'agent',
@@ -151,7 +146,8 @@ export function SankeySignals({
     return stabilizeThemeFlow(drilledFlow, [stableUnfilteredFlow, drilledFlow]);
   }, [drillStack, pathsQuery.data, stableUnfilteredFlow]);
   const graphSummary = useMemo(() => (flow ? buildSignalGraphSummary(flow) : undefined), [flow]);
-  const detailSelection = resolveControlledThemeSelection(stableUnfilteredFlow, selectedThemeId);
+  const detailSelection =
+    stableUnfilteredFlow && selectedThemeId ? findThemeSelectionById(stableUnfilteredFlow, selectedThemeId) : undefined;
   const populatedStageCount = currentFlow?.stages.filter(stage => stage.nodes.length > 0).length ?? 0;
   const shouldLoadProgress =
     snapshotsQuery.isSuccess &&
