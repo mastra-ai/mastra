@@ -11,13 +11,16 @@
  */
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
 
+import {
+  ensureAssistantRenderSegment,
+  finalizeStreamingAssistant,
+  getAssistantSegmentKey,
+} from '../assistant-render-registry.js';
 import { reconcileChatBoundarySpacers } from '../chat-boundary-reconciliation.js';
-import { AssistantMessageComponent } from '../components/assistant-message.js';
 import { ToolExecutionComponentEnhanced } from '../components/tool-execution-enhanced.js';
 import { getAssistantRenderParts, isGoalJudgeEvaluationSignal } from '../db-message-parts.js';
 import type { ToolRenderPart } from '../db-message-parts.js';
 import { flushRender, requestRender } from '../render-scheduler.js';
-import { getMarkdownTheme } from '../theme.js';
 
 import { createStaticSubagentComponent } from './tool.js';
 import type { EventHandlerContext } from './types.js';
@@ -129,11 +132,11 @@ export function handleMessageStart(ctx: EventHandlerContext, message: MastraDBMe
     state.lastAskUserComponent = undefined;
     state.lastSubmitPlanComponent = undefined;
     if (!state.streamingComponent) {
-      state.streamingComponent = new AssistantMessageComponent(undefined, state.hideThinkingBlock, getMarkdownTheme());
-      ctx.addChildBeforeFollowUps(state.streamingComponent);
       state.streamingMessage = message;
-      state.streamingComponent.updateContent(withParts(message, getTrailingParts(message)));
-      reconcileChatBoundarySpacers(state.chatContainer);
+      ensureAssistantRenderSegment(state, message.id, ctx.addChildBeforeFollowUps);
+      state.assistantRenderRegistry.queueActive(message.id, withParts(message, getTrailingParts(message)), () => {
+        reconcileChatBoundarySpacers(state.chatContainer);
+      });
     }
     flushRender(state);
   }
@@ -157,14 +160,14 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: MastraDBM
   const trailingParts = getTrailingParts(message);
   const hasToolCalls = toolParts.length > 0;
 
-  let createdStreamingComponent = false;
   if (!state.streamingComponent) {
     if (trailingParts.length === 0 && !hasToolCalls) {
       return;
     }
-    state.streamingComponent = new AssistantMessageComponent(undefined, state.hideThinkingBlock, getMarkdownTheme());
-    ctx.addChildBeforeFollowUps(state.streamingComponent);
-    createdStreamingComponent = true;
+    ensureAssistantRenderSegment(state, message.id, ctx.addChildBeforeFollowUps);
+  } else if (!state.assistantRenderRegistry.getActive(message.id)) {
+    const component = state.streamingComponent;
+    state.assistantRenderRegistry.start(message.id, getAssistantSegmentKey(message.id), () => component);
   }
 
   state.streamingMessage = message;
@@ -175,12 +178,12 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: MastraDBM
       state.seenToolCallIds.add(tool.toolCallId);
 
       const preParts = getPartsBeforeTool(message, tool.toolCallId, state.seenToolCallIds);
-      state.streamingComponent.updateContent(withParts(message, preParts));
+      state.assistantRenderRegistry.queueActive(message.id, withParts(message, preParts));
+      state.assistantRenderRegistry.finalizeActive(message.id);
 
       const staticSubagent = createStaticSubagentComponent(ctx, tool.toolCallId, tool.toolName, tool.args);
       if (staticSubagent) {
         state.subagentToolCallIds.add(tool.toolCallId);
-        createdStreamingComponent = true;
         continue;
       }
 
@@ -188,13 +191,7 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: MastraDBM
       // assistant slice before the tool and continue text in a fresh component.
       if (tool.toolName === 'subagent' && !state.subagentToolCallIds.has(tool.toolCallId)) {
         state.subagentToolCallIds.add(tool.toolCallId);
-        state.streamingComponent = new AssistantMessageComponent(
-          undefined,
-          state.hideThinkingBlock,
-          getMarkdownTheme(),
-        );
-        ctx.addChildBeforeFollowUps(state.streamingComponent);
-        createdStreamingComponent = true;
+        ensureAssistantRenderSegment(state, message.id, ctx.addChildBeforeFollowUps, tool.toolCallId);
         continue;
       }
 
@@ -215,9 +212,7 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: MastraDBM
       state.allToolComponents.push(component);
       reconcileChatBoundarySpacers(state.chatContainer);
 
-      state.streamingComponent = new AssistantMessageComponent(undefined, state.hideThinkingBlock, getMarkdownTheme());
-      ctx.addChildBeforeFollowUps(state.streamingComponent);
-      createdStreamingComponent = true;
+      ensureAssistantRenderSegment(state, message.id, ctx.addChildBeforeFollowUps, tool.toolCallId);
     } else {
       const component = state.pendingTools.get(tool.toolCallId);
       if (component) {
@@ -230,14 +225,9 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: MastraDBM
   // Avoid replacing visible assistant text with an empty trailing segment
   // (commonly happens immediately after tool-result-only updates).
   if (trailingParts.length > 0) {
-    const wasSpacingParticipant = state.streamingComponent.getChatSpacingKind() !== undefined;
-    state.streamingComponent.updateContent(withParts(message, trailingParts));
-    if (
-      createdStreamingComponent ||
-      (!wasSpacingParticipant && state.streamingComponent.getChatSpacingKind() !== undefined)
-    ) {
+    state.assistantRenderRegistry.queueActive(message.id, withParts(message, trailingParts), () => {
       reconcileChatBoundarySpacers(state.chatContainer);
-    }
+    });
   }
 
   requestRender(state);
@@ -255,7 +245,9 @@ export function handleMessageEnd(ctx: EventHandlerContext, message: MastraDBMess
     // If the final assistant chunk has no trailing text/thinking after tools,
     // keep the last rendered content instead of blanking the component.
     if (trailingParts.length > 0 || stopReason === 'aborted' || stopReason === 'error') {
-      state.streamingComponent.updateContent(withParts(message, trailingParts));
+      state.assistantRenderRegistry.queueActive(message.id, withParts(message, trailingParts), () => {
+        reconcileChatBoundarySpacers(state.chatContainer);
+      });
     }
 
     if (stopReason === 'aborted' || stopReason === 'error') {
@@ -274,8 +266,8 @@ export function handleMessageEnd(ctx: EventHandlerContext, message: MastraDBMess
       state.pendingTaskToolIds?.clear();
     }
 
-    state.streamingComponent = undefined;
-    state.streamingMessage = undefined;
+    state.assistantRenderRegistry.finalize(message.id);
+    finalizeStreamingAssistant(state);
     state.seenToolCallIds.clear();
     state.subagentToolCallIds.clear();
     state.currentRunSystemReminderKeys.clear();

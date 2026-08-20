@@ -1,5 +1,7 @@
 import type { AgentControllerSessionSettings } from '@mastra/client-js';
 import { useTheme } from '@mastra/playground-ui/components/ThemeProvider';
+import { useEffect } from 'react';
+import { useLocation } from 'react-router';
 import { useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -39,7 +41,14 @@ function getSettingsUpdateErrorMessage(error: unknown): string {
 
 export function SettingsPanel() {
   const section = useSettingsSection();
+  const { hash } = useLocation();
   const { theme, setTheme } = useTheme();
+
+  // Deep links like `/settings/models#model-packs` scroll to the subsection.
+  useEffect(() => {
+    if (!hash) return;
+    document.getElementById(hash.slice(1))?.scrollIntoView?.({ block: 'start' });
+  }, [hash, section]);
   const { resourceId, resourceEnabled, projectPath, baseUrl } = useChatSessionContext();
   const { isMobile } = useMainSidebar();
   const { permissions, pendingPermissionCategory, setPermissionForCategory } = useChatPermissions();
@@ -116,6 +125,7 @@ export function SettingsPanel() {
               </SettingsCard>
             </SettingsSubsection>
             <SettingsSubsection
+              id="model-packs"
               title="Chat model packs"
               description="Set your personal Build, Plan and Fast defaults for interactive chats. Factory work runs are unaffected."
             >

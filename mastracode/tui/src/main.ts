@@ -10,9 +10,14 @@ import { isStreamDestroyedError } from '@mastra/code-sdk/error-classification';
 import { hasHeadlessFlag, runMCCli } from '@mastra/code-sdk/headless/index';
 import { createBrowserFromSettings, loadSettings } from '@mastra/code-sdk/onboarding/settings';
 import { formatScaffoldSuccess, scaffoldPlugin } from '@mastra/code-sdk/plugins/scaffold';
+import {
+  stopProcessMemoryDiagnosticsWithTimeout,
+  type ProcessMemoryDiagnostics,
+} from '@mastra/code-sdk/process-memory-diagnostics';
 import { setupDebugLogging } from '@mastra/code-sdk/utils/debug-log';
 import { drainPipedStdin, reopenStdinFromTTY } from '@mastra/code-sdk/utils/stdin-pipe';
 import { releaseAllThreadLocks } from '@mastra/code-sdk/utils/thread-lock';
+import { createShutdownCoordinator, startTuiProcessMemoryDiagnostics } from './process-memory-diagnostics-lifecycle.js';
 import { detectTerminalTheme } from './tui/detect-theme.js';
 import { MastraTUI } from './tui/index.js';
 import { applyThemeMode, restoreTerminalForeground } from './tui/theme.js';
@@ -27,7 +32,9 @@ let storageMaintenance: Awaited<ReturnType<typeof createMastraCode>>['storageMai
 let stopPluginSignalProviders: Awaited<ReturnType<typeof createMastraCode>>['stopPluginSignalProviders'] | undefined;
 let analytics: ReturnType<typeof createMastraCodeAnalytics> | undefined;
 let tui: MastraTUI | undefined;
+let processMemoryDiagnostics: ProcessMemoryDiagnostics | undefined;
 let storageClosed = false;
+let cleanupPromise: Promise<void> | null = null;
 
 function isTruthyEnv(name: string): boolean {
   return ['1', 'true', 'yes', 'on'].includes(process.env[name]?.trim().toLowerCase() ?? '');
@@ -55,6 +62,9 @@ process.on('unhandledRejection', reason => {
 
 async function tuiMain(pipedInput?: string | null) {
   const settings = loadSettings();
+  processMemoryDiagnostics = await startTuiProcessMemoryDiagnostics(process.env, warning => {
+    console.info(`⚠ ${warning}`);
+  });
   let browserPromise: ReturnType<typeof createBrowserFromSettings> | undefined;
   const loadBrowser = () => {
     browserPromise ??= createBrowserFromSettings(settings.browser);
@@ -132,11 +142,13 @@ async function tuiMain(pipedInput?: string | null) {
     mcpManager,
     pluginManager: result.pluginManager,
     storageMaintenance: result.storageMaintenance,
+    processMemoryDiagnostics,
     knowledgeInspector: result.knowledgeInspector,
     appName: 'Mastra Code',
     version: getCurrentVersion(),
     inlineQuestions: true,
     githubSignals: result.githubSignals,
+    exit: exitCode => void shutdownAndExit(exitCode),
     ...(pipedInput ? { initialMessage: `The following was piped via stdin:\n\n${pipedInput}` } : {}),
   });
   tui.run().catch(error => {
@@ -154,32 +166,41 @@ async function tuiMain(pipedInput?: string | null) {
   }
 }
 
-const asyncCleanup = async () => {
-  releaseAllThreadLocks();
-  // Stop plugin-contributed signal providers (and the plugin reload listener)
-  // before quiescing workers: a provider that keeps polling past this point
-  // could dispatch into a controller that is shutting down.
-  try {
-    stopPluginSignalProviders?.();
-  } catch {
-    // Best-effort — the process is exiting.
-  }
-  const closeSignalsPubSub = (signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close;
-  await Promise.allSettled([mcpManager?.disconnect(), controller?.stopIntervals(), closeSignalsPubSub?.()]);
-  // Mastra owns the workspaces and must destroy them to stop retained language
-  // servers before storage is closed.
-  await Promise.allSettled([controller?.getMastra()?.shutdown(), analytics?.shutdown()]);
-  // Checkpoint WAL and close the local storage connection after all producers
-  // and timers are quiesced. Idempotent — repeated signals (SIGINT then SIGHUP)
-  // close only once. LibSQLStore.close()/LibSQLVector.close() truncate the WAL
-  // and switch back to DELETE journal mode for a clean shutdown.
-  if (!storageClosed) {
-    storageClosed = true;
-    await storageMaintenance?.closeStorage?.().catch(() => {
-      // Swallow — best-effort cleanup during shutdown. The process is exiting.
-    });
-  }
+const asyncCleanup = (): Promise<void> => {
+  cleanupPromise ??= (async () => {
+    releaseAllThreadLocks();
+    // Stop plugin-contributed signal providers (and the plugin reload listener)
+    // before quiescing workers: a provider that keeps polling past this point
+    // could dispatch into a controller that is shutting down.
+    try {
+      stopPluginSignalProviders?.();
+    } catch {
+      // Best-effort — the process is exiting.
+    }
+    const diagnosticsShutdown = processMemoryDiagnostics
+      ? stopProcessMemoryDiagnosticsWithTimeout(processMemoryDiagnostics, message => console.warn(message))
+      : undefined;
+    const closeSignalsPubSub = (signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close;
+    await Promise.allSettled([mcpManager?.disconnect(), controller?.stopIntervals(), closeSignalsPubSub?.()]);
+    // Mastra owns the workspaces and must destroy them to stop retained language
+    // servers before storage is closed.
+    await Promise.allSettled([controller?.getMastra()?.shutdown(), analytics?.shutdown()]);
+    // Checkpoint WAL and close the local storage connection after all producers
+    // and timers are quiesced. Idempotent — repeated signals (SIGINT then SIGHUP)
+    // close only once. LibSQLStore.close()/LibSQLVector.close() truncate the WAL
+    // and switch back to DELETE journal mode for a clean shutdown.
+    if (!storageClosed) {
+      storageClosed = true;
+      await storageMaintenance?.closeStorage?.().catch(() => {
+        // Swallow — best-effort cleanup during shutdown. The process is exiting.
+      });
+    }
+    await diagnosticsShutdown;
+  })();
+  return cleanupPromise;
 };
+
+const shutdownAndExit = createShutdownCoordinator(asyncCleanup, exitCode => process.exit(exitCode));
 
 process.on('beforeExit', () => {
   void asyncCleanup();
@@ -217,17 +238,17 @@ process.on('exit', () => {
   releaseAllThreadLocks();
 });
 
-// For all termination signals: stop the TUI FIRST (synchronous, disables keyboard
-// protocol immediately) before doing any async cleanup. This ensures the terminal
-// escape sequences are written even if asyncCleanup hangs or the process is killed
-// during cleanup.
+// Start durable diagnostics shutdown before synchronous TUI teardown so a stalled
+// terminal cleanup cannot prevent the final profile capture. The exit handler still
+// provides a failsafe terminal reset if teardown throws.
 const handleTermSignal = () => {
+  void asyncCleanup();
   try {
     tui?.stop();
   } catch {
     // ignored — exit handler has failsafe reset
   }
-  void asyncCleanup().finally(() => process.exit(0));
+  void shutdownAndExit(0);
 };
 process.on('SIGINT', handleTermSignal);
 process.on('SIGTERM', handleTermSignal);
@@ -271,7 +292,7 @@ function readFlag(args: string[], flag: string): string | undefined {
   return value;
 }
 
-function handleFatalError(error: unknown): never {
+function handleFatalError(error: unknown): void {
   // Always write to real stderr, even if console.error was overridden
   const write = (msg: string) => process.stderr.write(msg + '\n');
 
@@ -285,7 +306,12 @@ function handleFatalError(error: unknown): never {
         `\n\nTo switch back to LibSQL:` +
         `\n  Set MASTRA_STORAGE_BACKEND=libsql or change the backend in /settings\n`,
     );
-    process.exit(1);
+    void asyncCleanup();
+    try {
+      tui?.stop();
+    } catch {}
+    void shutdownAndExit(1);
+    return;
   }
 
   const msg = `Fatal error: ${error instanceof Error ? error.message : String(error)}`;
@@ -298,7 +324,11 @@ function handleFatalError(error: unknown): never {
   if (error instanceof Error && error.stack) {
     write(error.stack);
   }
-  process.exit(1);
+  void asyncCleanup();
+  try {
+    tui?.stop();
+  } catch {}
+  void shutdownAndExit(1);
 }
 
 async function main() {

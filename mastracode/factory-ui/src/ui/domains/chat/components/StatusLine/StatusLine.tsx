@@ -4,8 +4,7 @@ import { useFactoryQuery } from '../../../../../hooks/useFactories';
 import { useWorkItemsQuery } from '../../../../../hooks/useWorkItems';
 import { useChatSessionContext } from '../../context/useChatSessionContext';
 import { PullRequestLinks } from '../PullRequestLinks';
-import { ActiveModel } from './ActiveModel';
-import { ActiveModelPack } from './ActiveModelPack';
+import { ModelPicker } from './ModelPicker';
 import { ConnectionActivity } from './ConnectionActivity';
 import { GoalStatus } from './GoalStatus';
 import { ModesSelection } from './ModesSelection';
@@ -19,7 +18,7 @@ import { RuntimeActivity } from './RuntimeActivity';
  */
 export function StatusLine() {
   const { factoryId, threadId } = useParams<{ factoryId: string; threadId: string }>();
-  const { projectPath, factorySessionState, kind, resourceReady } = useChatSessionContext();
+  const { projectPath, factorySessionState } = useChatSessionContext();
   const { data: factory } = useFactoryQuery(factoryId);
   const repository = factory?.repositories.find(
     repo => repo.projectRepositoryId === factorySessionState?.projectRepositoryId,
@@ -40,8 +39,7 @@ export function StatusLine() {
       className="text-ui-sm text-icon3 flex h-fit shrink-0 flex-wrap items-center gap-x-1.5 gap-y-1"
     >
       <ModesSelection />
-      <ActiveModel />
-      {kind === 'user' && resourceReady ? <ActiveModelPack /> : null}
+      <ModelPicker />
       <OperationalMemoryStatus />
       <RuntimeActivity />
       <ConnectionActivity />
