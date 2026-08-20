@@ -29,6 +29,7 @@ import {
   createSessionSetupHook,
   evictSessionSandbox,
   getSessionSandbox,
+  peekSessionSandbox,
   runSessionSetupFallback,
 } from './sandbox/session-sandbox.js';
 import { computeLocalWorkdir, computeRemoteWorkdir } from './sandbox/workdir.js';
@@ -513,8 +514,13 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     const runSessionSetup = async (target: SessionSandbox): Promise<void> => {
       const token = await getRepositoryToken();
       // The configured setup command may shell out to `gh`/https fetches, so
-      // GH_TOKEN must exist before setup runs — not only after start settles.
-      target.setEnvironmentVariable?.('GH_TOKEN', token);
+      // GH_TOKEN must exist before setup runs — and it must be the same
+      // gh-capable credential the session gets after start (installation
+      // tokens 403 on integration-restricted endpoints when the org
+      // configured a PAT).
+      const setupPatKind = await resolveGithubPatKind('default');
+      const setupGhToken = (await getGithubPat(() => github.integrationStorage, session.orgId, setupPatKind)) ?? token;
+      target.setEnvironmentVariable?.('GH_TOKEN', setupGhToken);
       await materializeRepo({
         row: { id: session.id, sandboxWorkdir: workdir, materializedAt: session.materializedAt },
         repoInfo: { repoFullName: repoFullName, defaultBranch: repository.defaultBranch },
@@ -743,8 +749,13 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           // Evict the session memo too: the memoized instance already reports
           // `running`, so its `start()` would early-return without
           // re-acquiring. A fresh instance re-resolves the session id at the
-          // provider (reconnect, or provision a replacement VM).
-          evictSessionSandbox(session.id);
+          // provider (reconnect, or provision a replacement VM). Conditional
+          // on the memo still holding THIS failed instance — a concurrent
+          // failure may already have installed a replacement that a blind
+          // evict would orphan.
+          if (peekSessionSandbox(session.id)?.sandbox === (sandbox as unknown)) {
+            evictSessionSandbox(session.id);
+          }
           const revived = await ensureMaterialized();
           return revived.executeCommand(command, args, options);
         }

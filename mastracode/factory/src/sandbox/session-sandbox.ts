@@ -193,11 +193,14 @@ export async function runSessionSetupFallback(
   sandbox: WorkspaceSandbox,
   run: SessionSetupRun,
   workdir: string,
+  sessionId?: string,
 ): Promise<void> {
-  // Single-flight per sandbox id: two workspace variants of one session (the
-  // memo is workspace-keyed upstream) must not race the marker probe and both
-  // run the destructive materialize. Cleared on settle; failures never latch.
-  const key = sandbox.id;
+  // Single-flight per logical session: two workspace variants of one session
+  // (the memo is workspace-keyed upstream) must not race the marker probe and
+  // both run the destructive materialize. Keyed by the caller's session id —
+  // provider-reported sandbox ids are not guaranteed unique per session —
+  // with the sandbox id as fallback. Cleared on settle; failures never latch.
+  const key = sessionId ?? sandbox.id;
   let inflight = inflightFallbackSetups.get(key);
   if (!inflight) {
     inflight = runGuardedSetup(sandbox, run, { skipMarkerProbe: false, workdir }).finally(() => {

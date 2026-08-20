@@ -424,11 +424,12 @@ async function authorizePackSession({
   // truth); the persisted column is an observability fallback for sessions
   // materialized before this process started.
   const liveWorkdir = peekSessionSandbox(sourceSession?.id ?? '')?.workdir;
+  const effectiveWorkdir = liveWorkdir ?? sourceSession?.sandboxWorkdir;
   if (
     !sourceSession ||
     sourceSession.orgId !== packContext.orgId ||
     sourceSession.userId !== packContext.userId ||
-    (scope !== undefined && scope !== liveWorkdir && scope !== sourceSession.sandboxWorkdir)
+    (scope !== undefined && scope !== effectiveWorkdir)
   ) {
     return c.json({ error: `No session for resourceId "${resourceId}"` }, 404);
   }

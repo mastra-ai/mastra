@@ -1570,9 +1570,11 @@ function buildProjectGitRoutes({
         // process holds in the memo and clears the binding row. The persisted
         // sandboxId is observability-only and must not gate the decision (its
         // write is best-effort, so it can be absent for a live sandbox).
-        const hadLiveSandbox = peekSessionSandbox(projectSandboxKey(sandboxRow)) !== undefined;
         try {
           return await withSessionOperationLock(`sandbox:${sandboxRow.id}`, async () => {
+            // Peek inside the lock: an operation queued ahead of this DELETE
+            // may have just materialized the sandbox this teardown destroys.
+            const hadLiveSandbox = peekSessionSandbox(projectSandboxKey(sandboxRow)) !== undefined;
             await teardownProjectSandbox({
               row: sandboxRow,
               storage: github.sourceControlStorage.sandboxes,
