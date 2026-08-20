@@ -30,7 +30,7 @@ import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
 import { Sandbox, Template } from 'e2b';
 import type { SandboxInfo as E2BSandboxListInfo, SandboxNetworkOpts, TemplateBuilder, TemplateClass } from 'e2b';
 import { createDefaultMountableTemplate, isNamedTemplateSpec } from '../utils/template';
-import type { TemplateSpec } from '../utils/template';
+import type { NamedTemplateSpec, TemplateSpec } from '../utils/template';
 import { mountS3, mountGCS, mountAzure, LOG_PREFIX } from './mounts';
 import type {
   E2BMountConfig,
@@ -352,17 +352,33 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
       // If template not found (404), rebuild it and retry
       const errorStr = String(createError);
       if (
-        errorStr.includes('404') &&
-        errorStr.includes('not found') &&
         this.templateSpec &&
-        isNamedTemplateSpec(this.templateSpec)
+        isNamedTemplateSpec(this.templateSpec) &&
+        resolvedTemplateId === this.templateSpec.alias
       ) {
-        // Aliased template deleted between resolve and create: drop the
-        // cached resolution so the next start rebuilds it, and rethrow.
+        // The aliased template failed to produce a sandbox: deleted between
+        // resolve and create, or the alias was registered by a FAILED build —
+        // E2B keeps a failed build's alias visible to `Template.exists`, so a
+        // broken alias would otherwise be reused forever. Drop the cached
+        // resolution and retry once on the fallback so the session never
+        // wedges on a broken alias.
+        this.logger.warn(
+          `${LOG_PREFIX} Creating from '${resolvedTemplateId}' failed, retrying on fallback: ${createError}`,
+        );
         this._resolvedTemplateId = undefined;
-        throw createError;
-      }
-      if (errorStr.includes('404') && errorStr.includes('not found') && !this.templateSpec) {
+        const fallbackId = await this.resolveFallbackTemplate(this.templateSpec.fallbackTemplate);
+        this._sandbox = await Sandbox.create(fallbackId, {
+          ...this.connectionOpts,
+          lifecycle: { onTimeout: 'pause' },
+          metadata: {
+            ...this.metadata,
+            'mastra-sandbox-id': this.id,
+          },
+          ...(this.network && { network: this.network }),
+          timeoutMs: this.timeout,
+        });
+        this.logger.debug(`${LOG_PREFIX} Created sandbox ${this._sandbox.sandboxId} from fallback ${fallbackId}`);
+      } else if (errorStr.includes('404') && errorStr.includes('not found') && !this.templateSpec) {
         this.logger.debug(`${LOG_PREFIX} Template not found, rebuilding: ${resolvedTemplateId}`);
         this._resolvedTemplateId = undefined; // Clear cached ID to force rebuild
         const rebuiltTemplateId = await this.buildDefaultTemplate();
@@ -916,28 +932,10 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
         this.logger.debug(`${LOG_PREFIX} Template built: ${buildResult.templateId}`);
         return buildResult.templateId;
       } catch (error) {
-        this.logger.warn(
-          `${LOG_PREFIX} Template '${alias}' resolution failed, falling back to ${
-            typeof fallbackTemplate === 'string' ? `'${fallbackTemplate}'` : 'the default template'
-          }: ${error}`,
-        );
-        if (typeof fallbackTemplate === 'string') {
-          this._resolvedTemplateId = fallbackTemplate;
-          return fallbackTemplate;
-        }
-        if (fallbackTemplate) {
-          const buildResult = await Template.build(
-            fallbackTemplate as unknown as TemplateClass,
-            `mastra-fallback-${this.id.replace(/[^a-zA-Z0-9-]/g, '-')}`,
-            this.connectionOpts,
-          );
-          this._resolvedTemplateId = buildResult.templateId;
-          return buildResult.templateId;
-        }
-        return await this.buildOrReuseDefaultTemplate();
+        this.logger.warn(`${LOG_PREFIX} Template '${alias}' resolution failed, falling back: ${error}`);
+        return await this.resolveFallbackTemplate(fallbackTemplate);
       }
     }
-
     // TemplateBuilder or function - need to build
     let template: TemplateBuilder;
     let templateName: string;
@@ -967,6 +965,47 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
    * Resolve the default mountable template: reuse when it exists, build once
    * when it does not.
    */
+  /**
+   * Resolve a named spec's fallback template. A named fallback (e.g. the
+   * repo template's workspace-base spec) gets its own exists-then-build
+   * resolution; anything failing past that lands on the default mountable
+   * template so a broken build never wedges a session.
+   */
+  private async resolveFallbackTemplate(fallbackTemplate: NamedTemplateSpec['fallbackTemplate']): Promise<string> {
+    if (typeof fallbackTemplate === 'string') {
+      this._resolvedTemplateId = fallbackTemplate;
+      return fallbackTemplate;
+    }
+    if (fallbackTemplate && isNamedTemplateSpec(fallbackTemplate)) {
+      try {
+        if (await Template.exists(fallbackTemplate.alias, this.connectionOpts)) {
+          this._resolvedTemplateId = fallbackTemplate.alias;
+          return fallbackTemplate.alias;
+        }
+        const buildResult = await Template.build(
+          fallbackTemplate.template as TemplateClass,
+          fallbackTemplate.alias,
+          this.connectionOpts,
+        );
+        this._resolvedTemplateId = buildResult.templateId;
+        return buildResult.templateId;
+      } catch (error) {
+        this.logger.warn(`${LOG_PREFIX} Fallback template '${fallbackTemplate.alias}' failed too: ${error}`);
+        return await this.buildOrReuseDefaultTemplate();
+      }
+    }
+    if (fallbackTemplate) {
+      const buildResult = await Template.build(
+        fallbackTemplate as unknown as TemplateClass,
+        `mastra-fallback-${this.id.replace(/[^a-zA-Z0-9-]/g, '-')}`,
+        this.connectionOpts,
+      );
+      this._resolvedTemplateId = buildResult.templateId;
+      return buildResult.templateId;
+    }
+    return await this.buildOrReuseDefaultTemplate();
+  }
+
   private async buildOrReuseDefaultTemplate(): Promise<string> {
     const { template, id } = createDefaultMountableTemplate();
 

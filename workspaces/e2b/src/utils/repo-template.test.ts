@@ -79,6 +79,17 @@ describe('createRepoTemplate', () => {
     }
   });
 
+  it('preps the workspace root as root before cloning as user', async () => {
+    const steps = await serializedSteps(createRepoTemplate(BASE));
+    expect(steps).toContain('mkdir -p /workspace/octocat/hello && chown -R user:user /workspace');
+  });
+
+  it('carries a named workspace-base fallback so a broken build still yields a writable workdir', () => {
+    const spec = createRepoTemplate(BASE);
+    expect(isNamedTemplateSpec(spec.fallbackTemplate as never)).toBe(true);
+    expect((spec.fallbackTemplate as { alias: string }).alias).toMatch(/^mastra-workspace-base-[0-9a-f]{16}$/);
+  });
+
   it('rejects malformed inputs', () => {
     expect(() => createRepoTemplate({ repoFullName: 'no-slash' })).toThrow(/repoFullName/);
     expect(() => createRepoTemplate({ repoFullName: 'a/b; rm -rf /' })).toThrow(/repoFullName/);

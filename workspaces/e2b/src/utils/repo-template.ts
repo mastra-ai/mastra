@@ -114,16 +114,48 @@ export function createRepoTemplate(options: RepoTemplateOptions): NamedTemplateS
     steps.push(`cd ${workdir} && ${setupCommand}`);
   }
 
-  // Start from the default mountable base (s3fs/fuse) so repo-template
-  // sandboxes keep filesystem mount support.
-  const template = createDefaultMountableTemplate().template.runCmd(steps);
+  // Build steps run as the sandbox's default non-root `user`, which cannot
+  // create the workspace root — prepare it as root and hand it to `user`
+  // first, then clone + set up as `user` so runtime file ownership is right.
+  const template = createDefaultMountableTemplate()
+    .template.runCmd(workspaceRootPrepCommand(workdir), { user: 'root' })
+    .runCmd(steps);
 
   return {
     alias: repoTemplateAlias(options),
     template,
+    // A failed repo build degrades to a template that still has a writable
+    // workspace root, so the session's runtime cold clone works.
+    fallbackTemplate: createWorkspaceBaseTemplate(),
   };
 }
 
 function defaultWorkdir(repoFullName: string): string {
   return `/workspace/${repoFullName}`;
+}
+
+function workspaceRootPrepCommand(workdir: string): string {
+  const root = workdir.split('/').slice(0, 2).join('/') || '/workspace';
+  return `mkdir -p ${workdir} && chown -R user:user ${root}`;
+}
+
+export const WORKSPACE_BASE_TEMPLATE_VERSION = 'v1';
+
+/**
+ * The repo template's fallback: the default mountable base plus a
+ * user-writable `/workspace` root, under its own deterministic alias so a
+ * broken repo build degrades to a cold start whose runtime clone can
+ * actually write the deterministic workdir.
+ */
+export function createWorkspaceBaseTemplate(): NamedTemplateSpec {
+  const hash = createHash('sha256')
+    .update(JSON.stringify({ version: WORKSPACE_BASE_TEMPLATE_VERSION, kind: 'workspace-base' }))
+    .digest('hex')
+    .slice(0, 16);
+  return {
+    alias: `mastra-workspace-base-${hash}`,
+    template: createDefaultMountableTemplate().template.runCmd('mkdir -p /workspace && chown -R user:user /workspace', {
+      user: 'root',
+    }),
+  };
 }
