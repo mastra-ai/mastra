@@ -1,5 +1,62 @@
 # @mastra/code-sdk
 
+## 1.4.0-alpha.1
+
+### Minor Changes
+
+- Fixed credential failures that told every interface to run `/login`, a command only the terminal UI has. A provider fetch without a usable credential now throws `ProviderAuthRequiredError`, which states the fact and leaves the remedy to the host running the agent. ([#21860](https://github.com/mastra-ai/mastra/pull/21860))
+
+  ```ts
+  import { ProviderAuthRequiredError } from '@mastra/code-sdk/auth/provider-auth-error';
+
+  try {
+    await run();
+  } catch (error) {
+    // Before: the message hardcoded "Run /login first."
+    // Now: match the error and point the user at whatever sign-in path your host offers.
+    if (error instanceof ProviderAuthRequiredError) showSignIn();
+  }
+  ```
+
+  The error name is stable across serialization, so a client that only receives `{ name, message }` over the wire can match it too.
+
+- Added opt-in process memory diagnostics for SDK process adapters. The service records process and V8 heap-space samples, naturally occurring garbage collection events, and periodic allocation profiles without forcing garbage collection or writing heap snapshots. ([#21821](https://github.com/mastra-ai/mastra/pull/21821))
+
+  Start diagnostics before creating Mastra Code, then await the final capture after work-producing services stop:
+
+  ```ts
+  import {
+    createProcessMemoryDiagnosticsFromEnvironment,
+    startConfiguredProcessMemoryDiagnostics,
+  } from '@mastra/code-sdk/process-memory-diagnostics';
+
+  const setup = createProcessMemoryDiagnosticsFromEnvironment(process.env);
+  const diagnostics = await startConfiguredProcessMemoryDiagnostics(setup, console.warn);
+
+  try {
+    // Create and run the process adapter.
+  } finally {
+    await diagnostics.stop();
+  }
+  ```
+
+  Allocation profiles remain local and may contain prompts, credentials, file contents, and tool arguments. Keep them private and delete them after analysis.
+
+### Patch Changes
+
+- Updated dependencies [[`d23e75d`](https://github.com/mastra-ai/mastra/commit/d23e75d57cc7cf5b9bfdbee896bf5a6a2484fed7), [`c8faa4e`](https://github.com/mastra-ai/mastra/commit/c8faa4e1cfebaec56b65e754e90b9fe46d153359), [`f2031a4`](https://github.com/mastra-ai/mastra/commit/f2031a47445e8f67a89ba1309036816f97ab7a65), [`8e529d4`](https://github.com/mastra-ai/mastra/commit/8e529d4ac754efef04b225841349e0da9edf89a6)]:
+  - @mastra/core@1.61.0-alpha.1
+
+## 1.3.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`88d14ca`](https://github.com/mastra-ai/mastra/commit/88d14cac008582a618fecc3d5c7fd3bdf4f6ddc3), [`84a5b69`](https://github.com/mastra-ai/mastra/commit/84a5b699f84d6bae0a34efe5a970d891090b9f41), [`84a5b69`](https://github.com/mastra-ai/mastra/commit/84a5b699f84d6bae0a34efe5a970d891090b9f41), [`64cd7ac`](https://github.com/mastra-ai/mastra/commit/64cd7ac22c2c7a6e6b533a4b3a9ede432700f1fb), [`84a5b69`](https://github.com/mastra-ai/mastra/commit/84a5b699f84d6bae0a34efe5a970d891090b9f41), [`038b7b4`](https://github.com/mastra-ai/mastra/commit/038b7b405cb4ac25ab3f3031334111b1f87ac112), [`4132d61`](https://github.com/mastra-ai/mastra/commit/4132d61f8367077120ee9e6420d3224dffd93c93)]:
+  - @mastra/core@1.60.1-alpha.0
+  - @mastra/libsql@1.21.1-alpha.0
+  - @mastra/pg@1.21.1-alpha.0
+  - @mastra/mcp@1.17.1-alpha.0
+
 ## 1.3.0
 
 ### Minor Changes

@@ -14,7 +14,7 @@ import { RequestContext } from '../../../request-context';
 import { getNeedsApprovalFn } from '../../../tools/toolchecks';
 import type { CoreTool, RequireToolApproval, ToolApprovalContext } from '../../../tools/types';
 import type { Workspace } from '../../../workspace';
-import { MessageList } from '../../message-list';
+import type { MessageList } from '../../message-list';
 import { SaveQueueManager } from '../../save-queue';
 import { globalRunRegistry } from '../run-registry';
 import type {
@@ -27,6 +27,7 @@ import type {
   DurableAgenticWorkflowInput,
   RegistryModelListEntry,
 } from '../types';
+import { createRunMessageList } from './run-message-list';
 
 /**
  * Runtime dependencies that need to be resolved at step execution time.
@@ -150,7 +151,8 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
   const existingEntry = globalRunRegistry.get(runId);
   const messageList = existingEntry?.messageList
     ? existingEntry.messageList.deserialize(input.messageListState)
-    : new MessageList({
+    : createRunMessageList({
+        mastra,
         threadId: input.state.threadId,
         resourceId: input.state.resourceId,
       }).deserialize(input.messageListState);

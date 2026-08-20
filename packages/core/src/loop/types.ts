@@ -287,7 +287,7 @@ export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT = undefined> = LoopO
   runId: string;
   startTimestamp: number;
   _internal: StreamInternal;
-  rotateResponseMessageId: () => string;
+  rotateResponseMessageId: (sealMessageId?: string) => string;
   streamState: {
     serialize: () => any;
     deserialize: (state: any) => void;
