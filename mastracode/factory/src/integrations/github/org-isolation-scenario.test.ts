@@ -2,7 +2,8 @@ import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RouteAuth } from '../../routes/route.js';
 import { mountApiRoutes } from '../../routes/test-utils.js';
-import type { SandboxFleet } from '../../sandbox/fleet.js';
+import { __clearSessionSandboxesForTests, getSessionSandbox } from '../../sandbox/session-sandbox.js';
+
 import { SourceControlStorageInMemory } from '../../storage/domains/source-control/inmemory.js';
 import { buildGithubRoutes } from './routes.js';
 
@@ -229,17 +230,16 @@ const commitAll = vi.fn(async () => ({ committed: true }));
 const pushBranch = vi.fn(async () => {});
 const createPullRequest = vi.fn(async () => ({ url: 'https://github.com/octo/hello/pull/1' }));
 let sandboxEnabled = true;
-/** DI-injected fleet stub — routes read `enabled`/`provider`/`computeWorkdir`/`reattachSandbox`. */
-const fleet = {
+/** DI-injected sandbox surface stub — routes read `enabled`/`provider`. */
+const sandboxRuntime = {
   get enabled() {
     return sandboxEnabled;
   },
   get provider() {
     return sandboxEnabled ? 'railway' : 'none';
   },
-  computeWorkdir: (repo: string) => `/workspace/${repo.split('/').pop()}`,
-  reattachSandbox: (id: string) => reattachSandbox(id),
-} as unknown as SandboxFleet;
+  create: (ctx: { sessionId: string }) => ({ id: `sbx-${ctx.sessionId}` }),
+} as any;
 vi.mock('./sandbox', () => {
   class MaterializeError extends Error {
     code: string;
@@ -367,7 +367,7 @@ function buildApp(user: { workosId: string; organizationId?: string } | null) {
       github: githubStub as any,
       stateSigner,
       auth: testAuth,
-      fleet,
+      sandbox: sandboxRuntime,
     }),
   );
   return app;
@@ -411,6 +411,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  __clearSessionSandboxesForTests();
   vi.clearAllMocks();
 });
 
@@ -478,6 +479,15 @@ describe('two users in one org each get their own sandbox + session workspace', 
       sandboxId: 'sb-a1-session',
       sandboxWorkdir: '/workspace/a1/feat-x',
     });
+    // Materialization memoizes the session sandbox in-process; git write
+    // routes resolve through the memo, not persisted columns.
+    getSessionSandbox(session.id, '/workspace/a1/feat-x', () =>
+      ({
+        id: 'sb-a1-session',
+        provider: 'stub',
+        executeCommand: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
+      }) as never,
+    );
 
     // User 2 cannot address user 1's session workspace.
     const crossCommit = await postJson(user2, '/web/github/projects/p1/commit', {
@@ -526,6 +536,13 @@ describe('cross-user session workspaces are rejected', () => {
         sandboxId: `sb-${userId}`,
         sandboxWorkdir: `/workspace/sessions/${userId}/feat-x`,
       });
+      getSessionSandbox(session.id, `/workspace/sessions/${userId}/feat-x`, () =>
+        ({
+          id: `sb-${userId}`,
+          provider: 'stub',
+          executeCommand: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
+        }) as never,
+      );
       sessions.set(userId, session);
     }
 
@@ -605,7 +622,7 @@ describe('install flow binds the installation to the org', () => {
           installationStorageId: tables.installations[0]!.id,
           repositoryStorageId: tables.repositories[0]!.id,
           sandboxProvider: 'railway',
-          sandboxWorkdir: '/workspace/hello',
+          sandboxWorkdir: '/workspace/octo/hello',
         },
       ],
     });

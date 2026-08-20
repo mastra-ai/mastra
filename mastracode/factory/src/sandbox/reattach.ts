@@ -1,13 +1,19 @@
 /**
- * Wires the core workspace sandbox seam to the factory's sandbox fleet.
+ * Wires the core workspace sandbox seam to the factory's session sandboxes.
  * Core's `getDynamicWorkspace` reattaches project sandboxes through
- * `@mastra/code-sdk/agents/sandbox-reattach`, but only the factory owns the
- * fleet — so `MastraFactory.prepare()` registers the implementation here once
- * the fleet is constructed.
+ * `@mastra/code-sdk/agents/sandbox-reattach`. Sandbox identity is the session
+ * id, so the seam resolves through the per-process session memo — it never
+ * constructs or provisions (passive callers must not create VMs).
  */
 import { registerSandboxReattach as registerOnCore } from '@mastra/code-sdk/agents/sandbox-reattach';
-import type { SandboxFleet } from './fleet.js';
+import { peekSessionSandbox } from './session-sandbox.js';
 
-export function registerSandboxReattach(fleet: SandboxFleet): void {
-  registerOnCore((providerSandboxId, options) => fleet.reattachSandbox(providerSandboxId, options));
+export function registerSandboxReattach(): void {
+  registerOnCore(async sandboxId => {
+    const entry = peekSessionSandbox(sandboxId);
+    if (!entry) {
+      throw new Error(`No session sandbox '${sandboxId}' is active in this process`);
+    }
+    return entry.sandbox as never;
+  });
 }

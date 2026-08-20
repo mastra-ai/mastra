@@ -1125,7 +1125,7 @@ export class GithubIntegration implements FactoryIntegration {
     return buildGithubRoutes({
       github: this,
       auth: ctx.auth,
-      fleet: ctx.fleet,
+      sandbox: ctx.sandbox,
       storage: ctx.factoryStorage,
       stateSigner: ctx.stateSigner,
       baseUrl: ctx.baseUrl,

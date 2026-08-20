@@ -21,8 +21,10 @@ import type { Context } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import type { RouteAuth } from '../../routes/route.js';
 import { baseCheckpointIsStale } from '../../sandbox/base-checkpoint-triggers.js';
-import { SandboxBudgetError } from '../../sandbox/fleet.js';
-import type { MaterializationSandbox, PrepareProgress, ProgressFn, SandboxFleet } from '../../sandbox/fleet.js';
+import type { MaterializationSandbox, PrepareProgress, ProgressFn } from '../../sandbox/fleet.js';
+import type { FactorySandboxRuntime } from '../../sandbox/session-sandbox.js';
+import { peekSessionSandbox } from '../../sandbox/session-sandbox.js';
+import { computeLocalWorkdir, computeRemoteWorkdir } from '../../sandbox/workdir.js';
 import type { StateSigner } from '../../state-signing.js';
 import type { AuditEmitter } from '../../storage/domains/audit/domain.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
@@ -98,11 +100,11 @@ export interface MountGithubRoutesOptions {
   /** Host auth seam — resolves the signed-in user/tenant for each request. */
   auth: RouteAuth;
   /**
-   * Sandbox fleet for per-project sandboxes. A fleet constructed without a
-   * machine config reports `enabled: false` and the sandbox-backed routes
-   * respond 503.
+   * Sandbox surface for per-project sandboxes. Without a configured create
+   * callback it reports `enabled: false` and sandbox-backed routes respond
+   * 503.
    */
-  fleet: SandboxFleet;
+  sandbox: FactorySandboxRuntime;
   /** Factory storage backend used for the `appDbConfigured` diagnostic. */
   storage?: FactoryStorage;
   /**
@@ -359,9 +361,9 @@ async function ingestPolledEvents(
  */
 export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[] {
   const routes: ApiRoute[] = [];
-  const { auth, fleet, storage, github, stateSigner, controller, emitAudit, sessionRetirement } = options;
+  const { auth, sandbox, storage, github, stateSigner, controller, emitAudit, sessionRetirement } = options;
   const diagnostics = () =>
-    getGithubFeatureDiagnostics({ github, auth, appDbConfigured: storage !== undefined, stateSigner, fleet });
+    getGithubFeatureDiagnostics({ github, auth, appDbConfigured: storage !== undefined, stateSigner, sandbox });
 
   // The status route is always registered so the SPA can detect the disabled state.
   routes.push(
@@ -389,7 +391,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
         if (!tenant.orgId) {
           return c.json({
             enabled: true,
-            sandboxEnabled: fleet.enabled,
+            sandboxEnabled: sandbox.enabled,
             organizationRequired: true,
             connected: false,
             installations: [],
@@ -405,7 +407,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
         const connected = rows.length > 0;
         return c.json({
           enabled: true,
-          sandboxEnabled: fleet.enabled,
+          sandboxEnabled: sandbox.enabled,
           connected,
           installations: rows.map(r => ({
             installationId: Number(r.externalId),
@@ -661,8 +663,10 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
                 ...repo,
                 installationStorageId: inst.id,
                 repositoryStorageId: repository.id,
-                sandboxProvider: fleet.provider,
-                sandboxWorkdir: fleet.computeWorkdir(repo.fullName),
+                sandboxProvider: sandbox.provider,
+                // Snapshot for display only — the runtime workdir is computed
+                // deterministically at open time, never read from this row.
+                sandboxWorkdir: computeProjectWorkdir(sandbox, repo.fullName),
               };
             }),
           );
@@ -682,7 +686,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
         if ('response' in resolved) return resolved.response;
         const { orgId, userId } = resolved.tenant;
 
-        if (!fleet.enabled) {
+        if (!sandbox.enabled) {
           return c.json({ error: 'sandbox_not_configured', message: 'No sandbox provider is configured.' }, 503);
         }
 
@@ -702,7 +706,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             try {
               const result = await prepareProject({
                 github,
-                fleet,
+                sandbox,
                 project,
                 userId,
                 onProgress: ev => void stream.writeSSE({ event: 'progress', data: JSON.stringify(ev) }),
@@ -715,7 +719,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
         }
 
         try {
-          const result = await prepareProject({ github, fleet, project, userId });
+          const result = await prepareProject({ github, sandbox, project, userId });
           return c.json(result);
         } catch (err) {
           const { status, body } = ensureErrorPayload(err);
@@ -961,7 +965,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
   );
 
   // ── Sessions / commit / push / PR ────────────────────────────────────────
-  routes.push(...buildProjectGitRoutes({ github, auth, fleet, controller, emitAudit, sessionRetirement }));
+  routes.push(...buildProjectGitRoutes({ github, auth, sandbox, controller, emitAudit, sessionRetirement }));
 
   return routes;
 }
@@ -1000,22 +1004,6 @@ function identityFromUser(user: unknown): GitIdentity {
 }
 
 /**
- * Resolve a live, started sandbox for the caller's per-user sandbox binding. The
- * sandbox must already have been provisioned (`sandboxId` set) — the git write
- * routes never clone, they operate on the existing checkout.
- */
-async function resolveProjectSandbox(options: {
-  fleet: SandboxFleet;
-  sandboxRow: ProjectRepositorySandbox;
-}): Promise<MaterializationSandbox> {
-  const { fleet, sandboxRow } = options;
-  if (!sandboxRow.sandboxId) {
-    throw new MaterializeError('Project sandbox is not provisioned. Open the project first.', 'clone-failed');
-  }
-  return fleet.reattachSandbox(sandboxRow.sandboxId, { actingUserId: sandboxRow.userId });
-}
-
-/**
  * Load (or create) the caller's per-(project,user) sandbox binding row. The
  * binding inherits its workdir from the org-owned project, but `sandboxId` /
  * `materializedAt` stay null until the user first opens the project.
@@ -1044,38 +1032,17 @@ interface EnsureResult {
  */
 async function prepareProject(options: {
   github: GithubIntegration;
-  fleet: SandboxFleet;
+  sandbox: FactorySandboxRuntime;
   project: ResolvedProjectRepository;
   userId: string;
   onProgress?: ProgressFn;
 }): Promise<EnsureResult> {
-  const { github, fleet, userId, onProgress } = options;
-  // Self-heal a sandbox provider switch. The project row snapshots
-  // sandboxProvider/sandboxWorkdir at link time, so when the server's provider
-  // later changes (platform ↔ local) the stored workdir points into the old
-  // provider's filesystem (e.g. `/workspace/…` on a macOS host, where the
-  // clone dies on the read-only root volume). Recompute against the current
-  // fleet and persist so every later open uses the corrected target.
-  let project = options.project;
-  if (project.sandboxProvider !== fleet.provider) {
-    const sandboxWorkdir = fleet.computeWorkdir(project.repository.slug);
-    await github.sourceControlStorage.projectRepositories.update({
-      orgId: project.installation.orgId,
-      id: project.id,
-      input: { sandboxProvider: fleet.provider, sandboxWorkdir },
-    });
-    project = { ...project, sandboxProvider: fleet.provider, sandboxWorkdir };
-  }
-  let sandboxRow = await loadOrCreateSandboxRow(github, project, userId);
-  // The per-user binding inherits its workdir at creation time — re-point it
-  // (and force a re-clone) whenever the project's workdir has since moved.
-  if (sandboxRow.sandboxWorkdir !== project.sandboxWorkdir) {
-    await github.sourceControlStorage.sandboxes.setWorkdir({
-      id: sandboxRow.id,
-      sandboxWorkdir: project.sandboxWorkdir,
-    });
-    sandboxRow = { ...sandboxRow, sandboxWorkdir: project.sandboxWorkdir, materializedAt: null };
-  }
+  const { github, sandbox: runtime, project, userId, onProgress } = options;
+  const sandboxRow = await loadOrCreateSandboxRow(github, project, userId);
+  // Deterministic — never read from the project or binding rows, so a
+  // provider switch or stale snapshot cannot point the clone at another
+  // provider's filesystem (the stale-workdir incident class).
+  const workdir = computeProjectWorkdir(runtime, project.repository.slug, sandboxRow.id);
   const access = await github.versionControl.getRepositoryAccess({
     orgId: project.installation.orgId,
     repositoryId: project.repository.id,
@@ -1087,41 +1054,45 @@ async function prepareProject(options: {
   // there. Git clone/pull below keep the minted installation token.
   const ghCliToken =
     (await getGithubPat(() => github.integrationStorage, project.installation.orgId)) ?? access.authorization.token;
-  const seedCheckpointName =
-    project.baseCheckpoint && !baseCheckpointIsStale(project) ? project.baseCheckpoint.name : undefined;
   const sandbox = await ensureProjectSandbox({
-    fleet,
+    sandbox: runtime,
     row: sandboxRow,
+    repoFullName: project.repository.slug,
+    workdir,
     storage: github.sourceControlStorage.sandboxes,
     token: ghCliToken,
     onProgress,
-    // Seed fresh provisions from the repo's warm base checkpoint so the
-    // materialize step below finds an existing checkout and skips the
-    // redundant default-branch pull.
-    ...(seedCheckpointName ? { seedCheckpointName } : {}),
   });
-  // Re-read the sandbox binding so we have the freshly persisted sandboxId.
-  const fresh = await github.sourceControlStorage.sandboxes.getById({ id: sandboxRow.id });
-  const finalRow = fresh ?? sandboxRow;
   await materializeRepo({
-    row: finalRow,
+    row: { ...sandboxRow, sandboxWorkdir: workdir },
     repoInfo: { repoFullName: project.repository.slug, defaultBranch: project.defaultBranch },
     sandbox,
     token: access.authorization.token,
     storage: github.sourceControlStorage.sandboxes,
     onProgress,
-    skipPullOnExistingCheckout: Boolean(seedCheckpointName && sandbox.seedCheckpointNameUsed === seedCheckpointName),
   });
   const result: EnsureResult = {
     resourceId: project.factoryProjectId,
     factoryProjectId: project.factoryProjectId,
     projectRepositoryId: project.id,
-    sandboxId: finalRow.sandboxId,
-    sandboxWorkdir: finalRow.sandboxWorkdir,
+    sandboxId: sandbox.id,
+    sandboxWorkdir: workdir,
   };
   const done: PrepareProgress = { phase: 'done', message: 'Workspace ready.' };
   onProgress?.(done);
   return result;
+}
+
+/**
+ * Deterministic workdir for a per-(project,user) sandbox. Local deploys nest
+ * under the binding key so users don't share checkouts; remote VMs are
+ * one-per-binding so the repo path alone suffices.
+ */
+function computeProjectWorkdir(runtime: FactorySandboxRuntime, repoFullName: string, bindingId?: string): string {
+  if (runtime.localRoot) {
+    return computeLocalWorkdir(runtime.localRoot, bindingId ? `project-${bindingId}` : 'projects', repoFullName);
+  }
+  return computeRemoteWorkdir(repoFullName);
 }
 
 /** Shape an /ensure failure into an HTTP status + JSON body (also used as the SSE error payload). */
@@ -1129,9 +1100,6 @@ function ensureErrorPayload(err: unknown): {
   status: 429 | 502 | 500;
   body: { error: string; message: string };
 } {
-  if (err instanceof SandboxBudgetError) {
-    return { status: 429, body: { error: err.code, message: err.message } };
-  }
   if (err instanceof MaterializeError) {
     return { status: 502, body: { error: err.code, message: err.message } };
   }
@@ -1162,18 +1130,18 @@ function gitErrorResponse(c: Context, err: unknown) {
 async function loadOwnedProject(options: {
   github: GithubIntegration;
   auth: RouteAuth;
-  fleet: SandboxFleet;
+  sandbox: FactorySandboxRuntime;
   c: RouteContext;
 }): Promise<
   | { orgId: string; userId: string; project: ResolvedProjectRepository; sandboxRow: ProjectRepositorySandbox }
   | { response: Response }
 > {
-  const { github, auth, fleet, c } = options;
+  const { github, auth, sandbox, c } = options;
   const resolved = await resolveOrgTenant(c, auth);
   if ('response' in resolved) return { response: resolved.response };
   const { orgId, userId } = resolved.tenant;
 
-  if (!fleet.enabled) {
+  if (!sandbox.enabled) {
     return {
       response: c.json({ error: 'sandbox_not_configured', message: 'No sandbox provider is configured.' }, 503),
     };
@@ -1194,14 +1162,14 @@ async function loadOwnedProject(options: {
 function buildProjectGitRoutes({
   github,
   auth,
-  fleet,
+  sandbox,
   controller,
   emitAudit,
   sessionRetirement,
 }: {
   github: GithubIntegration;
   auth: RouteAuth;
-  fleet: SandboxFleet;
+  sandbox: FactorySandboxRuntime;
   controller?: MountedMastraCode['controller'];
   emitAudit?: AuditEmitter['emit'];
   sessionRetirement?: MountGithubRoutesOptions['sessionRetirement'];
@@ -1369,11 +1337,7 @@ function buildProjectGitRoutes({
           });
         } else {
           await github.sourceControlStorage.sessions.delete(session.id);
-          void reclaimDeletedSessionSandbox({
-            fleet,
-            sourceControl: github.sourceControlStorage,
-            session,
-          }).catch((error: unknown) => {
+          void reclaimDeletedSessionSandbox({ session }).catch((error: unknown) => {
             console.error('[GitHub Sessions] Failed to reclaim sandbox for deleted session', {
               sessionId: session.sessionId,
               sandboxId: session.sandboxId,
@@ -1390,7 +1354,7 @@ function buildProjectGitRoutes({
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
-        const owned = await loadOwnedProject({ github, auth, fleet, c: loose(c) });
+        const owned = await loadOwnedProject({ github, auth, sandbox, c: loose(c) });
         if ('response' in owned) return owned.response;
         const { userId, project } = owned;
 
@@ -1407,13 +1371,12 @@ function buildProjectGitRoutes({
         if (!sessionWorkspace) {
           return c.json({ error: 'Invalid sessionId' }, 400);
         }
-        const { workdir, sandboxBinding } = sessionWorkspace;
+        const { workdir, sandbox: sessionSandbox } = sessionWorkspace;
 
         try {
           return await withSessionOperationLock(sessionWorkspace.session.sessionId, async () => {
-            const sandbox = await resolveProjectSandbox({ fleet, sandboxRow: sandboxBinding });
             const result = await commitAll(
-              sandbox,
+              sessionSandbox,
               workdir,
               body.message as string,
               identityFromUser(await auth.ensureUser(loose(c))),
@@ -1443,7 +1406,7 @@ function buildProjectGitRoutes({
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
-        const owned = await loadOwnedProject({ github, auth, fleet, c: loose(c) });
+        const owned = await loadOwnedProject({ github, auth, sandbox, c: loose(c) });
         if ('response' in owned) return owned.response;
         const { orgId, userId, project } = owned;
 
@@ -1461,17 +1424,16 @@ function buildProjectGitRoutes({
         if (!sessionWorkspace) {
           return c.json({ error: 'Invalid sessionId' }, 400);
         }
-        const { workdir, sandboxBinding } = sessionWorkspace;
+        const { workdir, sandbox: sessionSandbox } = sessionWorkspace;
 
         try {
           return await withSessionOperationLock(sessionWorkspace.session.sessionId, async () => {
-            const sandbox = await resolveProjectSandbox({ fleet, sandboxRow: sandboxBinding });
             const access = await github.versionControl.getRepositoryAccess({
               orgId,
               repositoryId: project.repository.id,
             });
             if (!access.authorization) throw new Error('Repository access did not include a bearer token.');
-            await pushBranch(sandbox, workdir, branch, access.authorization.token, project.repository.slug);
+            await pushBranch(sessionSandbox, workdir, branch, access.authorization.token, project.repository.slug);
             await emitAudit?.({
               context: loose(c),
               input: {
@@ -1495,7 +1457,7 @@ function buildProjectGitRoutes({
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
-        const owned = await loadOwnedProject({ github, auth, fleet, c: loose(c) });
+        const owned = await loadOwnedProject({ github, auth, sandbox, c: loose(c) });
         if ('response' in owned) return owned.response;
         const { orgId, userId, project } = owned;
 
@@ -1601,7 +1563,7 @@ function buildProjectGitRoutes({
       method: 'DELETE',
       requiresAuth: false,
       handler: async c => {
-        const owned = await loadOwnedProject({ github, auth, fleet, c: loose(c) });
+        const owned = await loadOwnedProject({ github, auth, sandbox, c: loose(c) });
         if ('response' in owned) return owned.response;
         const { sandboxRow } = owned;
 
@@ -1612,14 +1574,9 @@ function buildProjectGitRoutes({
 
         try {
           return await withSessionOperationLock(`sandbox:${sandboxRow.id}`, async () => {
-            const sandbox = await fleet.reattachSandbox(sandboxRow.sandboxId!, {
-              actingUserId: sandboxRow.userId,
-            });
             await teardownProjectSandbox({
-              fleet,
               row: sandboxRow,
               storage: github.sourceControlStorage.sandboxes,
-              sandbox,
             });
             return c.json({ tornDown: true });
           });
@@ -1642,25 +1599,16 @@ async function resolveSessionWorkspace(
     return undefined;
   }
   const session = await github.sourceControlStorage.sessions.getBySessionId(sessionId);
-  if (
-    session?.projectRepositoryId !== projectId ||
-    session.userId !== userId ||
-    !session.sandboxId ||
-    !session.sandboxWorkdir
-  ) {
+  if (session?.projectRepositoryId !== projectId || session.userId !== userId) {
     return undefined;
   }
+  // Session sandboxes live in the per-process memo, keyed by the session row
+  // id. Passive resolution only — git write routes never provision.
+  const entry = peekSessionSandbox(session.id);
+  if (!entry) return undefined;
   return {
     session,
-    workdir: session.sandboxWorkdir,
-    sandboxBinding: {
-      id: session.id,
-      projectRepositoryId: session.projectRepositoryId,
-      userId: session.userId,
-      sandboxId: session.sandboxId,
-      sandboxWorkdir: session.sandboxWorkdir,
-      materializedAt: session.materializedAt,
-      createdAt: session.createdAt,
-    },
+    workdir: entry.workdir,
+    sandbox: entry.sandbox as unknown as MaterializationSandbox,
   };
 }

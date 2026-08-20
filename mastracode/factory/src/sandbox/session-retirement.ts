@@ -1,4 +1,4 @@
-import { cleanReleasedSandbox } from '../integrations/github/sandbox-release.js';
+import { releaseSessionSandbox } from '../integrations/github/sandbox-release.js';
 import { DEFAULT_COMMAND_TIMEOUT_MS, runWorktreeTeardown } from '../integrations/github/sandbox.js';
 import type {
   ProjectRepository,
@@ -6,13 +6,12 @@ import type {
   SourceControlStorageHandle,
 } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
-import type { MaterializationSandbox, SandboxBindingStore, SandboxFleet } from './fleet.js';
+import type { MaterializationSandbox } from './fleet.js';
+import { peekSessionSandbox } from './session-sandbox.js';
 
-type RetirementFleet = Pick<SandboxFleet, 'provider' | 'reattachSandbox' | 'teardownSandbox'>;
 type WarningLogger = (message: string, details: Record<string, unknown>) => void;
 
 export interface SessionRetirementCoordinatorOptions {
-  fleet: RetirementFleet;
   invalidateSession?: (sessionId: string) => Promise<void> | void;
   warn?: WarningLogger;
 }
@@ -33,17 +32,20 @@ function boundedError(error: unknown): string {
 /**
  * Owns terminal and destructive session cleanup. Each session is serialized so
  * duplicate role bindings and competing deletion/transition requests cannot
- * run teardown concurrently. Once the sandbox binding is cleared, later calls
- * are idempotent no-ops apart from cache invalidation or requested row deletion.
+ * run teardown concurrently.
+ *
+ * Sandbox identity is the session id: retirement stops (or, for deleted
+ * sessions, destroys) the sandbox this process holds in the session memo.
+ * Sessions opened on another replica have no memo entry here — their VMs are
+ * left to the provider's idle lifecycle (pause / idle GC), which is the
+ * provider-owned half of the contract.
  */
 export class SessionRetirementCoordinator {
-  readonly #fleet: RetirementFleet;
   readonly #invalidateSession: NonNullable<SessionRetirementCoordinatorOptions['invalidateSession']>;
   readonly #warn: WarningLogger;
   readonly #locks = new Map<string, Promise<void>>();
 
-  constructor(options: SessionRetirementCoordinatorOptions) {
-    this.#fleet = options.fleet;
+  constructor(options: SessionRetirementCoordinatorOptions = {}) {
     this.#invalidateSession = options.invalidateSession ?? (() => {});
     this.#warn = options.warn ?? ((message, details) => console.warn(`[Mastra Factory] ${message}`, details));
   }
@@ -105,60 +107,7 @@ export class SessionRetirementCoordinator {
     if (!session || session.orgId !== input.orgId) return;
 
     try {
-      let projectRepository: ProjectRepository | null | undefined;
-      try {
-        projectRepository = await input.sourceControl.projectRepositories.get({
-          orgId: input.orgId,
-          id: session.projectRepositoryId,
-        });
-      } catch (error) {
-        this.#warn('Factory repository settings could not be loaded for session retirement', {
-          orgId: session.orgId,
-          sessionId: session.sessionId,
-          projectRepositoryId: session.projectRepositoryId,
-          error: boundedError(error),
-        });
-      }
-      let sandbox: MaterializationSandbox | undefined;
-
-      if (session.sandboxId && session.sandboxWorkdir) {
-        try {
-          sandbox = await this.#fleet.reattachSandbox(session.sandboxId, {
-            actingUserId: session.userId,
-            ...(this.#fleet.provider === 'local' ? { workingDirectory: session.sandboxWorkdir } : {}),
-          });
-        } catch (error) {
-          this.#warn('Factory session sandbox could not be reattached for retirement', {
-            orgId: session.orgId,
-            sessionId: session.sessionId,
-            projectRepositoryId: session.projectRepositoryId,
-            sandboxId: session.sandboxId,
-            error: boundedError(error),
-          });
-        }
-
-        if (sandbox && projectRepository?.teardownCommand) {
-          try {
-            await runWorktreeTeardown(sandbox, session.sandboxWorkdir, projectRepository.teardownCommand, {
-              timeoutMs: DEFAULT_COMMAND_TIMEOUT_MS,
-            });
-          } catch (error) {
-            this.#warn('Factory worktree teardown failed', {
-              orgId: session.orgId,
-              sessionId: session.sessionId,
-              projectRepositoryId: session.projectRepositoryId,
-              sandboxId: session.sandboxId,
-              error: boundedError(error),
-            });
-          }
-        }
-
-        if (this.#fleet.provider === 'local') {
-          await this.#destroyLocalSandbox(input.sourceControl, session, sandbox);
-        } else {
-          await this.#releaseRemoteSandbox(input.sourceControl, session, sandbox);
-        }
-      }
+      await this.#teardownSessionSandbox(input, session);
     } finally {
       try {
         await this.#invalidateSession(session.sessionId);
@@ -175,97 +124,52 @@ export class SessionRetirementCoordinator {
     }
   }
 
-  async #releaseRemoteSandbox(
-    sourceControl: SourceControlStorageHandle,
-    session: SourceControlSession,
-    sandbox: MaterializationSandbox | undefined,
-  ): Promise<void> {
-    const sandboxId = session.sandboxId;
-    const sandboxWorkdir = session.sandboxWorkdir;
-    if (!sandboxId || !sandboxWorkdir) return;
-    await cleanReleasedSandbox({
-      fleet: this.#fleet,
-      sourceControl,
-      orgId: session.orgId,
-      projectRepositoryId: session.projectRepositoryId,
-      sandboxId,
-      sandboxWorkdir,
-      actingUserId: session.userId,
-      ...(sandbox ? { sandbox } : {}),
-    });
-    try {
-      await sourceControl.sandboxPool.release({
-        orgId: session.orgId,
-        projectRepositoryId: session.projectRepositoryId,
-        userId: session.userId,
-        sandboxId,
-        sandboxWorkdir,
-      });
-    } catch (error) {
-      this.#warn('Factory remote sandbox release failed', {
-        orgId: session.orgId,
-        sessionId: session.sessionId,
-        projectRepositoryId: session.projectRepositoryId,
-        sandboxId,
-        error: boundedError(error),
-      });
-    }
-    try {
-      await sourceControl.sessions.setSandbox({ id: session.id, sandboxId: null, sandboxWorkdir });
-    } catch (error) {
-      this.#warn('Factory remote sandbox binding could not be cleared', {
-        orgId: session.orgId,
-        sessionId: session.sessionId,
-        projectRepositoryId: session.projectRepositoryId,
-        sandboxId,
-        error: boundedError(error),
-      });
-    }
-  }
+  async #teardownSessionSandbox(input: RetireSessionInput, session: SourceControlSession): Promise<void> {
+    const entry = peekSessionSandbox(session.id);
+    if (!entry) return;
 
-  async #destroyLocalSandbox(
-    sourceControl: SourceControlStorageHandle,
-    session: SourceControlSession,
-    sandbox: MaterializationSandbox | undefined,
-  ): Promise<void> {
-    const sandboxWorkdir = session.sandboxWorkdir ?? '';
-    const binding: SandboxBindingStore = {
-      get sandboxId() {
-        return session.sandboxId;
-      },
-      setSandboxId: async sandboxId => {
-        await sourceControl.sessions.setSandbox({ id: session.id, sandboxId, sandboxWorkdir });
-        session.sandboxId = sandboxId;
-      },
-      clear: async () => {
-        await sourceControl.sessions.setSandbox({ id: session.id, sandboxId: null, sandboxWorkdir });
-        session.sandboxId = null;
-      },
-    };
+    let projectRepository: ProjectRepository | null | undefined;
     try {
-      await this.#fleet.teardownSandbox(binding, sandbox);
+      projectRepository = await input.sourceControl.projectRepositories.get({
+        orgId: input.orgId,
+        id: session.projectRepositoryId,
+      });
     } catch (error) {
-      this.#warn('Factory local sandbox destruction failed', {
+      this.#warn('Factory repository settings could not be loaded for session retirement', {
         orgId: session.orgId,
         sessionId: session.sessionId,
         projectRepositoryId: session.projectRepositoryId,
-        sandboxId: session.sandboxId,
         error: boundedError(error),
       });
     }
-    if (session.sandboxId) {
+
+    if (projectRepository?.teardownCommand) {
       try {
-        await sourceControl.sessions.setSandbox({ id: session.id, sandboxId: null, sandboxWorkdir });
-        session.sandboxId = null;
+        await runWorktreeTeardown(
+          entry.sandbox as unknown as MaterializationSandbox,
+          entry.workdir,
+          projectRepository.teardownCommand,
+          { timeoutMs: DEFAULT_COMMAND_TIMEOUT_MS },
+        );
       } catch (error) {
-        this.#warn('Factory local sandbox binding could not be cleared', {
+        this.#warn('Factory worktree teardown failed', {
           orgId: session.orgId,
           sessionId: session.sessionId,
           projectRepositoryId: session.projectRepositoryId,
-          sandboxId: session.sandboxId,
           error: boundedError(error),
         });
       }
+    }
+
+    try {
+      await releaseSessionSandbox({ sessionId: session.id, destroy: input.deleteSession });
+    } catch (error) {
+      this.#warn('Factory session sandbox release failed', {
+        orgId: session.orgId,
+        sessionId: session.sessionId,
+        projectRepositoryId: session.projectRepositoryId,
+        error: boundedError(error),
+      });
     }
   }
 }

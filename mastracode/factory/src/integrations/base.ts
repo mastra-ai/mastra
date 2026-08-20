@@ -29,8 +29,8 @@ import type { VersionControl } from '../capabilities/version-control.js';
 import type { RouteAuth } from '../routes/route.js';
 import type { FactoryRules } from '../rules/types.js';
 import type { BaseCheckpointTriggers } from '../sandbox/base-checkpoint-triggers.js';
-import type { SandboxFleet } from '../sandbox/fleet.js';
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
+import type { FactorySandboxRuntime } from '../sandbox/session-sandbox.js';
 import type { StateSigner } from '../state-signing.js';
 import type { AuditEventRow } from '../storage/domains/audit/base.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
@@ -70,11 +70,11 @@ export interface IntegrationContext {
   /** Host auth seam — integration routes resolve callers through this. */
   auth: RouteAuth;
   /**
-   * Sandbox fleet for per-project sandboxes. Always constructed at boot; a
-   * fleet built without a machine config reports `enabled: false` and
-   * sandbox-backed routes respond 503.
+   * Sandbox surface for per-project and per-session sandboxes. Always
+   * present; without a configured create callback it reports
+   * `enabled: false` and sandbox-backed routes respond 503.
    */
-  fleet: SandboxFleet;
+  sandbox: FactorySandboxRuntime;
   /**
    * Base-checkpoint trigger surface — present when the factory constructed a
    * builder (fleet enabled + a source-control owner registered). Integrations

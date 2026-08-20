@@ -22,34 +22,35 @@ describe('session sandbox memo', () => {
 
   it('constructs once per session id and returns the memoized instance', () => {
     const factory = vi.fn(() => construct('sb-1'));
-    const first = getSessionSandbox('sess-1', factory);
-    const second = getSessionSandbox('sess-1', factory);
+    const first = getSessionSandbox('sess-1', '/tmp/wd', factory);
+    const second = getSessionSandbox('sess-1', '/tmp/wd', factory);
     expect(second).toBe(first);
     expect(factory).toHaveBeenCalledTimes(1);
   });
 
   it('keeps sessions independent', () => {
-    const a = getSessionSandbox('sess-a', () => construct('sb-a'));
-    const b = getSessionSandbox('sess-b', () => construct('sb-b'));
+    const a = getSessionSandbox('sess-a', '/tmp/wd', () => construct('sb-a'));
+    const b = getSessionSandbox('sess-b', '/tmp/wd', () => construct('sb-b'));
     expect(a).not.toBe(b);
   });
 
   it('peek never constructs', () => {
     expect(peekSessionSandbox('sess-1')).toBeUndefined();
-    const made = getSessionSandbox('sess-1', () => construct('sb-1'));
-    expect(peekSessionSandbox('sess-1')).toBe(made);
+    const made = getSessionSandbox('sess-1', '/tmp/wd', () => construct('sb-1'));
+    expect(peekSessionSandbox('sess-1')?.sandbox).toBe(made);
+    expect(peekSessionSandbox('sess-1')?.workdir).toBe('/tmp/wd');
   });
 
   it('evict drops the instance so the next access reconstructs', () => {
-    const first = getSessionSandbox('sess-1', () => construct('sb-1'));
+    const first = getSessionSandbox('sess-1', '/tmp/wd', () => construct('sb-1'));
     evictSessionSandbox('sess-1');
-    const second = getSessionSandbox('sess-1', () => construct('sb-2'));
+    const second = getSessionSandbox('sess-1', '/tmp/wd', () => construct('sb-2'));
     expect(second).not.toBe(first);
   });
 
   it('does not memoize when construction throws', () => {
     expect(() =>
-      getSessionSandbox('sess-1', () => {
+      getSessionSandbox('sess-1', '/tmp/wd', () => {
         throw new Error('boom');
       }),
     ).toThrow('boom');
@@ -70,7 +71,7 @@ describe('session setup hook + fallback', () => {
 
   it('runs setup inside start() via the hook, and the fallback no-ops on the shared marker', async () => {
     // The callback forwarded ctx.onStart: setup runs during _start() on the
-    // create branch (fresh directory → created: true).
+    // create branch (fresh directory → outcome: 'created').
     const hook = createSessionSetupHook(async sb => void (await sb.executeCommand!('touch hook-ran.txt')));
     const boot = path.join(dir, 'fresh');
     const sandbox = new LocalSandbox({ workingDirectory: boot, onStart: hook });
@@ -91,7 +92,7 @@ describe('session setup hook + fallback', () => {
     });
     await first._start();
 
-    // Second instance reattaches (created: false) → marker probe skips setup.
+    // Second instance reattaches (outcome: 'connected') → marker probe skips setup.
     const second = new LocalSandbox({
       workingDirectory: boot,
       onStart: createSessionSetupHook(async sb => void (await sb.executeCommand!('touch second.txt'))),
@@ -112,7 +113,7 @@ describe('session setup hook + fallback', () => {
     await expect(failing._start()).rejects.toThrow(/Session setup failed \(exit 7\)/);
     await expect(fs.stat(path.join(boot, '.mastra-bootstrapped'))).rejects.toThrow();
 
-    // Reconnect (created: false), marker absent → setup re-runs and heals.
+    // Reconnect (outcome: 'connected'), marker absent → setup re-runs and heals.
     const healed = new LocalSandbox({
       workingDirectory: boot,
       onStart: createSessionSetupHook(async sb => void (await sb.executeCommand!('touch healed.txt'))),

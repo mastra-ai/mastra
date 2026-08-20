@@ -19,18 +19,15 @@
 
 import { createHash } from 'node:crypto';
 import { reportProgress } from '../../sandbox/fleet.js';
-import type {
-  MaterializationSandbox,
-  ProgressFn,
-  SandboxBindingStore,
-  SandboxCommandResult,
-  SandboxFleet,
-} from '../../sandbox/fleet.js';
+import type { MaterializationSandbox, ProgressFn, SandboxCommandResult } from '../../sandbox/fleet.js';
+import type { FactorySandboxRuntime } from '../../sandbox/session-sandbox.js';
+import { getSessionSandbox } from '../../sandbox/session-sandbox.js';
 import type {
   ProjectRepositorySandbox,
   SourceControlStorageHandle,
 } from '../../storage/domains/source-control/base.js';
 import { timedPhase } from '../../timing.js';
+import { releaseSessionSandbox } from './sandbox-release.js';
 
 type SourceControlSandboxStorage = SourceControlStorageHandle['sandboxes'];
 type MaterializationStore = Pick<SourceControlSandboxStorage, 'markMaterialized'>;
@@ -41,59 +38,64 @@ interface RepoMaterializationBinding {
   materializedAt: Date | null;
 }
 
-/** Adapt a per-(project,user) sandbox binding row to the fleet's persistence seam. */
-function bindingStore(
-  row: ProjectRepositorySandbox,
-  storage: SourceControlSandboxStorage,
-  seedCheckpointName?: string,
-): SandboxBindingStore {
-  return {
-    sandboxId: row.sandboxId,
-    // Boot-only fallback: fresh provisions seed from the repo base checkpoint
-    // (when the builder has produced one) so materialization pulls instead of
-    // cloning. Snapshots never write here.
-    ...(seedCheckpointName ? { seedCheckpointName } : {}),
-    setSandboxId: id =>
-      id === null ? storage.clearBinding({ id: row.id }) : storage.setSandboxId({ id: row.id, sandboxId: id }),
-    clear: () => storage.clearBinding({ id: row.id }),
-  };
+/**
+ * Stable logical sandbox id for a per-(project,user) binding row. The
+ * provider resolves this id on start — reconnect/resume when the VM exists,
+ * create otherwise — so no provider id needs to be persisted or trusted.
+ */
+export function projectSandboxKey(row: Pick<ProjectRepositorySandbox, 'id'>): string {
+  return `project-${row.id}`;
 }
 
 /**
- * Provision a new sandbox (persisting its provider id on first open) or
- * reattach to the stored one. Returns a started, live sandbox.
+ * Construct (memoized per process) and start the sandbox for a
+ * per-(project,user) binding row. Returns a started, live sandbox with
+ * `GH_TOKEN` injected. The persisted `sandboxId` is written for
+ * observability only — nothing reads it for decisions.
  */
 export async function ensureProjectSandbox(options: {
-  fleet: SandboxFleet;
+  sandbox: FactorySandboxRuntime;
   row: ProjectRepositorySandbox;
+  repoFullName: string;
+  workdir: string;
   storage: SourceControlSandboxStorage;
   token: string;
   onProgress?: ProgressFn;
-  /** Repo base checkpoint to seed a fresh provision from (boot-only). */
-  seedCheckpointName?: string;
 }): Promise<MaterializationSandbox> {
-  const { fleet, row, storage, token, onProgress, seedCheckpointName } = options;
-  return fleet.ensureSandbox(bindingStore(row, storage, seedCheckpointName), { GH_TOKEN: token }, onProgress, {
-    actingUserId: row.userId,
-  });
+  const { sandbox: runtime, row, repoFullName, workdir, storage, token, onProgress } = options;
+  if (!runtime.create) {
+    throw new MaterializeError('No sandbox provider is configured.', 'clone-failed');
+  }
+  reportProgress(onProgress, { phase: 'provisioning', message: 'Preparing sandbox…' });
+  const key = projectSandboxKey(row);
+  const instance = getSessionSandbox(key, workdir, () =>
+    runtime.create!({
+      sessionId: key,
+      workdir,
+      repoFullName,
+      idleTimeoutMinutes: 30,
+      actingUserId: row.userId,
+    }),
+  ) as unknown as MaterializationSandbox;
+  await instance.start();
+  instance.setEnvironmentVariable?.('GH_TOKEN', token);
+  void storage.setSandboxId({ id: row.id, sandboxId: instance.id }).catch(() => {});
+  return instance;
 }
 
 /**
- * Tear down a user's sandbox for a project: stop the live VM (best-effort) and
- * clear the persisted `sandboxId`/`materializedAt` on the per-(project,user)
- * binding row so the next open re-provisions cleanly.
- *
- * @param row     the per-(project,user) sandbox binding to tear down
- * @param sandbox an already-reattached live sandbox to stop, when available
+ * Tear down a user's sandbox for a project: destroy the VM this process
+ * holds (best-effort — other replicas' VMs are left to the provider's idle
+ * lifecycle) and clear the persisted binding row so the next open starts
+ * cleanly.
  */
 export async function teardownProjectSandbox(options: {
-  fleet: SandboxFleet;
   row: ProjectRepositorySandbox;
   storage: SourceControlSandboxStorage;
-  sandbox?: MaterializationSandbox;
 }): Promise<void> {
-  const { fleet, row, storage, sandbox } = options;
-  return fleet.teardownSandbox(bindingStore(row, storage), sandbox);
+  const { row, storage } = options;
+  await releaseSessionSandbox({ sessionId: projectSandboxKey(row), destroy: true });
+  await storage.clearBinding({ id: row.id });
 }
 
 /**

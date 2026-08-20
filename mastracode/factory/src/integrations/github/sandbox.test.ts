@@ -3,8 +3,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const dbUpdates: Array<Record<string, unknown>> = [];
 
-import { SandboxFleet } from '../../sandbox/fleet.js';
-import type { MaterializationSandbox, SandboxCommandResult, SandboxFactory } from '../../sandbox/fleet.js';
+import type { MaterializationSandbox, SandboxCommandResult } from '../../sandbox/fleet.js';
+import type { FactorySandboxContext, FactorySandboxRuntime } from '../../sandbox/session-sandbox.js';
+import { __clearSessionSandboxesForTests, peekSessionSandbox } from '../../sandbox/session-sandbox.js';
 import type {
   ProjectRepositorySandbox,
   SourceControlStorageHandle,
@@ -15,6 +16,8 @@ import {
   configureGitIdentity,
   createPullRequest,
   ensureProjectSandbox as ensureProjectSandboxWithStorage,
+  projectSandboxKey,
+  teardownProjectSandbox,
   ensureWorktree,
   isValidGitRef,
   materializeRepo as materializeRepoWithStorage,
@@ -31,35 +34,17 @@ import {
 } from './sandbox.js';
 import type { RepoMaterializeInfo } from './sandbox.js';
 
-/** Minimal cloneable template sandbox standing in for Railway/Local instances. */
-function templateSandbox(opts: { provider?: string; idleTimeoutMinutes?: number } = {}): WorkspaceSandbox {
-  const template = {
-    id: 'template-1',
-    name: 'Template',
-    provider: opts.provider ?? 'railway',
-    ...(opts.idleTimeoutMinutes !== undefined ? { idleTimeoutMinutes: opts.idleTimeoutMinutes } : {}),
-    clone: () => template,
-  };
-  return template as unknown as WorkspaceSandbox;
-}
-
-/** Build a fleet from a factory-shaped sandbox runtime. */
-function makeFleet(
-  opts: { provider?: string; idleTimeoutMinutes?: number; workdirBase?: string; maxSandboxes?: number } = {},
-): SandboxFleet {
-  return new SandboxFleet({
-    machine: templateSandbox(opts),
-    workdirBase: opts.workdirBase ?? '/workspace',
-    ...(opts.maxSandboxes !== undefined ? { maxSandboxes: opts.maxSandboxes } : {}),
-  });
-}
-
-/** The fleet under test; recreated per test, factory overridden as needed. */
-let fleet = makeFleet();
-
-function setSandboxFactory(factory: SandboxFactory): void {
-  fleet.setFactory(factory);
-}
+/** Callback-runtime under test: records ctx per construction. */
+const createCalls: FactorySandboxContext[] = [];
+let nextSandbox: () => FakeSandbox = () => new FakeSandbox();
+const runtime: FactorySandboxRuntime = {
+  enabled: true,
+  provider: 'stub',
+  create: ctx => {
+    createCalls.push(ctx);
+    return nextSandbox() as never;
+  },
+};
 
 type Responder = (script: string) => SandboxCommandResult;
 const OK: SandboxCommandResult = { exitCode: 0, stdout: '', stderr: '' };
@@ -75,8 +60,19 @@ class FakeSandbox implements MaterializationSandbox {
     this.responder = responder ?? (() => OK);
   }
 
-  async start(): Promise<void> {
+  async start(): Promise<{ created: boolean }> {
     this.startCount += 1;
+    return { created: this.startCount === 1 };
+  }
+
+  readonly env: Record<string, string> = {};
+  setEnvironmentVariable(name: string, value: string): void {
+    this.env[name] = value;
+  }
+
+  destroyed = false;
+  async destroy(): Promise<void> {
+    this.destroyed = true;
   }
 
   async getInfo() {
@@ -123,7 +119,15 @@ function ensureProjectSandbox(
   row: ProjectRepositorySandbox,
   onProgress?: Parameters<typeof ensureProjectSandboxWithStorage>[0]['onProgress'],
 ) {
-  return ensureProjectSandboxWithStorage({ fleet, row, storage, token: 'install-token', onProgress });
+  return ensureProjectSandboxWithStorage({
+    sandbox: runtime,
+    row,
+    repoFullName: 'octocat/hello',
+    workdir: '/workspace/octocat/hello',
+    storage,
+    token: 'install-token',
+    onProgress,
+  });
 }
 
 function materializeRepo(
@@ -138,123 +142,68 @@ function materializeRepo(
 
 beforeEach(() => {
   dbUpdates.length = 0;
-  fleet = makeFleet();
+  createCalls.length = 0;
+  nextSandbox = () => new FakeSandbox();
+  __clearSessionSandboxesForTests();
 });
 
 describe('ensureProjectSandbox', () => {
-  it('provisions a new sandbox and persists the provider id on first open', async () => {
+  it('constructs by binding key, starts, injects GH_TOKEN, and records the id for observability', async () => {
     const sandbox = new FakeSandbox();
-    setSandboxFactory(() => sandbox);
+    nextSandbox = () => sandbox;
 
     const result = await ensureProjectSandbox(makeRow({ sandboxId: null }));
 
     expect(result).toBe(sandbox);
     expect(sandbox.startCount).toBe(1);
-    expect(dbUpdates).toEqual([{ sandboxId: 'railway-vm-123' }]);
-  });
-
-  it('reattaches to the stored sandbox id without re-persisting', async () => {
-    const sandbox = new FakeSandbox();
-    let factoryArgs: { providerSandboxId?: string } | undefined;
-    setSandboxFactory(opts => {
-      factoryArgs = opts;
-      return sandbox;
-    });
-
-    await ensureProjectSandbox(makeRow({ sandboxId: 'railway-vm-existing' }));
-
-    expect(factoryArgs?.providerSandboxId).toBe('railway-vm-existing');
-    expect(dbUpdates).toEqual([]);
-  });
-
-  it('authenticates the GitHub CLI in provisioned and reattached sandboxes', async () => {
-    const calls: Parameters<SandboxFactory>[0][] = [];
-    setSandboxFactory(opts => {
-      calls.push(opts);
-      return new FakeSandbox();
-    });
-
-    await ensureProjectSandbox(makeRow({ sandboxId: null }));
-    await ensureProjectSandbox(makeRow({ sandboxId: 'railway-vm-existing' }));
-
-    expect(calls).toEqual([
-      expect.objectContaining({ env: { GH_TOKEN: 'install-token' }, actingUserId: 'user-1' }),
+    expect(sandbox.env.GH_TOKEN).toBe('install-token');
+    expect(createCalls).toEqual([
       expect.objectContaining({
-        providerSandboxId: 'railway-vm-existing',
-        env: { GH_TOKEN: 'install-token' },
+        sessionId: 'project-sbrow-1',
+        workdir: '/workspace/octocat/hello',
+        repoFullName: 'octocat/hello',
         actingUserId: 'user-1',
       }),
     ]);
+    // Observability only — nothing reads this back for decisions.
+    await vi.waitFor(() => expect(dbUpdates).toEqual([{ sandboxId: 'logical-id' }]));
   });
 
-  it('passes the template-configured idle timeout on provision', async () => {
-    fleet = makeFleet({ idleTimeoutMinutes: 15 });
+  it('memoizes the instance per binding key across opens', async () => {
+    const first = await ensureProjectSandbox(makeRow());
+    const second = await ensureProjectSandbox(makeRow());
+
+    expect(second).toBe(first);
+    expect(createCalls).toHaveLength(1);
+  });
+
+  it('fails loudly when no sandbox provider is configured', async () => {
+    await expect(
+      ensureProjectSandboxWithStorage({
+        sandbox: { enabled: false, provider: 'none' },
+        row: makeRow(),
+        repoFullName: 'octocat/hello',
+        workdir: '/workspace/octocat/hello',
+        storage,
+        token: 'install-token',
+      }),
+    ).rejects.toThrow(/No sandbox provider is configured/);
+  });
+});
+
+describe('teardownProjectSandbox', () => {
+  it('destroys the memoized sandbox and clears the persisted binding', async () => {
     const sandbox = new FakeSandbox();
-    let factoryArgs: { idleTimeoutMinutes?: number } | undefined;
-    setSandboxFactory(opts => {
-      factoryArgs = opts;
-      return sandbox;
-    });
+    nextSandbox = () => sandbox;
+    const row = makeRow();
+    await ensureProjectSandbox(row);
+    dbUpdates.length = 0;
 
-    await ensureProjectSandbox(makeRow({ sandboxId: null }));
+    await teardownProjectSandbox({ row, storage });
 
-    expect(factoryArgs?.idleTimeoutMinutes).toBe(15);
-  });
-
-  it('seeds a fresh provision from the repo base checkpoint when provided', async () => {
-    const sandbox = new FakeSandbox();
-    let factoryArgs: { seedCheckpointName?: string } | undefined;
-    setSandboxFactory(opts => {
-      factoryArgs = opts;
-      return sandbox;
-    });
-
-    await ensureProjectSandboxWithStorage({
-      fleet,
-      row: makeRow({ sandboxId: null }),
-      storage,
-      token: 'install-token',
-      seedCheckpointName: 'repo-project-repository-1',
-    });
-
-    expect(factoryArgs?.seedCheckpointName).toBe('repo-project-repository-1');
-  });
-
-  it('omits the seed checkpoint when none is provided', async () => {
-    const sandbox = new FakeSandbox();
-    let factoryArgs: { seedCheckpointName?: string } | undefined;
-    setSandboxFactory(opts => {
-      factoryArgs = opts;
-      return sandbox;
-    });
-
-    await ensureProjectSandbox(makeRow({ sandboxId: null }));
-
-    expect(factoryArgs?.seedCheckpointName).toBeUndefined();
-  });
-
-  it('re-provisions and clears the stale id when reattach to a dead sandbox fails', async () => {
-    const dead = new FakeSandbox();
-    dead.start = async () => {
-      throw new Error('sandbox not found');
-    };
-    const fresh = new FakeSandbox();
-    fresh.providerId = 'railway-vm-new';
-
-    const provided: Array<string | undefined> = [];
-    setSandboxFactory(opts => {
-      provided.push(opts.providerSandboxId);
-      return opts.providerSandboxId ? dead : fresh;
-    });
-
-    const result = await ensureProjectSandbox(makeRow({ sandboxId: 'railway-vm-dead' }));
-
-    // First call reattaches (dead), second provisions fresh.
-    expect(provided).toEqual(['railway-vm-dead', undefined]);
-    expect(result).toBe(fresh);
-    expect(fresh.startCount).toBe(1);
-    // The stale id is cleared, then the new provider id persisted.
-    expect(dbUpdates).toEqual([{ sandboxId: null }, { sandboxId: 'railway-vm-new' }]);
+    expect(sandbox.destroyed).toBe(true);
+    expect(peekSessionSandbox(projectSandboxKey(row))).toBeUndefined();
+    expect(dbUpdates).toEqual([{ sandboxId: null }]);
   });
 });
 

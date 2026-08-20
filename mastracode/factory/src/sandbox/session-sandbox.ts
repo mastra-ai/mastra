@@ -35,6 +35,22 @@ export interface FactorySandboxContext {
 export type SessionSetupRun = (sandbox: WorkspaceSandbox) => Promise<void>;
 
 /**
+ * The sandbox surface handed to integrations and route builders: whether
+ * sandboxes are configured, a provider label for diagnostics, and the
+ * deployer's create callback for paths that construct sandboxes themselves
+ * (e.g. the per-project git routes).
+ */
+export interface FactorySandboxRuntime {
+  enabled: boolean;
+  /** Provider label for diagnostics ('local', 'e2b', 'platform', 'custom', 'none'). */
+  provider: string;
+  /** Host root for local sandbox checkouts, when the deploy is local. */
+  localRoot?: string;
+  create?: (ctx: FactorySandboxContext) => WorkspaceSandbox;
+  instructions?: string;
+}
+
+/**
  * Per-process session-id → sandbox instance memo.
  *
  * The provider contract is id-keyed getOrCreate, but provider find-then-create
@@ -44,19 +60,33 @@ export type SessionSetupRun = (sandbox: WorkspaceSandbox) => Promise<void>;
  * per-binding coalescing provided. Cross-replica races are accepted (the
  * fleet was also per-replica).
  */
-const sessionSandboxes = new Map<string, WorkspaceSandbox>();
+interface SessionSandboxEntry {
+  sandbox: WorkspaceSandbox;
+  /** The session's deterministic workdir, recorded for passive readers (fs routes). */
+  workdir: string;
+}
+
+const sessionSandboxes = new Map<string, SessionSandboxEntry>();
 
 /** Get the session's memoized sandbox, constructing (and memoizing) it on first access. */
-export function getSessionSandbox(sessionId: string, construct: () => WorkspaceSandbox): WorkspaceSandbox {
+export function getSessionSandbox(
+  sessionId: string,
+  workdir: string,
+  construct: () => WorkspaceSandbox,
+): WorkspaceSandbox {
   const existing = sessionSandboxes.get(sessionId);
-  if (existing) return existing;
+  if (existing) return existing.sandbox;
   const sandbox = construct();
-  sessionSandboxes.set(sessionId, sandbox);
+  sessionSandboxes.set(sessionId, { sandbox, workdir });
   return sandbox;
 }
 
-/** The session's memoized sandbox when one was already constructed in this process, else undefined. Never constructs. */
-export function peekSessionSandbox(sessionId: string): WorkspaceSandbox | undefined {
+/**
+ * The session's memoized sandbox (and its workdir) when one was already
+ * constructed in this process, else undefined. Never constructs — passive
+ * read paths use this so browsing files cannot provision a VM.
+ */
+export function peekSessionSandbox(sessionId: string): SessionSandboxEntry | undefined {
   return sessionSandboxes.get(sessionId);
 }
 
@@ -116,14 +146,14 @@ async function runGuardedSetup(
 
 /**
  * Build the setup hook for `ctx.onStart`. Runs inside the sandbox start
- * lifecycle: a fresh VM (`created: true`) runs setup with no probe; a
+ * lifecycle: a fresh VM (`outcome: 'created'`) runs setup with no probe; a
  * reconnect probes the marker first, which re-runs setup after a failed or
  * crash-interrupted attempt. Throwing fails `start()` loudly — core treats
  * onStart errors as fatal.
  */
 export function createSessionSetupHook(run: SessionSetupRun): SandboxLifecycleHook {
-  return async ({ sandbox, created }) => {
-    await runGuardedSetup(sandbox, run, { skipMarkerProbe: created === true });
+  return async ({ sandbox, outcome }) => {
+    await runGuardedSetup(sandbox, run, { skipMarkerProbe: outcome === 'created' });
   };
 }
 

@@ -295,11 +295,22 @@ describe('MastraFactory.prepare', () => {
     expect(session.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-haiku-4-5' });
   });
 
-  it('constructs an enabled sandbox fleet from the configured machine', async () => {
+  it('exposes an enabled sandbox surface from the configured machine', async () => {
     const sandbox = new LocalSandbox({ workingDirectory: '/tmp/mc-factory-test' });
     const ctx = await prepareIntegrationContext({ storage: fakeStorage(), sandbox: { machine: sandbox } });
-    expect(ctx.fleet.enabled).toBe(true);
-    expect(ctx.fleet.provider).toBe('local');
+    expect(ctx.sandbox.enabled).toBe(true);
+    expect(ctx.sandbox.provider).toBe('local');
+    // The machine compat shim synthesizes a create callback from clone().
+    expect(ctx.sandbox.create).toBeTypeOf('function');
+    expect(ctx.sandbox.localRoot).toBe('/tmp/mc-factory-test');
+  });
+
+  it('exposes an enabled sandbox surface from a create callback', async () => {
+    const create = () => ({ id: 'sb-cb' }) as never;
+    const ctx = await prepareIntegrationContext({ storage: fakeStorage(), sandbox: { create } });
+    expect(ctx.sandbox.enabled).toBe(true);
+    expect(ctx.sandbox.provider).toBe('custom');
+    expect(ctx.sandbox.create).toBe(create);
   });
 
   it('hands the terminal-stage cleanup to the transition service', async () => {
@@ -375,10 +386,10 @@ describe('MastraFactory.prepare', () => {
     expect(storage.domainNames().every(name => storage.isDomainReady(name))).toBe(true);
   });
 
-  it('disables the sandbox fleet when the slot is omitted', async () => {
+  it('disables the sandbox surface when the slot is omitted', async () => {
     const ctx = await prepareIntegrationContext({ storage: fakeStorage() });
-    expect(ctx.fleet.enabled).toBe(false);
-    expect(ctx.fleet.provider).toBe('none');
+    expect(ctx.sandbox.enabled).toBe(false);
+    expect(ctx.sandbox.provider).toBe('none');
   });
 
   it('boots with a sandbox create callback without provisioning anything', async () => {
@@ -410,15 +421,7 @@ describe('MastraFactory.prepare', () => {
     await expect(factory.prepare()).rejects.toThrow(/does not implement clone\(\)/);
   });
 
-  it("defaults the workdir base to the machine's workingDirectory, else /workspace", async () => {
-    const local = await prepareIntegrationContext({
-      storage: fakeStorage(),
-      sandbox: { machine: new LocalSandbox({ workingDirectory: '/srv/checkouts/' }) },
-    });
-    expect(local.fleet.computeWorkdir('acme/api')).toBe('/srv/checkouts/acme/api');
-
-    prepareMock.mockClear();
-
+  it('labels a remote machine surface with its provider and no local root', async () => {
     const remote = {
       id: 'sb-2',
       name: 'Remote',
@@ -426,34 +429,9 @@ describe('MastraFactory.prepare', () => {
       clone: () => remote,
     } as unknown as WorkspaceSandbox;
     const ctx = await prepareIntegrationContext({ storage: fakeStorage(), sandbox: { machine: remote } });
-    expect(ctx.fleet.computeWorkdir('acme/api')).toBe('/workspace/acme/api');
-  });
-
-  it("keeps LocalSandbox checkouts under its host root even when workdir is '/workspace'", async () => {
-    const ctx = await prepareIntegrationContext({
-      storage: fakeStorage(),
-      sandbox: {
-        machine: new LocalSandbox({ workingDirectory: '/tmp/mc-factory-test' }),
-        workdir: '/workspace',
-        maxSandboxes: 5,
-      },
-    });
-    expect(ctx.fleet.computeWorkdir('acme/api')).toBe('/tmp/mc-factory-test/acme/api');
-    expect(ctx.fleet.maxSandboxes).toBe(5);
-  });
-
-  it('honors an explicit workdir override for remote sandboxes', async () => {
-    const remote = {
-      id: 'sb-3',
-      name: 'Remote',
-      provider: 'railway',
-      clone: () => remote,
-    } as unknown as WorkspaceSandbox;
-    const ctx = await prepareIntegrationContext({
-      storage: fakeStorage(),
-      sandbox: { machine: remote, workdir: '/custom/base/' },
-    });
-    expect(ctx.fleet.computeWorkdir('acme/api')).toBe('/custom/base/acme/api');
+    expect(ctx.sandbox.enabled).toBe(true);
+    expect(ctx.sandbox.provider).toBe('railway');
+    expect(ctx.sandbox.localRoot).toBeUndefined();
   });
 
   it("forwards the backend's Mastra store and the vector instance to the SDK mount", async () => {

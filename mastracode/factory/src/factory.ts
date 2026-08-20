@@ -65,7 +65,7 @@ import { BaseCheckpointBuilder } from './sandbox/base-checkpoint.js';
 import { SandboxFleet } from './sandbox/fleet.js';
 import { registerSandboxReattach } from './sandbox/reattach.js';
 import { SessionRetirementCoordinator } from './sandbox/session-retirement.js';
-import type { FactorySandboxContext } from './sandbox/session-sandbox.js';
+import type { FactorySandboxContext, FactorySandboxRuntime } from './sandbox/session-sandbox.js';
 import { handleServerError } from './server-error.js';
 import { observeSessionCheckpoint } from './session/checkpoint-capture.js';
 import { observeSessionFilesystem } from './session/filesystem-capture.js';
@@ -484,9 +484,44 @@ export class MastraFactory {
         : undefined,
     );
     // Core's `getDynamicWorkspace` reattaches project sandboxes through the
-    // SDK seam; only this factory owns the fleet, so register it here.
-    registerSandboxReattach(fleet);
+    // SDK seam; resolve through the per-process session sandbox memo.
+    registerSandboxReattach();
     const workspaceRegistry = new FactoryWorkspaceRegistry();
+
+    // Compat shim (dies with the fleet): a machine-configured deploy gets a
+    // `create` callback synthesized from `clone()`, so the intent path serves
+    // every deploy while the machine surface is deprecated. Cloned sandboxes
+    // do not receive `ctx.onStart` (clone options predate it); the workspace
+    // seam's marker-guarded fallback covers their setup.
+    const effectiveSandboxConfig =
+      sandboxConfig && !sandboxConfig.create && machine
+        ? {
+            ...sandboxConfig,
+            create: (ctx: FactorySandboxContext) =>
+              machine.clone!({
+                id: ctx.sessionId,
+                ...(typeof (machine as { workingDirectory?: unknown }).workingDirectory === 'string'
+                  ? { workingDirectory: ctx.workdir.slice(0, ctx.workdir.lastIndexOf('/')) }
+                  : {}),
+              }),
+          }
+        : sandboxConfig;
+    const sandboxLocalRoot =
+      effectiveSandboxConfig?.localRoot ??
+      (machine && typeof (machine as { workingDirectory?: unknown }).workingDirectory === 'string'
+        ? (machine as { workingDirectory: string }).workingDirectory
+        : undefined);
+    // The sandbox surface integrations and route builders see: enablement,
+    // a provider label for diagnostics, and the create callback for paths
+    // that construct sandboxes themselves.
+    const sandboxRuntime: FactorySandboxRuntime = {
+      enabled: !!effectiveSandboxConfig?.create,
+      provider:
+        machine?.provider ?? (effectiveSandboxConfig?.create ? (sandboxLocalRoot ? 'local' : 'custom') : 'none'),
+      ...(sandboxLocalRoot ? { localRoot: sandboxLocalRoot } : {}),
+      ...(effectiveSandboxConfig?.create ? { create: effectiveSandboxConfig.create } : {}),
+      ...(effectiveSandboxConfig?.instructions ? { instructions: effectiveSandboxConfig.instructions } : {}),
+    };
 
     // One shared OAuth state signer per boot. The deploy entry supplies a
     // replica-stable secret when needed; otherwise local development gets a
@@ -586,9 +621,8 @@ export class MastraFactory {
     }
     const workItemsReady = storage.isDomainReady('work-items');
     const sessionRetirement =
-      machine && storage.isDomainReady('source-control')
+      effectiveSandboxConfig?.create && storage.isDomainReady('source-control')
         ? new SessionRetirementCoordinator({
-            fleet,
             invalidateSession: sessionId => workspaceRegistry.invalidateSession(sessionId),
           })
         : undefined;
@@ -702,10 +736,9 @@ export class MastraFactory {
       prepareAgentControllerMount({
         controllerId: CONTROLLER_ID,
         workspace: createWorkspaceFactory({
-          ...(this.#config.sandbox ? { sandbox: this.#config.sandbox } : {}),
+          ...(effectiveSandboxConfig ? { sandbox: effectiveSandboxConfig } : {}),
           ...(githubIntegration ? { github: githubIntegration } : {}),
           ...(workItemsStorage ? { workItems: workItemsStorage } : {}),
-          fleet,
           workspaceRegistry,
         }),
         disableGithubSignals: true,
@@ -810,7 +843,7 @@ export class MastraFactory {
             audit: auditDomain,
             publicOrigin,
             stateSigner,
-            fleet,
+            sandbox: sandboxRuntime,
             ...(baseCheckpoints ? { baseCheckpoints } : {}),
             sessionRetirement,
             factoryStorage: storage,
@@ -968,7 +1001,7 @@ export class MastraFactory {
                 publicOrigin,
                 auth: routeAuth,
                 stateSigner,
-                fleet,
+                sandbox: sandboxRuntime,
                 ...(baseCheckpoints ? { baseCheckpoints } : {}),
                 factoryStorage: storage,
                 integrationStorage,
@@ -1001,7 +1034,7 @@ export class MastraFactory {
               publicOrigin,
               auth: routeAuth,
               stateSigner,
-              fleet,
+              sandbox: sandboxRuntime,
               ...(baseCheckpoints ? { baseCheckpoints } : {}),
               factoryStorage: storage,
               integrationStorage,
