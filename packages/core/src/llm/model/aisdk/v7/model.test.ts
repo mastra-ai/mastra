@@ -324,6 +324,15 @@ describe('AISDKV7LanguageModel', () => {
         mediaType: 'image/png',
         data: 'aGVsbG8=',
       });
+
+      // Untagging the content is only half the job: consumers read the
+      // synthesized stream, so assert the part survives the conversion too.
+      const generateChunks = await collectStream(generateResult.stream);
+      expect(generateChunks).toContainEqual({
+        type: 'reasoning-file',
+        mediaType: 'image/png',
+        data: 'aGVsbG8=',
+      });
     });
 
     it('produces flat data the shared chunk transform maps to a valid FileChunk payload', async () => {
