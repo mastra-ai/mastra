@@ -47,7 +47,7 @@ export interface DirectExecWebSocket {
  */
 export type DirectExecWebSocketFactory = (endpoint: string, subprotocols: string[]) => DirectExecWebSocket;
 
-/** Lease payload returned by `POST /v1/projects/:projectId/sandbox/:sandboxId/exec-lease`. */
+/** Lease payload returned by `POST /v1/:provider/projects/:projectId/sandbox/:sandboxId/exec-lease`. */
 export interface ExecLease {
   jwt: string;
   wsEndpoint: string;
@@ -102,8 +102,7 @@ export interface DirectExecResult {
 
 const DEFAULT_WS_FACTORY: DirectExecWebSocketFactory = (endpoint, subprotocols) => {
   const WS = (globalThis as { WebSocket?: unknown }).WebSocket as
-    | (new (url: string, protocols: string[]) => DirectExecWebSocket)
-    | undefined;
+    (new (url: string, protocols: string[]) => DirectExecWebSocket) | undefined;
   if (!WS) {
     throw new Error(
       'Direct exec requires a WebSocket implementation. Node 22+ provides one globally; on older runtimes, pass webSocketFactory explicitly.',

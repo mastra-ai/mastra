@@ -35,7 +35,7 @@ export type PlatformSandboxNetworkIsolation = 'ISOLATED' | 'PRIVATE';
  * round-trip through Railway's public control plane.
  *
  * The workspace proxy discovers each sandbox's IPv6 during
- * `POST /v1/projects/:pid/sandbox` and returns it as `instanceUrl` on the
+ * `POST /v1/:provider/projects/:pid/sandbox` and returns it as `instanceUrl` on the
  * create + get responses (see the platform inline-discovery issue). The
  * `PlatformSandbox` client copies that field into this registry from both
  * {@link PlatformSandbox.start} branches (fresh provision + reattach), evicts
@@ -489,7 +489,7 @@ export class PlatformSandbox extends MastraSandbox {
     const id = options.id ?? options.checkpointName;
     const seedCheckpointName =
       options.seedCheckpointName ??
-      (this._client.apiVersion === 'v2' ? options.checkpointName : undefined) ??
+      (this._client.sandboxProvider === 'e2b' ? options.checkpointName : undefined) ??
       this._seedCheckpointName;
     return new PlatformSandbox({
       ...(id !== undefined && { id }),
@@ -780,7 +780,7 @@ export class PlatformSandbox extends MastraSandbox {
    * it. Any in-flight capture is awaited first so the preserved checkpoint
    * reflects the latest disk state we asked for.
    *
-   * Corresponds to `DELETE /v1/projects/:pid/sandbox/:sandboxId` on
+   * Corresponds to `DELETE /v1/:provider/projects/:pid/sandbox/:sandboxId` on
    * workspace-proxy, which by contract does not touch the checkpoint. Use
    * {@link destroy} when you want the checkpoint released too.
    */
@@ -935,7 +935,7 @@ export class PlatformSandbox extends MastraSandbox {
    * to a skip as described above.
    */
   async captureCheckpoint(): Promise<CaptureCheckpointResult> {
-    if (!this._hasRecoveryKey && this._client.apiVersion !== 'v2') {
+    if (!this._hasRecoveryKey && this._client.sandboxProvider !== 'e2b') {
       this.logger.debug(
         `captureCheckpoint skipped: no recovery key configured for sandbox ${this._sandboxId ?? '(unstarted)'}`,
       );

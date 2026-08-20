@@ -22,7 +22,7 @@ export interface PlatformRequestOptions extends RequestInit {
   query?: Record<string, string | number | boolean | undefined>;
 }
 
-export type WorkspaceApiVersion = 'v1' | 'v2';
+export type SandboxProvider = 'railway' | 'e2b';
 
 const DEFAULT_PROXY_URL = 'https://workspaces.mastra.ai';
 
@@ -38,13 +38,21 @@ export function requireOption(value: string | undefined, name: string): string {
   return value;
 }
 
+function resolveSandboxProvider(value: string | undefined): SandboxProvider {
+  const provider = value?.trim() || 'railway';
+  if (provider !== 'railway' && provider !== 'e2b') {
+    throw new Error('SANDBOX_PROVIDER must be either "railway" or "e2b"');
+  }
+  return provider;
+}
+
 export function resolvePlatformOptions(options: PlatformClientOptions) {
   return {
     accessToken: requireOption(options.accessToken ?? process.env.MASTRA_PLATFORM_ACCESS_TOKEN, 'accessToken'),
     projectId: requireOption(options.projectId ?? process.env.MASTRA_PROJECT_ID, 'projectId'),
     actingUserId: options.actingUserId?.trim() || undefined,
     proxyUrl: (process.env.MASTRA_WORKSPACE_PROXY_URL ?? DEFAULT_PROXY_URL).replace(/\/$/, ''),
-    apiVersion: (process.env.WORKSPACES_V2 === 'true' ? 'v2' : 'v1') as WorkspaceApiVersion,
+    sandboxProvider: resolveSandboxProvider(process.env.SANDBOX_PROVIDER),
     sessionId: options.sessionId,
     threadId: options.threadId,
     fetch: options.fetch ?? fetch,
@@ -104,7 +112,7 @@ export class PlatformClient {
   readonly projectId: string;
   readonly actingUserId: string | undefined;
   readonly proxyUrl: string;
-  readonly apiVersion: WorkspaceApiVersion;
+  readonly sandboxProvider: SandboxProvider;
   /** Advisory session correlation id — see {@link PlatformClientOptions.sessionId}. */
   readonly sessionId: string | undefined;
   /** Advisory thread correlation id — see {@link PlatformClientOptions.threadId}. */
@@ -117,14 +125,16 @@ export class PlatformClient {
     this.projectId = resolved.projectId;
     this.actingUserId = resolved.actingUserId;
     this.proxyUrl = resolved.proxyUrl;
-    this.apiVersion = resolved.apiVersion;
+    this.sandboxProvider = resolved.sandboxProvider;
     this.sessionId = resolved.sessionId;
     this.threadId = resolved.threadId;
     this.fetch = resolved.fetch;
   }
 
   async request(path: string, options: PlatformRequestOptions = {}): Promise<Response> {
-    const url = new URL(`${this.proxyUrl}/${this.apiVersion}/projects/${encodeURIComponent(this.projectId)}${path}`);
+    const url = new URL(
+      `${this.proxyUrl}/v1/${this.sandboxProvider}/projects/${encodeURIComponent(this.projectId)}${path}`,
+    );
     for (const [key, value] of Object.entries(options.query ?? {})) {
       if (value !== undefined) url.searchParams.set(key, String(value));
     }

@@ -24,14 +24,14 @@ describe('PlatformClient', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0]!;
-    expect(String(url)).toBe('https://proxy.test/v1/projects/proj_123/sandbox?dryRun=true');
+    expect(String(url)).toBe('https://proxy.test/v1/railway/projects/proj_123/sandbox?dryRun=true');
     expect((init.headers as Headers).get('authorization')).toBe('Bearer sk_test');
     expect((init.headers as Headers).get('x-acting-user-id')).toBeNull();
     expect(init.method).toBe('POST');
   });
 
-  it('uses v2 routes when WORKSPACES_V2 is true', async () => {
-    vi.stubEnv('WORKSPACES_V2', 'true');
+  it('uses E2B provider routes when SANDBOX_PROVIDER is e2b', async () => {
+    vi.stubEnv('SANDBOX_PROVIDER', 'e2b');
     vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
     const fetchMock = vi.fn().mockResolvedValue(response('{}', { status: 200 }));
     const client = new PlatformClient({
@@ -42,22 +42,19 @@ describe('PlatformClient', () => {
 
     await client.request('/fs/bucket/path');
 
-    expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v2/projects/proj_123/fs/bucket/path');
+    expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v1/e2b/projects/proj_123/fs/bucket/path');
   });
 
-  it('does not enable v2 routes for other WORKSPACES_V2 values', async () => {
-    vi.stubEnv('WORKSPACES_V2', '1');
-    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
-    const fetchMock = vi.fn().mockResolvedValue(response('{}', { status: 200 }));
-    const client = new PlatformClient({
-      accessToken: 'sk_test',
-      projectId: 'proj_123',
-      fetch: fetchMock,
-    });
+  it('rejects unsupported SANDBOX_PROVIDER values', () => {
+    vi.stubEnv('SANDBOX_PROVIDER', 'unknown');
 
-    await client.request('/sandbox');
-
-    expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox');
+    expect(
+      () =>
+        new PlatformClient({
+          accessToken: 'sk_test',
+          projectId: 'proj_123',
+        }),
+    ).toThrow('SANDBOX_PROVIDER must be either "railway" or "e2b"');
   });
 
   it('sends an opaque acting-user subject on every request', async () => {
