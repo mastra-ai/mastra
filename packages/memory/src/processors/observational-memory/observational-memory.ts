@@ -4079,6 +4079,7 @@ ${formattedMessages}
     agent?: ProcessorContext['agent'];
     sendSignal?: ProcessorContext['sendSignal'];
     sendStateSignal?: ProcessorContext['sendStateSignal'];
+    requestContext?: RequestContext;
     observabilityContext?: ObservabilityContext;
     hooks?: ObservationTurnHooks;
   }): ObservationTurn {
@@ -4090,6 +4091,7 @@ ${formattedMessages}
       agent: opts.agent,
       sendSignal: opts.sendSignal,
       sendStateSignal: opts.sendStateSignal,
+      requestContext: opts.requestContext,
       observabilityContext: opts.observabilityContext,
       hooks: opts.hooks,
     });
