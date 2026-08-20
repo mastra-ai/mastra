@@ -14,7 +14,7 @@ import { MessageFactory } from '@mastra/react/ui';
 import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvocationPart } from '@mastra/react/ui';
 import { Bell, CircleDot, ExternalLink, Info, Layers, Slack } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 
 import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
 import { useChatSessionContext } from '../context/useChatSessionContext';
@@ -501,27 +501,22 @@ function SignalRow({ kind, label, message }: { kind: string; label: string; mess
 const HISTORY_ENTRY_STAGGER_MS = 55;
 const HISTORY_ENTRY_STAGGER_LIMIT = 10;
 
+interface PreparedTranscriptEntry {
+  entry: TimelineEntry;
+  content: ReactNode;
+}
+
+function createHistoryRevealDelays(entries: PreparedTranscriptEntry[]): Record<string, number> {
+  const visibleEntries = entries.filter(({ content }) => content !== null);
+  const staggerStart = Math.max(visibleEntries.length - HISTORY_ENTRY_STAGGER_LIMIT, 0);
+  return Object.fromEntries(
+    visibleEntries.map(({ entry }, index) => [entry.id, Math.max(index - staggerStart, 0) * HISTORY_ENTRY_STAGGER_MS]),
+  );
+}
+
 export function Transcript({ tail }: { tail?: ReactNode }) {
   const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
   const { transcript, resolvePrompt, busy } = useChatTranscript();
-  const historyRef = useRef<HTMLDivElement>(null);
-  useLayoutEffect(() => {
-    const entries = historyRef.current?.querySelectorAll<HTMLElement>('[data-transcript-history-entry]');
-    if (!entries?.length) return;
-
-    const staggerStart = Math.max(entries.length - HISTORY_ENTRY_STAGGER_LIMIT, 0);
-    entries.forEach((entry, index) => {
-      entry.style.animationDelay = `${Math.max(index - staggerStart, 0) * HISTORY_ENTRY_STAGGER_MS}ms`;
-      entry.classList.add('transcript-history-enter');
-    });
-
-    return () => {
-      entries.forEach(entry => {
-        entry.style.removeProperty('animation-delay');
-        entry.classList.remove('transcript-history-enter');
-      });
-    };
-  }, []);
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
@@ -542,21 +537,21 @@ export function Transcript({ tail }: { tail?: ReactNode }) {
   };
 
   return (
-    <div ref={historyRef} className="contents">
-      <TranscriptEntries
-        entries={transcript.entries}
-        isSubmitting={approveMutation.isPending || respondMutation.isPending}
-        onApprove={onApprove}
-        onRespond={onRespond}
-        running={busy}
-        tail={tail}
-      />
-    </div>
+    <TranscriptEntries
+      entries={transcript.entries}
+      revealInitialEntries
+      isSubmitting={approveMutation.isPending || respondMutation.isPending}
+      onApprove={onApprove}
+      onRespond={onRespond}
+      running={busy}
+      tail={tail}
+    />
   );
 }
 
 export function TranscriptEntries({
   entries,
+  revealInitialEntries = false,
   isSubmitting = false,
   onApprove,
   onRespond,
@@ -564,6 +559,7 @@ export function TranscriptEntries({
   tail,
 }: {
   entries: TimelineEntry[];
+  revealInitialEntries?: boolean;
   isSubmitting?: boolean;
   onApprove: (toolCallId: string, approved: boolean, promptId: string) => void;
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
@@ -588,9 +584,7 @@ export function TranscriptEntries({
   const renderEntry = (entry: TimelineEntry): ReactNode => {
     switch (entry.kind) {
       case 'message':
-        return (
-          <MessageBubble entry={entry} suspensions={suspensions} isSubmitting={isSubmitting} onRespond={onRespond} />
-        );
+        return renderMessageBubble({ entry, suspensions, isSubmitting, onRespond });
       case 'notice':
         return <NoticeCard entry={entry} />;
       case 'approval':
@@ -610,6 +604,11 @@ export function TranscriptEntries({
     }
   };
 
+  const preparedEntries = entries.map(entry => ({ entry, content: renderEntry(entry) }));
+  const [historyRevealDelays] = useState(() =>
+    revealInitialEntries ? createHistoryRevealDelays(preparedEntries) : {},
+  );
+
   // A turn is what you can see: the run echoes the message you sent back as a signal
   // that draws nothing, and letting that open a turn would take the room off your bubble.
   const drawsContent = (entry: MessageEntry): boolean =>
@@ -617,18 +616,22 @@ export function TranscriptEntries({
   const opensTurn = (entry: TimelineEntry): boolean =>
     entry.kind === 'message' && startsUserTurn(entry.message) && drawsContent(entry);
 
-  const turnGroups: { key: string; entries: TimelineEntry[]; opensTurn: boolean }[] = [];
-  for (const entry of entries) {
-    const opens = opensTurn(entry);
+  const turnGroups: { key: string; entries: PreparedTranscriptEntry[]; opensTurn: boolean }[] = [];
+  for (const preparedEntry of preparedEntries) {
+    const opens = opensTurn(preparedEntry.entry);
     if (!opens && turnGroups.length > 0) {
-      turnGroups.at(-1)?.entries.push(entry);
+      turnGroups.at(-1)?.entries.push(preparedEntry);
       continue;
     }
     // A gap sorts above the turn it introduces but arrives after it: inside that turn the
     // room absorbs its height, outside it shifts the transcript a beat later.
     const previous = turnGroups.at(-1);
-    const introduction = previous && isTimeGap(previous.entries.at(-1)) ? previous.entries.splice(-1) : [];
-    turnGroups.push({ key: entry.id, entries: [...introduction, entry], opensTurn: opens });
+    const introduction = previous && isTimeGap(previous.entries.at(-1)?.entry) ? previous.entries.splice(-1) : [];
+    turnGroups.push({
+      key: preparedEntry.entry.id,
+      entries: [...introduction, preparedEntry],
+      opensTurn: opens,
+    });
   }
 
   return (
@@ -642,21 +645,23 @@ export function TranscriptEntries({
             key={group.key}
             className={cn('flex flex-col', group.opensTurn && 'turn-room', holdsRoom && 'turn-room-open')}
           >
-            {group.entries.map(entry => {
-              const rendered = renderEntry(entry);
-              if (!rendered) return null;
+            {group.entries.map(({ entry, content }) => {
+              const historyRevealDelay = historyRevealDelays[entry.id];
 
               return (
                 <MessageScrollerItem
-                  data-transcript-history-entry=""
                   key={entry.id}
                   messageId={entry.id}
                   scrollAnchor={opensTurn(entry)}
                   // Estimated off-screen heights would make the prepend anchor restore
                   // the wrong offset — measure the real thing.
-                  className="[content-visibility:visible]"
+                  className={cn(
+                    '[content-visibility:visible]',
+                    historyRevealDelay !== undefined && 'transcript-history-enter',
+                  )}
+                  style={historyRevealDelay === undefined ? undefined : { animationDelay: `${historyRevealDelay}ms` }}
                 >
-                  {rendered}
+                  {content}
                 </MessageScrollerItem>
               );
             })}
@@ -709,7 +714,7 @@ export function ChannelOriginBadge({ origin }: { origin: { platform: string; aut
   );
 }
 
-function MessageBubble({
+function renderMessageBubble({
   entry,
   suspensions,
   isSubmitting,

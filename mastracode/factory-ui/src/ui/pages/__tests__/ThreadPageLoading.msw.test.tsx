@@ -13,7 +13,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { server } from '../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/ui/render';
 import { createAppRoutes } from '../../router';
-import { assistantOnlyThreadMessages, threadRailMessages } from './fixtures/thread-rail';
+import { assistantOnlyThreadMessages, threadRailMessagesWithEcho } from './fixtures/thread-rail';
 
 const FACTORY_ID = 'fp-1';
 const REPO_ID = 'ghp-1';
@@ -219,7 +219,7 @@ describe('ThreadPage loading shell', () => {
   });
 
   it('stagger-reveals loaded transcript entries in order', async () => {
-    const { sessionGate, messagesGate } = stubThreadRoute({ messages: threadRailMessages });
+    const { sessionGate, messagesGate } = stubThreadRoute({ messages: threadRailMessagesWithEcho });
     renderThreadRoute();
     sessionGate.resolve();
     await screen.findByRole('status', { name: 'Preparing session' });
@@ -227,9 +227,9 @@ describe('ThreadPage loading shell', () => {
     messagesGate.resolve();
     await screen.findByText('Run the focused checks');
 
-    const entries = Array.from(document.querySelectorAll<HTMLElement>('[data-transcript-history-entry]'));
+    const entries = Array.from(document.querySelectorAll<HTMLElement>('.transcript-history-enter'));
+    expect(entries).toHaveLength(3);
     expect(entries.map(entry => entry.style.animationDelay)).toEqual(['0ms', '55ms', '110ms']);
-    expect(entries.every(entry => entry.classList.contains('transcript-history-enter'))).toBe(true);
   });
 
   it('waits for sandbox readiness before synchronizing an existing route thread', async () => {
