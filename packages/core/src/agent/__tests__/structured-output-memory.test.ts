@@ -960,3 +960,79 @@ describe('Structured output stream memory persistence (#14659)', () => {
     }
   });
 });
+
+/**
+ * Regression tests for issue #21913:
+ * The TrailingAssistantGuard was only appended when the agent had configured
+ * input processors (or memory/skills), and only for model ids matching Claude 4.6.
+ * Agents without processors, or on Anthropic models newer than Claude 4.6,
+ * sent trailing-assistant prompts as-is and hit Anthropic's non-retryable
+ * "does not support assistant message prefill" 400.
+ */
+describe('TrailingAssistantGuard without input processors (#21913)', () => {
+  const buildAgent = ({ provider, modelId }: { provider: string; modelId: string }) => {
+    const capturedPrompts: any[] = [];
+    const mockModel = new MockLanguageModelV2({
+      provider,
+      modelId,
+      doGenerate: async options => {
+        capturedPrompts.push(options.prompt);
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: JSON.stringify({ status: 'completed', summary: 'done' }) }],
+          warnings: [],
+        };
+      },
+    });
+    const agent = new Agent({
+      id: `test-agent-21913-${modelId}`,
+      name: 'Test Agent 21913',
+      instructions: 'Report what happened.',
+      model: mockModel,
+    });
+    return { agent, capturedPrompts };
+  };
+
+  const generateWithTrailingAssistant = (agent: Agent) =>
+    agent.generate(
+      [
+        { role: 'user', content: 'Do the task, then report.' },
+        { role: 'assistant', content: 'Task done: the order was placed.' },
+      ],
+      { structuredOutput: { schema: z.object({ status: z.string(), summary: z.string() }) } },
+    );
+
+  const lastNonSystemRole = (capturedPrompts: any[]) => {
+    expect(capturedPrompts.length).toBeGreaterThan(0);
+    const lastPrompt = capturedPrompts[capturedPrompts.length - 1];
+    const nonSystemMessages = lastPrompt.filter((msg: any) => msg.role !== 'system');
+    expect(nonSystemMessages.length).toBeGreaterThan(0);
+    return nonSystemMessages[nonSystemMessages.length - 1].role;
+  };
+
+  it('appends a user message for an Anthropic agent without input processors or memory', async () => {
+    const { agent, capturedPrompts } = buildAgent({ provider: 'anthropic.messages', modelId: 'claude-opus-4-6' });
+
+    await generateWithTrailingAssistant(agent);
+
+    expect(lastNonSystemRole(capturedPrompts)).toBe('user');
+  });
+
+  it('appends a user message for Anthropic models newer than Claude 4.6', async () => {
+    const { agent, capturedPrompts } = buildAgent({ provider: 'anthropic.messages', modelId: 'claude-opus-5' });
+
+    await generateWithTrailingAssistant(agent);
+
+    expect(lastNonSystemRole(capturedPrompts)).toBe('user');
+  });
+
+  it('leaves the trailing assistant message untouched for non-Anthropic models', async () => {
+    const { agent, capturedPrompts } = buildAgent({ provider: 'openai.chat', modelId: 'gpt-5' });
+
+    await generateWithTrailingAssistant(agent);
+
+    expect(lastNonSystemRole(capturedPrompts)).toBe('assistant');
+  });
+});

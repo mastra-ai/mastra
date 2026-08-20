@@ -34,6 +34,7 @@ import { isProcessorWorkflow } from '../../../processors/index';
 import { PrepareStepProcessor } from '../../../processors/processors/prepare-step';
 import { ProcessorRunner } from '../../../processors/runner';
 import type { ProcessorState } from '../../../processors/runner';
+import { isMaybeAnthropic } from '../../../processors/trailing-assistant-guard';
 import { RequestContext } from '../../../request-context';
 import { execute } from '../../../stream/aisdk/v5/execute';
 import { DefaultStepResult } from '../../../stream/aisdk/v5/output-helpers';
@@ -1303,7 +1304,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           ...(inputProcessors || []),
           ...(options?.prepareStep ? [new PrepareStepProcessor({ prepareStep: options.prepareStep })] : []),
         ];
-        if (inputStepProcessors && inputStepProcessors.length > 0) {
+        // Run even with no configured processors when the model is Anthropic, so
+        // the runner can append its TrailingAssistantGuard (#21913).
+        if (inputStepProcessors.length > 0 || isMaybeAnthropic(model)) {
           const processorRunner = new ProcessorRunner({
             inputProcessors: inputStepProcessors,
             outputProcessors: [],

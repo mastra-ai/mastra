@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 
 import type { MastraDBMessage } from '../agent/message-list';
-import { isMaybeClaude46, TrailingAssistantGuard } from './trailing-assistant-guard';
+import { isMaybeAnthropic, TrailingAssistantGuard } from './trailing-assistant-guard';
 import type { ProcessInputStepArgs } from './index';
 
 const createMessage = (role: 'user' | 'assistant', text: string): MastraDBMessage => ({
@@ -25,42 +25,44 @@ const makeArgs = (
       'structuredOutput' in overrides ? overrides.structuredOutput : { schema: z.object({ answer: z.string() }) },
   }) as ProcessInputStepArgs;
 
-describe('isMaybeClaude46', () => {
-  it('detects Claude 4.6 string model configs from Anthropic providers', () => {
-    expect(isMaybeClaude46('anthropic/claude-opus-4-6')).toBe(true);
-    expect(isMaybeClaude46('anthropic/claude-sonnet-4.6')).toBe(true);
+describe('isMaybeAnthropic', () => {
+  it('detects Anthropic string model configs regardless of model version', () => {
+    expect(isMaybeAnthropic('anthropic/claude-opus-4-6')).toBe(true);
+    expect(isMaybeAnthropic('anthropic/claude-sonnet-4.6')).toBe(true);
+    expect(isMaybeAnthropic('anthropic/claude-opus-5')).toBe(true);
+    expect(isMaybeAnthropic('anthropic/claude-sonnet-4-5')).toBe(true);
   });
 
-  it('rejects non-Claude 4.6 string model configs', () => {
-    expect(isMaybeClaude46('anthropic/claude-sonnet-4-5')).toBe(false);
-    expect(isMaybeClaude46('openai/claude-opus-4-6')).toBe(false);
+  it('rejects non-Anthropic string model configs', () => {
+    expect(isMaybeAnthropic('openai/claude-opus-4-6')).toBe(false);
+    expect(isMaybeAnthropic('openai/gpt-5')).toBe(false);
   });
 
-  it('detects Claude 4.6 language model objects', () => {
-    expect(isMaybeClaude46({ provider: 'anthropic', modelId: 'claude-opus-4-6' })).toBe(true);
-    expect(isMaybeClaude46({ provider: 'anthropic.messages', modelId: 'claude-sonnet-4.6' })).toBe(true);
+  it('detects Anthropic language model objects regardless of model version', () => {
+    expect(isMaybeAnthropic({ provider: 'anthropic', modelId: 'claude-opus-4-6' })).toBe(true);
+    expect(isMaybeAnthropic({ provider: 'anthropic.messages', modelId: 'claude-opus-5' })).toBe(true);
   });
 
-  it('rejects non-Claude 4.6 language model objects', () => {
-    expect(isMaybeClaude46({ provider: 'anthropic', modelId: 'claude-sonnet-4-5' })).toBe(false);
-    expect(isMaybeClaude46({ provider: 'openai', modelId: 'claude-opus-4-6' })).toBe(false);
+  it('rejects non-Anthropic language model objects', () => {
+    expect(isMaybeAnthropic({ provider: 'openai', modelId: 'claude-opus-4-6' })).toBe(false);
+    expect(isMaybeAnthropic({ provider: 'openai.chat', modelId: 'gpt-5' })).toBe(false);
   });
 
-  it('treats dynamic model functions and unknown shapes as possibly Claude 4.6', () => {
-    expect(isMaybeClaude46(() => 'anthropic/claude-opus-4-6')).toBe(true);
-    expect(isMaybeClaude46({})).toBe(true);
-    expect(isMaybeClaude46(undefined)).toBe(true);
+  it('treats dynamic model functions and unknown shapes as possibly Anthropic', () => {
+    expect(isMaybeAnthropic(() => 'anthropic/claude-opus-4-6')).toBe(true);
+    expect(isMaybeAnthropic({})).toBe(true);
+    expect(isMaybeAnthropic(undefined)).toBe(true);
   });
 
-  it('detects Claude 4.6 inside fallback arrays', () => {
+  it('detects Anthropic inside fallback arrays', () => {
     expect(
-      isMaybeClaude46([{ model: 'openai/gpt-5' }, { model: { provider: 'anthropic', modelId: 'claude-sonnet-4.6' } }]),
+      isMaybeAnthropic([{ model: 'openai/gpt-5' }, { model: { provider: 'anthropic', modelId: 'claude-opus-5' } }]),
     ).toBe(true);
   });
 
-  it('rejects fallback arrays without a Claude 4.6 candidate', () => {
+  it('rejects fallback arrays without an Anthropic candidate', () => {
     expect(
-      isMaybeClaude46([{ model: 'openai/gpt-5' }, { model: { provider: 'anthropic', modelId: 'claude-sonnet-4-5' } }]),
+      isMaybeAnthropic([{ model: 'openai/gpt-5' }, { model: { provider: 'openai.chat', modelId: 'gpt-5-mini' } }]),
     ).toBe(false);
   });
 });

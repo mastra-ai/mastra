@@ -27,6 +27,7 @@ import { getRootExportSpan, getStepAvailableToolNames } from '../../../../observ
 import type { CachedLLMStepResponse } from '../../../../processors';
 import { PrepareStepProcessor } from '../../../../processors/processors/prepare-step';
 import { ProcessorRunner } from '../../../../processors/runner';
+import { isMaybeAnthropic } from '../../../../processors/trailing-assistant-guard';
 import { execute } from '../../../../stream/aisdk/v5/execute';
 import { MastraModelOutput } from '../../../../stream/base/output';
 import type { ChunkType, TextDeltaPayload, ToolCallPayload } from '../../../../stream/types';
@@ -390,7 +391,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             const stepInputProcessors = registryEntry?.prepareStep
               ? [...baseInputProcessors, new PrepareStepProcessor({ prepareStep: registryEntry.prepareStep })]
               : baseInputProcessors;
-            if (stepInputProcessors.length) {
+            // Run even with no configured processors when the model is Anthropic, so
+            // the runner can append its TrailingAssistantGuard (#21913).
+            if (stepInputProcessors.length || isMaybeAnthropic(currentModel)) {
               const inputStepWriter = pubsub
                 ? {
                     custom: async (data: { type: string }) => {
