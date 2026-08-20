@@ -554,7 +554,7 @@ const result = await runEvals({
 
 Each turn runs `agent.generate()` with the same `threadId`, so the agent sees the full conversation history. `runEvals` also injects a `resourceId` (Mastra memory scopes messages by resource + thread), defaulting it to the generated thread. Pass `targetOptions.memory.resource` to pin a specific one. Cross-turn recall requires the agent to have a memory store configured. Otherwise turns run in isolation. Mix single-turn (`input`) and multi-turn (`inputs`) items in the same `data` array. When using `inputs`, `input` can be omitted.
 
-Scoring uses the accumulated output from all turns as `run.output`, but only the first turn as `run.input`. Prefer output-based scorers (`checks.includes`, `checks.calledTool`, `checks.similarity`) for multi-turn. Input-relative scorers (e.g. faithfulness) only see the first turn's input. Trajectory scorers that read from the trace (`AgentScorerConfig.trajectory`) resolve against the last turn's span. Tool-call checks that read `run.output` (like `checks.calledTool`) still see every turn. See [Multi-turn scorer compatibility](#multi-turn-scorer-compatibility) for which scorers read the whole conversation.
+Scoring uses the accumulated output from all turns as `run.output`, but only the first turn as `run.input`. Prefer output-based scorers (`checks.includes`, `checks.calledTool`, `checks.similarity`) for multi-turn. Input-relative scorers (e.g. faithfulness) only see the first turn's input. Trajectory scorers that read from the trace (`AgentScorerConfig.trajectory`) resolve against the last turn's span. Tool-call checks that read `run.output` (like `checks.calledTool`) still see every turn.
 
 ### Per-turn assertions
 
@@ -586,58 +586,9 @@ result.turnResults // [{ index, gateResults, thresholdResults, scores }]
 
 Per-turn gates/scorers evaluate only that turn (`run.input`/`run.output` are that turn's). A failing turn gate makes the verdict `failed`. A missed turn threshold (gates passing) makes it `scored`. Top-level `scorers`/`gates` still score the accumulated conversation as a whole. `turns` is Agent-only and can't be combined with `input` or `inputs`.
 
-## Multi-turn scorer compatibility
-
-With `inputs`, `run.output` holds the accumulated messages from every turn, but scorers differ in how much of that they read.
-
-| Scorer | What it sees with `inputs` |
-| - | - |
-| [Quick Checks](/reference/evals/checks) (`checks.calledTool`, `checks.includes`, `checks.similarity`, `checks.noToolErrors`, and the rest) | The whole accumulated conversation. Tool-call checks count calls across every turn |
-| [Multi-turn Judge scorer](/reference/evals/multi-turn-judge) | Every assistant turn, graded together against one plain-English criterion |
-| Prebuilt LLM-judge scorers (rubric, answer relevancy, answer similarity, faithfulness, hallucination, bias, toxicity, context precision, context recall, context relevance, noise sensitivity, prompt alignment, summarization) | Only the last assistant message that carries text, because they extract output through `getAssistantMessageFromRunOutput()`. Judges that compare input against output also see only the first turn's input |
-| Trajectory scorers (`AgentScorerConfig.trajectory`) | The last turn's span when traces are available, otherwise the tool calls extracted from all accumulated messages |
-| Custom scorers | Whatever they read from `run.output`. Use [`extractAgentResponseMessages()`](/reference/evals/scorer-utils#extractagentresponsemessages) to grade every assistant turn |
-
-To grade a conversation semantically, use [`createMultiTurnJudgeScorer()`](/reference/evals/multi-turn-judge), which judges every assistant turn against one criterion. You can also attach a single-turn judge to one turn with `turns[].scorers`, where each turn grades its own input and output, or write your own scorer that reads every assistant message: see [Grading a whole conversation](/docs/evals/multi-turn#grading-a-whole-conversation).
-
-## Score persistence
-
-`runEvals` saves every scorer result to the scores store when the target's Mastra instance has `storage` configured. Stored results use `source: 'TEST'`, which keeps them separate from live scoring results.
-
-Persistence also needs the scorer registered on the Mastra instance. Saving resolves scorer metadata (name, description, type) through [`Mastra.getScorerById()`](/reference/core/getScorerById), which matches on the scorer's own `id`, not on the key it's registered under.
-
-```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core'
-import { LibSQLStore } from '@mastra/libsql'
-import { checks } from '@mastra/evals/checks'
-import { createRubricScorer } from '@mastra/evals/scorers/prebuilt'
-import { myAgent } from './agents/my-agent'
-
-export const mastra = new Mastra({
-  agents: { myAgent },
-  storage: new LibSQLStore({ url: 'file:./mastra.db' }),
-  scorers: {
-    calledTool: checks.calledTool('get_weather'),
-    includes: checks.includes('Brooklyn'),
-    rubric: createRubricScorer({
-      model: '__GATEWAY_ANTHROPIC_MODEL_HAIKU__',
-      criteria: [{ description: 'placeholder' }],
-    }),
-  },
-})
-```
-
-The registered instance only has to share the `id` of the scorer you pass to `runEvals`. Its arguments can differ, because the lookup ignores them. `checks.calledTool('get_weather')` and `checks.calledTool('search')` both have the id `check-called-tool`, so registering either one covers every use of that check, and the criteria on the registered `createRubricScorer` (id `rubric-scorer`) don't have to match the criteria you evaluate with.
-
-Scorers attached to the agent or workflow you evaluate register themselves on the Mastra instance, so this applies to scorers passed directly to `runEvals`.
-
-When a scorer isn't registered, `runEvals` still runs and returns correct scores, but each save fails with a `Failed to save score for scorer <id>: Scorer with id <id> not found` warning and nothing reaches the scores store.
-
 ## Related
 
 - [Multi-turn evals](/docs/evals/multi-turn): Conceptual guide to multi-turn evaluation
-- [Multi-turn Judge scorer](/reference/evals/multi-turn-judge): LLM judge that grades a whole conversation
-- [`Mastra` class](/reference/core/mastra-class): Register scorers with the `scorers` option
 - [Gates and Verdicts](/docs/evals/gates-and-verdicts): Conceptual guide to severity semantics
 - [Quick Checks](/reference/evals/checks): Zero-LLM composable micro-scorers
 - [createScorer()](/reference/evals/create-scorer): Create custom scorers for experiments
