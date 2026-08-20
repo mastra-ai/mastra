@@ -57,6 +57,47 @@ describe('Section', () => {
     expect(screen.getByText('Leave organization').className).toContain('text-accent2');
   });
 
+  it('aligns flat and factory content to the same horizontal inset', () => {
+    render(
+      <div>
+        <Section variant="factory">
+          <Section.Header>
+            <Section.Heading>Factory</Section.Heading>
+          </Section.Header>
+          <Section.Content>
+            <Section.Row label="Factory row" />
+          </Section.Content>
+        </Section>
+        <Section variant="flat">
+          <Section.Header>
+            <Section.Heading>Flat</Section.Heading>
+          </Section.Header>
+          <Section.Content>
+            <Section.Row label="Flat row" />
+          </Section.Content>
+        </Section>
+      </div>,
+    );
+
+    const factory = screen.getByRole('heading', { name: 'Factory' }).closest('[data-slot="section"]');
+    const flat = screen.getByRole('heading', { name: 'Flat' }).closest('[data-slot="section"]');
+
+    expect(factory?.className).toContain('w-full');
+    expect(flat?.className).toContain('w-full');
+    expect(factory?.querySelector('[data-slot="section-header"]')?.className).toContain(
+      'group-data-[variant=factory]/section:px-4',
+    );
+    expect(flat?.querySelector('[data-slot="section-header"]')?.className).toContain(
+      'group-data-[variant=flat]/section:px-4',
+    );
+    expect(screen.getByText('Factory row').closest('[data-slot="section-row"]')?.className).toContain(
+      'group-data-[variant=factory]/section:px-4',
+    );
+    expect(screen.getByText('Flat row').closest('[data-slot="section-row"]')?.className).toContain(
+      'group-data-[variant=flat]/section:px-4',
+    );
+  });
+
   it('renders factory rows with explicit dividers', () => {
     render(
       <Section variant="factory">
