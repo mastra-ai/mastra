@@ -106,7 +106,11 @@ export interface ResolveRuntimeOptions {
  */
 function restoreRequestContext(entries?: Record<string, unknown>, runLevel?: RequestContext): RequestContext {
   if (entries) {
-    const restored: RequestContext = new RequestContext<unknown>(Object.entries(entries));
+    // Drop any persisted token from legacy snapshots written before the token
+    // was excluded from persistence — a stale bearer token must never be restored.
+    const restored: RequestContext = new RequestContext<unknown>(
+      Object.entries(entries).filter(([key]) => key !== MASTRA_AUTH_TOKEN_KEY),
+    );
     // The framework-managed bearer token is deliberately never persisted into
     // `requestContextEntries` (see preparation.ts), so carry the *live* token
     // over from the run-level context when one exists. Without this, tools

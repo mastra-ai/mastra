@@ -74,4 +74,22 @@ describe('rebuildRunToolsFromMastra request context', () => {
     expect(used.get('tenantId')).toBe('from-snapshot');
     expect(used.getRaw(MASTRA_AUTH_TOKEN_KEY)).toBe('live-bearer-token');
   });
+
+  it('drops a stale token from a legacy snapshot when no live token exists', async () => {
+    const agent = makeAgent();
+
+    await rebuildRunToolsFromMastra({
+      mastra: makeMastra(agent),
+      runId: 'run-1',
+      agentId: 'agent-1',
+      state: {} as any,
+      // Legacy snapshot written before the token was excluded from persistence.
+      requestContextEntries: { tenantId: 'from-snapshot', [MASTRA_AUTH_TOKEN_KEY]: 'stale-bearer-token' },
+      requestContext: new RequestContext([['tenantId', 'from-run'] as const]),
+    });
+
+    const used = agent.getToolsForExecution.mock.calls[0]![0].requestContext;
+    expect(used.get('tenantId')).toBe('from-snapshot');
+    expect(used.getRaw(MASTRA_AUTH_TOKEN_KEY)).toBeUndefined();
+  });
 });
