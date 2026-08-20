@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import type { PrepareProgress } from '../../../workspaces/services/github';
 import { ChatSessionContext } from '../../context/ChatSessionContext';
 import type { ChatSessionContextApi } from '../../context/ChatSessionContext';
+import { ChatThreadMessagesContext } from '../../context/ChatThreadMessagesContext';
 import { SessionPrepareSteps } from '../SessionPrepareSteps';
 
 const BASE_SESSION: ChatSessionContextApi = {
@@ -18,12 +19,21 @@ const BASE_SESSION: ChatSessionContextApi = {
   kind: 'factory',
 };
 
-function renderWithProgress(sandboxProgress: PrepareProgress | undefined) {
-  return render(
-    <ChatSessionContext.Provider value={{ ...BASE_SESSION, sandboxProgress }}>
+function renderSteps(session: Partial<ChatSessionContextApi>, options?: { loadingMessages?: boolean }) {
+  const steps = options?.loadingMessages ? (
+    <ChatThreadMessagesContext.Provider value={{ threadId: 'thread-1', isPending: true, error: undefined }}>
       <SessionPrepareSteps />
-    </ChatSessionContext.Provider>,
+    </ChatThreadMessagesContext.Provider>
+  ) : (
+    <SessionPrepareSteps />
   );
+  return render(
+    <ChatSessionContext.Provider value={{ ...BASE_SESSION, ...session }}>{steps}</ChatSessionContext.Provider>,
+  );
+}
+
+function renderWithProgress(sandboxProgress: PrepareProgress | undefined) {
+  return renderSteps({ sandboxProgress });
 }
 
 function stepByTitle(title: string) {
@@ -118,5 +128,52 @@ describe('SessionPrepareSteps', () => {
     expect(within(stepByTitle('Cloning repository')).getByText('Cloning…')).toBeInTheDocument();
     expect(screen.queryByText('Cloning octo/hello…')).not.toBeInTheDocument();
     expect(screen.queryByText('Provisioning a new sandbox…')).not.toBeInTheDocument();
+  });
+
+  it('does not skip ahead to Starting session while the warm-up is still provisioning the sandbox', () => {
+    // Messages load in parallel with /ensure, so a pending messages fetch must
+    // not check off sandbox steps that have not actually happened.
+    renderSteps(
+      {
+        sandboxPreparing: false,
+        sandboxWarming: true,
+        sandboxProgress: { phase: 'provisioning', message: 'Provisioning a new sandbox…' },
+      },
+      { loadingMessages: true },
+    );
+    expect(stepByTitle('Preparing sandbox')).toHaveAttribute('data-status', 'running');
+    expect(within(stepByTitle('Preparing sandbox')).getByText('Provisioning…')).toBeInTheDocument();
+    expect(stepByTitle('Cloning repository')).toHaveAttribute('data-status', 'pending');
+    expect(stepByTitle('Starting session')).toHaveAttribute('data-status', 'pending');
+  });
+
+  it('pins Preparing sandbox while the warm-up is in flight but has not emitted an event yet', () => {
+    renderSteps(
+      { sandboxPreparing: false, sandboxWarming: true, sandboxProgress: undefined },
+      { loadingMessages: true },
+    );
+    expect(stepByTitle('Preparing sandbox')).toHaveAttribute('data-status', 'running');
+    expect(stepByTitle('Cloning repository')).toHaveAttribute('data-status', 'pending');
+    expect(stepByTitle('Starting session')).toHaveAttribute('data-status', 'pending');
+  });
+
+  it('lets message loading light up Starting session once no warm-up is running', () => {
+    renderSteps(
+      { sandboxPreparing: false, sandboxWarming: false, sandboxProgress: undefined },
+      { loadingMessages: true },
+    );
+    expect(stepByTitle('Preparing sandbox')).toHaveAttribute('data-status', 'success');
+    expect(stepByTitle('Cloning repository')).toHaveAttribute('data-status', 'success');
+    expect(stepByTitle('Starting session')).toHaveAttribute('data-status', 'running');
+    expect(within(stepByTitle('Starting session')).getByText('Loading messages…')).toBeInTheDocument();
+  });
+
+  it('shows Loading messages… on the done phase since done carries no sandbox work', () => {
+    renderSteps(
+      { sandboxPreparing: false, sandboxWarming: true, sandboxProgress: { phase: 'done', message: 'Ready' } },
+      { loadingMessages: true },
+    );
+    expect(stepByTitle('Starting session')).toHaveAttribute('data-status', 'running');
+    expect(within(stepByTitle('Starting session')).getByText('Loading messages…')).toBeInTheDocument();
   });
 });

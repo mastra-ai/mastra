@@ -26,7 +26,6 @@ import { useChatTranscript } from '../context/useChatTranscript';
 import {
   useAbortAgentControllerMutation,
   useSendAgentControllerMessageMutation,
-  useSteerAgentControllerMutation,
 } from '../../../../hooks/useAgentControllerRunMutations';
 import { useCreateAgentControllerThreadMutation } from '../../../../hooks/useAgentControllerThreadMutations';
 import { usePreparingThreadId } from '../hooks/usePreparingThreadId';
@@ -69,7 +68,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { status } = useChatConnection();
-  const { busy, localUser, reset, clearPending, pushNotice } = useChatTranscript();
+  const { busy, localUser, failLocalUser, reset, clearPending, pushNotice } = useChatTranscript();
   const { modes, activeModeId, isLoading: modesLoading, error: modesError, setMode } = useChatModes();
   const { activeModelId, isLoading: modelLoading, error: modelError } = useChatModels();
   const { composerDraft: draft, composerInputRef: inputRef, setComposerDraft, runComposerCommand } = useChatCommands();
@@ -84,7 +83,6 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   };
   const createThreadMutation = useCreateAgentControllerThreadMutation(hookArgs);
   const sendMutation = useSendAgentControllerMessageMutation(hookArgs);
-  const steerMutation = useSteerAgentControllerMutation(hookArgs);
   const abortMutation = useAbortAgentControllerMutation(hookArgs);
   const planFeedback = usePendingPlanFeedback();
 
@@ -167,8 +165,13 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
 
   const steer = async (text: string) => {
     if (!text.trim()) return;
-    localUser(text, true);
-    await steerMutation.mutateAsync(text);
+    const localId = localUser(text, true);
+    try {
+      await sendMutation.mutateAsync({ text });
+    } catch (error) {
+      failLocalUser(localId);
+      throw error;
+    }
   };
 
   const onSubmit = (e: { preventDefault: () => void }) => {
