@@ -639,10 +639,8 @@ describe('GitHub session workspace preparation', () => {
     const { resolver } = await createLocalFactory();
     addProject();
     addSession({ id: 'session-a' });
-    // Session start fires a background warm-up, so materialization *starts*;
-    // the guarantee under test is that kickoff skill resolution never awaits
-    // it. Make provisioning hang forever: skill resolution must still finish.
-    mocks.createSandbox.mockImplementationOnce(() => new Promise(() => {}) as any);
+    // Resolution is fully lazy (no warm-up), and kickoff skill resolution
+    // must never force materialization: provisioning never starts at all.
 
     const workspace = (await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') }))!;
     await workspace.skills?.maybeRefresh();
@@ -652,6 +650,7 @@ describe('GitHub session workspace preparation', () => {
     // The repo checkout never happened, so project skill roots were guarded
     // (reported empty) instead of forcing the sandbox to exist.
     expect(mocks.materializeRepo).not.toHaveBeenCalled();
+    expect(mocks.createSandbox).not.toHaveBeenCalled();
   });
 
   it('delegates project skill roots to the sandbox once it is materialized', async () => {
@@ -940,7 +939,7 @@ describe('GitHub session workspace preparation', () => {
   });
 
   it('returns an existing workspace immediately while its materialization is still in flight', async () => {
-    // The first session-start request can launch a slow warm-up. A second
+    // A first sandbox operation can hold the materialization gate open. A
     // metadata-only resolution (/threads, /messages, activity) must get the
     // same workspace back without waiting on the clone/setup gate.
     const { resolver } = await createLocalFactory();
@@ -988,38 +987,18 @@ describe('GitHub session workspace preparation', () => {
     const { resolver } = await createLocalFactory();
     addProject();
     addSession({ id: 'session-a' });
-    // Keep background warm-up from settling until after start() is asserted.
-    // Without this gate the test only passes because materialization still
-    // needs several more microtask turns after one await.
-    let releaseToken: (() => void) | undefined;
-    const tokenGate = new Promise<void>(resolve => {
-      releaseToken = resolve;
-    });
-    mocks.getRepositoryAccess.mockImplementation(async ({ repositoryId }: { repositoryId: string }) => {
-      await tokenGate;
-      return {
-        cloneUrl: 'https://github.com/octocat/hello.git',
-        authorization: { scheme: 'bearer' as const, token: `repo-token-${repositoryId}` },
-      };
-    });
 
-    try {
-      const resolved = await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
-      await (resolved as any).sandbox.start();
+    const resolved = await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+    await (resolved as any).sandbox.start();
 
-      expect(mocks.createSandbox).not.toHaveBeenCalled();
-      expect(mocks.materializeRepo).not.toHaveBeenCalled();
+    // Resolution is fully lazy: no background warm-up exists, so nothing may
+    // have provisioned no matter how many microtask turns have elapsed.
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(mocks.createSandbox).not.toHaveBeenCalled();
+    expect(mocks.materializeRepo).not.toHaveBeenCalled();
 
-      releaseToken?.();
-      await (resolved as any).sandbox.getInfo();
-      expect(mocks.createSandbox).toHaveBeenCalledTimes(1);
-    } finally {
-      releaseToken?.();
-      mocks.getRepositoryAccess.mockImplementation(async ({ repositoryId }: { repositoryId: string }) => ({
-        cloneUrl: 'https://github.com/octocat/hello.git',
-        authorization: { scheme: 'bearer' as const, token: `repo-token-${repositoryId}` },
-      }));
-    }
+    await (resolved as any).sandbox.getInfo();
+    expect(mocks.createSandbox).toHaveBeenCalledTimes(1);
   });
 
   it('surfaces ordinary command failures without reviving the sandbox', async () => {

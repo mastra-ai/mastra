@@ -360,10 +360,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     // During createSession this seeds the session's initial state (the
     // workspace resolves before the session is built); on later requests it
     // self-heals live state.
-    let stateSeeded = false;
     if (ctx && workdir && ctx.getState()?.projectPath !== workdir) {
       await ctx.setState({ projectPath: workdir, projectName: repoFullName });
-      stateSeeded = true;
     }
 
     const extensionId = effectiveSkillExtension ? `-${effectiveSkillExtension.id}` : '';
@@ -839,14 +837,10 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       throw new Error(`Factory session ${session.sessionId} was retired during workspace materialization`);
     }
 
-    // Session start (the resolution that seeds the session's initial state)
-    // warms the sandbox in the background so it materializes in parallel with
-    // the model's first turn instead of on the first tool call.
-    if (stateSeeded) {
-      void ensureMaterialized().catch(error => {
-        console.error(`[factory:workspace] background materialization for ${workspaceId} failed`, error);
-      });
-    }
+    // Fully lazy: nothing provisions until the first real sandbox operation.
+    // A background warm-up at session start was considered and dropped — it
+    // speculatively created a VM for every session, including ones whose
+    // agent never touches the workspace.
     return workspace;
   };
 }
