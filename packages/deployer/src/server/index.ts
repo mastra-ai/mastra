@@ -23,11 +23,7 @@ import { describeRoute } from 'hono-openapi';
 import type { DescribeRouteOptions } from 'hono-openapi';
 import { escapeStudioHtmlValue, injectStudioHtmlConfig, normalizeStudioBase } from '../build/utils';
 import { agentLearningProxyHandler } from './handlers/agent-learning';
-import {
-  getTriggerClientsRefreshPayload,
-  handleClientsRefreshRequest,
-  isHotReloadDisabled,
-} from './handlers/client';
+import { getTriggerClientsRefreshPayload, handleClientsRefreshRequest, isHotReloadDisabled } from './handlers/client';
 import { errorHandler } from './handlers/error';
 import { healthHandler } from './handlers/health';
 import { restartAllActiveWorkflowRunsHandler } from './handlers/restart-active-runs';
