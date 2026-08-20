@@ -90,7 +90,8 @@ export function CreateFactoryWizard() {
   if (!step) return null;
 
   // Each step starts from its own field value — the name step from the name already given.
-  const value = typed?.step === step ? typed.value : step === 'name' ? (draft.name ?? '') : '';
+  const typedOnThisStep = typed?.step === step ? typed.value : undefined;
+  const value = typedOnThisStep ?? (step === 'name' ? (draft.name ?? '') : '');
 
   return (
     <div className="flex min-h-0 flex-1 flex-col justify-center">

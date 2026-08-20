@@ -40,9 +40,8 @@ export function CreateFactoryRepositoryRows({
 }: CreateFactoryRepositoryRowsProps) {
   const githubStatus = useGithubStatusQuery();
   const connected = githubStatus.data?.connected === true;
-  const repos = useGithubReposQuery(query || undefined, connected);
 
-  if (githubStatus.isPending || (connected && repos.isPending)) {
+  if (githubStatus.isPending) {
     return <SkeletonRows label="Loading repositories" rows={3} rowClassName="mx-2 my-1 h-12 rounded-xl" />;
   }
 
@@ -74,24 +73,7 @@ export function CreateFactoryRepositoryRows({
 
   return (
     <>
-      {repos.isError ? (
-        <CreateFactoryPaletteAlert>{repos.error.message}</CreateFactoryPaletteAlert>
-      ) : repos.data?.length ? (
-        <CommandGroup heading="Repositories">
-          {repos.data.map(repo => (
-            <CommandPaletteItem
-              key={repo.id}
-              icon={<GithubIcon />}
-              title={repo.fullName}
-              subtitle={`${repo.private ? 'Private' : 'Public'} · ${repo.defaultBranch}`}
-              value={`repo-${repo.id}`}
-              onSelect={() => onSelectRepository(repo)}
-            />
-          ))}
-        </CommandGroup>
-      ) : (
-        <CreateFactoryPaletteMessage>No repositories found.</CreateFactoryPaletteMessage>
-      )}
+      <RepositoryResults query={query} onSelectRepository={onSelectRepository} />
       <CommandGroup heading="GitHub">
         <CommandPaletteItem
           icon={<Settings2 />}
@@ -102,5 +84,33 @@ export function CreateFactoryRepositoryRows({
         />
       </CommandGroup>
     </>
+  );
+}
+
+function RepositoryResults({
+  query,
+  onSelectRepository,
+}: Pick<CreateFactoryRepositoryRowsProps, 'query' | 'onSelectRepository'>) {
+  const repos = useGithubReposQuery(query || undefined, true);
+
+  if (repos.isPending) {
+    return <SkeletonRows label="Loading repositories" rows={3} rowClassName="mx-2 my-1 h-12 rounded-xl" />;
+  }
+  if (repos.isError) return <CreateFactoryPaletteAlert>{repos.error.message}</CreateFactoryPaletteAlert>;
+  if (repos.data.length === 0) return <CreateFactoryPaletteMessage>No repositories found.</CreateFactoryPaletteMessage>;
+
+  return (
+    <CommandGroup heading="Repositories">
+      {repos.data.map(repo => (
+        <CommandPaletteItem
+          key={repo.id}
+          icon={<GithubIcon />}
+          title={repo.fullName}
+          subtitle={`${repo.private ? 'Private' : 'Public'} · ${repo.defaultBranch}`}
+          value={`repo-${repo.id}`}
+          onSelect={() => onSelectRepository(repo)}
+        />
+      ))}
+    </CommandGroup>
   );
 }
