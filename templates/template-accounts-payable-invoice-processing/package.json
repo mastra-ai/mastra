@@ -1,0 +1,48 @@
+{
+  "name": "accounts-payable-invoice-processing",
+  "version": "1.0.0",
+  "private": true,
+  "description": "An accounts payable agent that extracts invoices, matches POs and receipts, routes approvals, and optionally posts bills to QuickBooks.",
+  "keywords": [],
+  "license": "Apache-2.0",
+  "author": "",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "dev": "mastra dev",
+    "build": "mastra build",
+    "start": "mastra start",
+    "format": "oxfmt . '!**/.github/**'",
+    "format:check": "oxfmt --check . '!**/.github/**'",
+    "typecheck": "tsc --noEmit",
+    "test": "INVOICE_READER=fixture ACCOUNTING_PROVIDER=fixture SANCTIONS_SCREENING= QBO_MCP_ENABLE_POSTING=false MASTRA_OBSERVABILITY_DB_PATH=:memory: tsx src/scripts/test.ts",
+    "fixtures:run": "INVOICE_READER=fixture tsx src/scripts/run-fixtures.ts",
+    "fixtures:score": "INVOICE_READER=fixture tsx src/scripts/score-fixtures.ts",
+    "invoice:run": "tsx src/scripts/run-invoice.ts",
+    "phase2:run": "INVOICE_READER=fixture ACCOUNTING_PROVIDER=fixture tsx src/scripts/run-phase2.ts",
+    "providers:conformance": "tsx src/scripts/provider-conformance.ts",
+    "kpis:report": "tsx src/scripts/kpi-report.ts",
+    "qbo-mcp:verify": "tsx src/scripts/verify-qbo-mcp.ts"
+  },
+  "dependencies": {
+    "@mastra/core": "latest",
+    "@mastra/duckdb": "latest",
+    "@mastra/libsql": "latest",
+    "@mastra/mcp": "latest",
+    "@mastra/observability": "latest",
+    "currency-codes": "2.2.0",
+    "decimal.js": "10.6.0",
+    "dotenv": "16.6.1",
+    "zod": "3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "mastra": "latest",
+    "oxfmt": "^0.59.0",
+    "tsx": "4.19.4",
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  }
+}

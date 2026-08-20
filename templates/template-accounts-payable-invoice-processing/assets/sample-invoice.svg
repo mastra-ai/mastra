@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1600" viewBox="0 0 1200 1600">
+  <rect width="1200" height="1600" fill="#f4f6f8"/>
+  <rect x="90" y="70" width="1020" height="1460" rx="12" fill="#ffffff" stroke="#d8dee6" stroke-width="3"/>
+  <style>
+    text { font-family: Arial, Helvetica, sans-serif; fill: #17212b; }
+    .muted { fill: #607080; }
+    .label { font-size: 24px; font-weight: 700; letter-spacing: 1px; }
+    .value { font-size: 27px; }
+    .cell { font-size: 24px; }
+  </style>
+
+  <text x="150" y="155" font-size="44" font-weight="700">ACME SUPPLIES</text>
+  <text x="150" y="198" class="muted" font-size="23">1450 Market Street · San Francisco, CA 94102</text>
+  <text x="150" y="232" class="muted" font-size="23">Tax ID: US-12-3456789</text>
+  <text x="1020" y="165" text-anchor="end" font-size="58" font-weight="700" fill="#2457d6">INVOICE</text>
+
+  <line x1="150" y1="285" x2="1050" y2="285" stroke="#2457d6" stroke-width="4"/>
+
+  <text x="150" y="350" class="label">BILL TO</text>
+  <text x="150" y="395" class="value">Example Corporation</text>
+  <text x="150" y="434" class="muted" font-size="23">Accounts Payable</text>
+  <text x="680" y="350" class="label">INVOICE DETAILS</text>
+  <text x="680" y="397" class="muted" font-size="23">Invoice number</text>
+  <text x="1020" y="397" text-anchor="end" class="value">ACME-1042</text>
+  <text x="680" y="442" class="muted" font-size="23">Invoice date</text>
+  <text x="1020" y="442" text-anchor="end" class="value">2026-08-01</text>
+  <text x="680" y="487" class="muted" font-size="23">Purchase order</text>
+  <text x="1020" y="487" text-anchor="end" class="value">PO-1001</text>
+  <text x="680" y="532" class="muted" font-size="23">Currency</text>
+  <text x="1020" y="532" text-anchor="end" class="value">USD</text>
+
+  <rect x="150" y="615" width="900" height="60" fill="#2457d6"/>
+  <text x="175" y="654" font-size="23" font-weight="700" fill="#ffffff">ITEM</text>
+  <text x="610" y="654" text-anchor="end" font-size="23" font-weight="700" fill="#ffffff">QTY</text>
+  <text x="805" y="654" text-anchor="end" font-size="23" font-weight="700" fill="#ffffff">UNIT PRICE</text>
+  <text x="1025" y="654" text-anchor="end" font-size="23" font-weight="700" fill="#ffffff">AMOUNT</text>
+
+  <rect x="150" y="675" width="900" height="105" fill="#f7f9fc" stroke="#d8dee6"/>
+  <text x="175" y="720" class="cell" font-weight="700">PEN-01 · Blue pens</text>
+  <text x="175" y="755" class="muted" font-size="21">Boxed office supplies</text>
+  <text x="610" y="730" text-anchor="end" class="cell">10</text>
+  <text x="805" y="730" text-anchor="end" class="cell">$10.00</text>
+  <text x="1025" y="730" text-anchor="end" class="cell">$100.00</text>
+
+  <line x1="650" y1="900" x2="1050" y2="900" stroke="#d8dee6" stroke-width="2"/>
+  <text x="710" y="952" class="muted" font-size="25">Subtotal</text>
+  <text x="1025" y="952" text-anchor="end" class="value">$100.00</text>
+  <text x="710" y="1005" class="muted" font-size="25">Tax</text>
+  <text x="1025" y="1005" text-anchor="end" class="value">$8.00</text>
+  <line x1="650" y1="1040" x2="1050" y2="1040" stroke="#2457d6" stroke-width="3"/>
+  <text x="710" y="1100" font-size="31" font-weight="700">TOTAL</text>
+  <text x="1025" y="1100" text-anchor="end" font-size="34" font-weight="700">USD $108.00</text>
+
+  <rect x="150" y="1220" width="900" height="165" rx="8" fill="#eef3ff"/>
+  <text x="185" y="1270" class="label" fill="#2457d6">PAYMENT DETAILS</text>
+  <text x="185" y="1320" class="value">Terms: Net 30</text>
+  <text x="185" y="1360" class="muted" font-size="22">Please reference invoice ACME-1042 with payment.</text>
+
+  <text x="600" y="1460" text-anchor="middle" class="muted" font-size="22">Thank you for your business.</text>
+</svg>
