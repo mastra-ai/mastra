@@ -39,7 +39,6 @@ export interface GithubReconcileWorkerConfig {
    * Base-checkpoint freshness sweep, run after the reconcilers within the same
    * lease. Rebuilds stale/missing base checkpoints for configured repos.
    */
-  sweepBaseCheckpoints?: () => Promise<void>;
   intervalMs?: number;
   issueIntervalMs?: number;
   now?: () => number;
@@ -56,7 +55,6 @@ export class GithubReconcileWorker extends MastraWorker {
   readonly #reconcile: GithubPullRequestReconciler | undefined;
   readonly #reconcileIssues: GithubIssueReconciler | undefined;
   readonly #sourceControl: GithubReconcileRepositorySource;
-  readonly #sweepBaseCheckpoints: (() => Promise<void>) | undefined;
   readonly #intervalMs: number;
   readonly #issueIntervalMs: number;
   readonly #leaseTtlMs: number;
@@ -78,7 +76,6 @@ export class GithubReconcileWorker extends MastraWorker {
     this.#reconcile = config.reconcile;
     this.#reconcileIssues = config.reconcileIssues;
     this.#sourceControl = config.sourceControl;
-    this.#sweepBaseCheckpoints = config.sweepBaseCheckpoints;
     this.#intervalMs = config.intervalMs ?? DEFAULT_GITHUB_RECONCILE_INTERVAL_MS;
     this.#issueIntervalMs = config.issueIntervalMs ?? this.#intervalMs;
     if (!Number.isFinite(this.#intervalMs) || this.#intervalMs <= 0) {
@@ -227,15 +224,6 @@ export class GithubReconcileWorker extends MastraWorker {
         this.deps?.logger.debug('GitHub issue reconcile skipped: lease lost during pull-request sweep');
       }
 
-      if (this.#sweepBaseCheckpoints && hasLease) {
-        try {
-          await this.#sweepBaseCheckpoints();
-        } catch (error) {
-          this.deps?.logger.warn('GitHub base-checkpoint freshness sweep failed', {
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-      }
     } finally {
       clearInterval(renewalTimer);
       if (hasLease) {

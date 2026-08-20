@@ -6,7 +6,7 @@ import type {
   SourceControlStorageHandle,
 } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
-import type { MaterializationSandbox } from './fleet.js';
+import type { MaterializationSandbox } from './materialization.js';
 import { peekSessionSandbox } from './session-sandbox.js';
 
 type WarningLogger = (message: string, details: Record<string, unknown>) => void;

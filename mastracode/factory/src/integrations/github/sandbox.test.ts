@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const dbUpdates: Array<Record<string, unknown>> = [];
 
-import type { MaterializationSandbox, SandboxCommandResult } from '../../sandbox/fleet.js';
+import type { MaterializationSandbox, SandboxCommandResult } from '../../sandbox/materialization.js';
 import type { FactorySandboxContext, FactorySandboxRuntime } from '../../sandbox/session-sandbox.js';
 import { __clearSessionSandboxesForTests, peekSessionSandbox } from '../../sandbox/session-sandbox.js';
 import type {

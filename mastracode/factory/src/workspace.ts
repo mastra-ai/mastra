@@ -24,7 +24,7 @@ import {
 } from './integrations/github/sandbox.js';
 import { registerGithubPatKind, registerGithubTokenInjector } from './integrations/github/token-refresh.js';
 import { getFactorySessionAddress } from './rules/binding-context.js';
-import type { MaterializationSandbox } from './sandbox/fleet.js';
+import type { MaterializationSandbox } from './sandbox/materialization.js';
 import {
   createSessionSetupHook,
   evictSessionSandbox,
@@ -584,8 +584,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // process-wide per session. The setup hook runs inside the start
       // lifecycle, so any lazy start heals a replaced VM.
       // Bridge: the setup helpers speak WorkspaceSandbox while the git
-      // helpers still take the fleet-era MaterializationSandbox shape (the
-      // type moves when the fleet module is deleted). Same object either way.
+      // helpers take the narrower MaterializationSandbox surface. Same
+      // object either way.
       const runSetupOn = (target: unknown) => runSessionSetup(target as SessionSandbox);
       const setupHook = createSessionSetupHook(runSetupOn);
       const sandbox = asSessionSandbox(

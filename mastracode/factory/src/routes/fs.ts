@@ -8,7 +8,7 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { ApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
-import type { MaterializationSandbox } from '../sandbox/fleet.js';
+import type { MaterializationSandbox } from '../sandbox/materialization.js';
 import { peekSessionSandbox } from '../sandbox/session-sandbox.js';
 import { waitForPendingFilesystemCapture } from '../session/filesystem-capture.js';
 import type { FilesystemStorage } from '../storage/domains/filesystem/base.js';

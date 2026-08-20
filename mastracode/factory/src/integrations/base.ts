@@ -28,7 +28,6 @@ import type { Intake } from '../capabilities/intake.js';
 import type { VersionControl } from '../capabilities/version-control.js';
 import type { RouteAuth } from '../routes/route.js';
 import type { FactoryRules } from '../rules/types.js';
-import type { BaseCheckpointTriggers } from '../sandbox/base-checkpoint-triggers.js';
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
 import type { FactorySandboxRuntime } from '../sandbox/session-sandbox.js';
 import type { StateSigner } from '../state-signing.js';
@@ -81,7 +80,6 @@ export interface IntegrationContext {
    * feed webhook events and reconcile sweeps into it so connected repos keep
    * a warm base checkpoint.
    */
-  baseCheckpoints?: BaseCheckpointTriggers;
   /**
    * Root factory storage backend and source of the `appDbConfigured`
    * diagnostic. Absent when the host runs without an application database.

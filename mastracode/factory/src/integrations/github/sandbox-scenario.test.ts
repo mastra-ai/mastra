@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { MaterializationSandbox, SandboxCommandResult } from '../../sandbox/fleet.js';
+import type { MaterializationSandbox, SandboxCommandResult } from '../../sandbox/materialization.js';
 import { createPullRequest, MaterializeError, pushBranch } from './sandbox.js';
 
 type Responder = (script: string) => SandboxCommandResult;

@@ -18,8 +18,8 @@
  */
 
 import { createHash } from 'node:crypto';
-import { reportProgress } from '../../sandbox/fleet.js';
-import type { MaterializationSandbox, ProgressFn, SandboxCommandResult } from '../../sandbox/fleet.js';
+import { reportProgress } from '../../sandbox/materialization.js';
+import type { MaterializationSandbox, ProgressFn, SandboxCommandResult } from '../../sandbox/materialization.js';
 import type { FactorySandboxRuntime } from '../../sandbox/session-sandbox.js';
 import { getSessionSandbox } from '../../sandbox/session-sandbox.js';
 import type {
