@@ -500,9 +500,9 @@ export class PlatformSandbox extends MastraSandbox {
    * observe its result; the in-flight slot is cleared on settle so a failed
    * attempt is not a permanent latch.
    *
-   * Reports `created: false` on reattach and `created: true` on provision.
+   * Reports `outcome: 'connected'` on reattach and `outcome: 'created'` on provision.
    * Note: a `POST /sandbox` seeded from an id-keyed checkpoint is still a
-   * fresh VM and reports `created: true`.
+   * fresh VM and reports `outcome: 'created'`.
    */
   async start(): Promise<SandboxStartResult> {
     const startedAt = Date.now();
@@ -519,7 +519,7 @@ export class PlatformSandbox extends MastraSandbox {
           this._createdAt = json.createdAt ? new Date(json.createdAt) : new Date();
           this._populateAddressFromResponse(json);
           this._logStartComplete(json.id, startedAt, requestMs, 'reattach');
-          return { created: false };
+          return { outcome: 'connected' };
         }
         this._sandboxId = undefined;
       } catch (error) {
@@ -569,7 +569,7 @@ export class PlatformSandbox extends MastraSandbox {
     this._createdAt = json.createdAt ? new Date(json.createdAt) : new Date();
     this._populateAddressFromResponse(json);
     this._logStartComplete(json.id, startedAt, requestMs, 'provision');
-    return { created: true };
+    return { outcome: 'created' };
   }
 
   /**

@@ -258,7 +258,7 @@ describe('PlatformSandbox', () => {
     );
   });
 
-  it('reports created: false on reattach and created: true on fresh provision', async () => {
+  it("reports outcome 'connected' on reattach and 'created' on fresh provision", async () => {
     vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
     vi.stubEnv('MASTRA_ENVIRONMENT_ID', 'env_from_process');
 
@@ -271,7 +271,7 @@ describe('PlatformSandbox', () => {
       sandboxId: 'sbx_existing',
       fetch: reattachFetch,
     });
-    await expect(reattached._start()).resolves.toEqual({ created: false });
+    await expect(reattached._start()).resolves.toEqual({ outcome: 'connected' });
 
     // A 404 on the reattach GET falls through to POST /sandbox — a fresh VM.
     const recreateFetch = vi
@@ -284,7 +284,7 @@ describe('PlatformSandbox', () => {
       sandboxId: 'sbx_stale',
       fetch: recreateFetch,
     });
-    await expect(recreated._start()).resolves.toEqual({ created: true });
+    await expect(recreated._start()).resolves.toEqual({ outcome: 'created' });
   });
 
   it('creates a fresh sandbox when the reattached sandbox no longer exists', async () => {
@@ -1604,7 +1604,7 @@ describe('PlatformSandbox', () => {
         // no addressRegistry
       });
 
-      await expect(sandbox._start()).resolves.toEqual({ created: true });
+      await expect(sandbox._start()).resolves.toEqual({ outcome: 'created' });
       expect(fetchMock).toHaveBeenCalledTimes(1);
     });
 

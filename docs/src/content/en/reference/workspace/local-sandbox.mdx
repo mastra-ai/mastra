@@ -98,7 +98,7 @@ const response = await agent.generate('Run npm install')
 ]}
 />
 
-`start()` reports `{ created: true }` when the working directory didn't exist yet and `{ created: false }` when it reattaches to an existing directory. See [`start()`](/reference/workspace/sandbox#start) for the shared contract.
+`start()` reports `{ outcome: 'created' }` when the working directory didn't exist yet and `{ outcome: 'connected' }` when it reattaches to an existing directory. See [`start()`](/reference/workspace/sandbox#start) for the shared contract.
 
 ## `NativeSandboxConfig`
 

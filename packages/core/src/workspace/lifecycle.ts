@@ -77,19 +77,29 @@ export interface FilesystemLifecycle<TInfo = unknown> extends Lifecycle<TInfo> {
 // =============================================================================
 
 /**
+ * How a sandbox `start()` acquired its VM.
+ *
+ * - `'created'`: this start provisioned a fresh VM.
+ * - `'connected'`: this start reconnected to (or resumed) a VM that already
+ *   existed. Providers deliberately don't distinguish resume from plain
+ *   reconnect — most SDKs can't report it honestly.
+ */
+export type SandboxStartOutcome = 'created' | 'connected';
+
+/**
  * Result reported by a sandbox provider's `start()`.
  *
- * Providers that implement the id-keyed getOrCreate contract report whether
- * this start provisioned a fresh VM (`created: true`) or reconnected to /
- * resumed an existing one (`created: false`). Providers that don't yet report
- * return `void`, which callers treat as "unknown".
+ * Providers that implement the id-keyed getOrCreate contract report the
+ * acquisition outcome. Providers that don't yet report return `void`, which
+ * callers treat as "unknown".
  *
  * Under start coalescing, joined callers share one attempt and therefore one
- * result: all of them observe `created: true` when the shared attempt created.
+ * result: all of them observe `outcome: 'created'` when the shared attempt
+ * created.
  */
 export interface SandboxStartResult {
-  /** True when start() provisioned a fresh VM; false when it reconnected to / resumed an existing one. */
-  created: boolean;
+  /** `'created'` when start() provisioned a fresh VM; `'connected'` when it reconnected to / resumed an existing one. */
+  outcome: SandboxStartOutcome;
 }
 
 /**

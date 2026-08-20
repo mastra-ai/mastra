@@ -292,8 +292,8 @@ export class LocalSandbox extends MastraSandbox<string> {
 
   /**
    * Acquisition primitives (base-orchestrated start): an existing working
-   * directory is the "found sandbox" — reattaching reports `created: false`,
-   * a missing directory means a fresh sandbox (`created: true`).
+   * directory is the "found sandbox" — reattaching reports `outcome: 'connected'`,
+   * a missing directory means a fresh sandbox (`outcome: 'created'`).
    */
   protected override async find(): Promise<string | undefined> {
     try {

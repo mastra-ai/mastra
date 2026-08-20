@@ -16,6 +16,7 @@ import type {
   ProviderStatus,
   SandboxCloneOptions,
   SandboxInfo,
+  SandboxStartOutcome,
   SandboxStartResult,
 } from '@mastra/core/workspace';
 import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
@@ -242,18 +243,18 @@ export class RailwaySandbox extends MastraSandbox {
    * Concurrent-caller coalescing lives in the `MastraSandbox` base class
    * (constructor-wrapped `start()`); a failed attempt is never latched.
    *
-   * Reports `created: false` on reattach and `created: true` when a new
+   * Reports `outcome: 'connected'` on reattach and `outcome: 'created'` when a new
    * sandbox was provisioned (including checkpoint-seeded fresh VMs).
    */
   async start(): Promise<SandboxStartResult> {
     if (this._sandbox) {
-      return { created: false };
+      return { outcome: 'connected' };
     }
 
     const clientConfig = this._clientConfig();
     const createOptions = this._createOptions(clientConfig);
 
-    let created = false;
+    let outcome: SandboxStartOutcome = 'connected';
     if (this._sandboxId) {
       this._restoredCheckpointName = undefined;
       try {
@@ -263,11 +264,11 @@ export class RailwaySandbox extends MastraSandbox {
           throw error;
         }
         this._sandbox = await this._createNewSandbox(createOptions);
-        created = true;
+        outcome = 'created';
       }
     } else {
       this._sandbox = await this._createNewSandbox(createOptions);
-      created = true;
+      outcome = 'created';
     }
 
     const sandbox = this._sandbox;
@@ -276,7 +277,7 @@ export class RailwaySandbox extends MastraSandbox {
     this._createdAt = sandbox.createdAt ? new Date(sandbox.createdAt) : new Date();
     this.logger.debug(`${LOG_PREFIX} Railway sandbox ${sandbox.id} ready for logical ID: ${this.id}`);
     this._scheduleCheckpointRefresh();
-    return { created };
+    return { outcome };
   }
 
   /**

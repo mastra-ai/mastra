@@ -210,18 +210,18 @@ describe('RailwaySandbox', () => {
       expect(sandbox.status).toBe('running');
     });
 
-    it('reports created flags: false on reattach, true on provision and replacement', async () => {
+    it("reports outcomes: 'connected' on reattach, 'created' on provision and replacement", async () => {
       mockConnect.mockResolvedValueOnce({ ...mockSandbox, id: 'rw-existing', status: 'RUNNING' });
       const reattached = new RailwaySandbox({ token: 'tok', sandboxId: 'rw-existing' });
-      await expect(reattached._start()).resolves.toEqual({ created: false });
+      await expect(reattached._start()).resolves.toEqual({ outcome: 'connected' });
 
       const fresh = new RailwaySandbox({ token: 'tok', environmentId: 'env-1' });
-      await expect(fresh._start()).resolves.toEqual({ created: true });
+      await expect(fresh._start()).resolves.toEqual({ outcome: 'created' });
 
       mockConnect.mockResolvedValueOnce({ ...mockSandbox, status: 'DESTROYED' });
       mockCreate.mockResolvedValueOnce({ ...mockSandbox, id: 'rw-replacement', status: 'RUNNING' });
       const replaced = new RailwaySandbox({ token: 'tok', sandboxId: 'rw-existing' });
-      await expect(replaced._start()).resolves.toEqual({ created: true });
+      await expect(replaced._start()).resolves.toEqual({ outcome: 'created' });
     });
 
     it('throws SandboxNotReadyError when accessing railway before start', () => {

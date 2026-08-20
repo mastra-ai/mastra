@@ -524,7 +524,7 @@ class LifecycleSandbox extends MastraSandbox {
   /** Sequence of executeCommand command strings. */
   commands: Array<{ command: string; env?: Record<string, string> }> = [];
 
-  startResult: { created: boolean } | undefined;
+  startResult: { outcome: 'created' | 'connected' } | undefined;
   startError: Error | undefined;
   startGate: Promise<void> | undefined;
   statusDuringImpl: ProviderStatus | undefined;
@@ -533,7 +533,7 @@ class LifecycleSandbox extends MastraSandbox {
     super({ ...options, name: 'LifecycleSandbox' });
   }
 
-  async start(): Promise<{ created: boolean } | void> {
+  async start(): Promise<{ outcome: 'created' | 'connected' } | void> {
     this.implCalls += 1;
     this.statusDuringImpl = this.status;
     if (this.startGate) await this.startGate;
@@ -554,11 +554,11 @@ class LifecycleSandbox extends MastraSandbox {
 describe('MastraSandbox start lifecycle wrap', () => {
   it('routes direct start() through the wrapper (status transitions applied, result returned)', async () => {
     const sandbox = new LifecycleSandbox();
-    sandbox.startResult = { created: true };
+    sandbox.startResult = { outcome: 'created' };
 
     const result = await sandbox.start();
 
-    expect(result).toEqual({ created: true });
+    expect(result).toEqual({ outcome: 'created' });
     expect(sandbox.implCalls).toBe(1);
     expect(sandbox.statusDuringImpl).toBe('starting');
     expect(sandbox.status).toBe('running');
@@ -566,7 +566,7 @@ describe('MastraSandbox start lifecycle wrap', () => {
 
   it('coalesces concurrent direct start() and _start() calls onto one attempt', async () => {
     const sandbox = new LifecycleSandbox();
-    sandbox.startResult = { created: true };
+    sandbox.startResult = { outcome: 'created' };
     let release!: () => void;
     sandbox.startGate = new Promise<void>(resolve => (release = resolve));
 
@@ -578,19 +578,19 @@ describe('MastraSandbox start lifecycle wrap', () => {
 
     expect(sandbox.implCalls).toBe(1);
     // Joined callers share the attempt's result.
-    expect(r1).toEqual({ created: true });
-    expect(r2).toEqual({ created: true });
-    expect(r3).toEqual({ created: true });
+    expect(r1).toEqual({ outcome: 'created' });
+    expect(r2).toEqual({ outcome: 'created' });
+    expect(r3).toEqual({ outcome: 'created' });
   });
 
-  it('reports created: false from the already-running early return without re-invoking the impl', async () => {
+  it("reports outcome 'connected' from the already-running early return without re-invoking the impl", async () => {
     const sandbox = new LifecycleSandbox();
-    sandbox.startResult = { created: true };
+    sandbox.startResult = { outcome: 'created' };
 
     await sandbox.start();
     const second = await sandbox.start();
 
-    expect(second).toEqual({ created: false });
+    expect(second).toEqual({ outcome: 'connected' });
     expect(sandbox.implCalls).toBe(1);
   });
 
@@ -602,7 +602,7 @@ describe('MastraSandbox start lifecycle wrap', () => {
     expect(sandbox.status).toBe('error');
 
     sandbox.startError = undefined;
-    sandbox.startResult = { created: false };
+    sandbox.startResult = { outcome: 'connected' };
     await sandbox.start();
 
     expect(sandbox.implCalls).toBe(2);
@@ -616,13 +616,13 @@ describe('MastraSandbox start lifecycle wrap', () => {
         .mockRejectedValueOnce(new Error('git clone failed: Killed (exit 137)'))
         .mockResolvedValue(undefined);
       const sandbox = new LifecycleSandbox({ onStart });
-      sandbox.startResult = { created: true };
+      sandbox.startResult = { outcome: 'created' };
 
       await expect(sandbox.start()).rejects.toThrow(/onStart hook failed: git clone failed: Killed \(exit 137\)/);
       expect(sandbox.status).toBe('error');
 
       // Nothing latched: the next start re-runs the full attempt incl. the hook.
-      await expect(sandbox.start()).resolves.toEqual({ created: true });
+      await expect(sandbox.start()).resolves.toEqual({ outcome: 'created' });
       expect(sandbox.status).toBe('running');
       expect(onStart).toHaveBeenCalledTimes(2);
     });
@@ -632,7 +632,7 @@ describe('MastraSandbox start lifecycle wrap', () => {
       const hookGate = new Promise<void>(resolve => (resolveHook = resolve));
       const onStart = vi.fn(() => hookGate);
       const sandbox = new LifecycleSandbox({ onStart });
-      sandbox.startResult = { created: true };
+      sandbox.startResult = { outcome: 'created' };
 
       let settled = false;
       const startPromise = sandbox.start().then(r => {
@@ -642,7 +642,7 @@ describe('MastraSandbox start lifecycle wrap', () => {
       await new Promise(r => setTimeout(r, 10));
       expect(settled).toBe(false);
       resolveHook();
-      await expect(startPromise).resolves.toEqual({ created: true });
+      await expect(startPromise).resolves.toEqual({ outcome: 'created' });
     });
 
     it('an onStart hook can execute commands through the sandbox (status is running before the hook fires)', async () => {
@@ -671,7 +671,7 @@ describe('MastraSandbox start lifecycle wrap', () => {
           sandbox.start(),
           new Promise((_, reject) => setTimeout(() => reject(new Error('deadlock: start() never resolved')), 2000)),
         ]),
-      ).resolves.toEqual({ created: true });
+      ).resolves.toEqual({ outcome: 'created' });
       expect(ran).toEqual(['exit:0']);
       expect(sandbox.status).toBe('running');
     });
@@ -680,20 +680,20 @@ describe('MastraSandbox start lifecycle wrap', () => {
   it('forwards created to the onStart hook', async () => {
     const onStart = vi.fn();
     const sandbox = new LifecycleSandbox({ onStart });
-    sandbox.startResult = { created: false };
+    sandbox.startResult = { outcome: 'connected' };
 
     await sandbox.start();
 
-    expect(onStart).toHaveBeenCalledWith(expect.objectContaining({ created: false }));
+    expect(onStart).toHaveBeenCalledWith(expect.objectContaining({ outcome: 'connected' }));
   });
 
-  it('onStart receives created: undefined when the provider does not report', async () => {
+  it('onStart receives outcome: undefined when the provider does not report', async () => {
     const onStart = vi.fn();
     const sandbox = new LifecycleSandbox({ onStart });
 
     await sandbox.start();
 
-    expect(onStart).toHaveBeenCalledWith(expect.objectContaining({ created: undefined }));
+    expect(onStart).toHaveBeenCalledWith(expect.objectContaining({ outcome: undefined }));
   });
 });
 
@@ -753,25 +753,25 @@ class PrimitiveSandbox extends MastraSandbox<string> {
 }
 
 describe('MastraSandbox acquisition primitives', () => {
-  it('find hit → connect with the found handle, created: false, create never called', async () => {
+  it("find hit → connect with the found handle, outcome 'connected', create never called", async () => {
     const sandbox = new PrimitiveSandbox();
     sandbox.vmExists = true;
 
     const result = await sandbox.start();
 
-    expect(result).toEqual({ created: false });
+    expect(result).toEqual({ outcome: 'connected' });
     expect(sandbox.connectCalls).toBe(1);
     expect(sandbox.lastConnectedHandle).toBe('vm-handle');
     expect(sandbox.createCalls).toBe(0);
     expect(sandbox.status).toBe('running');
   });
 
-  it('find miss → create, created: true', async () => {
+  it("find miss → create, outcome 'created'", async () => {
     const sandbox = new PrimitiveSandbox();
 
     const result = await sandbox.start();
 
-    expect(result).toEqual({ created: true });
+    expect(result).toEqual({ outcome: 'created' });
     expect(sandbox.findCalls).toBe(1);
     expect(sandbox.createCalls).toBe(1);
     expect(sandbox.connectCalls).toBe(0);
@@ -793,7 +793,7 @@ describe('MastraSandbox acquisition primitives', () => {
     }
 
     const sandbox = new CreateOnlySandbox();
-    await expect(sandbox.start()).resolves.toEqual({ created: true });
+    await expect(sandbox.start()).resolves.toEqual({ outcome: 'created' });
     expect(sandbox.createCalls).toBe(1);
   });
 
@@ -806,7 +806,7 @@ describe('MastraSandbox acquisition primitives', () => {
     expect(sandbox.status).toBe('error');
 
     sandbox.connectError = undefined;
-    await expect(sandbox.start()).resolves.toEqual({ created: false });
+    await expect(sandbox.start()).resolves.toEqual({ outcome: 'connected' });
     expect(sandbox.status).toBe('running');
   });
 
@@ -815,36 +815,38 @@ describe('MastraSandbox acquisition primitives', () => {
       implCalls = 0;
       override async start(): Promise<{ created: boolean }> {
         this.implCalls += 1;
-        return { created: false };
+        return { outcome: 'connected' };
       }
     }
 
     const sandbox = new BothSandbox();
-    await expect(sandbox.start()).resolves.toEqual({ created: false });
+    await expect(sandbox.start()).resolves.toEqual({ outcome: 'connected' });
     expect(sandbox.implCalls).toBe(1);
     expect(sandbox.findCalls).toBe(0);
     expect(sandbox.createCalls).toBe(0);
   });
 
-  it('forwards structural created to onStart, so a setup hook can branch on create vs connect', async () => {
-    const observed: Array<boolean | undefined> = [];
+  it('forwards the structural outcome to onStart, so a setup hook can branch on create vs connect', async () => {
+    const observed: Array<'created' | 'connected' | undefined> = [];
     // The recommended once-per-VM setup shape: run on create, probe on connect.
-    const onStart = vi.fn(async ({ sandbox: sb, created }: { sandbox: WorkspaceSandbox; created?: boolean }) => {
-      observed.push(created);
-      if (created) await sb.executeCommand!('run full setup');
-      else await sb.executeCommand!('probe setup');
-    });
+    const onStart = vi.fn(
+      async ({ sandbox: sb, outcome }: { sandbox: WorkspaceSandbox; outcome?: 'created' | 'connected' }) => {
+        observed.push(outcome);
+        if (outcome === 'created') await sb.executeCommand!('run full setup');
+        else await sb.executeCommand!('probe setup');
+      },
+    );
 
     const first = new PrimitiveSandbox({ onStart });
     await first.start();
     expect(first.commands.map(c => c.command)).toEqual(['run full setup']);
 
-    // Second instance, same "remote": connect branch → hook sees created: false.
+    // Second instance, same "remote": connect branch → hook sees outcome: 'connected'.
     const second = new PrimitiveSandbox({ onStart });
     second.vmExists = true;
     await second.start();
     expect(second.commands.map(c => c.command)).toEqual(['probe setup']);
-    expect(observed).toEqual([true, false]);
+    expect(observed).toEqual(['created', 'connected']);
   });
 
   it('a fatal onStart on the create branch leaves the found-again VM to a retrying hook (crash/fail window)', async () => {
@@ -857,8 +859,8 @@ describe('MastraSandbox acquisition primitives', () => {
 
     // Retry: the VM exists now, so acquisition connects — and the hook runs
     // again (it owns deciding whether setup completed, e.g. via a probe).
-    await expect(sandbox.start()).resolves.toEqual({ created: false });
-    expect(onStart).toHaveBeenLastCalledWith(expect.objectContaining({ created: false }));
+    await expect(sandbox.start()).resolves.toEqual({ outcome: 'connected' });
+    expect(onStart).toHaveBeenLastCalledWith(expect.objectContaining({ outcome: 'connected' }));
     expect(sandbox.status).toBe('running');
   });
 });

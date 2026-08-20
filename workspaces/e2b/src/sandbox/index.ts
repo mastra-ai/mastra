@@ -293,8 +293,8 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
 
   /**
    * Acquisition primitives (base-orchestrated start): the base derives
-   * `created: true` only when a brand-new sandbox VM was created;
-   * reconnecting (including resuming a paused sandbox) is `created: false`.
+   * `outcome: 'created'` only when a brand-new sandbox VM was created;
+   * reconnecting (including resuming a paused sandbox) is `outcome: 'connected'`.
    *
    * `find` returns an already-connected E2B handle: `Sandbox.connect`
    * resumes paused sandboxes, and its failures are deliberately swallowed

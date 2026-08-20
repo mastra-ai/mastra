@@ -371,8 +371,8 @@ export class DaytonaSandbox extends MastraSandbox {
    * Reconnects to an existing sandbox with the same logical ID if one exists,
    * otherwise creates a new sandbox instance.
    *
-   * Reports `created: true` only when a brand-new sandbox was created;
-   * reconnecting to an existing sandbox reports `created: false`.
+   * Reports `outcome: 'created'` only when a brand-new sandbox was created;
+   * reconnecting to an existing sandbox reports `outcome: 'connected'`.
    */
   /**
    * Acquisition primitives (base-orchestrated start): the base derives
