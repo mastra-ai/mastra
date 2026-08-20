@@ -344,7 +344,8 @@ describe('observation-cadence curation trigger', () => {
   });
 
   it('preserves buffered end-hook error precedence when the observation also throws', async () => {
-    const om = createEngine({ cadence: 1, memory: { runCuration: vi.fn() } });
+    const runCuration = vi.fn();
+    const om = createEngine({ cadence: 1, memory: { runCuration } });
     const runError = new Error('buffered observation failed');
     const hookError = new Error('buffered end hook failed');
     vi.spyOn(om as any, 'composeHooks').mockReturnValue({
@@ -358,6 +359,7 @@ describe('observation-cadence curation trigger', () => {
         throw runError;
       }),
     ).rejects.toBe(hookError);
+    expect(runCuration).not.toHaveBeenCalled();
   });
 
   it('does not fail buffered observation when cadence curation rejects', async () => {
