@@ -28,6 +28,7 @@ import { isTerminalInvocationState } from '../services/transcript';
 import { MESSAGE_HOVER, MessageMeta } from './MessageMeta';
 import { ToolCard } from './tool/ToolCard';
 import { ToolGroup, TOOL_GROUP_MIN } from './tool/ToolGroup';
+import { SubmitPlanCard } from './SubmitPlanCard';
 import { isTranscriptToolVisible, ToolFactory } from './ToolFactory';
 import { ROW_RAIL, ROW_TRIGGER, TranscriptRow } from './TranscriptRow';
 
@@ -193,34 +194,12 @@ function SuspensionCard({
 
   if (prompt.toolName === 'submit_plan') {
     return (
-      <div className={promptCardSuspension} role="group" aria-label="Plan approval">
-        <div className={promptTitle}>Plan: {payload.plan?.title ?? payload.title ?? 'Proposed plan'}</div>
-        {payload.plan?.summary && (
-          <div className="text-ui-smd text-icon5 font-mono leading-relaxed break-words whitespace-pre-wrap">
-            {payload.plan.summary}
-          </div>
-        )}
-        <div className={promptActions}>
-          <Button
-            variant="primary"
-            size="sm"
-            aria-label="Approve the plan and switch to build"
-            autoFocus
-            disabled={isSubmitting}
-            onClick={() => onRespond(prompt.toolCallId, { action: 'approved' }, prompt.id)}
-          >
-            Approve &amp; build
-          </Button>
-          <Button
-            size="sm"
-            aria-label="Reject the plan"
-            disabled={isSubmitting}
-            onClick={() => onRespond(prompt.toolCallId, { action: 'rejected' }, prompt.id)}
-          >
-            Reject
-          </Button>
-        </div>
-      </div>
+      <SubmitPlanCard
+        toolCallId={prompt.toolCallId}
+        input={prompt.suspendPayload}
+        isSubmitting={isSubmitting}
+        onRespond={response => onRespond(prompt.toolCallId, response, prompt.id)}
+      />
     );
   }
 
@@ -711,6 +690,12 @@ export function ChannelOriginBadge({ origin }: { origin: { platform: string; aut
   );
 }
 
+function steeringLabel(entry: MessageEntry): string | undefined {
+  if (!entry.steer) return undefined;
+  if (entry.deliveryStatus === 'pending') return 'Steering…';
+  if (entry.deliveryStatus === 'failed') return 'Not sent';
+  return 'Steered message';
+}
 function renderMessageBubble({
   entry,
   suspensions,
@@ -723,6 +708,7 @@ function renderMessageBubble({
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
 }) {
   const messageParts = entry.message.content.parts ?? [];
+
   const parts = messageParts.filter(part => isRenderablePart(part, suspensions, entry.runtimeTools));
   const message =
     parts.length === messageParts.length
@@ -733,17 +719,28 @@ function renderMessageBubble({
   const toolGroups = collectToolGroups(parts, suspensions, entry.runtimeTools);
   const origin = channelOrigin(entry);
   const prose = messageText(parts);
+  const steeringStatus = steeringLabel(entry);
+  const steeringPending = entry.deliveryStatus === 'pending';
+  const steeringFailed = entry.deliveryStatus === 'failed';
   const roles: MessageRoleRenderers = {
     User: ({ children }) => (
       <div className={cn(MESSAGE_HOVER, 'my-3 ml-auto flex w-fit max-w-[70%] flex-col items-end')}>
         <div
           className={cn(
-            'text-text1 rounded-xl px-4 py-2 break-words',
-            entry.steer ? 'bg-warning1/10' : 'bg-neutral6/5',
+            'text-text1 bg-neutral6/5 rounded-xl border border-transparent px-4 py-2 break-words',
+            steeringPending && 'border-border1 border-dashed',
           )}
         >
           {children}
         </div>
+        {steeringStatus && (
+          <span
+            className={cn('text-ui-xs text-icon3 mt-1', steeringFailed && 'text-notice-destructive-fg')}
+            aria-live="polite"
+          >
+            {steeringStatus}
+          </span>
+        )}
         {origin && <ChannelOriginBadge origin={origin} />}
         {prose ? <MessageMeta text={prose} createdAt={entry.message.createdAt} align="end" /> : null}
       </div>

@@ -218,8 +218,11 @@ export interface MastraFactoryDispatcherConfig {
 
 const CONTROLLER_ID = 'code';
 
-function hasPlatformSecretKey(): boolean {
-  return Boolean(process.env.MASTRA_PLATFORM_SECRET_KEY?.trim());
+function hasPlatformCredentials(): boolean {
+  // MASTRA_PLATFORM_ACCESS_TOKEN is the credential Mastra Platform injects
+  // into deployed projects; MASTRA_PLATFORM_SECRET_KEY is the org secret key
+  // written by project scaffolding. Either enables the platform integrations.
+  return Boolean(process.env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim() || process.env.MASTRA_PLATFORM_SECRET_KEY?.trim());
 }
 
 /**
@@ -352,7 +355,7 @@ export class MastraFactory {
     // Explicit integrations win. Platform credentials fill only missing GitHub
     // and Linear slots so callers can override either provider independently.
     const integrations = [...(this.#config.integrations ?? [])];
-    if (hasPlatformSecretKey()) {
+    if (hasPlatformCredentials()) {
       if (!integrations.some(integration => integration.id === 'github')) {
         integrations.push(new PlatformGithubIntegration({ slug: this.#config.platform?.githubAppSlug }));
       }

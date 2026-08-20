@@ -65,7 +65,7 @@ export function useCreateFactoryFromDraft({
 
       await Promise.all([
         updateFactoryDefaultModel(baseUrl, factory.id, modelId),
-        applyOMDefaults.mutateAsync({ providerId, factoryModelId: modelId }),
+        applyOMDefaults.mutateAsync({ providerId, factoryModelId: modelId, factoryId: factory.id }),
         draft.linearProjectId && feedBoardFromLinear(draft.linearProjectId, factory.id),
       ]);
       await queryClient.invalidateQueries({ queryKey: queryKeys.factories() });

@@ -31,7 +31,7 @@ export function DatasetExperiments({
   // Derive unique target IDs from all (unfiltered) experiments for the filter dropdown
   const targetIds = useMemo(() => {
     const source = allExperiments ?? experiments;
-    return [...new Set(source.map(e => e.targetId))];
+    return [...new Set(source.map(e => e.targetId).filter((id): id is string => id !== null))];
   }, [allExperiments, experiments]);
 
   // Toggle experiment selection for comparison (max 2)

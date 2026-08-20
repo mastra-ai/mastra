@@ -15,8 +15,8 @@ export function SectionRoot({ variant = 'default', children, className, ...props
       className={cn(
         'group/section',
         variant === 'default' && 'grid gap-4',
-        variant === 'flat' && 'min-w-0',
-        variant === 'factory' && 'flex min-w-0 flex-col gap-2',
+        variant === 'flat' && 'w-full min-w-0',
+        variant === 'factory' && 'flex w-full min-w-0 flex-col gap-2',
         className,
       )}
       {...props}

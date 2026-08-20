@@ -2,6 +2,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
+import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SankeySignals } from '../sankey-signals';
@@ -56,16 +57,25 @@ class ChartResizeObserver implements ResizeObserver {
   disconnect() {}
 }
 
+function ControlledSankeySignals({ dateFrom, dateTo }: { dateFrom?: Date; dateTo?: Date }) {
+  const [selectedThemeId, setSelectedThemeId] = useState<string>();
+  return (
+    <SankeySignals
+      entityId="support-agent"
+      signalNames={['goal', 'outcome', 'behavior', 'sentiment']}
+      dateFrom={dateFrom}
+      dateTo={dateTo}
+      selectedThemeId={selectedThemeId}
+      onSelectedThemeIdChange={setSelectedThemeId}
+    />
+  );
+}
+
 function renderSankeySignals({ dateFrom, dateTo }: { dateFrom?: Date; dateTo?: Date } = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <SankeySignals
-        entityId="support-agent"
-        signalNames={['goal', 'outcome', 'behavior', 'sentiment']}
-        dateFrom={dateFrom}
-        dateTo={dateTo}
-      />
+      <ControlledSankeySignals dateFrom={dateFrom} dateTo={dateTo} />
     </QueryClientProvider>,
   );
 }

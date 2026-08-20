@@ -1,5 +1,42 @@
 # @mastra/code-sdk
 
+## 1.4.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`7c60df5`](https://github.com/mastra-ai/mastra/commit/7c60df5c7872343fbac5c3e5b1175c8076a5abfd)]:
+  - @mastra/core@1.61.0-alpha.5
+
+## 1.4.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`1d41dd0`](https://github.com/mastra-ai/mastra/commit/1d41dd06a001c6fee3aab1cdf1ec759f2070df3e)]:
+  - @mastra/mcp@1.17.1-alpha.1
+  - @mastra/core@1.61.0-alpha.4
+
+## 1.4.0-alpha.3
+
+### Patch Changes
+
+- Factory runs now resolve provider credentials with org > user precedence, so an org-wide "Everyone in org" key takes priority over a run's acting user's personal key. This means factory automation always bills against the org's shared credentials when they exist, regardless of who triggered the run. Interactive (non-factory) sessions keep the existing user > org precedence, so personal plan subscriptions and keys still take priority there. ([#21899](https://github.com/mastra-ai/mastra/pull/21899))
+
+- Interactive messages and model switches on factory sessions now resolve provider credentials org-first (org > user), matching board-run kickoff. The credential resolver keys off the session's `factoryProjectId` in controller state, so any run on a factory-owned session rides the org's shared keys with the caller's personal credentials as fallback — switching to a personal-only model still works through that fallback. Repo-backed Slack channel sessions now stamp the owning factory project onto session state so they get the same behavior. ([#21899](https://github.com/mastra-ai/mastra/pull/21899))
+
+- Fixed shared threads running with a stale model in multi-server deployments. The model selected for a mode is now re-read from the thread's persisted settings at the start of every run, so a model switch made in one browser session or server replica is picked up by all others instead of silently diverging until the next mode switch. ([#21899](https://github.com/mastra-ai/mastra/pull/21899))
+
+- Updated dependencies [[`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`acc3471`](https://github.com/mastra-ai/mastra/commit/acc3471de5f3fde8027ee4e355af292b2bc1bc30), [`b6a771e`](https://github.com/mastra-ai/mastra/commit/b6a771ef23d203ddb348efca8065eff65def8191), [`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`acc3471`](https://github.com/mastra-ai/mastra/commit/acc3471de5f3fde8027ee4e355af292b2bc1bc30), [`26d4016`](https://github.com/mastra-ai/mastra/commit/26d40160ff7f7d8bf95fee2039a52cbc83863533), [`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`57c5103`](https://github.com/mastra-ai/mastra/commit/57c51035a2a36e3df3c4f32f46bb789a66ed5946), [`acc3471`](https://github.com/mastra-ai/mastra/commit/acc3471de5f3fde8027ee4e355af292b2bc1bc30)]:
+  - @mastra/core@1.61.0-alpha.3
+  - @mastra/libsql@1.21.1-alpha.1
+  - @mastra/pg@1.21.1-alpha.1
+
+## 1.4.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`480e491`](https://github.com/mastra-ai/mastra/commit/480e491588bd6a7a1c9ee4407590ad625dd33952), [`3bb88dd`](https://github.com/mastra-ai/mastra/commit/3bb88ddf07fb98f3cd16d3bff94e51cd3b45d011), [`d378d75`](https://github.com/mastra-ai/mastra/commit/d378d7511f71309ed61a8f6b93cd0361dc6cb70f), [`cad4208`](https://github.com/mastra-ai/mastra/commit/cad42082e6aa1776168a94914f523334be45d929), [`d378d75`](https://github.com/mastra-ai/mastra/commit/d378d7511f71309ed61a8f6b93cd0361dc6cb70f)]:
+  - @mastra/core@1.61.0-alpha.2
+
 ## 1.4.0-alpha.1
 
 ### Minor Changes

@@ -6,6 +6,10 @@
  * background warm-up: while it is still streaming, the composer must become
  * fully usable (send enabled, attachments accepted) as soon as the initial
  * messages request resolves. The only blocking window is message loading.
+ *
+ * The prepare stepper, by contrast, stays in the (otherwise empty) transcript
+ * region until the warm-up finishes — dropping it on step 1/3 reads like a
+ * crash. It is a status display there, never an interactivity gate.
  */
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -190,23 +194,24 @@ describe('ThreadPage eager render during /ensure', () => {
     const sendButton = screen.getByRole('button', { name: 'Send message' });
     expect(sendButton).toBeDisabled();
 
-    // Messages resolve while /ensure is still streaming: the loader unmounts
-    // and the composer comes fully online without waiting for the warm-up.
+    // Messages resolve while /ensure is still streaming: the composer comes
+    // fully online without waiting for the warm-up — while the stepper stays
+    // up in the empty transcript region instead of vanishing on step 1/3.
     ensure.completeMessages();
-    await waitFor(() => expect(screen.queryByRole('status', { name: 'Preparing session' })).not.toBeInTheDocument());
-
     const user = userEvent.setup();
     await user.type(screen.getByRole('textbox', { name: 'Message' }), 'ready before warm-up');
     await waitFor(() => expect(sendButton).toBeEnabled());
+    expect(screen.getByRole('status', { name: 'Preparing session' })).toBeInTheDocument();
 
-    // Warm-up progress may still stream in the background without re-blocking.
+    // Warm-up progress may still stream without re-blocking the composer.
     await ensure.emitProgress('cloning', 'Cloning acme/app…');
     expect(sendButton).toBeEnabled();
-    expect(screen.queryByRole('status', { name: 'Preparing session' })).not.toBeInTheDocument();
 
-    // The warm-up fired exactly once for this session entry.
+    // The warm-up fired exactly once for this session entry, and only its
+    // completion releases the stepper.
     expect(ensure.ensureRequests()).toBe(1);
     await ensure.completeEnsure();
+    await waitFor(() => expect(screen.queryByRole('status', { name: 'Preparing session' })).not.toBeInTheDocument());
     await waitForMutationsIdle(client);
   });
 
@@ -248,14 +253,15 @@ describe('ThreadPage eager render during /ensure', () => {
     await user.type(textarea, 'my draft prompt');
     expect(textarea.value).toBe('my draft prompt');
 
-    // Messages resolve while /ensure is still pending: the loader unmounts,
-    // ring stops spinning, placeholder reverts, Send tooltip clears, and Send
-    // becomes enabled — all without waiting for the warm-up.
+    // Messages resolve while /ensure is still pending: the ring stops
+    // spinning, placeholder reverts, Send tooltip clears, and Send becomes
+    // enabled — all without waiting for the warm-up. The stepper stays in the
+    // transcript region as a status display, never an interactivity gate.
     ensure.completeMessages();
-    await waitFor(() => expect(screen.queryByRole('status', { name: 'Preparing session' })).not.toBeInTheDocument());
+    await waitFor(() => expect(ring.getAttribute('data-busy')).toBe('false'));
     // Draft survives the flag flip without remount.
     expect(textarea.value).toBe('my draft prompt');
-    await waitFor(() => expect(ring.getAttribute('data-busy')).toBe('false'));
+    expect(screen.getByRole('status', { name: 'Preparing session' })).toBeInTheDocument();
     expect(textarea.placeholder).toBe('Ask Mastra Code…');
     expect(sendButton).not.toHaveAttribute('title', 'Initializing session…');
     await waitFor(() => expect(sendButton).not.toBeDisabled());
@@ -265,6 +271,7 @@ describe('ThreadPage eager render during /ensure', () => {
     expect(await screen.findByRole('button', { name: 'Remove image' })).toBeInTheDocument();
 
     await ensure.completeEnsure();
+    await waitFor(() => expect(screen.queryByRole('status', { name: 'Preparing session' })).not.toBeInTheDocument());
     await waitForMutationsIdle(client);
   });
 });
