@@ -109,8 +109,11 @@ export interface ComputerPosition {
  *
  * Providers with a controllable display (Daytona Computer Use, E2B Desktop,
  * etc.) implement this to surface screenshot, mouse, and keyboard control
- * through the abstraction. When present, the workspace tools factory emits
- * the `mastra_workspace_computer_*` tools automatically.
+ * through the abstraction. When present on a statically configured workspace
+ * sandbox, the workspace tools factory emits the
+ * `mastra_workspace_computer_*` tools automatically. Resolver-backed sandboxes
+ * do not register these tools because their capabilities are unavailable when
+ * the tool list is constructed.
  *
  * Coordinates are in pixels from the top-left corner of the display.
  * Providers normalize their SDK semantics (key names, scroll units) onto
