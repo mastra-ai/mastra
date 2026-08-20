@@ -45,6 +45,15 @@ export interface PGIndexStats extends IndexStats {
   };
 }
 
+/**
+ * The subset of {@link PGIndexStats} that can be read from the Postgres catalog alone.
+ *
+ * Everything here comes from `information_schema.columns`, `pg_attribute` and `pg_index`,
+ * which are cheap regardless of how large the table is. The row count is deliberately
+ * excluded: it requires `SELECT COUNT(*)`, a full heap scan on large indexes.
+ */
+type PGIndexMetadata = Omit<PGIndexStats, 'count'>;
+
 interface PgQueryVectorParams extends QueryVectorParams<PGVectorFilter> {
   minScore?: number;
   /**
@@ -107,7 +116,16 @@ const MAX_UPSERT_ROWS_PER_STATEMENT = Math.floor(65535 / 3);
 
 export class PgVector extends MastraVector<PGVectorFilter> {
   public pool: pg.Pool;
-  private describeIndexCache: Map<string, PGIndexStats> = new Map();
+  /**
+   * Cache for the public `getIndexInfo()`. Holds the in-flight promise rather than the
+   * resolved value so concurrent callers on a cold cache share a single round trip.
+   */
+  private describeIndexCache: Map<string, Promise<PGIndexStats>> = new Map();
+  /**
+   * Cache for the catalog-only index metadata used by the internal hot paths
+   * (cache warmup, query, upsert, updateVector, setupIndex). Also memoizes the promise.
+   */
+  private indexMetadataCache: Map<string, Promise<PGIndexMetadata>> = new Map();
   private createdIndexes = new Map<string, number>();
   private indexVectorTypes = new Map<string, VectorType>();
   private mutexesByName = new Map<string, Mutex>();
@@ -186,7 +204,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
           const existingIndexes = await this.listIndexes();
           await Promise.all(
             existingIndexes.map(async indexName => {
-              const info = await this.getIndexInfo({ indexName });
+              const info = await this.getIndexMetadata({ indexName });
               const key = await this.getIndexCacheKey({
                 indexName,
                 metric: info.metric,
@@ -441,11 +459,49 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     return translator.translate(filter);
   }
 
+  /**
+   * Cached variant of {@link describeIndex}, including the row count.
+   *
+   * Internal code paths do not use this - they use the catalog-only
+   * {@link getIndexMetadata}, which never scans the table.
+   */
   async getIndexInfo({ indexName }: DescribeIndexParams): Promise<PGIndexStats> {
-    if (!this.describeIndexCache.has(indexName)) {
-      this.describeIndexCache.set(indexName, await this.describeIndex({ indexName }));
+    return this.memoize(this.describeIndexCache, indexName, () => this.describeIndex({ indexName }));
+  }
+
+  /**
+   * Cached index metadata read from the Postgres catalog only.
+   *
+   * This is what every internal caller needs: none of them read `count`, and paying for
+   * `SELECT COUNT(*)` on a large index costs a full heap scan per call.
+   */
+  private getIndexMetadata({ indexName }: DescribeIndexParams): Promise<PGIndexMetadata> {
+    return this.memoize(this.indexMetadataCache, indexName, () => this.describeIndexMetadata({ indexName }));
+  }
+
+  /**
+   * Stores the in-flight promise in `cache` so concurrent callers on a cold cache share one
+   * round trip, and drops the entry if it rejects so a transient failure is not cached forever.
+   */
+  private memoize<T>(cache: Map<string, Promise<T>>, key: string, load: () => Promise<T>): Promise<T> {
+    const cached = cache.get(key);
+    if (cached) {
+      return cached;
     }
-    return this.describeIndexCache.get(indexName)!;
+    const pending = load();
+    cache.set(key, pending);
+    pending.catch(() => {
+      if (cache.get(key) === pending) {
+        cache.delete(key);
+      }
+    });
+    return pending;
+  }
+
+  /** Drops every cached view of an index, e.g. after its index definition or table changed. */
+  private invalidateIndexCaches(indexName: string) {
+    this.describeIndexCache.delete(indexName);
+    this.indexMetadataCache.delete(indexName);
   }
 
   async query({
@@ -538,7 +594,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       const { sql: filterQuery, values: filterValues } = buildFilterQuery(translatedFilter, minScore, topK);
 
       // Get index type and configuration
-      const indexInfo = await this.getIndexInfo({ indexName });
+      const indexInfo = await this.getIndexMetadata({ indexName });
 
       const metric = indexInfo.metric ?? 'cosine';
       const ops = this.getVectorOps(indexInfo.vectorType, metric);
@@ -678,7 +734,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       const vectorIds = ids || vectors.map(() => crypto.randomUUID());
 
       // Get the properly qualified vector type for this index
-      const indexInfo = await this.getIndexInfo({ indexName });
+      const indexInfo = await this.getIndexMetadata({ indexName });
       const qualifiedVectorType = this.getVectorTypeName(indexInfo.vectorType, indexInfo.dimension);
       const ops = this.getVectorOps(indexInfo.vectorType, indexInfo.metric ?? 'cosine');
 
@@ -1117,10 +1173,10 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       const { tableName, vectorIndexName } = this.getTableName(indexName);
 
       // Try to get existing index info to check if configuration has changed
-      let existingIndexInfo: PGIndexStats | null = null;
+      let existingIndexInfo: PGIndexMetadata | null = null;
       let dimension = 0;
       try {
-        existingIndexInfo = await this.getIndexInfo({ indexName });
+        existingIndexInfo = await this.getIndexMetadata({ indexName });
         dimension = existingIndexInfo.dimension;
 
         if (isConfigEmpty && existingIndexInfo.metric === metric) {
@@ -1176,13 +1232,13 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         // Configuration changed, need to rebuild
         this.logger?.info(`Index ${vectorIndexName} configuration changed, rebuilding index`);
         await client.query(`DROP INDEX IF EXISTS ${vectorIndexName}`);
-        this.describeIndexCache.delete(indexName);
+        this.invalidateIndexCaches(indexName);
       } catch {
         this.logger?.debug(`Index ${indexName} doesn't exist yet, will create it`);
       }
 
       if (indexType === 'flat') {
-        this.describeIndexCache.delete(indexName);
+        this.invalidateIndexCaches(indexName);
         return;
       }
 
@@ -1395,6 +1451,17 @@ export class PgVector extends MastraVector<PGVectorFilter> {
    * @returns A promise that resolves to the index statistics including dimension, count and metric
    */
   async describeIndex({ indexName }: DescribeIndexParams): Promise<PGIndexStats> {
+    const metadata = await this.describeIndexMetadata({ indexName });
+    const count = await this.countIndexRows({ indexName });
+    return { ...metadata, count };
+  }
+
+  /**
+   * Reads the index metadata that lives in the Postgres catalog. Unlike
+   * {@link describeIndex} it issues no `COUNT(*)`, so its cost does not grow with the
+   * number of rows in the table.
+   */
+  private async describeIndexMetadata({ indexName }: DescribeIndexParams): Promise<PGIndexMetadata> {
     const client = await this.pool.connect();
     try {
       const { tableName } = this.getTableName(indexName);
@@ -1433,12 +1500,6 @@ export class PgVector extends MastraVector<PGVectorFilter> {
                 AND attname = 'embedding';
             `;
 
-      // Get row count
-      const countQuery = `
-                SELECT COUNT(*) as count
-                FROM ${tableName};
-            `;
-
       // Get index metric type
       const indexQuery = `
             SELECT
@@ -1455,7 +1516,6 @@ export class PgVector extends MastraVector<PGVectorFilter> {
             `;
 
       const dimResult = await client.query(dimensionQuery, [tableName]);
-      const countResult = await client.query(countQuery);
       const indexResult = await client.query(indexQuery, [`${indexName}_vector_idx`, this.schema || 'public']);
 
       const { index_method, index_def, operator_class } = indexResult.rows[0] || {
@@ -1490,7 +1550,6 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
       return {
         dimension: dimResult.rows[0].dimension,
-        count: parseInt(countResult.rows[0].count),
         metric: metric as PGIndexStats['metric'],
         type: index_method as 'flat' | 'hnsw' | 'ivfflat',
         vectorType,
@@ -1498,6 +1557,38 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       };
     } catch (e: any) {
       await client.query('ROLLBACK');
+      const mastraError = new MastraError(
+        {
+          id: createVectorErrorId('PG', 'DESCRIBE_INDEX', 'FAILED'),
+          domain: ErrorDomain.MASTRA_VECTOR,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            indexName,
+          },
+        },
+        e,
+      );
+      this.logger?.trackException(mastraError);
+      throw mastraError;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Exact row count for an index. This is a full scan of the table, so it is only issued
+   * for the public {@link describeIndex}, never from an internal code path.
+   */
+  private async countIndexRows({ indexName }: DescribeIndexParams): Promise<number> {
+    const client = await this.pool.connect();
+    try {
+      const { tableName } = this.getTableName(indexName);
+      const countResult = await client.query(`
+                SELECT COUNT(*) as count
+                FROM ${tableName};
+            `);
+      return parseInt(countResult.rows[0].count);
+    } catch (e: any) {
       const mastraError = new MastraError(
         {
           id: createVectorErrorId('PG', 'DESCRIBE_INDEX', 'FAILED'),
@@ -1524,7 +1615,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       await client.query(`DROP TABLE IF EXISTS ${tableName} CASCADE`);
       this.createdIndexes.delete(indexName);
       this.indexVectorTypes.delete(indexName);
-      this.describeIndexCache.delete(indexName);
+      this.invalidateIndexCaches(indexName);
     } catch (error: any) {
       await client.query('ROLLBACK');
       const mastraError = new MastraError(
@@ -1629,7 +1720,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       const { tableName } = this.getTableName(indexName);
 
       // Get the properly qualified vector type for this index
-      const indexInfo = await this.getIndexInfo({ indexName });
+      const indexInfo = await this.getIndexMetadata({ indexName });
       const qualifiedVectorType = this.getVectorTypeName(indexInfo.vectorType, indexInfo.dimension);
       const ops = this.getVectorOps(indexInfo.vectorType, indexInfo.metric ?? 'cosine');
 
