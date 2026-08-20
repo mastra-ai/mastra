@@ -265,6 +265,17 @@ export function KnowledgeFlyout({
           </header>
 
           <div className="min-h-0 flex-1 overflow-y-auto pb-4">
+            {nodeQuery.data.node.content.trim() ? (
+              <Collapsible defaultOpen>
+                <SectionHeader title="Content" />
+                <CollapsibleContent>
+                  <p className="text-icon5 px-4 pb-3 text-xs leading-relaxed break-words whitespace-pre-wrap">
+                    <RecordText text={nodeQuery.data.node.content} onNodeRef={onNodeRef} />
+                  </p>
+                </CollapsibleContent>
+              </Collapsible>
+            ) : null}
+
             <Collapsible defaultOpen>
               <SectionHeader title="Knowledge node" />
               <CollapsibleContent>
@@ -282,17 +293,6 @@ export function KnowledgeFlyout({
                 </dl>
               </CollapsibleContent>
             </Collapsible>
-
-            {nodeQuery.data.node.content ? (
-              <Collapsible defaultOpen>
-                <SectionHeader title="Content" />
-                <CollapsibleContent>
-                  <p className="text-icon5 px-4 pb-3 text-xs leading-relaxed whitespace-pre-wrap">
-                    <RecordText text={nodeQuery.data.node.content} onNodeRef={onNodeRef} />
-                  </p>
-                </CollapsibleContent>
-              </Collapsible>
-            ) : null}
 
             <Collapsible defaultOpen>
               <SectionHeader title="Knowledge records" count={nodeQuery.data.records.length} />
