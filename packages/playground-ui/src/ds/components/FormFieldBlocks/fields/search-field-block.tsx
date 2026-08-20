@@ -78,13 +78,13 @@ export function SearchFieldBlock({
   return (
     <FieldBlock.Layout layout={layout} className={className}>
       {layout === 'horizontal' ? (
-        <FieldBlock.Column>
-          <FieldBlock.Label name={name} required={required} className={labelIsHidden ? 'sr-only' : undefined}>
+        <FieldBlock.Column className={labelIsHidden ? 'sr-only' : undefined}>
+          <FieldBlock.Label name={name} required={required}>
             {label}
           </FieldBlock.Label>
         </FieldBlock.Column>
       ) : null}
-      <FieldBlock.Column>
+      <FieldBlock.Column className={layout === 'horizontal' && labelIsHidden ? 'col-span-full' : undefined}>
         {layout === 'vertical' && label ? (
           <FieldBlock.Label name={name} required={required} className={labelIsHidden ? 'sr-only' : undefined}>
             {label}

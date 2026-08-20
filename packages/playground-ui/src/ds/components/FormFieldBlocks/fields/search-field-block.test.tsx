@@ -9,20 +9,32 @@ afterEach(() => {
 });
 
 describe('SearchFieldBlock', () => {
-  it.each(['vertical', 'horizontal'] as const)('removes a hidden label from the %s layout flow', layout => {
-    render(<SearchFieldBlock name="search" label="Search" labelIsHidden layout={layout} />);
+  it('removes a vertically hidden label from the layout flow', () => {
+    render(<SearchFieldBlock name="search" label="Search" labelIsHidden />);
 
     const label = screen.getByText('Search');
 
     expect(label.tagName).toBe('LABEL');
     expect(label.classList.contains('sr-only')).toBe(true);
-    expect(label.children).toHaveLength(0);
-    expect((screen.getByLabelText('Search') as HTMLInputElement).id).toBe('input-search');
+    expect(screen.getByRole<HTMLInputElement>('textbox', { name: 'Search' }).id).toBe('input-search');
   });
 
-  it('keeps a visible label in the layout flow', () => {
-    render(<SearchFieldBlock name="search" label="Search" />);
+  it('hides the horizontal label column while preserving the accessible name', () => {
+    const { container } = render(<SearchFieldBlock name="search" label="Search" labelIsHidden layout="horizontal" />);
 
-    expect(screen.getByText('Search').classList.contains('sr-only')).toBe(false);
+    const [labelColumn, inputColumn] = container.firstElementChild?.children ?? [];
+
+    expect(labelColumn?.classList.contains('sr-only')).toBe(true);
+    expect(inputColumn?.classList.contains('col-span-full')).toBe(true);
+    expect(screen.getByRole<HTMLInputElement>('textbox', { name: 'Search' }).id).toBe('input-search');
+  });
+
+  it('keeps a visible horizontal label in a separate column', () => {
+    const { container } = render(<SearchFieldBlock name="search" label="Search" layout="horizontal" />);
+
+    const [labelColumn, inputColumn] = container.firstElementChild?.children ?? [];
+
+    expect(labelColumn?.classList.contains('sr-only')).toBe(false);
+    expect(inputColumn?.classList.contains('col-span-full')).toBe(false);
   });
 });
