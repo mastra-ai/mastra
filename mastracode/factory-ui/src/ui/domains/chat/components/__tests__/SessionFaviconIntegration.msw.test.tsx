@@ -59,20 +59,25 @@ describe('Session favicon tracks the session lifecycle', () => {
     });
   });
 
-  describe('when the chat renders but the sandbox warm-up is still running', () => {
-    it('keeps the initializing indicator until the warm-up finishes', async () => {
+  describe('when messages land before the sandbox warm-up finishes', () => {
+    it('keeps the stepper and the initializing indicator until the warm-up finishes', async () => {
       const session = stubPreparingSession({ ensurePending: true });
       const { client } = renderThread();
 
       session.finishWorkspace();
-      await waitFor(() => expect(screen.getByTestId('thread-body')).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByTestId('session-prepare-steps')).toBeInTheDocument());
 
-      // Messages are loaded and the stepper is gone, but the sandbox is still
-      // provisioning — the favicon must not claim the session is ready.
+      // Give the (empty) messages query time to resolve — the stepper must
+      // survive it instead of vanishing on step 1/3, and the favicon must not
+      // claim the session is ready while the sandbox is still provisioning.
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(screen.getByTestId('session-prepare-steps')).toBeInTheDocument();
+      expect(screen.queryByTestId('thread-body')).not.toBeInTheDocument();
       expect(faviconHref()).toBe('/favicon-session-initializing.svg');
 
       session.finishEnsure();
       await waitForMutationsIdle(client);
+      await waitFor(() => expect(screen.getByTestId('thread-body')).toBeInTheDocument());
       await waitFor(() => expect(faviconHref()).toBe('/favicon-session-awaiting.svg'));
     });
   });

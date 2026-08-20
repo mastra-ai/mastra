@@ -95,6 +95,14 @@ function invalidateSessionQueries(
 }
 
 const UNMATERIALIZED_POLL_MS = 15_000;
+/**
+ * A session created but never run stays un-materialized forever — without a
+ * bound it would keep the list polling indefinitely. Materialization follows
+ * within minutes of the activity that starts it, and every such trigger (run
+ * start, run end, attention) invalidates the sessions list, refreshing
+ * `updatedAt` and re-opening this window.
+ */
+const UNMATERIALIZED_POLL_WINDOW_MS = 10 * 60_000;
 
 /**
  * Poll gently while any listed session has not been materialized yet. The
@@ -102,9 +110,11 @@ const UNMATERIALIZED_POLL_MS = 15_000;
  * server stamps out-of-band (first agent exec, warm-up, another tab) — with no
  * poll the cached `null` never resolved and dots wedged on "initializing".
  */
-export function sessionsRefetchInterval(data: WorkspacesData | undefined): number | false {
+export function sessionsRefetchInterval(data: WorkspacesData | undefined, now = Date.now()): number | false {
   if (!data) return false;
-  const unresolved = [...data.workspaces, ...data.userSessions].some(session => !session.materializedAt);
+  const unresolved = [...data.workspaces, ...data.userSessions].some(
+    session => !session.materializedAt && now - Date.parse(session.updatedAt) < UNMATERIALIZED_POLL_WINDOW_MS,
+  );
   return unresolved ? UNMATERIALIZED_POLL_MS : false;
 }
 

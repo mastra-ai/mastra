@@ -27,7 +27,9 @@ function renderSteps(session: Partial<ChatSessionContextApi>, options?: { loadin
   ) : (
     <SessionPrepareSteps />
   );
-  return render(<ChatSessionContext.Provider value={{ ...BASE_SESSION, ...session }}>{steps}</ChatSessionContext.Provider>);
+  return render(
+    <ChatSessionContext.Provider value={{ ...BASE_SESSION, ...session }}>{steps}</ChatSessionContext.Provider>,
+  );
 }
 
 function renderWithProgress(sandboxProgress: PrepareProgress | undefined) {
@@ -146,14 +148,20 @@ describe('SessionPrepareSteps', () => {
   });
 
   it('pins Preparing sandbox while the warm-up is in flight but has not emitted an event yet', () => {
-    renderSteps({ sandboxPreparing: false, sandboxWarming: true, sandboxProgress: undefined }, { loadingMessages: true });
+    renderSteps(
+      { sandboxPreparing: false, sandboxWarming: true, sandboxProgress: undefined },
+      { loadingMessages: true },
+    );
     expect(stepByTitle('Preparing sandbox')).toHaveAttribute('data-status', 'running');
     expect(stepByTitle('Cloning repository')).toHaveAttribute('data-status', 'pending');
     expect(stepByTitle('Starting session')).toHaveAttribute('data-status', 'pending');
   });
 
   it('lets message loading light up Starting session once no warm-up is running', () => {
-    renderSteps({ sandboxPreparing: false, sandboxWarming: false, sandboxProgress: undefined }, { loadingMessages: true });
+    renderSteps(
+      { sandboxPreparing: false, sandboxWarming: false, sandboxProgress: undefined },
+      { loadingMessages: true },
+    );
     expect(stepByTitle('Preparing sandbox')).toHaveAttribute('data-status', 'success');
     expect(stepByTitle('Cloning repository')).toHaveAttribute('data-status', 'success');
     expect(stepByTitle('Starting session')).toHaveAttribute('data-status', 'running');
