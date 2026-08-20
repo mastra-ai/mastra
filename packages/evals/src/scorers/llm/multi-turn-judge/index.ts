@@ -85,6 +85,10 @@ export function createMultiTurnJudgeScorer({
 }) {
   const scale = options?.scale ?? 1;
 
+  if (!Number.isFinite(scale)) {
+    throw new Error('createMultiTurnJudgeScorer: options.scale must be a finite number');
+  }
+
   return createScorer<ScorerRunInputForLLMJudge, ScorerRunOutputForLLMJudge>({
     id: 'multi-turn-judge-scorer',
     name: 'Multi-turn Judge (LLM)',

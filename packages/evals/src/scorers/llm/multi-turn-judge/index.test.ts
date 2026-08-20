@@ -138,5 +138,27 @@ describe('Multi-turn Judge Scorer (LLM)', () => {
 
       expect(result.score).toBe(10);
     });
+
+    it('reports the criterion as satisfied with a scale below 1', async () => {
+      const { model } = mockJudge({ satisfied: true, reasoning: 'satisfied' });
+      const scorer = createMultiTurnJudgeScorer({
+        model,
+        criterion: 'Forecasts plus packing advice',
+        options: { scale: 0.5 },
+      });
+
+      const result = await scorer.run(multiTurnRun());
+
+      expect(result.score).toBe(0.5);
+      expect(result.reason).toContain('Criterion satisfied');
+    });
+
+    it.each([NaN, Infinity, -Infinity])('rejects a non-finite scale (%s)', scale => {
+      const { model } = mockJudge({ satisfied: true, reasoning: 'satisfied' });
+
+      expect(() => createMultiTurnJudgeScorer({ model, criterion: 'Anything', options: { scale } })).toThrow(
+        'options.scale must be a finite number',
+      );
+    });
   });
 });

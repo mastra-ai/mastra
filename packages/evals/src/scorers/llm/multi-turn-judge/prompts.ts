@@ -52,7 +52,7 @@ export function formatMultiTurnJudgeReason({
   criterion: string;
   analysis: MultiTurnJudgeAnalysisResult | undefined;
 }): string {
-  const satisfied = score >= 1;
+  const satisfied = analysis?.satisfied ?? score >= 1;
   const header = satisfied ? '✅ Criterion satisfied.' : '❌ Criterion not satisfied.';
   const reasoning = analysis?.reasoning || '(no reasoning returned by the judge)';
 
