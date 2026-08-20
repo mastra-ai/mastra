@@ -17,7 +17,9 @@ afterEach(() => {
   tempDir = undefined;
 });
 
-function makeFixture(options: { lifecycleScript?: boolean; packageManager?: string; piApiRange?: string } = {}) {
+function makeFixture(
+  options: { lifecycleScript?: boolean; missingExtension?: boolean; packageManager?: string; piApiRange?: string } = {},
+) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-pi-intake-'));
   tempDir = root;
   const projectRoot = path.join(root, 'project');
@@ -29,7 +31,7 @@ function makeFixture(options: { lifecycleScript?: boolean; packageManager?: stri
       name: 'pi-intake-fixture',
       version: '1.0.0',
       ...(options.packageManager ? { packageManager: options.packageManager } : {}),
-      pi: { extensions: ['./index.js'] },
+      pi: { extensions: [options.missingExtension ? './missing.js' : './index.js'] },
       peerDependencies: { '@earendil-works/pi-agent-core': options.piApiRange ?? '^0.84.0' },
       ...(options.lifecycleScript ? { scripts: { postinstall: 'node postinstall.js' } } : {}),
     }),
@@ -55,6 +57,19 @@ describe('Pi Package intake trust boundary', () => {
     );
     expect(execaMock).not.toHaveBeenCalled();
     expect(fs.existsSync(fixture.factoryMarker)).toBe(false);
+  });
+
+  it('removes owned package sources when static resource inspection fails', async () => {
+    const fixture = makeFixture({ missingExtension: true });
+
+    await expect(preparePiPackage('./fixture', 'project', fixture)).rejects.toThrow(
+      'Pi Package extensions path does not exist',
+    );
+
+    const ownedSources = path.join(fixture.projectRoot, '.mastracode', 'plugins', 'sources', 'pi-packages', 'local');
+    const remaining = fs.existsSync(ownedSources) ? fs.readdirSync(ownedSources, { recursive: true }) : [];
+    expect(remaining.some((entry: string) => entry.endsWith('package.json'))).toBe(false);
+    expect(fs.existsSync(path.join(fixture.projectRoot, 'fixture', 'package.json'))).toBe(true);
   });
 
   it('marks unknown Pi API ranges as version-gated during characterization', async () => {

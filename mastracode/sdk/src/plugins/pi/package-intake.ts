@@ -60,9 +60,16 @@ export async function preparePiPackage(
   options: ResolvePiPackageOptions,
 ): Promise<PreparedPiPackageInspection> {
   const prepared = await resolvePiPackageSource(specifier, scope, options);
-  const manifest = inspectPiPackageManifest(prepared.resolution.packageRoot);
-  const resources = discoverPiPackageResources(manifest);
-  return { ...prepared, manifest, resources };
+  try {
+    const manifest = inspectPiPackageManifest(prepared.resolution.packageRoot);
+    const resources = discoverPiPackageResources(manifest);
+    return { ...prepared, manifest, resources };
+  } catch (error) {
+    for (const root of new Set([prepared.resolution.packageRoot, prepared.resolution.sourceRoot])) {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+    throw error;
+  }
 }
 
 export async function characterizePiPackage(
