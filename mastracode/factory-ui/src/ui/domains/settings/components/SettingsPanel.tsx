@@ -2,7 +2,6 @@ import type { AgentControllerSessionSettings } from '@mastra/client-js';
 import { useTheme } from '@mastra/playground-ui/components/ThemeProvider';
 import { useEffect } from 'react';
 import { useLocation, useParams } from 'react-router';
-import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -101,7 +100,6 @@ export function SettingsPanel() {
         {section === 'intake' && <IntakeSection />}
         {section === 'models' && (
           <ModelsSettingsSection
-            hash={hash}
             factoryId={factoryId}
             models={models}
             settings={settings}
@@ -128,7 +126,6 @@ export function SettingsPanel() {
 }
 
 interface ModelsSettingsSectionProps {
-  hash: string;
   factoryId: string | undefined;
   models: AvailableModelOption[];
   settings: AgentControllerSessionSettings | null;
@@ -145,7 +142,6 @@ interface ModelsSettingsSectionProps {
  * drops to the bottom.
  */
 function ModelsSettingsSection({
-  hash,
   factoryId,
   models,
   settings,
@@ -188,52 +184,44 @@ function ModelsSettingsSection({
   return (
     <div className="flex flex-col gap-8">
       <SettingsSubsection
-        id="model-packs"
-        title="Default models"
-        description="Factory defaults apply to Factory runs (triage, board work items) and channel sessions. User defaults apply to your interactive chats."
+        title="Factory defaults"
+        description="Applied to Factory runs (triage, board work items) and channel sessions."
       >
-        <Tabs defaultTab={hash === '#model-packs' ? 'user' : 'factory'}>
-          <TabList variant="pill">
-            <Tab value="factory">Factory</Tab>
-            <Tab value="user">User</Tab>
-          </TabList>
-          <TabContent value="factory" className="pt-4">
-            <SettingsCard>
-              <FactoryDefaultModelSection models={models} />
-              <BaseThinkingSection />
-            </SettingsCard>
-          </TabContent>
-          <TabContent value="user" className="flex flex-col gap-4 pt-4">
-            <SettingsCard className="p-4">
-              <ModelPacksSection models={models} />
-            </SettingsCard>
-            <SettingsCard>
-              <ModelSettings settings={settings} updating={updating} onBehaviorChange={onBehaviorChange} />
-              <ModeThinkingDefaultsSection />
-            </SettingsCard>
-          </TabContent>
-        </Tabs>
+        <SettingsCard>
+          <FactoryDefaultModelSection models={models} />
+          <BaseThinkingSection />
+        </SettingsCard>
       </SettingsSubsection>
       <SettingsSubsection
-        title="Observational memory"
-        description="Models and token thresholds used to summarize and retain context. Factory applies to Factory runs; User applies to your interactive chats."
+        id="model-packs"
+        title="Your defaults"
+        description="Applied to your interactive chats."
       >
-        <Tabs defaultTab="factory">
-          <TabList variant="pill">
-            <Tab value="factory">Factory</Tab>
-            <Tab value="user">User</Tab>
-          </TabList>
-          <TabContent value="factory" className="pt-4">
-            <SettingsCard className="p-4">
-              <OMSection factoryId={factoryId} models={models} />
-            </SettingsCard>
-          </TabContent>
-          <TabContent value="user" className="pt-4">
-            <SettingsCard className="p-4">
-              <OMSection resourceId={sessionResourceId} scope={sessionScope} models={models} />
-            </SettingsCard>
-          </TabContent>
-        </Tabs>
+        <div className="flex flex-col gap-4">
+          <SettingsCard className="p-4">
+            <ModelPacksSection models={models} />
+          </SettingsCard>
+          <SettingsCard>
+            <ModelSettings settings={settings} updating={updating} onBehaviorChange={onBehaviorChange} />
+            <ModeThinkingDefaultsSection />
+          </SettingsCard>
+        </div>
+      </SettingsSubsection>
+      <SettingsSubsection
+        title="Factory observational memory"
+        description="Models and token thresholds used to summarize and retain context in Factory runs."
+      >
+        <SettingsCard className="p-4">
+          <OMSection factoryId={factoryId} models={models} />
+        </SettingsCard>
+      </SettingsSubsection>
+      <SettingsSubsection
+        title="Your observational memory"
+        description="Models and token thresholds used to summarize and retain context in your interactive chats."
+      >
+        <SettingsCard className="p-4">
+          <OMSection resourceId={sessionResourceId} scope={sessionScope} models={models} />
+        </SettingsCard>
       </SettingsSubsection>
       {providerSubsections}
     </div>
