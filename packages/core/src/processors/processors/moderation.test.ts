@@ -567,11 +567,37 @@ describe('ModerationProcessor', () => {
   });
 
   describe('processOutputStream', () => {
+    it('should buffer partial text without calling the moderation model per chunk', async () => {
+      const model = setupMockModel({ object: createMockModerationResult(false) });
+      const generateSpy = vi.spyOn(model, 'doGenerate');
+      const moderator = new ModerationProcessor({ model, bufferSize: 200 });
+      const state = {};
+      const firstPart: ChunkType = {
+        type: 'text-delta',
+        payload: { text: 'partial', id: 'text-1' },
+        runId: '1',
+        from: ChunkFrom.AGENT,
+      };
+      const secondPart: ChunkType = {
+        ...firstPart,
+        payload: { text: ' content', id: 'text-1' },
+      };
+
+      expect(
+        await moderator.processOutputStream({ part: firstPart, streamParts: [], state, abort: vi.fn() as any }),
+      ).toBeNull();
+      expect(
+        await moderator.processOutputStream({ part: secondPart, streamParts: [firstPart], state, abort: vi.fn() as any }),
+      ).toBeNull();
+      expect(generateSpy).not.toHaveBeenCalled();
+    });
+
     it('should always moderate current part even when chunkWindow is 0', async () => {
       const model = setupMockModel({ object: createMockModerationResult(true, ['hate']) });
       const moderator = new ModerationProcessor({
         model,
         chunkWindow: 0, // No context window
+        bufferSize: 1,
         strategy: 'block',
       });
 
@@ -604,7 +630,8 @@ describe('ModerationProcessor', () => {
       const model = setupMockModel({ object: createMockModerationResult(false) });
       const moderator = new ModerationProcessor({
         model,
-        chunkWindow: 2, // Include 2 previous chunks
+        chunkWindow: 2, // Include 2 previous approved buffers
+        bufferSize: 1,
         strategy: 'block',
       });
 
@@ -676,6 +703,7 @@ describe('ModerationProcessor', () => {
       const moderator = new ModerationProcessor({
         model,
         chunkWindow: 0, // No context window
+        bufferSize: 1,
         strategy: 'block',
       });
 
