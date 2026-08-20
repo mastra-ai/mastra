@@ -593,11 +593,12 @@ With `inputs`, `run.output` holds the accumulated messages from every turn, but 
 | Scorer | What it sees with `inputs` |
 | - | - |
 | [Quick Checks](/reference/evals/checks) (`checks.calledTool`, `checks.includes`, `checks.similarity`, `checks.noToolErrors`, and the rest) | The whole accumulated conversation. Tool-call checks count calls across every turn |
+| [Multi-turn Judge scorer](/reference/evals/multi-turn-judge) | Every assistant turn, graded together against one plain-English criterion |
 | Prebuilt LLM-judge scorers (rubric, answer relevancy, answer similarity, faithfulness, hallucination, bias, toxicity, context precision, context recall, context relevance, noise sensitivity, prompt alignment, summarization) | Only the last assistant message that carries text, because they extract output through `getAssistantMessageFromRunOutput()`. Judges that compare input against output also see only the first turn's input |
 | Trajectory scorers (`AgentScorerConfig.trajectory`) | The last turn's span when traces are available, otherwise the tool calls extracted from all accumulated messages |
 | Custom scorers | Whatever they read from `run.output`. Use [`extractAgentResponseMessages()`](/reference/evals/scorer-utils#extractagentresponsemessages) to grade every assistant turn |
 
-To grade a conversation semantically, attach the judge to a single turn with `turns[].scorers`, where each turn grades its own input and output. The alternative is a scorer that reads every assistant message: see [Grading a whole conversation](/docs/evals/multi-turn#grading-a-whole-conversation).
+To grade a conversation semantically, use [`createMultiTurnJudgeScorer()`](/reference/evals/multi-turn-judge), which judges every assistant turn against one criterion. You can also attach a single-turn judge to one turn with `turns[].scorers`, where each turn grades its own input and output, or write your own scorer that reads every assistant message: see [Grading a whole conversation](/docs/evals/multi-turn#grading-a-whole-conversation).
 
 ## Score persistence
 
@@ -635,6 +636,7 @@ When a scorer isn't registered, `runEvals` still runs and returns correct scores
 ## Related
 
 - [Multi-turn evals](/docs/evals/multi-turn): Conceptual guide to multi-turn evaluation
+- [Multi-turn Judge scorer](/reference/evals/multi-turn-judge): LLM judge that grades a whole conversation
 - [`Mastra` class](/reference/core/mastra-class): Register scorers with the `scorers` option
 - [Gates and Verdicts](/docs/evals/gates-and-verdicts): Conceptual guide to severity semantics
 - [Quick Checks](/reference/evals/checks): Zero-LLM composable micro-scorers
