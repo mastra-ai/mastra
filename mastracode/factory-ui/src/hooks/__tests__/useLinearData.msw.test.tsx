@@ -139,6 +139,7 @@ describe('useIntakeConfigQuery / useSaveIntakeConfigMutation', () => {
   const config: IntakeConfig = {
     github: { enabled: true, sourceIds: null },
     linear: { enabled: true, sourceIds: null },
+    jira: { enabled: false, sourceIds: null },
   };
 
   it('given a saved config, when the query resolves, then it exposes the config', async () => {
@@ -154,6 +155,7 @@ describe('useIntakeConfigQuery / useSaveIntakeConfigMutation', () => {
     const updated: IntakeConfig = {
       github: { enabled: false, sourceIds: null },
       linear: { enabled: true, sourceIds: ['proj-1'] },
+      jira: { enabled: false, sourceIds: null },
     };
     let putBody: unknown;
     server.use(

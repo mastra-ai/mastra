@@ -35,6 +35,11 @@ export const queryKeys = {
   linearIssuesAll: () => ['linear', 'issues'] as const,
   linearIssues: (githubProjectId: string | undefined) =>
     [...queryKeys.linearIssuesAll(), githubProjectId ?? null] as const,
+  jiraStatus: () => ['jira', 'status'] as const,
+  jiraProjects: () => ['jira', 'projects'] as const,
+  jiraIssuesAll: () => ['jira', 'issues'] as const,
+  jiraIssues: (factoryProjectId: string | undefined) =>
+    [...queryKeys.jiraIssuesAll(), factoryProjectId ?? null] as const,
   intakeConfig: () => ['intake', 'config'] as const,
   intakeBindings: () => ['intake', 'bindings'] as const,
   channelAccounts: () => ['channel-accounts'] as const,

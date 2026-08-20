@@ -19,7 +19,9 @@ import {
   useSaveIntakeBindingMutation,
   useSaveIntakeConfigMutation,
 } from '../../../../hooks/useIntakeConfig';
+import { useJiraProjectsQuery, useJiraStatusQuery } from '../../../../hooks/useJiraData';
 import { useLinearProjectsQuery, useLinearStatusQuery } from '../../../../hooks/useLinearData';
+import { isJiraAuthError } from '../../factory/services/jira';
 import { connectLinear, isLinearReauthError } from '../../factory/services/linear';
 import type { LinearProject } from '../../factory/services/linear';
 import type { IntakeConfig } from '../../factory/services/intake';
@@ -148,16 +150,22 @@ function SourcePickerSection({
 const UNROUTED = '__unrouted__';
 
 /**
- * Routing for the selected Linear projects. A Linear project feeds exactly one
- * Factory; until it is routed its issues are not picked up by any board.
+ * Routing for one provider's selected intake sources. A source feeds exactly
+ * one Factory; until it is routed its issues are not picked up by any board.
  */
-function LinearRouting({
+function IntakeSourceRouting({
+  integrationId,
+  label,
   sourceIds,
-  projects,
+  sources,
   factories,
 }: {
+  /** Server integration id the bindings are keyed by, e.g. `linear`. */
+  integrationId: string;
+  /** Human provider name for toasts, e.g. `Linear`. */
+  label: string;
   sourceIds: string[];
-  projects: LinearProject[];
+  sources: { id: string; name: string }[];
   factories: { id: string; name: string }[];
 }) {
   const bindingsQuery = useIntakeBindingsQuery();
@@ -167,10 +175,10 @@ function LinearRouting({
 
   const route = (sourceId: string, value: string) => {
     saveBinding.mutate(
-      { integrationId: 'linear', sourceId, factoryProjectId: value === UNROUTED ? null : value },
+      { integrationId, sourceId, factoryProjectId: value === UNROUTED ? null : value },
       {
-        onSuccess: () => toast.success('Linear routing updated'),
-        onError: err => toast.error(err instanceof Error ? err.message : 'Failed to save Linear routing'),
+        onSuccess: () => toast.success(`${label} routing updated`),
+        onError: err => toast.error(err instanceof Error ? err.message : `Failed to save ${label} routing`),
       },
     );
   };
@@ -178,9 +186,9 @@ function LinearRouting({
   return (
     <div className="flex flex-col">
       {sourceIds.map(sourceId => {
-        const name = projects.find(project => project.id === sourceId)?.name ?? sourceId;
+        const name = sources.find(source => source.id === sourceId)?.name ?? sourceId;
         const factoryProjectId = bindings.find(
-          binding => binding.integrationId === 'linear' && binding.sourceId === sourceId,
+          binding => binding.integrationId === integrationId && binding.sourceId === sourceId,
         )?.factoryProjectId;
         return (
           <SettingsRow
@@ -228,6 +236,11 @@ export function IntakeSection() {
   const linearConnected = Boolean(linearStatus?.enabled && linearStatus.connected);
   const linearProjectsQuery = useLinearProjectsQuery(linearConnected);
 
+  const jiraStatusQuery = useJiraStatusQuery();
+  const jiraStatus = jiraStatusQuery.data;
+  const jiraConfigured = Boolean(jiraStatus?.enabled);
+  const jiraProjectsQuery = useJiraProjectsQuery(jiraConfigured);
+
   const config = configQuery.data;
   const linkedRepositories = (factoriesQuery.data ?? []).flatMap(factory => factory.repositories);
 
@@ -242,7 +255,7 @@ export function IntakeSection() {
     return (
       <SettingsSubsection title="Issue sources" description={INTAKE_INTRO}>
         <Txt as="p" variant="ui-sm" className="text-icon3">
-          Intake configuration is unavailable. Connect GitHub or Linear first.
+          Intake configuration is unavailable. Connect GitHub, Linear, or Jira first.
         </Txt>
       </SettingsSubsection>
     );
@@ -364,9 +377,76 @@ export function IntakeSection() {
                 </SourcePickerGroup>
               )}
               {(config.linear.sourceIds?.length ?? 0) > 0 && (
-                <LinearRouting
+                <IntakeSourceRouting
+                  integrationId="linear"
+                  label="Linear"
                   sourceIds={config.linear.sourceIds ?? []}
-                  projects={linearProjectsQuery.data ?? []}
+                  sources={linearProjectsQuery.data ?? []}
+                  factories={factoriesQuery.data ?? []}
+                />
+              )}
+            </div>
+          )
+        )}
+
+        <SettingsRow label="Jira issues" hint="Active issues from the selected projects.">
+          <Switch
+            aria-label="Sync Jira issues"
+            checked={config.jira.enabled}
+            disabled={busy || !jiraConfigured}
+            onCheckedChange={enabled => update({ ...config, jira: { ...config.jira, enabled } })}
+          />
+        </SettingsRow>
+
+        {!jiraConfigured ? (
+          // No connect flow — Jira is enabled through server env vars only.
+          <div className="flex items-center gap-3 px-4 py-3">
+            <Txt as="span" variant="ui-sm" className="text-icon3">
+              Jira is not configured on this server. Set JIRA_BASE_URL, JIRA_EMAIL, and JIRA_API_TOKEN to enable it.
+            </Txt>
+          </div>
+        ) : config.jira.enabled && isJiraAuthError(jiraProjectsQuery.error) ? (
+          // Bad or expired API token: only the operator can fix the env group.
+          <div className="flex items-center gap-3 px-4 py-3">
+            <Txt as="span" variant="ui-sm" className="text-icon3">
+              Jira rejected the configured credentials. Ask the operator to check the Jira API token.
+            </Txt>
+          </div>
+        ) : (
+          config.jira.enabled && (
+            <div className="flex flex-col gap-2.5 px-4 py-3">
+              <Txt as="span" variant="ui-sm" className="text-icon3">
+                Connected to {jiraStatus?.site ?? 'a Jira site'}
+              </Txt>
+              {(jiraProjectsQuery.data ?? []).length > 0 && (
+                <SourcePickerGroup>
+                  <SourcePickerSection
+                    label="Projects"
+                    items={(jiraProjectsQuery.data ?? []).map(project => ({
+                      id: project.id,
+                      label: `${project.key} · ${project.name}`,
+                    }))}
+                    selectedIds={config.jira.sourceIds}
+                    disabled={busy}
+                    pending={busy}
+                    onToggleItem={projectId =>
+                      update({
+                        ...config,
+                        jira: { ...config.jira, sourceIds: toggleId(config.jira.sourceIds, projectId) },
+                      })
+                    }
+                  />
+                </SourcePickerGroup>
+              )}
+              {(config.jira.sourceIds?.length ?? 0) > 0 && (
+                <IntakeSourceRouting
+                  integrationId="jira"
+                  label="Jira"
+                  sourceIds={config.jira.sourceIds ?? []}
+                  sources={(jiraProjectsQuery.data ?? []).map(project => ({
+                    id: project.id,
+                    name: `${project.key} · ${project.name}`,
+                  }))}
                   factories={factoriesQuery.data ?? []}
                 />
               )}

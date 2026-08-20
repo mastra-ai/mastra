@@ -22,8 +22,8 @@ export function useIntakeConfigQuery(enabled: boolean = true) {
 
 /**
  * Persist the intake config. On success the config cache is updated in place
- * and the Linear issue list is invalidated — the server applies the project
- * selection, so a config change can alter its results.
+ * and the provider issue lists are invalidated — the server applies the
+ * project selection, so a config change can alter their results.
  */
 export function useSaveIntakeConfigMutation() {
   const { baseUrl } = useApiConfig();
@@ -33,6 +33,7 @@ export function useSaveIntakeConfigMutation() {
     onSuccess: saved => {
       queryClient.setQueryData(queryKeys.intakeConfig(), saved);
       void queryClient.invalidateQueries({ queryKey: queryKeys.linearIssuesAll() });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.jiraIssuesAll() });
     },
   });
 }
@@ -60,6 +61,7 @@ export function useSaveIntakeBindingMutation() {
     onSuccess: bindings => {
       queryClient.setQueryData(queryKeys.intakeBindings(), bindings);
       void queryClient.invalidateQueries({ queryKey: queryKeys.linearIssuesAll() });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.jiraIssuesAll() });
     },
   });
 }
