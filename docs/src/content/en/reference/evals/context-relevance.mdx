@@ -601,10 +601,6 @@ Choose the right scorer for your needs:
 | **Usage tracking** | ✓ Tracks utilization | ✗ Not considered |
 | **Position sensitivity** | ✗ Position agnostic | ✓ Rewards early placement |
 
-## Multi-turn evals
-
-This scorer reads a single assistant message, so with [multi-turn `inputs`](/docs/evals/multi-turn) it grades only the last turn's response, and input-relative grading compares against the first turn's input. To grade a conversation, use the [Multi-turn Judge scorer](/reference/evals/multi-turn-judge), or attach this scorer to a single turn with `turns[].scorers`.
-
 ## Related
 
 - [Context Precision Scorer](/reference/evals/context-precision): Evaluates context ranking using MAP

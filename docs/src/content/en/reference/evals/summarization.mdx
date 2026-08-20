@@ -281,10 +281,6 @@ To add this scorer to an agent, see the [Scorers overview](/docs/evals/overview#
 
 Use `faithfulness` when the question is whether an answer stays grounded in retrieved context. Use `summarization` when the output is meant to stand in for a longer text.
 
-## Multi-turn evals
-
-This scorer reads a single assistant message, so with [multi-turn `inputs`](/docs/evals/multi-turn) it grades only the last turn's response, and input-relative grading compares against the first turn's input. To grade a conversation, use the [Multi-turn Judge scorer](/reference/evals/multi-turn-judge), or attach this scorer to a single turn with `turns[].scorers`.
-
 ## Related
 
 - [Faithfulness Scorer](/reference/evals/faithfulness): Measures answer groundedness in context
