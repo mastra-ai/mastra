@@ -374,9 +374,15 @@ export class DaytonaSandbox extends MastraSandbox {
    * Reports `created: true` only when a brand-new sandbox was created;
    * reconnecting to an existing sandbox reports `created: false`.
    */
-  async start(): Promise<SandboxStartResult> {
+  /**
+   * Acquisition primitives (base-orchestrated start): the base derives
+   * `created` structurally from whether an existing sandbox was found.
+   * Lookup errors other than not-found propagate deliberately — creating a
+   * duplicate sandbox on a transient/auth error would be worse than failing.
+   */
+  protected override async find(): Promise<Sandbox | undefined> {
     if (this._sandbox) {
-      return { created: false };
+      return this._sandbox;
     }
 
     // Create Daytona client if not exists
@@ -384,21 +390,38 @@ export class DaytonaSandbox extends MastraSandbox {
       this._daytona = new Daytona(this.connectionOpts);
     }
 
-    // Try to reconnect to an existing sandbox with the same logical ID
-    const existing = await this.findExistingSandbox();
-    if (existing) {
-      this._sandbox = existing;
-      this._daytonaSandboxId = existing.id;
-      this._createdAt = existing.createdAt ? new Date(existing.createdAt) : new Date();
-      this.logger.debug(`${LOG_PREFIX} Reconnected to existing sandbox ${existing.id} for: ${this.id}`);
+    return (await this.findExistingSandbox()) ?? undefined;
+  }
 
-      // Reconcile FUSE mounts — clean up stale mounts from a previous session
-      const expectedPaths = Array.from(this.mounts.entries.keys());
-      this.logger.debug(`${LOG_PREFIX} Running mount reconciliation...`);
-      await this.reconcileMounts(expectedPaths);
-      this.logger.debug(`${LOG_PREFIX} Mount reconciliation complete`);
-      await this.detectWorkingDir();
-      return { created: false };
+  protected override async connect(existing: Sandbox): Promise<void> {
+    if (existing === this._sandbox) {
+      return;
+    }
+
+    // Wake a stopped/archived sandbox before adopting it.
+    if (existing.state !== SandboxState.STARTED) {
+      this.logger.debug(`${LOG_PREFIX} Restarting sandbox ${existing.id} (state: ${existing.state})`);
+      await this.waitForStableStateAndStart(existing);
+    }
+
+    this._sandbox = existing;
+    this._daytonaSandboxId = existing.id;
+    this._createdAt = existing.createdAt ? new Date(existing.createdAt) : new Date();
+    this.logger.debug(`${LOG_PREFIX} Reconnected to existing sandbox ${existing.id} for: ${this.id}`);
+
+    // Reconcile FUSE mounts — clean up stale mounts from a previous session
+    const expectedPaths = Array.from(this.mounts.entries.keys());
+    this.logger.debug(`${LOG_PREFIX} Running mount reconciliation...`);
+    await this.reconcileMounts(expectedPaths);
+    this.logger.debug(`${LOG_PREFIX} Mount reconciliation complete`);
+    await this.detectWorkingDir();
+  }
+
+  protected override async create(): Promise<void> {
+    // Create Daytona client if not exists (find() normally runs first, but
+    // keep this branch self-sufficient).
+    if (!this._daytona) {
+      this._daytona = new Daytona(this.connectionOpts);
     }
 
     this.logger.debug(`${LOG_PREFIX} Creating sandbox for: ${this.id}`);
@@ -444,7 +467,6 @@ export class DaytonaSandbox extends MastraSandbox {
     this.logger.debug(`${LOG_PREFIX} Created sandbox ${this._sandbox.id} for logical ID: ${this.id}`);
     this._createdAt = new Date();
     await this.detectWorkingDir();
-    return { created: true };
   }
 
   /**
@@ -1093,11 +1115,8 @@ export class DaytonaSandbox extends MastraSandbox {
       return null;
     }
 
-    if (state !== SandboxState.STARTED) {
-      this.logger.debug(`${LOG_PREFIX} Restarting sandbox ${sandbox.id} (state: ${state})`);
-      await this.waitForStableStateAndStart(sandbox);
-    }
-
+    // Note: a stopped-but-alive sandbox is returned as-is — waking it is
+    // connect()'s job, not the lookup's.
     return sandbox;
   }
 

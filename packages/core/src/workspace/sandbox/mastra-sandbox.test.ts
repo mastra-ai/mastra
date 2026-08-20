@@ -623,114 +623,10 @@ describe('MastraSandbox start lifecycle wrap', () => {
     expect(sandbox.status).toBe('running');
   });
 
-  describe('bootstrap', () => {
-    const bootstrap = { command: 'echo bootstrap', env: { GIT_TOKEN: 'shhh' } };
-
-    it('created: true → runs bootstrap without a sentinel probe, writes sentinel after success', async () => {
-      const sandbox = new LifecycleSandbox({ bootstrap });
-      sandbox.startResult = { created: true };
-
-      await sandbox.start();
-
-      const cmds = sandbox.commands.map(c => c.command);
-      expect(cmds).toEqual(['echo bootstrap', 'touch "$HOME/.mastra-bootstrapped"']);
-      expect(sandbox.files.has('$HOME/.mastra-bootstrapped')).toBe(true);
-    });
-
-    it('created: false with sentinel present → bootstrap skipped', async () => {
-      const sandbox = new LifecycleSandbox({ bootstrap });
-      sandbox.startResult = { created: false };
-      sandbox.files.add('$HOME/.mastra-bootstrapped');
-
-      await sandbox.start();
-
-      expect(sandbox.commands.map(c => c.command)).toEqual(['test -f "$HOME/.mastra-bootstrapped"']);
-    });
-
-    it('created: false with sentinel ABSENT → bootstrap runs (failed-first-bootstrap reconnect case)', async () => {
-      const sandbox = new LifecycleSandbox({ bootstrap });
-      sandbox.startResult = { created: false };
-
-      await sandbox.start();
-
-      expect(sandbox.commands.map(c => c.command)).toEqual([
-        'test -f "$HOME/.mastra-bootstrapped"',
-        'echo bootstrap',
-        'touch "$HOME/.mastra-bootstrapped"',
-      ]);
-    });
-
-    it('void start result → sentinel probed; present → skipped', async () => {
-      const sandbox = new LifecycleSandbox({ bootstrap });
-      sandbox.files.add('$HOME/.mastra-bootstrapped');
-
-      await sandbox.start();
-
-      expect(sandbox.commands.map(c => c.command)).toEqual(['test -f "$HOME/.mastra-bootstrapped"']);
-    });
-
-    it('bootstrap failure → start() rejects, status error, sentinel not written, retry re-attempts', async () => {
-      const sandbox = new LifecycleSandbox({ bootstrap });
-      sandbox.startResult = { created: true };
-      sandbox.bootstrapExitCode = 1;
-
-      await expect(sandbox.start()).rejects.toThrow(/bootstrap command failed \(exit 1\)/);
-      expect(sandbox.status).toBe('error');
-      expect(sandbox.files.has('$HOME/.mastra-bootstrapped')).toBe(false);
-
-      // Reconnect after the failed attempt: provider reports created: false,
-      // sentinel is absent → bootstrap runs again and succeeds this time.
-      sandbox.startResult = { created: false };
-      sandbox.bootstrapExitCode = 0;
-      await sandbox.start();
-
-      expect(sandbox.status).toBe('running');
-      expect(sandbox.files.has('$HOME/.mastra-bootstrapped')).toBe(true);
-    });
-
-    it('bootstrap env reaches the command execution options only', async () => {
-      const sandbox = new LifecycleSandbox({ bootstrap });
-      sandbox.startResult = { created: true };
-
-      await sandbox.start();
-
-      const bootstrapCall = sandbox.commands.find(c => c.command === 'echo bootstrap');
-      expect(bootstrapCall?.env).toEqual({ GIT_TOKEN: 'shhh' });
-      // Sentinel write does not carry the env.
-      const touchCall = sandbox.commands.find(c => c.command.startsWith('touch'));
-      expect(touchCall?.env).toBeUndefined();
-    });
-
-    it('does not deadlock when bootstrap runs through the auto-created executeCommand (pm.spawn → ensureRunning)', async () => {
-      // No own executeCommand: the base auto-creates one from the process
-      // manager, whose spawn wrapper calls sandbox.ensureRunning(). Before the
-      // status-before-bootstrap ordering this would await its own start.
-      class PmLifecycleSandbox extends MastraSandbox {
-        readonly id = 'pm-lifecycle-sandbox';
-        readonly name = 'PmLifecycleSandbox';
-        readonly provider = 'test';
-        status: ProviderStatus = 'pending';
-        constructor() {
-          super({
-            name: 'PmLifecycleSandbox',
-            processes: new ExecuteCommandProcessManager('ok'),
-            bootstrap: { command: 'echo bootstrap' },
-          });
-        }
-        async start(): Promise<{ created: boolean }> {
-          return { created: true };
-        }
-      }
-
-      const sandbox = new PmLifecycleSandbox();
-      await expect(
-        Promise.race([
-          sandbox.start(),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('deadlock: start() never resolved')), 2000)),
-        ]),
-      ).resolves.toEqual({ created: true });
-      expect(sandbox.status).toBe('running');
-    });
+  it('rejects a bootstrap command on a provider without acquisition primitives at construction', () => {
+    expect(() => new LifecycleSandbox({ bootstrap: { command: 'echo bootstrap' } })).toThrow(
+      /bootstrap requires the find\/connect\/create acquisition primitives/,
+    );
   });
 
   it('forwards created to the onStart hook', async () => {
@@ -750,5 +646,252 @@ describe('MastraSandbox start lifecycle wrap', () => {
     await sandbox.start();
 
     expect(onStart).toHaveBeenCalledWith(expect.objectContaining({ created: undefined }));
+  });
+});
+
+// =============================================================================
+// Acquisition primitives ladder (find / connect / create)
+// =============================================================================
+
+const SENTINEL = '$HOME/.mastra-bootstrapped';
+
+/**
+ * Rung-1 sandbox: no start() override, acquisition via primitives. The fake
+ * "remote" is `vmExists`; the fake VM filesystem stores the bootstrap marker
+ * and interprets the base's folded bootstrap script.
+ */
+class PrimitiveSandbox extends MastraSandbox<string> {
+  readonly id = 'primitive-sandbox';
+  readonly name = 'PrimitiveSandbox';
+  readonly provider = 'test';
+  status: ProviderStatus = 'pending';
+
+  vmExists = false;
+  findCalls = 0;
+  connectCalls = 0;
+  createCalls = 0;
+  lastConnectedHandle: string | undefined;
+  connectError: Error | undefined;
+  createError: Error | undefined;
+
+  commands: Array<{ command: string; env?: Record<string, string> }> = [];
+  files = new Set<string>();
+  bootstrapExitCode = 0;
+
+  constructor(options?: MastraSandboxOptions) {
+    super({ ...options, name: 'PrimitiveSandbox' });
+  }
+
+  protected override async find(): Promise<string | undefined> {
+    this.findCalls += 1;
+    return this.vmExists ? 'vm-handle' : undefined;
+  }
+
+  protected override async connect(handle: string): Promise<void> {
+    this.connectCalls += 1;
+    this.lastConnectedHandle = handle;
+    if (this.connectError) throw this.connectError;
+  }
+
+  protected override async create(): Promise<void> {
+    this.createCalls += 1;
+    if (this.createError) throw this.createError;
+    this.vmExists = true;
+  }
+
+  async executeCommand(
+    command: string,
+    _args?: string[],
+    options?: { env?: NodeJS.ProcessEnv },
+  ): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+    this.commands.push({ command, env: options?.env as Record<string, string> | undefined });
+    // Interpret the base's folded bootstrap script against the fake VM fs.
+    if (command.includes('rc=$?')) {
+      const guarded = command.startsWith(`if [ -f "${SENTINEL}" ]`);
+      if (guarded && this.files.has(SENTINEL)) {
+        return { exitCode: 0, stdout: '', stderr: '' };
+      }
+      if (this.bootstrapExitCode === 0) this.files.add(SENTINEL);
+      return { exitCode: this.bootstrapExitCode, stdout: '', stderr: this.bootstrapExitCode === 0 ? '' : 'boom' };
+    }
+    return { exitCode: 0, stdout: '', stderr: '' };
+  }
+}
+
+describe('MastraSandbox acquisition primitives', () => {
+  it('find hit → connect with the found handle, created: false, create never called', async () => {
+    const sandbox = new PrimitiveSandbox();
+    sandbox.vmExists = true;
+
+    const result = await sandbox.start();
+
+    expect(result).toEqual({ created: false });
+    expect(sandbox.connectCalls).toBe(1);
+    expect(sandbox.lastConnectedHandle).toBe('vm-handle');
+    expect(sandbox.createCalls).toBe(0);
+    expect(sandbox.status).toBe('running');
+  });
+
+  it('find miss → create, created: true', async () => {
+    const sandbox = new PrimitiveSandbox();
+
+    const result = await sandbox.start();
+
+    expect(result).toEqual({ created: true });
+    expect(sandbox.findCalls).toBe(1);
+    expect(sandbox.createCalls).toBe(1);
+    expect(sandbox.connectCalls).toBe(0);
+  });
+
+  it('a create-only provider (no find) always creates', async () => {
+    class CreateOnlySandbox extends MastraSandbox {
+      readonly id = 'create-only';
+      readonly name = 'CreateOnlySandbox';
+      readonly provider = 'test';
+      status: ProviderStatus = 'pending';
+      createCalls = 0;
+      constructor() {
+        super({ name: 'CreateOnlySandbox' });
+      }
+      protected override async create(): Promise<void> {
+        this.createCalls += 1;
+      }
+    }
+
+    const sandbox = new CreateOnlySandbox();
+    await expect(sandbox.start()).resolves.toEqual({ created: true });
+    expect(sandbox.createCalls).toBe(1);
+  });
+
+  it('connect failure fails start() and is retryable', async () => {
+    const sandbox = new PrimitiveSandbox();
+    sandbox.vmExists = true;
+    sandbox.connectError = new Error('wake failed');
+
+    await expect(sandbox.start()).rejects.toThrow('wake failed');
+    expect(sandbox.status).toBe('error');
+
+    sandbox.connectError = undefined;
+    await expect(sandbox.start()).resolves.toEqual({ created: false });
+    expect(sandbox.status).toBe('running');
+  });
+
+  it('a start() override wins over implemented primitives', async () => {
+    class BothSandbox extends PrimitiveSandbox {
+      implCalls = 0;
+      override async start(): Promise<{ created: boolean }> {
+        this.implCalls += 1;
+        return { created: false };
+      }
+    }
+
+    const sandbox = new BothSandbox();
+    await expect(sandbox.start()).resolves.toEqual({ created: false });
+    expect(sandbox.implCalls).toBe(1);
+    expect(sandbox.findCalls).toBe(0);
+    expect(sandbox.createCalls).toBe(0);
+  });
+
+  describe('bootstrap', () => {
+    const bootstrap = { command: 'echo bootstrap', env: { GIT_TOKEN: 'shhh' } };
+
+    it('create branch → single folded exec without a guard, marker written', async () => {
+      const sandbox = new PrimitiveSandbox({ bootstrap });
+
+      await sandbox.start();
+
+      expect(sandbox.commands).toHaveLength(1);
+      const [call] = sandbox.commands;
+      expect(call!.command).toContain('echo bootstrap');
+      expect(call!.command).not.toContain('if [ -f');
+      expect(call!.command).toContain(`touch "${SENTINEL}"`);
+      expect(sandbox.files.has(SENTINEL)).toBe(true);
+    });
+
+    it('connect branch with marker present → single guarded exec, bootstrap not re-run', async () => {
+      const sandbox = new PrimitiveSandbox({ bootstrap });
+      sandbox.vmExists = true;
+      sandbox.files.add(SENTINEL);
+      // Poison: if the guard is ignored, the interpreter would "run" and flip this.
+      sandbox.bootstrapExitCode = 1;
+
+      await sandbox.start();
+
+      expect(sandbox.commands).toHaveLength(1);
+      expect(sandbox.commands[0]!.command.startsWith('if [ -f')).toBe(true);
+      expect(sandbox.status).toBe('running');
+    });
+
+    it('connect branch without marker (failed-first-bootstrap reconnect) → runs and marks', async () => {
+      const sandbox = new PrimitiveSandbox({ bootstrap });
+      sandbox.vmExists = true;
+
+      await sandbox.start();
+
+      expect(sandbox.commands).toHaveLength(1);
+      expect(sandbox.commands[0]!.command.startsWith('if [ -f')).toBe(true);
+      expect(sandbox.files.has(SENTINEL)).toBe(true);
+    });
+
+    it('bootstrap failure → start() rejects, status error, no marker, retry re-runs', async () => {
+      const sandbox = new PrimitiveSandbox({ bootstrap });
+      sandbox.bootstrapExitCode = 1;
+
+      await expect(sandbox.start()).rejects.toThrow(/bootstrap command failed \(exit 1\)/);
+      expect(sandbox.status).toBe('error');
+      expect(sandbox.files.has(SENTINEL)).toBe(false);
+
+      // Retry: the VM now exists (create succeeded), marker absent → re-runs.
+      sandbox.bootstrapExitCode = 0;
+      await expect(sandbox.start()).resolves.toEqual({ created: false });
+      expect(sandbox.files.has(SENTINEL)).toBe(true);
+      expect(sandbox.status).toBe('running');
+    });
+
+    it('bootstrap env reaches the folded exec', async () => {
+      const sandbox = new PrimitiveSandbox({ bootstrap });
+
+      await sandbox.start();
+
+      expect(sandbox.commands[0]!.env).toEqual({ GIT_TOKEN: 'shhh' });
+    });
+
+    it('forwards structural created to onStart', async () => {
+      const onStart = vi.fn();
+      const sandbox = new PrimitiveSandbox({ bootstrap, onStart });
+
+      await sandbox.start();
+
+      expect(onStart).toHaveBeenCalledWith(expect.objectContaining({ created: true }));
+    });
+
+    it('does not deadlock when bootstrap runs through the auto-created executeCommand (pm.spawn → ensureRunning)', async () => {
+      // No own executeCommand: the base auto-creates one from the process
+      // manager, whose spawn wrapper calls sandbox.ensureRunning(). Before the
+      // status-before-bootstrap ordering this would await its own start.
+      class PmPrimitiveSandbox extends MastraSandbox {
+        readonly id = 'pm-primitive-sandbox';
+        readonly name = 'PmPrimitiveSandbox';
+        readonly provider = 'test';
+        status: ProviderStatus = 'pending';
+        constructor() {
+          super({
+            name: 'PmPrimitiveSandbox',
+            processes: new ExecuteCommandProcessManager('ok'),
+            bootstrap: { command: 'echo bootstrap' },
+          });
+        }
+        protected override async create(): Promise<void> {}
+      }
+
+      const sandbox = new PmPrimitiveSandbox();
+      await expect(
+        Promise.race([
+          sandbox.start(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('deadlock: start() never resolved')), 2000)),
+        ]),
+      ).resolves.toEqual({ created: true });
+      expect(sandbox.status).toBe('running');
+    });
   });
 });

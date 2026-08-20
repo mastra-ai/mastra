@@ -19,7 +19,7 @@ import type { RequestContext } from '../../request-context';
 import type { WorkspaceFilesystem } from '../filesystem/filesystem';
 import { expandTilde } from '../filesystem/fs-utils';
 import type { FilesystemMountConfig, MountResult } from '../filesystem/mount';
-import type { ProviderStatus, SandboxStartResult } from '../lifecycle';
+import type { ProviderStatus } from '../lifecycle';
 import type { InstructionsOption } from '../types';
 import { resolveInstructions } from '../utils';
 import { IsolationUnavailableError } from './errors';
@@ -176,7 +176,7 @@ export interface LocalSandboxOptions extends Omit<MastraSandboxOptions, 'process
  * const result = await workspace.executeCommand('node', ['script.js']);
  * ```
  */
-export class LocalSandbox extends MastraSandbox {
+export class LocalSandbox extends MastraSandbox<string> {
   readonly id: string;
   readonly name = 'LocalSandbox';
   readonly provider = 'local';
@@ -319,28 +319,40 @@ export class LocalSandbox extends MastraSandbox {
   }
 
   /**
-   * Start the local sandbox.
-   * Creates working directory and sets up seatbelt profile if using macOS isolation.
-   * Status management is handled by the base class.
-   *
-   * Reports `created: true` when the working directory did not exist yet;
-   * an existing directory means we are reattaching to a prior sandbox.
+   * Acquisition primitives (base-orchestrated start): an existing working
+   * directory is the "found sandbox" — reattaching reports `created: false`,
+   * a missing directory means a fresh sandbox (`created: true`).
    */
-  async start(): Promise<SandboxStartResult> {
-    this.logger.debug('Starting sandbox', {
-      workingDirectory: this.workingDirectory,
-      isolation: this.isolation,
-    });
-
-    let created = false;
+  protected override async find(): Promise<string | undefined> {
     try {
       await fs.stat(this.workingDirectory);
+      return this.workingDirectory;
     } catch (err: unknown) {
       if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code !== 'ENOENT') {
         throw err;
       }
-      created = true;
+      return undefined;
     }
+  }
+
+  protected override async connect(_handle: string): Promise<void> {
+    await this._prepareWorkspace();
+  }
+
+  protected override async create(): Promise<void> {
+    await this._prepareWorkspace();
+  }
+
+  /**
+   * Shared start body for both branches: ensure the working directory
+   * exists, seed it from a checkpoint when empty, and set up the seatbelt
+   * profile on macOS. Everything here is idempotent.
+   */
+  private async _prepareWorkspace(): Promise<void> {
+    this.logger.debug('Starting sandbox', {
+      workingDirectory: this.workingDirectory,
+      isolation: this.isolation,
+    });
 
     await fs.mkdir(this.workingDirectory, { recursive: true });
 
@@ -402,7 +414,6 @@ export class LocalSandbox extends MastraSandbox {
     }
 
     this.logger.debug('Sandbox started', { workingDirectory: this.workingDirectory });
-    return { created };
   }
 
   // ---------------------------------------------------------------------------

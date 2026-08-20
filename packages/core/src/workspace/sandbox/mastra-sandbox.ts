@@ -71,12 +71,14 @@ export interface MastraSandboxOptions {
    * replacement VM. `env` is merged into the command's execution env only —
    * never baked into the VM (this is the channel for short-lived tokens).
    *
-   * When the provider's `start()` reports `created: true` the sentinel probe
-   * is skipped; in every other case (`false` or unknown) a sentinel file
-   * guards idempotency — `created: false` still probes, because a VM whose
-   * bootstrap previously failed reconnects as `created: false` and must get
-   * another attempt. The sentinel is written only after the command succeeds;
-   * a bootstrap failure rejects `start()` and marks the sandbox errored.
+   * Requires the provider to implement the find/connect/create acquisition
+   * primitives — the bootstrap is driven by the base's structural knowledge
+   * of which branch ran (the constructor throws otherwise). The create
+   * branch runs the command directly; the connect branch probes a sentinel
+   * file first, so a VM whose bootstrap previously failed (or a crash
+   * between create and bootstrap-complete) gets another attempt. The
+   * sentinel is written only after the command succeeds; a bootstrap
+   * failure rejects `start()` and marks the sandbox errored.
    */
   bootstrap?: { command: string; env?: Record<string, string>; timeoutMs?: number };
 
@@ -132,7 +134,7 @@ export interface MastraSandboxOptions {
  * }
  * ```
  */
-export abstract class MastraSandbox extends MastraBase implements WorkspaceSandbox {
+export abstract class MastraSandbox<THandle = unknown> extends MastraBase implements WorkspaceSandbox {
   /** Unique identifier for this sandbox instance */
   abstract readonly id: string;
 
@@ -219,6 +221,13 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
    */
   private readonly _implStart: () => void | Promise<SandboxStartResult | void>;
 
+  /**
+   * Whether start acquisition runs through the {@link find}/{@link connect}/
+   * {@link create} primitives (the subclass implements `create()` and does
+   * NOT override `start()`). Computed once in the constructor.
+   */
+  private readonly _useAcquisitionPrimitives: boolean;
+
   /** Once-per-VM bootstrap command. See {@link MastraSandboxOptions.bootstrap}. */
   private readonly _bootstrap?: MastraSandboxOptions['bootstrap'];
 
@@ -248,8 +257,24 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
     // `_start()`/`ensureRunning()`. Subclasses keep their natural method name.
     // Requires method syntax in subclasses — a `start` class FIELD initializer
     // would overwrite this wrapper (same constraint as `executeCommand` above).
+    const hasStartOverride = this.start !== MastraSandbox.prototype.start;
     this._implStart = this.start.bind(this);
     this.start = () => this._start();
+    // Acquisition ladder rung selection: a subclass `start()` override wins
+    // (fused-getOrCreate providers); otherwise the find/connect/create
+    // primitives drive acquisition when `create()` is implemented.
+    this._useAcquisitionPrimitives = !hasStartOverride && typeof this.create === 'function';
+
+    // The once-per-VM bootstrap is driven by the base's structural knowledge
+    // of whether acquisition created or reconnected — only the primitives
+    // path has that. Fail loudly rather than silently never bootstrapping.
+    if (this._bootstrap && !this._useAcquisitionPrimitives) {
+      throw new Error(
+        `Sandbox '${options.name}' was given a bootstrap command, but bootstrap requires the ` +
+          `find/connect/create acquisition primitives (a start() override opts out of base-orchestrated ` +
+          `acquisition). Migrate the provider to the primitives or run setup yourself after start().`,
+      );
+    }
 
     // Automatically create MountManager if subclass implements mount()
     if (this.mount) {
@@ -352,7 +377,7 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
 
     let result: SandboxStartResult | void;
     try {
-      result = await this._implStart();
+      result = this._useAcquisitionPrimitives ? await this._acquire() : await this._implStart();
       // Status must flip to 'running' BEFORE the bootstrap runs: the bootstrap
       // executes through `executeCommand` → `pm.spawn` → `ensureRunning()`,
       // which would otherwise join the in-flight `_startPromise` and deadlock
@@ -403,6 +428,47 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
     return result;
   }
 
+  // ---------------------------------------------------------------------------
+  // Acquisition primitives (optional — see start() for the rung ladder)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Locate an existing VM/environment for this sandbox's logical id. Returns
+   * a provider-native handle that {@link connect} adopts, or `undefined` when
+   * nothing usable exists. Should avoid side effects where the provider's API
+   * allows — this doubles as the existence peek consumers use to answer "does
+   * a sandbox exist?" without provisioning one.
+   */
+  protected find?(): Promise<THandle | undefined>;
+
+  /**
+   * Adopt/wake/resume the handle {@link find} returned. Throwing fails
+   * `start()` — providers whose "connect failure" should fall back to
+   * creating fresh must implement that policy inside `find` (return
+   * `undefined` on an unusable handle) rather than throwing here.
+   */
+  protected connect?(handle: THandle): Promise<void> | void;
+
+  /**
+   * Provision a fresh VM/environment for this sandbox's logical id.
+   * Implementing this (without overriding `start()`) opts the provider into
+   * base-orchestrated acquisition: find → connect → `{ created: false }`,
+   * else create → `{ created: true }` — the `created` flag is derived
+   * structurally from which branch ran.
+   */
+  protected create?(): Promise<void> | void;
+
+  /** Base-orchestrated acquisition (rung 1 — see {@link start}). */
+  private async _acquire(): Promise<SandboxStartResult> {
+    const handle = this.find ? await this.find() : undefined;
+    if (handle != null) {
+      await this.connect?.(handle);
+      return { created: false };
+    }
+    await this.create!();
+    return { created: true };
+  }
+
   /**
    * Sentinel file marking a VM as bootstrapped. Quoted into shell commands,
    * so `$HOME` expands in the remote shell. LocalSandbox overrides this to a
@@ -442,12 +508,28 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
   }
 
   /**
+   * Whether both sentinel operations are the base shell implementations —
+   * when they are, the guarded bootstrap folds probe + command + marker
+   * write into a single exec. An override of either (LocalSandbox's host-fs
+   * ops, a provider using native metadata) takes the decomposed path so the
+   * override is actually honored.
+   */
+  private get _sentinelOpsAreShell(): boolean {
+    return (
+      this.probeBootstrapSentinel === MastraSandbox.prototype.probeBootstrapSentinel &&
+      this.writeBootstrapSentinel === MastraSandbox.prototype.writeBootstrapSentinel
+    );
+  }
+
+  /**
    * Run the configured bootstrap command once per VM lifetime.
    *
-   * When `skipSentinel` (the provider reported `created: true`) the probe is
-   * skipped — the VM is definitely fresh. In every other case the sentinel is
-   * probed first, so reconnects (`created: false`) after a failed bootstrap
-   * still get another attempt. The sentinel is written only after success.
+   * `skipSentinel` is set on the create branch (the base just provisioned
+   * this VM — definitely fresh, no probe). The connect branch probes first,
+   * so a VM whose bootstrap previously failed (or a crash between create and
+   * bootstrap-complete) gets another attempt. The sentinel is written only
+   * after success; a sentinel-write failure is non-fatal (the idempotent
+   * bootstrap merely re-runs on a future reconnect).
    */
   private async _runBootstrapOnce({ skipSentinel }: { skipSentinel: boolean }): Promise<void> {
     const bootstrap = this._bootstrap;
@@ -456,16 +538,34 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
       throw new Error(`Sandbox '${this.id}' has a bootstrap command but no executeCommand implementation`);
     }
 
+    const execOpts = {
+      ...(bootstrap.env && { env: bootstrap.env }),
+      ...(bootstrap.timeoutMs !== undefined && { timeout: bootstrap.timeoutMs }),
+    };
+
+    if (this._sentinelOpsAreShell) {
+      // Single-exec path: guard, command, and marker in one shell invocation.
+      // The command's own exit code is preserved; a failed marker write is
+      // ignored (same non-fatal semantics as the decomposed path).
+      const sentinel = this.bootstrapSentinelPath;
+      const guard = skipSentinel ? '' : `if [ -f "${sentinel}" ]; then exit 0; fi\n`;
+      const script = `${guard}{\n${bootstrap.command}\n}\nrc=$?\n[ "$rc" -eq 0 ] && touch "${sentinel}" 2>/dev/null\nexit "$rc"`;
+      this.logger.debug('Running sandbox bootstrap command', { sandbox: this.name });
+      const result = await this.executeCommand(script, undefined, execOpts);
+      if (result.exitCode !== 0) {
+        const stderr = (result.stderr ?? '').slice(-2000);
+        throw new Error(`Sandbox bootstrap command failed (exit ${result.exitCode}): ${stderr}`);
+      }
+      return;
+    }
+
     if (!skipSentinel && (await this.probeBootstrapSentinel())) {
       this.logger.debug('Bootstrap sentinel present — skipping bootstrap', { sandbox: this.name });
       return;
     }
 
     this.logger.debug('Running sandbox bootstrap command', { sandbox: this.name });
-    const result = await this.executeCommand(bootstrap.command, undefined, {
-      ...(bootstrap.env && { env: bootstrap.env }),
-      ...(bootstrap.timeoutMs !== undefined && { timeout: bootstrap.timeoutMs }),
-    });
+    const result = await this.executeCommand(bootstrap.command, undefined, execOpts);
     if (result.exitCode !== 0) {
       const stderr = (result.stderr ?? '').slice(-2000);
       throw new Error(`Sandbox bootstrap command failed (exit ${result.exitCode}): ${stderr}`);
@@ -481,33 +581,34 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
   }
 
   /**
-   * Override this method to implement sandbox startup logic.
+   * Sandbox startup. Providers plug in at one of three rungs (best available
+   * wins); either way the base owns coalescing, status management, the
+   * once-per-VM bootstrap, and mount processing:
+   *
+   * 1. Implement the {@link find}/{@link connect}/{@link create} primitives
+   *    (and do NOT override `start()`) — the base orchestrates acquisition
+   *    and derives `created` structurally. For providers whose API
+   *    decomposes into lookup/wake/provision.
+   * 2. Override `start()` returning {@link SandboxStartResult} — for
+   *    providers with a fused getOrCreate-style API where decomposition
+   *    would add round-trips.
+   * 3. Override `start()` returning void — `created` is unknown; the
+   *    bootstrap sentinel probe covers correctness.
    *
    * The base constructor wraps `start()` so direct calls are routed through
-   * `_start()` (coalescing, status management, once-per-VM bootstrap, mount
-   * processing). Use METHOD syntax when overriding — a class-field `start`
+   * `_start()`. Use METHOD syntax when overriding — a class-field `start`
    * initializer would overwrite the wrapper.
    *
    * Id-keyed getOrCreate contract: a sandbox constructed with a known `id`
    * resolves that id on start — reconnect/resume when the provider finds an
-   * existing VM for it, create otherwise — and reports which via
-   * {@link SandboxStartResult}. Returning `void` means "unknown". Note:
-   * E2B/Daytona/Local resolve logical ids natively; PlatformSandbox and
-   * RailwaySandbox currently reattach only via an explicit provider
-   * `sandboxId` hint (their logical-id lookup is a follow-up).
-   *
-   * @example
-   * ```typescript
-   * async start(): Promise<SandboxStartResult> {
-   *   const existing = await this.findExisting();
-   *   if (existing) { this._sandbox = existing; return { created: false }; }
-   *   this._sandbox = await Sandbox.create({ ... });
-   *   return { created: true };
-   * }
-   * ```
+   * existing VM for it, create otherwise. Note: E2B/Daytona/Local resolve
+   * logical ids natively; PlatformSandbox and RailwaySandbox currently
+   * reattach only via an explicit provider `sandboxId` hint (their
+   * logical-id lookup is a follow-up).
    */
   async start(): Promise<SandboxStartResult | void> {
-    // Default no-op - subclasses override
+    // Default no-op — subclasses override start() or implement the
+    // acquisition primitives (see the rung ladder above).
   }
 
   /**

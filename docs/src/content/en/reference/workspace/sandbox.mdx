@@ -55,13 +55,19 @@ A sandbox constructed with a known `id` resolves that id on `start()`: reconnect
 
 Providers that predate the contract return `void`, which the base class treats as unknown.
 
+Provider implementations plug into the start lifecycle at one of three rungs; the best available wins, and the base class always owns coalescing, status management, bootstrap, and mount processing:
+
+1. **Acquisition primitives**: implement protected `find()` (side-effect-free lookup by logical id, returning a provider-native handle or `undefined`), `connect(handle)` (wake/resume/adopt), and `create()` (provision fresh) without overriding `start()`. The base orchestrates find → connect → `{ created: false }`, else create → `{ created: true }`. The flag is derived structurally from which branch ran. Used by `E2BSandbox`, `DaytonaSandbox`, and `LocalSandbox`.
+1. **`start()` override returning `SandboxStartResult`**: for providers whose API is a fused get-or-create where decomposition would add round-trips (`PlatformSandbox`, `RailwaySandbox`).
+1. **`start()` override returning `void`**: legacy providers, where `created` is unknown.
+
 Concurrent `start()` calls on one instance coalesce onto a single in-flight attempt, and joined callers share that attempt's result (all observe `created: true` when the shared attempt created the VM). The in-flight slot is cleared when the attempt settles, so a failed start can be retried. While the sandbox is already `running`, `start()` resolves `{ created: false }` without re-invoking the provider.
 
 The result is also forwarded to the `onStart` lifecycle hook as `{ sandbox, created }`.
 
 ### `bootstrap` (constructor option)
 
-The `MastraSandbox` base class accepts a `bootstrap` constructor option. The bootstrap is a command that runs once per VM lifetime, immediately after a successful `start()`.
+The `MastraSandbox` base class accepts a `bootstrap` constructor option. The bootstrap is a command that runs once per VM lifetime, immediately after a successful `start()`. It requires a provider on the acquisition-primitives rung (the constructor throws otherwise), because the bootstrap is driven by the base class's structural knowledge of whether acquisition created or reconnected.
 
 ```typescript
 new E2BSandbox({
@@ -99,9 +105,10 @@ new E2BSandbox({
 
 Semantics:
 
-- When `start()` reports `created: true`, the bootstrap runs without any probe.
-- Otherwise the base class probes a sentinel file (`~/.mastra-bootstrapped` in the VM filesystem, or inside the working directory for `LocalSandbox`) and runs the bootstrap only when the sentinel is absent. The sentinel survives pause/resume and disappears with VM replacement.
-- The sentinel is written only after the command succeeds. A failed bootstrap fails `start()` and leaves the sandbox in `error` status, so a half-bootstrapped VM is never marked running. The next `start()` retries.
+- On the create branch (the base provisioned the VM moments ago) the bootstrap runs with no probe.
+- On the connect branch the base checks a completion marker (`~/.mastra-bootstrapped` in the VM filesystem, or inside the working directory for `LocalSandbox`) and runs the bootstrap only when the marker is absent. This covers a VM whose bootstrap previously failed, and a process crash between create and bootstrap-complete. The marker survives pause/resume and disappears with VM replacement. In the happy path a reconnect never re-runs the bootstrap.
+- The guard, command, and marker write fold into a single shell exec by default. To store the marker elsewhere, override `probeBootstrapSentinel()` and `writeBootstrapSentinel()`. Overriding either automatically switches the bootstrap to a decomposed path that honors them (`LocalSandbox` overrides both with host filesystem calls, which keeps it OS-independent).
+- The marker is written only after the command succeeds. A failed bootstrap fails `start()` and leaves the sandbox in `error` status, so a half-bootstrapped VM is never marked running. The next `start()` retries.
 - The sandbox status flips to `running` before the bootstrap executes (the bootstrap runs through the sandbox's own command path), so commands issued concurrently through `ensureRunning()` can interleave with the bootstrap.
 - The bootstrap runs before pending filesystem mounts are processed, so it can't rely on mounted paths.
 
