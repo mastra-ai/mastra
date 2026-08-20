@@ -84,6 +84,17 @@ describe('getPackageRootPath', () => {
 
     expect(consoleErrorSpy).not.toHaveBeenCalled();
   });
+
+  it('ignores rollup virtual module ids passed as parentPath', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    // Rollup virtual module ids contain a null byte; Node rejects such paths, and mlly
+    // would otherwise log a raw ERR_INVALID_ARG_VALUE error to the console.
+    await expect(getPackageRootPath('rollup', '\0virtual:#entry')).resolves.not.toBeNull();
+    await expect(getPackageRootPath('mastra-nonexistent-package', '\0virtual:#entry')).resolves.toBeNull();
+
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
+  });
 });
 
 describe('getPackageMetadata', () => {

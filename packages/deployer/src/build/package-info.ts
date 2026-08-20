@@ -44,6 +44,11 @@ export async function getPackageRootPath(packageName: string, parentPath?: strin
 
   try {
     let options: { paths?: string[] } | undefined = undefined;
+    // Rollup virtual module ids (e.g. `\0virtual:#entry`) contain a null byte and are not
+    // filesystem paths. Node rejects paths with null bytes, so resolve without a parent instead.
+    if (parentPath?.includes('\0')) {
+      parentPath = undefined;
+    }
     if (parentPath) {
       options = {
         paths: [toParentDirectoryUrl(parentPath)],
