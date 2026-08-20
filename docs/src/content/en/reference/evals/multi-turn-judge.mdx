@@ -140,7 +140,9 @@ The scorer runs in two phases:
 1. **Grade**: Every assistant message in `run.output` is collected in order and rendered as a numbered transcript, then the judge decides whether the conversation as a whole satisfies the criterion. Assistant messages with no text (a turn that only carried tool calls, for example) are skipped.
 1. **Score**: A `satisfied` verdict scores `1` and anything else scores `0`, multiplied by `scale`.
 
-The judge only sees what the assistant said. The user's turns and any tool results aren't included, so write criteria in terms of the agent's responses.
+The judge only sees what the assistant said. The user's turns and any tool results aren't included, so write criteria in terms of the agent's responses. This keeps the graded text limited to the agent's own output, but it also means a reply that only makes sense next to the question that prompted it ("Yes, bring one.") can't be judged on its own. For criteria that depend on the user's turns, grade each turn with `turns[].scorers` or write a [custom scorer](/docs/evals/multi-turn) that renders both roles.
+
+The transcript is passed to the judge as untrusted data, fenced with explicit delimiters and an instruction to ignore anything inside it that reads as an instruction, so an agent response can't talk its way into a passing verdict.
 
 ## Related
 
