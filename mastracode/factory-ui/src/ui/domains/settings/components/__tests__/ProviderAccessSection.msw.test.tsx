@@ -329,6 +329,56 @@ describe('ProviderAccessSection', () => {
       await waitFor(() => expect(putBody).toEqual({ key: 'sk-org', scope: 'org' }));
       await waitFor(() => expect(within(rowFor('openai')).getByText('Org key')).toBeInTheDocument());
     });
+
+    it('starts an org-scoped OAuth flow and signs out at org scope', async () => {
+      window.__MASTRACODE_CONFIG__ = { authEnabled: true };
+      const providers: ProviderInfo[] = [
+        { provider: 'anthropic', source: 'none', oauth: { supported: true, modes: ['paste-code'] } },
+      ];
+      let startBody: unknown;
+      let signOutScope: string | null = null;
+      server.use(
+        http.get(`${TEST_BASE_URL}/auth/me`, () =>
+          HttpResponse.json({ authenticated: true, user: { id: 'user-1', organizationId: 'org-1' } }),
+        ),
+        http.get(PROVIDERS_URL, () => providersResponse(providers)),
+        http.post(oauthUrl('anthropic', 'start'), async ({ request }) => {
+          startBody = await request.json();
+          return HttpResponse.json({
+            sessionId: 'session-org',
+            kind: 'paste-code',
+            url: 'https://example.com/authorize',
+            instructions: 'Authorize and paste the code.',
+            expiresAt: Date.now() + 60_000,
+          });
+        }),
+        http.post(oauthUrl('anthropic', 'complete'), () => {
+          providers[0] = { provider: 'anthropic', source: 'oauth-org', oauth: providers[0].oauth };
+          return HttpResponse.json({ status: 'complete', ok: true });
+        }),
+        http.delete(`${PROVIDERS_URL}/anthropic/oauth`, ({ request }) => {
+          signOutScope = new URL(request.url).searchParams.get('scope');
+          providers[0] = { provider: 'anthropic', source: 'none', oauth: providers[0].oauth };
+          return HttpResponse.json({ ok: true });
+        }),
+      );
+
+      const user = userEvent.setup();
+      renderWithProviders(<ProviderAccessSection />);
+
+      await screen.findByText('Anthropic');
+      await user.click(screen.getByRole('button', { name: 'Everyone in org' }));
+      await user.click(within(rowFor('anthropic')).getByRole('button', { name: 'Sign in to Anthropic' }));
+
+      await waitFor(() => expect(startBody).toEqual({ mode: 'paste-code', scope: 'org' }));
+
+      await user.type(await screen.findByLabelText('Authorization code'), 'code#state');
+      await user.click(screen.getByRole('button', { name: 'Complete sign in' }));
+      await waitFor(() => expect(within(rowFor('anthropic')).getByText('Org sign-in')).toBeInTheDocument());
+
+      await user.click(within(rowFor('anthropic')).getByRole('button', { name: 'Sign out of Anthropic' }));
+      await waitFor(() => expect(signOutScope).toBe('org'));
+    });
   });
 
   describe('when a credential changes', () => {

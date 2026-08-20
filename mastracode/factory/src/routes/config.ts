@@ -72,6 +72,7 @@ export type ProviderCredentialSource =
   | 'env'
   | 'none'
   | 'oauth-user'
+  | 'oauth-org'
   | 'stored-user'
   | 'stored-org';
 
@@ -172,11 +173,14 @@ export async function listProviders({
     if (tenantCredentials) {
       const userRec = tenantCredentials.find(r => r.scope === 'user' && r.provider === authProviderId);
       const orgRec = tenantCredentials.find(r => r.scope === 'org' && r.provider === authProviderId);
-      orgKey = orgRec?.credential.type === 'api_key';
+      // Any shared org credential (API key or org-wide OAuth) counts.
+      orgKey = orgRec !== undefined;
       if (userRec?.credential.type === 'oauth') {
         source = 'oauth-user';
       } else if (userRec?.credential.type === 'api_key') {
         source = 'stored-user';
+      } else if (orgRec?.credential.type === 'oauth') {
+        source = 'oauth-org';
       } else if (orgRec?.credential.type === 'api_key') {
         source = 'stored-org';
       }

@@ -54,6 +54,9 @@ export interface ResolvedCredential {
 /** Kind of pending web login flow a session row tracks. */
 export type LoginSessionKind = 'paste-code' | 'device-code';
 
+/** Scope the completed credential should be written to. */
+export type LoginCredentialScope = 'user' | 'org';
+
 /** One pending OAuth login flow, persisted so any replica can continue it. */
 export interface LoginSessionRow {
   sessionId: string;
@@ -61,6 +64,8 @@ export interface LoginSessionRow {
   userId: string;
   provider: string;
   kind: LoginSessionKind;
+  /** Where the completed credential lands; absent rows default to `'user'`. */
+  credentialScope?: LoginCredentialScope;
   /** Serialized flow state (PKCE verifier, device-code pending state, ...). */
   pending: Record<string, unknown>;
   expiresAt: Date;
@@ -75,6 +80,7 @@ export interface CreateLoginSessionInput {
   userId: string;
   provider: string;
   kind: LoginSessionKind;
+  credentialScope?: LoginCredentialScope;
   pending: Record<string, unknown>;
   expiresAt: Date;
   nextPollAt?: Date | null;
@@ -83,13 +89,6 @@ export interface CreateLoginSessionInput {
 /** Mirror of `AuthStorage.getApiKey()`'s expiry check. */
 export function isOAuthCredentialExpired(credential: OAuthCredential, now = Date.now()): boolean {
   return now >= credential.expires;
-}
-
-/** OAuth plan credentials are personal and must always have an owning user. */
-export function assertCredentialScope(tenant: CredentialTenant, credential: AuthCredential): void {
-  if (credential.type === 'oauth' && !tenant.userId) {
-    throw new Error('OAuth credentials must be user-scoped');
-  }
 }
 
 export const MODEL_CREDENTIALS_SCHEMA: CollectionSchema = {
@@ -124,6 +123,7 @@ export const OAUTH_LOGIN_SESSIONS_SCHEMA: CollectionSchema = {
     user_id: { type: 'text' },
     provider: { type: 'text' },
     kind: { type: 'text' },
+    credential_scope: { type: 'text', nullable: true },
     pending: { type: 'json' },
     expires_at: { type: 'timestamp' },
     next_poll_at: { type: 'timestamp', nullable: true },
@@ -147,6 +147,7 @@ interface LoginSessionDbRow extends Record<string, unknown> {
   user_id: string;
   provider: string;
   kind: LoginSessionKind;
+  credential_scope: LoginCredentialScope | null;
   pending: Record<string, unknown>;
   expires_at: Date;
   next_poll_at: Date | null;
@@ -160,6 +161,7 @@ function toSessionRow(db: LoginSessionDbRow): LoginSessionRow {
     userId: db.user_id,
     provider: db.provider,
     kind: db.kind,
+    ...(db.credential_scope ? { credentialScope: db.credential_scope } : {}),
     pending: db.pending,
     expiresAt: db.expires_at,
     nextPollAt: db.next_poll_at,
@@ -204,7 +206,6 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
 
   /** Upsert the tenant's credential (`created_at` is preserved on update). */
   async setCredential(tenant: CredentialTenant, provider: string, credential: AuthCredential): Promise<void> {
-    assertCredentialScope(tenant, credential);
     const where = tenantWhere(tenant, provider);
     const update = async () =>
       this.#db.updateMany('model_provider_credentials', where, {
@@ -337,6 +338,7 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
       user_id: input.userId,
       provider: input.provider,
       kind: input.kind,
+      credential_scope: input.credentialScope ?? null,
       pending: input.pending,
       expires_at: input.expiresAt,
       next_poll_at: input.nextPollAt ?? null,

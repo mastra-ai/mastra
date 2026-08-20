@@ -2,6 +2,7 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DataList } from '@mastra/playground-ui/components/DataList';
 import { Input } from '@mastra/playground-ui/components/Input';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -11,6 +12,7 @@ import { useState } from 'react';
 import type { OAuthStartResponse, ProviderInfo } from '../../../../api/types';
 import {
   useCancelProviderOAuth,
+  useOrgKeyAdminQuery,
   useProvidersQuery,
   useRemoveProviderKey,
   useSignOutProviderOAuth,
@@ -25,6 +27,7 @@ import { providerDisplayName } from './provider-display-name';
 const SOURCE_LABEL: Record<ProviderInfo['source'], string> = {
   oauth: 'Signed in',
   'oauth-user': 'Signed in',
+  'oauth-org': 'Org sign-in',
   stored: 'Key saved',
   'stored-user': 'Personal key',
   'stored-org': 'Org key',
@@ -35,6 +38,7 @@ const SOURCE_LABEL: Record<ProviderInfo['source'], string> = {
 const SOURCE_VARIANT: Record<ProviderInfo['source'], 'success' | 'info' | 'default'> = {
   oauth: 'success',
   'oauth-user': 'success',
+  'oauth-org': 'info',
   stored: 'success',
   'stored-user': 'success',
   'stored-org': 'info',
@@ -86,7 +90,9 @@ export function ProviderAccessSection() {
   const cancelOAuthMutation = useCancelProviderOAuth();
   const signOutMutation = useSignOutProviderOAuth();
   const removeKeyMutation = useRemoveProviderKey();
+  const orgKeyAdminQuery = useOrgKeyAdminQuery();
   const [search, setSearch] = useState('');
+  const [oauthScope, setOAuthScope] = useState<'user' | 'org'>('user');
   const [startingProvider, setStartingProvider] = useState<string>();
   const [activeOAuth, setActiveOAuth] = useState<ActiveOAuthSession>();
   const [keyDialogProvider, setKeyDialogProvider] = useState<ProviderInfo>();
@@ -108,6 +114,8 @@ export function ProviderAccessSection() {
     ? apiKeyProviders.filter(provider => provider.provider.toLowerCase().includes(query))
     : apiKeyProviders;
 
+  const canWriteOrgKey = !authEnabled || (orgKeyAdminQuery.data ?? true);
+
   const startOAuth = async (provider: ProviderInfo) => {
     const modes = provider.oauth?.modes ?? [];
     setStartingProvider(provider.provider);
@@ -115,6 +123,7 @@ export function ProviderAccessSection() {
       const session = await startOAuthMutation.mutateAsync({
         provider: provider.provider,
         mode: modes.length === 1 ? modes[0] : undefined,
+        ...(authEnabled ? { scope: oauthScope } : {}),
       });
       setActiveOAuth({ provider: provider.provider, session });
     } catch {
@@ -134,7 +143,10 @@ export function ProviderAccessSection() {
 
   const signOut = (provider: ProviderInfo) => {
     signOutMutation.mutate(
-      { provider: provider.provider },
+      {
+        provider: provider.provider,
+        ...(authEnabled && provider.source === 'oauth-org' ? { scope: 'org' as const } : {}),
+      },
       { onError: error => toast.error(mutationErrorMessage(error, 'Failed to sign out')) },
     );
   };
@@ -172,6 +184,37 @@ export function ProviderAccessSection() {
         </TabList>
 
         <TabContent value="oauth" className="flex flex-col gap-3">
+          {authEnabled && (
+            <div className="flex items-center justify-between gap-4">
+              <Txt as="span" variant="ui-sm" className="text-icon4">
+                Who can use this sign-in
+              </Txt>
+              <ButtonsGroup spacing="close" role="group" aria-label="Sign-in access">
+                {(
+                  [
+                    { value: 'user', label: 'Just me' },
+                    { value: 'org', label: 'Everyone in org' },
+                  ] as const
+                ).map(option => (
+                  <Button
+                    key={option.value}
+                    variant={oauthScope === option.value ? 'primary' : 'outline'}
+                    size="sm"
+                    aria-pressed={oauthScope === option.value}
+                    disabled={option.value === 'org' && !canWriteOrgKey}
+                    title={
+                      option.value === 'org' && !canWriteOrgKey
+                        ? 'Only org admins can sign in for the whole org'
+                        : undefined
+                    }
+                    onClick={() => setOAuthScope(option.value)}
+                  >
+                    {option.label}
+                  </Button>
+                ))}
+              </ButtonsGroup>
+            </div>
+          )}
           {providersQuery.isPending ? (
             <SkeletonRows label="Loading providers" rows={3} rowClassName="h-9 w-full" />
           ) : oauthProviders.length === 0 ? (
@@ -182,7 +225,8 @@ export function ProviderAccessSection() {
             <DataList aria-label="Sign in providers" variant="lined" columns={PROVIDER_LIST_COLUMNS}>
               {oauthProviders.map(provider => {
                 const displayName = providerDisplayName(provider.provider);
-                const signedIn = provider.source === 'oauth' || provider.source === 'oauth-user';
+                const signedIn =
+                  provider.source === 'oauth' || provider.source === 'oauth-user' || provider.source === 'oauth-org';
                 return (
                   <DataList.RowStatic key={provider.provider}>
                     <DataList.NameCell>{displayName}</DataList.NameCell>
