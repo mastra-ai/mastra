@@ -290,6 +290,7 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
       const results: PruneResult[] = [];
       const now = Date.now();
       let invalidatesTagDiscovery = false;
+      let pruneFailed = false;
 
       try {
         for (const [key, entry] of Object.entries(ObservabilityStoragePostgresVNext.retentionTables)) {
@@ -316,12 +317,20 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
 
           results.push({ domain: 'observability', table: entry.table, deleted: outcome.deleted, done: outcome.done });
         }
+      } catch (error) {
+        pruneFailed = true;
+        throw error;
       } finally {
         // Pruning is not atomic across signal tables. If a later table fails
         // after an earlier one deleted rows, the monotonic tag cache still
         // has to be rebuilt on its next read.
         if (invalidatesTagDiscovery) {
-          await discoveryOps.invalidateTagDiscoveryCache(this.#client, this.#schema);
+          try {
+            await discoveryOps.invalidateTagDiscoveryCache(this.#client, this.#schema);
+          } catch (error) {
+            if (!pruneFailed) throw error;
+            this.logger?.warn?.('[observability/v-next] tag discovery invalidation failed after prune', { error });
+          }
         }
       }
 
