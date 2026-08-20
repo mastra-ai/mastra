@@ -35,7 +35,15 @@ export function useApplyProviderOMDefaults() {
   const { client } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ providerId, factoryModelId, factoryId }: { providerId: string; factoryModelId: string; factoryId?: string }) =>
+    mutationFn: ({
+      providerId,
+      factoryModelId,
+      factoryId,
+    }: {
+      providerId: string;
+      factoryModelId: string;
+      factoryId?: string;
+    }) =>
       client.post<ProviderOMDefaultsResponse>('/web/config/om/provider-defaults', {
         providerId,
         factoryModelId,

@@ -884,7 +884,7 @@ describe('OM routes with a tenant', () => {
         auth: fakeRouteAuth({ enabled: opts.authEnabled !== false }),
         controller,
         modelCredentials: seed.credentials,
-        ...(opts.withStorage === false ? {} : { memorySettings: seed.memorySettings }),
+        ...(opts.withStorage === false ? {} : { memorySettings: seed.memorySettings, factoryProjects: seed.projects }),
       }).routes(),
     );
     return app;
@@ -930,10 +930,11 @@ describe('OM routes with a tenant', () => {
   });
 
   it('seeds provider-specific OM defaults into the factory-scoped row when factoryId is given', async () => {
+    const project = await seed.projects.create({ orgId: 'org1', userId: 'user-a', input: { name: 'Factory One' } });
     const res = await postJson(buildApp(makeOmSession()), '/web/config/om/provider-defaults', {
       providerId: 'anthropic',
       factoryModelId: 'anthropic/claude-fable-5',
-      factoryId: 'factory-1',
+      factoryId: project.id,
     });
 
     expect(res.status).toBe(200);
@@ -942,13 +943,31 @@ describe('OM routes with a tenant', () => {
       reflectorModelId: 'anthropic/claude-haiku-4-5',
     });
     await expect(
-      seed.memorySettings.get({ orgId: 'org1', userId: factoryMemorySettingsUserId('factory-1') }),
+      seed.memorySettings.get({ orgId: 'org1', userId: factoryMemorySettingsUserId(project.id) }),
     ).resolves.toMatchObject({
       observerModelId: 'anthropic/claude-haiku-4-5',
       reflectorModelId: 'anthropic/claude-haiku-4-5',
     });
     // The personal row must remain untouched.
     await expect(seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' })).resolves.toBeNull();
+  });
+
+  it('rejects factory-scoped OM access for a factory outside the caller org', async () => {
+    const foreign = await seed.projects.create({ orgId: 'org2', userId: 'user-b', input: { name: 'Other Org' } });
+    const app = buildApp(makeOmSession());
+
+    const read = await app.request(`/web/config/om?factoryId=${foreign.id}`);
+    expect(read.status).toBe(404);
+
+    const write = await postJson(app, '/web/config/om/provider-defaults', {
+      providerId: 'anthropic',
+      factoryModelId: 'anthropic/claude-fable-5',
+      factoryId: foreign.id,
+    });
+    expect(write.status).toBe(404);
+    await expect(
+      seed.memorySettings.get({ orgId: 'org1', userId: factoryMemorySettingsUserId(foreign.id) }),
+    ).resolves.toBeNull();
   });
 
   it('reads the OpenAI OM default through a Codex credential', async () => {

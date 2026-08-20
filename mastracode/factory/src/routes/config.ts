@@ -579,15 +579,29 @@ async function resolveMemorySettingsContext({
   auth,
   memorySettings,
   factoryProjectId,
+  factoryProjects,
 }: {
   c: Context;
   auth: RouteAuth;
   memorySettings?: MemorySettingsStorage;
   factoryProjectId?: string;
+  factoryProjects?: FactoryProjectsStorage;
 }): Promise<MemorySettingsContext | { response: Response }> {
   await auth.ensureUser(c);
   const tenant = auth.tenant(c);
   if (!tenant && auth.enabled()) return { response: c.json({ error: 'unauthorized' }, 401) };
+  // Factory-scoped rows are shared org state: the target project must exist in
+  // the caller's org before its settings row can be read or written.
+  if (factoryProjectId && tenant) {
+    if (!factoryProjects) return { response: c.json({ error: 'factory_unavailable' }, 503) };
+    try {
+      await factoryProjects.ensureReady();
+      const project = await factoryProjects.get({ orgId: tenantOrgId(tenant), id: factoryProjectId });
+      if (!project) return { response: c.json({ error: 'factory_project_not_found' }, 404) };
+    } catch {
+      return { response: c.json({ error: 'factory_unavailable' }, 503) };
+    }
+  }
   if (memorySettings) {
     try {
       await memorySettings.ensureReady();
@@ -1261,6 +1275,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             auth,
             memorySettings: options.memorySettings,
             factoryProjectId,
+            factoryProjects: options.factoryProjects,
           });
           if ('response' in context) return context.response;
 
@@ -1308,6 +1323,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             auth,
             memorySettings: options.memorySettings,
             factoryProjectId,
+            factoryProjects: options.factoryProjects,
           });
           if ('response' in context) return context.response;
           try {
@@ -1353,6 +1369,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             auth,
             memorySettings: options.memorySettings,
             factoryProjectId,
+            factoryProjects: options.factoryProjects,
           });
           if ('response' in context) return context.response;
           try {
@@ -1421,6 +1438,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             auth,
             memorySettings: options.memorySettings,
             factoryProjectId,
+            factoryProjects: options.factoryProjects,
           });
           if ('response' in context) return context.response;
           try {
@@ -1475,6 +1493,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             auth,
             memorySettings: options.memorySettings,
             factoryProjectId,
+            factoryProjects: options.factoryProjects,
           });
           if ('response' in context) return context.response;
           try {

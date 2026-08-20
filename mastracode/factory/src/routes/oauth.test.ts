@@ -368,6 +368,31 @@ describe('org-scoped sign-in', () => {
     expect(await seed.credentials.getCredential({ orgId: 'org1' }, 'openai-codex')).toMatchObject({ type: 'oauth' });
   });
 
+  it('403s complete when admin access was revoked after the org-scoped flow started', async () => {
+    const { sessionId } = await (
+      await post(buildApp(userA), '/web/config/providers/anthropic/oauth/start', { scope: 'org' })
+    ).json();
+
+    // Admin at start, revoked before completion.
+    const revoked = buildApp(userA, { isOrganizationAdmin: async () => false });
+    const res = await post(revoked, '/web/config/providers/anthropic/oauth/complete', { sessionId, code: 'c' });
+    expect(res.status).toBe(403);
+    expect(await seed.credentials.getCredential({ orgId: 'org1' }, 'anthropic')).toBeUndefined();
+  });
+
+  it('403s device-code poll when admin access was revoked after the org-scoped flow started', async () => {
+    const { sessionId } = await (
+      await post(buildApp(userA), '/web/config/providers/openai/oauth/start', { scope: 'org' })
+    ).json();
+    pollCodexDeviceLogin.mockResolvedValue({ status: 'complete', credentials: CODEX_CREDS });
+    await makePollable(sessionId);
+
+    const revoked = buildApp(userA, { isOrganizationAdmin: async () => false });
+    const res = await post(revoked, '/web/config/providers/openai/oauth/poll', { sessionId });
+    expect(res.status).toBe(403);
+    expect(await seed.credentials.getCredential({ orgId: 'org1' }, 'openai-codex')).toBeUndefined();
+  });
+
   it('403s a non-admin starting an org-scoped flow', async () => {
     const app = buildApp(userA, { isOrganizationAdmin: async () => false });
     const res = await post(app, '/web/config/providers/anthropic/oauth/start', { scope: 'org' });

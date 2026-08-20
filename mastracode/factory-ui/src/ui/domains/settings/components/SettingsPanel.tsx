@@ -180,14 +180,18 @@ function MemorySettingsSection({ factoryId, models, sessionResourceId, sessionSc
 
   return (
     <div className="flex flex-col gap-8">
-      <SettingsSubsection
-        title="Factory observational memory"
-        description="Models and token thresholds used to summarize and retain context in Factory runs."
-      >
-        <SettingsCard className="p-4">
-          <OMSection factoryId={factoryId} models={models} />
-        </SettingsCard>
-      </SettingsSubsection>
+      {/* Without a factory id an unscoped OM request would resolve — and let
+          this section edit — the caller's personal row as if it were shared. */}
+      {factoryId && (
+        <SettingsSubsection
+          title="Factory observational memory"
+          description="Models and token thresholds used to summarize and retain context in Factory runs."
+        >
+          <SettingsCard className="p-4">
+            <OMSection factoryId={factoryId} models={models} />
+          </SettingsCard>
+        </SettingsSubsection>
+      )}
       <SettingsSubsection
         title="Your observational memory"
         description="Models and token thresholds used to summarize and retain context in your interactive chats."
@@ -249,11 +253,7 @@ function ModelsSettingsSection({ models, settings, updating, onBehaviorChange }:
           <BaseThinkingSection />
         </SettingsCard>
       </SettingsSubsection>
-      <SettingsSubsection
-        id="model-packs"
-        title="Your defaults"
-        description="Applied to your interactive chats."
-      >
+      <SettingsSubsection id="model-packs" title="Your defaults" description="Applied to your interactive chats.">
         <SettingsCard>
           <div className="p-4">
             <ModelPacksSection models={models} />

@@ -344,6 +344,15 @@ export class OAuthRoutes extends Route<OAuthRoutesDeps> {
           const session = await loadOwnedSession({ ctx, provider, sessionId });
           if (!session) return c.json({ error: 'session_not_found' }, 404);
           if (session.kind !== 'paste-code') return c.json({ error: 'wrong_session_kind' }, 400);
+          // Org-scoped flows recheck admin access at completion time — the
+          // caller may have lost admin since the flow was started.
+          if (
+            session.credentialScope === 'org' &&
+            ctx.mode === 'tenant' &&
+            !(await auth.isOrganizationAdmin(loose(c), ctx.orgId))
+          ) {
+            return c.json({ error: 'forbidden', message: 'Only org admins can sign in for the whole org' }, 403);
+          }
 
           const claimed = await (
             await sessionStore(ctx)
@@ -394,6 +403,15 @@ export class OAuthRoutes extends Route<OAuthRoutesDeps> {
           const session = await loadOwnedSession({ ctx, provider, sessionId });
           if (!session) return c.json({ error: 'session_not_found' }, 404);
           if (session.kind !== 'device-code') return c.json({ error: 'wrong_session_kind' }, 400);
+          // Org-scoped flows recheck admin access before the credential write —
+          // the caller may have lost admin since the flow was started.
+          if (
+            session.credentialScope === 'org' &&
+            ctx.mode === 'tenant' &&
+            !(await auth.isOrganizationAdmin(loose(c), ctx.orgId))
+          ) {
+            return c.json({ error: 'forbidden', message: 'Only org admins can sign in for the whole org' }, 403);
+          }
 
           // Server-side rate limit: at most one upstream poll per interval,
           // regardless of how eagerly the client calls this route.

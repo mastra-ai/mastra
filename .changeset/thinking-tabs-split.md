@@ -2,4 +2,4 @@
 '@mastra/factory': patch
 ---
 
-Split thinking defaults in the Models settings tabs: the Factory tab now has a base thinking level widget, and per-mode thinking defaults moved into the User tab.
+Split thinking defaults on the Models settings page: the factory defaults section now has a base thinking level widget, and per-mode thinking defaults moved into the personal "Your defaults" section.

@@ -4,7 +4,7 @@ import { delay, http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
-import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
+import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import type { ProviderInfo } from '../../../../../api/types';
 import { useAvailableModelsQuery } from '../../../../../hooks/useAvailableModels';
 import type { AvailableModelOption } from '../../../../../hooks/useAvailableModels';
@@ -370,7 +370,7 @@ describe('ProviderAccessSection', () => {
       );
 
       const user = userEvent.setup();
-      renderWithProviders(<ProviderAccessSection />);
+      const { client } = renderWithProviders(<ProviderAccessSection />);
 
       await screen.findByText('Anthropic');
       await user.click(within(rowFor('anthropic')).getByRole('button', { name: 'Sign in to Anthropic' }));
@@ -382,6 +382,9 @@ describe('ProviderAccessSection', () => {
 
       await user.type(await screen.findByLabelText('Authorization code'), 'code#state');
       await user.click(screen.getByRole('button', { name: 'Complete sign in' }));
+      // Settle the complete mutation and its provider-list refresh before
+      // asserting on the refreshed row.
+      await waitForMutationsIdle(client);
       await waitFor(() => expect(within(rowFor('anthropic')).getByText('Org sign-in')).toBeInTheDocument());
 
       await user.click(within(rowFor('anthropic')).getByRole('button', { name: 'Sign out of Anthropic for the org' }));
