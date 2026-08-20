@@ -851,7 +851,7 @@ describe('session start (onSessionStart)', () => {
 
     await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
 
-    expect(deps.memorySettings.get).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1' });
+    expect(deps.memorySettings.get).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'factory-project:fp-1' });
     expect(session.om.observer.switchModel).toHaveBeenCalledWith({ modelId: 'openai/gpt-5.4-mini' });
     expect(session.state.set).toHaveBeenCalledWith(expect.objectContaining({ observationThreshold: 111 }));
   });

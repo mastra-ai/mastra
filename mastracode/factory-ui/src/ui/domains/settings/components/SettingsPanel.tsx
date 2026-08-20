@@ -1,7 +1,8 @@
 import type { AgentControllerSessionSettings } from '@mastra/client-js';
 import { useTheme } from '@mastra/playground-ui/components/ThemeProvider';
 import { useEffect } from 'react';
-import { useLocation } from 'react-router';
+import { useLocation, useParams } from 'react-router';
+import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -42,6 +43,7 @@ function getSettingsUpdateErrorMessage(error: unknown): string {
 export function SettingsPanel() {
   const section = useSettingsSection();
   const { hash } = useLocation();
+  const { factoryId } = useParams<{ factoryId: string }>();
   const { theme, setTheme } = useTheme();
 
   // Deep links like `/settings/models#model-packs` scroll to the subsection.
@@ -96,16 +98,58 @@ export function SettingsPanel() {
         {section === 'intake' && <IntakeSection />}
         {section === 'models' && (
           <div className="flex flex-col gap-8">
-            <SettingsSubsection title="Defaults">
-              <SettingsCard>
-                <FactoryDefaultModelSection models={models} />
-                <ModelSettings
-                  settings={settings}
-                  updating={updateSettingsMutation.isPending}
-                  onBehaviorChange={onBehaviorChange}
-                />
-              </SettingsCard>
-            </SettingsSubsection>
+            <Tabs defaultTab={hash === '#model-packs' ? 'user' : 'factory'}>
+              <TabList variant="pill">
+                <Tab value="factory">Factory</Tab>
+                <Tab value="user">User</Tab>
+              </TabList>
+              <TabContent value="factory" className="flex flex-col gap-8 pt-4">
+                <SettingsSubsection
+                  title="Defaults"
+                  description="Applied to Factory runs (triage, board work items) and channel sessions."
+                >
+                  <SettingsCard>
+                    <FactoryDefaultModelSection models={models} />
+                  </SettingsCard>
+                </SettingsSubsection>
+                <SettingsSubsection
+                  title="Observational memory"
+                  description="Models and token thresholds Factory runs use to summarize and retain context. Unset values fall back to the built-in defaults."
+                >
+                  <SettingsCard className="p-4">
+                    <OMSection factoryId={factoryId} models={models} />
+                  </SettingsCard>
+                </SettingsSubsection>
+              </TabContent>
+              <TabContent value="user" className="flex flex-col gap-8 pt-4">
+                <SettingsSubsection title="Session">
+                  <SettingsCard>
+                    <ModelSettings
+                      settings={settings}
+                      updating={updateSettingsMutation.isPending}
+                      onBehaviorChange={onBehaviorChange}
+                    />
+                  </SettingsCard>
+                </SettingsSubsection>
+                <SettingsSubsection
+                  id="model-packs"
+                  title="Chat model packs"
+                  description="Set your personal Build, Plan and Fast defaults for interactive chats. Factory work runs are unaffected."
+                >
+                  <SettingsCard className="p-4">
+                    <ModelPacksSection models={models} />
+                  </SettingsCard>
+                </SettingsSubsection>
+                <SettingsSubsection
+                  title="Observational memory"
+                  description="Your personal models and token thresholds used to summarize and retain conversation context in interactive chats. Factory runs use the Factory tab's settings."
+                >
+                  <SettingsCard className="p-4">
+                    <OMSection resourceId={sessionResourceId} scope={sessionScope} models={models} />
+                  </SettingsCard>
+                </SettingsSubsection>
+              </TabContent>
+            </Tabs>
             <SettingsSubsection
               title="Thinking defaults"
               description="Reasoning-effort applied to runs without a session override — including automated Factory runs. The session thinking level above takes precedence."
@@ -122,23 +166,6 @@ export function SettingsPanel() {
             <SettingsSubsection title="Custom providers">
               <SettingsCard className="p-4">
                 <CustomProvidersSection />
-              </SettingsCard>
-            </SettingsSubsection>
-            <SettingsSubsection
-              id="model-packs"
-              title="Chat model packs"
-              description="Set your personal Build, Plan and Fast defaults for interactive chats. Factory work runs are unaffected."
-            >
-              <SettingsCard className="p-4">
-                <ModelPacksSection models={models} />
-              </SettingsCard>
-            </SettingsSubsection>
-            <SettingsSubsection
-              title="Observational memory"
-              description="Your personal models and token thresholds used to summarize and retain conversation context in interactive chats. Factory runs always use the built-in defaults."
-            >
-              <SettingsCard className="p-4">
-                <OMSection resourceId={sessionResourceId} scope={sessionScope} models={models} />
               </SettingsCard>
             </SettingsSubsection>
           </div>

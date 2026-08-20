@@ -71,7 +71,8 @@ interface SlackChannelDeps {
   sourceControl?: SourceControlStorageHandle;
   /**
    * Observational-memory settings domain. When provided, a repo-backed session
-   * adopts its owner's memory settings on start, matching the web kickoff.
+   * adopts its factory project's shared memory settings on start, matching the
+   * web kickoff.
    */
   memorySettings?: MemorySettingsStorage;
   /**
@@ -408,7 +409,7 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
     const defaultModelId = await resolveFactoryDefaultModelId(projects, owner.factoryProjectId);
     await hydrateFactorySession(session, {
       orgId: owner.orgId,
-      userId: owner.userId,
+      factoryProjectId: owner.factoryProjectId,
       defaultModelId,
       memorySettings,
     });

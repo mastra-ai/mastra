@@ -3,6 +3,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_OBSERVATION_THRESHOLD, DEFAULT_REFLECTION_THRESHOLD } from '../session/memory-settings-hydration.js';
+import { factoryMemorySettingsUserId } from '../storage/domains/memory-settings/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { defaultFactoryRules } from './defaults.js';
 import { FactoryStartCoordinator } from './start-coordinator.js';
@@ -232,6 +233,7 @@ describe('FactoryStartCoordinator', () => {
       storage.workItems,
       undefined,
       makeSourceControl() as never,
+      storage.memorySettings,
     );
 
     await coordinator.prepare(startRequest());
@@ -241,6 +243,39 @@ describe('FactoryStartCoordinator', () => {
     expect(session.state.set).toHaveBeenCalledWith({
       observationThreshold: DEFAULT_OBSERVATION_THRESHOLD,
       reflectionThreshold: DEFAULT_REFLECTION_THRESHOLD,
+    });
+  });
+
+  it("hydrates board runs with the factory project's shared memory settings when stored", async () => {
+    const storage = await createFactoryStorageForTests();
+    await storage.memorySettings.patch({
+      orgId: 'org-1',
+      userId: factoryMemorySettingsUserId(PROJECT_ID),
+      patch: {
+        observerModelId: 'anthropic/claude-haiku-4-5',
+        reflectorModelId: 'anthropic/claude-opus-5',
+        observationThreshold: 12_000,
+        reflectionThreshold: 23_000,
+        observeAttachments: true,
+      },
+    });
+    const { controller, session } = makeController();
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      storage.workItems,
+      undefined,
+      makeSourceControl() as never,
+      storage.memorySettings,
+    );
+
+    await coordinator.prepare(startRequest());
+
+    expect(session.om.observer.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-haiku-4-5' });
+    expect(session.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-opus-5' });
+    expect(session.state.set).toHaveBeenCalledWith({
+      observationThreshold: 12_000,
+      reflectionThreshold: 23_000,
+      observeAttachments: true,
     });
   });
 

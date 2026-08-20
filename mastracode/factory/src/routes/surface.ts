@@ -391,6 +391,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
         deps.domains.workItems,
         transitionService,
         githubIntegration?.sourceControlStorage,
+        deps.domains.memorySettings,
       )
     : undefined;
   if (transitionService && startCoordinator) {

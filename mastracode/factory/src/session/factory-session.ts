@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController } from '@mastra/core/agent-controller';
 
+import { factoryMemorySettingsUserId } from '../storage/domains/memory-settings/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
@@ -199,14 +200,18 @@ export async function ensureFactorySourceSession(
 
 export interface HydrateFactorySessionArgs {
   orgId: string;
-  userId: string;
+  /**
+   * The factory project whose shared memory settings apply. Factory sessions
+   * never read an individual user's personal memory settings — the project's
+   * own row (or the built-in defaults) is what they run with.
+   */
+  factoryProjectId?: string;
   /** The factory project's default model. Without it the session keeps the SDK's built-in mode default. */
   defaultModelId?: string;
   /**
-   * When provided, the user's stored memory-settings row is applied — the path
-   * for user-facing sessions (e.g. channel threads). When omitted the session
-   * is reset to the built-in memory defaults: autonomous board runs must never
-   * inherit an individual user's personal model configuration.
+   * When provided, the factory project's stored memory-settings row is
+   * applied. When omitted (or no row exists) the session is reset to the
+   * built-in memory defaults.
    */
   memorySettings?: MemorySettingsStorage;
 }
@@ -221,9 +226,13 @@ export interface HydrateFactorySessionArgs {
  */
 export async function hydrateFactorySession(session: FactorySession, args: HydrateFactorySessionArgs): Promise<void> {
   try {
-    const record = args.memorySettings
-      ? await args.memorySettings.get({ orgId: args.orgId, userId: args.userId })
-      : null;
+    const record =
+      args.memorySettings && args.factoryProjectId
+        ? await args.memorySettings.get({
+            orgId: args.orgId,
+            userId: factoryMemorySettingsUserId(args.factoryProjectId),
+          })
+        : null;
     await applyStoredMemorySettings(session, record);
   } catch (error) {
     console.warn('[Factory Start] Failed to apply observational-memory settings', {

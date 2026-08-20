@@ -26,6 +26,7 @@ import type {
   ModelCredentialsStorage,
 } from '../storage/domains/credentials/base.js';
 import type { CustomProviderRecord, CustomProvidersStorage } from '../storage/domains/custom-providers/base.js';
+import { factoryMemorySettingsUserId } from '../storage/domains/memory-settings/base.js';
 import type {
   MemorySettingsFillIfUnset,
   MemorySettingsPatch,
@@ -546,15 +547,23 @@ interface MemorySettingsContext {
   userId: string;
 }
 
-/** Resolve the memory-settings context for a request, or a ready-to-return error response. */
+/**
+ * Resolve the memory-settings context for a request, or a ready-to-return
+ * error response. When `factoryProjectId` is provided the row addressed is the
+ * factory project's shared settings (a sentinel user id in the caller's org)
+ * instead of the caller's personal row — this is what factory board runs and
+ * channel sessions hydrate from.
+ */
 async function resolveMemorySettingsContext({
   c,
   auth,
   memorySettings,
+  factoryProjectId,
 }: {
   c: Context;
   auth: RouteAuth;
   memorySettings?: MemorySettingsStorage;
+  factoryProjectId?: string;
 }): Promise<MemorySettingsContext | { response: Response }> {
   await auth.ensureUser(c);
   const tenant = auth.tenant(c);
@@ -562,9 +571,10 @@ async function resolveMemorySettingsContext({
   if (memorySettings) {
     try {
       await memorySettings.ensureReady();
+      const factoryUserId = factoryProjectId ? factoryMemorySettingsUserId(factoryProjectId) : undefined;
       return tenant
-        ? { storage: memorySettings, orgId: tenantOrgId(tenant), userId: tenant.userId }
-        : { storage: memorySettings, orgId: 'local', userId: 'local' };
+        ? { storage: memorySettings, orgId: tenantOrgId(tenant), userId: factoryUserId ?? tenant.userId }
+        : { storage: memorySettings, orgId: 'local', userId: factoryUserId ?? 'local' };
     } catch {
       // fall through to the unavailable response
     }
@@ -1253,10 +1263,12 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
         handler: async c => {
           const resourceId = c.req.query('resourceId');
           const scope = c.req.query('scope') || undefined;
+          const factoryProjectId = c.req.query('factoryId') || undefined;
           const context = await resolveMemorySettingsContext({
             c: loose(c),
             auth,
             memorySettings: options.memorySettings,
+            factoryProjectId,
           });
           if ('response' in context) return context.response;
           try {
@@ -1285,7 +1297,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           if (role !== 'observer' && role !== 'reflector') {
             return c.json({ error: `Unknown OM role "${role}"` }, 400);
           }
-          let body: { resourceId?: unknown; modelId?: unknown; scope?: unknown };
+          let body: { resourceId?: unknown; modelId?: unknown; scope?: unknown; factoryId?: unknown };
           try {
             body = await c.req.json();
           } catch {
@@ -1293,12 +1305,14 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           }
           const resourceId = typeof body.resourceId === 'string' ? body.resourceId : '';
           const scope = typeof body.scope === 'string' && body.scope ? body.scope : undefined;
+          const factoryProjectId = typeof body.factoryId === 'string' && body.factoryId ? body.factoryId : undefined;
           const modelId = typeof body.modelId === 'string' ? body.modelId.trim() : '';
           if (!modelId) return c.json({ error: 'Missing required field: modelId' }, 400);
           const context = await resolveMemorySettingsContext({
             c: loose(c),
             auth,
             memorySettings: options.memorySettings,
+            factoryProjectId,
           });
           if ('response' in context) return context.response;
           try {
@@ -1338,6 +1352,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             observationThreshold?: unknown;
             reflectionThreshold?: unknown;
             scope?: unknown;
+            factoryId?: unknown;
           };
           try {
             body = await c.req.json();
@@ -1346,6 +1361,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           }
           const resourceId = typeof body.resourceId === 'string' ? body.resourceId : '';
           const scope = typeof body.scope === 'string' && body.scope ? body.scope : undefined;
+          const factoryProjectId = typeof body.factoryId === 'string' && body.factoryId ? body.factoryId : undefined;
           const observation =
             typeof body.observationThreshold === 'number' && body.observationThreshold > 0
               ? Math.round(body.observationThreshold)
@@ -1361,6 +1377,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             c: loose(c),
             auth,
             memorySettings: options.memorySettings,
+            factoryProjectId,
           });
           if ('response' in context) return context.response;
           try {
@@ -1393,7 +1410,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
         method: 'PUT',
         requiresAuth: false,
         handler: async c => {
-          let body: { resourceId?: unknown; value?: unknown; scope?: unknown };
+          let body: { resourceId?: unknown; value?: unknown; scope?: unknown; factoryId?: unknown };
           try {
             body = await c.req.json();
           } catch {
@@ -1401,6 +1418,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           }
           const resourceId = typeof body.resourceId === 'string' ? body.resourceId : '';
           const scope = typeof body.scope === 'string' && body.scope ? body.scope : undefined;
+          const factoryProjectId = typeof body.factoryId === 'string' && body.factoryId ? body.factoryId : undefined;
           const raw = body.value;
           const value: 'auto' | boolean = raw === 'auto' || raw === true || raw === false ? raw : 'auto';
           if (raw !== 'auto' && raw !== true && raw !== false) {
@@ -1410,6 +1428,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             c: loose(c),
             auth,
             memorySettings: options.memorySettings,
+            factoryProjectId,
           });
           if ('response' in context) return context.response;
           try {
