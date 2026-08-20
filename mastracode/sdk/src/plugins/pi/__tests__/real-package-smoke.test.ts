@@ -4,7 +4,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { loadPiExtensionGeneration } from '../loader.js';
+import { PluginManager } from '../../manager.js';
+import { loadPluginRegistry } from '../../registry.js';
 import { inspectPiPackageManifest } from '../package-manifest.js';
 import { discoverPiPackageResources } from '../resource-discovery.js';
 
@@ -59,22 +60,55 @@ describe('pinned real Pi Package fixture', () => {
     expect(resources.skills).toContain('skills/mcp-scripting/SKILL.md');
 
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-pi-real-package-'));
-    process.env.HOME = tempDir;
-    process.chdir(tempDir);
-    const generation = await loadPiExtensionGeneration({
-      pluginId: manifest.name,
-      entryPath: resources.extensions[0]!,
-      pluginRoot: packageRoot,
-    });
-    const api = generation.createApi();
+    const projectRoot = path.join(tempDir, 'project');
+    const homeDir = path.join(tempDir, 'home');
+    fs.mkdirSync(projectRoot, { recursive: true });
+    process.env.HOME = homeDir;
+    process.chdir(projectRoot);
+
+    const corepackFixture = path.join(tempDir, 'corepack-fixture.mjs');
+    fs.writeFileSync(
+      corepackFixture,
+      `#!/usr/bin/env node\nimport fs from 'node:fs';\nimport path from 'node:path';\nfs.symlinkSync(${JSON.stringify(path.join(sdkRoot, 'node_modules'))}, path.join(process.cwd(), 'node_modules'), 'dir');\n`,
+      { mode: 0o755 },
+    );
+
+    const manager = new PluginManager({ projectRoot, homeDir });
     try {
+      const prepared = await manager.preparePiPackage(packageRoot, 'global');
+      const characterized = await manager.characterizePiPackage(prepared, {
+        trustCodeExecution: true,
+        installScripts: 'deny',
+        corepackCliPath: corepackFixture,
+      });
+      expect(characterized.compatibility.status).toBe('pi-compatible');
+
+      await manager.installPiPackage(characterized, { confirmEnable: true });
+      const generation = manager.getPiGenerations()[0]!;
+      const api = generation.createApi();
       expect(generation.registrations.tools.has('mcp')).toBe(true);
-      expect(generation.compatibility.status).toBe('pi-compatible');
-      await generation.emit('session_shutdown', { type: 'session_shutdown' });
+      expect((await manager.listPlugins()).find(plugin => plugin.id === manifest.name)).toMatchObject({
+        status: 'active',
+        piPackage: {
+          targetApiVersion: '0.84.2',
+          observedApiVersion: '^0.84.1',
+          compatibilityReport: { status: 'pi-compatible' },
+        },
+      });
+      expect(
+        loadPluginRegistry(path.join(homeDir, '.mastracode/plugins/plugins.json')).plugins[manifest.name],
+      ).toMatchObject({ source: 'pi-package', enabled: true });
+
+      await manager.uninstall(manifest.name, 'global');
+      expect(manager.getPiGenerations()).toEqual([]);
+      expect(loadPluginRegistry(path.join(homeDir, '.mastracode/plugins/plugins.json')).plugins).not.toHaveProperty(
+        manifest.name,
+      );
+      expect(fs.existsSync(characterized.resolution.sourceRoot)).toBe(false);
+      expect(fs.existsSync(characterized.resolution.packageRoot)).toBe(false);
+      expect(() => api.getFlag('transport')).toThrow('context is stale');
     } finally {
-      await generation.invalidate('Real Pi Package smoke completed.');
+      await manager.dispose();
     }
-    expect(generation.active).toBe(false);
-    expect(() => api.getFlag('transport')).toThrow('Real Pi Package smoke completed.');
-  });
+  }, 20_000);
 });

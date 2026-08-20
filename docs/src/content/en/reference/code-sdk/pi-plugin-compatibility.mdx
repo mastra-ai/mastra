@@ -9,7 +9,7 @@ packages:
 
 Mastra Code's Pi compatibility contract defines a bounded subset of the Pi Package extension API. The compatibility host adapts supported contributions into Mastra Code's existing plugin and AgentController runtime. It doesn't run Pi's coding-agent loop, `ExtensionRunner`, `SessionManager`, or transcript store.
 
-The matrices on this page define the end state for this compatibility release. The current implementation includes extension loading, tools, mapped lifecycle and interception events, commands, messages, namespaced state, models, declarative providers, threads, and bounded UI. Package installation, trust, package resource discovery, compaction, and thread-operation interception aren't available yet. Registrations for those future mappings receive unsupported-capability diagnostics.
+The current implementation includes extension loading, tools, mapped lifecycle and interception events, commands, messages, namespaced state, models, declarative providers, threads, bounded UI, and Pi Package management. Compaction and thread-operation interception aren't available. Registrations for unsupported mappings receive extension-attributed diagnostics.
 
 This contract targets `@earendil-works/pi-coding-agent@0.84.2` and matching `@earendil-works/pi-*` packages. Other Pi API versions are unverified and don't become compatible automatically.
 
@@ -22,6 +22,31 @@ This contract targets `@earendil-works/pi-coding-agent@0.84.2` and matching `@ea
 - Pi shell execution uses Mastra Code workspace approval, working-directory, timeout, abort, environment, and output limits.
 - Declarative provider credentials must reference environment variables. Literal credentials are rejected. Native provider objects and provider OAuth UI aren't accepted.
 - The interactive UI bridge owns bounded notification, status, text-widget, dialog, editor-text, semantic-theme, and text-renderer surfaces. It clears generation-owned UI during reload and uses attributed diagnostics for unsupported components, shortcuts, theme replacement, and terminal access.
+
+## Install and manage Pi Packages
+
+Open `/plugins`, select **Install plugin**, then select **Pi Package**. Mastra Code accepts these source forms:
+
+| Source | Syntax | Resolution |
+| - | - | - |
+| npm | `npm:<name>@<exact-version>` | Verifies the registry SHA-512 integrity and stores the exact package version. Tags and version ranges aren't accepted. |
+| GitHub | `github:<owner>/<repository>@<ref>` | Resolves the ref to a commit and stores the commit identity. |
+| Git | `git:<url>@<ref>` or an HTTP(S), SSH, or Git URL | Resolves the ref to a commit. URLs with embedded credentials aren't accepted. |
+| Local | A directory path | Copies the package into a content-addressed, scope-owned directory. Project-scoped sources must remain inside the project. |
+
+The install flow uses separate decisions for arbitrary-code trust, lifecycle scripts, and enablement:
+
+1. Mastra Code resolves the source and inspects its manifest without running package code.
+1. You review the arbitrary-code warning and approve code execution. Project packages also require project trust.
+1. You decide whether dependency lifecycle scripts may run. They remain disabled by default.
+1. Mastra Code installs dependencies and characterizes the extension. The capability report lists its API version, discovered resources, capability statuses, and diagnostics.
+1. You confirm enablement separately.
+
+Canceling before enablement removes the operation-owned package files and doesn't publish a plugin generation. Failed updates keep the previous package and runtime generation active.
+
+The package detail view supports update, reload, enable, disable, and uninstall. Disable and uninstall await owned tools, handlers, providers, UI, and asynchronous service cleanup. Uninstall removes package-owned source and dependency files, but retains namespaced plugin state. A cleanup failure remains visible and retryable instead of being reported as a successful uninstall.
+
+Pi extensions run as trusted in-process code with the launching user's filesystem, process, network, and credential access, not in a Mastra Code sandbox.
 
 ## Status vocabulary
 
