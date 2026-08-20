@@ -41,7 +41,13 @@ export interface ScoreDataPanelProps {
 }
 
 export function ScoreDataPanel({ score, onClose, onPrevious, onNext }: ScoreDataPanelProps) {
-  const { Link } = useLinkComponent();
+  const { Link, paths } = useLinkComponent();
+  // Thread drill-down: agent-run scores carry the agent id as entityId, so we
+  // can deep-link straight into the conversation view.
+  const threadHref =
+    score.threadId && score.entityType === 'AGENT' && score.entityId
+      ? paths.agentThreadLink(score.entityId, score.threadId)
+      : undefined;
   const [datasetDialogOpen, setDatasetDialogOpen] = useState(false);
   const isCodeBased = isCodeBasedScorer(score);
   const naText = isCodeBased ? 'N/A — code-based scorer does not use prompts' : 'N/A — step not configured';
@@ -97,6 +103,18 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext }: ScoreData
                 >
                   {score.spanId}
                 </DataKeysAndValues.ValueLink>
+              </>
+            )}
+            {score.threadId && (
+              <>
+                <DataKeysAndValues.Key>Thread Id</DataKeysAndValues.Key>
+                {threadHref ? (
+                  <DataKeysAndValues.ValueLink href={threadHref} as={Link}>
+                    {score.threadId}
+                  </DataKeysAndValues.ValueLink>
+                ) : (
+                  <DataKeysAndValues.Value>{score.threadId}</DataKeysAndValues.Value>
+                )}
               </>
             )}
           </DataKeysAndValues>

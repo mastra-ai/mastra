@@ -1,0 +1,81 @@
+---
+title: "Ingesting external scores | Evals"
+description: "Post scores produced outside Mastra — human review queues, offline pipelines, or external workers — and query them alongside live scorer results."
+packages:
+  - "@mastra/core"
+  - "@mastra/client-js"
+---
+
+# Ingesting external scores
+
+Not every score comes from a Mastra scorer. Human review queues, offline batch pipelines, and external workers (for example, Temporal workflows) can grade agent output out-of-band and post the result back to Mastra. External scores persist in the same scores table as live scorer results, so they appear in Studio and in the [score query API](/docs/evals/overview) with full trace and thread drill-down.
+
+## Posting a score
+
+Send a `POST` request to `/api/scores` with `source: 'EXTERNAL'`. Link the score to the run it grades using `traceId`, `spanId`, `threadId`, or `runId`:
+
+```typescript title="src/workers/grade-run.ts"
+import { MastraClient } from '@mastra/client-js'
+
+const client = new MastraClient({ baseUrl: process.env.MASTRA_URL! })
+
+await client.saveScore({
+  score: {
+    id: 'grader-queue-item-42', // caller-supplied ID makes retries idempotent
+    scorerId: 'human-grader',
+    scorer: { name: 'human-grader' },
+    source: 'EXTERNAL',
+    score: 1,
+    entityId: 'support-agent',
+    entityType: 'AGENT',
+    entity: { id: 'support-agent' },
+    runId: 'run-123',
+    traceId: 'trace-abc',
+    threadId: 'thread-xyz',
+    input: [],
+    output: {},
+    metadata: {
+      grader: 'dr-smith',
+      deployment: 'v42',
+      cohort: 'oncology',
+    },
+  },
+})
+```
+
+## Idempotent retries
+
+If you supply an `id`, posting the same score twice upserts instead of duplicating: the original `createdAt` is preserved and the latest payload wins. Use a stable identifier from your own system — a queue item ID or workflow run ID — so retries after network failures converge to a single record.
+
+If you omit `id`, Mastra generates one and every post creates a new record.
+
+## Score values
+
+The `score` field is numeric. Map categorical or boolean grades onto numbers (for example, `pass = 1`, `fail = 0`) and keep the original label in `metadata`:
+
+```json
+{ "score": 0, "metadata": { "label": "hallucination", "grader": "dr-smith" } }
+```
+
+## Querying external scores back
+
+External scores are returned by `GET /api/scores` and included in `GET /api/scores/aggregate` alongside `LIVE` scores. Filter by source or by any metadata key:
+
+```typescript
+// All external scores from one grader in a cohort
+const { scores } = await client.queryScores({
+  source: 'EXTERNAL',
+  metadata: JSON.stringify({ grader: 'dr-smith', cohort: 'oncology' }),
+})
+
+// Pass rate per cohort, external and live scores combined
+const { rows } = await client.aggregateScores({
+  bucket: 'day',
+  groupBy: 'metadata:cohort',
+})
+```
+
+## Related
+
+- [Custom scorers](/docs/evals/custom-scorers): Run scoring inside Mastra instead
+- [Running scorers in CI](/docs/evals/running-in-ci): Offline experiment runs

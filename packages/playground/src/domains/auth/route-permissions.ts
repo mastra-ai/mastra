@@ -57,6 +57,7 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
 
   // Evaluation - uses 'scores' resource (not 'scorers')
   { route: '/scorers', permission: 'scores:read', name: 'Scorers' },
+  { route: '/monitors', permission: 'scores:read', name: 'Monitors' },
   { route: '/datasets', permission: ['datasets:read'], name: 'Datasets' },
   { route: '/experiments', permission: ['datasets:read'], name: 'Experiments' },
 

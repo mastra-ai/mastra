@@ -22,6 +22,7 @@ import { LEGACY_ROUTES } from './legacy';
 import { LOGS_ROUTES } from './logs';
 import { MCP_ROUTES } from './mcp';
 import { MEMORY_ROUTES } from './memory';
+import { MONITORS_ROUTES } from './monitors';
 import { OBSERVABILITY_ROUTES } from './observability';
 import { PROCESSOR_PROVIDER_ROUTES } from './processor-providers';
 import { PROCESSORS_ROUTES } from './processors';
@@ -194,6 +195,7 @@ export const SERVER_ROUTES: readonly ServerRoute[] = [
   ...EDITOR_BUILDER_ROUTES,
   ...AGENT_BUILDER_ROUTES,
   ...SCHEDULES_ROUTES,
+  ...MONITORS_ROUTES,
   ...CHANNELS_ROUTES,
   ...AGENT_CONTROLLER_ROUTES,
 ];

@@ -129,7 +129,7 @@ export type DefinitionSource = 'code' | 'stored' | 'fs';
 export type ScorerScoreSource = 'live' | 'trace' | 'experiment';
 
 /** How the scorer interpreted the target data. */
-export type ScorerTargetScope = 'span' | 'trajectory';
+export type ScorerTargetScope = 'span' | 'trajectory' | 'thread';
 
 /** Execution style for a scorer step. */
 export type ScorerStepType = 'function' | 'prompt';

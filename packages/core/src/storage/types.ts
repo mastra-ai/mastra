@@ -3078,6 +3078,68 @@ export interface ListScoresBySpanInput {
   filters?: ScoreTenancyFilters;
 }
 
+/**
+ * Unified score list filter. All fields are optional and combine with AND
+ * semantics. `metadata` matches score rows whose `metadata` JSON contains
+ * every provided key with a (deep-)equal value.
+ */
+export interface ListScoresFilter {
+  scorerIds?: string[];
+  entityId?: string;
+  entityType?: string;
+  traceId?: string;
+  threadId?: string;
+  source?: ScoringSource;
+  /** Inclusive lower bound on createdAt. */
+  startDate?: Date;
+  /** Inclusive upper bound on createdAt. */
+  endDate?: Date;
+  /** Inclusive lower bound on score value. */
+  minScore?: number;
+  /** Inclusive upper bound on score value. */
+  maxScore?: number;
+  /** Exact-match filters on top-level metadata keys (AND across keys). */
+  metadata?: Record<string, unknown>;
+}
+
+export interface ListScoresInput {
+  filter?: ListScoresFilter;
+  pagination: StoragePagination;
+  filters?: ScoreTenancyFilters;
+}
+
+export type ScoreAggregationBucket = 'hour' | 'day' | 'week' | 'month';
+
+/** Dimension to group aggregated scores by. `metadata:<key>` groups on a top-level metadata key. */
+export type ScoreGroupByDimension = 'scorerId' | 'entityId' | `metadata:${string}`;
+
+export interface AggregateScoresInput {
+  filter?: ListScoresFilter;
+  /** Optional UTC time bucketing of results. */
+  bucket?: ScoreAggregationBucket;
+  /** Group results by these dimensions in addition to the optional time bucket. */
+  groupBy?: ScoreGroupByDimension[];
+  /** Scores >= this value count as passing for passRate. Defaults to 1. */
+  passThreshold?: number;
+  filters?: ScoreTenancyFilters;
+}
+
+export interface ScoreAggregateRow {
+  /** ISO timestamp of the bucket start (UTC). Present only when `bucket` was requested. */
+  bucketStart?: string;
+  /** Group key values in the same order as the requested `groupBy` dimensions. Missing keys are null. */
+  groups?: (string | null)[];
+  count: number;
+  avg: number;
+  p50: number;
+  p95: number;
+  passRate: number;
+}
+
+export interface AggregateScoresResponse {
+  rows: ScoreAggregateRow[];
+}
+
 export interface ListExperimentsInput {
   datasetId?: string;
   targetType?: TargetType;

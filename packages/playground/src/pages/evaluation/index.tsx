@@ -17,6 +17,7 @@ import { computeReviewTotals } from '@/domains/review/review-maps';
 import { useScoreMetrics, useScorers } from '@/domains/scores';
 import type { ScoreMetricsDateRange } from '@/domains/scores';
 import { ScoresOverTimeCard } from '@/domains/scores/components/scores-over-time-card';
+import { SegmentedScoresCard } from '@/domains/scores/components/segmented-scores-card';
 
 export default function Evaluation() {
   const [datePreset, setDatePreset] = useState<DateRangePreset>('all');
@@ -109,6 +110,7 @@ export default function Evaluation() {
           isLoading={isLoadingScores}
           isError={isErrorScores}
         />
+        <SegmentedScoresCard dateRange={dateRange} />
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <DatasetHealthCard experiments={experiments} isLoading={isLoadingExperiments} isError={!!errorExperiments} />
           <ExperimentStatusCard

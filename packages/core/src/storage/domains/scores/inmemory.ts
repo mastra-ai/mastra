@@ -1,8 +1,8 @@
 import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource } from '../../../evals/types';
 import { calculatePagination, normalizePerPage } from '../../base';
-import type { ScoreTenancyFilters, StoragePagination } from '../../types';
+import type { ListScoresInput, ScoreTenancyFilters, StoragePagination } from '../../types';
 import type { InMemoryDB } from '../inmemory-db';
-import { ScoresStorage } from './base';
+import { ScoresStorage, scoreMatchesFilter } from './base';
 
 function matchesTenancy(score: ScoreRowData, filters?: ScoreTenancyFilters): boolean {
   if (!filters) return true;
@@ -28,7 +28,16 @@ export class ScoresInMemory extends ScoresStorage {
   }
 
   async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
-    const newScore = { id: crypto.randomUUID(), createdAt: new Date(), updatedAt: new Date(), ...score };
+    const id = score.id ?? crypto.randomUUID();
+    // Caller-supplied IDs upsert: last write wins, original createdAt preserved.
+    const existing = score.id ? this.db.scores.get(score.id) : undefined;
+    const payloadTimestamps = score as SaveScorePayload & { createdAt?: Date; updatedAt?: Date };
+    const newScore = {
+      ...score,
+      id,
+      createdAt: existing?.createdAt ?? payloadTimestamps.createdAt ?? new Date(),
+      updatedAt: payloadTimestamps.updatedAt ?? new Date(),
+    };
     this.db.scores.set(newScore.id, newScore);
     return { score: newScore };
   }
@@ -130,6 +139,33 @@ export class ScoresInMemory extends ScoresStorage {
       const baseFilter = score.entityId === entityId && score.entityType === entityType;
 
       return baseFilter && matchesTenancy(score, filters);
+    });
+
+    const { page, perPage: perPageInput } = pagination;
+    const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
+    const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+    const end = perPageInput === false ? scores.length : start + perPage;
+
+    return {
+      scores: scores.slice(start, end),
+      pagination: {
+        total: scores.length,
+        page: page,
+        perPage: perPageForResponse,
+        hasMore: perPageInput === false ? false : scores.length > end,
+      },
+    };
+  }
+
+  async listScores({ filter, pagination, filters }: ListScoresInput): Promise<ListScoresResponse> {
+    const scores = Array.from(this.db.scores.values()).filter(
+      score => scoreMatchesFilter(score, filter) && matchesTenancy(score, filters),
+    );
+    // Newest-first with id tiebreaker for stable pagination.
+    scores.sort((a, b) => {
+      const diff = new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      if (diff !== 0) return diff;
+      return a.id.localeCompare(b.id);
     });
 
     const { page, perPage: perPageInput } = pagination;

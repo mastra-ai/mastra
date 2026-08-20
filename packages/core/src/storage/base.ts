@@ -18,6 +18,7 @@ import type {
   ExperimentsStorage,
   BackgroundTasksStorage,
   SchedulesStorage,
+  MonitorsStorage,
   ChannelsStorage,
   HarnessStorage,
   ToolProviderConnectionsStorage,
@@ -51,6 +52,7 @@ export type StorageDomains = {
   blobs?: BlobStore;
   backgroundTasks?: BackgroundTasksStorage;
   schedules?: SchedulesStorage;
+  monitors?: MonitorsStorage;
   harness?: HarnessStorage;
   toolProviderConnections?: ToolProviderConnectionsStorage;
   threadState?: ThreadStateStorage;
@@ -99,6 +101,7 @@ export const DOMAIN_KEYS = [
   'blobs',
   'backgroundTasks',
   'schedules',
+  'monitors',
   'channels',
   'harness',
   'toolProviderConnections',

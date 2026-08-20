@@ -17,7 +17,7 @@ type Shared_Auxiliary_298 =
       [key: string]: Shared_Auxiliary_298;
     };
 
-type Shared_Auxiliary_1095 =
+type Shared_Auxiliary_1104 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -62,19 +62,19 @@ type Shared_Auxiliary_1095 =
     }
   | {
       op: 'and' | 'or';
-      args: Shared_Auxiliary_1095[];
+      args: Shared_Auxiliary_1104[];
     }
   | {
       op: 'not';
-      arg: Shared_Auxiliary_1095;
+      arg: Shared_Auxiliary_1104;
     };
 
-type Shared_Auxiliary_1236 = {
+type Shared_Auxiliary_1245 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_1236[] | undefined;
+  children?: Shared_Auxiliary_1245[] | undefined;
 };
 
 type Shared_Type_0 = {
@@ -2476,13 +2476,13 @@ type Shared_Type_107 =
   | {
       type: 'conditional';
       steps: Shared_Type_105[];
-      predicates: Shared_Auxiliary_1095[];
+      predicates: Shared_Auxiliary_1104[];
     }
   | {
       type: 'loop';
       step: Shared_Type_105;
       loopType: 'dowhile' | 'dountil';
-      predicate: Shared_Auxiliary_1095;
+      predicate: Shared_Auxiliary_1104;
     };
 
 type Shared_Type_108 = {
@@ -2819,7 +2819,7 @@ type Shared_Type_120 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1236[] | undefined;
+  files?: Shared_Auxiliary_1245[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -3435,6 +3435,53 @@ type Shared_Type_151 = {
         [key: string]: unknown;
       }
     | undefined;
+  createdAt: number;
+  updatedAt: number;
+};
+
+type Shared_Type_152 = {
+  scorerIds?: string[] | undefined;
+  entityId?: string | undefined;
+  entityType?: string | undefined;
+  traceId?: string | undefined;
+  threadId?: string | undefined;
+  source?: string | undefined;
+  minScore?: number | undefined;
+  maxScore?: number | undefined;
+  metadata?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+};
+
+type Shared_Type_153 = {
+  id: string;
+  name: string;
+  filter?: Shared_Type_152 | undefined;
+  windowMinutes: number;
+  aggregation: 'avg' | 'p50' | 'p95' | 'count' | 'passRate';
+  passThreshold?: number | undefined;
+  threshold: {
+    op: 'lt' | 'lte' | 'gt' | 'gte';
+    value: number;
+  };
+  cooldownMinutes?: number | undefined;
+  channels: {
+    type: 'webhook';
+    url: string;
+    format?: ('json' | 'slack') | undefined;
+  }[];
+  noDataBehavior?: ('skip' | 'breach') | undefined;
+  status: 'active' | 'paused';
+  metadata?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  lastEvaluatedAt?: number | undefined;
+  lastBreachAt?: number | undefined;
+  breached?: boolean | undefined;
   createdAt: number;
   updatedAt: number;
 };
@@ -8196,12 +8243,44 @@ export interface GetScoresScorers_RouteContract {
 }
 
 // ============================================================================
-// Route: GET /scores/scorers/:scorerId
+// Route: GET /scores/scorers/:scorerId/health
 // ============================================================================
-export type GetScoresScorersScorerId_PathParams = {
+export type GetScoresScorersScorerIdHealth_PathParams = {
   /** Unique identifier for the scorer */
   scorerId: string;
 };
+
+export type GetScoresScorersScorerIdHealth_Response = {
+  scorerId: string;
+  triggered: number;
+  sampled: number;
+  saved: number;
+  failed: number;
+  lastErrorMessage?: string | undefined;
+  lastErrorAt?: number | undefined;
+};
+
+export type GetScoresScorersScorerIdHealth_Request = Simplify<
+  (GetScoresScorersScorerIdHealth_PathParams extends never
+    ? {}
+    : { params: GetScoresScorersScorerIdHealth_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetScoresScorersScorerIdHealth_RouteContract {
+  pathParams: GetScoresScorersScorerIdHealth_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetScoresScorersScorerIdHealth_Request;
+  response: GetScoresScorersScorerIdHealth_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /scores/scorers/:scorerId
+// ============================================================================
+export type GetScoresScorersScorerId_PathParams = GetScoresScorersScorerIdHealth_PathParams;
 
 export type GetScoresScorersScorerId_Response = Shared_Type_68 | null;
 
@@ -8221,6 +8300,174 @@ export interface GetScoresScorersScorerId_RouteContract {
 }
 
 // ============================================================================
+// Route: GET /scores/aggregate
+// ============================================================================
+export type GetScoresAggregate_QueryParams = {
+  /** Comma-separated scorer IDs */
+  scorerIds?: string | undefined;
+  entityId?: string | undefined;
+  entityType?: string | undefined;
+  traceId?: string | undefined;
+  threadId?: string | undefined;
+  source?: string | undefined;
+  /** Inclusive lower bound on createdAt (ISO date) */
+  startDate?: Date | undefined;
+  /** Inclusive upper bound on createdAt (ISO date) */
+  endDate?: Date | undefined;
+  minScore?: number | undefined;
+  maxScore?: number | undefined;
+  /** JSON-encoded object of top-level metadata key/value filters (AND across keys) */
+  metadata?: string | undefined;
+  /** UTC time bucket for the aggregation */
+  bucket?: ('hour' | 'day' | 'week' | 'month') | undefined;
+  /** Comma-separated group-by dimensions: 'scorerId', 'entityId', or 'metadata:<key>' */
+  groupBy?: string | undefined;
+  /** Scores >= this value count as passing (default 1) */
+  passThreshold?: number | undefined;
+};
+
+export type GetScoresAggregate_Response = {
+  rows: {
+    bucketStart?: string | undefined;
+    groups?: (string | null)[] | undefined;
+    count: number;
+    avg: number;
+    p50: number;
+    p95: number;
+    passRate: number;
+  }[];
+};
+
+export type GetScoresAggregate_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (GetScoresAggregate_QueryParams extends never
+      ? {}
+      : {} extends GetScoresAggregate_QueryParams
+        ? { query?: GetScoresAggregate_QueryParams }
+        : { query: GetScoresAggregate_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetScoresAggregate_RouteContract {
+  pathParams: never;
+  queryParams: GetScoresAggregate_QueryParams;
+  body: never;
+  request: GetScoresAggregate_Request;
+  response: GetScoresAggregate_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /scores/metadata-keys
+// ============================================================================
+export type GetScoresMetadataKeys_Response = {
+  keys: string[];
+};
+
+export type GetScoresMetadataKeys_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetScoresMetadataKeys_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: never;
+  request: GetScoresMetadataKeys_Request;
+  response: GetScoresMetadataKeys_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /scores/threads/score
+// ============================================================================
+export type PostScoresThreadsScore_Body = {
+  scorerName: string;
+  targets: {
+    threadId: string;
+    resourceId?: string | undefined;
+  }[];
+};
+
+export type PostScoresThreadsScore_Response = {
+  status: string;
+  message: string;
+  threadCount: number;
+};
+
+export type PostScoresThreadsScore_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostScoresThreadsScore_Body extends never
+      ? {}
+      : {} extends PostScoresThreadsScore_Body
+        ? { body?: PostScoresThreadsScore_Body }
+        : { body: PostScoresThreadsScore_Body })
+>;
+
+export interface PostScoresThreadsScore_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: PostScoresThreadsScore_Body;
+  request: PostScoresThreadsScore_Request;
+  response: PostScoresThreadsScore_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /scores
+// ============================================================================
+export type GetScores_QueryParams = {
+  /** Comma-separated scorer IDs */
+  scorerIds?: string | undefined;
+  entityId?: string | undefined;
+  entityType?: string | undefined;
+  traceId?: string | undefined;
+  threadId?: string | undefined;
+  source?: string | undefined;
+  /** Inclusive lower bound on createdAt (ISO date) */
+  startDate?: Date | undefined;
+  /** Inclusive upper bound on createdAt (ISO date) */
+  endDate?: Date | undefined;
+  minScore?: number | undefined;
+  maxScore?: number | undefined;
+  /** JSON-encoded object of top-level metadata key/value filters (AND across keys) */
+  metadata?: string | undefined;
+  page: number | undefined;
+  perPage: number | undefined;
+};
+
+export type GetScores_Response = {
+  pagination: {
+    total: number;
+    page: number;
+    perPage: number | false;
+    hasMore: boolean;
+  };
+  scores: unknown[];
+};
+
+export type GetScores_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (GetScores_QueryParams extends never
+      ? {}
+      : {} extends GetScores_QueryParams
+        ? { query?: GetScores_QueryParams }
+        : { query: GetScores_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetScores_RouteContract {
+  pathParams: never;
+  queryParams: GetScores_QueryParams;
+  body: never;
+  request: GetScores_Request;
+  response: GetScores_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: GET /scores/run/:runId
 // ============================================================================
 export type GetScoresRunRunId_PathParams = PostWorkflowsWorkflowIdStream_QueryParams;
@@ -8230,15 +8477,7 @@ export type GetScoresRunRunId_QueryParams = {
   perPage: number | undefined;
 };
 
-export type GetScoresRunRunId_Response = {
-  pagination: {
-    total: number;
-    page: number;
-    perPage: number | false;
-    hasMore: boolean;
-  };
-  scores: unknown[];
-};
+export type GetScoresRunRunId_Response = GetScores_Response;
 
 export type GetScoresRunRunId_Request = Simplify<
   (GetScoresRunRunId_PathParams extends never ? {} : { params: GetScoresRunRunId_PathParams }) &
@@ -8262,7 +8501,7 @@ export interface GetScoresRunRunId_RouteContract {
 // ============================================================================
 // Route: GET /scores/scorer/:scorerId
 // ============================================================================
-export type GetScoresScorerScorerId_PathParams = GetScoresScorersScorerId_PathParams;
+export type GetScoresScorerScorerId_PathParams = GetScoresScorersScorerIdHealth_PathParams;
 
 export type GetScoresScorerScorerId_QueryParams = {
   page: number | undefined;
@@ -8271,7 +8510,7 @@ export type GetScoresScorerScorerId_QueryParams = {
   entityType?: string | undefined;
 };
 
-export type GetScoresScorerScorerId_Response = GetScoresRunRunId_Response;
+export type GetScoresScorerScorerId_Response = GetScores_Response;
 
 export type GetScoresScorerScorerId_Request = Simplify<
   (GetScoresScorerScorerId_PathParams extends never ? {} : { params: GetScoresScorerScorerId_PathParams }) &
@@ -8304,7 +8543,7 @@ export type GetScoresEntityEntityTypeEntityId_PathParams = {
 
 export type GetScoresEntityEntityTypeEntityId_QueryParams = GetScoresRunRunId_QueryParams;
 
-export type GetScoresEntityEntityTypeEntityId_Response = GetScoresRunRunId_Response;
+export type GetScoresEntityEntityTypeEntityId_Response = GetScores_Response;
 
 export type GetScoresEntityEntityTypeEntityId_Request = Simplify<
   (GetScoresEntityEntityTypeEntityId_PathParams extends never
@@ -8832,7 +9071,7 @@ export type GetObservabilityTracesTraceIdSpanIdScores_Response = {
           [key: string]: unknown;
         }
       | undefined;
-    source: 'LIVE' | 'TEST';
+    source: 'LIVE' | 'TEST' | 'EXTERNAL';
     entity: {
       [key: string]: unknown;
     };
@@ -8842,6 +9081,7 @@ export type GetObservabilityTracesTraceIdSpanIdScores_Response = {
           | 'WORKFLOW'
           | 'TRAJECTORY'
           | 'STEP'
+          | 'THREAD'
           | 'agent_run'
           | 'scorer_run'
           | 'scorer_step'
@@ -16411,7 +16651,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1236[] | undefined;
+  files?: Shared_Auxiliary_1245[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -16469,7 +16709,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (Shared_Auxiliary_1236[] | undefined) | undefined;
+  files?: (Shared_Auxiliary_1245[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
@@ -19806,6 +20046,260 @@ export interface PostSchedulesScheduleIdRun_RouteContract {
 }
 
 // ============================================================================
+// Route: GET /monitors
+// ============================================================================
+export type GetMonitors_Response = {
+  monitors: Shared_Type_153[];
+};
+
+export type GetMonitors_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetMonitors_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: never;
+  request: GetMonitors_Request;
+  response: GetMonitors_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /monitors/evaluate
+// ============================================================================
+export type PostMonitorsEvaluate_Response = {
+  results: {
+    monitorId: string;
+    value: number | null;
+    count: number;
+    breached: boolean;
+    notified: boolean;
+  }[];
+};
+
+export type PostMonitorsEvaluate_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface PostMonitorsEvaluate_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: never;
+  request: PostMonitorsEvaluate_Request;
+  response: PostMonitorsEvaluate_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /monitors
+// ============================================================================
+export type PostMonitors_Body = {
+  id?: string | undefined;
+  name: string;
+  filter?: Shared_Type_152 | undefined;
+  windowMinutes: number;
+  aggregation: 'avg' | 'p50' | 'p95' | 'count' | 'passRate';
+  passThreshold?: number | undefined;
+  threshold: {
+    op: 'lt' | 'lte' | 'gt' | 'gte';
+    value: number;
+  };
+  cooldownMinutes?: number | undefined;
+  channels: {
+    type: 'webhook';
+    url: string;
+    format?: ('json' | 'slack') | undefined;
+  }[];
+  noDataBehavior?: ('skip' | 'breach') | undefined;
+  status?: ('active' | 'paused') | undefined;
+  metadata?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+};
+
+export type PostMonitors_Response = Shared_Type_153;
+
+export type PostMonitors_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostMonitors_Body extends never
+      ? {}
+      : {} extends PostMonitors_Body
+        ? { body?: PostMonitors_Body }
+        : { body: PostMonitors_Body })
+>;
+
+export interface PostMonitors_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: PostMonitors_Body;
+  request: PostMonitors_Request;
+  response: PostMonitors_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /monitors/:monitorId
+// ============================================================================
+export type GetMonitorsMonitorId_PathParams = {
+  monitorId: string;
+};
+
+export type GetMonitorsMonitorId_Response = PostMonitors_Response;
+
+export type GetMonitorsMonitorId_Request = Simplify<
+  (GetMonitorsMonitorId_PathParams extends never ? {} : { params: GetMonitorsMonitorId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetMonitorsMonitorId_RouteContract {
+  pathParams: GetMonitorsMonitorId_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetMonitorsMonitorId_Request;
+  response: GetMonitorsMonitorId_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: PATCH /monitors/:monitorId
+// ============================================================================
+export type PatchMonitorsMonitorId_PathParams = GetMonitorsMonitorId_PathParams;
+
+export type PatchMonitorsMonitorId_Body = {
+  name?: string | undefined;
+  filter?: (Shared_Type_152 | undefined) | undefined;
+  windowMinutes?: number | undefined;
+  aggregation?: ('avg' | 'p50' | 'p95' | 'count' | 'passRate') | undefined;
+  passThreshold?: (number | undefined) | undefined;
+  threshold?:
+    | {
+        op: 'lt' | 'lte' | 'gt' | 'gte';
+        value: number;
+      }
+    | undefined;
+  cooldownMinutes?: (number | undefined) | undefined;
+  channels?:
+    | {
+        type: 'webhook';
+        url: string;
+        format?: ('json' | 'slack') | undefined;
+      }[]
+    | undefined;
+  noDataBehavior?: (('skip' | 'breach') | undefined) | undefined;
+  status?: (('active' | 'paused') | undefined) | undefined;
+  metadata?:
+    | (
+        | {
+            [key: string]: unknown;
+          }
+        | undefined
+      )
+    | undefined;
+};
+
+export type PatchMonitorsMonitorId_Response = PostMonitors_Response;
+
+export type PatchMonitorsMonitorId_Request = Simplify<
+  (PatchMonitorsMonitorId_PathParams extends never ? {} : { params: PatchMonitorsMonitorId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PatchMonitorsMonitorId_Body extends never
+      ? {}
+      : {} extends PatchMonitorsMonitorId_Body
+        ? { body?: PatchMonitorsMonitorId_Body }
+        : { body: PatchMonitorsMonitorId_Body })
+>;
+
+export interface PatchMonitorsMonitorId_RouteContract {
+  pathParams: PatchMonitorsMonitorId_PathParams;
+  queryParams: never;
+  body: PatchMonitorsMonitorId_Body;
+  request: PatchMonitorsMonitorId_Request;
+  response: PatchMonitorsMonitorId_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: DELETE /monitors/:monitorId
+// ============================================================================
+export type DeleteMonitorsMonitorId_PathParams = GetMonitorsMonitorId_PathParams;
+
+export type DeleteMonitorsMonitorId_Request = Simplify<
+  (DeleteMonitorsMonitorId_PathParams extends never ? {} : { params: DeleteMonitorsMonitorId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface DeleteMonitorsMonitorId_RouteContract {
+  pathParams: DeleteMonitorsMonitorId_PathParams;
+  queryParams: never;
+  body: never;
+  request: DeleteMonitorsMonitorId_Request;
+  response: unknown;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /monitors/:monitorId/events
+// ============================================================================
+export type GetMonitorsMonitorIdEvents_PathParams = GetMonitorsMonitorId_PathParams;
+
+export type GetMonitorsMonitorIdEvents_QueryParams = {
+  limit?: number | undefined;
+  type?: ('breach' | 'recovery' | 'delivery_failure') | undefined;
+};
+
+export type GetMonitorsMonitorIdEvents_Response = {
+  events: {
+    id?: string | undefined;
+    monitorId: string;
+    type: 'breach' | 'recovery' | 'delivery_failure';
+    value: number | null;
+    count: number;
+    threshold: {
+      op: 'lt' | 'lte' | 'gt' | 'gte';
+      value: number;
+    };
+    windowStart: number;
+    windowEnd: number;
+    error?: string | undefined;
+    metadata?:
+      | {
+          [key: string]: unknown;
+        }
+      | undefined;
+    createdAt: number;
+  }[];
+};
+
+export type GetMonitorsMonitorIdEvents_Request = Simplify<
+  (GetMonitorsMonitorIdEvents_PathParams extends never ? {} : { params: GetMonitorsMonitorIdEvents_PathParams }) &
+    (GetMonitorsMonitorIdEvents_QueryParams extends never
+      ? {}
+      : {} extends GetMonitorsMonitorIdEvents_QueryParams
+        ? { query?: GetMonitorsMonitorIdEvents_QueryParams }
+        : { query: GetMonitorsMonitorIdEvents_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetMonitorsMonitorIdEvents_RouteContract {
+  pathParams: GetMonitorsMonitorIdEvents_PathParams;
+  queryParams: GetMonitorsMonitorIdEvents_QueryParams;
+  body: never;
+  request: GetMonitorsMonitorIdEvents_Request;
+  response: GetMonitorsMonitorIdEvents_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: GET /channels/platforms
 // ============================================================================
 export type GetChannelsPlatforms_Response = {
@@ -21561,7 +22055,12 @@ export interface RouteTypes {
   'DELETE /memory/network/threads/:threadId': DeleteMemoryNetworkThreadsThreadId_RouteContract;
   'POST /memory/network/messages/delete': PostMemoryNetworkMessagesDelete_RouteContract;
   'GET /scores/scorers': GetScoresScorers_RouteContract;
+  'GET /scores/scorers/:scorerId/health': GetScoresScorersScorerIdHealth_RouteContract;
   'GET /scores/scorers/:scorerId': GetScoresScorersScorerId_RouteContract;
+  'GET /scores/aggregate': GetScoresAggregate_RouteContract;
+  'GET /scores/metadata-keys': GetScoresMetadataKeys_RouteContract;
+  'POST /scores/threads/score': PostScoresThreadsScore_RouteContract;
+  'GET /scores': GetScores_RouteContract;
   'GET /scores/run/:runId': GetScoresRunRunId_RouteContract;
   'GET /scores/scorer/:scorerId': GetScoresScorerScorerId_RouteContract;
   'GET /scores/entity/:entityType/:entityId': GetScoresEntityEntityTypeEntityId_RouteContract;
@@ -21800,6 +22299,13 @@ export interface RouteTypes {
   'POST /schedules/:scheduleId/pause': PostSchedulesScheduleIdPause_RouteContract;
   'POST /schedules/:scheduleId/resume': PostSchedulesScheduleIdResume_RouteContract;
   'POST /schedules/:scheduleId/run': PostSchedulesScheduleIdRun_RouteContract;
+  'GET /monitors': GetMonitors_RouteContract;
+  'POST /monitors/evaluate': PostMonitorsEvaluate_RouteContract;
+  'POST /monitors': PostMonitors_RouteContract;
+  'GET /monitors/:monitorId': GetMonitorsMonitorId_RouteContract;
+  'PATCH /monitors/:monitorId': PatchMonitorsMonitorId_RouteContract;
+  'DELETE /monitors/:monitorId': DeleteMonitorsMonitorId_RouteContract;
+  'GET /monitors/:monitorId/events': GetMonitorsMonitorIdEvents_RouteContract;
   'GET /channels/platforms': GetChannelsPlatforms_RouteContract;
   'GET /channels/:platform/installations': GetChannelsPlatformInstallations_RouteContract;
   'POST /channels/:platform/connect': PostChannelsPlatformConnect_RouteContract;
@@ -22383,6 +22889,21 @@ export interface Client {
     GET: GetMemoryThreadsThreadIdWorkingMemory_RouteContract;
     POST: PostMemoryThreadsThreadIdWorkingMemory_RouteContract;
   };
+  '/monitors': {
+    GET: GetMonitors_RouteContract;
+    POST: PostMonitors_RouteContract;
+  };
+  '/monitors/:monitorId': {
+    DELETE: DeleteMonitorsMonitorId_RouteContract;
+    GET: GetMonitorsMonitorId_RouteContract;
+    PATCH: PatchMonitorsMonitorId_RouteContract;
+  };
+  '/monitors/:monitorId/events': {
+    GET: GetMonitorsMonitorIdEvents_RouteContract;
+  };
+  '/monitors/evaluate': {
+    POST: PostMonitorsEvaluate_RouteContract;
+  };
   '/observability/branches': {
     GET: GetObservabilityBranches_RouteContract;
   };
@@ -22527,10 +23048,17 @@ export interface Client {
     GET: GetSchedulesScheduleIdTriggers_RouteContract;
   };
   '/scores': {
+    GET: GetScores_RouteContract;
     POST: PostScores_RouteContract;
+  };
+  '/scores/aggregate': {
+    GET: GetScoresAggregate_RouteContract;
   };
   '/scores/entity/:entityType/:entityId': {
     GET: GetScoresEntityEntityTypeEntityId_RouteContract;
+  };
+  '/scores/metadata-keys': {
+    GET: GetScoresMetadataKeys_RouteContract;
   };
   '/scores/run/:runId': {
     GET: GetScoresRunRunId_RouteContract;
@@ -22543,6 +23071,12 @@ export interface Client {
   };
   '/scores/scorers/:scorerId': {
     GET: GetScoresScorersScorerId_RouteContract;
+  };
+  '/scores/scorers/:scorerId/health': {
+    GET: GetScoresScorersScorerIdHealth_RouteContract;
+  };
+  '/scores/threads/score': {
+    POST: PostScoresThreadsScore_RouteContract;
   };
   '/stored/agents': {
     GET: GetStoredAgents_RouteContract;

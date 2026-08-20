@@ -5,6 +5,7 @@ import {
   createStorageErrorId,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_SPANS,
+  TABLE_SCORERS,
   TABLE_SCHEMAS,
   getSqlType,
   getDefaultValue,
@@ -843,6 +844,16 @@ export class PgDB extends MastraBase {
           values,
         );
       }
+    } else if (tableName === TABLE_SCORERS) {
+      // Scores support idempotent ingestion by caller-supplied ID: replace the
+      // row on conflict (last write wins) but preserve the original createdAt.
+      const updateColumns = columns.filter(c => c !== 'id' && c !== 'createdAt' && c !== 'createdAtZ');
+      const updateClause = updateColumns.map(c => `"${c}" = EXCLUDED."${c}"`).join(', ');
+      await client.none(
+        `INSERT INTO ${fullTableName} (${columnList}) VALUES (${placeholders})
+           ON CONFLICT ("id") DO UPDATE SET ${updateClause}`,
+        values,
+      );
     } else {
       await client.none(`INSERT INTO ${fullTableName} (${columnList}) VALUES (${placeholders})`, values);
     }

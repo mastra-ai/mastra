@@ -4,6 +4,8 @@ export { OrchestrationWorker } from './workers/orchestration-worker';
 export type { OrchestrationWorkerConfig } from './workers/orchestration-worker';
 export { SchedulerWorker } from './workers/scheduler-worker';
 export { BackgroundTaskWorker } from './workers/background-task-worker';
+export { MonitorWorker } from './workers/monitor-worker';
+export type { MonitorWorkerConfig } from './workers/monitor-worker';
 export type { BackgroundTaskWorkerConfig } from './workers/background-task-worker';
 export type { StepExecutionStrategy, StepExecutionParams } from './types';
 export { InProcessStrategy } from './strategies/in-process-strategy';

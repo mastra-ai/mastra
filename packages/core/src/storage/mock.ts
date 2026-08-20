@@ -13,6 +13,7 @@ import { InMemoryKnowledgeStorage } from './domains/knowledge/inmemory';
 import { InMemoryMCPClientsStorage } from './domains/mcp-clients/inmemory';
 import { InMemoryMCPServersStorage } from './domains/mcp-servers/inmemory';
 import { InMemoryMemory } from './domains/memory/inmemory';
+import { InMemoryMonitorsStorage } from './domains/monitors/inmemory';
 import { InMemoryNotificationsStorage } from './domains/notifications';
 import { ObservabilityInMemory } from './domains/observability/inmemory';
 import { InMemoryPromptBlocksStorage } from './domains/prompt-blocks/inmemory';
@@ -85,6 +86,7 @@ export class InMemoryStore extends MastraCompositeStore {
       blobs: new InMemoryBlobStore(),
       backgroundTasks: new BackgroundTasksInMemory({ db: this.#db }),
       schedules: new InMemorySchedulesStorage({ db: this.#db }),
+      monitors: new InMemoryMonitorsStorage({ db: this.#db }),
       harness: new InMemoryHarness(),
       toolProviderConnections: new InMemoryToolProviderConnectionsStorage({ db: this.#db }),
       threadState: new InMemoryThreadStateStorage(),

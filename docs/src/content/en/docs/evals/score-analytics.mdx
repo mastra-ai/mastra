@@ -1,0 +1,88 @@
+---
+title: "Score analytics | Evals"
+description: "Query, filter, and aggregate scores by any metadata dimension — deployment, model version, cohort — and track scorer delivery health."
+packages:
+  - "@mastra/core"
+  - "@mastra/client-js"
+---
+
+# Score analytics
+
+Every score Mastra persists carries its lineage: the scorer, the entity, the trace and thread it graded, and any metadata you attach (deployment, model version, cohort, and so on). The score analytics API lets you slice results along those dimensions without exporting data.
+
+## Querying scores
+
+`GET /api/scores` accepts a unified filter — scorer, entity, trace, thread, source, date range, score range, and exact-match metadata key/value pairs:
+
+```typescript
+import { MastraClient } from '@mastra/client-js'
+
+const client = new MastraClient({ baseUrl: process.env.MASTRA_URL! })
+
+const result = await client.queryScores({
+  scorerIds: ['clinical-accuracy'],
+  metadata: { deployment: 'v42', cohort: 'oncology' },
+  startDate: '2026-08-01T00:00:00Z',
+  minScore: 0,
+  maxScore: 0.5,
+  page: 0,
+  perPage: 50,
+})
+```
+
+Metadata filters match exactly and combine with AND semantics across keys. Each returned score includes `traceId` and `threadId` so a quality signal drills down to the exact trace and conversation that produced it.
+
+## Aggregating scores
+
+`GET /api/scores/aggregate` computes `count`, `avg`, `p50`, `p95`, and `passRate` with optional UTC time bucketing and grouping:
+
+```typescript
+const trend = await client.aggregateScores({
+  bucket: 'day',
+  groupBy: ['metadata:cohort'],
+  startDate: '2026-08-01T00:00:00Z',
+})
+
+// trend.rows: [{ bucketStart, groups: ['oncology'], count, avg, p50, p95, passRate }, ...]
+```
+
+Group by `scorerId`, `entityId`, or any `metadata:<key>` dimension. Rows missing the group-by key land in a `null` group rather than being dropped. `passRate` counts scores at or above `passThreshold` (default `1`).
+
+Aggregation includes every score source — live scorers, test runs, and [external scores](/docs/evals/external-scores) — so out-of-band grades appear in the same trends.
+
+## Discovering metadata keys
+
+`GET /api/scores/metadata-keys` returns the distinct metadata keys observed on recent scores. Studio uses this to populate filter and group-by pickers on the Evaluation page; you can use it to build your own.
+
+```typescript
+const { keys } = await client.getScoresMetadataKeys()
+```
+
+## Scoring conversation threads
+
+Scorers can grade an entire Memory thread rather than a single span. `POST /api/scores/threads/score` materializes the thread's messages and runs the scorer over the whole conversation, persisting the result with `threadId` set:
+
+```typescript
+await client.scoreThreads({
+  scorerName: 'conversation-quality',
+  targets: [{ threadId: 'thread-xyz' }],
+})
+```
+
+Thread scores appear in Studio with a link back to the conversation view.
+
+## Scorer delivery health
+
+Async scorers can fail silently — a judge model times out, or a score fails to persist. `GET /api/scores/scorers/:scorerId/health` exposes per-process counters so expected-versus-delivered gaps are visible:
+
+```typescript
+const health = await client.getScorerHealth('clinical-accuracy')
+// { scorerId, triggered, sampled, saved, failed, lastErrorMessage?, lastErrorAt? }
+```
+
+- `triggered`: eligible invocations before sampling
+- `sampled`: invocations that passed sampling and were dispatched
+- `saved`: scores successfully persisted
+- `failed`: scorer runs that threw or failed to persist
+
+Counters are held in process memory and reset on restart. Studio shows them on each scorer's detail panel.

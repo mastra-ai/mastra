@@ -1,0 +1,66 @@
+---
+title: "Monitors and alerts | Evals"
+description: "Define durable monitors over score aggregates and receive webhook alerts when quality drops below a threshold."
+packages:
+  - "@mastra/core"
+  - "@mastra/client-js"
+---
+
+# Monitors and alerts
+
+A monitor is a persisted rule over your scores: a filter, an evaluation window, an aggregation, and a threshold. Mastra evaluates active monitors on an interval and delivers a webhook when a monitor breaches — and again when it recovers.
+
+## Creating a monitor
+
+```typescript
+import { MastraClient } from '@mastra/client-js'
+
+const client = new MastraClient({ baseUrl: process.env.MASTRA_URL! })
+
+await client.createMonitor({
+  name: 'Oncology accuracy floor',
+  filter: {
+    scorerIds: ['clinical-accuracy'],
+    metadata: { cohort: 'oncology' },
+  },
+  windowMinutes: 60,
+  aggregation: 'avg',
+  threshold: { op: 'lt', value: 0.5 },
+  cooldownMinutes: 30,
+  channels: [{ type: 'webhook', url: 'https://hooks.example.com/quality' }],
+})
+```
+
+- `filter` uses the same shape as the [score query API](/docs/evals/score-analytics), minus date bounds — the window supplies those at evaluation time.
+- `aggregation` is one of `avg`, `p50`, `p95`, `count`, or `passRate`.
+- `cooldownMinutes` suppresses repeat breach notifications; recovery re-arms the monitor.
+- `noDataBehavior` controls what happens when the window has no scores: `skip` (default) or `breach`.
+
+## Alert delivery
+
+v1 delivers webhooks. The payload includes the monitor, the window stats (value, count, window bounds), and the threshold that was crossed, so you can route it into Datadog, PagerDuty, or Slack yourself. Set `format: 'slack'` on a channel to post a Slack-compatible `{ text }` body instead of raw JSON.
+
+Delivery failures are recorded as `delivery_failure` events in the monitor's history and never crash the evaluation loop.
+
+## Breach history and drill-down
+
+Every breach and recovery is recorded as a monitor event:
+
+```typescript
+const { events } = await client.listMonitorEvents({ monitorId: 'mon-123' })
+// [{ type: 'breach', value: 0.25, count: 12, windowStart, windowEnd, ... }]
+```
+
+To investigate a breach, re-apply the monitor's filter with the event's window bounds via `queryScores` — every matching score links to its trace and thread.
+
+Studio includes a Monitors page for creating and editing monitors, browsing breach history, and drilling down to matching scores.
+
+## Scheduling
+
+Monitors are evaluated every 5 minutes by a background worker in the Mastra server process (with jitter to avoid thundering herds across instances). On serverless deployments, trigger evaluation from a cron instead:
+
+```bash
+curl -X POST https://your-app/api/monitors/evaluate
+```
+
+Each call evaluates all active monitors exactly once.

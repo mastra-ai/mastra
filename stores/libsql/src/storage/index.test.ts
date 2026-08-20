@@ -33,7 +33,7 @@ const mastra = new Mastra({
   storage: libsql,
 });
 
-createTestSuite(mastra.getStorage()!);
+createTestSuite(mastra.getStorage()!, { unifiedScoreListing: true });
 
 // Configuration validation tests
 createConfigValidationTests({

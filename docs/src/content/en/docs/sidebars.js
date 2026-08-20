@@ -629,6 +629,21 @@ const sidebars = {
               id: 'evals/evals-with-memory',
               label: 'Evals with Memory',
             },
+            {
+              type: 'doc',
+              id: 'evals/external-scores',
+              label: 'External Scores',
+            },
+            {
+              type: 'doc',
+              id: 'evals/score-analytics',
+              label: 'Score Analytics',
+            },
+            {
+              type: 'doc',
+              id: 'evals/monitors',
+              label: 'Monitors and Alerts',
+            },
           ],
         },
         {

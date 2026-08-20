@@ -17,7 +17,7 @@ export type ScoringSamplingConfig = { type: 'none' } | { type: 'ratio'; rate: nu
 // Scoring Source & Entity Type
 // ============================================================================
 
-export const scoringSourceSchema = z.enum(['LIVE', 'TEST']);
+export const scoringSourceSchema = z.enum(['LIVE', 'TEST', 'EXTERNAL']);
 
 export type ScoringSource = z.infer<typeof scoringSourceSchema>;
 
@@ -26,6 +26,7 @@ export const scoringEntityTypeSchema = z.enum([
   'WORKFLOW',
   'TRAJECTORY',
   'STEP',
+  'THREAD',
   ...Object.values(SpanType),
 ] as [string, string, ...string[]]);
 
@@ -222,11 +223,18 @@ export type ScoreRowData = z.infer<typeof scoreRowDataSchema>;
 // Save Score Payload (for creating new scores)
 // ============================================================================
 
-export const saveScorePayloadSchema = scoreRowDataSchema.omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
+export const saveScorePayloadSchema = scoreRowDataSchema
+  .omit({
+    id: true,
+    createdAt: true,
+    updatedAt: true,
+  })
+  .extend({
+    // Caller-supplied ID enables idempotent ingestion of external scores:
+    // posting the same ID twice converges to a single row (last write wins,
+    // original createdAt preserved).
+    id: z.string().optional(),
+  });
 
 export type SaveScorePayload = z.infer<typeof saveScorePayloadSchema>;
 

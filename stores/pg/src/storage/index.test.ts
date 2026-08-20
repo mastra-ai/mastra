@@ -23,8 +23,8 @@ import { PostgresStore } from '.';
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
-createTestSuite(new PostgresStore(TEST_CONFIG));
-createTestSuite(new PostgresStore({ ...TEST_CONFIG, schemaName: 'my_schema' }));
+createTestSuite(new PostgresStore(TEST_CONFIG), { unifiedScoreListing: true });
+createTestSuite(new PostgresStore({ ...TEST_CONFIG, schemaName: 'my_schema' }), { unifiedScoreListing: true });
 
 // Helper to create a pre-configured pg.Pool
 const createTestPool = () => {

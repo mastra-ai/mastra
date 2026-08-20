@@ -3,6 +3,7 @@ import { setScorerHookOwner } from '../hooks/scorer-owner';
 import type { Mastra } from '../mastra';
 import type { ObservabilityContext } from '../observability';
 import type { MastraScorerEntry } from './base';
+import { recordScorerSampled, recordScorerTriggered } from './health';
 import type { ScoringEntityType, ScoringHookInput, ScoringSource } from './types';
 
 export function runScorer({
@@ -53,9 +54,14 @@ export function runScorer({
     }
   }
 
+  const healthScorerId = scorerObject.scorer?.id || scorerId;
+  recordScorerTriggered(healthScorerId);
+
   if (!shouldExecute) {
     return;
   }
+
+  recordScorerSampled(healthScorerId);
 
   // Extract all primitive (string | number | boolean) values from requestContext,
   // flattening nested objects so scorers can access any key regardless of depth.

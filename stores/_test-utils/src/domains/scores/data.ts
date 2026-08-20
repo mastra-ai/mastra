@@ -14,6 +14,10 @@ export function createSampleScore({
   datasetId,
   datasetItemId,
   runId,
+  threadId,
+  score,
+  metadata,
+  id,
 }: {
   scorerId: string;
   entityId?: string;
@@ -27,9 +31,13 @@ export function createSampleScore({
   datasetId?: string;
   datasetItemId?: string;
   runId?: string;
+  threadId?: string;
+  score?: number;
+  metadata?: Record<string, unknown>;
+  id?: string;
 }): ScoreRowData {
   return {
-    id: randomUUID(),
+    id: id ?? randomUUID(),
     entityId: entityId ?? 'eval-agent',
     entityType: entityType ?? 'AGENT',
     scorerId,
@@ -51,7 +59,8 @@ export function createSampleScore({
     analyzeStepResult: {
       text: 'Sample analyze step result',
     },
-    score: 0.8,
+    score: score ?? 0.8,
+    threadId,
     analyzePrompt: 'Sample analyze prompt',
     generateReasonPrompt: 'Sample reason prompt',
     scorer: {
@@ -75,7 +84,7 @@ export function createSampleScore({
       name: 'Sample entity',
     },
     requestContext: {},
-    metadata: {
+    metadata: metadata ?? {
       scorerVersion: '1.0.0',
       customField: 'test-value',
     },

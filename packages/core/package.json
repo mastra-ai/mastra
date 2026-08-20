@@ -251,6 +251,26 @@
         "default": "./dist/evals/scoreTraces/index.cjs"
       }
     },
+    "./evals/scoreThreads": {
+      "import": {
+        "types": "./dist/evals/scoreThreads/index.d.ts",
+        "default": "./dist/evals/scoreThreads/index.js"
+      },
+      "require": {
+        "types": "./dist/evals/scoreThreads/index.d.ts",
+        "default": "./dist/evals/scoreThreads/index.cjs"
+      }
+    },
+    "./evals/monitors": {
+      "import": {
+        "types": "./dist/evals/monitors/index.d.ts",
+        "default": "./dist/evals/monitors/index.js"
+      },
+      "require": {
+        "types": "./dist/evals/monitors/index.d.ts",
+        "default": "./dist/evals/monitors/index.cjs"
+      }
+    },
     "./events": {
       "import": {
         "types": "./dist/events/index.d.ts",

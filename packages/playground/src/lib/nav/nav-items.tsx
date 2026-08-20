@@ -141,6 +141,12 @@ export const mainNav: NavSection[] = [
         isOnMastraPlatform: true,
       },
       {
+        name: 'Monitors',
+        url: '/monitors',
+        Icon: MetricsIcon,
+        isOnMastraPlatform: true,
+      },
+      {
         name: 'Datasets',
         url: '/datasets',
         Icon: DatasetsIcon,

@@ -978,6 +978,149 @@ export interface ListScoresByEntityIdParams {
   perPage?: number;
 }
 
+/** Filters for the unified score query/aggregation endpoints. All fields combine with AND semantics. */
+export interface QueryScoresFilter {
+  scorerIds?: string[];
+  entityId?: string;
+  entityType?: string;
+  traceId?: string;
+  threadId?: string;
+  source?: string;
+  /** Inclusive lower bound on createdAt. */
+  startDate?: Date | string;
+  /** Inclusive upper bound on createdAt. */
+  endDate?: Date | string;
+  /** Inclusive lower bound on score value. */
+  minScore?: number;
+  /** Inclusive upper bound on score value. */
+  maxScore?: number;
+  /** Exact-match filters on top-level metadata keys (AND across keys). */
+  metadata?: Record<string, unknown>;
+}
+
+export interface QueryScoresParams extends QueryScoresFilter {
+  page?: number;
+  perPage?: number;
+}
+
+export interface AggregateScoresParams extends QueryScoresFilter {
+  /** Optional UTC time bucketing of results. */
+  bucket?: 'hour' | 'day' | 'week' | 'month';
+  /** Group results by 'scorerId', 'entityId', or 'metadata:<key>' dimensions. */
+  groupBy?: string[];
+  /** Scores >= this value count as passing for passRate. Defaults to 1. */
+  passThreshold?: number;
+}
+
+export interface AggregateScoresResponse {
+  rows: Array<{
+    bucketStart?: string;
+    groups?: (string | null)[];
+    count: number;
+    avg: number;
+    p50: number;
+    p95: number;
+    passRate: number;
+  }>;
+}
+
+export interface ScoreThreadsParams {
+  /** Name (or id) of the registered scorer to run. */
+  scorerName: string;
+  /** Memory threads to score. */
+  targets: Array<{ threadId: string; resourceId?: string }>;
+}
+
+export interface ScoreThreadsResponse {
+  status: string;
+  message: string;
+  threadCount: number;
+}
+
+/** Delivery channel for monitor breach notifications (webhook or Slack-format webhook). */
+export interface MonitorChannel {
+  type: 'webhook';
+  url: string;
+  format?: 'json' | 'slack';
+}
+
+/** A persisted score monitor definition. */
+export interface Monitor {
+  id: string;
+  name: string;
+  /** Score filter evaluated within the window (date bounds supplied by the window). */
+  filter?: Omit<QueryScoresFilter, 'startDate' | 'endDate'>;
+  /** Evaluation window size in minutes (lookback from evaluation time). */
+  windowMinutes: number;
+  aggregation: 'avg' | 'p50' | 'p95' | 'count' | 'passRate';
+  /** Scores >= this value count as passing when `aggregation === 'passRate'`. Defaults to 1. */
+  passThreshold?: number;
+  threshold: { op: 'lt' | 'lte' | 'gt' | 'gte'; value: number };
+  /** Minimum minutes between consecutive breach notifications. */
+  cooldownMinutes?: number;
+  channels: MonitorChannel[];
+  /** Behavior when the window contains no scores: `skip` (default) or `breach`. */
+  noDataBehavior?: 'skip' | 'breach';
+  status: 'active' | 'paused';
+  lastEvaluatedAt?: number;
+  lastBreachAt?: number;
+  breached?: boolean;
+  metadata?: Record<string, unknown>;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type CreateMonitorParams = Omit<Monitor, 'id' | 'status' | 'createdAt' | 'updatedAt'> & {
+  id?: string;
+  status?: 'active' | 'paused';
+};
+
+export type UpdateMonitorParams = Partial<Omit<Monitor, 'id' | 'createdAt' | 'updatedAt'>>;
+
+export interface MonitorEvent {
+  id?: string;
+  monitorId: string;
+  type: 'breach' | 'recovery' | 'delivery_failure';
+  value: number | null;
+  count: number;
+  threshold: { op: 'lt' | 'lte' | 'gt' | 'gte'; value: number };
+  windowStart: number;
+  windowEnd: number;
+  error?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: number;
+}
+
+export interface ListMonitorEventsParams {
+  limit?: number;
+  type?: 'breach' | 'recovery' | 'delivery_failure';
+}
+
+/** In-process scorer delivery health counters (per server process; reset on restart). */
+export interface ScorerHealth {
+  scorerId: string;
+  /** Eligible scorer invocations before sampling. */
+  triggered: number;
+  /** Invocations that passed sampling and were dispatched. */
+  sampled: number;
+  /** Scores successfully persisted. */
+  saved: number;
+  /** Scorer runs that threw or failed to persist. */
+  failed: number;
+  lastErrorMessage?: string;
+  lastErrorAt?: number;
+}
+
+export interface EvaluateMonitorsResponse {
+  results: Array<{
+    monitorId: string;
+    value: number | null;
+    count: number;
+    breached: boolean;
+    notified: boolean;
+  }>;
+}
+
 export interface SaveScoreParams {
   score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>;
 }

@@ -12,6 +12,8 @@ import {
   transformScoreRow as coreTransformScoreRow,
 } from '@mastra/core/storage';
 import type {
+  ListScoresFilter,
+  ListScoresInput,
   PruneOptions,
   PruneResult,
   RetentionTablesDescriptor,
@@ -33,6 +35,70 @@ function appendTenancyConditions(conditions: string[], args: InValue[], filters?
   if (filters?.projectId !== undefined) {
     conditions.push(`projectId = ?`);
     args.push(filters.projectId);
+  }
+}
+
+/** Builds SQL conditions for the unified list filter (`?` placeholders). Mutates inputs. */
+function appendListFilterConditions(conditions: string[], args: InValue[], filter?: ListScoresFilter): void {
+  if (!filter) return;
+  if (filter.scorerIds && filter.scorerIds.length > 0) {
+    conditions.push(`scorerId IN (${filter.scorerIds.map(() => '?').join(', ')})`);
+    args.push(...filter.scorerIds);
+  }
+  if (filter.entityId !== undefined) {
+    conditions.push(`entityId = ?`);
+    args.push(filter.entityId);
+  }
+  if (filter.entityType !== undefined) {
+    conditions.push(`entityType = ?`);
+    args.push(filter.entityType);
+  }
+  if (filter.traceId !== undefined) {
+    conditions.push(`traceId = ?`);
+    args.push(filter.traceId);
+  }
+  if (filter.threadId !== undefined) {
+    conditions.push(`threadId = ?`);
+    args.push(filter.threadId);
+  }
+  if (filter.source !== undefined) {
+    conditions.push(`source = ?`);
+    args.push(filter.source);
+  }
+  if (filter.startDate !== undefined) {
+    conditions.push(`createdAt >= ?`);
+    args.push(filter.startDate.toISOString());
+  }
+  if (filter.endDate !== undefined) {
+    conditions.push(`createdAt <= ?`);
+    args.push(filter.endDate.toISOString());
+  }
+  if (filter.minScore !== undefined) {
+    conditions.push(`score >= ?`);
+    args.push(filter.minScore);
+  }
+  if (filter.maxScore !== undefined) {
+    conditions.push(`score <= ?`);
+    args.push(filter.maxScore);
+  }
+  if (filter.metadata) {
+    for (const [key, value] of Object.entries(filter.metadata)) {
+      // JSON path with the key quoted so dots/special chars in keys stay literal.
+      const path = `$."${key.replace(/"/g, '""')}"`;
+      if (value === null) {
+        conditions.push(`json_type(metadata, ?) = 'null'`);
+        args.push(path);
+      } else if (typeof value === 'boolean') {
+        conditions.push(`json_extract(metadata, ?) = ?`);
+        args.push(path, value ? 1 : 0);
+      } else if (typeof value === 'object') {
+        conditions.push(`json_extract(metadata, ?) = json_extract(?, '$')`);
+        args.push(path, JSON.stringify(value));
+      } else {
+        conditions.push(`json_extract(metadata, ?) = ?`);
+        args.push(path, value as InValue);
+      }
+    }
   }
 }
 
@@ -281,20 +347,25 @@ export class ScoresLibSQL extends ScoresStorage {
     }
 
     try {
-      const id = crypto.randomUUID();
+      const id = parsedScore.id ?? crypto.randomUUID();
       const now = new Date();
+
+      // Caller-supplied IDs upsert (insert is INSERT OR REPLACE): last write
+      // wins, original createdAt preserved.
+      const existing = parsedScore.id ? await this.getScoreById({ id }) : null;
+      const createdAt = existing?.createdAt ?? now;
 
       await this.#db.insert({
         tableName: TABLE_SCORERS,
         record: {
           ...parsedScore,
           id,
-          createdAt: now.toISOString(),
+          createdAt: new Date(createdAt).toISOString(),
           updatedAt: now.toISOString(),
         },
       });
 
-      return { score: { ...parsedScore, id, createdAt: now, updatedAt: now } as ScoreRowData };
+      return { score: { ...parsedScore, id, createdAt: new Date(createdAt), updatedAt: now } as ScoreRowData };
     } catch (error) {
       throw new MastraError(
         {
@@ -370,6 +441,62 @@ export class ScoresLibSQL extends ScoresStorage {
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'LIST_SCORES_BY_ENTITY_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  async listScores({ filter, pagination, filters }: ListScoresInput): Promise<ListScoresResponse> {
+    try {
+      const { page, perPage: perPageInput } = pagination;
+
+      const conditions: string[] = [];
+      const queryParams: InValue[] = [];
+      appendListFilterConditions(conditions, queryParams, filter);
+      appendTenancyConditions(conditions, queryParams, filters);
+      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+      const countResult = await this.#client.execute({
+        sql: `SELECT COUNT(*) as count FROM ${TABLE_SCORERS} ${whereClause}`,
+        args: queryParams,
+      });
+      const total = Number(countResult.rows?.[0]?.count ?? 0);
+
+      if (total === 0) {
+        return {
+          pagination: { total: 0, page, perPage: perPageInput, hasMore: false },
+          scores: [],
+        };
+      }
+
+      const perPage = normalizePerPage(perPageInput, 100);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+      const limitValue = perPageInput === false ? total : perPage;
+      const end = perPageInput === false ? total : start + perPage;
+
+      const result = await this.#client.execute({
+        sql: `SELECT ${buildSelectColumns(TABLE_SCORERS)} FROM ${TABLE_SCORERS} ${whereClause} ORDER BY createdAt DESC, id ASC LIMIT ? OFFSET ?`,
+        args: [...queryParams, limitValue, start],
+      });
+
+      const scores = result.rows?.map(row => this.transformScoreRow(row)) ?? [];
+
+      return {
+        scores,
+        pagination: {
+          total,
+          page,
+          perPage: perPageForResponse,
+          hasMore: end < total,
+        },
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'LIST_SCORES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },

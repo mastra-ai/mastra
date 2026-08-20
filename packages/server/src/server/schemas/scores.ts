@@ -76,6 +76,68 @@ export const listScoresByEntityIdQuerySchema = z.object({
   perPage: z.coerce.number().optional().default(10),
 });
 
+// Shared flat query params for the unified score list/aggregate endpoints.
+// HTTP query params must be flat; list values are comma-separated and
+// `metadata` is a JSON-encoded object string.
+const scoreListFilterQueryShape = {
+  scorerIds: z.string().optional().describe('Comma-separated scorer IDs'),
+  entityId: z.string().optional(),
+  entityType: z.string().optional(),
+  traceId: z.string().optional(),
+  threadId: z.string().optional(),
+  source: z.string().optional(),
+  startDate: z.coerce.date().optional().describe('Inclusive lower bound on createdAt (ISO date)'),
+  endDate: z.coerce.date().optional().describe('Inclusive upper bound on createdAt (ISO date)'),
+  minScore: z.coerce.number().optional(),
+  maxScore: z.coerce.number().optional(),
+  metadata: z
+    .string()
+    .optional()
+    .describe('JSON-encoded object of top-level metadata key/value filters (AND across keys)')
+    .refine(
+      value => {
+        if (value === undefined) return true;
+        try {
+          const parsed = JSON.parse(value);
+          return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed);
+        } catch {
+          return false;
+        }
+      },
+      { message: 'metadata must be a JSON-encoded object' },
+    ),
+};
+
+export const listScoresQuerySchema = z.object({
+  ...scoreListFilterQueryShape,
+  page: z.coerce.number().optional().default(0),
+  perPage: z.coerce.number().optional().default(10),
+});
+
+export const aggregateScoresQuerySchema = z.object({
+  ...scoreListFilterQueryShape,
+  bucket: z.enum(['hour', 'day', 'week', 'month']).optional().describe('UTC time bucket for the aggregation'),
+  groupBy: z
+    .string()
+    .optional()
+    .describe("Comma-separated group-by dimensions: 'scorerId', 'entityId', or 'metadata:<key>'"),
+  passThreshold: z.coerce.number().optional().describe('Scores >= this value count as passing (default 1)'),
+});
+
+export const aggregateScoresResponseSchema = z.object({
+  rows: z.array(
+    z.object({
+      bucketStart: z.string().optional(),
+      groups: z.array(z.string().nullable()).optional(),
+      count: z.number(),
+      avg: z.number(),
+      p50: z.number(),
+      p95: z.number(),
+      passRate: z.number(),
+    }),
+  ),
+});
+
 // Body schema for saving scores
 export const saveScoreBodySchema = z.object({
   score: z.unknown(), // ScoreRowData - complex type
@@ -89,4 +151,37 @@ export const scoresWithPaginationResponseSchema = z.object({
 
 export const saveScoreResponseSchema = z.object({
   score: z.unknown(), // ScoreRowData
+});
+
+// Thread scoring
+export const scoreThreadsBodySchema = z.object({
+  scorerName: z.string().min(1),
+  targets: z
+    .array(
+      z.object({
+        threadId: z.string().min(1),
+        resourceId: z.string().optional(),
+      }),
+    )
+    .min(1),
+});
+
+export const scoreThreadsResponseSchema = z.object({
+  status: z.string(),
+  message: z.string(),
+  threadCount: z.number(),
+});
+
+export const scorerHealthResponseSchema = z.object({
+  scorerId: z.string(),
+  triggered: z.number(),
+  sampled: z.number(),
+  saved: z.number(),
+  failed: z.number(),
+  lastErrorMessage: z.string().optional(),
+  lastErrorAt: z.number().optional(),
+});
+
+export const scoresMetadataKeysResponseSchema = z.object({
+  keys: z.array(z.string()),
 });

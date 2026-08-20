@@ -72,7 +72,7 @@ import type { MastraTTS } from '../tts';
 import type { MastraIdGenerator, IdGeneratorContext } from '../types';
 import { readPositiveIntEnv } from '../utils';
 import type { MastraVector } from '../vector';
-import { OrchestrationWorker, SchedulerWorker, BackgroundTaskWorker } from '../worker';
+import { OrchestrationWorker, SchedulerWorker, BackgroundTaskWorker, MonitorWorker } from '../worker';
 import type { MastraWorker, WorkerDeps } from '../worker';
 import type { AnyWorkflow, Workflow } from '../workflows';
 import { normalizeWorkflowBuilderDefinition } from '../workflows/builder';
@@ -1372,6 +1372,9 @@ export class Mastra<
       if (config?.backgroundTasks?.enabled) {
         defaultWorkers.push(new BackgroundTaskWorker(config.backgroundTasks));
       }
+      // MonitorWorker evaluates score monitors on an interval. It no-ops
+      // (cheaply) when no monitors store is configured, so it's always on.
+      defaultWorkers.push(new MonitorWorker());
       // Merge custom workers with the defaults: a custom worker replaces a
       // default sharing its name (e.g. a custom OrchestrationWorker), and
       // duplicate names within the custom array fail loud.

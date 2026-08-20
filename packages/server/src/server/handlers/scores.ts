@@ -1,6 +1,8 @@
-import type { MastraScorerEntry, ScoreRowData } from '@mastra/core/evals';
+import type { MastraScorerEntry, ScoreRowData, ScoringSource } from '@mastra/core/evals';
+import { getScorerHealth } from '@mastra/core/evals';
+import { scoreThreads } from '@mastra/core/evals/scoreThreads';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { StoragePagination } from '@mastra/core/storage';
+import type { ListScoresFilter, ScoreGroupByDimension, StoragePagination } from '@mastra/core/storage';
 import { HTTPException } from '../http-exception';
 import { runIdSchema } from '../schemas/common';
 import {
@@ -11,9 +13,16 @@ import {
   listScoresByRunIdQuerySchema,
   listScoresByScorerIdQuerySchema,
   listScoresByEntityIdQuerySchema,
+  listScoresQuerySchema,
+  aggregateScoresQuerySchema,
+  aggregateScoresResponseSchema,
   saveScoreBodySchema,
   scoresWithPaginationResponseSchema,
   saveScoreResponseSchema,
+  scoreThreadsBodySchema,
+  scoreThreadsResponseSchema,
+  scorerHealthResponseSchema,
+  scoresMetadataKeysResponseSchema,
 } from '../schemas/scores';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
@@ -330,6 +339,152 @@ export const LIST_SCORES_BY_ENTITY_ID_ROUTE = createRoute({
   },
 });
 
+function buildListScoresFilter(params: Record<string, unknown>): ListScoresFilter {
+  const filter: ListScoresFilter = {};
+  if (typeof params.scorerIds === 'string' && params.scorerIds.length > 0) {
+    filter.scorerIds = params.scorerIds.split(',').map(s => s.trim());
+  }
+  if (typeof params.entityId === 'string') filter.entityId = params.entityId;
+  if (typeof params.entityType === 'string') filter.entityType = params.entityType;
+  if (typeof params.traceId === 'string') filter.traceId = params.traceId;
+  if (typeof params.threadId === 'string') filter.threadId = params.threadId;
+  if (typeof params.source === 'string') filter.source = params.source as ScoringSource;
+  if (params.startDate instanceof Date) filter.startDate = params.startDate;
+  if (params.endDate instanceof Date) filter.endDate = params.endDate;
+  if (typeof params.minScore === 'number') filter.minScore = params.minScore;
+  if (typeof params.maxScore === 'number') filter.maxScore = params.maxScore;
+  if (typeof params.metadata === 'string') {
+    filter.metadata = JSON.parse(params.metadata) as Record<string, unknown>;
+  }
+  return filter;
+}
+
+export const LIST_SCORES_ROUTE = createRoute({
+  method: 'GET',
+  path: '/scores',
+  responseType: 'json',
+  queryParamSchema: listScoresQuerySchema,
+  responseSchema: scoresWithPaginationResponseSchema,
+  summary: 'List scores',
+  description:
+    'Returns scores matching the provided filters (scorer, entity, trace, thread, source, date range, score range, metadata key/value)',
+  tags: ['Scoring'],
+  requiresAuth: true,
+  handler: async ({ mastra, ...params }) => {
+    try {
+      const { page, perPage } = params;
+      const scores = await mastra.getStorage()?.getStore('scores');
+      if (!scores) {
+        throw new HTTPException(500, { message: 'Storage not configured' });
+      }
+      const scoreResults = await scores.listScores({
+        filter: buildListScoresFilter(params),
+        pagination: { page: page ?? 0, perPage: perPage ?? 10 },
+      });
+      return {
+        pagination: scoreResults.pagination,
+        scores: scoreResults.scores.map((score: ScoreRowData) => ({ ...score, ...getTraceDetails(score.traceId) })),
+      };
+    } catch (error) {
+      return handleError(error, 'Error listing scores');
+    }
+  },
+});
+
+const VALID_GROUP_BY = /^(scorerId|entityId|metadata:.+)$/;
+
+export const AGGREGATE_SCORES_ROUTE = createRoute({
+  method: 'GET',
+  path: '/scores/aggregate',
+  responseType: 'json',
+  queryParamSchema: aggregateScoresQuerySchema,
+  responseSchema: aggregateScoresResponseSchema,
+  summary: 'Aggregate scores',
+  description:
+    'Returns time-bucketed aggregate statistics (count, avg, p50, p95, passRate) over scores matching the provided filters, optionally grouped by scorerId, entityId, or metadata keys',
+  tags: ['Scoring'],
+  requiresAuth: true,
+  handler: async ({ mastra, ...params }) => {
+    try {
+      const { bucket, groupBy, passThreshold } = params as {
+        bucket?: 'hour' | 'day' | 'week' | 'month';
+        groupBy?: string;
+        passThreshold?: number;
+      };
+      let groupByDims: ScoreGroupByDimension[] | undefined;
+      if (typeof groupBy === 'string' && groupBy.length > 0) {
+        groupByDims = groupBy.split(',').map(s => s.trim()) as ScoreGroupByDimension[];
+        for (const dim of groupByDims) {
+          if (!VALID_GROUP_BY.test(dim)) {
+            throw new HTTPException(400, {
+              message: `Invalid groupBy dimension '${dim}'. Expected 'scorerId', 'entityId', or 'metadata:<key>'.`,
+            });
+          }
+        }
+      }
+      const scores = await mastra.getStorage()?.getStore('scores');
+      if (!scores) {
+        throw new HTTPException(500, { message: 'Storage not configured' });
+      }
+      return await scores.aggregateScores({
+        filter: buildListScoresFilter(params),
+        bucket,
+        groupBy: groupByDims,
+        passThreshold,
+      });
+    } catch (error) {
+      return handleError(error, 'Error aggregating scores');
+    }
+  },
+});
+
+/** Route: POST /scores/threads/score - score Memory threads using a specified scorer (fire-and-forget). */
+export const SCORE_THREADS_ROUTE = createRoute({
+  method: 'POST',
+  path: '/scores/threads/score',
+  responseType: 'json',
+  bodySchema: scoreThreadsBodySchema,
+  responseSchema: scoreThreadsResponseSchema,
+  summary: 'Score threads',
+  description: 'Scores one or more Memory threads using a specified scorer (fire-and-forget)',
+  tags: ['Scoring'],
+  requiresAuth: true,
+  handler: async ({ mastra, ...params }) => {
+    try {
+      if (!mastra.getStorage()) {
+        throw new HTTPException(500, { message: 'Storage not configured' });
+      }
+
+      const { scorerName, targets } = params as {
+        scorerName: string;
+        targets: { threadId: string; resourceId?: string }[];
+      };
+
+      const scorer = mastra.getScorerById(scorerName);
+      if (!scorer) {
+        throw new HTTPException(404, { message: `Scorer '${scorerName}' not found` });
+      }
+
+      scoreThreads({
+        scorerId: scorer.config.id || scorer.config.name,
+        targets,
+        mastra,
+      }).catch((error: Error) => {
+        const logger = mastra.getLogger();
+        logger?.error(`Background thread scoring failed: ${error.message}`, error);
+      });
+
+      return {
+        status: 'success',
+        message: `Scoring started for ${targets.length} ${targets.length === 1 ? 'thread' : 'threads'}`,
+        threadCount: targets.length,
+      };
+    } catch (error) {
+      return handleError(error, 'Error processing thread scoring');
+    }
+  },
+});
+
 export const SAVE_SCORE_ROUTE = createRoute({
   method: 'POST',
   path: '/scores',
@@ -351,6 +506,58 @@ export const SAVE_SCORE_ROUTE = createRoute({
       return result;
     } catch (error) {
       return handleError(error, 'Error saving score');
+    }
+  },
+});
+
+export const SCORER_HEALTH_ROUTE = createRoute({
+  method: 'GET',
+  path: '/scores/scorers/:scorerId/health',
+  responseType: 'json',
+  pathParamSchema: scorerIdPathParams,
+  responseSchema: scorerHealthResponseSchema,
+  summary: 'Get scorer delivery health',
+  description:
+    'Returns in-process scorer health counters: triggered vs sampled vs saved vs failed, so missing or failed async scores are detectable',
+  tags: ['Scoring'],
+  requiresAuth: true,
+  handler: async ({ scorerId }) => {
+    try {
+      return getScorerHealth(scorerId);
+    } catch (error) {
+      return handleError(error, 'Error getting scorer health');
+    }
+  },
+});
+
+export const SCORES_METADATA_KEYS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/scores/metadata-keys',
+  responseType: 'json',
+  responseSchema: scoresMetadataKeysResponseSchema,
+  summary: 'List score metadata keys',
+  description: 'Returns the distinct metadata keys observed on recent scores, for filter/group-by pickers',
+  tags: ['Scoring'],
+  requiresAuth: true,
+  handler: async ({ mastra }) => {
+    try {
+      const scoresStore = await mastra.getStorage()?.getStore('scores');
+      if (!scoresStore) {
+        return { keys: [] };
+      }
+      // Sample the most recent scores; metadata keys are a discovery aid, not an exhaustive index.
+      const result = await scoresStore.listScores({ pagination: { page: 0, perPage: 200 } });
+      const keys = new Set<string>();
+      for (const score of result.scores) {
+        if (score.metadata && typeof score.metadata === 'object') {
+          for (const key of Object.keys(score.metadata)) {
+            keys.add(key);
+          }
+        }
+      }
+      return { keys: [...keys].sort() };
+    } catch (error) {
+      return handleError(error, 'Error listing score metadata keys');
     }
   },
 });

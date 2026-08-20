@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { beforeAll, describe, it, expect, beforeEach } from 'vitest';
 import { createSampleScore } from './data';
+import { createListAggregateScoresTest } from './list-aggregate';
 import type { ScoreRowData } from '@mastra/core/evals';
 import type { MastraStorage, ScoresStorage } from '@mastra/core/storage';
 import type { TestCapabilities } from '../../factory';
@@ -47,6 +48,10 @@ export function createScoresTest({
     }
     scoresStorage = store;
   });
+
+  if (capabilities.unifiedScoreListing === true) {
+    createListAggregateScoresTest({ storage });
+  }
 
   describe('Score Operations', () => {
     beforeEach(async () => {

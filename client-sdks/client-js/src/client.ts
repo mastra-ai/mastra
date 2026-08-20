@@ -120,6 +120,19 @@ import type {
   ListScoresByScorerIdParams,
   ListScoresByRunIdParams,
   ListScoresByEntityIdParams,
+  QueryScoresFilter,
+  QueryScoresParams,
+  AggregateScoresParams,
+  ScoreThreadsParams,
+  Monitor,
+  CreateMonitorParams,
+  UpdateMonitorParams,
+  MonitorEvent,
+  ListMonitorEventsParams,
+  EvaluateMonitorsResponse,
+  ScorerHealth,
+  ScoreThreadsResponse,
+  AggregateScoresResponse,
   SaveScoreParams,
   SaveScoreResponse,
   GetMemoryConfigParams,
@@ -1021,6 +1034,117 @@ export class MastraClient extends BaseResource {
     return this.request(
       `/scores/entity/${encodeURIComponent(entityType)}/${encodeURIComponent(entityId)}${queryString ? `?${queryString}` : ''}`,
     );
+  }
+
+  private buildScoreFilterParams(params: QueryScoresFilter): URLSearchParams {
+    const searchParams = new URLSearchParams();
+    if (params.scorerIds?.length) searchParams.set('scorerIds', params.scorerIds.join(','));
+    if (params.entityId !== undefined) searchParams.set('entityId', params.entityId);
+    if (params.entityType !== undefined) searchParams.set('entityType', params.entityType);
+    if (params.traceId !== undefined) searchParams.set('traceId', params.traceId);
+    if (params.threadId !== undefined) searchParams.set('threadId', params.threadId);
+    if (params.source !== undefined) searchParams.set('source', params.source);
+    if (params.startDate !== undefined) searchParams.set('startDate', new Date(params.startDate).toISOString());
+    if (params.endDate !== undefined) searchParams.set('endDate', new Date(params.endDate).toISOString());
+    if (params.minScore !== undefined) searchParams.set('minScore', String(params.minScore));
+    if (params.maxScore !== undefined) searchParams.set('maxScore', String(params.maxScore));
+    if (params.metadata !== undefined) searchParams.set('metadata', JSON.stringify(params.metadata));
+    return searchParams;
+  }
+
+  /**
+   * Queries scores with unified filters (scorer, entity, trace, thread, source,
+   * date range, score range, metadata key/value).
+   */
+  public queryScores(params: QueryScoresParams = {}): Promise<ListScoresResponseOld> {
+    const searchParams = this.buildScoreFilterParams(params);
+    if (params.page !== undefined) searchParams.set('page', String(params.page));
+    if (params.perPage !== undefined) searchParams.set('perPage', String(params.perPage));
+    const queryString = searchParams.toString();
+    return this.request(`/scores${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Aggregates scores (count, avg, p50, p95, passRate) with optional UTC time
+   * bucketing and grouping by scorerId, entityId, or metadata keys.
+   */
+  public aggregateScores(params: AggregateScoresParams = {}): Promise<AggregateScoresResponse> {
+    const searchParams = this.buildScoreFilterParams(params);
+    if (params.bucket !== undefined) searchParams.set('bucket', params.bucket);
+    if (params.groupBy?.length) searchParams.set('groupBy', params.groupBy.join(','));
+    if (params.passThreshold !== undefined) searchParams.set('passThreshold', String(params.passThreshold));
+    const queryString = searchParams.toString();
+    return this.request(`/scores/aggregate${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Returns in-process delivery health counters for a scorer (triggered vs
+   * sampled vs saved vs failed), so missing or failed async scores are visible.
+   */
+  public getScorerHealth(scorerId: string): Promise<ScorerHealth> {
+    return this.request(`/scores/scorers/${encodeURIComponent(scorerId)}/health`);
+  }
+
+  /** Lists the distinct metadata keys observed on recent scores (for filter/group-by pickers). */
+  public getScoresMetadataKeys(): Promise<{ keys: string[] }> {
+    return this.request('/scores/metadata-keys');
+  }
+
+  /**
+   * Scores one or more Memory threads using a specified scorer (fire-and-forget).
+   * @param params - Scorer name and thread targets to score
+   * @returns Promise containing the scoring status
+   */
+  public scoreThreads(params: ScoreThreadsParams): Promise<ScoreThreadsResponse> {
+    return this.request('/scores/threads/score', {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /** Lists all score monitors. */
+  public listMonitors(): Promise<{ monitors: Monitor[] }> {
+    return this.request('/monitors');
+  }
+
+  /** Retrieves a score monitor by ID. */
+  public getMonitor(monitorId: string): Promise<Monitor> {
+    return this.request(`/monitors/${encodeURIComponent(monitorId)}`);
+  }
+
+  /** Creates a durable score monitor with threshold and alert channels. */
+  public createMonitor(params: CreateMonitorParams): Promise<Monitor> {
+    return this.request('/monitors', { method: 'POST', body: params });
+  }
+
+  /** Partially updates a score monitor. */
+  public updateMonitor(monitorId: string, params: UpdateMonitorParams): Promise<Monitor> {
+    return this.request(`/monitors/${encodeURIComponent(monitorId)}`, { method: 'PATCH', body: params });
+  }
+
+  /** Deletes a score monitor and its event history. */
+  public deleteMonitor(monitorId: string): Promise<{ success: boolean }> {
+    return this.request(`/monitors/${encodeURIComponent(monitorId)}`, { method: 'DELETE' });
+  }
+
+  /** Lists breach/recovery/delivery-failure history for a monitor, newest first. */
+  public listMonitorEvents(
+    monitorId: string,
+    params: ListMonitorEventsParams = {},
+  ): Promise<{ events: MonitorEvent[] }> {
+    const searchParams = new URLSearchParams();
+    if (params.limit !== undefined) searchParams.set('limit', String(params.limit));
+    if (params.type !== undefined) searchParams.set('type', params.type);
+    const queryString = searchParams.toString();
+    return this.request(`/monitors/${encodeURIComponent(monitorId)}/events${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Evaluates every active monitor exactly once. Intended as a cron hook for
+   * serverless deployments where the built-in interval loop is unavailable.
+   */
+  public evaluateMonitors(): Promise<EvaluateMonitorsResponse> {
+    return this.request('/monitors/evaluate', { method: 'POST' });
   }
 
   /**

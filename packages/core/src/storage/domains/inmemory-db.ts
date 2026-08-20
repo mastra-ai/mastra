@@ -31,6 +31,7 @@ import type {
 } from './knowledge';
 import type { MCPClientVersion } from './mcp-clients';
 import type { MCPServerVersion } from './mcp-servers';
+import type { Monitor, MonitorEvent } from './monitors/base';
 import type { TraceEntry } from './observability';
 import type { FeedbackRecord } from './observability/feedback';
 import type { LogRecord } from './observability/logs';
@@ -119,6 +120,10 @@ export class InMemoryDB {
   readonly schedules = new Map<string, Schedule>();
   readonly scheduleTriggers: ScheduleTrigger[] = [];
 
+  // Monitors domain
+  readonly monitors = new Map<string, Monitor>();
+  readonly monitorEvents: MonitorEvent[] = [];
+
   /**
    * Tool provider connections keyed by `${authorId}\u0000${providerId}\u0000${connectionId}`.
    */
@@ -179,6 +184,8 @@ export class InMemoryDB {
     this.knowledgeSemanticIdempotency.clear();
     this.schedules.clear();
     this.scheduleTriggers.length = 0;
+    this.monitors.clear();
+    this.monitorEvents.length = 0;
     this.toolProviderConnections.clear();
   }
 }

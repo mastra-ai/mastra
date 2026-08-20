@@ -36,6 +36,8 @@ export type TestCapabilities = {
   listScoresBySpan?: boolean;
   /** Whether scorer-based pagination is guaranteed to be ordered newest-first. */
   deterministicScorePagination?: boolean;
+  /** Whether the adapter natively implements the unified listScores/aggregateScores API. */
+  unifiedScoreListing?: boolean;
   /**
    * Whether the adapter persists item-level tool mocks and experiment tool mock
    * reports (defaults to true). Adapters that reject them (e.g. MySQL) set this

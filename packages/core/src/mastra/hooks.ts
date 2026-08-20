@@ -1,5 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { saveScorePayloadSchema } from '../evals';
+import { recordScorerFailure, recordScoreSaved } from '../evals/health';
 import type { ScoringHookInput } from '../evals/types';
 import { isScorerHookForMastra } from '../hooks/scorer-owner';
 import type { Mastra } from '../mastra';
@@ -96,7 +97,9 @@ export function createOnScorerHook(mastra: Mastra) {
       // packages/core/src/evals/base.ts). The hook must not republish or every
       // exporter would receive the same score twice.
       await validateAndSaveScore(storage, payload);
+      recordScoreSaved(scorerId);
     } catch (error) {
+      recordScorerFailure(scorerId, error);
       const mastraError = new MastraError(
         {
           id: 'MASTRA_SCORER_FAILED_TO_RUN_HOOK',

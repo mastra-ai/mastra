@@ -67,6 +67,7 @@ import MCPs from './pages/mcps';
 import { McpServerPage } from './pages/mcps/[serverId]';
 import MCPServerToolExecutor from './pages/mcps/tool';
 import Metrics from './pages/metrics';
+import Monitors from './pages/monitors';
 import PromptBlocks from './pages/prompt-blocks';
 import RequestContext from './pages/request-context';
 import Resources from './pages/resources';
@@ -379,6 +380,7 @@ export const routes: RouteObject[] = [
         element: <Scorer />,
         handle: navHandleWithChildren('/scorers', [{ id: 'scorer', Component: ScorerCrumb, heading: 'Scorer' }]),
       },
+      { path: '/monitors', element: <Monitors />, handle: navHandle('/monitors') },
       { path: '/metrics', element: <Metrics />, handle: navHandle('/metrics') },
       {
         path: '/intelligence',

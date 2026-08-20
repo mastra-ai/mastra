@@ -3,6 +3,8 @@ import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource 
 import { saveScorePayloadSchema } from '@mastra/core/evals';
 import type {
   CreateIndexOptions,
+  ListScoresFilter,
+  ListScoresInput,
   PruneOptions,
   PruneResult,
   RetentionTablesDescriptor,
@@ -43,6 +45,72 @@ function applyTenancyFilters(
   if (filters?.projectId !== undefined) {
     conditions.push(`"projectId" = $${paramIndex++}`);
     queryParams.push(filters.projectId);
+  }
+  return paramIndex;
+}
+
+/**
+ * Appends conditions for the unified list filter using positional parameters.
+ * Mutates `conditions`/`queryParams` and returns the next parameter index.
+ */
+function applyListFilterConditions(
+  conditions: string[],
+  queryParams: any[],
+  startIndex: number,
+  filter?: ListScoresFilter,
+): number {
+  let paramIndex = startIndex;
+  if (!filter) return paramIndex;
+  if (filter.scorerIds && filter.scorerIds.length > 0) {
+    conditions.push(`"scorerId" IN (${filter.scorerIds.map(() => `$${paramIndex++}`).join(', ')})`);
+    queryParams.push(...filter.scorerIds);
+  }
+  if (filter.entityId !== undefined) {
+    conditions.push(`"entityId" = $${paramIndex++}`);
+    queryParams.push(filter.entityId);
+  }
+  if (filter.entityType !== undefined) {
+    conditions.push(`"entityType" = $${paramIndex++}`);
+    queryParams.push(filter.entityType);
+  }
+  if (filter.traceId !== undefined) {
+    conditions.push(`"traceId" = $${paramIndex++}`);
+    queryParams.push(filter.traceId);
+  }
+  if (filter.threadId !== undefined) {
+    conditions.push(`"threadId" = $${paramIndex++}`);
+    queryParams.push(filter.threadId);
+  }
+  if (filter.source !== undefined) {
+    conditions.push(`"source" = $${paramIndex++}`);
+    queryParams.push(filter.source);
+  }
+  if (filter.startDate !== undefined) {
+    // Use the timezone-aware mirror column; legacy "createdAt" is timestamp-without-tz.
+    conditions.push(`"createdAtZ" >= $${paramIndex++}`);
+    queryParams.push(filter.startDate);
+  }
+  if (filter.endDate !== undefined) {
+    conditions.push(`"createdAtZ" <= $${paramIndex++}`);
+    queryParams.push(filter.endDate);
+  }
+  if (filter.minScore !== undefined) {
+    conditions.push(`"score" >= $${paramIndex++}`);
+    queryParams.push(filter.minScore);
+  }
+  if (filter.maxScore !== undefined) {
+    conditions.push(`"score" <= $${paramIndex++}`);
+    queryParams.push(filter.maxScore);
+  }
+  if (filter.metadata) {
+    // saveScore double-encodes metadata (JSON.stringify + jsonb stringify), so the jsonb
+    // column may hold a JSON string scalar. Normalize it back to an object before key lookup.
+    const metadataExpr = `(CASE WHEN jsonb_typeof("metadata") = 'string' THEN ("metadata" #>> '{}')::jsonb ELSE "metadata" END)`;
+    for (const [key, value] of Object.entries(filter.metadata)) {
+      // jsonb equality gives exact (deep) value matching, mirroring the base-class deepEqual semantics.
+      conditions.push(`${metadataExpr} -> $${paramIndex++}::text = $${paramIndex++}::jsonb`);
+      queryParams.push(key, JSON.stringify(value ?? null));
+    }
   }
   return paramIndex;
 }
@@ -362,10 +430,13 @@ export class ScoresPG extends ScoresStorage {
     }
 
     try {
-      const id = crypto.randomUUID();
+      // Caller-supplied IDs upsert (executeInsert uses ON CONFLICT ("id") for
+      // this table): last write wins, original createdAt preserved by the DB.
+      const id = parsedScore.id ?? crypto.randomUUID();
       const now = new Date();
 
       const {
+        id: _callerSuppliedId,
         scorer,
         preprocessStepResult,
         analyzeStepResult,
@@ -529,6 +600,61 @@ export class ScoresPG extends ScoresStorage {
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'GET_SCORES_BY_ENTITY_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  async listScores({ filter, pagination, filters }: ListScoresInput): Promise<ListScoresResponse> {
+    try {
+      const tableName = getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.#schema) });
+      const conditions: string[] = [];
+      const queryParams: any[] = [];
+      let paramIndex = applyListFilterConditions(conditions, queryParams, 1, filter);
+      paramIndex = applyTenancyFilters(conditions, queryParams, paramIndex, filters);
+      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+      const countResult = await this.#db.client.oneOrNone<{ count: string }>(
+        `SELECT COUNT(*) as count FROM ${tableName} ${whereClause}`,
+        queryParams,
+      );
+      const total = Number(countResult?.count ?? 0);
+
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, 100);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
+      if (total === 0) {
+        return {
+          pagination: { total: 0, page, perPage: perPageForResponse, hasMore: false },
+          scores: [],
+        };
+      }
+
+      const limitValue = perPageInput === false ? total : perPage;
+      const end = perPageInput === false ? total : start + perPage;
+
+      const result = await this.#db.client.manyOrNone<ScoreRowData>(
+        `SELECT * FROM ${tableName} ${whereClause} ORDER BY "createdAt" DESC, "id" ASC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`,
+        [...queryParams, limitValue, start],
+      );
+
+      return {
+        scores: result.map(transformScoreRow),
+        pagination: {
+          total,
+          page,
+          perPage: perPageForResponse,
+          hasMore: end < total,
+        },
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'LIST_SCORES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
