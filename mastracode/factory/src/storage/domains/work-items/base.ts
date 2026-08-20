@@ -391,8 +391,8 @@ export const WORK_ITEMS_SCHEMA: CollectionSchema = {
   ],
   indexes: [
     {
-      name: 'work_items_org_project_updated_at_idx',
-      columns: ['org_id', 'factory_project_id', 'updated_at'],
+      name: 'work_items_org_project_created_at_id_idx',
+      columns: ['org_id', 'factory_project_id', 'created_at', 'id'],
     },
     {
       name: 'work_items_project_parent_idx',
