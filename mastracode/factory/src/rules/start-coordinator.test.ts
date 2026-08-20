@@ -1,12 +1,15 @@
 import { RequestContext } from '@mastra/core/request-context';
+import { createSkill } from '@mastra/core/skills';
 import { describe, expect, it, vi } from 'vitest';
 
+import { createFactorySkillCatalog } from '../skills/catalog.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { defaultFactoryRules } from './defaults.js';
 import { FactoryStartCoordinator } from './start-coordinator.js';
 import { FactoryTransitionService } from './transition-service.js';
 
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
+const factorySkills = createFactorySkillCatalog([]);
 
 function makeController(sendMessage = vi.fn(async () => {})) {
   let threadId: string | undefined;
@@ -135,6 +138,7 @@ describe('FactoryStartCoordinator', () => {
     const coordinator = new FactoryStartCoordinator(
       controller as never,
       storage,
+      factorySkills,
       undefined,
       makeSourceControl() as never,
     );
@@ -167,6 +171,7 @@ describe('FactoryStartCoordinator', () => {
     const coordinator = new FactoryStartCoordinator(
       controller as never,
       storage,
+      factorySkills,
       undefined,
       makeSourceControl() as never,
     );
@@ -183,6 +188,7 @@ describe('FactoryStartCoordinator', () => {
     const coordinator = new FactoryStartCoordinator(
       controller as never,
       storage,
+      factorySkills,
       undefined,
       makeSourceControl() as never,
     );
@@ -200,6 +206,7 @@ describe('FactoryStartCoordinator', () => {
     const coordinator = new FactoryStartCoordinator(
       controller as never,
       storage,
+      factorySkills,
       undefined,
       makeSourceControl() as never,
     );
@@ -226,6 +233,7 @@ describe('FactoryStartCoordinator', () => {
     const coordinator = new FactoryStartCoordinator(
       controller as never,
       storage.workItems,
+      factorySkills,
       undefined,
       makeSourceControl() as never,
       storage.memorySettings,
@@ -250,6 +258,7 @@ describe('FactoryStartCoordinator', () => {
     const coordinator = new FactoryStartCoordinator(
       controller as never,
       storage,
+      factorySkills,
       undefined,
       makeSourceControl() as never,
     );
@@ -288,6 +297,7 @@ describe('FactoryStartCoordinator', () => {
     const coordinator = new FactoryStartCoordinator(
       controller as never,
       storage,
+      factorySkills,
       transitionService,
       makeSourceControl() as never,
     );
@@ -307,6 +317,7 @@ describe('FactoryStartCoordinator', () => {
     const coordinator = new FactoryStartCoordinator(
       controller as never,
       storage,
+      factorySkills,
       undefined,
       makeSourceControl() as never,
     );
@@ -341,6 +352,7 @@ describe('FactoryStartCoordinator', () => {
     const coordinator = new FactoryStartCoordinator(
       controller as never,
       storage,
+      factorySkills,
       undefined,
       makeSourceControl() as never,
     );
@@ -363,27 +375,30 @@ describe('FactoryStartCoordinator', () => {
   });
 
   it.each(['factory-review', 'factory-rereview'] as const)(
-    'tags %s skill kickoffs with untrustedCheckout',
+    'resolves bundled %s kickoffs without workspace discovery',
     async skillName => {
       const storage = (await createFactoryStorageForTests()).workItems;
+      const prepareRunStart = vi.spyOn(storage, 'prepareRunStart');
       const { controller, session } = makeController();
-      session.getWorkspace.mockReturnValue({
-        skills: {
-          maybeRefresh: vi.fn(async () => {}),
-          get: vi.fn(async () => ({ name: skillName, description: 'Review a PR', instructions: 'Review.' })),
-        },
-      } as never);
+      session.getWorkspace.mockImplementation(() => {
+        throw new Error('workspace discovery must not run');
+      });
+      const bundledSkills = createFactorySkillCatalog([
+        createSkill({ name: skillName, description: 'Review a PR', instructions: 'Review carefully.' }),
+      ]);
       const coordinator = new FactoryStartCoordinator(
         controller as never,
         storage,
+        bundledSkills,
         undefined,
         makeSourceControl() as never,
       );
 
       const request = startRequest({ kickoffMessage: null });
       request.invocation = { type: 'skill', skillName, arguments: 'PR #1' } as never;
-      await coordinator.prepare(request);
+      const prepared = await coordinator.prepare(request);
 
+      expect(session.getWorkspace).not.toHaveBeenCalled();
       expect(session.state.set).toHaveBeenCalledWith({
         factoryProjectId: PROJECT_ID,
         projectRepositoryId: 'project-repository-1',
@@ -391,8 +406,66 @@ describe('FactoryStartCoordinator', () => {
         untrustedCheckout: true,
         baseRef: 'main',
       });
+      expect(prepared.bindingId).toEqual(expect.any(String));
+      expect(prepareRunStart).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kickoffMessage: `<skill name="${skillName}">\nReview carefully.\n\nARGUMENTS: PR #1\n</skill>`,
+        }),
+      );
     },
   );
+
+  it('rejects a bundled non-user-invocable skill without workspace discovery', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { controller, session } = makeController();
+    session.getWorkspace.mockImplementation(() => {
+      throw new Error('workspace discovery must not run');
+    });
+    const bundledSkills = createFactorySkillCatalog([
+      createSkill({
+        name: 'factory-hidden',
+        description: 'Hidden Factory skill',
+        instructions: 'Hidden.',
+        'user-invocable': false,
+      }),
+    ]);
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      storage,
+      bundledSkills,
+      undefined,
+      makeSourceControl() as never,
+    );
+    const request = startRequest({ kickoffMessage: null });
+    request.invocation = { type: 'skill', skillName: 'factory-hidden', arguments: '' } as never;
+
+    await expect(coordinator.prepare(request)).rejects.toThrow('Skill not found: factory-hidden.');
+    expect(session.getWorkspace).not.toHaveBeenCalled();
+  });
+
+  it('keeps repository skill kickoff discovery as a fallback', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { controller, session } = makeController();
+    const maybeRefresh = vi.fn(async () => {});
+    const get = vi.fn(async () =>
+      createSkill({ name: 'repository-review', description: 'Repository review', instructions: 'Review repository.' }),
+    );
+    session.getWorkspace.mockReturnValue({ skills: { maybeRefresh, get } } as never);
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      storage,
+      factorySkills,
+      undefined,
+      makeSourceControl() as never,
+    );
+    const request = startRequest({ kickoffMessage: null });
+    request.invocation = { type: 'skill', skillName: 'repository-review', arguments: '' } as never;
+
+    await coordinator.prepare(request);
+
+    expect(maybeRefresh).toHaveBeenCalledOnce();
+    expect(get).toHaveBeenCalledWith('repository-review');
+  });
 
   it('falls back to intake metadata for baseRef when the session record has no base branch', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
@@ -400,7 +473,13 @@ describe('FactoryStartCoordinator', () => {
     const sourceControl = makeSourceControl();
     const record = await sourceControl.sessions.getBySessionId('session-1');
     record!.baseBranch = '';
-    const coordinator = new FactoryStartCoordinator(controller as never, storage, undefined, sourceControl as never);
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      storage,
+      factorySkills,
+      undefined,
+      sourceControl as never,
+    );
 
     const request = startRequest({ role: 'review', kickoffMessage: null });
     request.workItem.input.externalSource.type = 'pull-request' as never;
@@ -422,6 +501,7 @@ describe('FactoryStartCoordinator', () => {
     const coordinator = new FactoryStartCoordinator(
       controller as never,
       storage,
+      factorySkills,
       undefined,
       makeSourceControl() as never,
     );
@@ -441,6 +521,7 @@ describe('FactoryStartCoordinator', () => {
     const coordinator = new FactoryStartCoordinator(
       controller as never,
       storage,
+      factorySkills,
       undefined,
       makeSourceControl() as never,
     );
@@ -477,6 +558,7 @@ describe('FactoryStartCoordinator', () => {
     const coordinator = new FactoryStartCoordinator(
       controller as never,
       storage,
+      factorySkills,
       transitionService,
       makeSourceControl() as never,
     );
@@ -497,6 +579,7 @@ describe('FactoryStartCoordinator', () => {
     const coordinator = new FactoryStartCoordinator(
       controller as never,
       storage,
+      factorySkills,
       undefined,
       makeSourceControl() as never,
     );
@@ -511,6 +594,7 @@ describe('FactoryStartCoordinator', () => {
     const coordinator = new FactoryStartCoordinator(
       controller as never,
       storage,
+      factorySkills,
       undefined,
       makeSourceControl() as never,
     );
@@ -531,6 +615,7 @@ describe('FactoryStartCoordinator', () => {
     const coordinator = new FactoryStartCoordinator(
       controller as never,
       storage,
+      factorySkills,
       undefined,
       makeSourceControl() as never,
     );
@@ -550,6 +635,7 @@ describe('FactoryStartCoordinator', () => {
     const coordinator = new FactoryStartCoordinator(
       controller as never,
       storage,
+      factorySkills,
       undefined,
       makeSourceControl() as never,
     );

@@ -3,12 +3,15 @@ import { builtInFactoryRules, defaultFactoryRules } from '../../rules/defaults.j
 import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../../rules/transition-service.js';
+import { createFactorySkillCatalog } from '../../skills/catalog.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import { GithubAppIdentity } from './app-identity.js';
 import type { GithubIntegration } from './integration.js';
 import { createGithubPullRequestReconciler, GithubRules } from './rules.js';
 import type { ReconcileIssueState, ReconcilePullRequestState } from './rules.js';
 import { changeRequestTargetKey } from './subscriptions.js';
+
+const factorySkills = createFactorySkillCatalog([]);
 
 async function setup(permission: string | undefined) {
   const seeded = await createFactoryStorageForTests();
@@ -548,9 +551,10 @@ describe('GithubRules', () => {
       branch: 'factory/issue-42',
       baseBranch: 'main',
     });
-    const coordinator = new FactoryStartCoordinator(controller as never, workItems, transitionService, sourceControl);
+    const coordinator = new FactoryStartCoordinator(controller as never, workItems, factorySkills, transitionService, sourceControl);
     const primeCredentials = vi.fn(async () => {});
     const dispatcher = new FactoryDecisionDispatcher({
+      factorySkills,
       controller: controller as never,
       transitionService,
       storage: workItems,
@@ -902,6 +906,7 @@ describe('GithubRules', () => {
       rules,
     });
     const dispatcher = new FactoryDecisionDispatcher({
+      factorySkills,
       controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
       transitionService: new FactoryTransitionService({ storage: workItems, rules }),
       storage: workItems,
@@ -984,6 +989,7 @@ describe('GithubRules', () => {
       rules,
     });
     const dispatcher = new FactoryDecisionDispatcher({
+      factorySkills,
       controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
       transitionService: new FactoryTransitionService({ storage: workItems, rules }),
       storage: workItems,
@@ -1375,7 +1381,7 @@ describe('GithubRules', () => {
       branch: 'factory/issue-42',
       baseBranch: 'main',
     });
-    const coordinator = new FactoryStartCoordinator(controller as never, workItems, transitionService, sourceControl);
+    const coordinator = new FactoryStartCoordinator(controller as never, workItems, factorySkills, transitionService, sourceControl);
     const prepared = await coordinator.prepare({
       orgId: 'org-1',
       userId: 'user-1',
@@ -1408,6 +1414,7 @@ describe('GithubRules', () => {
       data: { kind: 'factory-pr-provenance', workItemId: prepared.workItemId },
     });
     const dispatcher = new FactoryDecisionDispatcher({
+      factorySkills,
       controller: controller as never,
       transitionService,
       storage: workItems,

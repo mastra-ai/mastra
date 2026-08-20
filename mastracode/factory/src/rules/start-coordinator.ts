@@ -1,9 +1,11 @@
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController } from '@mastra/core/agent-controller';
 import { RequestContext } from '@mastra/core/request-context';
-import { formatSkillActivation } from '@mastra/core/workspace';
+import type { Skill } from '@mastra/core/skills';
 
 import { hydrateFactorySession } from '../session/factory-session.js';
+import type { FactorySkillCatalog } from '../skills/catalog.js';
+import { formatSkillInvocationMessage } from '../skills/service.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { SourceControlSession, SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { CreateWorkItemInput, WorkItemsStorage } from '../storage/domains/work-items/base.js';
@@ -56,26 +58,24 @@ export interface FactoryStartPreparedResult {
 type FactoryController = AgentController<MastraCodeState>;
 type FactorySession = Awaited<ReturnType<FactoryController['createSession']>>;
 
-function escapeSkillBoundary(value: string): string {
-  return value.replaceAll('</skill>', '&lt;/skill&gt;');
-}
-
 async function resolveKickoffMessage(
   session: FactorySession,
+  factorySkills: FactorySkillCatalog,
   invocation: FactoryStartRequest['invocation'],
 ): Promise<string | null> {
   if (!invocation) return null;
   if (invocation.type === 'prompt') return invocation.prompt;
 
-  const skills = session.getWorkspace()?.skills;
-  await skills?.maybeRefresh();
-  const skill = await skills?.get(invocation.skillName);
+  let skill: Skill | null | undefined = factorySkills.get(invocation.skillName);
+  if (!skill) {
+    const skills = session.getWorkspace()?.skills;
+    await skills?.maybeRefresh();
+    skill = await skills?.get(invocation.skillName);
+  }
   if (!skill || skill['user-invocable'] === false) {
     throw new Error(`Skill not found: ${invocation.skillName}.`);
   }
-  const args = invocation.arguments.trim();
-  const content = `${formatSkillActivation(skill)}${args ? `\n\nARGUMENTS: ${args}` : ''}`.trim();
-  return `<skill name="${skill.name}">\n${escapeSkillBoundary(content)}\n</skill>`;
+  return formatSkillInvocationMessage(skill, invocation.arguments);
 }
 
 async function resolveSourceSession(
@@ -109,6 +109,7 @@ async function configureThread(session: FactorySession, request: FactoryStartReq
 export class FactoryStartCoordinator {
   readonly #controller: FactoryController;
   readonly #storage: WorkItemsStorage;
+  readonly #factorySkills: FactorySkillCatalog;
   readonly #transitionService?: Pick<FactoryTransitionService, 'transition'>;
   readonly #sourceControl?: SourceControlStorageHandle;
   readonly #memorySettings?: MemorySettingsStorage;
@@ -116,12 +117,14 @@ export class FactoryStartCoordinator {
   constructor(
     controller: FactoryController,
     storage: WorkItemsStorage,
+    factorySkills: FactorySkillCatalog,
     transitionService?: Pick<FactoryTransitionService, 'transition'>,
     sourceControl?: SourceControlStorageHandle,
     memorySettings?: MemorySettingsStorage,
   ) {
     this.#controller = controller;
     this.#storage = storage;
+    this.#factorySkills = factorySkills;
     this.#transitionService = transitionService;
     this.#sourceControl = sourceControl;
     this.#memorySettings = memorySettings;
@@ -184,7 +187,7 @@ export class FactoryStartCoordinator {
       memorySettings: this.#memorySettings,
     });
     const threadId = await configureThread(session, request);
-    const kickoffMessage = await resolveKickoffMessage(session, request.invocation);
+    const kickoffMessage = await resolveKickoffMessage(session, this.#factorySkills, request.invocation);
     const prepared = await storage.prepareRunStart({
       orgId: request.orgId,
       userId: request.userId,

@@ -4,6 +4,7 @@ import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController, AgentControllerEventListener } from '@mastra/core/agent-controller';
 import { RequestContext } from '@mastra/core/request-context';
 
+import type { FactorySkillCatalog } from '../skills/catalog.js';
 import { resolvePromptInvocation, resolveSkillInvocation } from '../skills/service.js';
 import type { SkillSession } from '../skills/service.js';
 import type {
@@ -74,6 +75,7 @@ export interface FactoryBindingPreparationInput {
 
 export interface FactoryDecisionDispatcherOptions {
   controller: FactoryController;
+  factorySkills: FactorySkillCatalog;
   transitionService: Pick<FactoryTransitionService, 'transition'>;
   storage: WorkItemsStorage;
   ownerId?: string;
@@ -165,6 +167,7 @@ async function awaitNotification(
 
 export class FactoryDecisionDispatcher {
   readonly #controller: FactoryController;
+  readonly #factorySkills: FactorySkillCatalog;
   readonly #transitionService: Pick<FactoryTransitionService, 'transition'>;
   readonly #storage: WorkItemsStorage;
   readonly #ownerId: string;
@@ -185,6 +188,7 @@ export class FactoryDecisionDispatcher {
 
   constructor(options: FactoryDecisionDispatcherOptions) {
     this.#controller = options.controller;
+    this.#factorySkills = options.factorySkills;
     this.#transitionService = options.transitionService;
     this.#storage = options.storage;
     this.#ownerId = options.ownerId ?? `factory-dispatcher:${randomUUID()}`;
@@ -469,7 +473,7 @@ export class FactoryDecisionDispatcher {
                 resourceId: binding.resourceId,
                 prompt: decision.prompt,
               })
-            : await resolveSkillInvocation(this.#controller, {
+            : await resolveSkillInvocation(this.#controller, this.#factorySkills, {
                 resourceId: binding.resourceId,
                 name: decision.skillName,
                 arguments: decision.arguments,

@@ -1,6 +1,5 @@
 import { existsSync } from 'node:fs';
-import path, { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import path from 'node:path';
 import { SandboxFilesystem } from '@mastra/code-sdk/agents/sandbox-filesystem';
 import { MASTRACODE_WORKSPACE_TOOLS } from '@mastra/code-sdk/agents/tool-availability';
 import { getDynamicWorkspace } from '@mastra/code-sdk/agents/workspace';
@@ -29,6 +28,7 @@ import { registerGithubPatKind, registerGithubTokenInjector } from './integratio
 import { getFactorySessionAddress } from './rules/binding-context.js';
 import { baseCheckpointIsStale } from './sandbox/base-checkpoint-triggers.js';
 import type { SandboxBindingStore, SandboxFleet } from './sandbox/fleet.js';
+import { FACTORY_SKILL_NAMES, FACTORY_SKILLS_SOURCE_PATH } from './skills/catalog.js';
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
 
 const WORKSPACE_ID_PREFIX = 'mfw';
@@ -79,28 +79,7 @@ export function isMissingWorkdirError(error: unknown, workdir: string | undefine
   return !existsSync(workdir);
 }
 
-const bundleDirectory = dirname(fileURLToPath(import.meta.url));
-const bundledFactorySkillsPath = join(bundleDirectory, 'factory-skills');
-export const FACTORY_SKILLS_SOURCE_PATH =
-  [
-    // Deploy bundle: the consumer copies `factory-skills/` next to the built
-    // server module (e.g. via its public/ dir).
-    bundledFactorySkillsPath,
-    // Package layout: `dist/../factory-skills` (also `src/../factory-skills`
-    // when running tests against sources).
-    join(bundleDirectory, '..', 'factory-skills'),
-    // Consumer repo running from its package root before a build.
-    join(process.cwd(), 'src', 'mastra', 'public', 'factory-skills'),
-  ].find(existsSync) ?? bundledFactorySkillsPath;
 const FACTORY_SKILLS_MOUNT = path.resolve(path.parse(process.cwd()).root, '__mastracode_factory_skills__');
-export const FACTORY_SKILL_NAMES = new Set([
-  'configure-factory-rules',
-  'factory-complete-issue',
-  'factory-plan',
-  'factory-rereview',
-  'factory-review',
-  'factory-triage',
-]);
 
 class FactorySkillSource implements SkillSource {
   readonly #factorySource = new LocalSkillSource({ basePath: FACTORY_SKILLS_SOURCE_PATH });
