@@ -1,5 +1,15 @@
 # @mastra/deployer
 
+## 1.61.0-alpha.5
+
+### Patch Changes
+
+- Sweep idle HTTP connections periodically during graceful shutdown. A keep-alive socket whose in-flight response finished after the initial `closeIdleConnections()` call would stall the drain until the full `server.drainTimeout` expired; the server now exits as soon as in-flight work actually completes. ([#21996](https://github.com/mastra-ai/mastra/pull/21996))
+
+- Updated dependencies [[`7c60df5`](https://github.com/mastra-ai/mastra/commit/7c60df5c7872343fbac5c3e5b1175c8076a5abfd)]:
+  - @mastra/core@1.61.0-alpha.5
+  - @mastra/server@1.61.0-alpha.5
+
 ## 1.61.0-alpha.4
 
 ### Patch Changes
