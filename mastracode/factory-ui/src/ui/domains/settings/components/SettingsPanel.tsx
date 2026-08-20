@@ -1,7 +1,10 @@
 import type { AgentControllerSessionSettings } from '@mastra/client-js';
 import { useTheme } from '@mastra/playground-ui/components/ThemeProvider';
 import { useEffect } from 'react';
-import { useLocation, useParams } from 'react-router';
+import { Link, useLocation, useParams } from 'react-router';
+import { Brain } from 'lucide-react';
+import { buttonVariants } from '@mastra/playground-ui/components/Button';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -9,6 +12,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useChatPermissions } from '../../chat/context/useChatPermissions';
 import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
 import { useSettingsSection } from '../hooks/useSettingsSection';
+import { settingsSectionPath } from '../settingsSections';
 import { useAgentControllerSettings } from '../../../../hooks/useAgentControllerSettings';
 import { useAvailableModelsQuery } from '../../../../hooks/useAvailableModels';
 import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
@@ -100,11 +104,16 @@ export function SettingsPanel() {
         {section === 'intake' && <IntakeSection />}
         {section === 'models' && (
           <ModelsSettingsSection
-            factoryId={factoryId}
             models={models}
             settings={settings}
             updating={updateSettingsMutation.isPending}
             onBehaviorChange={onBehaviorChange}
+          />
+        )}
+        {section === 'memory' && (
+          <MemorySettingsSection
+            factoryId={factoryId}
+            models={models}
             sessionResourceId={sessionResourceId}
             sessionScope={sessionScope}
           />
@@ -126,13 +135,69 @@ export function SettingsPanel() {
 }
 
 interface ModelsSettingsSectionProps {
-  factoryId: string | undefined;
   models: AvailableModelOption[];
   settings: AgentControllerSessionSettings | null;
   updating: boolean;
   onBehaviorChange: (updates: Partial<AgentControllerSessionSettings>) => void;
+}
+
+interface MemorySettingsSectionProps {
+  factoryId: string | undefined;
+  models: AvailableModelOption[];
   sessionResourceId: string | undefined;
   sessionScope: string | undefined;
+}
+
+/**
+ * Observational-memory settings, split by scope. OM models are useless
+ * without a provider credential, so until one is connected the page is a
+ * zero state pointing at the Models page.
+ */
+function MemorySettingsSection({ factoryId, models, sessionResourceId, sessionScope }: MemorySettingsSectionProps) {
+  const providersQuery = useProvidersQuery();
+  const customProvidersQuery = useCustomProvidersQuery();
+  const anyConnected =
+    (providersQuery.data ?? []).some(p => p.source !== 'none') || (customProvidersQuery.data ?? []).length > 0;
+  const providersKnown = providersQuery.isSuccess && customProvidersQuery.isSuccess;
+
+  if (providersKnown && !anyConnected) {
+    return (
+      <EmptyState
+        as="h2"
+        iconSlot={<Brain size={40} className="text-icon3" />}
+        titleSlot="No models configured"
+        descriptionSlot="Observational memory needs a model to summarize and retain context. Connect a provider on the Models page first."
+        actionSlot={
+          factoryId ? (
+            <Link to={settingsSectionPath(factoryId, 'models')} className={buttonVariants({ variant: 'primary' })}>
+              Open Models settings
+            </Link>
+          ) : undefined
+        }
+      />
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-8">
+      <SettingsSubsection
+        title="Factory observational memory"
+        description="Models and token thresholds used to summarize and retain context in Factory runs."
+      >
+        <SettingsCard className="p-4">
+          <OMSection factoryId={factoryId} models={models} />
+        </SettingsCard>
+      </SettingsSubsection>
+      <SettingsSubsection
+        title="Your observational memory"
+        description="Models and token thresholds used to summarize and retain context in your interactive chats."
+      >
+        <SettingsCard className="p-4">
+          <OMSection resourceId={sessionResourceId} scope={sessionScope} models={models} />
+        </SettingsCard>
+      </SettingsSubsection>
+    </div>
+  );
 }
 
 /**
@@ -141,15 +206,7 @@ interface ModelsSettingsSectionProps {
  * Once connected, model selection moves to the top and provider management
  * drops to the bottom.
  */
-function ModelsSettingsSection({
-  factoryId,
-  models,
-  settings,
-  updating,
-  onBehaviorChange,
-  sessionResourceId,
-  sessionScope,
-}: ModelsSettingsSectionProps) {
+function ModelsSettingsSection({ models, settings, updating, onBehaviorChange }: ModelsSettingsSectionProps) {
   const providersQuery = useProvidersQuery();
   const customProvidersQuery = useCustomProvidersQuery();
   const anyConnected =
@@ -206,22 +263,6 @@ function ModelsSettingsSection({
             <ModeThinkingDefaultsSection />
           </SettingsCard>
         </div>
-      </SettingsSubsection>
-      <SettingsSubsection
-        title="Factory observational memory"
-        description="Models and token thresholds used to summarize and retain context in Factory runs."
-      >
-        <SettingsCard className="p-4">
-          <OMSection factoryId={factoryId} models={models} />
-        </SettingsCard>
-      </SettingsSubsection>
-      <SettingsSubsection
-        title="Your observational memory"
-        description="Models and token thresholds used to summarize and retain context in your interactive chats."
-      >
-        <SettingsCard className="p-4">
-          <OMSection resourceId={sessionResourceId} scope={sessionScope} models={models} />
-        </SettingsCard>
       </SettingsSubsection>
       {providerSubsections}
     </div>
