@@ -2254,25 +2254,35 @@ describe('E2BSandbox Internal Methods', () => {
       expect(sandbox.status).toBe('stopped');
     });
 
-    it('resets failed mounts to pending when replacing a dead sandbox', () => {
-      const sandbox = new E2BSandbox();
+    it.each([
+      { state: 'mounted', expectedState: 'pending', error: undefined },
+      { state: 'mounting', expectedState: 'pending', error: undefined },
+      { state: 'error', expectedState: 'pending', error: 'transient mount failure' },
+      { state: 'unsupported', expectedState: 'unsupported', error: 'unsupported filesystem' },
+      { state: 'unavailable', expectedState: 'unavailable', error: 'filesystem unavailable' },
+    ] as const)('handles $state mounts correctly and preserves their metadata', ({ state, expectedState, error }) => {
+      const config = { type: 's3', bucket: 'test-bucket', region: 'us-east-1' } as const;
       const filesystem = {
         id: 'test-s3',
         name: 'S3Filesystem',
         provider: 's3',
         status: 'ready',
-        getMountConfig: () => ({ type: 's3', bucket: 'test-bucket', region: 'us-east-1' }),
+        getMountConfig: () => config,
       } as any;
+      const sandbox = new E2BSandbox();
       sandbox.mounts.add({ '/data': filesystem });
-      sandbox.mounts.set('/data', { state: 'error', error: 'transient mount failure' });
+      sandbox.mounts.set('/data', { state, config, error });
+      const configHash = sandbox.mounts.get('/data')?.configHash;
+      expect(configHash).toBeDefined();
 
       (sandbox as any).handleSandboxTimeout();
 
-      expect(sandbox.mounts.get('/data')).toMatchObject({
-        filesystem,
-        state: 'pending',
-      });
-      expect(sandbox.mounts.get('/data')?.error).toBeUndefined();
+      const entry = sandbox.mounts.get('/data');
+      expect(entry?.filesystem).toBe(filesystem);
+      expect(entry?.config).toBe(config);
+      expect(entry?.configHash).toBe(configHash);
+      expect(entry?.state).toBe(expectedState);
+      expect(entry?.error).toBe(expectedState === 'pending' ? undefined : error);
     });
   });
 
@@ -2281,6 +2291,22 @@ describe('E2BSandbox Internal Methods', () => {
       const { Sandbox } = await import('e2b');
       const sandbox = new E2BSandbox();
       await sandbox._start();
+
+      const filesystem = {
+        id: 'test-s3',
+        name: 'S3Filesystem',
+        provider: 's3',
+        status: 'ready',
+        getMountConfig: () => ({
+          type: 's3',
+          bucket: 'test-bucket',
+          region: 'us-east-1',
+          accessKeyId: 'test-key',
+          secretAccessKey: 'test-secret',
+        }),
+      } as any;
+      sandbox.mounts.add({ '/data': filesystem });
+      sandbox.mounts.set('/data', { state: 'error', error: 'transient mount failure' });
 
       let callCount = 0;
       mockSandbox.commands.run.mockImplementation((_cmd: string, opts?: any) => {
@@ -2301,6 +2327,11 @@ describe('E2BSandbox Internal Methods', () => {
       expect(result.success).toBe(true);
       // create called once in initial start(), once in retry start()
       expect(Sandbox.create).toHaveBeenCalledTimes(2);
+      expect(sandbox.mounts.get('/data')).toMatchObject({
+        filesystem,
+        state: 'mounted',
+      });
+      expect(sandbox.mounts.get('/data')?.error).toBeUndefined();
     });
 
     it('does not retry infinitely (only once)', async () => {
