@@ -716,6 +716,49 @@ describe('DiscordProvider — storage resolution', () => {
     const records = await shared.listInstallations('discord');
     expect(records.map(r => r.agentId)).toContain('agent-2');
   });
+
+  it('re-queues the fallback for a second attach that lands mid-migration', async () => {
+    // Pre-registration connect(): the install lands in the in-memory fallback.
+    const provider = new DiscordProvider({ app: APP });
+    stubValidateApp();
+    await provider.connect('agent-1');
+
+    // First attach: real storage, but slow — #pendingMigration gets claimed and
+    // #migrateFallback is mid-flight when the second attach interrupts it.
+    const storageA = new InMemoryChannelsStorage();
+    const mastraA = {
+      getAgentById: () => undefined,
+      getServer: () => undefined,
+      getStorage: () => ({ init: async () => {}, getStore: async () => withLatency(storageA) }),
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (provider as any).__attach(mastraA);
+    const resolution = provider.getInstallation('agent-1');
+
+    // Let resolveStorage() and the pending-migration claim clear their
+    // microtasks, then land the second attach before migrateFallback's own
+    // (slower) timers resolve — a redeploy pointing at a different storage
+    // target while the first attach is still carrying the fallback over.
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const storageB = new InMemoryChannelsStorage();
+    const mastraB = {
+      getAgentById: () => undefined,
+      getServer: () => undefined,
+      getStorage: () => ({ init: async () => {}, getStore: async () => storageB }),
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (provider as any).__attach(mastraB);
+
+    // The superseded attempt must not strand the caller: it re-queues the same
+    // fallback for the next resolution instead of dropping it on the floor.
+    expect(await resolution).not.toBeNull();
+
+    // …and the install ends up in the *second* target, not the first — a
+    // migration that finished into storageA would leave agent-1 unreachable
+    // once the provider is pinned to storageB.
+    const recordsB = await storageB.listInstallations('discord');
+    expect(recordsB.map(r => r.agentId)).toContain('agent-1');
+  });
 });
 
 describe('DiscordInstallStore.getByGuildId — deterministic routing', () => {
