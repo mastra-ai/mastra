@@ -1,0 +1,142 @@
+import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { describe, it, expect } from 'vitest';
+import { createAgentTestRun, createTestMessage } from '../../utils';
+import type { MultiTurnJudgeAnalysisResult } from './prompts';
+import { createMultiTurnJudgeScorer } from '.';
+
+/**
+ * Build a mock judge model that always answers with the given analysis, capturing the prompts it
+ * was given so tests can assert on the transcript the scorer built.
+ */
+function mockJudge(analysis: MultiTurnJudgeAnalysisResult) {
+  const text = JSON.stringify(analysis);
+  const prompts: string[] = [];
+  const record = (options: { prompt: unknown }) => {
+    prompts.push(JSON.stringify(options.prompt));
+  };
+
+  const model = new MockLanguageModelV2({
+    doGenerate: async options => {
+      record(options);
+      return {
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text' as const, text }],
+        warnings: [],
+      };
+    },
+    doStream: async options => {
+      record(options);
+      return {
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: text },
+          { type: 'text-end', id: 'text-1' },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+        ]),
+      };
+    },
+  });
+
+  return { model, prompts };
+}
+
+/** A multi-turn run: `runEvals` accumulates every turn's output messages into `run.output`. */
+function multiTurnRun() {
+  return createAgentTestRun({
+    inputMessages: [createTestMessage({ id: 'u1', role: 'user', content: 'How is the weather in London?' })],
+    output: [
+      createTestMessage({ id: 'a1', role: 'assistant', content: 'London is 12°C and rainy.' }),
+      createTestMessage({ id: 'u2', role: 'user', content: 'And Paris?' }),
+      createTestMessage({ id: 'a2', role: 'assistant', content: 'Paris is 18°C and sunny.' }),
+      createTestMessage({ id: 'a3', role: 'assistant', content: 'Pack an umbrella for London.' }),
+    ],
+  });
+}
+
+describe('Multi-turn Judge Scorer (LLM)', () => {
+  describe('configuration', () => {
+    it('creates a scorer with the expected identity and judge', () => {
+      const { model } = mockJudge({ satisfied: true, reasoning: 'ok' });
+      const scorer = createMultiTurnJudgeScorer({ model, criterion: 'The agent gave a forecast' });
+
+      expect(scorer.id).toBe('multi-turn-judge-scorer');
+      expect(scorer.name).toBe('Multi-turn Judge (LLM)');
+      expect(scorer.config.judge?.instructions).toContain('multi-turn conversation');
+    });
+  });
+
+  describe('prompt', () => {
+    it('includes every assistant turn and excludes non-assistant messages', async () => {
+      const { model, prompts } = mockJudge({ satisfied: true, reasoning: 'all cities covered' });
+      const scorer = createMultiTurnJudgeScorer({ model, criterion: 'Forecasts for London and Paris' });
+
+      await scorer.run(multiTurnRun());
+
+      const prompt = prompts.join('\n');
+      expect(prompt).toContain('Assistant turn 1: London is 12°C and rainy.');
+      expect(prompt).toContain('Assistant turn 2: Paris is 18°C and sunny.');
+      expect(prompt).toContain('Assistant turn 3: Pack an umbrella for London.');
+      expect(prompt).not.toContain('And Paris?');
+      expect(prompt).toContain('Forecasts for London and Paris');
+    });
+
+    it('handles a conversation with no assistant text', async () => {
+      const { model, prompts } = mockJudge({ satisfied: false, reasoning: 'nothing was said' });
+      const scorer = createMultiTurnJudgeScorer({ model, criterion: 'The agent answered' });
+
+      const result = await scorer.run(
+        createAgentTestRun({
+          inputMessages: [createTestMessage({ id: 'u1', role: 'user', content: 'Hello?' })],
+          output: [createTestMessage({ id: 'a1', role: 'assistant', content: '' })],
+        }),
+      );
+
+      expect(prompts.join('\n')).toContain('(no assistant messages)');
+      expect(result.score).toBe(0);
+    });
+  });
+
+  describe('scoring', () => {
+    it('scores 1 when the judge says the criterion is satisfied', async () => {
+      const { model } = mockJudge({ satisfied: true, reasoning: 'both forecasts and packing advice' });
+      const scorer = createMultiTurnJudgeScorer({ model, criterion: 'Forecasts plus packing advice' });
+
+      const result = await scorer.run(multiTurnRun());
+
+      expect(result.score).toBe(1);
+      expect(result.reason).toContain('Criterion satisfied');
+      expect(result.reason).toContain('Forecasts plus packing advice');
+      expect(result.reason).toContain('both forecasts and packing advice');
+    });
+
+    it('scores 0 when the judge says the criterion is not satisfied', async () => {
+      const { model } = mockJudge({ satisfied: false, reasoning: 'no Tokyo forecast' });
+      const scorer = createMultiTurnJudgeScorer({ model, criterion: 'Forecasts for three cities' });
+
+      const result = await scorer.run(multiTurnRun());
+
+      expect(result.score).toBe(0);
+      expect(result.reason).toContain('Criterion not satisfied');
+      expect(result.reason).toContain('no Tokyo forecast');
+    });
+
+    it('applies the configured scale', async () => {
+      const { model } = mockJudge({ satisfied: true, reasoning: 'satisfied' });
+      const scorer = createMultiTurnJudgeScorer({
+        model,
+        criterion: 'Forecasts plus packing advice',
+        options: { scale: 10 },
+      });
+
+      const result = await scorer.run(multiTurnRun());
+
+      expect(result.score).toBe(10);
+    });
+  });
+});
