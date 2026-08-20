@@ -229,22 +229,18 @@ describe('platform entry (src/mastra/index.ts)', () => {
       expect(paths).toContain('/auth/linear/connect');
     });
 
-    it(
-      'boots without Jira routes when the Jira group is partially configured',
-      { timeout: 60_000 },
-      async () => {
-        vi.resetModules();
-        vi.stubEnv('JIRA_BASE_URL', 'https://acme.atlassian.net');
-        vi.stubEnv('JIRA_EMAIL', 'ops@acme.test');
-        vi.stubEnv('JIRA_API_TOKEN', '');
-        const mod = await import('./index.js');
-        expect(mod.mastra).toBeDefined();
-        // No integration instance means no /web/jira/* routes mount at all;
-        // the SPA degrades the status 404 to "disabled" (Linear parity).
-        const paths = mod.mastra.getServer()?.apiRoutes?.map(route => route.path) ?? [];
-        expect(paths).not.toContain('/web/jira/status');
-      },
-    );
+    it('boots without Jira routes when the Jira group is partially configured', { timeout: 60_000 }, async () => {
+      vi.resetModules();
+      vi.stubEnv('JIRA_BASE_URL', 'https://acme.atlassian.net');
+      vi.stubEnv('JIRA_EMAIL', 'ops@acme.test');
+      vi.stubEnv('JIRA_API_TOKEN', '');
+      const mod = await import('./index.js');
+      expect(mod.mastra).toBeDefined();
+      // No integration instance means no /web/jira/* routes mount at all;
+      // the SPA degrades the status 404 to "disabled" (Linear parity).
+      const paths = mod.mastra.getServer()?.apiRoutes?.map(route => route.path) ?? [];
+      expect(paths).not.toContain('/web/jira/status');
+    });
 
     it('registers the Jira integration when the full group is configured', { timeout: 60_000 }, async () => {
       vi.resetModules();
