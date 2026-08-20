@@ -3696,6 +3696,7 @@ ${formattedMessages}
     let observed = false;
     let observationUsage: ObserveHookUsage | undefined;
     let observationProviderMetadata: ProviderMetadata | undefined;
+    let hookError: Error | undefined;
     let generationBefore = -1;
 
     await this.withLock(lockKey, async () => {
@@ -3743,11 +3744,16 @@ ${formattedMessages}
         observationError = error instanceof Error ? error : new Error(String(error));
         throw error;
       } finally {
-        hooks?.onObservationEnd?.({
-          usage: observationUsage,
-          error: observationError,
-          ...(observationProviderMetadata ? { providerMetadata: observationProviderMetadata } : {}),
-        });
+        try {
+          hooks?.onObservationEnd?.({
+            usage: observationUsage,
+            error: observationError,
+            ...(observationProviderMetadata ? { providerMetadata: observationProviderMetadata } : {}),
+          });
+        } catch (error) {
+          if (observationError) throw error;
+          hookError = error instanceof Error ? error : new Error(String(error));
+        }
       }
     });
 
@@ -3765,6 +3771,7 @@ ${formattedMessages}
       );
     }
 
+    if (hookError) throw hookError;
     return { observed, reflected, record };
   }
 

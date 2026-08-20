@@ -324,6 +324,25 @@ describe('observation-cadence curation trigger', () => {
     expect(runCuration).not.toHaveBeenCalled();
   });
 
+  it('accounts a successful synchronous commit before rethrowing an end-hook error', async () => {
+    const runCuration = vi.fn(async () => ({ outcome: 'ran' }));
+    const om = createEngine({ cadence: 1, memory: { runCuration } });
+    const hookError = new Error('end hook failed');
+
+    await expect(
+      om.observe({
+        threadId: 'sync-hook-error-cadence-thread',
+        messages: createBulkMessages(10, 'sync-hook-error-cadence-thread'),
+        hooks: {
+          onObservationEnd: () => {
+            throw hookError;
+          },
+        },
+      }),
+    ).rejects.toBe(hookError);
+    await vi.waitFor(() => expect(runCuration).toHaveBeenCalledOnce());
+  });
+
   it('does not fail buffered observation when cadence curation rejects', async () => {
     const runCuration = vi.fn(async () => {
       throw new Error('curation failed');
