@@ -1016,6 +1016,7 @@ describe('transcript reducer mergeWindow', () => {
     // the echo it belongs to carries a client-minted `local-…` id.
     let state = createInitialTranscript({ messages: [], threadId: 't1' });
     state = transcriptReducer(state, { type: 'localUser', text: 'stop and read the file', steer: true });
+    const localId = state.entries[0]?.id;
 
     const next = transcriptReducer(state, {
       type: 'mergeWindow',
@@ -1031,7 +1032,12 @@ describe('transcript reducer mergeWindow', () => {
     });
 
     expect(next.entries).toHaveLength(1);
-    expect(next.entries[0]).toMatchObject({ id: 'sig-1', steer: true, deliveryStatus: 'delivered' });
+    expect(next.entries[0]).toMatchObject({
+      id: localId,
+      steer: true,
+      deliveryStatus: 'delivered',
+      message: { id: 'sig-1' },
+    });
   });
 
   it('does not redraw a turn whose persisted copy carries tool calls the stream never delivered', () => {
@@ -1253,6 +1259,7 @@ describe('live user-signal events render the same as their persisted copy', () =
       steer: true,
     });
     expect(state.entries[0]).toMatchObject({ steer: true, deliveryStatus: 'pending' });
+    const localId = state.entries[0]?.id;
 
     const delivered = liveComposerSignal({ delivery: 'while-active' });
     state = transcriptReducer(state, { type: 'event', event: { type: 'message_start', message: delivered } });
@@ -1260,10 +1267,14 @@ describe('live user-signal events render the same as their persisted copy', () =
 
     expect(state.entries).toHaveLength(1);
     expect(state.entries[0]).toMatchObject({
-      id: 'sig-web',
+      id: localId,
       steer: true,
       deliveryStatus: 'delivered',
-      message: { role: 'user', content: { parts: [{ type: 'text', text: 'hello from the composer' }] } },
+      message: {
+        id: 'sig-web',
+        role: 'user',
+        content: { parts: [{ type: 'text', text: 'hello from the composer' }] },
+      },
     });
   });
 
@@ -1274,6 +1285,7 @@ describe('live user-signal events render the same as their persisted copy', () =
       text: 'hello from the composer',
       steer: true,
     });
+    const localId = state.entries[0]?.id;
 
     state = transcriptReducer(state, {
       type: 'event',
@@ -1282,9 +1294,10 @@ describe('live user-signal events render the same as their persisted copy', () =
 
     expect(state.entries).toHaveLength(1);
     expect(state.entries[0]).toMatchObject({
-      id: 'sig-web',
+      id: localId,
       steer: false,
       deliveryStatus: undefined,
+      message: { id: 'sig-web' },
     });
   });
 
@@ -1295,6 +1308,7 @@ describe('live user-signal events render the same as their persisted copy', () =
       text: 'hello from the composer',
       steer: true,
     });
+    const localId = state.entries[0]?.id;
 
     state = transcriptReducer(state, {
       type: 'mergeWindow',
@@ -1303,10 +1317,67 @@ describe('live user-signal events render the same as their persisted copy', () =
 
     expect(state.entries).toHaveLength(1);
     expect(state.entries[0]).toMatchObject({
-      id: 'sig-web',
+      id: localId,
       steer: true,
       deliveryStatus: 'delivered',
-      message: { role: 'user', content: { parts: [{ type: 'text', text: 'hello from the composer' }] } },
+      message: {
+        id: 'sig-web',
+        role: 'user',
+        content: { parts: [{ type: 'text', text: 'hello from the composer' }] },
+      },
+    });
+  });
+
+  it('confirms a failed steer when its streamed signal arrives later', () => {
+    let state = createInitialTranscript({ messages: [], threadId: 't1' });
+    state = transcriptReducer(state, {
+      type: 'localUser',
+      text: 'hello from the composer',
+      steer: true,
+    });
+    const localId = state.entries[0]?.id;
+    if (!localId) throw new Error('Expected an optimistic message');
+    state = transcriptReducer(state, { type: 'failLocalUser', id: localId });
+
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: {
+        type: 'message_start',
+        message: liveComposerSignal({ delivery: 'while-active' }),
+      },
+    });
+
+    expect(state.entries).toHaveLength(1);
+    expect(state.entries[0]).toMatchObject({
+      id: localId,
+      steer: true,
+      deliveryStatus: 'delivered',
+      message: { id: 'sig-web' },
+    });
+  });
+
+  it('confirms a failed steer when its server-window copy arrives later', () => {
+    let state = createInitialTranscript({ messages: [], threadId: 't1' });
+    state = transcriptReducer(state, {
+      type: 'localUser',
+      text: 'hello from the composer',
+      steer: true,
+    });
+    const localId = state.entries[0]?.id;
+    if (!localId) throw new Error('Expected an optimistic message');
+    state = transcriptReducer(state, { type: 'failLocalUser', id: localId });
+
+    state = transcriptReducer(state, {
+      type: 'mergeWindow',
+      messages: [liveComposerSignal({ delivery: 'while-active' })],
+    });
+
+    expect(state.entries).toHaveLength(1);
+    expect(state.entries[0]).toMatchObject({
+      id: localId,
+      steer: true,
+      deliveryStatus: 'delivered',
+      message: { id: 'sig-web' },
     });
   });
 

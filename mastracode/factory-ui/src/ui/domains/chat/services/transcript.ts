@@ -673,7 +673,9 @@ function claimOnScreenEntries(
     for (const [index, candidate] of onScreen.entries()) {
       if (!candidate || (eligible && !eligible(candidate.entry))) continue;
       const sameMessage =
-        candidate.entry.id === message.id || toolCallIds.some(toolCallId => candidate.toolCallIds.has(toolCallId));
+        candidate.entry.id === message.id ||
+        candidate.entry.message.id === message.id ||
+        toolCallIds.some(toolCallId => candidate.toolCallIds.has(toolCallId));
       const alreadyDrawn = redrawsEntry(candidate, displayed, texts, toolCallIds);
 
       const claimsIdentity = sameMessage && !claimedEntries.has(index);
@@ -690,16 +692,20 @@ function claimOnScreenEntries(
   return anchors;
 }
 
+function isUnconfirmedSteer(entry: MessageEntry): boolean {
+  return entry.deliveryStatus === 'pending' || entry.deliveryStatus === 'failed';
+}
+
 function confirmPendingUserMessages(state: TranscriptState, anchors: Map<MastraDBMessage, number>): TranscriptState {
   const confirmed = new Map<number, MessageEntry>();
   for (const [message, index] of anchors) {
     const current = state.entries[index];
-    if (current?.kind !== 'message' || current.deliveryStatus !== 'pending') continue;
+    if (current?.kind !== 'message' || !isUnconfirmedSteer(current)) continue;
     const canonical = toMessageEntry(preserveOptimisticUserContent(message, current.message), {
       streaming: current.streaming,
       runtimeTools: current.runtimeTools,
     });
-    if (canonical.message.role === 'user') confirmed.set(index, canonical);
+    if (canonical.message.role === 'user') confirmed.set(index, { ...canonical, id: current.id });
   }
   if (confirmed.size === 0) return state;
 
@@ -987,10 +993,12 @@ function indexOfSameTurn(entries: TimelineEntry[], message: MastraDBMessage): nu
 function upsertMessage(state: TranscriptState, message: MastraDBMessage, streaming: boolean): TranscriptState {
   if (message.role !== 'assistant' && message.role !== 'signal') return state;
   const entries = [...state.entries];
-  let idx = entries.findIndex(e => e.kind === 'message' && e.id === message.id);
+  let idx = entries.findIndex(
+    entry => entry.kind === 'message' && (entry.id === message.id || entry.message.id === message.id),
+  );
   if (message.role === 'assistant' && idx === -1) idx = indexOfSameTurn(entries, message);
   if (message.role === 'signal' && idx === -1 && !isChannelOriginSignal(message)) {
-    idx = claimOnScreenEntries(entries, [message], entry => entry.deliveryStatus === 'pending').get(message) ?? -1;
+    idx = claimOnScreenEntries(entries, [message], isUnconfirmedSteer).get(message) ?? -1;
   }
   const prev = idx !== -1 ? entries[idx] : undefined;
   const prevEntry = prev?.kind === 'message' ? prev : undefined;
@@ -998,7 +1006,11 @@ function upsertMessage(state: TranscriptState, message: MastraDBMessage, streami
     message.role === 'assistant'
       ? preserveRuntimeToolParts(message, prevEntry?.message)
       : preserveOptimisticUserContent(message, prevEntry?.message);
-  const entry = toMessageEntry(nextMessage, { streaming, runtimeTools: prevEntry?.runtimeTools });
+  const canonicalEntry = toMessageEntry(nextMessage, { streaming, runtimeTools: prevEntry?.runtimeTools });
+  const entry =
+    message.role === 'signal' && prevEntry?.message.role === 'user'
+      ? { ...canonicalEntry, id: prevEntry.id }
+      : canonicalEntry;
 
   if (message.role === 'assistant') {
     const ownedToolCallIds = new Set(
