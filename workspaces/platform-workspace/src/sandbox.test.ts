@@ -123,6 +123,22 @@ describe('PlatformSandbox', () => {
     expect(init.data).toEqual({ command: 'echo ok', cwd: '/workspace', env: { A: '1' } });
   });
 
+  it('uses the regional workspace proxy URL for sandbox requests', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_REGION', 'eu');
+    const fetchMock = vi.fn().mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }));
+
+    const sandbox = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      fetch: fetchMock,
+    });
+
+    await sandbox._start();
+
+    expect(String(fetchMock.mock.calls[0]![0])).toBe('https://workspaces.eu.mastra.ai/v1/projects/proj_123/sandbox');
+  });
+
   it('does not send a template field on the create wire body', async () => {
     vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
     const fetchMock = vi.fn().mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }));
