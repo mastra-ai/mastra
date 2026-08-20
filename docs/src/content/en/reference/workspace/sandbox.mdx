@@ -55,7 +55,7 @@ A sandbox constructed with a known `id` resolves that id on `start()`: reconnect
 
 Providers that predate the contract return `void`, which the base class treats as unknown.
 
-Provider implementations plug into the start lifecycle at one of three rungs; the best available wins, and the base class always owns coalescing, status management, bootstrap, and mount processing:
+Provider implementations plug into the start lifecycle at one of three rungs; the best available wins, and the base class always owns coalescing, status management, the `onStart` hook, and mount processing:
 
 1. **Acquisition primitives**: implement protected `find()` (side-effect-free lookup by logical id, returning a provider-native handle or `undefined`), `connect(handle)` (wake/resume/adopt), and `create()` (provision fresh) without overriding `start()`. The base orchestrates find → connect → `{ created: false }`, else create → `{ created: true }`. The flag is derived structurally from which branch ran. Used by `E2BSandbox`, `DaytonaSandbox`, and `LocalSandbox`.
 1. **`start()` override returning `SandboxStartResult`**: for providers whose API is a fused get-or-create where decomposition would add round-trips (`PlatformSandbox`, `RailwaySandbox`).
@@ -65,52 +65,33 @@ Concurrent `start()` calls on one instance coalesce onto a single in-flight atte
 
 The result is also forwarded to the `onStart` lifecycle hook as `{ sandbox, created }`.
 
-### `bootstrap` (constructor option)
+### `onStart` (constructor option)
 
-The `MastraSandbox` base class accepts a `bootstrap` constructor option. The bootstrap is a command that runs once per VM lifetime, immediately after a successful `start()`. It requires a provider on the acquisition-primitives rung (the constructor throws otherwise), because the bootstrap is driven by the base class's structural knowledge of whether acquisition created or reconnected.
+`onStart` runs inside the start lifecycle, after the sandbox reaches `running` status and before pending mounts are processed. It fires on every start regardless of trigger, whether an explicit call, a lazy `ensureRunning()` from a command, or a revival after the provider replaced the VM. That makes it the seam for once-per-VM setup: branch on `created` and probe or run whatever the environment needs.
 
 ```typescript
 new E2BSandbox({
   id: sessionId,
-  bootstrap: {
-    command: 'git -C ~/repo fetch origin && git -C ~/repo checkout my-branch',
-    env: { GIT_TOKEN: token },
+  onStart: async ({ sandbox, created }) => {
+    if (created) {
+      // Fresh VM: run the full setup.
+      await runSetup(sandbox)
+      return
+    }
+    // Reconnected: probe, and self-heal if setup never completed.
+    const probe = await sandbox.executeCommand('test -d ~/repo/.git')
+    if (probe.exitCode !== 0) await runSetup(sandbox)
   },
 })
 ```
 
-<PropertiesTable
-  content={[
-  {
-    name: 'command',
-    type: 'string',
-    description:
-      'Shell command to run once per VM. Keep it idempotent — a checkpoint-recovered fresh VM reports created: true and re-runs it.',
-  },
-  {
-    name: 'env',
-    type: 'Record<string, string>',
-    description:
-      'Environment variables passed only to the bootstrap command execution. Use this for credentials instead of interpolating them into the command string.',
-    isOptional: true,
-  },
-  {
-    name: 'timeoutMs',
-    type: 'number',
-    description: 'Timeout for the bootstrap command in milliseconds.',
-    isOptional: true,
-  },
-]}
-/>
-
 Semantics:
 
-- On the create branch (the base provisioned the VM moments ago) the bootstrap runs with no probe.
-- On the connect branch the base checks a completion marker (`~/.mastra-bootstrapped` in the VM filesystem, or inside the working directory for `LocalSandbox`) and runs the bootstrap only when the marker is absent. This covers a VM whose bootstrap previously failed, and a process crash between create and bootstrap-complete. The marker survives pause/resume and disappears with VM replacement. In the happy path a reconnect never re-runs the bootstrap.
-- The guard, command, and marker write fold into a single shell exec by default. To store the marker elsewhere, override `probeBootstrapSentinel()` and `writeBootstrapSentinel()`. Overriding either automatically switches the bootstrap to a decomposed path that honors them (`LocalSandbox` overrides both with host filesystem calls, which keeps it OS-independent).
-- The marker is written only after the command succeeds. A failed bootstrap fails `start()` and leaves the sandbox in `error` status, so a half-bootstrapped VM is never marked running. The next `start()` retries.
-- The sandbox status flips to `running` before the bootstrap executes (the bootstrap runs through the sandbox's own command path), so commands issued concurrently through `ensureRunning()` can interleave with the bootstrap.
-- The bootstrap runs before pending filesystem mounts are processed, so it can't rely on mounted paths.
+- A thrown error is fatal: `start()` rejects with the hook's error and the sandbox is marked `error`, so a caller never observes a running sandbox whose setup hook failed. Nothing is latched, and the next `start()` (including the one triggered by the next lazy command) retries the hook. `onStop` and `onDestroy` remain non-fatal observers, because teardown proceeds best-effort.
+- `created` distinguishes the branches: `true` means this start provisioned a fresh VM (run setup), `false` means it reconnected or resumed (setup normally already ran, so probe when the hook must self-heal a crash between create and setup-complete). `undefined` means the provider doesn't report.
+- Keep setup work idempotent. A hook re-runs whenever a probe decides it should, and a checkpoint-recovered fresh VM reports `created: true`.
+- The sandbox status flips to `running` before the hook executes (the hook runs commands through the sandbox's own command path), so commands issued concurrently through `ensureRunning()` can interleave with it. Callers awaiting the original `start()` always observe a sandbox whose hook finished.
+- The hook runs before pending filesystem mounts are processed, so it can't rely on mounted paths.
 
 ### `stop()`
 

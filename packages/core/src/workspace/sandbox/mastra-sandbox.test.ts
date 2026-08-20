@@ -20,6 +20,7 @@ import type { MastraSandboxOptions } from './mastra-sandbox';
 import type { MountManager } from './mount-manager';
 import { ProcessHandle, SandboxProcessManager } from './process-manager';
 import type { SpawnProcessOptions } from './process-manager';
+import type { WorkspaceSandbox } from './sandbox';
 import type { CommandResult } from './types';
 
 /**
@@ -395,19 +396,17 @@ describe('MastraSandbox Base Class', () => {
       expect(sideEffect).toBe(true);
     });
 
-    it('onStart error is non-fatal (logged as warning)', async () => {
-      const mockLogger = createMockLogger();
+    it('onStart error is fatal: _start() rejects and the sandbox is marked errored', async () => {
       const sandbox = new MountableSandbox({
         onStart: () => {
           throw new Error('onStart boom');
         },
       });
-      sandbox.__setLogger(mockLogger);
 
-      // onStart errors are caught and logged — they don't fail _start()
-      await sandbox._start();
-      expect(sandbox.status).toBe('running');
-      expect(mockLogger.warn).toHaveBeenCalledWith('onStart callback failed', expect.any(Object));
+      // onStart is the setup seam — a caller must never observe a running
+      // sandbox whose setup hook failed.
+      await expect(sandbox._start()).rejects.toThrow(/onStart hook failed: onStart boom/);
+      expect(sandbox.status).toBe('error');
     });
 
     it('onStop error sets status to error and propagates', async () => {
@@ -508,12 +507,12 @@ describe('MastraSandbox Base Class', () => {
 });
 
 // =============================================================================
-// Start lifecycle wrap: coalescing, SandboxStartResult, bootstrap
+// Start lifecycle wrap: coalescing, SandboxStartResult, fatal onStart
 // =============================================================================
 
 /**
- * Sandbox with a controllable start() impl and a fake in-VM filesystem for
- * bootstrap sentinel probes. Records every executeCommand invocation.
+ * Sandbox with a controllable start() impl. Records every executeCommand
+ * invocation.
  */
 class LifecycleSandbox extends MastraSandbox {
   readonly id = 'lifecycle-sandbox';
@@ -524,10 +523,6 @@ class LifecycleSandbox extends MastraSandbox {
   implCalls = 0;
   /** Sequence of executeCommand command strings. */
   commands: Array<{ command: string; env?: Record<string, string> }> = [];
-  /** Fake VM files (sentinel storage). */
-  files = new Set<string>();
-  /** Exit code for the bootstrap command. */
-  bootstrapExitCode = 0;
 
   startResult: { created: boolean } | undefined;
   startError: Error | undefined;
@@ -552,16 +547,7 @@ class LifecycleSandbox extends MastraSandbox {
     options?: { env?: NodeJS.ProcessEnv },
   ): Promise<{ exitCode: number; stdout: string; stderr: string }> {
     this.commands.push({ command, env: options?.env as Record<string, string> | undefined });
-    const sentinel = '$HOME/.mastra-bootstrapped';
-    if (command === `test -f "${sentinel}"`) {
-      return { exitCode: this.files.has(sentinel) ? 0 : 1, stdout: '', stderr: '' };
-    }
-    if (command === `touch "${sentinel}"`) {
-      this.files.add(sentinel);
-      return { exitCode: 0, stdout: '', stderr: '' };
-    }
-    // Anything else is treated as the bootstrap command.
-    return { exitCode: this.bootstrapExitCode, stdout: '', stderr: this.bootstrapExitCode === 0 ? '' : 'boom' };
+    return { exitCode: 0, stdout: '', stderr: '' };
   }
 }
 
@@ -623,10 +609,72 @@ describe('MastraSandbox start lifecycle wrap', () => {
     expect(sandbox.status).toBe('running');
   });
 
-  it('rejects a bootstrap command on a provider without acquisition primitives at construction', () => {
-    expect(() => new LifecycleSandbox({ bootstrap: { command: 'echo bootstrap' } })).toThrow(
-      /bootstrap requires the find\/connect\/create acquisition primitives/,
-    );
+  describe('fatal onStart', () => {
+    it('a thrown onStart rejects start(), marks the sandbox errored, and the next start retries the hook', async () => {
+      const onStart = vi
+        .fn()
+        .mockRejectedValueOnce(new Error('git clone failed: Killed (exit 137)'))
+        .mockResolvedValue(undefined);
+      const sandbox = new LifecycleSandbox({ onStart });
+      sandbox.startResult = { created: true };
+
+      await expect(sandbox.start()).rejects.toThrow(/onStart hook failed: git clone failed: Killed \(exit 137\)/);
+      expect(sandbox.status).toBe('error');
+
+      // Nothing latched: the next start re-runs the full attempt incl. the hook.
+      await expect(sandbox.start()).resolves.toEqual({ created: true });
+      expect(sandbox.status).toBe('running');
+      expect(onStart).toHaveBeenCalledTimes(2);
+    });
+
+    it('a caller awaiting start() never observes running before the hook finished', async () => {
+      let resolveHook!: () => void;
+      const hookGate = new Promise<void>(resolve => (resolveHook = resolve));
+      const onStart = vi.fn(() => hookGate);
+      const sandbox = new LifecycleSandbox({ onStart });
+      sandbox.startResult = { created: true };
+
+      let settled = false;
+      const startPromise = sandbox.start().then(r => {
+        settled = true;
+        return r;
+      });
+      await new Promise(r => setTimeout(r, 10));
+      expect(settled).toBe(false);
+      resolveHook();
+      await expect(startPromise).resolves.toEqual({ created: true });
+    });
+
+    it('an onStart hook can execute commands through the sandbox (status is running before the hook fires)', async () => {
+      // Setup hooks run their work through the sandbox's own command path; the
+      // pm.spawn wrapper calls ensureRunning(), which must not deadlock
+      // joining the in-flight start.
+      class PmHookSandbox extends MastraSandbox {
+        readonly id = 'pm-hook-sandbox';
+        readonly name = 'PmHookSandbox';
+        readonly provider = 'test';
+        status: ProviderStatus = 'pending';
+        constructor(onStart: MastraSandboxOptions['onStart']) {
+          super({ name: 'PmHookSandbox', processes: new ExecuteCommandProcessManager('ok'), onStart });
+        }
+        protected override async create(): Promise<void> {}
+      }
+
+      const ran: string[] = [];
+      const sandbox: PmHookSandbox = new PmHookSandbox(async ({ sandbox: sb }) => {
+        const result = await sb.executeCommand!('echo setup');
+        ran.push(`exit:${result.exitCode}`);
+      });
+
+      await expect(
+        Promise.race([
+          sandbox.start(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('deadlock: start() never resolved')), 2000)),
+        ]),
+      ).resolves.toEqual({ created: true });
+      expect(ran).toEqual(['exit:0']);
+      expect(sandbox.status).toBe('running');
+    });
   });
 
   it('forwards created to the onStart hook', async () => {
@@ -653,12 +701,9 @@ describe('MastraSandbox start lifecycle wrap', () => {
 // Acquisition primitives ladder (find / connect / create)
 // =============================================================================
 
-const SENTINEL = '$HOME/.mastra-bootstrapped';
-
 /**
  * Rung-1 sandbox: no start() override, acquisition via primitives. The fake
- * "remote" is `vmExists`; the fake VM filesystem stores the bootstrap marker
- * and interprets the base's folded bootstrap script.
+ * "remote" is `vmExists`.
  */
 class PrimitiveSandbox extends MastraSandbox<string> {
   readonly id = 'primitive-sandbox';
@@ -675,8 +720,6 @@ class PrimitiveSandbox extends MastraSandbox<string> {
   createError: Error | undefined;
 
   commands: Array<{ command: string; env?: Record<string, string> }> = [];
-  files = new Set<string>();
-  bootstrapExitCode = 0;
 
   constructor(options?: MastraSandboxOptions) {
     super({ ...options, name: 'PrimitiveSandbox' });
@@ -705,15 +748,6 @@ class PrimitiveSandbox extends MastraSandbox<string> {
     options?: { env?: NodeJS.ProcessEnv },
   ): Promise<{ exitCode: number; stdout: string; stderr: string }> {
     this.commands.push({ command, env: options?.env as Record<string, string> | undefined });
-    // Interpret the base's folded bootstrap script against the fake VM fs.
-    if (command.includes('rc=$?')) {
-      const guarded = command.startsWith(`if [ -f "${SENTINEL}" ]`);
-      if (guarded && this.files.has(SENTINEL)) {
-        return { exitCode: 0, stdout: '', stderr: '' };
-      }
-      if (this.bootstrapExitCode === 0) this.files.add(SENTINEL);
-      return { exitCode: this.bootstrapExitCode, stdout: '', stderr: this.bootstrapExitCode === 0 ? '' : 'boom' };
-    }
     return { exitCode: 0, stdout: '', stderr: '' };
   }
 }
@@ -792,106 +826,39 @@ describe('MastraSandbox acquisition primitives', () => {
     expect(sandbox.createCalls).toBe(0);
   });
 
-  describe('bootstrap', () => {
-    const bootstrap = { command: 'echo bootstrap', env: { GIT_TOKEN: 'shhh' } };
-
-    it('create branch → single folded exec without a guard, marker written', async () => {
-      const sandbox = new PrimitiveSandbox({ bootstrap });
-
-      await sandbox.start();
-
-      expect(sandbox.commands).toHaveLength(1);
-      const [call] = sandbox.commands;
-      expect(call!.command).toContain('echo bootstrap');
-      expect(call!.command).not.toContain('if [ -f');
-      expect(call!.command).toContain(`touch "${SENTINEL}"`);
-      expect(sandbox.files.has(SENTINEL)).toBe(true);
+  it('forwards structural created to onStart, so a setup hook can branch on create vs connect', async () => {
+    const observed: Array<boolean | undefined> = [];
+    // The recommended once-per-VM setup shape: run on create, probe on connect.
+    const onStart = vi.fn(async ({ sandbox: sb, created }: { sandbox: WorkspaceSandbox; created?: boolean }) => {
+      observed.push(created);
+      if (created) await sb.executeCommand!('run full setup');
+      else await sb.executeCommand!('probe setup');
     });
 
-    it('connect branch with marker present → single guarded exec, bootstrap not re-run', async () => {
-      const sandbox = new PrimitiveSandbox({ bootstrap });
-      sandbox.vmExists = true;
-      sandbox.files.add(SENTINEL);
-      // Poison: if the guard is ignored, the interpreter would "run" and flip this.
-      sandbox.bootstrapExitCode = 1;
+    const first = new PrimitiveSandbox({ onStart });
+    await first.start();
+    expect(first.commands.map(c => c.command)).toEqual(['run full setup']);
 
-      await sandbox.start();
+    // Second instance, same "remote": connect branch → hook sees created: false.
+    const second = new PrimitiveSandbox({ onStart });
+    second.vmExists = true;
+    await second.start();
+    expect(second.commands.map(c => c.command)).toEqual(['probe setup']);
+    expect(observed).toEqual([true, false]);
+  });
 
-      expect(sandbox.commands).toHaveLength(1);
-      expect(sandbox.commands[0]!.command.startsWith('if [ -f')).toBe(true);
-      expect(sandbox.status).toBe('running');
-    });
+  it('a fatal onStart on the create branch leaves the found-again VM to a retrying hook (crash/fail window)', async () => {
+    // First attempt: create succeeds, setup hook fails → start rejects.
+    const onStart = vi.fn().mockRejectedValueOnce(new Error('setup failed')).mockResolvedValue(undefined);
+    const sandbox = new PrimitiveSandbox({ onStart });
 
-    it('connect branch without marker (failed-first-bootstrap reconnect) → runs and marks', async () => {
-      const sandbox = new PrimitiveSandbox({ bootstrap });
-      sandbox.vmExists = true;
+    await expect(sandbox.start()).rejects.toThrow(/onStart hook failed: setup failed/);
+    expect(sandbox.status).toBe('error');
 
-      await sandbox.start();
-
-      expect(sandbox.commands).toHaveLength(1);
-      expect(sandbox.commands[0]!.command.startsWith('if [ -f')).toBe(true);
-      expect(sandbox.files.has(SENTINEL)).toBe(true);
-    });
-
-    it('bootstrap failure → start() rejects, status error, no marker, retry re-runs', async () => {
-      const sandbox = new PrimitiveSandbox({ bootstrap });
-      sandbox.bootstrapExitCode = 1;
-
-      await expect(sandbox.start()).rejects.toThrow(/bootstrap command failed \(exit 1\)/);
-      expect(sandbox.status).toBe('error');
-      expect(sandbox.files.has(SENTINEL)).toBe(false);
-
-      // Retry: the VM now exists (create succeeded), marker absent → re-runs.
-      sandbox.bootstrapExitCode = 0;
-      await expect(sandbox.start()).resolves.toEqual({ created: false });
-      expect(sandbox.files.has(SENTINEL)).toBe(true);
-      expect(sandbox.status).toBe('running');
-    });
-
-    it('bootstrap env reaches the folded exec', async () => {
-      const sandbox = new PrimitiveSandbox({ bootstrap });
-
-      await sandbox.start();
-
-      expect(sandbox.commands[0]!.env).toEqual({ GIT_TOKEN: 'shhh' });
-    });
-
-    it('forwards structural created to onStart', async () => {
-      const onStart = vi.fn();
-      const sandbox = new PrimitiveSandbox({ bootstrap, onStart });
-
-      await sandbox.start();
-
-      expect(onStart).toHaveBeenCalledWith(expect.objectContaining({ created: true }));
-    });
-
-    it('does not deadlock when bootstrap runs through the auto-created executeCommand (pm.spawn → ensureRunning)', async () => {
-      // No own executeCommand: the base auto-creates one from the process
-      // manager, whose spawn wrapper calls sandbox.ensureRunning(). Before the
-      // status-before-bootstrap ordering this would await its own start.
-      class PmPrimitiveSandbox extends MastraSandbox {
-        readonly id = 'pm-primitive-sandbox';
-        readonly name = 'PmPrimitiveSandbox';
-        readonly provider = 'test';
-        status: ProviderStatus = 'pending';
-        constructor() {
-          super({
-            name: 'PmPrimitiveSandbox',
-            processes: new ExecuteCommandProcessManager('ok'),
-            bootstrap: { command: 'echo bootstrap' },
-          });
-        }
-        protected override async create(): Promise<void> {}
-      }
-
-      const sandbox = new PmPrimitiveSandbox();
-      await expect(
-        Promise.race([
-          sandbox.start(),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('deadlock: start() never resolved')), 2000)),
-        ]),
-      ).resolves.toEqual({ created: true });
-      expect(sandbox.status).toBe('running');
-    });
+    // Retry: the VM exists now, so acquisition connects — and the hook runs
+    // again (it owns deciding whether setup completed, e.g. via a probe).
+    await expect(sandbox.start()).resolves.toEqual({ created: false });
+    expect(onStart).toHaveBeenLastCalledWith(expect.objectContaining({ created: false }));
+    expect(sandbox.status).toBe('running');
   });
 });

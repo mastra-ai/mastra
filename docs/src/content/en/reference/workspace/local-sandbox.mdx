@@ -95,13 +95,6 @@ const response = await agent.generate('Run npm install')
     description: 'Configuration for native sandboxing (see NativeSandboxConfig below).',
     isOptional: true,
   },
-  {
-    name: 'bootstrap',
-    type: '{ command: string; env?: Record<string, string>; timeoutMs?: number }',
-    description:
-      'Command run once per sandbox lifetime after start(). For LocalSandbox the guard sentinel (.mastra-bootstrapped) lives inside the working directory. See the WorkspaceSandbox reference for full semantics.',
-    isOptional: true,
-  },
 ]}
 />
 

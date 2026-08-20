@@ -24,7 +24,7 @@ import type { InstructionsOption } from '../types';
 import { resolveInstructions } from '../utils';
 import { IsolationUnavailableError } from './errors';
 import { LocalProcessManager } from './local-process-manager';
-import { MastraSandbox, SANDBOX_BOOTSTRAP_SENTINEL_BASENAME } from './mastra-sandbox';
+import { MastraSandbox } from './mastra-sandbox';
 import type { MastraSandboxOptions } from './mastra-sandbox';
 import type { MountManager } from './mount-manager';
 import type { IsolationBackend, NativeSandboxConfig } from './native-sandbox';
@@ -289,34 +289,6 @@ export class LocalSandbox extends MastraSandbox<string> {
   // ---------------------------------------------------------------------------
   // Lifecycle
   // ---------------------------------------------------------------------------
-
-  /**
-   * Bootstrap sentinel lives inside the working directory: local sandboxes
-   * share the host `$HOME`, so the base default would collide across
-   * sandboxes. An absolute path keeps it correct regardless of command cwd.
-   */
-  protected override get bootstrapSentinelPath(): string {
-    return path.join(this.workingDirectory, SANDBOX_BOOTSTRAP_SENTINEL_BASENAME);
-  }
-
-  /**
-   * Local sandboxes probe/write the sentinel through the host filesystem
-   * instead of shell commands: it avoids a process spawn and works on any
-   * host OS (the base shell implementation assumes a POSIX shell, which a
-   * Windows host does not have).
-   */
-  protected override async probeBootstrapSentinel(): Promise<boolean> {
-    try {
-      await fs.stat(this.bootstrapSentinelPath);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  protected override async writeBootstrapSentinel(): Promise<void> {
-    await fs.writeFile(this.bootstrapSentinelPath, '');
-  }
 
   /**
    * Acquisition primitives (base-orchestrated start): an existing working

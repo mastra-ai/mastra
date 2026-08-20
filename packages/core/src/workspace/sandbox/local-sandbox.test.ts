@@ -214,37 +214,21 @@ describe('LocalSandbox', () => {
       await expect(again._start()).resolves.toEqual({ created: false });
     });
 
-    it('runs bootstrap once with the sentinel inside the working directory', async () => {
+    it('runs a once-per-directory setup through a fatal onStart hook branching on created', async () => {
       const dir = path.join(tempDir, 'boot');
-      const first = new LocalSandbox({ workingDirectory: dir, bootstrap: { command: 'touch first-run.txt' } });
+      const setup = async ({ sandbox: sb, created }: { sandbox: WorkspaceSandbox; created?: boolean }) => {
+        if (created) await sb.executeCommand!('touch setup-ran.txt');
+      };
+
+      const first = new LocalSandbox({ workingDirectory: dir, onStart: setup });
       await first._start();
+      await expect(fs.stat(path.join(dir, 'setup-ran.txt'))).resolves.toBeDefined();
 
-      await expect(fs.stat(path.join(dir, 'first-run.txt'))).resolves.toBeDefined();
-      await expect(fs.stat(path.join(dir, '.mastra-bootstrapped'))).resolves.toBeDefined();
-
-      // A second instance reattaches (created: false) and the sentinel skips bootstrap.
-      const second = new LocalSandbox({ workingDirectory: dir, bootstrap: { command: 'touch second-run.txt' } });
+      // A second instance reattaches (created: false) → the hook skips setup.
+      await fs.rm(path.join(dir, 'setup-ran.txt'));
+      const second = new LocalSandbox({ workingDirectory: dir, onStart: setup });
       await second._start();
-
-      await expect(fs.stat(path.join(dir, 'second-run.txt'))).rejects.toThrow();
-    });
-
-    it('probes and writes the bootstrap sentinel via the host filesystem, not shell commands', async () => {
-      const dir = path.join(tempDir, 'boot-fs');
-      const first = new LocalSandbox({ workingDirectory: dir, bootstrap: { command: 'touch first-run.txt' } });
-      const execSpy = vi.spyOn(first, 'executeCommand');
-      await first._start();
-
-      // Only the bootstrap command itself goes through exec — no `test -f` probe, no `touch <sentinel>`.
-      const commands = execSpy.mock.calls.map(call => call[0]);
-      expect(commands).toEqual(['touch first-run.txt']);
-      await expect(fs.stat(path.join(dir, '.mastra-bootstrapped'))).resolves.toBeDefined();
-
-      // Reattach: the sentinel probe answers from the filesystem with zero exec calls.
-      const second = new LocalSandbox({ workingDirectory: dir, bootstrap: { command: 'touch second-run.txt' } });
-      const secondSpy = vi.spyOn(second, 'executeCommand');
-      await second._start();
-      expect(secondSpy).not.toHaveBeenCalled();
+      await expect(fs.stat(path.join(dir, 'setup-ran.txt'))).rejects.toThrow();
     });
   });
 
