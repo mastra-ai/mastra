@@ -254,15 +254,13 @@ function ModelsSettingsSection({ models, settings, updating, onBehaviorChange }:
         title="Your defaults"
         description="Applied to your interactive chats."
       >
-        <div className="flex flex-col gap-4">
-          <SettingsCard className="p-4">
+        <SettingsCard>
+          <div className="p-4">
             <ModelPacksSection models={models} />
-          </SettingsCard>
-          <SettingsCard>
-            <ModelSettings settings={settings} updating={updating} onBehaviorChange={onBehaviorChange} />
-            <ModeThinkingDefaultsSection />
-          </SettingsCard>
-        </div>
+          </div>
+          <ModelSettings settings={settings} updating={updating} onBehaviorChange={onBehaviorChange} />
+          <ModeThinkingDefaultsSection />
+        </SettingsCard>
       </SettingsSubsection>
       {providerSubsections}
     </div>
