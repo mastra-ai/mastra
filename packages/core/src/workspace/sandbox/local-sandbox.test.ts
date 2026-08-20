@@ -199,6 +199,35 @@ describe('LocalSandbox', () => {
 
       expect(await sandbox.isReady()).toBe(true);
     });
+
+    it('reports created: true when the working directory did not exist', async () => {
+      const fresh = new LocalSandbox({ workingDirectory: path.join(tempDir, 'fresh') });
+
+      await expect(fresh._start()).resolves.toEqual({ created: true });
+    });
+
+    it('reports created: false when reattaching to an existing working directory', async () => {
+      // beforeEach pre-creates tempDir via mkdtemp, so this is a reattach.
+      await expect(sandbox._start()).resolves.toEqual({ created: false });
+
+      const again = new LocalSandbox({ workingDirectory: tempDir });
+      await expect(again._start()).resolves.toEqual({ created: false });
+    });
+
+    it('runs bootstrap once with the sentinel inside the working directory', async () => {
+      const dir = path.join(tempDir, 'boot');
+      const first = new LocalSandbox({ workingDirectory: dir, bootstrap: { command: 'touch first-run.txt' } });
+      await first._start();
+
+      await expect(fs.stat(path.join(dir, 'first-run.txt'))).resolves.toBeDefined();
+      await expect(fs.stat(path.join(dir, '.mastra-bootstrapped'))).resolves.toBeDefined();
+
+      // A second instance reattaches (created: false) and the sentinel skips bootstrap.
+      const second = new LocalSandbox({ workingDirectory: dir, bootstrap: { command: 'touch second-run.txt' } });
+      await second._start();
+
+      await expect(fs.stat(path.join(dir, 'second-run.txt'))).rejects.toThrow();
+    });
   });
 
   // ===========================================================================

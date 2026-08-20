@@ -19,6 +19,7 @@ import type {
   SandboxFileInput,
   SandboxNetworking,
   SandboxCloneOptions,
+  SandboxStartResult,
 } from '@mastra/core/workspace';
 
 /**
@@ -295,11 +296,14 @@ export class E2BSandbox extends MastraSandbox {
    * Handles template preparation, existing sandbox reconnection, and new sandbox creation.
    *
    * Status management and mount processing are handled by the base class.
+   *
+   * Reports `created: true` only when a brand-new sandbox VM was created;
+   * reconnecting (including resuming a paused sandbox) reports `created: false`.
    */
-  async start(): Promise<void> {
+  async start(): Promise<SandboxStartResult> {
     // Already have a sandbox instance
     if (this._sandbox) {
-      return;
+      return { created: false };
     }
 
     // Await template preparation (started in constructor) and existing sandbox search in parallel
@@ -319,7 +323,7 @@ export class E2BSandbox extends MastraSandbox {
       this.logger.debug(`${LOG_PREFIX} Running mount reconciliation...`);
       await this.reconcileMounts(expectedPaths);
       this.logger.debug(`${LOG_PREFIX} Mount reconciliation complete`);
-      return;
+      return { created: false };
     }
 
     // If template preparation failed earlier, retry now
@@ -372,6 +376,7 @@ export class E2BSandbox extends MastraSandbox {
     this._createdAt = new Date();
 
     // Note: processPending is called by base class after start completes
+    return { created: true };
   }
 
   /**

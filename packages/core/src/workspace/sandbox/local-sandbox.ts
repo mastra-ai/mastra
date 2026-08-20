@@ -19,7 +19,7 @@ import type { RequestContext } from '../../request-context';
 import type { WorkspaceFilesystem } from '../filesystem/filesystem';
 import { expandTilde } from '../filesystem/fs-utils';
 import type { FilesystemMountConfig, MountResult } from '../filesystem/mount';
-import type { ProviderStatus } from '../lifecycle';
+import type { ProviderStatus, SandboxStartResult } from '../lifecycle';
 import type { InstructionsOption } from '../types';
 import { resolveInstructions } from '../utils';
 import { IsolationUnavailableError } from './errors';
@@ -303,12 +303,25 @@ export class LocalSandbox extends MastraSandbox {
    * Start the local sandbox.
    * Creates working directory and sets up seatbelt profile if using macOS isolation.
    * Status management is handled by the base class.
+   *
+   * Reports `created: true` when the working directory did not exist yet;
+   * an existing directory means we are reattaching to a prior sandbox.
    */
-  async start(): Promise<void> {
+  async start(): Promise<SandboxStartResult> {
     this.logger.debug('Starting sandbox', {
       workingDirectory: this.workingDirectory,
       isolation: this.isolation,
     });
+
+    let created = false;
+    try {
+      await fs.stat(this.workingDirectory);
+    } catch (err: unknown) {
+      if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code !== 'ENOENT') {
+        throw err;
+      }
+      created = true;
+    }
 
     await fs.mkdir(this.workingDirectory, { recursive: true });
 
@@ -370,6 +383,7 @@ export class LocalSandbox extends MastraSandbox {
     }
 
     this.logger.debug('Sandbox started', { workingDirectory: this.workingDirectory });
+    return { created };
   }
 
   // ---------------------------------------------------------------------------

@@ -491,6 +491,16 @@ describe('DaytonaSandbox', () => {
       expect(mockDaytona.create).toHaveBeenCalledTimes(1); // only on initial start
     });
 
+    it('reports created: true on fresh create and created: false on reconnect', async () => {
+      const sandbox = new DaytonaSandbox({ id: 'my-id' });
+
+      await expect(sandbox._start()).resolves.toEqual({ created: true });
+      await sandbox._stop();
+
+      mockDaytona.get.mockResolvedValue({ ...mockSandbox, state: 'started' });
+      await expect(sandbox._start()).resolves.toEqual({ created: false });
+    });
+
     it('creates a fresh sandbox when no existing sandbox is found by name', async () => {
       // get() throws DaytonaNotFoundError → no existing sandbox → create fresh
       const sandbox = new DaytonaSandbox({ id: 'my-id' });

@@ -310,6 +310,32 @@ describe('E2BSandbox', () => {
 
       expect(Sandbox.connect).toHaveBeenCalledWith('existing-sandbox', expect.any(Object));
     });
+
+    it('reports created: true when a new sandbox is created', async () => {
+      const sandbox = new E2BSandbox();
+
+      await expect(sandbox._start()).resolves.toEqual({ created: true });
+    });
+
+    it('reports created: false when reconnecting to an existing sandbox', async () => {
+      const { Sandbox } = await import('e2b');
+      (Sandbox.list as any).mockReturnValue({
+        nextItems: vi.fn().mockResolvedValue([{ sandboxId: 'existing-sandbox', state: 'running' }]),
+      });
+
+      const sandbox = new E2BSandbox({ id: 'existing-id' });
+
+      await expect(sandbox._start()).resolves.toEqual({ created: false });
+    });
+
+    it('reports created: false from the already-started early return', async () => {
+      const sandbox = new E2BSandbox();
+      await sandbox._start();
+
+      // Invoke the subclass impl directly (bypassing the base wrapper's
+      // already-running shortcut) to assert its idempotency contract.
+      await expect(E2BSandbox.prototype.start.call(sandbox)).resolves.toEqual({ created: false });
+    });
   });
 
   describe('Start - Template Handling', () => {

@@ -23,11 +23,10 @@ import type {
   MountResult,
   FilesystemMountConfig,
   MountManager,
-  CommandResult,
-  ExecuteCommandOptions,
   SandboxNetworking,
   SandboxFileInput,
   SandboxCloneOptions,
+  SandboxStartResult,
 } from '@mastra/core/workspace';
 import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
 
@@ -371,10 +370,13 @@ export class DaytonaSandbox extends MastraSandbox {
    * Start the Daytona sandbox.
    * Reconnects to an existing sandbox with the same logical ID if one exists,
    * otherwise creates a new sandbox instance.
+   *
+   * Reports `created: true` only when a brand-new sandbox was created;
+   * reconnecting to an existing sandbox reports `created: false`.
    */
-  async start(): Promise<void> {
+  async start(): Promise<SandboxStartResult> {
     if (this._sandbox) {
-      return;
+      return { created: false };
     }
 
     // Create Daytona client if not exists
@@ -396,7 +398,7 @@ export class DaytonaSandbox extends MastraSandbox {
       await this.reconcileMounts(expectedPaths);
       this.logger.debug(`${LOG_PREFIX} Mount reconciliation complete`);
       await this.detectWorkingDir();
-      return;
+      return { created: false };
     }
 
     this.logger.debug(`${LOG_PREFIX} Creating sandbox for: ${this.id}`);
@@ -442,6 +444,7 @@ export class DaytonaSandbox extends MastraSandbox {
     this.logger.debug(`${LOG_PREFIX} Created sandbox ${this._sandbox.id} for logical ID: ${this.id}`);
     this._createdAt = new Date();
     await this.detectWorkingDir();
+    return { created: true };
   }
 
   /**
@@ -585,20 +588,10 @@ export class DaytonaSandbox extends MastraSandbox {
   // Command Execution
   // ---------------------------------------------------------------------------
 
-  /**
-   * Execute a command in the sandbox and return the result.
-   */
-  async executeCommand(
-    command: string,
-    args: string[] = [],
-    options: ExecuteCommandOptions = {},
-  ): Promise<CommandResult> {
-    await this.ensureRunning();
-    const fullCommand = args.length > 0 ? `${command} ${args.map(shellQuote).join(' ')}` : command;
-    const handle = await this.processes!.spawn(fullCommand, options);
-    const result = await handle.wait();
-    return { ...result, command, args };
-  }
+  // executeCommand is auto-created by the MastraSandbox base class from the
+  // process manager: pm.spawn already lazy-starts via ensureRunning(), and the
+  // base default releases the process handle when the command settles (the
+  // previous override here leaked handles by never calling pm.release).
 
   /**
    * Bulk-write files into the sandbox filesystem via the SDK's native upload.

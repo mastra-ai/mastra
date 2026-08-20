@@ -258,6 +258,35 @@ describe('PlatformSandbox', () => {
     );
   });
 
+  it('reports created: false on reattach and created: true on fresh provision', async () => {
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    vi.stubEnv('MASTRA_ENVIRONMENT_ID', 'env_from_process');
+
+    const reattachFetch = vi
+      .fn()
+      .mockResolvedValueOnce(json({ id: 'sbx_existing', createdAt: '2026-06-26T00:00:00.000Z' }));
+    const reattached = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      sandboxId: 'sbx_existing',
+      fetch: reattachFetch,
+    });
+    await expect(reattached._start()).resolves.toEqual({ created: false });
+
+    // A 404 on the reattach GET falls through to POST /sandbox — a fresh VM.
+    const recreateFetch = vi
+      .fn()
+      .mockResolvedValueOnce(json({ error: { message: 'Sandbox not found', type: 'not_found' } }, { status: 404 }))
+      .mockResolvedValueOnce(json({ id: 'sbx_recreated', createdAt: '2026-06-26T00:00:00.000Z' }));
+    const recreated = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      sandboxId: 'sbx_stale',
+      fetch: recreateFetch,
+    });
+    await expect(recreated._start()).resolves.toEqual({ created: true });
+  });
+
   it('creates a fresh sandbox when the reattached sandbox no longer exists', async () => {
     vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
     vi.stubEnv('MASTRA_ENVIRONMENT_ID', 'env_from_process');
@@ -1575,7 +1604,7 @@ describe('PlatformSandbox', () => {
         // no addressRegistry
       });
 
-      await expect(sandbox._start()).resolves.toBeUndefined();
+      await expect(sandbox._start()).resolves.toEqual({ created: true });
       expect(fetchMock).toHaveBeenCalledTimes(1);
     });
 
@@ -3062,11 +3091,11 @@ describe('PlatformSandbox', () => {
     it('clears the in-flight slot on success so a second concurrent batch does not reuse the settled promise', async () => {
       vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
       // First batch: two concurrent starts share one POST /sandbox.
-      // Second batch (after the first settles): the sandbox instance is
-      // reused for a fresh coalescing round — the parent MastraSandbox
-      // `_start()` idempotency check normally short-circuits on
-      // `status === 'running'`, so we drive `start()` directly to observe
-      // the wrapper's own behavior in isolation.
+      // Second batch (after the first settles and the sandbox is no longer
+      // running): the same instance gets a fresh coalescing round. The base
+      // MastraSandbox wrapper short-circuits while `status === 'running'`,
+      // so we mark the sandbox stopped between batches — what matters is
+      // that the settled first-batch promise is not reused.
       let releaseFirst!: (value: Response) => void;
       const firstHeld = new Promise<Response>(resolve => {
         releaseFirst = resolve;
@@ -3100,6 +3129,7 @@ describe('PlatformSandbox', () => {
       // resolve immediately without a network call (fetch mock stays at
       // 1). What we want is the slot cleared, so this batch takes the
       // reattach GET path and coalesces onto that single call.
+      sandbox.status = 'stopped';
       const secondA = sandbox.start();
       const secondB = sandbox.start();
       releaseSecond(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }));
