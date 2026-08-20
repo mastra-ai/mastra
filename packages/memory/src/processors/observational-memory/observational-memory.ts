@@ -2250,6 +2250,7 @@ ${formattedMessages}
 
     await this.runBufferedObservationCycle(
       { threadId, resourceId: freshRecord.resourceId ?? undefined, trigger: 'async-buffer' },
+      requestContext,
       () =>
         ObservationStrategy.create(this, {
           record: freshRecord,
@@ -3234,6 +3235,7 @@ ${formattedMessages}
       // around the cycle — fire-and-forget callers never see this result.
       await this.runBufferedObservationCycle(
         { threadId, resourceId: record.resourceId ?? resourceId, trigger: 'async-buffer' },
+        requestContext,
         () =>
           ObservationStrategy.create(this, {
             record,
@@ -3612,25 +3614,46 @@ ${formattedMessages}
    */
   private async runBufferedObservationCycle(
     context: ObserveHookContext,
+    requestContext: RequestContext | undefined,
     run: () => Promise<ObservationRunResult>,
   ): Promise<ObservationRunResult | undefined> {
     const hooks = this.composeHooks(undefined, context);
     hooks?.onObservationStart?.();
     let runResult: ObservationRunResult | undefined;
     let runError: Error | undefined;
+    let thrownError: unknown;
+    let hookError: unknown;
     try {
       runResult = await run();
-      return runResult;
     } catch (error) {
+      thrownError = error;
       runError = error instanceof Error ? error : new Error(String(error));
-      throw error;
     } finally {
-      hooks?.onObservationEnd?.({
-        usage: runResult?.usage,
-        error: runError ?? runResult?.error,
-        ...(runResult?.providerMetadata ? { providerMetadata: runResult.providerMetadata } : {}),
-      });
+      try {
+        hooks?.onObservationEnd?.({
+          usage: runResult?.usage,
+          error: runError ?? runResult?.error,
+          ...(runResult?.providerMetadata ? { providerMetadata: runResult.providerMetadata } : {}),
+        });
+      } catch (error) {
+        hookError = error;
+      }
     }
+
+    const threadId = context.threadId;
+    if (runResult?.observed && threadId) {
+      this.scheduleCadenceAfterObservationCommit(
+        threadId,
+        context.resourceId,
+        () => this.getOrCreateRecord(threadId, context.resourceId),
+        requestContext,
+        'buffer',
+      );
+    }
+
+    if (thrownError) throw thrownError;
+    if (hookError) throw hookError;
+    return runResult;
   }
 
   /**
@@ -3733,22 +3756,42 @@ ${formattedMessages}
     const reflected = record.generationCount > generationBefore && generationBefore >= 0;
 
     if (observed) {
-      // Fire-and-forget; a curation failure must never fail the observation.
-      void this.maybeTriggerCadenceCuration(threadId, resourceId, record, requestContext).catch(error => {
-        omDebug(`[OM:observe] cadence curation failed: ${error instanceof Error ? error.message : String(error)}`);
-      });
+      this.scheduleCadenceAfterObservationCommit(
+        threadId,
+        resourceId,
+        () => Promise.resolve(record),
+        requestContext,
+        'observe',
+      );
     }
 
     return { observed, reflected, record };
   }
 
+  private scheduleCadenceAfterObservationCommit(
+    threadId: string,
+    resourceId: string | undefined,
+    getRecord: () => Promise<ObservationalMemoryRecord>,
+    requestContext: RequestContext | undefined,
+    lane: 'observe' | 'buffer',
+  ): void {
+    if (!this.curationCadence || !this.memory) return;
+    void getRecord()
+      .then(latestRecord => this.maybeTriggerCadenceCuration(threadId, resourceId, latestRecord, requestContext))
+      .catch(error => {
+        omDebug(
+          `[OM:${lane}] cadence curation failed: ${error instanceof Error ? error.message : String(error)} thread=${threadId}`,
+        );
+      });
+  }
+
   /**
-   * Count committed observation runs on the sync observe path and run the curator every
+   * Count successful committed observation cycles and run the curator every
    * `curationCadence` runs. The counter is persisted at `record.config.subconscious.observationRuns`
    * (the OM record's config jsonb, deep-merged; threshold resolution only reads `_overrides`, so the
    * sibling key is inert). Concurrent commits can miscount — the curator run is advisory, and the
-   * curation cursor is the real serializer. The async-buffer lane bypasses observe(); deployments
-   * that gate on this cadence (factory's resource scope) disable async buffering.
+   * curation cursor is the real serializer. Successful synchronous and buffered observation cycles
+   * both enter this event-driven accounting path; it does not wake an idle process.
    */
   private async maybeTriggerCadenceCuration(
     threadId: string,
