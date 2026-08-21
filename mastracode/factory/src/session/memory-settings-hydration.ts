@@ -94,10 +94,11 @@ export interface MemorySettingsHydrationDependencies {
  * start a run.
  *
  * The org seed matters beyond settings. Subconscious knowledge capture scopes
- * every node and record on `factoryOrgId`; without it the capture side falls
- * back to the session owner id, which for web chat sessions is the agent
- * controller's own id rather than a tenant, so captured knowledge lands under an
- * org rung no reader ever queries. Same rule as the start coordinator: the org
+ * every node and record on `factoryOrgId`; before the SDK refusal guard,
+ * missing it made capture substitute the session owner id. For web chat sessions
+ * that is the agent controller's own id rather than a tenant, so captured
+ * knowledge landed under an org rung no reader ever queries. Same rule as the
+ * start coordinator: the org
  * comes from the row the session was created from, never improvised from an
  * owner id.
  *
