@@ -168,7 +168,8 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
   {
     name: 'scorers',
     type: 'Record<string, Scorer>',
-    description: 'Scorers for evaluating agent responses and workflow outputs',
+    description:
+      'Scorers for evaluating agent responses and workflow outputs. Registration also makes a scorer resolvable by ID, which is required to persist its scores. See [Score persistence](/docs/evals/overview#score-persistence)',
     isOptional: true,
     defaultValue: '{}',
   },

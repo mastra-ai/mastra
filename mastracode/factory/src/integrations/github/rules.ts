@@ -815,15 +815,17 @@ export function createGithubPullRequestReconciler(
             const pullRequestNumber = reconcilablePullRequestNumber(item, repository);
             if (!pullRequestNumber) continue;
             const metadata = item.metadata ?? {};
-            const hasReconciledMetadata =
-              (metadata.state === 'open' || metadata.state === 'closed') &&
+            // An approving review ends the card at `done` while its pull request is
+            // still open, so only a closed pull request retires a card from the sweep.
+            const pullRequestSettled =
+              metadata.state === 'closed' &&
               typeof metadata.draft === 'boolean' &&
               typeof metadata.merged === 'boolean' &&
               typeof metadata.author === 'string' &&
               Array.isArray(metadata.assignees) &&
               Array.isArray(metadata.requestedReviewers) &&
               Array.isArray(metadata.labels);
-            if ((stage === 'done' || stage === 'canceled') && hasReconciledMetadata) continue;
+            if ((stage === 'done' || stage === 'canceled') && pullRequestSettled) continue;
             const cards = cardsByNumber.get(pullRequestNumber) ?? [];
             cards.push(item);
             cardsByNumber.set(pullRequestNumber, cards);

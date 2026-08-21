@@ -57,6 +57,7 @@ const mastra = new Mastra({
             publicKey: 'pk-lf-...',
             secretKey: 'sk-lf-...',
             baseUrl: 'https://cloud.langfuse.com', // Optional
+            additionalHeaders: { 'x-custom-header': 'custom-value' }, // Optional
             realtime: true, // Optional - flush after each event
             flushAt: 200, // Optional - spans per OTEL batch
             flushInterval: 15, // Optional - seconds between OTEL batch flushes
@@ -70,16 +71,17 @@ const mastra = new Mastra({
 
 ### Configuration Options
 
-| Option          | Type      | Description                                                                  |
-| --------------- | --------- | ---------------------------------------------------------------------------- |
-| `publicKey`     | `string`  | Langfuse public key. Defaults to `LANGFUSE_PUBLIC_KEY` env var               |
-| `secretKey`     | `string`  | Langfuse secret key. Defaults to `LANGFUSE_SECRET_KEY` env var               |
-| `baseUrl`       | `string`  | Langfuse host URL. Defaults to `LANGFUSE_BASE_URL` env var or Langfuse cloud |
-| `realtime`      | `boolean` | Flush after each event for immediate visibility. Defaults to `false`         |
-| `flushAt`       | `number`  | Maximum number of spans per OTEL export batch                                |
-| `flushInterval` | `number`  | Maximum time in seconds before pending spans are exported                    |
-| `environment`   | `string`  | Langfuse tracing environment tag                                             |
-| `release`       | `string`  | Langfuse release tag                                                         |
+| Option              | Type                     | Description                                                                  |
+| ------------------- | ------------------------ | ---------------------------------------------------------------------------- |
+| `publicKey`         | `string`                 | Langfuse public key. Defaults to `LANGFUSE_PUBLIC_KEY` env var               |
+| `secretKey`         | `string`                 | Langfuse secret key. Defaults to `LANGFUSE_SECRET_KEY` env var               |
+| `baseUrl`           | `string`                 | Langfuse host URL. Defaults to `LANGFUSE_BASE_URL` env var or Langfuse cloud |
+| `additionalHeaders` | `Record<string, string>` | Additional headers sent with requests to Langfuse                            |
+| `realtime`          | `boolean`                | Flush after each event for immediate visibility. Defaults to `false`         |
+| `flushAt`           | `number`                 | Maximum number of spans per OTEL export batch                                |
+| `flushInterval`     | `number`                 | Maximum time in seconds before pending spans are exported                    |
+| `environment`       | `string`                 | Langfuse tracing environment tag                                             |
+| `release`           | `string`                 | Langfuse release tag                                                         |
 
 ### High-Volume Streaming
 

@@ -2,18 +2,21 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import type { ReactNode } from 'react';
 
 export function SettingsSubsection({
+  id,
   title,
   description,
   action,
   children,
 }: {
+  /** Anchor id so other surfaces can deep-link to this subsection. */
+  id?: string;
   title: string;
   description?: string;
   action?: ReactNode;
   children?: ReactNode;
 }) {
   return (
-    <section className="flex flex-col gap-2">
+    <section id={id} className="flex scroll-mt-4 flex-col gap-2">
       <div className="flex flex-col gap-1">
         <Txt as="h2" variant="ui-sm" className="text-icon6 leading-ui-md font-semibold">
           {title}

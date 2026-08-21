@@ -37,7 +37,7 @@ import type {
   WorkItemStage,
   WorkItemsStorage,
 } from '../storage/domains/work-items/base.js';
-import { WorkItemRelationError } from '../storage/domains/work-items/base.js';
+import { FACTORY_RULE_MATERIALIZATION_KEY, WorkItemRelationError } from '../storage/domains/work-items/base.js';
 import { computeFactoryMetrics, parseMetricsRange } from '../storage/domains/work-items/metrics.js';
 import type { RouteDependencies } from './route.js';
 import { Route } from './route.js';
@@ -56,6 +56,13 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
   startCoordinator?: Pick<FactoryStartCoordinator, 'prepare'>;
   /** Materialized sessions, read to report which of the listed cards are being worked. */
   liveSessions: Pick<LiveSessions, 'isRunning'>;
+}
+
+/** The card as clients see it, without the dispatcher's internal bookkeeping. */
+function toWireWorkItem(item: WorkItemRow): WorkItemRow {
+  if (!item.metadata || !(FACTORY_RULE_MATERIALIZATION_KEY in item.metadata)) return item;
+  const { [FACTORY_RULE_MATERIALIZATION_KEY]: _internal, ...metadata } = item.metadata;
+  return { ...item, metadata };
 }
 
 /** Session ids of the listed cards whose agent run is in flight. */
@@ -546,7 +553,10 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             orgId: resolved.orgId,
             factoryProjectId: resolved.factoryProjectId,
           });
-          return c.json({ workItems: items, runningSessionIds: runningSessionIds(items, liveSessions) });
+          return c.json({
+            workItems: items.map(toWireWorkItem),
+            runningSessionIds: runningSessionIds(items, liveSessions),
+          });
         },
       }),
 
@@ -711,7 +721,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
                 patch: boundedPatch as unknown as Record<string, unknown>,
               });
             }
-            return c.json({ workItem: item });
+            return c.json({ workItem: toWireWorkItem(item) });
           } catch (error) {
             if (error instanceof WorkItemRelationError) {
               return c.json({ error: error.code, message: error.message }, 400);
@@ -861,7 +871,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
               previous: updated.previous,
               patch: patch as Record<string, unknown>,
             });
-            return c.json({ workItem: updated.item });
+            return c.json({ workItem: toWireWorkItem(updated.item) });
           } catch (error) {
             if (error instanceof WorkItemRelationError) {
               return c.json({ error: error.code, message: error.message }, 400);

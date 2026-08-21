@@ -55,6 +55,45 @@ describe('RenderScheduler', () => {
     vi.useRealTimers();
   });
 
+  it('applies the latest pending state immediately before scheduled and flushed renders', () => {
+    vi.useFakeTimers();
+    try {
+      const calls: string[] = [];
+      const scheduler = new RenderScheduler(
+        () => calls.push('render'),
+        80,
+        () => 0,
+        () => calls.push('apply'),
+      );
+
+      scheduler.request();
+      vi.advanceTimersByTime(80);
+      expect(calls).toEqual(['apply', 'render']);
+
+      scheduler.request();
+      scheduler.flush();
+      expect(calls).toEqual(['apply', 'render', 'apply', 'render']);
+      scheduler.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not apply pending state after disposal', () => {
+    vi.useFakeTimers();
+    try {
+      const apply = vi.fn();
+      const scheduler = new RenderScheduler(vi.fn(), 80, () => 0, apply);
+      scheduler.request();
+      scheduler.dispose();
+      scheduler.flush();
+      vi.runAllTimers();
+      expect(apply).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('ignores requests and flushes after disposal', () => {
     vi.useFakeTimers();
     const render = vi.fn();

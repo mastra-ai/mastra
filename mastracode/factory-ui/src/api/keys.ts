@@ -67,7 +67,7 @@ export const queryKeys = {
   modelPacksAll: () => ['model-packs'] as const,
   modelPacks: (resourceId: string | undefined, scope: string | undefined) =>
     [...queryKeys.modelPacksAll(), resourceId ?? null, scope ?? null] as const,
-  om: (resourceId: string | undefined) => ['om', resourceId ?? null] as const,
+  om: (resourceId: string | undefined, factoryId?: string) => ['om', resourceId ?? null, factoryId ?? null] as const,
   thinkingConfig: () => ['thinking-config'] as const,
   factorySkills: () => ['factory', 'skills'] as const,
   fsList: (path: string | undefined) => ['fs-list', path ?? null] as const,
@@ -76,8 +76,13 @@ export const queryKeys = {
     ['workspace-rendered-list', workspacePath ?? null, renderedRoot ?? null] as const,
   workspaceFiles: (workspacePath: string | undefined, threadId: string | undefined) =>
     ['workspace-files', workspacePath ?? null, threadId ?? null] as const,
+  workspaceFileScope: (workspacePath: string | undefined) => ['workspace-file', workspacePath ?? null] as const,
   workspaceFile: (workspacePath: string | undefined, filePath: string | undefined, threadId?: string) =>
     ['workspace-file', workspacePath ?? null, filePath ?? null, threadId ?? null] as const,
+  // Keyed by toolCallId so each plan (re)submission fetches the file fresh
+  // instead of reusing the previous submission's cached content.
+  planFile: (workspacePath: string | undefined, filePath: string | undefined, toolCallId: string | undefined) =>
+    ['plan-file', workspacePath ?? null, filePath ?? null, toolCallId ?? null] as const,
   workspaceChanges: (workspacePath: string | undefined) => ['workspace-changes', workspacePath ?? null] as const,
   workspaceDiff: (
     workspacePath: string | undefined,
@@ -118,12 +123,8 @@ export const queryKeys = {
       ...(threadId ? [threadId] : []),
     ] as const,
   // Session state must stay out of the key: it would reset the query on navigation, and a reset reads as every run going idle.
-  agentControllerActivity: (agentControllerId: string | undefined) =>
-    ['agent-controller', agentControllerId ?? null, 'activity'] as const,
-  // The polled session's own id, not the page's — user sessions each carry their own resourceId, so one
-  // shared entry would collapse every poll into one.
-  agentControllerSessionActivity: (agentControllerId: string | undefined, resourceId: string | undefined) =>
-    [...queryKeys.agentControllerActivity(agentControllerId), resourceId ?? null] as const,
+  agentControllerActivity: (agentControllerId: string | undefined, baseUrl: string) =>
+    ['agent-controller', agentControllerId ?? null, 'activity', baseUrl] as const,
   agentControllerSettings: (
     agentControllerId: string | undefined,
     resourceId: string | undefined,

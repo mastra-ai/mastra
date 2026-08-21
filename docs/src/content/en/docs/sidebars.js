@@ -262,7 +262,7 @@ const sidebars = {
         },
         {
           type: 'category',
-          label: 'Sandbox',
+          label: 'Sandboxes',
           link: {
             type: 'doc',
             id: 'sandbox/overview',

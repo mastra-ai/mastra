@@ -1,0 +1,152 @@
+---
+title: "Reference: Multi-turn Judge scorer | Evals"
+description: Documentation for the Multi-turn Judge Scorer in Mastra. An LLM-as-judge scorer that grades every assistant turn of a conversation against a plain-English criterion and returns a binary verdict.
+packages:
+  - "@mastra/evals"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# Multi-turn Judge scorer
+
+**Added in:** `@mastra/evals@1.9.0`
+
+The `createMultiTurnJudgeScorer()` function creates an LLM-as-judge scorer that grades a whole conversation against a single plain-English criterion. It returns a **binary** score: `1` when the criterion is satisfied, otherwise `0`, and the `reason` echoes the criterion with the judge's explanation.
+
+Unlike the other prebuilt LLM judges, which read a single assistant message, this scorer reads every assistant turn accumulated in `run.output`, so it works with the [multi-turn `inputs`](/docs/evals/multi-turn) form of [`runEvals()`](/reference/evals/run-evals).
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'model',
+    type: 'MastraModelConfig',
+    description:
+      'The language model used to grade the conversation. A smaller, cheaper model is usually sufficient for grading.',
+    required: true,
+  },
+  {
+    name: 'criterion',
+    type: 'string',
+    description:
+      'What the conversation must satisfy, in plain English, e.g. "The agent gave forecasts for London and Paris, and weather-appropriate packing advice".',
+    required: true,
+  },
+  {
+    name: 'options',
+    type: 'MultiTurnJudgeScorerOptions',
+    description: 'Configuration options for the scorer',
+    required: false,
+    children: [
+      {
+        name: 'scale',
+        type: 'number',
+        description: 'Scale factor applied to the score (default: 1), so the scorer returns 1 or 0.',
+        required: false,
+      },
+    ],
+  },
+]}
+/>
+
+## `.run()` returns
+
+<PropertiesTable
+  content={[
+  {
+    name: 'score',
+    type: 'number',
+    description: '1 when the judge considers the criterion satisfied, otherwise 0 (multiplied by scale).',
+  },
+  {
+    name: 'reason',
+    type: 'string',
+    description:
+      "The verdict, the criterion it graded, and the judge's explanation of why the criterion is or is not satisfied.",
+  },
+]}
+/>
+
+## Usage with multi-turn evals
+
+Pass the scorer to `runEvals` alongside an `inputs` array. Every assistant turn is included in the prompt sent to the judge:
+
+```typescript title="src/evals/trip-planning-eval.ts"
+import { runEvals } from '@mastra/core/evals'
+// highlight-next-line
+import { createMultiTurnJudgeScorer } from '@mastra/evals/scorers/prebuilt'
+import { weatherAgent } from '../agents'
+
+const result = await runEvals({
+  data: [
+    {
+      inputs: [
+        "I'm planning a trip to London, Paris, and Tokyo next week.",
+        "How's the weather looking in London?",
+        'And Paris?',
+        'Tokyo too?',
+        'Should I pack an umbrella for the London leg?',
+      ],
+    },
+  ],
+  target: weatherAgent,
+  scorers: [
+    {
+      // highlight-start
+      scorer: createMultiTurnJudgeScorer({
+        model: '__GATEWAY_ANTHROPIC_MODEL_HAIKU__',
+        criterion:
+          'The agent provided weather forecasts for London, Paris, and Tokyo, and gave weather-appropriate packing or clothing advice.',
+      }),
+      // highlight-end
+      threshold: 1,
+    },
+  ],
+})
+```
+
+Use `threshold: 1` to turn the verdict into a pass or fail: the score is binary, so any lower threshold always passes.
+
+## Persisting scores
+
+Scores are only written to the scores store when a scorer with the same ID is registered on the Mastra instance, because persistence resolves scorer metadata through `Mastra.getScorerById()`. Only the ID is looked up, so the registered instance's `criterion` can be a placeholder:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { LibSQLStore } from '@mastra/libsql'
+import { createMultiTurnJudgeScorer } from '@mastra/evals/scorers/prebuilt'
+
+export const mastra = new Mastra({
+  agents: { weatherAgent },
+  storage: new LibSQLStore({ url: 'file:./mastra.db' }),
+  scorers: {
+    // highlight-start
+    'multi-turn-judge-scorer': createMultiTurnJudgeScorer({
+      model: '__GATEWAY_ANTHROPIC_MODEL_HAIKU__',
+      criterion: 'placeholder',
+    }),
+    // highlight-end
+  },
+})
+```
+
+See [Score persistence](/docs/evals/overview#score-persistence) for the full requirement and the warning you get when a scorer isn't registered.
+
+## Scoring details
+
+The scorer runs in two phases:
+
+1. **Grade**: Every assistant message in `run.output` is collected in order and rendered as a numbered transcript, then the judge decides whether the conversation as a whole satisfies the criterion. Assistant messages with no text (a turn that only carried tool calls, for example) are skipped.
+1. **Score**: A `satisfied` verdict scores `1` and anything else scores `0`, multiplied by `scale`.
+
+The judge only sees what the assistant said. The user's turns and any tool results aren't included, so write criteria in terms of the agent's responses. This keeps the graded text limited to the agent's own output, but it also means a reply that only makes sense next to the question that prompted it ("Yes, bring one.") can't be judged on its own. For criteria that depend on the user's turns, grade each turn with `turns[].scorers` or write a [custom scorer](/docs/evals/multi-turn) that renders both roles.
+
+The transcript is passed to the judge as untrusted data, fenced with explicit delimiters and an instruction to ignore anything inside it that reads as an instruction, so an agent response can't talk its way into a passing verdict.
+
+## Related
+
+- [Multi-turn evals](/docs/evals/multi-turn)
+- [`runEvals()`](/reference/evals/run-evals)
+- [Rubric scorer](/reference/evals/rubric)
+- [createScorer](/reference/evals/create-scorer)
