@@ -20,6 +20,7 @@ import {
   traceLightSpans,
   traceList,
   traceListWithTwoTraces,
+  traceRootSpan,
   traceUsageBreakdown,
 } from './fixtures/traces';
 import { TestLinkProvider } from '@/test/link-provider';
@@ -55,6 +56,9 @@ const setTracePageHandlers = (systemPackages: GetSystemPackagesResponse) => {
     http.get(`${TEST_BASE_URL}/api/observability/discovery/entity-names`, () => HttpResponse.json(emptyEntityNames)),
     http.get(`${TEST_BASE_URL}/api/observability/discovery/service-names`, () => HttpResponse.json(emptyServiceNames)),
     http.get(`${TEST_BASE_URL}/api/observability/discovery/environments`, () => HttpResponse.json(emptyEnvironments)),
+    http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId/spans/:spanId`, () =>
+      HttpResponse.json(traceRootSpan),
+    ),
     http.post(`${TEST_BASE_URL}/api/observability/metrics/breakdown`, () => {
       onBreakdownRequest();
       return HttpResponse.json(traceUsageBreakdown);
@@ -79,7 +83,63 @@ beforeEach(() => {
     TRACE_COLUMN_STORAGE_KEY,
     serializeTraceColumnPreferences({ visibleColumns: ['inputTokens'], metadataKeys: [] }),
   );
+  // Usage assertions below inspect the technical panel, which only renders in advanced mode.
+  window.localStorage.setItem('mastra:traces:view-mode', 'advanced');
   onBreakdownRequest.mockClear();
+});
+
+describe('Traces page review mode', () => {
+  describe('when a trace is opened without a saved preference', () => {
+    it('shows the readable case and response', async () => {
+      window.localStorage.setItem('mastra:flags:trace-review', 'on');
+      window.localStorage.removeItem('mastra:traces:view-mode');
+      setTracePageHandlers(metricsCapableSystemPackages);
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a/light`, () => HttpResponse.json(traceLightSpans)),
+        http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(emptyFeedback)),
+      );
+
+      renderPage('/traces?traceId=trace-a');
+
+      expect(await screen.findByText('A patient reports sudden chest pain.')).not.toBeNull();
+      expect(screen.getByText('The presentation requires urgent evaluation.')).not.toBeNull();
+      expect(screen.queryByText('Studio preview agent')).toBeNull();
+    });
+  });
+
+  describe('when advanced mode was saved', () => {
+    it('shows the technical timeline', async () => {
+      window.localStorage.setItem('mastra:flags:trace-review', 'on');
+      window.localStorage.setItem('mastra:traces:view-mode', 'advanced');
+      setTracePageHandlers(metricsCapableSystemPackages);
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a/light`, () => HttpResponse.json(traceLightSpans)),
+        http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(emptyFeedback)),
+      );
+
+      renderPage('/traces?traceId=trace-a');
+
+      expect(await screen.findByText('Studio preview agent')).not.toBeNull();
+      expect(screen.queryByText('A patient reports sudden chest pain.')).toBeNull();
+    });
+  });
+});
+
+describe('Traces page review flag', () => {
+  describe('when the trace-review flag is off', () => {
+    it('opens the technical timeline without review tabs', async () => {
+      setTracePageHandlers(metricsCapableSystemPackages);
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a/light`, () => HttpResponse.json(traceLightSpans)),
+        http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(emptyFeedback)),
+      );
+
+      renderPage('/traces?traceId=trace-a');
+
+      expect(await screen.findByText('Studio preview agent')).not.toBeNull();
+      expect(screen.queryByRole('tab', { name: 'Review' })).toBeNull();
+    });
+  });
 });
 
 describe('Traces page usage columns', () => {
