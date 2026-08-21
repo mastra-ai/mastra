@@ -978,8 +978,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
 
   async #countRows(collection: string, where: CollectionWhere): Promise<number> {
     const count = this.#db.count;
-    if (!count) throw new Error('[WorkItemsStorage] storage backend does not support collection counts.');
-    return count.call(this.#db, collection, where);
+    if (count) return count.call(this.#db, collection, where);
+    return (await this.#db.findMany(collection, where)).length;
   }
 
   async #withProjectRelationTransaction<T>(
