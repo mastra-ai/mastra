@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { webSearchLinks } from './web-search';
+import { isWebSearchToolName, webSearchLinks } from './provider-web-search';
 
 describe('webSearchLinks', () => {
   it('keeps the pages out of an Anthropic result and drops its encrypted payload', () => {
@@ -14,7 +14,7 @@ describe('webSearchLinks', () => {
       },
     ]);
 
-    expect(links).toEqual([{ url: 'https://mastra.ai/docs', title: 'Mastra docs' }]);
+    expect(links).toEqual([{ url: 'https://mastra.ai/docs', title: 'Mastra docs', pageAge: '2 days' }]);
   });
 
   it('reads OpenAI sources and skips the ones with no page behind them', () => {
@@ -26,7 +26,7 @@ describe('webSearchLinks', () => {
           { type: 'api', name: 'internal' },
         ],
       }),
-    ).toEqual([{ url: 'https://mastra.ai', title: undefined }]);
+    ).toEqual([{ url: 'https://mastra.ai', title: undefined, pageAge: undefined }]);
   });
 
   it('falls back to the page the model opened when the result carries no sources', () => {
@@ -36,5 +36,13 @@ describe('webSearchLinks', () => {
 
   it('has nothing to link to for a Tavily string result', () => {
     expect(webSearchLinks('## Title\nhttps://mastra.ai\nbody')).toEqual([]);
+  });
+});
+
+describe('isWebSearchToolName', () => {
+  it('covers the dated name providers give their own tool', () => {
+    expect(isWebSearchToolName('web_search')).toBe(true);
+    expect(isWebSearchToolName('web_search_20250305')).toBe(true);
+    expect(isWebSearchToolName('web_extract')).toBe(false);
   });
 });

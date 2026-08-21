@@ -1,3 +1,5 @@
+import type { WebSearchLink } from '@mastra/core/tools/provider-web-search';
+import { isWebSearchToolName, webSearchLinks } from '@mastra/core/tools/provider-web-search';
 import { CodeBlock as DsCodeBlock } from '@mastra/playground-ui/components/CodeBlock';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
@@ -12,8 +14,6 @@ import { stripSerializedAnsi } from '../../services/ansi';
 import type { ToolCall } from '../../services/transcript';
 import { ROW_RAIL, ROW_TRIGGER, TranscriptRow } from '../TranscriptRow';
 import { presentTool } from './tool-presentation';
-import type { WebSearchLink } from './web-search';
-import { isWebSearchTool, webSearchLinks } from './web-search';
 
 function truncate(s: string, max: number): string {
   return s.length > max ? s.slice(0, max) + '…' : s;
@@ -206,7 +206,7 @@ function toolBody(tool: ToolCall, command?: string): ReactNode {
     );
   }
 
-  if (isWebSearchTool(tool.toolName) && tool.status !== 'error') {
+  if (isWebSearchToolName(tool.toolName) && tool.status !== 'error') {
     const links = webSearchLinks(tool.result);
     if (links.length > 0) return <WebPageLinks links={links} />;
     return typeof tool.result === 'string' ? (

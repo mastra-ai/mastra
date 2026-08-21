@@ -1,7 +1,8 @@
 /**
- * OpenAI's `webSearch` declares an empty input schema — the query never reaches us as
- * tool args, it comes back in the result as an `action`. Anthropic's `webSearch_20250305`
- * does send a `query` input and answers with a bare array of results.
+ * Reads a provider-executed web search, whose call is described by its result rather
+ * than its input: OpenAI's `webSearch` declares an empty input schema and answers with
+ * an `action`, while Anthropic's `webSearch_20250305` sends a `query` input and answers
+ * with a bare array of results.
  */
 
 export type WebSearchAction =
@@ -12,10 +13,12 @@ export type WebSearchAction =
 export interface WebSearchLink {
   url: string;
   title?: string;
+  pageAge?: string;
 }
 
-export function isWebSearchTool(toolName: string): boolean {
-  return toolName === 'web_search';
+/** Matches both the plain name and the dated one providers use (`web_search_20250305`). */
+export function isWebSearchToolName(toolName: string): boolean {
+  return toolName === 'web_search' || /^web_search_\d+$/.test(toolName);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -51,12 +54,13 @@ function resultEntries(result: unknown): unknown[] {
 
 /**
  * Pages the call touched, whichever provider ran it. Anthropic entries also carry a
- * large `encryptedContent` blob, dropped here rather than dumped into the card.
+ * large `encryptedContent` blob, left out here rather than handed to a renderer.
  */
 export function webSearchLinks(result: unknown): WebSearchLink[] {
   const links = resultEntries(result).flatMap(entry => {
     const url = stringField(entry, 'url');
-    return url ? [{ url, title: stringField(entry, 'title') }] : [];
+    if (!url) return [];
+    return [{ url, title: stringField(entry, 'title'), pageAge: stringField(entry, 'pageAge') }];
   });
   if (links.length > 0) return links;
 

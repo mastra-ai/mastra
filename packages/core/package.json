@@ -641,6 +641,16 @@
         "default": "./dist/tools/is-vercel-tool.cjs"
       }
     },
+    "./tools/provider-web-search": {
+      "import": {
+        "types": "./dist/tools/provider-web-search.d.ts",
+        "default": "./dist/tools/provider-web-search.js"
+      },
+      "require": {
+        "types": "./dist/tools/provider-web-search.d.ts",
+        "default": "./dist/tools/provider-web-search.cjs"
+      }
+    },
     "./workflows/_constants": {
       "import": {
         "types": "./dist/workflows/constants.d.ts",

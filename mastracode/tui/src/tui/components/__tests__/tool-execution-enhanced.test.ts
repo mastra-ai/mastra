@@ -550,7 +550,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
         {
           type: 'text',
           text: JSON.stringify({
-            action: { query: 'latest mastra release' },
+            action: { type: 'search', query: 'latest mastra release' },
             sources: [
               { title: 'Release notes', url: 'https://mastra.ai/changelog' },
               { url: 'https://github.com/mastra-ai/mastra/releases' },
@@ -568,6 +568,25 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(output).toContain('╰── web_search "latest mastra release" ✓');
     expect(output).not.toContain('sources');
     expect(output).not.toContain('action');
+  });
+
+  it('names the page a provider-run search opened, which no input ever carried', () => {
+    const component = new ToolExecutionComponentEnhanced('web_search', {}, {}, ui);
+
+    component.updateResult({
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({ action: { type: 'openPage', url: 'https://mastra.ai/docs/agents' } }),
+        },
+      ],
+      isError: false,
+    });
+
+    const output = stripAnsi(component.render(120).join('\n'));
+    expect(output).toContain('╰── web_search "https://mastra.ai/docs/agents" ✓');
+    expect(output).toContain('│   https://mastra.ai/docs/agents');
+    expect(output).not.toContain('openPage');
   });
 
   it('passes Tavily markdown through normal web search rendering without JSON double-formatting', () => {

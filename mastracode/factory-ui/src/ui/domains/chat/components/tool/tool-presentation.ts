@@ -1,3 +1,4 @@
+import { isWebSearchToolName, webSearchAction } from '@mastra/core/tools/provider-web-search';
 import {
   BookOpen,
   Braces,
@@ -17,7 +18,6 @@ import {
 import type { LucideIcon } from 'lucide-react';
 
 import type { ToolCall } from '../../services/transcript';
-import { isWebSearchTool, webSearchAction } from './web-search';
 
 type ToolCallPresentation = Pick<ToolCall, 'toolName' | 'args' | 'result'>;
 
@@ -112,7 +112,7 @@ function presentWebSearch(args: unknown, result: unknown): ToolPresentation {
 
 export function presentTool({ toolName, args, result }: ToolCallPresentation): ToolPresentation {
   const name = toolName.replace(/^mastra_workspace_/, '');
-  if (isWebSearchTool(name)) return presentWebSearch(args, result);
+  if (isWebSearchToolName(name)) return presentWebSearch(args, result);
 
   const style = TOOL_STYLES[name];
   if (!style) return { icon: Wrench, label: prettifyToolName(toolName) };
