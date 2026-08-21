@@ -1,5 +1,14 @@
 # @mastra/observability
 
+## 1.17.2-alpha.0
+
+### Patch Changes
+
+- Fixed `MastraStorageExporter` staying disabled when a configured observability store is temporarily unavailable during startup. The exporter now recovers on a later event, so traces resume without restarting the process. (#21943) ([#21957](https://github.com/mastra-ai/mastra/pull/21957))
+
+- Updated dependencies [[`f95f468`](https://github.com/mastra-ai/mastra/commit/f95f468cf1e7c2b924a13826494f98b8f2ccd581)]:
+  - @mastra/core@1.61.1-alpha.1
+
 ## 1.17.1
 
 ### Patch Changes
