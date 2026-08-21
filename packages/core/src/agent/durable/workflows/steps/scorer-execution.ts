@@ -113,7 +113,7 @@ export function createDurableScorerStep() {
 
       // Execute each scorer
       for (const [scorerKey, scorerEntry] of Object.entries(scorers)) {
-        const { scorerName, sampling } = scorerEntry;
+        const { scorerName, sampling, filter } = scorerEntry;
 
         try {
           // Resolve the scorer from Mastra
@@ -128,6 +128,7 @@ export function createDurableScorerStep() {
           const scorerObject: MastraScorerEntry = {
             scorer,
             sampling,
+            filter,
           };
 
           // Call runScorer (fire-and-forget via hooks)
