@@ -213,14 +213,36 @@ describe('hydrateSessionMemorySettings', () => {
     expect(session.state.set).toHaveBeenCalledWith({ factoryOrgId: 'org-1' });
   });
 
-  it('writes nothing and does not throw when the session has no source-control row', async () => {
+  it('marks the session unresolved and does not throw when it has no source-control row', async () => {
+    // No row means no org. Staying silent here is what let a Factory session be
+    // mistaken for a local one and filed under a scope nothing can read.
     const session = createSession();
     const dependencies = createDependencies({ row: null });
 
     await hydrateSessionMemorySettings(session, dependencies);
 
-    expect(session.state.set).not.toHaveBeenCalled();
+    expect(session.state.set).toHaveBeenCalledWith({ factoryOrgUnresolved: true });
+    expect(session.state.set).not.toHaveBeenCalledWith(expect.objectContaining({ factoryOrgId: expect.anything() }));
     expect(dependencies.memorySettings.get).not.toHaveBeenCalled();
+  });
+
+  it('marks the session unresolved when the row carries an empty org', async () => {
+    const session = createSession();
+    const dependencies = createDependencies({ row: { orgId: '  ', userId: 'user-1' } as never });
+
+    await hydrateSessionMemorySettings(session, dependencies);
+
+    expect(session.state.set).toHaveBeenCalledWith({ factoryOrgUnresolved: true });
+  });
+
+  it('marks the session unresolved when the row lookup rejects', async () => {
+    const session = createSession();
+    const dependencies = createDependencies();
+    dependencies.sourceControl.sessions.getBySessionId.mockRejectedValueOnce(new Error('storage down'));
+
+    await expect(hydrateSessionMemorySettings(session, dependencies)).resolves.toBeUndefined();
+
+    expect(session.state.set).toHaveBeenCalledWith({ factoryOrgUnresolved: true });
   });
 
   it('seeds the org on a tagged session that never went through the coordinator', async () => {

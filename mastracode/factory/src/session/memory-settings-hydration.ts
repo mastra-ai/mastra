@@ -2,6 +2,7 @@ import { DEFAULT_OM_MODEL_ID } from '@mastra/code-sdk/constants';
 
 import type { MemorySettingsRecord, MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
+import { seedSessionOrg } from './org-seed.js';
 
 /** Default thresholds mirror the TUI `/om` fallbacks. */
 export const DEFAULT_OBSERVATION_THRESHOLD = 30_000;
@@ -118,14 +119,19 @@ export async function hydrateSessionMemorySettings(
   if (isFactoryRun && state.factoryOrgId) return;
   try {
     const record = await sourceControl.sessions.getBySessionId(session.identity.getResourceId());
+    // No row, or a row whose org is blank, leaves the session with no tenant.
+    // Mark it rather than returning silently: an unmarked projectless factory
+    // session is indistinguishable from a local one, and capture would file it
+    // under the local scope — the same bug wearing a different rung.
+    await seedSessionOrg(session, record?.orgId);
     if (!record) return;
-    if (state.factoryOrgId !== record.orgId) {
-      await session.state.set({ factoryOrgId: record.orgId });
-    }
     if (isFactoryRun) return;
     const settings = await memorySettings.get({ orgId: record.orgId, userId: record.userId });
     await applyStoredMemorySettings(session, settings);
   } catch (error) {
     console.warn('[Factory memory-settings hydration] Unable to apply stored memory settings.', error);
+    // A failed lookup is an unresolved org, not an absent one — unless the seed
+    // already landed and a later step is what threw.
+    if (!session.state.get()?.factoryOrgId) await seedSessionOrg(session, undefined);
   }
 }

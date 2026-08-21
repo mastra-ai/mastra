@@ -19,6 +19,7 @@ import {
   resolveFactoryProjectForSession,
   resolveFactorySourceRepository,
 } from '../../session/factory-session.js';
+import { readRequestContextOrgId, seedSessionOrg } from '../../session/org-seed.js';
 import type {
   ChannelAccountLink,
   ChannelAccountLinkKey,
@@ -396,7 +397,15 @@ export const resolveChannelThreadId: ResolveThreadId = ({ resourceId, defaultThr
  */
 export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSessionStart {
   const { projects, sourceControl, memorySettings } = deps;
-  return async ({ session, thread }) => {
+  return async ({ session, thread, requestContext }) => {
+    // Seed the tenant org above every guard below. `gateDispatch` stamps it on
+    // the message's request context before the session exists, so this needs no
+    // storage read — which matters, because the guards below deliberately skip
+    // storage on a restarted session. A channel-only thread and a thread whose
+    // dispatch was ungated both land here with no org and are marked unresolved
+    // rather than being left to look like a local session.
+    await seedSessionOrg(session, readRequestContextOrgId(requestContext));
+
     if (!projects || !sourceControl) return;
     if (thread.resourceId.startsWith('channel:')) return;
 
