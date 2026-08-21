@@ -70,6 +70,29 @@ Don't say "Agent did x", say "did x". It will be assumed the agent did what was 
 Drop caveman for: security warnings, irreversible action confirmations, multi-step sequences where fragment order risks misread, user asks to clarify or repeats question, and anything that requires remembering verbatim content. Resume caveman after clear part done`;
 
 /**
+ * The organization rung local (TUI/studio) knowledge is captured under. A fixed
+ * literal on purpose: deriving it from a hostname or path would fragment local
+ * knowledge per checkout into scopes nothing ever reads.
+ */
+export const LOCAL_KNOWLEDGE_ORG_ID = 'local';
+
+// One error per session, not per memory resolution. Keyed on the controller so
+// the bookkeeping dies with the session — no unbounded set in a long-running
+// Factory process.
+const reportedOrgUnresolved = new WeakSet<object>();
+
+function reportOrgUnresolved(controller: object | undefined, factoryProjectId: string | undefined) {
+  if (controller) {
+    if (reportedOrgUnresolved.has(controller)) return;
+    reportedOrgUnresolved.add(controller);
+  }
+  const session = (controller as AgentControllerRequestContext<MastraCodeState> | undefined)?.session;
+  console.error(
+    `[Subconscious] Knowledge capture disabled: no organization resolved for session ${session?.id ?? 'unknown'} (project ${factoryProjectId ?? 'none'}). Knowledge is not written rather than written where it cannot be read.`,
+  );
+}
+
+/**
  * Dynamic memory factory function.
  * Reads OM thresholds from controller state via requestContext.
  * Model functions also read from requestContext (no mutable bridge needed).
@@ -87,16 +110,24 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
     const factoryProjectId = state?.factoryProjectId;
     const isFactory = typeof factoryProjectId === 'string' && factoryProjectId.trim().length > 0;
 
+    // A Factory-owned session that could not resolve its org refuses to capture:
+    // writing under a substituted identity produces knowledge the fail-closed
+    // read path can never see.
+    let orgUnresolvedRefusal = false;
+
     if (subconsciousEnabled) {
-      // Factory seeds the authoritative org id into session state; prefer it.
-      // The session owner is a USER id — mapping it into organizationId is only
-      // the legacy fallback for clients (TUI/studio) that never set factoryOrgId.
+      // Factory seeds the authoritative org id into session state. There is no
+      // fallback: a session owner is a USER id, never an organization.
       const factoryOrgId = state?.factoryOrgId;
-      const ownerId = controller?.session.ownerId;
+      const factoryOwned = isFactory || state?.factoryOrgUnresolved === true;
       if (typeof factoryOrgId === 'string' && factoryOrgId.trim()) {
         requestContext.set('organizationId', factoryOrgId);
-      } else if (ownerId) {
-        requestContext.set('organizationId', ownerId);
+      } else if (factoryOwned) {
+        orgUnresolvedRefusal = true;
+        reportOrgUnresolved(controller, factoryProjectId);
+      } else {
+        // TUI/studio: an explicit, named scope rather than a cascaded identity.
+        requestContext.set('organizationId', LOCAL_KNOWLEDGE_ORG_ID);
       }
       // Factory runs share one knowledge graph per project: anchor the
       // subconscious knowledge scope's resource rung on the project id.
@@ -104,6 +135,8 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
         requestContext.set('knowledgeResourceId', factoryProjectId);
       }
     }
+
+    const captureEnabled = subconsciousEnabled && !orgUnresolvedRefusal;
 
     const omScope = state?.omScope ?? getOmScope(state?.projectPath);
 
@@ -115,7 +148,7 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
     const observeAttachments = state?.observeAttachments;
     // Factory sessions get a factory-only Subconscious config, so the cache key
     // carries a factory presence bit to keep the two configs from cross-serving.
-    const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}:${caveman ? 1 : 0}:${observeAttachments}:${isFactory ? 1 : 0}:${subconsciousEnabled ? 1 : 0}`;
+    const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}:${caveman ? 1 : 0}:${observeAttachments}:${isFactory ? 1 : 0}:${captureEnabled ? 1 : 0}`;
     if (cachedMemory && cachedMemoryKey === cacheKey) {
       return cachedMemory;
     }
@@ -137,7 +170,7 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
           enabled: true,
           temporalMarkers: true,
           retrieval: vector ? { vector: true } : true,
-          experimental_subconscious: subconsciousEnabled
+          experimental_subconscious: captureEnabled
             ? new Subconscious({
                 defaultScope: 'resource',
                 maxScope: 'resource',
