@@ -150,23 +150,6 @@ export class IntakeStorage extends FactoryStorageDomain {
     return rows.map(toIntakeSourceBinding);
   }
 
-  async getBinding({
-    orgId,
-    integrationId,
-    sourceId,
-  }: {
-    orgId: string;
-    integrationId: string;
-    sourceId: string;
-  }): Promise<IntakeSourceBinding | null> {
-    const row = await this.#db.findOne<IntakeSourceBindingRow>('intake_source_bindings', {
-      org_id: orgId,
-      integration_id: integrationId,
-      source_id: sourceId,
-    });
-    return row ? toIntakeSourceBinding(row) : null;
-  }
-
   /** Source ids bound to one Factory project. Empty means "nothing bound". */
   async listBoundSourceIds({
     orgId,
@@ -185,10 +168,27 @@ export class IntakeStorage extends FactoryStorageDomain {
     return rows.map(row => row.source_id);
   }
 
-  /**
-   * Points a source at a Factory project, replacing any existing binding.
-   * A `null` project clears the binding.
-   */
+  async clearBinding({
+    orgId,
+    integrationId,
+    sourceId,
+  }: {
+    orgId: string;
+    integrationId: string;
+    sourceId: string;
+  }): Promise<IntakeSourceBinding | null> {
+    const where = { org_id: orgId, integration_id: integrationId, source_id: sourceId };
+    return this.storage.withTransaction(
+      async ops => {
+        const row = await ops.findOne<IntakeSourceBindingRow>('intake_source_bindings', where);
+        if (!row) return null;
+        await ops.deleteMany('intake_source_bindings', where);
+        return toIntakeSourceBinding(row);
+      },
+      { isolationLevel: 'serializable' },
+    );
+  }
+
   async setBinding({
     orgId,
     integrationId,
@@ -199,14 +199,10 @@ export class IntakeStorage extends FactoryStorageDomain {
     orgId: string;
     integrationId: string;
     sourceId: string;
-    factoryProjectId: string | null;
+    factoryProjectId: string;
     userId?: string;
   }): Promise<void> {
     const where = { org_id: orgId, integration_id: integrationId, source_id: sourceId };
-    if (factoryProjectId === null) {
-      await this.#db.deleteMany('intake_source_bindings', where);
-      return;
-    }
     const now = new Date();
     const patch = { factory_project_id: factoryProjectId, updated_at: now };
     const updated = await this.#db.updateMany('intake_source_bindings', where, patch);

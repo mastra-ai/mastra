@@ -220,16 +220,23 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
           }
 
           await intake.ensureReady();
-          const previousBinding =
-            binding.factoryProjectId === null
-              ? await intake.getBinding({
-                  orgId: tenant.orgId,
-                  integrationId: binding.integrationId,
-                  sourceId: binding.sourceId,
-                })
-              : null;
-          const auditFactoryProjectId = binding.factoryProjectId ?? previousBinding?.factoryProjectId;
-          await intake.setBinding({ orgId: tenant.orgId, userId: tenant.userId, ...binding });
+          let auditFactoryProjectId = binding.factoryProjectId;
+          if (binding.factoryProjectId === null) {
+            const previousBinding = await intake.clearBinding({
+              orgId: tenant.orgId,
+              integrationId: binding.integrationId,
+              sourceId: binding.sourceId,
+            });
+            auditFactoryProjectId = previousBinding?.factoryProjectId ?? null;
+          } else {
+            await intake.setBinding({
+              orgId: tenant.orgId,
+              userId: tenant.userId,
+              integrationId: binding.integrationId,
+              sourceId: binding.sourceId,
+              factoryProjectId: binding.factoryProjectId,
+            });
+          }
           await audit.emit({
             context: loose(c),
             input: {
