@@ -12,6 +12,10 @@ export function toMinorUnits(value: number, currency: string): number {
   if (!Number.isSafeInteger(result)) throw new Error(`Unsafe ${currency} minor-unit value: ${value}`);
   return result;
 }
+export function toMajorUnits(value: number, currency: string): number {
+  if (!Number.isSafeInteger(value)) throw new Error(`Unsafe ${currency} minor-unit value: ${value}`);
+  return new Decimal(value).div(new Decimal(10).pow(exponent(currency))).toNumber();
+}
 export function normalizePhase1Output(output: Phase1WorkflowOutput): Phase2Invoice {
   const x: ExtractedInvoice = output.extractedResult,
     money = (value: number | null) => (value === null ? null : toMinorUnits(value, x.currency));

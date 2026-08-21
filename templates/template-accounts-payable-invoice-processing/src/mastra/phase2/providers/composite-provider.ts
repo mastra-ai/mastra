@@ -144,16 +144,21 @@ export function makeCompositeProvider(config: CompositeProviderConfig): Accounti
     }
   }
   if (posting) {
-    const vendorFrom = vendor?.identityNamespaces?.vendors,
-      vendorTo = postingSource?.identityNamespaces?.postingVendorIds;
-    const poFrom = po?.identityNamespaces?.purchaseOrders,
-      poTo = postingSource?.identityNamespaces?.postingPurchaseOrders;
-    if (!vendorFrom || !vendorTo) throw new Error('Composite vendor/posting sources must declare identity namespaces');
-    if (po && (!poFrom || !poTo)) throw new Error('Composite PO/posting sources must declare identity namespaces');
-    const vendorPair = shared(vendorFrom, vendorTo, config.identity)
-      ? undefined
-      : ([vendorFrom, vendorTo] as [string, string]);
-    const poPair = po && !shared(poFrom!, poTo!, config.identity) ? ([poFrom!, poTo!] as [string, string]) : undefined;
+    if (!vendor) throw new Error('Composite posting requires a vendor source');
+    let vendorPair: [string, string] | undefined, poPair: [string, string] | undefined;
+    if (vendor.id !== postingSource!.id) {
+      const vendorFrom = vendor.identityNamespaces?.vendors,
+        vendorTo = postingSource?.identityNamespaces?.postingVendorIds;
+      if (!vendorFrom || !vendorTo)
+        throw new Error('Composite vendor/posting sources must declare identity namespaces');
+      if (!shared(vendorFrom, vendorTo, config.identity)) vendorPair = [vendorFrom, vendorTo];
+    }
+    if (po && po.id !== postingSource!.id) {
+      const poFrom = po.identityNamespaces?.purchaseOrders,
+        poTo = postingSource?.identityNamespaces?.postingPurchaseOrders;
+      if (!poFrom || !poTo) throw new Error('Composite PO/posting sources must declare identity namespaces');
+      if (!shared(poFrom, poTo, config.identity)) poPair = [poFrom, poTo];
+    }
     if (vendorPair && !config.identity?.crosswalk?.mapVendorId)
       throw new Error('Composite vendor/posting sources require a shared namespace or vendor ID crosswalk');
     if (poPair && !config.identity?.crosswalk?.mapPurchaseOrderId)

@@ -55,8 +55,9 @@ export function createPhase2Runtime(
         syncing = provider
           .billHistorySeed()
           .then(invoices => history.seed(invoices))
-          .finally(() => {
+          .catch(error => {
             syncing = undefined;
+            throw error;
           });
       return syncing;
     },

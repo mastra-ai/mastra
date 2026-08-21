@@ -3,7 +3,10 @@ import { runtimeSources } from '../composition.ts';
 import { ProviderUnavailableError, ReferenceCrosswalkError } from '../ports.ts';
 import { AssessmentStateSchema, type AssessmentState, type StepDecision } from '../schemas.ts';
 
-const days = (left: string, right: string) => Math.abs(Date.parse(left) - Date.parse(right)) / 86_400_000;
+const withinDuplicateWindow = (left: string, right: string) => {
+  const elapsed = Math.abs(Date.parse(left) - Date.parse(right));
+  return !Number.isFinite(elapsed) || elapsed / 86_400_000 <= 7;
+};
 export function makeDuplicateDetection(runtime: Phase2Runtime) {
   const sources = runtimeSources(runtime);
   return async (state: AssessmentState) => {
@@ -26,7 +29,7 @@ export function makeDuplicateDetection(runtime: Phase2Runtime) {
           candidate.invoiceNumber?.trim().toLowerCase() === state.invoice.invoiceNumber.trim().toLowerCase() ||
           (candidate.currency === state.invoice.currency &&
             candidate.totalMinor === state.invoice.totalMinor &&
-            days(candidate.invoiceDate, state.invoice.invoiceDate) <= 7),
+            withinDuplicateWindow(candidate.invoiceDate, state.invoice.invoiceDate)),
       );
       state.duplicateIds = duplicates.map(invoice => invoice.id);
       state.decisions.push({

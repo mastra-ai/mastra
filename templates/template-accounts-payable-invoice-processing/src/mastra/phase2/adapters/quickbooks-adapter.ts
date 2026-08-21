@@ -40,12 +40,13 @@ export interface QboClient {
   query<T>(entity: string, query: string): Promise<T[]>;
 }
 export class QboUnavailableError extends ProviderUnavailableError {
-  constructor(operation: string, cause?: unknown) {
-    super('quickbooks', operation, { cause });
+  constructor(operation: string, options?: { cause?: unknown; retryable?: boolean }) {
+    super('quickbooks', operation, options);
     this.name = 'QboUnavailableError';
   }
 }
-const quote = (value: string) => value.replaceAll("'", "\\'");
+const quote = (value: string) => value.replaceAll('\\', '\\\\').replaceAll("'", "\\'");
+const identity = (value: string) => value.replace(/[^a-z0-9]/gi, '').toLowerCase();
 const required = (value: string | undefined, field: string) => {
   if (!value) throw new Error(`QuickBooks ${field} missing`);
   return value;
@@ -100,18 +101,29 @@ export class HttpQboClient implements QboClient {
     private readonly realmId: string,
     private readonly accessToken: string,
     private readonly baseUrl = 'https://sandbox-quickbooks.api.intuit.com',
-  ) {}
+    private readonly timeoutMs = 30_000,
+  ) {
+    if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1)
+      throw new Error('QuickBooks request timeout must be a positive integer');
+  }
   async query<T>(entity: string, query: string): Promise<T[]> {
     try {
       const response = await fetch(
         `${this.baseUrl}/v3/company/${this.realmId}/query?query=${encodeURIComponent(query)}&minorversion=75`,
-        { headers: { Authorization: `Bearer ${this.accessToken}`, Accept: 'application/json' } },
+        {
+          headers: { Authorization: `Bearer ${this.accessToken}`, Accept: 'application/json' },
+          signal: AbortSignal.timeout(this.timeoutMs),
+        },
       );
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      if (!response.ok) {
+        const retryable = response.status === 408 || response.status === 429 || response.status >= 500;
+        throw new QboUnavailableError(`query ${entity} returned HTTP ${response.status}`, { retryable });
+      }
       const body = (await response.json()) as { QueryResponse?: Record<string, T[]> };
       return body.QueryResponse?.[entity] ?? [];
     } catch (error) {
-      throw new QboUnavailableError(`query ${entity}`, error);
+      if (error instanceof ProviderUnavailableError) throw error;
+      throw new QboUnavailableError(`query ${entity}`, { cause: error });
     }
   }
 }
@@ -119,16 +131,23 @@ export class QuickBooksAdapter implements VendorRepository, PurchaseOrderReposit
   constructor(
     private readonly client: QboClient,
     private readonly billPageSize = 1000,
+    private readonly billPageLimit = 100,
   ) {
     if (!Number.isInteger(billPageSize) || billPageSize < 1 || billPageSize > 1000)
       throw new Error('QuickBooks bill page size must be an integer from 1 to 1000');
+    if (!Number.isInteger(billPageLimit) || billPageLimit < 1)
+      throw new Error('QuickBooks bill page limit must be a positive integer');
   }
   async find(input: VendorLookup) {
     const rows = await this.client.query<QboVendor>(
       'Vendor',
       `select * from Vendor where DisplayName = '${quote(input.name)}'`,
     );
-    return rows.map(mapQboVendor);
+    const vendors = rows.map(mapQboVendor);
+    const taxId = input.taxId;
+    if (!taxId) return vendors;
+    const taxMatches = vendors.filter(vendor => vendor.taxId && identity(vendor.taxId) === identity(taxId));
+    return taxMatches.length ? taxMatches : vendors;
   }
   async findByNumber(poNumber: string) {
     const rows = await this.client.query<QboPurchaseOrder>(
@@ -139,14 +158,15 @@ export class QuickBooksAdapter implements VendorRepository, PurchaseOrderReposit
   }
   async billHistorySeed(): Promise<PriorInvoice[]> {
     const rows: QboBill[] = [];
-    for (let start = 1; ; start += this.billPageSize) {
+    for (let pageNumber = 0; pageNumber < this.billPageLimit; pageNumber++) {
+      const start = pageNumber * this.billPageSize + 1;
       const page = await this.client.query<QboBill>(
         'Bill',
         `select * from Bill startposition ${start} maxresults ${this.billPageSize}`,
       );
       rows.push(...page);
-      if (page.length < this.billPageSize) break;
+      if (page.length < this.billPageSize) return rows.map(mapQboBill);
     }
-    return rows.map(mapQboBill);
+    throw new QboUnavailableError('bill history result window exhausted', { retryable: false });
   }
 }

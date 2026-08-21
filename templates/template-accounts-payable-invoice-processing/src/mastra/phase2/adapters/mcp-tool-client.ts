@@ -59,6 +59,7 @@ export function createQuickBooksMcpToolClient(options: { enablePosting?: boolean
   ]);
   const client = new MCPClient({
     id: 'quickbooks-accounting',
+    timeout: 30_000,
     servers: {
       quickbooks: {
         command: process.execPath,

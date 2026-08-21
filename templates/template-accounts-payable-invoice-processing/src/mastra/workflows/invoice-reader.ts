@@ -51,6 +51,11 @@ const verifyInvoice = createStep({
     const reviewerId = resumeData ? (requestContext.get('reviewerId') ?? null) : null;
     if (resumeData && !reviewerId)
       throw new Error('reviewerId must come from authenticated request context when resuming verification');
+    const originalCandidate = {
+      ...inputData.draft,
+      source: inputData.rawDocumentRef.source,
+    };
+    const originalIssues = validateExtraction(originalCandidate).issues;
     const candidate = {
       ...(resumeData?.extracted ?? inputData.draft),
       source: inputData.rawDocumentRef.source,
@@ -60,7 +65,7 @@ const verifyInvoice = createStep({
     return {
       rawDocumentRef: inputData.rawDocumentRef,
       extractedResult: extracted,
-      checks: { passed: true, issues: [] },
+      checks: { passed: true, issues: resumeData ? originalIssues : issues },
       reviewerId,
     };
   },

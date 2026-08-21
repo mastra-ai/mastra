@@ -155,7 +155,7 @@ export function makeVendorValidation(runtime: Phase2Runtime) {
         state.decisions.push({
           step: 'vendor',
           outcome: uncertain ? 'verify_extraction' : 'review',
-          reviewType: uncertain ? null : 'vendor_identity_mismatch',
+          reviewType: uncertain ? 'verify_extraction' : 'vendor_identity_mismatch',
           reasons: [mismatchReason],
           signals,
           adaptations,

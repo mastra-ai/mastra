@@ -27,6 +27,8 @@ npm run phase2:run
 
 The workflow snapshot is persisted through Mastra's configured LibSQL storage at `MASTRA_DB_URL`. Without that variable, the template uses `<project>/data/mastra.db` regardless of the launch directory and creates the directory/database with owner-only permissions. The final workflow output includes `snapshot.rawDocumentRef` and `snapshot.extractedResult`; full workflow state is retained by Mastra for both completed and suspended runs.
 
+Snapshots contain financial data, including invoice lines, vendor tax IDs, and any available bank-detail fingerprints. Set a retention period that matches your accounting and privacy requirements. For the default local database, stop Mastra and delete `data/mastra.db` when the retained runs are no longer needed. For a remote `MASTRA_DB_URL`, apply the database provider's row-retention, backup-expiry, and deletion controls; removing the local file does not delete remote snapshots.
+
 Open the URL printed by `mastra dev`, select `apInvoiceWorkflow`, and start it with:
 
 ```json
@@ -48,10 +50,10 @@ The non-production fixture demo opens Studio without a login and assigns a fixed
 
 ```bash
 INVOICE_READER=vision
-INVOICE_READER_MODEL=openai/gpt-5.2
+INVOICE_READER_MODEL=openai/gpt-5.6-sol
 OPENAI_API_KEY=...
-INVOICE_ROOT=/absolute/path/to/invoices
-npm run invoice:run -- path/to/invoice.pdf
+INVOICE_ROOT=./assets
+npm run invoice:run -- assets/sample-invoice.png
 ```
 
 The vision reader accepts PDF, PNG, and JPEG files inside `INVOICE_ROOT`, checks file size before reading, verifies magic bytes and checksum, then sends those exact bytes as a multimodal file part. Use a provider/model that supports the document MIME type. The reader never returns ERP IDs, and document source metadata comes from the trusted input rather than the model.
@@ -146,7 +148,7 @@ npm run qbo-mcp:verify
 npm run dev
 ```
 
-The adapter converts MCP text/JSON into canonical Zod-validated records. Intuit's MCP PO search cannot filter by printed PO number, so it filters a bounded result window and reports a retryable integration failure instead of a false not-found when that window is exhausted.
+The adapter converts MCP text/JSON into canonical Zod-validated records. Intuit's MCP PO search cannot filter by printed PO number, so it filters a bounded result window and reports a non-retryable integration failure instead of a false not-found when that window is exhausted.
 
 Posting is disabled unless it is explicitly enabled with QuickBooks internal account IDs:
 
@@ -209,7 +211,7 @@ const provider = makeCompositeProvider({
 npm run providers:conformance
 ```
 
-The reusable kit verifies canonical Zod outputs, declared-port invariants, genuine not-found behavior, and the distinction between an empty result and a retryable `ProviderUnavailableError`. CI runs it against fixtures. Supply sandbox-specific known/missing cases and a faulting test transport to run it against a live adapter.
+The reusable kit verifies canonical Zod outputs, declared-port invariants, genuine not-found behavior, and the distinction between an empty result and a retryable `ProviderUnavailableError`. CI runs it against fixtures. Supply sandbox-specific known/missing cases and a faulting test transport to run it against a live adapter. Posting conformance is skipped unless the caller explicitly passes `{ allowPosting: true }`; only enable that option for an isolated fixture or sandbox where creating a Bill is intended.
 
 To add an accounting system:
 
@@ -223,7 +225,7 @@ Pipeline steps never consume raw accounting-system objects or read environment v
 
 ## Results and storage
 
-Mastra persists workflow state and snapshots through `LibSQLStore` at `MASTRA_DB_URL`. Without that variable it uses the owner-only `<project>/data/mastra.db`. Final output contains the normalized invoice, resolved canonical records, decisions, adaptations, sources, policy, disposition, approval evidence, and posting receipt. The fixture invoice-history and posting adapters are intentionally in-memory; a production deployment should bind pipeline history to its durable database.
+Mastra persists workflow state and snapshots through `LibSQLStore` at `MASTRA_DB_URL`. Without that variable it uses the owner-only `<project>/data/mastra.db`. Final output contains the normalized invoice, resolved canonical records, decisions, adaptations, sources, policy, disposition, approval evidence, and posting receipt. Apply the snapshot retention and deletion guidance above to this data. The fixture invoice-history and posting adapters are intentionally in-memory; a production deployment should bind pipeline history to its durable database.
 
 Chat intake returns the deterministic disposition, review types, every reason code with its message/evidence, capability adaptations, and posting status. It also appends one lifecycle event per run state to `<project>/data/ap-kpis.ndjson` (override with `AP_KPI_LOG_PATH`). KPI persistence is best-effort and cannot change a financial workflow result. Generate the current aggregate at any time with:
 

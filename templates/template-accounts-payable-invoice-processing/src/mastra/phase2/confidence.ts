@@ -25,8 +25,8 @@ export const requiredConfidenceFields = (invoice: Phase2Invoice) => [
   'poNumber',
   'invoiceDate',
   'currency',
-  'subtotal',
-  'tax',
+  ...(invoice.subtotalMinor === null ? [] : ['subtotal']),
+  ...(invoice.taxMinor === null ? [] : ['tax']),
   'total',
   ...invoice.lines.flatMap((line, index) => [
     `lines.${index}.description`,

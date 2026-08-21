@@ -32,14 +32,20 @@ const mismatchReasons = (mismatches: string[]) => [
         },
       ]
     : []),
-  ...(mismatches.some(mismatch => mismatch.endsWith('.missing') || mismatch === 'lines.uninvoicedPoLines')
+  ...(mismatches.some(
+    mismatch =>
+      mismatch.endsWith('.missing') || mismatch.endsWith('.lineTotal') || mismatch === 'lines.uninvoicedPoLines',
+  )
     ? [
         {
           code: 'LINE_ITEM_VARIANCE',
           message: 'Invoice and PO line items differ',
           evidence: {
             mismatches: mismatches.filter(
-              mismatch => mismatch.endsWith('.missing') || mismatch === 'lines.uninvoicedPoLines',
+              mismatch =>
+                mismatch.endsWith('.missing') ||
+                mismatch.endsWith('.lineTotal') ||
+                mismatch === 'lines.uninvoicedPoLines',
             ),
           },
         },
@@ -78,7 +84,12 @@ const reviewTypeFor = (mismatches: string[]) =>
     ? 'review_price_variance'
     : mismatches.some(mismatch => mismatch.endsWith('.qty'))
       ? 'review_quantity_variance'
-      : mismatches.some(mismatch => mismatch.endsWith('.missing') || mismatch === 'lines.uninvoicedPoLines')
+      : mismatches.some(
+            mismatch =>
+              mismatch.endsWith('.missing') ||
+              mismatch.endsWith('.lineTotal') ||
+              mismatch === 'lines.uninvoicedPoLines',
+          )
         ? 'review_line_item_variance'
         : mismatches.includes('currency')
           ? 'review_currency_mismatch'
@@ -192,6 +203,26 @@ export function makeInvoiceMatch(runtime: Phase2Runtime) {
       }
       state.matchMode = 'three_way';
       state.receipts = await provider.goodsReceipts.findByPurchaseOrderId(po.id);
+      const invoiceLinesWithoutSku = state.invoice.lines.filter(line => !line.sku).length,
+        receiptLinesWithoutSku = state.receipts.flatMap(receipt => receipt.lines).filter(line => !line.sku).length;
+      if (invoiceLinesWithoutSku > 1 || receiptLinesWithoutSku > 1) {
+        state.decisions.push({
+          step: 'match',
+          outcome: 'review',
+          reviewType: 'receipt_mismatch',
+          reasons: [
+            {
+              code: 'RECEIPT_LINE_IDENTITY_AMBIGUOUS',
+              message: 'Multiple lines without SKUs cannot be matched safely by position',
+              evidence: { matchMode: 'three_way', invoiceLinesWithoutSku, receiptLinesWithoutSku },
+            },
+          ],
+          signals: [],
+          adaptations,
+          sources: { purchaseOrders: sources.purchaseOrders, goodsReceipts: sources.goodsReceipts },
+        });
+        return AssessmentStateSchema.parse(state);
+      }
       const received = new Map<string, number>();
       for (const receipt of state.receipts)
         receipt.lines.forEach((line, index) => {

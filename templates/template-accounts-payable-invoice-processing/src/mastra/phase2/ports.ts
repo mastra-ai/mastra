@@ -57,14 +57,15 @@ export class ReferenceCrosswalkError extends Error {
 }
 
 export class ProviderUnavailableError extends Error {
-  readonly retryable = true;
+  readonly retryable: boolean;
   constructor(
     readonly providerId: string,
     readonly operation: string,
-    options?: { cause?: unknown },
+    options?: { cause?: unknown; retryable?: boolean },
   ) {
     super(`${providerId} unavailable during ${operation}`, options);
     this.name = 'ProviderUnavailableError';
+    this.retryable = options?.retryable ?? true;
   }
 }
 export class PostingConflictError extends Error {

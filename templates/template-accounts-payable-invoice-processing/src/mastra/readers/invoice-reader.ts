@@ -20,7 +20,7 @@ export function detectMediaType(data: Uint8Array) {
 async function readLocalDocument(document: DocumentRef) {
   if (!document.localPath) throw new Error('Vision reader requires document.localPath');
   const root = await realpath(resolve(process.env.INVOICE_ROOT ?? '.')),
-    localPath = await realpath(resolve(document.localPath)),
+    localPath = await realpath(resolve(root, document.localPath)),
     pathFromRoot = relative(root, localPath);
   if (pathFromRoot === '..' || pathFromRoot.startsWith(`..${sep}`) || isAbsolute(pathFromRoot))
     throw new Error(`Invoice file must be inside INVOICE_ROOT: ${root}`);
@@ -29,15 +29,16 @@ async function readLocalDocument(document: DocumentRef) {
   const file = await open(localPath, 'r');
   let data: Buffer;
   try {
-    if ((await file.stat()).size > limit) throw new Error(`Invoice exceeds INVOICE_MAX_BYTES (${limit})`);
-    const bounded = Buffer.allocUnsafe(limit + 1);
+    const { size } = await file.stat();
+    if (size > limit) throw new Error(`Invoice exceeds INVOICE_MAX_BYTES (${limit})`);
+    const bounded = Buffer.allocUnsafe(size + 1);
     let bytesRead = 0;
     while (bytesRead < bounded.length) {
       const read = await file.read(bounded, bytesRead, bounded.length - bytesRead, bytesRead);
       if (!read.bytesRead) break;
       bytesRead += read.bytesRead;
     }
-    if (bytesRead > limit) throw new Error(`Invoice exceeds INVOICE_MAX_BYTES (${limit})`);
+    if (bytesRead !== size) throw new Error('Invoice changed while it was being read');
     data = bounded.subarray(0, bytesRead);
   } finally {
     await file.close();
@@ -50,15 +51,15 @@ async function readLocalDocument(document: DocumentRef) {
   return { data, localPath, sha256 };
 }
 export async function prepareDocument(document: DocumentRef): Promise<DocumentRef> {
-  if (document.localPath && !allowedMediaTypes.has(document.mimeType))
+  if (!allowedMediaTypes.has(document.mimeType))
     throw new Error(`Unsupported invoice media type: ${document.mimeType}`);
-  const expectedSource =
-    document.mimeType === 'application/pdf' ? 'PDF' : document.mimeType.startsWith('image/') ? 'image' : undefined;
-  if (expectedSource && document.source !== expectedSource)
-    throw new Error(`Document source ${document.source} conflicts with ${document.mimeType}`);
-  if (!document.localPath) return document;
-  const { localPath, sha256 } = await readLocalDocument(document);
-  return { ...document, localPath, sha256 };
+  const normalized: DocumentRef = {
+    ...document,
+    source: document.mimeType === 'application/pdf' ? 'PDF' : 'image',
+  };
+  if (!normalized.localPath) return normalized;
+  const { localPath, sha256 } = await readLocalDocument(normalized);
+  return { ...normalized, localPath, sha256 };
 }
 
 class FixtureInvoiceReader implements InvoiceReader {

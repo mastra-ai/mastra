@@ -12,6 +12,7 @@ import {
   type VendorRepository,
 } from '../ports.ts';
 import { PostingReceiptSchema, PostingRequestSchema, type PostingRequest } from '../schemas.ts';
+import { toMajorUnits } from '../money.ts';
 import {
   mapQboBill,
   mapQboPurchaseOrder,
@@ -33,15 +34,15 @@ const ToolResultSchema = z
 const records = (result: unknown) => {
   const parsed = ToolResultSchema.parse(result),
     texts = parsed.content.flatMap(item => (item.type === 'text' && item.text ? [item.text] : []));
-  if (parsed.isError || texts.some(text => text.startsWith('Error ')))
-    throw new Error(texts.join('\n') || 'MCP tool returned an error');
+  if (parsed.isError) throw new Error(texts.join('\n') || 'MCP tool returned an error');
   return texts
     .flatMap(text => {
       try {
         const value: unknown = JSON.parse(text);
         return Array.isArray(value) ? value : [value];
       } catch {
-        return [];
+        if (/^Found \d+ records?:$/i.test(text.trim())) return [];
+        throw new Error(`MCP tool returned non-JSON output: ${text}`);
       }
     })
     .filter(
@@ -55,10 +56,6 @@ export interface QuickBooksMcpPostingConfig {
   apAccountId?: string;
   lockDirectory?: string;
 }
-const exponent = (currency: string) =>
-  new Intl.NumberFormat('en', { style: 'currency', currency }).resolvedOptions().maximumFractionDigits ?? 2;
-const major = (minor: number, currency: string) =>
-  new Decimal(minor).div(new Decimal(10).pow(exponent(currency))).toNumber();
 
 export class QuickBooksMcpAdapter implements VendorRepository, PurchaseOrderRepository, PostingAdapter {
   private verification?: Promise<void>;
@@ -111,7 +108,9 @@ export class QuickBooksMcpAdapter implements VendorRepository, PurchaseOrderRepo
     const rows = await this.call('search_purchase_orders', { limit: this.poLimit }),
       matches = rows.filter(row => row.DocNumber === poNumber);
     if (!matches.length && rows.length === this.poLimit)
-      throw new ProviderUnavailableError('quickbooks-mcp', 'search_purchase_orders result window exhausted');
+      throw new ProviderUnavailableError('quickbooks-mcp', 'search_purchase_orders result window exhausted', {
+        retryable: false,
+      });
     return matches.map(row => mapQboPurchaseOrder(row as QboPurchaseOrder));
   }
   async billHistorySeed() {
@@ -164,14 +163,15 @@ export class QuickBooksMcpAdapter implements VendorRepository, PurchaseOrderRepo
       criteria: [{ field: 'DocNumber', value: input.invoice.invoiceNumber, operator: '=' }],
       fetchAll: true,
     });
-    if (prior.length) {
-      const exact = prior.find(
+    const sameVendor = prior.filter(
+      row => row.VendorRef && (row.VendorRef as { value?: string }).value === input.vendor.id,
+    );
+    if (sameVendor.length) {
+      const exact = sameVendor.find(
         row =>
           row.PrivateNote === marker &&
           row.TxnDate === input.invoice.invoiceDate &&
-          row.VendorRef &&
-          (row.VendorRef as { value?: string }).value === input.vendor.id &&
-          row.TotalAmt === major(input.invoice.totalMinor, input.invoice.currency) &&
+          row.TotalAmt === toMajorUnits(input.invoice.totalMinor, input.invoice.currency) &&
           ((row.CurrencyRef as { value?: string } | undefined)?.value ?? input.invoice.currency) ===
             input.invoice.currency,
       );
@@ -190,6 +190,8 @@ export class QuickBooksMcpAdapter implements VendorRepository, PurchaseOrderRepo
     const tax = input.invoice.taxMinor ?? 0;
     if (tax && !config.taxAccountId)
       throw new PostingConflictError('QBO_MCP_TAX_ACCOUNT_ID is required to post an invoice with tax');
+    if (input.invoice.subtotalMinor !== null && input.invoice.subtotalMinor + tax !== input.invoice.totalMinor)
+      throw new PostingConflictError('Invoice subtotal and tax do not reconcile to the approved total');
     const amounts = input.invoice.lines.map(
       line =>
         line.lineTotalMinor ??
@@ -199,14 +201,14 @@ export class QuickBooksMcpAdapter implements VendorRepository, PurchaseOrderRepo
     if (amounts.reduce((sum, amount) => sum + amount, 0) !== expectedSubtotal)
       throw new PostingConflictError('Invoice lines do not reconcile to the posting subtotal');
     const line = input.invoice.lines.map((item, index) => ({
-      Amount: major(amounts[index]!, input.invoice.currency),
+      Amount: toMajorUnits(amounts[index]!, input.invoice.currency),
       DetailType: 'AccountBasedExpenseLineDetail',
       Description: item.description,
       AccountBasedExpenseLineDetail: { AccountRef: { value: config.expenseAccountId } },
     }));
     if (tax)
       line.push({
-        Amount: major(tax, input.invoice.currency),
+        Amount: toMajorUnits(tax, input.invoice.currency),
         DetailType: 'AccountBasedExpenseLineDetail',
         Description: 'Invoice tax',
         AccountBasedExpenseLineDetail: { AccountRef: { value: config.taxAccountId! } },
@@ -216,7 +218,7 @@ export class QuickBooksMcpAdapter implements VendorRepository, PurchaseOrderRepo
       DocNumber: input.invoice.invoiceNumber,
       TxnDate: input.invoice.invoiceDate,
       CurrencyRef: { value: input.invoice.currency },
-      TotalAmt: major(input.invoice.totalMinor, input.invoice.currency),
+      TotalAmt: toMajorUnits(input.invoice.totalMinor, input.invoice.currency),
       Line: line,
       PrivateNote: marker,
       ...(config.apAccountId && { APAccountRef: { value: config.apAccountId } }),
@@ -225,7 +227,8 @@ export class QuickBooksMcpAdapter implements VendorRepository, PurchaseOrderRepo
       }),
     };
     const created = (await this.call(postingTool, { bill }))[0];
-    if (!created?.Id) throw new ProviderUnavailableError('quickbooks-mcp', 'create-bill returned no Bill.Id');
+    if (!created?.Id)
+      throw new ProviderUnavailableError('quickbooks-mcp', 'create-bill returned no Bill.Id', { retryable: false });
     return PostingReceiptSchema.parse({
       status: 'posted',
       providerId: 'quickbooks-mcp',

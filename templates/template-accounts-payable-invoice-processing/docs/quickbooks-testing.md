@@ -20,7 +20,7 @@ npm run dev
 
 Keep `MASTRA_AUTH_TOKEN` available for Studio or API authentication. The fixture sanctions screener is for demos only. Bind a real `SanctionsScreener` before using production data.
 
-To test Bill creation through Intuit's MCP server, complete the [MCP setup](./advanced.md#intuit-quickbooks-mcp-server). Posting remains disabled until you explicitly enable it and supply QuickBooks account IDs.
+To test Bill creation through Intuit's MCP server, complete the [MCP setup](./advanced.md#intuit-quickbooks-mcp-server), then restart Mastra with `ACCOUNTING_PROVIDER=quickbooks-mcp`. Posting remains disabled until you explicitly enable it and supply QuickBooks account IDs.
 
 ## Prepare test data
 
@@ -71,15 +71,15 @@ Approval resumes the existing run. Rejection ends it without creating a Bill.
 
 Use a fresh invoice number for each test unless testing duplicates.
 
-| Test                  | Change                                               | Expected result                                             |
-| --------------------- | ---------------------------------------------------- | ----------------------------------------------------------- |
-| Unknown vendor        | Use a display name absent from the sandbox           | `VENDOR_NOT_FOUND`; no post                                 |
-| Missing PO            | Omit the PO number                                   | `PO_NUMBER_MISSING`; no post                                |
-| Price variance        | Change a unit price and reconcile the printed totals | `review_price_variance`; no post                            |
-| Quantity variance     | Change a quantity and reconcile the printed totals   | `review_quantity_variance`; no post                         |
-| Currency mismatch     | Use a currency different from the PO                 | `review_currency_mismatch`; no post                         |
-| Duplicate             | Process the same invoice number twice                | `POSSIBLE_DUPLICATE`; no second Bill                        |
-| Invalid authorization | Revoke or invalidate the sandbox token               | retryable integration failure, not a false not-found result |
+| Test                  | Change                                               | Expected result                                          |
+| --------------------- | ---------------------------------------------------- | -------------------------------------------------------- |
+| Unknown vendor        | Use a display name absent from the sandbox           | `VENDOR_NOT_FOUND`; no post                              |
+| Missing PO            | Omit the PO number                                   | `PO_NUMBER_MISSING`; no post                             |
+| Price variance        | Change a unit price and reconcile the printed totals | `review_price_variance`; no post                         |
+| Quantity variance     | Change a quantity and reconcile the printed totals   | `review_quantity_variance`; no post                      |
+| Currency mismatch     | Use a currency different from the PO                 | `review_currency_mismatch`; no post                      |
+| Duplicate             | Process the same invoice number twice                | `POSSIBLE_DUPLICATE`; no second Bill                     |
+| Invalid authorization | Revoke or invalidate the sandbox token               | non-retryable integration failure, not a false not-found |
 
 ## Verify a posted Bill
 

@@ -154,17 +154,17 @@ export class FixtureStatusRestrictionSource implements VendorStatusRestrictionSo
 export class FixturePostingAdapter implements PostingAdapter {
   private readonly receipts = new Map<string, PostingReceipt>();
   async postBill(input: Parameters<PostingAdapter['postBill']>[0]) {
-    input = PostingRequestSchema.parse(input);
-    const prior = this.receipts.get(input.idempotencyKey);
+    const request = PostingRequestSchema.parse(input);
+    const prior = this.receipts.get(request.idempotencyKey);
     if (prior) return { ...prior, status: 'already_posted' as const };
     const receipt = PostingReceiptSchema.parse({
       status: 'posted',
       providerId: 'fixture',
-      externalBillId: `fixture-${input.idempotencyKey.slice(0, 16)}`,
+      externalBillId: `fixture-${request.idempotencyKey.slice(0, 16)}`,
       postedAt: new Date().toISOString(),
-      idempotencyKey: input.idempotencyKey,
+      idempotencyKey: request.idempotencyKey,
     });
-    this.receipts.set(input.idempotencyKey, receipt);
+    this.receipts.set(request.idempotencyKey, receipt);
     return receipt;
   }
 }

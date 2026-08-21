@@ -11,7 +11,7 @@ export function buildApKpiReport(rows: ApKpiEvent[]) {
     [...events].sort((a, b) => Date.parse(a.recordedAt) - Date.parse(b.recordedAt)),
   );
   const latest = ordered.flatMap(events => {
-    const row = [...events].reverse().find(event => event.approvalState !== 'resume_failed') ?? events.at(-1);
+    const row = events.at(-1);
     return row ? [row] : [];
   });
   const isPending = (row: ApKpiEvent) =>

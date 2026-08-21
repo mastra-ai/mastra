@@ -11,20 +11,20 @@ import { validateExtraction } from '../mastra/validation/extraction-checks.ts';
 import { runProviderConformance } from '../mastra/phase2/conformance.ts';
 import { fixtureConformanceCases } from '../mastra/phase2/conformance-fixtures.ts';
 import { createPhase2Runtime } from '../mastra/phase2/composition.ts';
-import { toMinorUnits, normalizePhase1Output } from '../mastra/phase2/money.ts';
+import { toMajorUnits, toMinorUnits, normalizePhase1Output } from '../mastra/phase2/money.ts';
 import {
   FixturePolicyProvider,
   FixtureSanctionsScreener,
   InMemoryInvoiceHistoryRepository,
 } from '../mastra/phase2/adapters/fixture.ts';
-import { QuickBooksAdapter, type QboClient } from '../mastra/phase2/adapters/quickbooks-adapter.ts';
+import { HttpQboClient, QuickBooksAdapter, type QboClient } from '../mastra/phase2/adapters/quickbooks-adapter.ts';
 import { QuickBooksMcpAdapter } from '../mastra/phase2/adapters/quickbooks-mcp-adapter.ts';
 import type { McpToolClient } from '../mastra/phase2/adapters/mcp-tool-client.ts';
 import { makeCompositeProvider } from '../mastra/phase2/providers/composite-provider.ts';
 import { fixtureProvider } from '../mastra/phase2/providers/fixture-provider.ts';
 import { makeQuickBooksProvider } from '../mastra/phase2/providers/quickbooks-provider.ts';
 import { makeQuickBooksMcpProvider } from '../mastra/phase2/providers/quickbooks-mcp-provider.ts';
-import { providerRegistry } from '../mastra/phase2/providers/registry.ts';
+import { ProviderRegistry, providerRegistry } from '../mastra/phase2/providers/registry.ts';
 import { assertProvider } from '../mastra/phase2/providers/types.ts';
 import { makeInvoiceMatch } from '../mastra/phase2/steps/match.ts';
 import { makeDuplicateDetection } from '../mastra/phase2/steps/dedup.ts';
@@ -168,7 +168,28 @@ try {
     }),
     /INVOICE_ROOT/,
   );
-  await assert.rejects(prepareDocument({ id: 'source-mismatch', mimeType: 'image/png', source: 'PDF' }), /conflicts/);
+  assert.equal(
+    (await prepareDocument({ id: 'source-normalized', mimeType: 'image/png', source: 'PDF' })).source,
+    'image',
+  );
+  const previousRoot = process.env.INVOICE_ROOT;
+  try {
+    process.env.INVOICE_ROOT = tempDir;
+    assert.equal(
+      (
+        await prepareDocument({
+          id: 'relative-path',
+          localPath: 'invoice.pdf',
+          mimeType: 'application/pdf',
+          source: 'PDF',
+        })
+      ).localPath,
+      pdfPath,
+    );
+  } finally {
+    if (previousRoot === undefined) delete process.env.INVOICE_ROOT;
+    else process.env.INVOICE_ROOT = previousRoot;
+  }
   const previousLimit = process.env.INVOICE_MAX_BYTES;
   try {
     process.env.INVOICE_MAX_BYTES = '4';
@@ -196,11 +217,8 @@ assert.equal((await stat(defaultStoragePath)).mode & 0o777, 0o600);
 assert.equal((await stat(dirname(defaultStoragePath))).mode & 0o777, 0o700);
 
 const readerWorkflow = mastra.getWorkflow('invoiceReaderWorkflow');
-const originalSource = invoiceFixtures[0]!.draft.source;
-invoiceFixtures[0]!.draft.source = 'image';
 const sourceRun = await readerWorkflow.createRun(),
   sourceResult = await sourceRun.start({ inputData: invoiceFixtures[0]!.document });
-invoiceFixtures[0]!.draft.source = originalSource;
 assert.equal(sourceResult.status, 'success');
 if (sourceResult.status === 'success') assert.equal(sourceResult.result.extractedResult.source, 'PDF');
 
@@ -234,6 +252,7 @@ assert.equal(completedReview.status, 'success');
 if (completedReview.status === 'success') {
   assert.equal(completedReview.result.extractedResult.source, 'image');
   assert.equal(completedReview.result.reviewerId, 'reviewer');
+  assert.ok(completedReview.result.checks.issues.length > 0);
 }
 
 const composedWorkflow = mastra.getWorkflow('apInvoiceWorkflow'),
@@ -261,6 +280,7 @@ console.log('reader workflow and control tests passed');
 assert.equal(toMinorUnits(10.5, 'USD'), 1050);
 assert.equal(toMinorUnits(10.5, 'JPY'), 11);
 assert.equal(toMinorUnits(10.5, 'BHD'), 10_500);
+assert.equal(toMajorUnits(10_500, 'BHD'), 10.5);
 const clean = invoiceFixtures[0]!,
   normalized = normalizePhase1Output({
     rawDocumentRef: clean.document,
@@ -268,8 +288,20 @@ const clean = invoiceFixtures[0]!,
   });
 assert.equal(normalized.totalMinor, 10_800);
 
-await runProviderConformance(fixtureProvider, fixtureConformanceCases);
+const readOnlyConformance = await runProviderConformance(fixtureProvider, {
+  ...fixtureConformanceCases,
+  posting: undefined,
+});
+assert.ok(readOnlyConformance.checks.some(check => check.includes('explicit allowPosting opt-in')));
+await runProviderConformance(fixtureProvider, fixtureConformanceCases, { allowPosting: true });
 assert.throws(() => providerRegistry.create('missing'), /Unknown accounting provider/);
+let providerFactoryCalls = 0;
+const cachedRegistry = new ProviderRegistry().register('fixture', () => {
+  providerFactoryCalls++;
+  return fixtureProvider;
+});
+assert.equal(cachedRegistry.create('fixture'), cachedRegistry.create('fixture'));
+assert.equal(providerFactoryCalls, 1);
 
 const qboRows: Record<string, unknown[]> = {
   Vendor: [
@@ -309,6 +341,41 @@ const qboRows: Record<string, unknown[]> = {
 };
 const qboClient: QboClient = { query: async <T>(entity: string) => (qboRows[entity] ?? []) as T[] };
 const quickbooks = makeQuickBooksProvider(qboClient);
+let capturedVendorQuery = '';
+const duplicateVendorClient: QboClient = {
+  query: async <T>(_entity: string, query: string) => {
+    capturedVendorQuery = query;
+    return [
+      ...(qboRows.Vendor ?? []),
+      { Id: 'qbo_vendor_other', DisplayName: 'Acme Supplies', Active: true, TaxIdentifier: 'US-00-0000000' },
+    ] as T[];
+  },
+};
+const resolvedVendor = await new QuickBooksAdapter(duplicateVendorClient).find({
+  name: "Acme\\' Supplies",
+  taxId: 'US123456789',
+});
+assert.equal(resolvedVendor.length, 1);
+assert.equal(resolvedVendor[0]!.id, 'qbo_vendor_acme');
+assert.ok(capturedVendorQuery.includes("Acme\\\\\\' Supplies"));
+assert.throws(() => new HttpQboClient('realm', 'token', undefined, 0), /timeout/);
+const originalFetch = globalThis.fetch;
+try {
+  globalThis.fetch = (async () => new Response(null, { status: 401 })) as typeof fetch;
+  await assert.rejects(new HttpQboClient('realm', 'token').query('Vendor', 'select * from Vendor'), error => {
+    assert.ok(error instanceof ProviderUnavailableError);
+    assert.equal(error.retryable, false);
+    return true;
+  });
+  globalThis.fetch = (async () => new Response(null, { status: 429 })) as typeof fetch;
+  await assert.rejects(new HttpQboClient('realm', 'token').query('Vendor', 'select * from Vendor'), error => {
+    assert.ok(error instanceof ProviderUnavailableError);
+    assert.equal(error.retryable, true);
+    return true;
+  });
+} finally {
+  globalThis.fetch = originalFetch;
+}
 const billPages: Record<number, unknown[]> = {
   1: [
     {
@@ -346,6 +413,14 @@ const pageStarts: number[] = [],
   };
 assert.equal((await new QuickBooksAdapter(pagingClient, 2).billHistorySeed()).length, 3);
 assert.deepEqual(pageStarts, [1, 3]);
+const endlessPagingClient: QboClient = {
+  query: async <T>() => billPages[1] as T[],
+};
+await assert.rejects(new QuickBooksAdapter(endlessPagingClient, 2, 2).billHistorySeed(), error => {
+  assert.ok(error instanceof ProviderUnavailableError);
+  assert.equal(error.retryable, false);
+  return true;
+});
 const noDocNumberClient: QboClient = {
   query: async <T>() =>
     [
@@ -432,12 +507,24 @@ await assert.rejects(
   makeQuickBooksMcpProvider(failingMcp).vendors!.find({ name: 'Acme Supplies' }),
   ProviderUnavailableError,
 );
+const malformedMcp: McpToolClient = {
+  ...qboMcpClient,
+  call: async () => ({ content: [{ type: 'text', text: 'unexpected plain text' }] }),
+};
+await assert.rejects(
+  makeQuickBooksMcpProvider(malformedMcp).vendors!.find({ name: 'Acme Supplies' }),
+  ProviderUnavailableError,
+);
 const truncatedMcp: McpToolClient = {
   listToolNames: qboMcpClient.listToolNames,
   call: async () => mcpResult([{ DocNumber: 'OTHER' }]),
   disconnect: async () => undefined,
 };
-await assert.rejects(new QuickBooksMcpAdapter(truncatedMcp, 1).findByNumber('PO-MISSING'), ProviderUnavailableError);
+await assert.rejects(new QuickBooksMcpAdapter(truncatedMcp, 1).findByNumber('PO-MISSING'), error => {
+  assert.ok(error instanceof ProviderUnavailableError);
+  assert.equal(error.retryable, false);
+  return true;
+});
 
 let createdBill: Record<string, unknown> | undefined;
 const postingMcp: McpToolClient = {
@@ -511,6 +598,13 @@ assert.equal(billPayload.LinkedTxn[0]!.TxnId, 'po_1001');
 assert.ok(billPayload.PrivateNote.includes(testDigest));
 createdBill = { ...createdBill, PrivateNote: 'unrelated bill' };
 await assert.rejects(postingAdapter.postBill(postingRequest), /conflicting bill/);
+createdBill = {
+  Id: 'other-vendor-bill',
+  DocNumber: normalized.invoiceNumber,
+  VendorRef: { value: 'different-vendor' },
+  PrivateNote: 'unrelated bill',
+};
+assert.equal((await postingAdapter.postBill(postingRequest)).status, 'posted');
 await assert.rejects(
   new QuickBooksMcpAdapter(
     {
@@ -523,6 +617,13 @@ await assert.rejects(
   ProviderUnavailableError,
 );
 createdBill = undefined;
+await assert.rejects(
+  postingAdapter.postBill({
+    ...postingRequest,
+    invoice: { ...normalized, invoiceNumber: 'BAD-TOTAL', subtotalMinor: normalized.subtotalMinor! - 1 },
+  }),
+  /subtotal and tax/,
+);
 await assert.rejects(
   new QuickBooksMcpAdapter(postingMcp, 1000, { expenseAccountId: 'expense-1' }).postBill({
     ...postingRequest,
@@ -593,6 +694,21 @@ assert.throws(
       purchaseOrders: quickbooks,
     }),
   /vendor ID crosswalk/,
+);
+const selfContainedProvider = assertProvider({
+  ...fixtureProvider,
+  id: 'self-contained',
+  identityNamespaces: undefined,
+});
+assert.equal(
+  makeCompositeProvider({
+    id: 'self-contained-composite',
+    displayName: 'Self-contained provider',
+    vendors: selfContainedProvider,
+    purchaseOrders: selfContainedProvider,
+    posting: selfContainedProvider,
+  }).capabilities.posting,
+  true,
 );
 assert.throws(
   () =>
@@ -760,6 +876,13 @@ const optionalLowConfidenceState = await makeVendorValidation(fixtureRuntime)({
   confidence: [...indexedLineConfidence, { field: 'vendorTaxId', confidence: 0.1 }],
 });
 assert.equal(optionalLowConfidenceState.decisions[0]!.outcome, 'pass');
+const nullableMoneyConfidenceState = await makeVendorValidation(fixtureRuntime)({
+  ...normalized,
+  subtotalMinor: null,
+  taxMinor: null,
+  confidence: normalized.confidence.filter(item => !['subtotal', 'tax'].includes(item.field)),
+});
+assert.equal(nullableMoneyConfidenceState.decisions[0]!.outcome, 'pass');
 const unknownVendorState = await makeVendorValidation(fixtureRuntime)({
   ...normalized,
   vendorName: 'Not A Sandbox Vendor LLC',
@@ -791,6 +914,57 @@ assert.ok(
 assert.ok(lineMismatchState.decisions.at(-1)!.reasons.some(reason => reason.code === 'PRICE_VARIANCE'));
 assert.ok(lineMismatchState.decisions.at(-1)!.reasons.some(reason => reason.code === 'QUANTITY_VARIANCE'));
 assert.equal((await makePolicyRouting(fixtureRuntime)(lineMismatchState)).disposition, 'review');
+let lineTotalMismatchState = await makeVendorValidation(fixtureRuntime)({
+  ...normalized,
+  lines: [{ ...normalized.lines[0]!, lineTotalMinor: normalized.lines[0]!.lineTotalMinor! - 10 }],
+});
+lineTotalMismatchState = await makeInvoiceMatch(fixtureRuntime)(lineTotalMismatchState);
+assert.equal(lineTotalMismatchState.decisions.at(-1)!.reviewType, 'review_line_item_variance');
+assert.ok(lineTotalMismatchState.decisions.at(-1)!.reasons.some(reason => reason.code === 'LINE_ITEM_VARIANCE'));
+
+const ambiguousReceiptProvider = assertProvider({
+  ...fixtureProvider,
+  id: 'ambiguous-receipts',
+  purchaseOrders: {
+    findByNumber: async () => [
+      {
+        id: 'po_sku_less',
+        poNumber: normalized.poNumber!,
+        vendorId: 'vendor_acme',
+        currency: normalized.currency,
+        totalMinor: normalized.totalMinor,
+        lines: [
+          { sku: null, description: 'First service', qty: 1, unitPriceMinor: 5000, lineTotalMinor: 5000 },
+          { sku: null, description: 'Second service', qty: 1, unitPriceMinor: 5000, lineTotalMinor: 5000 },
+        ],
+      },
+    ],
+  },
+  goodsReceipts: {
+    findByPurchaseOrderId: async () => [
+      {
+        id: 'receipt_sku_less',
+        purchaseOrderId: 'po_sku_less',
+        receivedAt: normalized.invoiceDate,
+        lines: [
+          { sku: null, qty: 1 },
+          { sku: null, qty: 1 },
+        ],
+      },
+    ],
+  },
+});
+const ambiguousReceiptRuntime = createPhase2Runtime({ provider: ambiguousReceiptProvider });
+let ambiguousReceiptState = await makeVendorValidation(ambiguousReceiptRuntime)({
+  ...normalized,
+  lines: [
+    { sku: null, description: 'First service', qty: 1, unitPriceMinor: 5000, lineTotalMinor: 5000 },
+    { sku: null, description: 'Second service', qty: 1, unitPriceMinor: 5000, lineTotalMinor: 5000 },
+  ],
+});
+ambiguousReceiptState = await makeInvoiceMatch(ambiguousReceiptRuntime)(ambiguousReceiptState);
+assert.equal(ambiguousReceiptState.decisions.at(-1)!.reviewType, 'receipt_mismatch');
+assert.equal(ambiguousReceiptState.decisions.at(-1)!.reasons[0]!.code, 'RECEIPT_LINE_IDENTITY_AMBIGUOUS');
 
 let identityMismatchState = await makeVendorValidation(fixtureRuntime)({
   ...normalized,
@@ -800,6 +974,15 @@ identityMismatchState = await makeInvoiceMatch(fixtureRuntime)(identityMismatchS
 identityMismatchState = await makeDuplicateDetection(fixtureRuntime)(identityMismatchState);
 assert.equal((await makePolicyRouting(fixtureRuntime)(identityMismatchState)).disposition, 'review');
 assert.equal(identityMismatchState.decisions[0]!.reasons[0]!.code, 'VENDOR_TAX_ID_MISMATCH');
+const uncertainIdentityMismatchState = await makeVendorValidation(fixtureRuntime)({
+  ...normalized,
+  vendorTaxId: 'US-99-9999999',
+  confidence: [
+    ...normalized.confidence.filter(item => item.field !== 'vendorTaxId'),
+    { field: 'vendorTaxId', confidence: 0.1 },
+  ],
+});
+assert.equal(uncertainIdentityMismatchState.decisions[0]!.reviewType, 'verify_extraction');
 
 for (const vendor of [
   {
@@ -868,6 +1051,26 @@ let unlabeledState = await makeVendorValidation(unlabeledRuntime)({
 unlabeledState = await makeInvoiceMatch(unlabeledRuntime)(unlabeledState);
 unlabeledState = await makeDuplicateDetection(unlabeledRuntime)(unlabeledState);
 assert.ok(unlabeledState.duplicateIds.includes('unlabeled'));
+const invalidDateHistory = new InMemoryInvoiceHistoryRepository();
+await invalidDateHistory.seed([
+  {
+    id: 'invalid-date',
+    vendorId: 'vendor_acme',
+    invoiceNumber: null,
+    invoiceDate: 'not-a-date',
+    currency: normalized.currency,
+    totalMinor: normalized.totalMinor,
+    channel: null,
+  },
+]);
+const invalidDateRuntime = createPhase2Runtime({ provider: fixtureProvider, history: invalidDateHistory });
+let invalidDateState = await makeVendorValidation(invalidDateRuntime)({
+  ...normalized,
+  invoiceNumber: 'NEW-NUMBER',
+});
+invalidDateState = await makeInvoiceMatch(invalidDateRuntime)(invalidDateState);
+invalidDateState = await makeDuplicateDetection(invalidDateRuntime)(invalidDateState);
+assert.ok(invalidDateState.duplicateIds.includes('invalid-date'));
 const currencyHistory = new InMemoryInvoiceHistoryRepository();
 await currencyHistory.seed([
   {
@@ -931,7 +1134,7 @@ providerHistory = [
   },
 ];
 await refreshRuntime.seedHistory();
-assert.equal(refreshCalls, 3);
+assert.equal(refreshCalls, 2);
 assert.equal(
   (
     await refreshHistory.findPotentialDuplicates({
@@ -941,7 +1144,7 @@ assert.equal(
       totalMinor: 200,
     })
   ).length,
-  1,
+  0,
 );
 
 const approved = await makePolicyRouting(fixtureRuntime)({
@@ -1023,6 +1226,10 @@ try {
   process.env.NODE_ENV = 'development';
   process.env.ACCOUNTING_PROVIDER = 'fixture';
   assert.doesNotThrow(() => signAssessment({ disposition: 'auto_post' }));
+  assert.equal(
+    signAssessment({ invoice: { total: 108, vendor: { name: 'Acme', id: 'vendor_acme' } }, disposition: 'auto_post' }),
+    signAssessment({ disposition: 'auto_post', invoice: { vendor: { id: 'vendor_acme', name: 'Acme' }, total: 108 } }),
+  );
 
   process.env.MASTRA_HOST = '0.0.0.0';
   assert.throws(() => signAssessment({ disposition: 'auto_post' }), /server-only AP_ASSESSMENT_SIGNING_KEY/);
@@ -1125,11 +1332,19 @@ const kpiReport = buildApKpiReport([
     approvalState: 'approved',
   },
   { ...kpiBase, runId: 'still-pending', recordedAt: '2026-08-14T00:00:06.000Z' },
+  { ...kpiBase, runId: 'terminal-failed-resume', recordedAt: '2026-08-14T00:00:07.000Z' },
+  {
+    ...kpiBase,
+    runId: 'terminal-failed-resume',
+    recordedAt: '2026-08-14T00:00:09.000Z',
+    integrationFailure: true,
+    approvalState: 'resume_failed',
+  },
 ]);
-assert.equal(kpiReport.runs, 5);
+assert.equal(kpiReport.runs, 6);
 assert.equal(kpiReport.straightThroughProcessingRate, 1 / 4);
 assert.deepEqual(kpiReport.approvalTimeMs, { count: 2, average: 5000 });
-assert.equal(kpiReport.integrationFailures, 2);
+assert.equal(kpiReport.integrationFailures, 3);
 assert.equal(kpiReport.pendingApprovals, 1);
 const badKpiTarget = await mkdtemp(join(dirname(defaultStoragePath), 'kpi-failure-test-'));
 const priorKpiPath = process.env.AP_KPI_LOG_PATH;

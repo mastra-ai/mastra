@@ -14,15 +14,20 @@ import {
 export type ProviderFactory = () => AccountingProvider;
 export class ProviderRegistry {
   private readonly factories = new Map<string, ProviderFactory>();
+  private readonly instances = new Map<string, AccountingProvider>();
   register(id: string, factory: ProviderFactory) {
     if (this.factories.has(id)) throw new Error(`Provider ${id} already registered`);
     this.factories.set(id, factory);
     return this;
   }
   create(id: string) {
+    const instance = this.instances.get(id);
+    if (instance) return instance;
     const factory = this.factories.get(id);
     if (!factory) throw new Error(`Unknown accounting provider: ${id}`);
-    return assertProvider(factory());
+    const created = assertProvider(factory());
+    this.instances.set(id, created);
+    return created;
   }
   ids() {
     return [...this.factories.keys()];

@@ -237,7 +237,7 @@ const resumeApproval = createTool({
 export const invoiceChatIntakeAgent = new Agent({
   id: 'accounts-payable-agent',
   name: 'Accounts Payable Agent',
-  model: process.env.INVOICE_READER_MODEL ?? 'openai/gpt-5.2',
+  model: process.env.INVOICE_READER_MODEL ?? 'openai/gpt-5.6-sol',
   instructions: `An explicit approval or rejection for an existing run takes priority over invoice intake. If the user says approve or reject and supplies a run ID, do not request an attachment: call resolve-invoice-approval exactly once with that run ID, approved true for approval or false for rejection, and the supplied comment if any. That action requires an authenticated reviewer but no invoice attachment.
 
 Otherwise, process one invoice attachment at a time. Read only values visibly printed on the attached PDF, PNG, or JPEG; use null or omit fields that are unreadable. Always include an honest overallConfidence and field-level confidence entries. Name line confidence fields with indexed paths such as lines[0].description, lines[0].qty, and lines[0].unitPrice. A missing PDF text layer alone is not low confidence: judge the visible rendered page. Use low confidence (below 0.8) only for fields that are visually degraded, such as blur, noise, skew, cropping, occlusion, or ambiguous/unreadable characters. Then call submit-invoice-for-processing exactly once with the extracted draft. Never invent vendor IDs, PO IDs, accounting IDs, or values. Report the disposition, review types, all reason details and evidence, and adaptations returned by the tool; do not invent an adaptation. If it reports approvalPending, present the runId and wait for an authenticated reviewer to explicitly approve or reject it; only then call resolve-invoice-approval.`,

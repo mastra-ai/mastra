@@ -49,6 +49,7 @@ async function expectUnavailable(run: () => Promise<unknown>, label: string) {
 export async function runProviderConformance(
   provider: AccountingProvider,
   cases: ProviderConformanceCases,
+  options: { allowPosting?: boolean } = {},
 ): Promise<ConformanceReport> {
   assertProvider(provider);
   const checks: string[] = [];
@@ -127,14 +128,17 @@ export async function runProviderConformance(
     checks.push('billHistory: canonical seed');
   }
   if (provider.posting) {
-    check(cases.posting, 'Posting conformance case is required');
-    const first = PostingReceiptSchema.parse(await provider.posting.postBill(cases.posting!)),
-      second = PostingReceiptSchema.parse(await provider.posting.postBill(cases.posting!));
-    check(
-      first.idempotencyKey === second.idempotencyKey && second.status === 'already_posted',
-      'Posting must be idempotent',
-    );
-    checks.push('posting: canonical and idempotent receipt');
+    if (!options.allowPosting) checks.push('posting: skipped; explicit allowPosting opt-in required');
+    else {
+      check(cases.posting, 'Posting conformance case is required');
+      const first = PostingReceiptSchema.parse(await provider.posting.postBill(cases.posting!)),
+        second = PostingReceiptSchema.parse(await provider.posting.postBill(cases.posting!));
+      check(
+        first.idempotencyKey === second.idempotencyKey && second.status === 'already_posted',
+        'Posting must be idempotent',
+      );
+      checks.push('posting: canonical and idempotent receipt');
+    }
   }
   return { providerId: provider.id, checks };
 }

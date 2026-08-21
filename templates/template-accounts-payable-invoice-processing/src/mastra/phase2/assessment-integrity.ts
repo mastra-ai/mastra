@@ -11,9 +11,19 @@ const signingKey = () => {
   return 'local-development-assessment-key';
 };
 
+const canonical = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (value && typeof value === 'object')
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+        .map(([key, nested]) => [key, canonical(nested)]),
+    );
+  return value;
+};
 const payload = (assessment: Record<string, unknown>) => {
   const { assessmentSignature: _signature, ...unsigned } = assessment;
-  return JSON.stringify(unsigned);
+  return JSON.stringify(canonical(unsigned));
 };
 
 export const signAssessment = (assessment: Record<string, unknown>) =>
