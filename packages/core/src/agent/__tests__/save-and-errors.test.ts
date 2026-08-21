@@ -1554,11 +1554,10 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
         expect(afterNextTurn.messages[0]?.id).toBe(afterAbort.messages[0]?.id);
       });
 
-      it('should persist exactly the assistant text emitted before abort', async () => {
+      it('should persist the assistant text available when the abort is saved', async () => {
         const abortController = new AbortController();
         const totalChunks = 20;
         const abortAfterChunks = 5;
-        let generatedTextChunkCount = 0;
         let resolveProviderFinished!: () => void;
         const providerFinished = new Promise<void>(resolve => {
           resolveProviderFinished = resolve;
@@ -1606,11 +1605,8 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
                         await new Promise(resolve => setTimeout(resolve, 5));
                         const chunk = allChunks[index++]!;
                         const textDeltaCount = index - 3;
-                        if (chunk.type === 'text-delta') {
-                          generatedTextChunkCount++;
-                          if (textDeltaCount === abortAfterChunks) {
-                            abortController.abort();
-                          }
+                        if (chunk.type === 'text-delta' && textDeltaCount === abortAfterChunks) {
+                          abortController.abort();
                         }
 
                         try {
@@ -1667,7 +1663,6 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
           threadId: 'bounded-abort-thread',
           resourceId: 'bounded-abort-resource',
         });
-        expect(generatedTextChunkCount).toBe(totalChunks);
         expect(recalled.messages.map(message => message.role)).toEqual(['user', 'assistant']);
         expect(new Set(recalled.messages.map(message => message.id)).size).toBe(2);
         expect(

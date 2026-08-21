@@ -26,26 +26,13 @@ import {
 } from './run-scope-keys';
 import type { AgentCapabilities, PrepareMemoryStepOutput, PrepareToolsStepOutput } from './schema';
 
-/**
- * Assistant text that was already streamed to the caller when the abort happened.
- *
- * Prefers the snapshot taken when the abort signal fired. Falls back to the aborted finish
- * payload, which the stream builds from its own buffer at the abort event. Text a provider
- * emitted after cancellation is never included.
- */
-function getPartialAbortedText(
-  payload: { text?: string; finishReason?: string },
-  streamedTextAtAbort?: string,
-): string {
-  if (typeof streamedTextAtAbort === 'string' && streamedTextAtAbort.length > 0) {
-    return streamedTextAtAbort;
+/** Selects the most complete cumulative assistant text available when an aborted transcript is persisted. */
+export function getAbortedTextAtSaveTime(payloadText: string | undefined, streamedText: string): string {
+  if (typeof payloadText === 'string' && payloadText.length > streamedText.length) {
+    return payloadText;
   }
 
-  if (payload.finishReason === 'aborted' && typeof payload.text === 'string') {
-    return payload.text;
-  }
-
-  return '';
+  return streamedText;
 }
 
 interface MapResultsStepOptions<OUTPUT = undefined> {
@@ -97,24 +84,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
 
     let threadCreatedByStep = false;
     let abortTranscriptPersisted = false;
-    // Text already handed to the caller. Snapshotted the moment the abort signal fires so
-    // chunks a provider keeps producing after cancellation can never widen the snapshot.
     let streamedText = '';
-    let streamedTextAtAbort: string | undefined;
-
-    if (options.abortSignal) {
-      if (options.abortSignal.aborted) {
-        streamedTextAtAbort = streamedText;
-      } else {
-        options.abortSignal.addEventListener(
-          'abort',
-          () => {
-            streamedTextAtAbort = streamedText;
-          },
-          { once: true },
-        );
-      }
-    }
 
     const result = {
       ...options,
@@ -378,7 +348,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
 
               try {
                 if (memory && memoryData.thread && result.threadId && saveQueueManager && !memoryConfig?.readOnly) {
-                  const partialText = getPartialAbortedText(payload, streamedTextAtAbort);
+                  const partialText = getAbortedTextAtSaveTime(payload.text, streamedText);
                   const responseMessages = messageList.get.response.db();
                   const currentResponseId = payload.response?.id;
                   const currentResponseAlreadyPresent =
@@ -386,7 +356,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
                     responseMessages.some(message => message.id === currentResponseId);
 
                   // Aborting cannot erase submitted history or completed tool side effects, which may
-                  // represent irreversible external actions. Only text visible before abort is added.
+                  // represent irreversible external actions. Include assistant text available at save time.
                   if (partialText.trim().length > 0 && !currentResponseAlreadyPresent) {
                     messageList.add(
                       {
