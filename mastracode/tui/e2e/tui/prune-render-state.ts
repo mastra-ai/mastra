@@ -85,7 +85,7 @@ export const pruneRenderStateScenario: McE2eScenario = {
     let retainedTool: Component | undefined;
     const thresholdDeadline = Date.now() + 30_000;
     while ((!prunedTool || !retainedTool) && Date.now() < thresholdDeadline) {
-      prunedTool ??= tuiState.pendingAskUserComponents.get('call_prune_0000');
+      prunedTool ??= tuiState.pendingAskUserComponents.get('call_prune_1000');
       retainedTool ??= tuiState.pendingTools.get('call_prune_1667') as Component | undefined;
       await runtime.sleep(10);
     }

@@ -25,6 +25,7 @@ export const activeSignalFollowupScenario: McE2eScenario = {
     runtime.printScreen('after active follow-up submit', terminal);
 
     await runtime.waitForScreenText(/Active signal follow-up completed\./i, terminal, 60_000);
+    await runtime.waitForScreenText(/╭ steer /i, terminal, 5_000);
     runtime.printScreen('after active follow-up response', terminal);
 
     const completedView = terminal.serialize().view;
