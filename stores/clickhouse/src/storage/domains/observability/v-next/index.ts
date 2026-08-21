@@ -107,6 +107,8 @@ import {
   ALL_TABLE_NAMES,
   DELTA_CURSOR_COUNTER_NAMES,
   DELTA_MV_NAMES,
+  hasDiscoveryRefreshAppend,
+  supportsRefreshableMvAppend,
   MV_DISCOVERY_VALUES,
   MV_DISCOVERY_PAIRS,
   TABLE_DISCOVERY_VALUES,
@@ -247,20 +249,6 @@ async function filterAppliedRetention(
   });
 }
 
-/**
- * Reconciles the discovery helper tables with the engine declared in the
- * current DDL. Skips tables that are already on the expected engine or that
- * don't exist yet; in those cases the regular `CREATE TABLE IF NOT EXISTS`
- * in init() handles them.
- *
- * When an engine mismatch is found, the refreshable MV is dropped first so
- * it can't write into the table mid-drop, then the table itself is dropped.
- * Init's subsequent `CREATE TABLE IF NOT EXISTS` and discovery MV bootstrap
- * recreate both with the current definitions.
- *
- * Silently returns if `system.tables` can't be queried — the rest of init
- * will still run and leave any existing tables untouched.
- */
 async function assertExistingTablesCompatibleWithReplication(
   client: ClickHouseClient,
   replication: ClickhouseReplicationConfig | undefined,
@@ -284,10 +272,36 @@ async function assertExistingTablesCompatibleWithReplication(
   }
 }
 
+/**
+ * Reconciles the discovery helper tables with the engine declared in the
+ * current DDL. Skips tables that are already on the expected engine or that
+ * don't exist yet; in those cases the regular `CREATE TABLE IF NOT EXISTS`
+ * in init() handles them.
+ *
+ * When an engine mismatch is found, the refreshable MV is dropped first so
+ * it can't write into the table mid-drop, then the table itself is dropped.
+ * Init's subsequent `CREATE TABLE IF NOT EXISTS` and discovery MV bootstrap
+ * recreate both with the current definitions.
+ *
+ * Also drops (and lets init recreate) discovery MVs whose refresh clause lacks
+ * `APPEND`, but only when the ClickHouse server is ≥ 24.9 (APPEND support).
+ * Without APPEND, refreshes use an atomic table swap that fails with
+ * ClickHouse error 36 when the target is a Replicated or Shared MergeTree
+ * inside a plain Atomic database. The derived helper table is retained in that
+ * case. On older servers, legacy non-APPEND MVs are left untouched.
+ *
+ * Silently returns if `system.tables` can't be queried — the rest of init
+ * will still run and leave any existing tables untouched.
+ */
 async function reconcileDiscoveryTables(
   client: ClickHouseClient,
   replication?: ClickhouseReplicationConfig,
 ): Promise<void> {
+  const targets: Array<{ table: string; mv: string }> = [
+    { table: TABLE_DISCOVERY_VALUES, mv: MV_DISCOVERY_VALUES },
+    { table: TABLE_DISCOVERY_PAIRS, mv: MV_DISCOVERY_PAIRS },
+  ];
+
   let engines: Map<string, string>;
   try {
     const result = await client.query({
@@ -301,11 +315,6 @@ async function reconcileDiscoveryTables(
     return;
   }
 
-  const targets: Array<{ table: string; mv: string }> = [
-    { table: TABLE_DISCOVERY_VALUES, mv: MV_DISCOVERY_VALUES },
-    { table: TABLE_DISCOVERY_PAIRS, mv: MV_DISCOVERY_PAIRS },
-  ];
-
   // ClickHouse Cloud rewrites `ReplacingMergeTree` to `SharedReplacingMergeTree`
   // and self-managed replicated clusters rewrite it to `ReplicatedReplacingMergeTree`.
   // `isReplacingMergeTreeEngine` accepts all three so we don't churn the helper
@@ -315,6 +324,49 @@ async function reconcileDiscoveryTables(
     if (!engine || isReplacingMergeTreeEngine(engine)) continue;
     await client.command({ query: addOnClusterToDDL(`DROP VIEW IF EXISTS ${mv}`, replication) });
     await client.command({ query: addOnClusterToDDL(`DROP TABLE IF EXISTS ${table}`, replication) });
+  }
+
+  // Upgrade path for #21168: existing installs may already have ReplacingMergeTree
+  // helper tables (so the engine check above keeps them) paired with legacy
+  // non-APPEND refreshable MVs. `CREATE MATERIALIZED VIEW IF NOT EXISTS` would
+  // leave those definitions stale — drop only the MV so init recreates it with
+  // APPEND while retaining the derived target table.
+  //
+  // APPEND landed in ClickHouse 24.9. On older servers, leave legacy non-APPEND
+  // MVs in place: dropping them would remove working refreshes that init cannot
+  // recreate with APPEND DDL.
+  let appendSupported = false;
+  try {
+    const result = await client.query({
+      query: `SELECT version() AS version`,
+      format: 'JSONEachRow',
+    });
+    const rows = (await result.json()) as Array<{ version?: string }>;
+    appendSupported = supportsRefreshableMvAppend(rows[0]?.version ?? '');
+  } catch {
+    // If version() is unavailable, skip the upgrade rather than risk dropping
+    // working MVs on an unsupported server.
+    return;
+  }
+  if (!appendSupported) return;
+
+  let createQueries: Map<string, string>;
+  try {
+    const result = await client.query({
+      query: `SELECT name, create_table_query FROM system.tables WHERE database = currentDatabase() AND name IN ({mvs:Array(String)})`,
+      query_params: { mvs: [MV_DISCOVERY_VALUES, MV_DISCOVERY_PAIRS] },
+      format: 'JSONEachRow',
+    });
+    const rows = (await result.json()) as Array<{ name: string; create_table_query?: string | null }>;
+    createQueries = new Map(rows.map(r => [r.name, r.create_table_query ?? '']));
+  } catch {
+    return;
+  }
+
+  for (const { mv } of targets) {
+    const ddl = createQueries.get(mv);
+    if (!ddl || hasDiscoveryRefreshAppend(ddl)) continue;
+    await client.command({ query: addOnClusterToDDL(`DROP VIEW IF EXISTS ${mv}`, replication) });
   }
 }
 
