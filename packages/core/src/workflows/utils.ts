@@ -530,7 +530,9 @@ export const createTimeTravelExecutionParams = (params: {
           ? (context?.[stepId]?.output ?? stepOutput ?? snapshotContext[stepId]?.output ?? {})
           : undefined,
         resumePayload: stepContext?.resumePayload,
-        suspendPayload: stepContext?.suspendPayload ?? (isTargetEntry ? foreachSuspendPayload : undefined),
+        suspendPayload:
+          stepContext?.suspendPayload ??
+          (entry.type === 'foreach' && stepId === firstStepId ? foreachSuspendPayload : undefined),
         suspendOutput: stepContext?.suspendOutput,
         startedAt: stepContext?.startedAt ?? Date.now(),
         endedAt: isCompleteStatus ? (stepContext?.endedAt ?? Date.now()) : undefined,
