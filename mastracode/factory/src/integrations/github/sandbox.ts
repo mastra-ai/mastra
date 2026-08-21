@@ -17,7 +17,6 @@
  * and `gh pr create`. Workdir layout lives in `../sandbox/workdir`.
  */
 
-import { createHash } from 'node:crypto';
 import { reportProgress } from '../../sandbox/materialization.js';
 import type { MaterializationSandbox, ProgressFn, SandboxCommandResult } from '../../sandbox/materialization.js';
 import type { MastraFactorySandboxConfig } from '../../sandbox/session-sandbox.js';
@@ -903,119 +902,6 @@ export class WorktreeError extends Error {
 }
 
 /**
- * Reduce a (already ref-validated) branch name to a filesystem-safe directory
- * segment for the worktree path: slashes/dots/unsafe chars collapsed to `-`.
- * This only affects the *directory name*, never the git branch itself.
- *
- * Sanitization is lossy (e.g. `feat/a` and `feat-a` both reduce to `feat-a`),
- * so an 8-char hash of the original branch is appended whenever the sanitized
- * form differs from the input. That keeps clean names (`main`) readable while
- * guaranteeing distinct branches never share a worktree directory.
- */
-export function safeBranchDir(branch: string): string {
-  const sanitized =
-    branch
-      .replace(/[^A-Za-z0-9._-]+/g, '-')
-      .replace(/\/+/g, '-')
-      .replace(/^[-.]+|[-.]+$/g, '')
-      .slice(0, 100) || 'work';
-  if (sanitized === branch) return sanitized;
-  const hash = createHash('sha256').update(branch).digest('hex').slice(0, 8);
-  return `${sanitized}-${hash}`;
-}
-
-/**
- * Compute the absolute worktree path for a branch, server-side only. Worktrees
- * live alongside the repo checkout under a sibling `worktrees/` directory so the
- * repo's `.git` is shared. Never derived from client-supplied paths.
- */
-export function computeWorktreePath(repoWorkdir: string, branch: string): string {
-  const parent = repoWorkdir.replace(/\/+$/, '').split('/').slice(0, -1).join('/') || '';
-  return `${parent}/worktrees/${safeBranchDir(branch)}`;
-}
-
-export interface EnsureWorktreeResult {
-  worktreePath: string;
-  branch: string;
-  baseBranch: string;
-  /** True when an existing worktree was reused rather than freshly created. */
-  reused: boolean;
-}
-
-/**
- * Create (or reuse) a git worktree + branch inside the sandbox for a unit of
- * work. Idempotent: if a worktree already exists at the computed path it is
- * reused. The branch is created from the freshly fetched `origin/<baseBranch>`
- * — never the sandbox's possibly stale local ref — so new worktrees always
- * start from the latest remote state.
- *
- * @param sandbox       live sandbox containing the base checkout
- * @param repoWorkdir   the base repo checkout path inside the sandbox
- * @param branch        the feature branch (ref-validated server-side)
- * @param baseBranch    the branch to fork from (ref-validated; defaults to the repo's default branch)
- * @param token         short-lived installation token used only for the base-branch fetch
- * @param repoFullName  `owner/repo` used to build the tokenized remote URL
- */
-export async function ensureWorktree(
-  sandbox: MaterializationSandbox,
-  repoWorkdir: string,
-  {
-    branch,
-    baseBranch,
-    token,
-    repoFullName,
-  }: { branch: string; baseBranch: string; token: string; repoFullName: string },
-): Promise<EnsureWorktreeResult> {
-  if (!isValidGitRef(branch)) {
-    throw new WorktreeError(`Invalid branch name '${branch}'.`, 'invalid-branch');
-  }
-  if (!isValidGitRef(baseBranch)) {
-    throw new WorktreeError(`Invalid base branch name '${baseBranch}'.`, 'invalid-branch');
-  }
-
-  const worktreePath = computeWorktreePath(repoWorkdir, branch);
-
-  // Idempotent reuse: a worktree already checked out at this path has a `.git`
-  // file (worktrees use a gitfile, not a directory). Reuse it as-is.
-  const exists = await sh(sandbox, `test -e ${shellQuote(`${worktreePath}/.git`)}`);
-  if (exists.exitCode === 0) {
-    return { worktreePath, branch, baseBranch, reused: true };
-  }
-
-  // Fetch the latest base ref from origin before forking. The explicit refspec
-  // updates `refs/remotes/origin/<base>` even when the checkout was created as
-  // a single-branch clone. The fetch needs the install token (the resting
-  // remote is tokenless), and a failure is a hard error — silently forking a
-  // stale local ref is worse than failing the request.
-  const baseRef = `origin/${baseBranch}`;
-  await withInstallToken(sandbox, repoWorkdir, repoFullName, token, async () => {
-    const fetch = await sh(
-      sandbox,
-      `git -C ${shellQuote(repoWorkdir)} fetch origin ${shellQuote(`+refs/heads/${baseBranch}:refs/remotes/${baseRef}`)}`,
-    );
-    if (fetch.exitCode !== 0) {
-      throw classifyGitFailure(fetch, 'pull-failed');
-    }
-  });
-
-  // Create the worktree. If the branch already exists, check it out into the
-  // worktree; otherwise create it from the fetched base. `git worktree add -B`
-  // creates-or-resets the branch to the base, which keeps this idempotent for a
-  // fresh worktree while still working when the branch already exists remotely.
-  // `--no-track` keeps the feature branch from tracking origin/<base>; pushes
-  // set their own upstream via `push -u`.
-  const add = await sh(
-    sandbox,
-    `git -C ${shellQuote(repoWorkdir)} worktree add --no-track -B ${shellQuote(branch)} ${shellQuote(worktreePath)} ${shellQuote(baseRef)}`,
-  );
-  if (add.exitCode !== 0) {
-    throw new WorktreeError(`git worktree add failed: ${add.stderr.trim() || add.stdout.trim()}`, 'worktree-failed');
-  }
-
-  return { worktreePath, branch, baseBranch, reused: false };
-}
-
-/**
  * Run the project's setup command (e.g. `pnpm i && pnpm build`) inside a
  * freshly created worktree. Called before the worktree is handed to any agent
  * run so the checkout is ready to build/test. A non-zero exit is a hard error —
@@ -1080,59 +966,6 @@ export async function runWorktreeTeardown(
     ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
   });
 }
-
-/**
- * Remove a worktree (and its local feature branch) from the sandbox. The
- * checkout is removed with `--force` — the caller owns confirming that any
- * uncommitted work in it can be discarded. Idempotent: a worktree whose
- * directory is already gone only has its metadata pruned.
- *
- * @param sandbox       live sandbox containing the base checkout
- * @param repoWorkdir   the base repo checkout path inside the sandbox
- * @param branch        the worktree's feature branch (ref-validated)
- * @param worktreePath  the persisted, server-computed worktree path
- */
-export async function removeWorktree(
-  sandbox: MaterializationSandbox,
-  repoWorkdir: string,
-  { branch, worktreePath }: { branch: string; worktreePath: string },
-): Promise<void> {
-  if (!isValidGitRef(branch)) {
-    throw new WorktreeError(`Invalid branch name '${branch}'.`, 'invalid-branch');
-  }
-
-  const remove = await sh(
-    sandbox,
-    `git -C ${shellQuote(repoWorkdir)} worktree remove --force ${shellQuote(worktreePath)}`,
-  );
-  if (remove.exitCode !== 0) {
-    // Tolerate a checkout that's already gone (e.g. a fresh sandbox after
-    // re-provisioning): prune stale metadata and only fail when the directory
-    // still exists, meaning git genuinely refused to remove it.
-    await sh(sandbox, `git -C ${shellQuote(repoWorkdir)} worktree prune`);
-    const exists = await sh(sandbox, `test -e ${shellQuote(worktreePath)}`);
-    if (exists.exitCode === 0) {
-      throw new WorktreeError(
-        `git worktree remove failed: ${remove.stderr.trim() || remove.stdout.trim()}`,
-        'worktree-failed',
-      );
-    }
-  }
-
-  // Best-effort local branch cleanup; the branch may not exist locally anymore
-  // or may still be pushed remotely — neither should fail the removal.
-  await sh(sandbox, `git -C ${shellQuote(repoWorkdir)} branch -D ${shellQuote(branch)}`);
-}
-
-// ---------------------------------------------------------------------------
-// Phase 3 — `gh` CLI pull-request creation primitive
-//
-// PRs are opened from inside the sandbox with the GitHub CLI. `gh` must be
-// present in the sandbox template (preflighted only on the PR path so clone /
-// open still work when it is absent). The token is passed to `gh` via a
-// per-invocation `GH_TOKEN` env that is scoped to the single `gh` process and
-// never written to git config, a shell rc, or the VM's environment.
-// ---------------------------------------------------------------------------
 
 export interface CreatePullRequestArgs {
   /** Short-lived installation token, injected only into the `gh` process env. */

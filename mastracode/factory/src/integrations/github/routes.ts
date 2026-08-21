@@ -42,7 +42,6 @@ import type { GithubPatKind } from './pat.js';
 import { reclaimDeletedSessionSandbox } from './sandbox-release.js';
 import {
   commitAll,
-  computeWorktreePath,
   ensureProjectSandbox,
   isValidGitRef as isValidGitRefSandbox,
   materializeRepo,

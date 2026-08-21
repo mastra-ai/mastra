@@ -215,11 +215,6 @@ const ensureProjectSandbox = vi.fn(
 );
 const materializeRepo = vi.fn(async (_opts: any) => {});
 const reattachSandbox = vi.fn(async (_id: string) => ({ id: 'sb' }));
-const ensureWorktree = vi.fn(async (_sb: any, _workdir: string, opts: { branch: string; baseBranch: string }) => ({
-  worktreePath: `/workspace/hello/../worktrees/${opts.branch}`,
-  branch: opts.branch,
-  baseBranch: opts.baseBranch,
-}));
 const commitAll = vi.fn(async () => ({ committed: true }));
 // pushBranch is overridable per-test so S2 can make it block on a deferred.
 let pushImpl: (...args: any[]) => Promise<void> = async () => {};
@@ -254,7 +249,6 @@ vi.mock('./sandbox', () => {
   return {
     ensureProjectSandbox: (opts: any) => ensureProjectSandbox(opts),
     materializeRepo: (opts: any) => materializeRepo(opts),
-    ensureWorktree: (sb: any, workdir: string, opts: any) => ensureWorktree(sb, workdir, opts),
     commitAll: (...args: any[]) => commitAll(...(args as [])),
     pushBranch: (...args: any[]) => pushBranch(...(args as [])),
     createPullRequest: (...args: any[]) => createPullRequest(...(args as [])),
@@ -411,7 +405,6 @@ beforeEach(() => {
   ensureProjectSandbox.mockClear();
   materializeRepo.mockClear();
   reattachSandbox.mockClear();
-  ensureWorktree.mockClear();
   commitAll.mockClear();
   pushBranch.mockClear();
   createPullRequest.mockClear();

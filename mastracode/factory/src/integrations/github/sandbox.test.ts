@@ -12,13 +12,11 @@ import type {
 } from '../../storage/domains/source-control/base.js';
 import {
   checkoutSessionBranch,
-  computeWorktreePath,
   configureGitIdentity,
   createPullRequest,
   ensureProjectSandbox as ensureProjectSandboxWithStorage,
   projectSandboxKey,
   teardownProjectSandbox,
-  ensureWorktree,
   isValidGitRef,
   materializeRepo as materializeRepoWithStorage,
   MaterializeError,
@@ -26,7 +24,6 @@ import {
   resolveGitIdentity,
   runWorktreeSetup,
   runWorktreeTeardown,
-  safeBranchDir,
   shellQuote,
   withInstallToken,
   WorktreeError,
@@ -1055,146 +1052,6 @@ describe('pushBranch', () => {
     const err = await pushBranch(sandbox, '/workspace/hello', 'feat/x', 'tok', 'octocat/hello').catch(e => e);
     expect(err).toBeInstanceOf(MaterializeError);
     expect(err.code).toBe('egress-blocked');
-  });
-});
-
-describe('safeBranchDir', () => {
-  it('leaves already-safe names untouched', () => {
-    expect(safeBranchDir('main')).toBe('main');
-    expect(safeBranchDir('release-1.2.3')).toBe('release-1.2.3');
-  });
-
-  it('collapses slashes and unsafe chars and appends a hash to stay unique', () => {
-    expect(safeBranchDir('feat/cloud-agent')).toBe('feat-cloud-agent-53bf6e98');
-    expect(safeBranchDir('release/1.2.3')).toBe('release-1.2.3-88ded651');
-  });
-
-  it('never produces an empty segment', () => {
-    expect(safeBranchDir('///')).toBe('work-732c4e97');
-  });
-
-  it('gives ambiguous branches distinct directories', () => {
-    // Without the hash suffix both of these would collapse to `feat-a`.
-    expect(safeBranchDir('feat/a')).not.toBe(safeBranchDir('feat-a'));
-  });
-});
-
-describe('computeWorktreePath', () => {
-  it('places worktrees in a sibling worktrees/ dir of the repo checkout', () => {
-    expect(computeWorktreePath('/workspace/hello', 'feat/x')).toBe('/workspace/worktrees/feat-x-79b4cc55');
-  });
-
-  it('tolerates a trailing slash on the repo workdir', () => {
-    expect(computeWorktreePath('/workspace/hello/', 'main')).toBe('/workspace/worktrees/main');
-  });
-});
-
-describe('ensureWorktree', () => {
-  const WT_OPTS = { branch: 'feat/x', baseBranch: 'main', token: 'tok', repoFullName: 'octocat/hello' };
-
-  // The default FakeSandbox responder returns OK for everything, which would
-  // make `test -e <path>/.git` look like the worktree already exists. Use a
-  // responder that fails the existence check so the create path runs.
-  const notExisting = (script: string): SandboxCommandResult =>
-    script.startsWith('test -e') ? { exitCode: 1, stdout: '', stderr: '' } : OK;
-
-  it('creates a branch + worktree from the freshly fetched origin base when none exists', async () => {
-    const sandbox = new FakeSandbox(notExisting);
-    const result = await ensureWorktree(sandbox, '/workspace/hello', WT_OPTS);
-
-    expect(result).toEqual({
-      worktreePath: '/workspace/worktrees/feat-x-79b4cc55',
-      branch: 'feat/x',
-      baseBranch: 'main',
-      reused: false,
-    });
-    const joined = sandbox.calls.join('\n');
-    // The base branch is fetched from origin with an explicit refspec so the
-    // fork point is the latest remote state, not the stale local ref.
-    expect(joined).toContain("git -C '/workspace/hello' fetch origin '+refs/heads/main:refs/remotes/origin/main'");
-    expect(joined).toContain(
-      "git -C '/workspace/hello' worktree add --no-track -B 'feat/x' '/workspace/worktrees/feat-x-79b4cc55' 'origin/main'",
-    );
-  });
-
-  it('fetches with the install token and scrubs the remote afterwards', async () => {
-    const sandbox = new FakeSandbox(notExisting);
-    await ensureWorktree(sandbox, '/workspace/hello', WT_OPTS);
-
-    const setUrlIdx = sandbox.calls.findIndex(c => c.includes('remote set-url origin') && c.includes('tok'));
-    const fetchIdx = sandbox.calls.findIndex(c => c.includes('fetch origin'));
-    const scrubIdx = sandbox.calls.findIndex(c => c.includes('remote set-url origin') && !c.includes('tok'));
-    expect(setUrlIdx).toBeGreaterThanOrEqual(0);
-    expect(fetchIdx).toBeGreaterThan(setUrlIdx);
-    expect(scrubIdx).toBeGreaterThan(fetchIdx);
-  });
-
-  it('fails instead of forking a stale local ref when the fetch fails', async () => {
-    const sandbox = new FakeSandbox(script => {
-      if (script.startsWith('test -e')) return { exitCode: 1, stdout: '', stderr: '' };
-      if (script.includes('fetch origin')) return { exitCode: 128, stdout: '', stderr: 'fatal: unable to fetch' };
-      return OK;
-    });
-    const err = await ensureWorktree(sandbox, '/workspace/hello', WT_OPTS).catch(e => e);
-    expect(err).toBeInstanceOf(MaterializeError);
-    expect(err.code).toBe('pull-failed');
-    expect(sandbox.calls.some(c => c.includes('worktree add'))).toBe(false);
-  });
-
-  it('classifies an egress-blocked fetch failure', async () => {
-    const sandbox = new FakeSandbox(script => {
-      if (script.startsWith('test -e')) return { exitCode: 1, stdout: '', stderr: '' };
-      if (script.includes('fetch origin'))
-        return { exitCode: 128, stdout: '', stderr: 'fatal: unable to access: Could not resolve host: github.com' };
-      return OK;
-    });
-    const err = await ensureWorktree(sandbox, '/workspace/hello', WT_OPTS).catch(e => e);
-    expect(err).toBeInstanceOf(MaterializeError);
-    expect(err.code).toBe('egress-blocked');
-  });
-
-  it('reuses an existing worktree without fetching or running git worktree add', async () => {
-    // Default responder => `test -e` returns OK => path exists => reuse.
-    const sandbox = new FakeSandbox();
-    const result = await ensureWorktree(sandbox, '/workspace/hello', WT_OPTS);
-
-    expect(result.reused).toBe(true);
-    expect(result.worktreePath).toBe('/workspace/worktrees/feat-x-79b4cc55');
-    expect(sandbox.calls.some(c => c.includes('worktree add'))).toBe(false);
-    expect(sandbox.calls.some(c => c.includes('fetch origin'))).toBe(false);
-  });
-
-  it('rejects an unsafe branch name before touching the sandbox', async () => {
-    const sandbox = new FakeSandbox(notExisting);
-    const err = await ensureWorktree(sandbox, '/workspace/hello', {
-      ...WT_OPTS,
-      branch: "x'; rm -rf /; '",
-    }).catch(e => e);
-    expect(err).toBeInstanceOf(WorktreeError);
-    expect(err.code).toBe('invalid-branch');
-    expect(sandbox.calls).toHaveLength(0);
-  });
-
-  it('rejects an unsafe base branch name', async () => {
-    const sandbox = new FakeSandbox(notExisting);
-    const err = await ensureWorktree(sandbox, '/workspace/hello', {
-      ...WT_OPTS,
-      baseBranch: 'bad branch',
-    }).catch(e => e);
-    expect(err).toBeInstanceOf(WorktreeError);
-    expect(err.code).toBe('invalid-branch');
-    expect(sandbox.calls).toHaveLength(0);
-  });
-
-  it('surfaces a worktree-failed error when git worktree add fails', async () => {
-    const sandbox = new FakeSandbox(script => {
-      if (script.startsWith('test -e')) return { exitCode: 1, stdout: '', stderr: '' };
-      if (script.includes('worktree add')) return { exitCode: 1, stdout: '', stderr: 'fatal: branch in use' };
-      return OK;
-    });
-    const err = await ensureWorktree(sandbox, '/workspace/hello', WT_OPTS).catch(e => e);
-    expect(err).toBeInstanceOf(WorktreeError);
-    expect(err.code).toBe('worktree-failed');
   });
 });
 

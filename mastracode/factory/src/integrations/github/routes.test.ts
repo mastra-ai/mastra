@@ -422,12 +422,6 @@ const materializeRepo = vi.fn(
   },
 );
 const reattachSandbox = vi.fn(async (_id: string, _options?: { actingUserId?: string }) => ({ id: 'sb' }));
-const ensureWorktree = vi.fn(async (_sb: any, _workdir: string, opts: { branch: string; baseBranch: string }) => ({
-  worktreePath: `/workspace/hello/../worktrees/${opts.branch}`,
-  branch: opts.branch,
-  baseBranch: opts.baseBranch,
-}));
-const removeWorktree = vi.fn(async (_sb: any, _workdir: string, _opts: { branch: string; worktreePath: string }) => {});
 const runWorktreeSetup = vi.fn(async (_sb: any, _worktreePath: string, _command: string) => {});
 const runWorktreeTeardown = vi.fn(async (_sb: any, _worktreePath: string, _command: string) => {});
 const commitAll = vi.fn(async () => ({ committed: true }));
@@ -456,12 +450,8 @@ vi.mock('./sandbox', () => {
   }
   return {
     DEFAULT_COMMAND_TIMEOUT_MS: 15 * 60_000,
-    computeWorktreePath: (repoWorkdir: string, branch: string) =>
-      `${repoWorkdir.replace(/\/+$/, '').split('/').slice(0, -1).join('/')}/worktrees/${branch.replace('/', '-')}-aeab418d`,
     ensureProjectSandbox: (opts: any) => ensureProjectSandbox(opts),
     materializeRepo: (opts: any) => materializeRepo(opts),
-    ensureWorktree: (sb: any, workdir: string, opts: any) => ensureWorktree(sb, workdir, opts),
-    removeWorktree: (sb: any, workdir: string, opts: any) => removeWorktree(sb, workdir, opts),
     runWorktreeSetup: (sb: any, worktreePath: string, command: string) => runWorktreeSetup(sb, worktreePath, command),
     runWorktreeTeardown: (sb: any, worktreePath: string, command: string, options?: { timeoutMs?: number }) =>
       runWorktreeTeardown(sb, worktreePath, command, options),
@@ -682,8 +672,6 @@ beforeEach(() => {
   ensureProjectSandbox.mockClear();
   materializeRepo.mockClear();
   reattachSandbox.mockClear();
-  ensureWorktree.mockClear();
-  removeWorktree.mockClear();
   runWorktreeSetup.mockClear();
   runWorktreeTeardown.mockClear();
   commitAll.mockClear();
@@ -1758,7 +1746,6 @@ describe('Factory session routes', () => {
     });
     expect(session.sessionId).toEqual(expect.any(String));
     expect(tables.sessions).toHaveLength(1);
-    expect(ensureWorktree).not.toHaveBeenCalled();
     expect(ensureProjectSandbox).not.toHaveBeenCalled();
   });
 
