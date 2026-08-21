@@ -26,15 +26,6 @@ import {
 } from './run-scope-keys';
 import type { AgentCapabilities, PrepareMemoryStepOutput, PrepareToolsStepOutput } from './schema';
 
-/** Selects the most complete cumulative assistant text available when an aborted transcript is persisted. */
-export function getAbortedTextAtSaveTime(payloadText: string | undefined, streamedText: string): string {
-  if (typeof payloadText === 'string' && payloadText.length > streamedText.length) {
-    return payloadText;
-  }
-
-  return streamedText;
-}
-
 interface MapResultsStepOptions<OUTPUT = undefined> {
   capabilities: AgentCapabilities;
   options: InnerAgentExecutionOptions<OUTPUT>;
@@ -83,8 +74,6 @@ export function createMapResultsStep<OUTPUT = undefined>({
     const convertedTools = runScope.get(CONVERTED_TOOLS_KEY);
 
     let threadCreatedByStep = false;
-    let abortTranscriptPersisted = false;
-    let streamedText = '';
 
     const result = {
       ...options,
@@ -335,66 +324,13 @@ export function createMapResultsStep<OUTPUT = undefined>({
           const aborted = payload.finishReason === 'aborted' || options.abortSignal?.aborted === true;
 
           if (aborted) {
-            const endAbortedSpan = () => {
-              if (payload.finishReason === 'aborted') {
-                agentSpan?.end({ output: { status: 'aborted', reason: 'abort' } });
-              } else {
-                agentSpan?.end();
-              }
-            };
-
-            if (!abortTranscriptPersisted) {
-              abortTranscriptPersisted = true;
-
-              try {
-                if (memory && memoryData.thread && result.threadId && saveQueueManager && !memoryConfig?.readOnly) {
-                  const partialText = getAbortedTextAtSaveTime(payload.text, streamedText);
-                  const responseMessages = messageList.get.response.db();
-                  const currentResponseId = payload.response?.id;
-                  const currentResponseAlreadyPresent =
-                    typeof currentResponseId === 'string' &&
-                    responseMessages.some(message => message.id === currentResponseId);
-
-                  // Aborting cannot erase submitted history or completed tool side effects, which may
-                  // represent irreversible external actions. Include assistant text available at save time.
-                  if (partialText.trim().length > 0 && !currentResponseAlreadyPresent) {
-                    messageList.add(
-                      {
-                        ...(typeof currentResponseId === 'string' && { id: currentResponseId }),
-                        role: 'assistant',
-                        content: [{ type: 'text', text: partialText }],
-                      },
-                      'response',
-                    );
-                  }
-
-                  if (!memoryData.threadExists && !threadCreatedByStep) {
-                    await memory.createThread({
-                      threadId: memoryData.thread.id,
-                      title: memoryData.thread.title,
-                      metadata: memoryData.thread.metadata,
-                      resourceId: memoryData.thread.resourceId,
-                      memoryConfig,
-                    });
-                    threadCreatedByStep = true;
-                  }
-
-                  await saveQueueManager.flushMessages(messageList, result.threadId, memoryConfig);
-                }
-              } catch (e) {
-                capabilities.logger.error('Error saving memory on abort', {
-                  error: e,
-                  runId,
-                });
-              }
-
-              endAbortedSpan();
-            }
-
-            // The aborted finish payload is synthetic; the caller already received onAbort.
             if (payload.finishReason === 'aborted') {
+              agentSpan?.end({ output: { status: 'aborted', reason: 'abort' } });
+              // The aborted finish payload is synthetic; the caller already received onAbort.
               return;
             }
+
+            agentSpan?.end();
           } else {
             try {
               const outputText =
@@ -452,12 +388,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
           });
         },
         onStepFinish: result.onStepFinish,
-        onChunk: async (chunk: any) => {
-          if (chunk.type === 'text-delta') {
-            streamedText += chunk.payload.text;
-          }
-          await options.onChunk?.(chunk);
-        },
+        onChunk: options.onChunk,
         onError: options.onError,
         onAbort: options.onAbort,
         abortSignal: options.abortSignal,
