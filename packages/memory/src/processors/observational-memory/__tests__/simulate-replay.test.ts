@@ -111,6 +111,17 @@ describe('replayCycles', () => {
     expect(result.curations.some(curation => curation.outcome === 'ran' && curation.cursorAdvanced)).toBe(true);
   });
 
+  it('curates the tail when the cycle count is not a multiple of the cadence', async () => {
+    const memory = createMemory();
+    curatorAlwaysCompletes();
+
+    const result = await run(memory, { cycles: cycles(3), curationCadence: 2 });
+
+    // Cadence 2 over 3 cycles: one scheduled curation at cycle 1, one flush at cycle 2.
+    // Without the flush the last cycle's knowledge would never reach the curator.
+    expect(result.curations.map(curation => curation.cycleIndex)).toEqual([1, 2]);
+  });
+
   it('fails fast when no Subconscious is configured rather than reporting an empty run', async () => {
     const memory = createMemory({ subconscious: undefined });
     await expect(run(memory)).rejects.toThrow(/experimental_subconscious/);

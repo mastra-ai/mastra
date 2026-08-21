@@ -137,6 +137,20 @@ async function main() {
       console.log(`CURATION_${arm.toUpperCase()}_${outcome.toUpperCase()}=${count}`);
     }
   }
+
+  // An arm whose curator never completed holds raw capture output. Its knowledge is at a
+  // different stage of the pipeline than an arm that curated, so the diff measures that
+  // difference as much as it measures the prompt. Say so instead of letting the numbers imply
+  // a clean comparison.
+  const uncurated = Object.entries(outcomes)
+    .filter(([, counts]) => !counts.ran)
+    .map(([arm]) => arm);
+  console.log(`UNCURATED_ARMS=${uncurated.length ? uncurated.join(',') : 'none'}`);
+  for (const arm of uncurated) {
+    console.log(
+      `WARNING: arm ${arm} completed 0 curations — its knowledge is uncurated capture output and the diff is not a curated-vs-curated comparison.`,
+    );
+  }
 }
 
 main().catch(error => {

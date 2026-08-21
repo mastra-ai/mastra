@@ -207,6 +207,42 @@ export async function replayCycles(options: ReplayOptions): Promise<ReplayResult
   const warnings: string[] = [];
   let sinceLastCuration = 0;
 
+  const runCurationStep = async (cycleIndex: number, requestContext: RequestContext) => {
+    const cursorBefore = await store.getCurationCursor({ sourceThreadId: threadId, agent: 'curate' });
+    const worklistBefore = await countWorklist(store, threadId, scope, cursorBefore?.lastKnowledgeId);
+    // The curator is fail-closed: a model reply missing the completion marker throws.
+    // That is a property of the model under test, not of the replay, so it is recorded
+    // as a `failed` curation and counted in the summary rather than killing the arm.
+    let outcome: CurationOutcome;
+    try {
+      ({ outcome } = await memory.runCuration({ threadId, resourceId, requestContext }));
+    } catch (error) {
+      outcome = 'failed';
+      warnings.push(`cycle ${cycleIndex}: curation failed (${error instanceof Error ? error.message : String(error)})`);
+    }
+
+    if (outcome === 'skipped' || outcome === 'no-model') {
+      throw new Error(`cycle ${cycleIndex}: curation returned "${outcome}"; aborting the arm.`);
+    }
+    if (outcome === 'no-op' && worklistBefore > 0) {
+      throw new Error(
+        `cycle ${cycleIndex}: curation returned "no-op" with ${worklistBefore} pending records; aborting the arm.`,
+      );
+    }
+
+    const cursorAfter = await store.getCurationCursor({ sourceThreadId: threadId, agent: 'curate' });
+    const cursorAdvanced =
+      Boolean(cursorAfter?.lastKnowledgeId) && cursorAfter?.lastKnowledgeId !== cursorBefore?.lastKnowledgeId;
+    if (outcome === 'ran' && !cursorAdvanced) {
+      warnings.push(`cycle ${cycleIndex}: curation ran but the curation cursor did not advance`);
+    }
+
+    curations.push({ cycleIndex, outcome, worklistBefore, cursorAdvanced });
+    options.onEvent?.(
+      `CURATION=${cycleIndex} outcome=${outcome} worklist=${worklistBefore} advanced=${cursorAdvanced}`,
+    );
+  };
+
   for (const [cycleIndex, cycle] of cycles.entries()) {
     const requestContext = requestContextWithOrg(organizationId);
     const hookContext = { threadId, resourceId, memory, requestContext } as unknown as Parameters<
@@ -247,42 +283,15 @@ export async function replayCycles(options: ReplayOptions): Promise<ReplayResult
 
     if (sinceLastCuration >= options.curationCadence) {
       sinceLastCuration = 0;
-      const cursorBefore = await store.getCurationCursor({ sourceThreadId: threadId, agent: 'curate' });
-      const worklistBefore = await countWorklist(store, threadId, scope, cursorBefore?.lastKnowledgeId);
-      // The curator is fail-closed: a model reply missing the completion marker throws.
-      // That is a property of the model under test, not of the replay, so it is recorded
-      // as a `failed` curation and counted in the summary rather than killing the arm.
-      let outcome: CurationOutcome;
-      try {
-        ({ outcome } = await memory.runCuration({ threadId, resourceId, requestContext }));
-      } catch (error) {
-        outcome = 'failed';
-        warnings.push(
-          `cycle ${cycleIndex}: curation failed (${error instanceof Error ? error.message : String(error)})`,
-        );
-      }
-
-      if (outcome === 'skipped' || outcome === 'no-model') {
-        throw new Error(`cycle ${cycleIndex}: curation returned "${outcome}"; aborting the arm.`);
-      }
-      if (outcome === 'no-op' && worklistBefore > 0) {
-        throw new Error(
-          `cycle ${cycleIndex}: curation returned "no-op" with ${worklistBefore} pending records; aborting the arm.`,
-        );
-      }
-
-      const cursorAfter = await store.getCurationCursor({ sourceThreadId: threadId, agent: 'curate' });
-      const cursorAdvanced =
-        Boolean(cursorAfter?.lastKnowledgeId) && cursorAfter?.lastKnowledgeId !== cursorBefore?.lastKnowledgeId;
-      if (outcome === 'ran' && !cursorAdvanced) {
-        warnings.push(`cycle ${cycleIndex}: curation ran but the curation cursor did not advance`);
-      }
-
-      curations.push({ cycleIndex, outcome, worklistBefore, cursorAdvanced });
-      options.onEvent?.(
-        `CURATION=${cycleIndex} outcome=${outcome} worklist=${worklistBefore} advanced=${cursorAdvanced}`,
-      );
+      await runCurationStep(cycleIndex, requestContext);
     }
+  }
+
+  // Flush: a cycle count that is not a multiple of the cadence would otherwise leave the
+  // tail of the run uncurated, and the arms' knowledge would be compared at different
+  // stages of curation.
+  if (sinceLastCuration > 0 && cycles.length) {
+    await runCurationStep(cycles.length - 1, requestContextWithOrg(organizationId));
   }
 
   return { cyclesReplayed: cycles.length, curations, warnings };
