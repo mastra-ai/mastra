@@ -106,6 +106,22 @@ export interface SubconsciousConfig {
    * caller-driven `Memory.runCuration` triggers). Off by default.
    */
   curationCadence?: number;
+  /**
+   * Run the curator once this many uncurated knowledge records have accumulated since the
+   * last curation cursor. Evaluated lazily, whenever the observational lifecycle already has
+   * a reason to look — never on a timer. Off by default.
+   */
+  curationThreshold?: number | false;
+  /**
+   * How stale the last curation may get before the next lifecycle evaluation runs the curator.
+   *
+   * This is an **opportunistic age threshold, not a timer and not a scheduled job**: nothing is
+   * ever scheduled, and with no activity on the resource nothing fires. The age condition is only
+   * consulted when the lifecycle is already evaluating (an observation, an activation, or the end
+   * of a turn), and it additionally requires at least one uncurated record to exist — an idle
+   * resource never calls the curator with nothing to curate. Off by default.
+   */
+  curationMaxAgeMs?: number | false;
   maxSteps?: number;
 }
 
@@ -128,4 +144,6 @@ export interface ResolvedSubconsciousConfig {
   activity: false | { recentUpdates: number };
   pins: false | { maxPins: number; maxCharacters: number; capturePinning: boolean };
   curationCadence?: number;
+  curationThreshold: number | false;
+  curationMaxAgeMs: number | false;
 }

@@ -136,6 +136,20 @@ export class Subconscious {
       throw new Error('Subconscious curationCadence must be a positive integer.');
     }
 
+    if (
+      typeof config.curationThreshold === 'number' &&
+      (!Number.isInteger(config.curationThreshold) || config.curationThreshold < 1)
+    ) {
+      throw new Error('Subconscious curationThreshold must be a positive integer or false.');
+    }
+
+    if (
+      typeof config.curationMaxAgeMs === 'number' &&
+      (!Number.isInteger(config.curationMaxAgeMs) || config.curationMaxAgeMs < 1)
+    ) {
+      throw new Error('Subconscious curationMaxAgeMs must be a positive integer of milliseconds or false.');
+    }
+
     this.config = Object.freeze({ ...config, observation: [...observation], reflection: [...reflection] });
     this.resolved = Object.freeze({
       observation: observation.map(entry =>
@@ -151,6 +165,8 @@ export class Subconscious {
       activity: recentUpdates === false ? false : { recentUpdates },
       pins,
       curationCadence: config.curationCadence,
+      curationThreshold: config.curationThreshold ?? false,
+      curationMaxAgeMs: config.curationMaxAgeMs ?? false,
     });
   }
 
