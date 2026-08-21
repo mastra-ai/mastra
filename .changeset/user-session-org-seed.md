@@ -3,11 +3,10 @@
 '@mastra/code-sdk': patch
 ---
 
-Fix organization scoping for Subconscious knowledge capture.
+Fix knowledge captured in factory sessions being stored in the wrong tenant.
 
-Every factory session-creation path now seeds the authoritative organization id into
-session state, and a path that cannot resolve one marks the session unresolved. The code
-SDK no longer promotes a session owner id into the organization slot: a factory-owned
-session with no resolvable organization disables knowledge capture and logs once instead
-of writing into a scope the read path can never resolve, and local (TUI/studio) use
-captures under an explicit local scope.
+Knowledge captured during a factory session is now always stored under the organization
+that owns the session, so it is visible in that organization's knowledge graph. A session
+whose organization cannot be determined no longer stores knowledge somewhere it could
+never be read back from; it stops capturing and reports why. Local (TUI/studio) use is
+unaffected and captures under a dedicated local scope.
