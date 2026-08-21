@@ -94,7 +94,7 @@ import { SkillsProcessor } from '../processors/processors/skills';
 import { WorkspaceInstructionsProcessor } from '../processors/processors/workspace-instructions';
 import type { ProcessorState } from '../processors/runner';
 import { ProcessorRunner } from '../processors/runner';
-import { emitSpanFact } from '../pulse/lifecycle';
+import { emitSpanFact, withPulseRun } from '../pulse/lifecycle';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, MASTRA_VERSIONS_KEY } from '../request-context';
 import type { DeclaredAgentSchedule } from '../schedules/define';
 import type { InferStandardSchemaOutput } from '../schema';
@@ -7161,7 +7161,12 @@ export class Agent<
 
     const observabilityContext = createObservabilityContext({ currentSpan: agentSpan });
     const run = await executionWorkflow.createRun();
-    const result = await run.start({ requestContext, actor: options.actor, ...observabilityContext });
+    // Ambient pulse run identity: every async continuation created inside
+    // (model loop, tools, processors, memory operations) inherits it, so
+    // span-less sites can mint pulse facts without a runId in scope.
+    const result = await withPulseRun({ runId, threadId: threadFromArgs?.id, resourceId }, () =>
+      run.start({ requestContext, actor: options.actor, ...observabilityContext }),
+    );
     return result;
   }
 

@@ -4,7 +4,9 @@ import { InMemoryPulseStorage } from '../storage/domains/pulse/inmemory';
 import { PulseBridge } from './bridge';
 import { PulseBus } from './bus';
 import { registerPulseEmitter, unregisterPulseEmitter } from './emitter';
+import { mintFactId } from './identity';
 import { emitSpanFact } from './lifecycle';
+import { withPulseRun } from './run-context';
 import type { PulseBusEvent } from './types';
 
 function collect(bus: PulseBus) {
@@ -147,5 +149,91 @@ describe('span lifecycle facts (native lane)', () => {
       unregisterPulseEmitter(bus);
     }
     expect(n.pulses[0]).toMatchObject({ action: 'run_failed', type: 'error', level: 'error', source: 'native' });
+  });
+});
+
+describe('site context extras', () => {
+  it('span path carries site attributes (model/provider survive dual mode)', async () => {
+    const bus = new PulseBus();
+    const c = collect(bus);
+    registerPulseEmitter(bus);
+    try {
+      emitSpanFact(
+        span({
+          type: 'model_generation',
+          id: 'm1',
+          endTime: new Date('2026-08-18T10:00:01Z'),
+          output: { t: 1 },
+        }) as any,
+        'ended',
+        {
+          runId: 'run-lc',
+          surface: 'model',
+          base: 'generate',
+          attributes: { model: 'gpt-4o-mini', provider: 'openai.responses' },
+        },
+      );
+      await flush();
+    } finally {
+      unregisterPulseEmitter(bus);
+    }
+    expect(c.pulses[0]?.attributes).toMatchObject({ model: 'gpt-4o-mini', provider: 'openai.responses' });
+  });
+
+  it('a terminal status names its action: aborted ends as run_aborted on both paths', async () => {
+    const bus = new PulseBus();
+    const c = collect(bus);
+    registerPulseEmitter(bus);
+    try {
+      emitSpanFact(span({ endTime: new Date('2026-08-18T10:00:01Z'), output: { status: 'aborted' } }) as any, 'ended', {
+        runId: 'run-lc',
+        surface: 'agent',
+        base: 'run',
+        status: 'aborted',
+      });
+      emitSpanFact(undefined, 'ended', { runId: 'run-m', surface: 'agent', base: 'run', status: 'aborted' });
+      await flush();
+    } finally {
+      unregisterPulseEmitter(bus);
+    }
+    expect(c.pulses.map(p => p.action)).toEqual(['run_aborted', 'run_aborted']);
+    // A suspended run is NOT terminal — the action says so and readers keep the flow open.
+    expect(c.pulses.every(p => p.type === 'state')).toBe(true);
+  });
+
+  it('span-less emission falls back to the ambient run context', async () => {
+    const bus = new PulseBus();
+    const c = collect(bus);
+    registerPulseEmitter(bus);
+    try {
+      await withPulseRun({ runId: 'ambient-run', threadId: 'amb-t' }, async () => {
+        emitSpanFact(undefined, 'started', {
+          runId: undefined,
+          surface: 'memory',
+          base: 'operation',
+          occurrence: 'recall',
+          name: 'memory: recall',
+        });
+      });
+      await flush();
+    } finally {
+      unregisterPulseEmitter(bus);
+    }
+    expect(c.pulses[0]).toMatchObject({
+      surface: 'memory',
+      action: 'operation_started',
+      runId: 'ambient-run',
+      traceId: 'ambient-run',
+      threadId: 'amb-t',
+    });
+  });
+
+  it('string occurrences mint distinct deterministic ids', () => {
+    expect(mintFactId('r', 'tool', 'call', 'started', 'call-1')).toBe(
+      mintFactId('r', 'tool', 'call', 'started', 'call-1'),
+    );
+    expect(mintFactId('r', 'tool', 'call', 'started', 'call-1')).not.toBe(
+      mintFactId('r', 'tool', 'call', 'started', 'call-2'),
+    );
   });
 });

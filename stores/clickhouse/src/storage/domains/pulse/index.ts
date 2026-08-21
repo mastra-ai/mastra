@@ -308,7 +308,7 @@ export class PulseStorageClickhouse extends PulseStorage {
                max(p.timestamp) AS ended_at,
                dateDiff('ms',
                  minIf(p.timestamp, endsWith(p.action, '_started') AND p.parent_span_id = ''),
-                 maxIf(p.timestamp, (endsWith(p.action, '_completed') OR endsWith(p.action, '_failed')) AND p.parent_span_id = '')
+                 maxIf(p.timestamp, (endsWith(p.action, '_completed') OR endsWith(p.action, '_failed') OR endsWith(p.action, '_aborted')) AND p.parent_span_id = '')
                ) AS run_ms,
                count() AS pulse_count,
                anyIf(JSONExtractString(p.metadata, 'entityName'), JSONExtractString(p.metadata, 'entityName') != '') AS entity_name,
@@ -318,8 +318,9 @@ export class PulseStorageClickhouse extends PulseStorage {
                    groupUniqArrayIf(p.run_id, p.run_id != ''),
                    (SELECT groupUniqArray(run_id) FROM exact_aborts)
                  ), 'aborted',
-                 endsWith(argMaxIf(p.action, (p.timestamp, p.seq), p.parent_span_id = '' AND (endsWith(p.action, '_completed') OR endsWith(p.action, '_failed'))), '_failed'), 'failed',
-                 endsWith(argMaxIf(p.action, (p.timestamp, p.seq), p.parent_span_id = '' AND (endsWith(p.action, '_completed') OR endsWith(p.action, '_failed'))), '_completed'), 'completed',
+                 endsWith(argMaxIf(p.action, (p.timestamp, p.seq), p.parent_span_id = '' AND (endsWith(p.action, '_completed') OR endsWith(p.action, '_failed') OR endsWith(p.action, '_aborted'))), '_aborted'), 'aborted',
+                 endsWith(argMaxIf(p.action, (p.timestamp, p.seq), p.parent_span_id = '' AND (endsWith(p.action, '_completed') OR endsWith(p.action, '_failed') OR endsWith(p.action, '_aborted'))), '_failed'), 'failed',
+                 endsWith(argMaxIf(p.action, (p.timestamp, p.seq), p.parent_span_id = '' AND (endsWith(p.action, '_completed') OR endsWith(p.action, '_failed') OR endsWith(p.action, '_aborted'))), '_completed'), 'completed',
                  dateDiff('second', max(p.timestamp), now64(3)) > ${STALE_THRESHOLD_S}, 'stale',
                  'running') AS status
         FROM (SELECT * FROM pulses LIMIT 1 BY id) p
@@ -411,10 +412,10 @@ export class PulseStorageClickhouse extends PulseStorage {
         SELECT span_id,
                any(parent_span_id) AS parent,
                any(surface) AS surface,
-               replaceRegexpOne(any(action), '_(started|completed|failed)$', '') AS base,
+               replaceRegexpOne(any(action), '_(started|completed|failed|aborted)$', '') AS base,
                min(timestamp) AS t0,
-               maxIf(timestamp, endsWith(action, '_completed') OR endsWith(action, '_failed')) AS t1,
-               countIf(endsWith(action, '_completed') OR endsWith(action, '_failed')) AS ended,
+               maxIf(timestamp, endsWith(action, '_completed') OR endsWith(action, '_failed') OR endsWith(action, '_aborted')) AS t1,
+               countIf(endsWith(action, '_completed') OR endsWith(action, '_failed') OR endsWith(action, '_aborted')) AS ended,
                countIf(type = 'error') AS errs
         FROM (SELECT * FROM pulses LIMIT 1 BY id)
         WHERE source IN ('span','native') AND trace_id = {var_flow:String} AND span_id != ''

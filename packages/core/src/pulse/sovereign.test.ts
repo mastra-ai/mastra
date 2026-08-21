@@ -1,12 +1,15 @@
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { z } from 'zod';
 import { Agent } from '../agent';
 import { agentThreadStreamRuntime } from '../agent/thread-stream-runtime';
 import { MockMemory } from '../memory/mock';
 import { InMemoryPulseStorage } from '../storage/domains/pulse/inmemory';
+import { createTool } from '../tools';
 import { PulseBus } from './bus';
 import { registerPulseEmitter, unregisterPulseEmitter } from './emitter';
 import { factIds } from './identity';
+import { withPulseRun } from './run-context';
 
 /**
  * THE sovereignty property (goal SOVEREIGN, P1): with observability fully
@@ -146,6 +149,116 @@ describe('sovereignty: observability OFF, pulse alone', () => {
       await settle();
       const removed = c.facts.find(f => f.surface === 'content' && f.action === 'removed');
       expect(removed).toMatchObject({ attributes: { messageId: msg!.id }, threadId: 'ct-t', source: 'native' });
+    } finally {
+      c.done();
+    }
+  });
+
+  it('tool calls are first-hand facts with observability OFF', async () => {
+    const c = collector();
+    try {
+      const testTool = createTool({
+        id: 'sov-adder',
+        description: 'Adds two numbers',
+        inputSchema: z.object({ a: z.number(), b: z.number() }),
+        execute: async ({ a, b }: any) => ({ sum: a + b }),
+      });
+      const toolModel = new MockLanguageModelV2({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'tool-calls',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [
+            {
+              type: 'tool-call',
+              toolCallType: 'function',
+              toolCallId: 'call-1',
+              toolName: 'sov-adder',
+              input: '{"a":1,"b":2}',
+            },
+          ],
+          warnings: [],
+        }),
+      });
+      const agent = new Agent({
+        id: 'sov-tools',
+        name: 'Sovereign Tools',
+        instructions: 'Test',
+        model: toolModel,
+        tools: { 'sov-adder': testTool },
+      });
+      await agent.generate('Add 1 and 2 with the tool');
+      await settle();
+
+      const started = c.facts.find(f => f.surface === 'tool' && f.action === 'call_started');
+      const ended = c.facts.find(f => f.surface === 'tool' && f.action === 'call_completed');
+      expect(started, 'tool call_started fact').toBeDefined();
+      expect(ended, 'tool call_completed fact').toBeDefined();
+      expect(started.runId, 'tool fact carries the run').toBeTruthy();
+      expect(started.traceId).toBe(started.runId); // the run IS the flow
+      expect(
+        c.edges.some(e => e.type === 'parent_of' && e.to.id === started.id),
+        'tool fact is parented',
+      ).toBe(true);
+    } finally {
+      c.done();
+    }
+  });
+
+  it('processor runs are first-hand facts with observability OFF', async () => {
+    const c = collector();
+    try {
+      const echo: any = {
+        id: 'sov-echo',
+        name: 'SovEcho',
+        processInput: async ({ messages }: any) => messages,
+      };
+      const agent = new Agent({
+        id: 'sov-proc',
+        name: 'Sovereign Proc',
+        instructions: 'Test',
+        model: model(),
+        inputProcessors: [echo],
+      });
+      const stream = await agent.stream('hi');
+      await stream.consumeStream();
+      await settle();
+
+      const procFacts = c.facts.filter(f => f.surface === 'processor');
+      expect(
+        procFacts.some(f => f.action === 'run_started'),
+        `processor run_started (saw: ${c.facts.map(f => `${f.surface}.${f.action}`).join(',')})`,
+      ).toBe(true);
+      expect(procFacts.some(f => f.action === 'run_completed' || f.action === 'run_failed')).toBe(true);
+      expect(procFacts[0].runId, 'processor fact carries the run').toBeTruthy();
+    } finally {
+      c.done();
+    }
+  });
+
+  it('memory operations are first-hand facts with observability OFF', async () => {
+    const c = collector();
+    try {
+      const { MessageHistory } = await import('../processors/memory/message-history');
+      const { MessageList } = await import('../agent/message-list');
+      const storage: any = { listMessages: async () => ({ messages: [] }) };
+      const mh = new MessageHistory({ storage });
+      const list = new MessageList({ threadId: 'mh-t', resourceId: 'mh-u' });
+      await withPulseRun({ runId: 'mem-run', threadId: 'mh-t' }, () =>
+        mh.processInput({
+          messages: [],
+          messageList: list,
+          abort: (() => {
+            throw new Error('abort');
+          }) as any,
+        }),
+      );
+      await settle();
+
+      const rec = c.facts.find(f => f.surface === 'memory' && f.action === 'operation_started');
+      expect(rec, 'memory operation_started fact').toBeDefined();
+      expect(rec).toMatchObject({ runId: 'mem-run', traceId: 'mem-run' });
+      expect(c.facts.some(f => f.surface === 'memory' && f.action === 'operation_completed')).toBe(true);
     } finally {
       c.done();
     }

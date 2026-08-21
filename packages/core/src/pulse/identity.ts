@@ -12,16 +12,18 @@ import { createHash } from 'node:crypto';
  *
  * Phase keys the id (started|ended) rather than the terminal action, so a
  * completed and a failed end address the same logical slot — exactly like
- * spanPulseId on the span lane. `occurrence` is the fact's LOGICAL index
- * within the run (0 for singletons, stepIndex for steps), not arrival
- * order.
+ * spanPulseId on the span lane. `occurrence` is the fact's LOGICAL key
+ * within the run — a number for indexed families (0 for singletons,
+ * stepIndex for steps) or a natural string key where one exists
+ * (toolCallId for tool calls, 'recall'/'save' for memory operations,
+ * 'family:processorId' for processors) — never arrival order.
  */
 export function mintFactId(
   runId: string,
   surface: string,
   base: string,
   phase: 'started' | 'ended',
-  occurrence = 0,
+  occurrence: number | string = 0,
 ): string {
   return `f_${createHash('sha256')
     .update(`${runId}:${surface}:${base}:${phase}:${occurrence}`)

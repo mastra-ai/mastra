@@ -70,9 +70,14 @@ export function createMapResultsStep<OUTPUT = undefined>({
     // Every terminal below ends the AGENT_RUN span (all error calls carry
     // endSpan: true); the native run terminal fact rides the same moment.
     const runCtx = { runId, surface: 'agent', base: 'run' } as const;
-    const endAgentSpan: NonNullable<typeof agentSpan>['end'] = opts => {
+    // Second argument carries the pulse-side terminal: aborted/suspended
+    // ends must not be recorded as run_completed.
+    const endAgentSpan = (
+      opts?: Parameters<NonNullable<typeof agentSpan>['end']>[0],
+      pulseStatus?: 'aborted' | 'suspended',
+    ) => {
       agentSpan?.end(opts as any);
-      emitSpanFact(agentSpan as any, 'ended', { ...runCtx, output: true });
+      emitSpanFact(agentSpan as any, 'ended', { ...runCtx, output: !pulseStatus, status: pulseStatus });
     };
     const errorAgentSpan: NonNullable<typeof agentSpan>['error'] = opts => {
       agentSpan?.error(opts as any);
@@ -308,24 +313,30 @@ export function createMapResultsStep<OUTPUT = undefined>({
           }
 
           if (payload.finishReason === 'suspended') {
-            endAgentSpan({
-              output: {
-                status: 'suspended',
-                reason: payload.suspendReason,
-                toolName: payload.toolName,
-                toolCallId: payload.toolCallId,
+            endAgentSpan(
+              {
+                output: {
+                  status: 'suspended',
+                  reason: payload.suspendReason,
+                  toolName: payload.toolName,
+                  toolCallId: payload.toolCallId,
+                },
               },
-            });
+              'suspended',
+            );
             return;
           }
 
           if (payload.finishReason === 'aborted') {
-            endAgentSpan({
-              output: {
-                status: 'aborted',
-                reason: 'abort',
+            endAgentSpan(
+              {
+                output: {
+                  status: 'aborted',
+                  reason: 'abort',
+                },
               },
-            });
+              'aborted',
+            );
             return;
           }
 

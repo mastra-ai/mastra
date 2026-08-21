@@ -467,4 +467,24 @@ describe('write idempotency by stable id (ack-lost retries)', () => {
     // definitions derive from relationships — no double effects anywhere.
     expect(detail!.pulseCount).toBe(rows.length);
   });
+
+  it('a root run_aborted terminal derives status aborted', async () => {
+    const s = store();
+    await s.batchCreatePulses([
+      pulse({ traceId: 'flow-ab', runId: 'run-ab', spanId: 'root', action: 'run_started', timestamp: at(0) }),
+      pulse({ traceId: 'flow-ab', runId: 'run-ab', spanId: 'root', action: 'run_aborted', timestamp: at(700) }),
+    ]);
+    const { flows } = await s.listFlows();
+    expect(flows[0]).toMatchObject({ flowId: 'flow-ab', status: 'aborted', durationMs: 700 });
+  });
+
+  it('a root run_suspended is NOT terminal — the flow stays open', async () => {
+    const s = store(T0.getTime() + 1_000); // well inside the stale threshold
+    await s.batchCreatePulses([
+      pulse({ traceId: 'flow-su', runId: 'run-su', spanId: 'root', action: 'run_started', timestamp: at(0) }),
+      pulse({ traceId: 'flow-su', runId: 'run-su', spanId: 'root', action: 'run_suspended', timestamp: at(500) }),
+    ]);
+    const { flows } = await s.listFlows();
+    expect(flows[0]!.status).toBe('running');
+  });
 });

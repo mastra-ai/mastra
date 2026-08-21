@@ -670,7 +670,15 @@ export class ProcessorRunner {
           retryCount,
         },
       });
-      emitSpanFact(processorSpan as any, 'started');
+      // Span-less identity: runId comes from the ambient run context.
+      const pulsePctx = {
+        surface: 'processor',
+        base: 'run',
+        occurrence: `output-processor:${processor.id}`,
+        name: `output processor: ${processor.id}`,
+        parent: { surface: 'agent', base: 'run' },
+      };
+      emitSpanFact(processorSpan as any, 'started', pulsePctx);
 
       // Start recording MessageList mutations for this processor
       messageList.startRecording();
@@ -736,7 +744,7 @@ export class ProcessorRunner {
           },
           attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
         });
-        emitSpanFact(processorSpan as any, 'ended');
+        emitSpanFact(processorSpan as any, 'ended', pulsePctx);
       } catch (error) {
         // Stop recording on error
         messageList.stopRecording();
@@ -753,12 +761,12 @@ export class ProcessorRunner {
               },
             },
           });
-          emitSpanFact(processorSpan as any, 'ended');
+          emitSpanFact(processorSpan as any, 'ended', { ...pulsePctx, error: true });
           await invokeOnViolation(processor, error);
           throw error;
         }
         processorSpan?.error({ error: error as Error, endSpan: true });
-        emitSpanFact(processorSpan as any, 'ended');
+        emitSpanFact(processorSpan as any, 'ended', { ...pulsePctx, error: true });
         throw error;
       }
     }
@@ -1176,7 +1184,15 @@ export class ProcessorRunner {
           systemMessages: currentSystemMessages,
         },
       });
-      emitSpanFact(processorSpan as any, 'started');
+      // Span-less identity: runId comes from the ambient run context.
+      const pulsePctx = {
+        surface: 'processor',
+        base: 'run',
+        occurrence: `input-processor:${processor.id}`,
+        name: `input processor: ${processor.id}`,
+        parent: { surface: 'agent', base: 'run' },
+      };
+      emitSpanFact(processorSpan as any, 'started', pulsePctx);
 
       // Start recording MessageList mutations for this processor
       messageList.startRecording();
@@ -1310,7 +1326,7 @@ export class ProcessorRunner {
           },
           attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
         });
-        emitSpanFact(processorSpan as any, 'ended');
+        emitSpanFact(processorSpan as any, 'ended', pulsePctx);
       } catch (error) {
         // Stop recording on error
         messageList.stopRecording();
@@ -1327,12 +1343,12 @@ export class ProcessorRunner {
               },
             },
           });
-          emitSpanFact(processorSpan as any, 'ended');
+          emitSpanFact(processorSpan as any, 'ended', { ...pulsePctx, error: true });
           await invokeOnViolation(processor, error);
           throw error;
         }
         processorSpan?.error({ error: error as Error, endSpan: true });
-        emitSpanFact(processorSpan as any, 'ended');
+        emitSpanFact(processorSpan as any, 'ended', { ...pulsePctx, error: true });
         throw error;
       }
     }
@@ -1495,7 +1511,15 @@ export class ProcessorRunner {
           activeTools: inputData.activeTools,
         }),
       });
-      emitSpanFact(processorSpan as any, 'started');
+      // Span-less identity: runId comes from the ambient run context.
+      const pulsePctx = {
+        surface: 'processor',
+        base: 'run',
+        occurrence: `input-step-processor:${processor.id}`,
+        name: `input step processor: ${processor.id}`,
+        parent: { surface: 'agent', base: 'run' },
+      };
+      emitSpanFact(processorSpan as any, 'started', pulsePctx);
 
       // Start recording MessageList mutations for this processor
       messageList.startRecording();
@@ -1625,7 +1649,7 @@ export class ProcessorRunner {
           }),
           attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
         });
-        emitSpanFact(processorSpan as any, 'ended');
+        emitSpanFact(processorSpan as any, 'ended', pulsePctx);
       } catch (error) {
         // Stop recording on error
         messageList.stopRecording();
@@ -1642,12 +1666,12 @@ export class ProcessorRunner {
               },
             },
           });
-          emitSpanFact(processorSpan as any, 'ended');
+          emitSpanFact(processorSpan as any, 'ended', { ...pulsePctx, error: true });
           await invokeOnViolation(processor, error);
           throw error;
         }
         processorSpan?.error({ error: error as Error, endSpan: true });
-        emitSpanFact(processorSpan as any, 'ended');
+        emitSpanFact(processorSpan as any, 'ended', { ...pulsePctx, error: true });
         throw error;
       }
     }
@@ -1945,7 +1969,15 @@ export class ProcessorRunner {
           ...(text !== undefined ? { text } : {}),
         },
       });
-      emitSpanFact(processorSpan as any, 'started');
+      // Span-less identity: runId comes from the ambient run context.
+      const pulsePctx = {
+        surface: 'processor',
+        base: 'run',
+        occurrence: `output-step-processor:${processor.id}`,
+        name: `output step processor: ${processor.id}`,
+        parent: { surface: 'agent', base: 'run' },
+      };
+      emitSpanFact(processorSpan as any, 'started', pulsePctx);
 
       // Start recording MessageList mutations for this processor
       messageList.startRecording();
@@ -2024,7 +2056,7 @@ export class ProcessorRunner {
           },
           attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
         });
-        emitSpanFact(processorSpan as any, 'ended');
+        emitSpanFact(processorSpan as any, 'ended', pulsePctx);
       } catch (error) {
         // Stop recording on error
         messageList.stopRecording();
@@ -2041,12 +2073,12 @@ export class ProcessorRunner {
               },
             },
           });
-          emitSpanFact(processorSpan as any, 'ended');
+          emitSpanFact(processorSpan as any, 'ended', { ...pulsePctx, error: true });
           await invokeOnViolation(processor, error);
           throw error;
         }
         processorSpan?.error({ error: error as Error, endSpan: true });
-        emitSpanFact(processorSpan as any, 'ended');
+        emitSpanFact(processorSpan as any, 'ended', { ...pulsePctx, error: true });
         throw error;
       }
     }
@@ -2165,7 +2197,15 @@ export class ProcessorRunner {
           ...(providerExecuted !== undefined ? { providerExecuted } : {}),
         },
       });
-      emitSpanFact(processorSpan as any, 'started');
+      // Span-less identity: runId comes from the ambient run context.
+      const pulsePctx = {
+        surface: 'processor',
+        base: 'run',
+        occurrence: `tool-result-processor:${processor.id}`,
+        name: `tool result processor: ${processor.id}`,
+        parent: { surface: 'agent', base: 'run' },
+      };
+      emitSpanFact(processorSpan as any, 'started', pulsePctx);
 
       // Start recording MessageList mutations for this processor
       messageList.startRecording();
@@ -2230,7 +2270,7 @@ export class ProcessorRunner {
           },
           attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
         });
-        emitSpanFact(processorSpan as any, 'ended');
+        emitSpanFact(processorSpan as any, 'ended', pulsePctx);
       } catch (error) {
         // Stop recording on error
         messageList.stopRecording();
@@ -2247,11 +2287,11 @@ export class ProcessorRunner {
               },
             },
           });
-          emitSpanFact(processorSpan as any, 'ended');
+          emitSpanFact(processorSpan as any, 'ended', { ...pulsePctx, error: true });
           throw error;
         }
         processorSpan?.error({ error: error as Error, endSpan: true });
-        emitSpanFact(processorSpan as any, 'ended');
+        emitSpanFact(processorSpan as any, 'ended', { ...pulsePctx, error: true });
         throw error;
       }
     }
@@ -2331,7 +2371,15 @@ export class ProcessorRunner {
           retryCount,
         },
       });
-      emitSpanFact(processorSpan as any, 'started');
+      // Span-less identity: runId comes from the ambient run context.
+      const pulsePctx = {
+        surface: 'processor',
+        base: 'run',
+        occurrence: `request-error-processor:${processor.id}`,
+        name: `request error processor: ${processor.id}`,
+        parent: { surface: 'agent', base: 'run' },
+      };
+      emitSpanFact(processorSpan as any, 'started', pulsePctx);
 
       // Start recording MessageList mutations for this processor
       messageList.startRecording();
@@ -2391,7 +2439,7 @@ export class ProcessorRunner {
           output,
           attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
         });
-        emitSpanFact(processorSpan as any, 'ended');
+        emitSpanFact(processorSpan as any, 'ended', pulsePctx);
 
         if (result?.retry) {
           return { retry: true };
@@ -2412,7 +2460,7 @@ export class ProcessorRunner {
               },
             },
           });
-          emitSpanFact(processorSpan as any, 'ended');
+          emitSpanFact(processorSpan as any, 'ended', { ...pulsePctx, error: true });
           await invokeOnViolation(processor, processorError);
           throw processorError;
         }

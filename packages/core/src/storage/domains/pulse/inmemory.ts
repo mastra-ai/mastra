@@ -100,7 +100,11 @@ export class InMemoryPulseStorage extends PulseStorage {
     const rootStart = sorted.find(p => !p.parentSpanId && p.action.endsWith('_started'));
     const rootEnd = [...sorted]
       .reverse()
-      .find(p => !p.parentSpanId && (p.action.endsWith('_completed') || p.action.endsWith('_failed')));
+      .find(
+        p =>
+          !p.parentSpanId &&
+          (p.action.endsWith('_completed') || p.action.endsWith('_failed') || p.action.endsWith('_aborted')),
+      );
 
     // Session-layer abort override: the span layer records aborted runs as
     // completed; the session's run_control.abort_completed fact wins. The
@@ -121,6 +125,7 @@ export class InMemoryPulseStorage extends PulseStorage {
     // the ROOT terminal decides failed vs completed.
     let status: FlowStatus;
     if (aborted) status = 'aborted';
+    else if (rootEnd?.action.endsWith('_aborted')) status = 'aborted';
     else if (rootEnd?.action.endsWith('_failed')) status = 'failed';
     else if (rootEnd?.action.endsWith('_completed')) status = 'completed';
     else if (this.#now() - last.timestamp.getTime() > this.#staleThresholdMs) status = 'stale';

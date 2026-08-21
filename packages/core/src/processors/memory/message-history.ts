@@ -109,7 +109,17 @@ export class MessageHistory implements Processor {
         lastMessages: this.lastMessages,
       },
     );
-    emitSpanFact(span as any, 'started');
+    // Span-less identity: runId comes from the ambient run context.
+    const recallCtx = {
+      surface: 'memory',
+      base: 'operation',
+      occurrence: 'recall',
+      name: 'memory: recall',
+      parent: { surface: 'agent', base: 'run' },
+      threadId,
+      resourceId,
+    } as const;
+    emitSpanFact(span as any, 'started', recallCtx);
 
     try {
       // 1. Fetch historical messages from storage (as DB format)
@@ -140,7 +150,7 @@ export class MessageHistory implements Processor {
           output: { success: true },
           attributes: { messageCount: 0 },
         });
-        emitSpanFact(span as any, 'ended');
+        emitSpanFact(span as any, 'ended', recallCtx);
         return messageList;
       }
 
@@ -157,12 +167,12 @@ export class MessageHistory implements Processor {
         output: { success: true },
         attributes: { messageCount: chronologicalMessages.length },
       });
-      emitSpanFact(span as any, 'ended');
+      emitSpanFact(span as any, 'ended', recallCtx);
 
       return messageList;
     } catch (error) {
       span?.error({ error: error as Error, endSpan: true });
-      emitSpanFact(span as any, 'ended');
+      emitSpanFact(span as any, 'ended', { ...recallCtx, error: true });
       throw error;
     }
   }
@@ -272,7 +282,16 @@ export class MessageHistory implements Processor {
     const span = this.createMemorySpan('save', observabilityContext, undefined, {
       messageCount: messagesToSave.length,
     });
-    emitSpanFact(span as any, 'started');
+    const saveCtx = {
+      surface: 'memory',
+      base: 'operation',
+      occurrence: 'save',
+      name: 'memory: save',
+      parent: { surface: 'agent', base: 'run' },
+      threadId,
+      resourceId,
+    } as const;
+    emitSpanFact(span as any, 'started', saveCtx);
 
     try {
       await this.persistMessages({ messages: messagesToSave, threadId, resourceId });
@@ -282,12 +301,12 @@ export class MessageHistory implements Processor {
       span?.end({
         output: { success: true },
       });
-      emitSpanFact(span as any, 'ended');
+      emitSpanFact(span as any, 'ended', saveCtx);
 
       return messageList;
     } catch (error) {
       span?.error({ error: error as Error, endSpan: true });
-      emitSpanFact(span as any, 'ended');
+      emitSpanFact(span as any, 'ended', { ...saveCtx, error: true });
       throw error;
     }
   }

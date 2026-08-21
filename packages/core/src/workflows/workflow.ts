@@ -934,7 +934,19 @@ function createStepFromProcessor<TProcessorId extends string>(
               },
             })
           : undefined;
-      emitSpanFact(processorSpan as any, 'started');
+      // Span-less identity (ambient runId); outputStream stays span-backed —
+      // its per-chunk span lifecycle has no single logical start/end here.
+      const pulsePctx =
+        phase !== 'outputStream'
+          ? {
+              surface: 'processor',
+              base: 'run',
+              occurrence: `${phase}:${processor.id}`,
+              name: `${getSpanNamePrefix(phase)}: ${processor.id}`,
+              parent: { surface: 'agent', base: 'run' },
+            }
+          : undefined;
+      emitSpanFact(processorSpan as any, 'started', pulsePctx);
 
       // Create observability context with processor span so internal agent calls nest correctly
       const processorObservabilityContext: ObservabilityContext | undefined = createObservabilityContext(
@@ -1046,16 +1058,16 @@ function createStepFromProcessor<TProcessorId extends string>(
         try {
           const result = await executeWithContext({ span: processorSpan, fn });
           processorSpan?.end({ output: buildProcessorSpanOutput(result) });
-          emitSpanFact(processorSpan as any, 'ended');
+          emitSpanFact(processorSpan as any, 'ended', pulsePctx);
           return result;
         } catch (error) {
           // TripWire errors should end span but bubble up to halt the workflow
           if (error instanceof TripWire) {
             processorSpan?.end({ output: { tripwire: error.message } });
-            emitSpanFact(processorSpan as any, 'ended');
+            emitSpanFact(processorSpan as any, 'ended', pulsePctx);
           } else {
             processorSpan?.error({ error: error as Error, endSpan: true });
-            emitSpanFact(processorSpan as any, 'ended');
+            emitSpanFact(processorSpan as any, 'ended', pulsePctx && { ...pulsePctx, error: true });
           }
           throw error;
         }

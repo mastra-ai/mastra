@@ -631,4 +631,34 @@ describe('write idempotency by stable id (ack-lost retries, live)', () => {
     const timeline = await store.getFlowTimeline('flow-dup');
     expect(timeline).toHaveLength(3);
   });
+
+  it('a root run_aborted terminal derives status aborted (same rule as in-memory)', async ctx => {
+    if (!available) return ctx.skip();
+    const store = makeStore();
+    await store.init();
+    await store.dangerouslyClearAll();
+
+    let seq = 0;
+    const p = (o: Record<string, any>) => ({
+      id: `ab${++seq}`,
+      timestamp: T0,
+      seq,
+      type: 'state' as const,
+      surface: 'agent',
+      action: 'run_started',
+      traceId: 'flow-ab',
+      runId: 'run-ab',
+      source: 'native',
+      ...o,
+    });
+    await store.batchCreatePulses([
+      p({ spanId: 'agent.run.0', timestamp: at(0) }),
+      p({ spanId: 'agent.run.0', action: 'run_aborted', timestamp: at(700) }),
+    ] as PulseRecord[]);
+
+    const { flows } = await store.listFlows();
+    const f = flows.find(x => x.flowId === 'flow-ab');
+    expect(f).toMatchObject({ status: 'aborted' });
+    expect(f!.durationMs).toBe(700);
+  });
 });

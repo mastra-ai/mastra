@@ -4,6 +4,9 @@ export { usageTokenData };
 import { emitPulseFact } from './emitter';
 import type { PulseFactInput } from './emitter';
 import { mintFactId } from './identity';
+import { activePulseRun } from './run-context';
+
+export { withPulseRun, activePulseRun } from './run-context';
 
 /**
  * First-hand span-lifecycle facts (the 'native' lane).
@@ -37,15 +40,22 @@ export const NATIVE_SURFACES = ['agent', 'model', 'tool', 'memory', 'processor']
  * ambient context needed.
  */
 export interface LifecycleSiteContext {
-  runId: string | undefined;
+  /** Explicit run identity; when absent, the ambient run context is used. */
+  runId?: string | undefined;
   surface: string;
   base: string;
-  /** Logical index within the run (stepIndex for steps); 0 for singletons. */
-  occurrence?: number;
-  parent?: { surface: string; base: string; occurrence?: number };
+  /** Logical key within the run: index (stepIndex) or natural string key. */
+  occurrence?: number | string;
+  parent?: { surface: string; base: string; occurrence?: number | string };
   threadId?: string;
   resourceId?: string;
   error?: boolean;
+  /**
+   * Non-completed terminal for an end fact: 'aborted' is a TERMINAL the
+   * readers derive status from; 'suspended' is deliberately NON-terminal
+   * (the flow stays open until resume completes or staleness closes it).
+   */
+  status?: 'aborted' | 'suspended';
   /** End carried an output (semantic type 'output' instead of 'state'). */
   output?: boolean;
   name?: string;
@@ -88,7 +98,18 @@ export function emitSpanFact(
   ctx?: LifecycleSiteContext,
 ): void {
   if (!span?.id || !span.type) {
-    if (ctx?.runId) emitMintedFact(phase, ctx as LifecycleSiteContext & { runId: string });
+    if (!ctx) return;
+    // Sites without a runId in scope inherit the ambient run identity.
+    const ambient = ctx.runId ? undefined : activePulseRun();
+    const runId = ctx.runId ?? ambient?.runId;
+    if (runId) {
+      emitMintedFact(phase, {
+        ...ctx,
+        runId,
+        threadId: ctx.threadId ?? ambient?.threadId,
+        resourceId: ctx.resourceId ?? ambient?.resourceId,
+      });
+    }
     return;
   }
   const { surface, base } = surfaceAction(String(span.type));
@@ -108,6 +129,10 @@ export function emitSpanFact(
   } else if (hasError) {
     type = 'error';
     action = `${base}_failed`;
+  } else if (ctx?.status) {
+    // Aborted/suspended ends must not masquerade as completed.
+    type = 'state';
+    action = `${base}_${ctx.status}`;
   } else {
     type = span.output != null ? 'output' : 'state';
     action = `${base}_completed`;
@@ -168,16 +193,22 @@ export function emitSpanFact(
     if (v) metadata[key] = v;
   }
 
+  // Site attributes (model/provider identity for price resolution) are
+  // first-hand on BOTH paths — the span carries none of them itself.
+  const attributes: Record<string, unknown> = {};
+  if (ctx?.attributes) for (const [k, v] of Object.entries(ctx.attributes)) if (v !== undefined) attributes[k] = v;
+
   emitPulseFact({
     id: pulseId,
     timestamp: (isEnd && !isEventSpan ? span.endTime : span.startTime) ?? undefined,
-    runId: metaStr(span, 'runId') ?? '',
+    runId: metaStr(span, 'runId') ?? ctx?.runId ?? '',
     traceId,
     spanId: span.id,
     parentSpanId: span.parentSpanId,
     surface,
     action,
     type,
+    attributes: Object.keys(attributes).length ? attributes : undefined,
     level: hasError && isEnd ? 'error' : undefined,
     text: span.name || undefined,
     data: Object.keys(data).length ? data : undefined,
@@ -206,6 +237,9 @@ function emitMintedFact(phase: 'started' | 'ended', ctx: LifecycleSiteContext & 
   } else if (ctx.error) {
     type = 'error';
     action = `${ctx.base}_failed`;
+  } else if (ctx.status) {
+    type = 'state';
+    action = `${ctx.base}_${ctx.status}`;
   } else {
     type = ctx.output ? 'output' : 'state';
     action = `${ctx.base}_completed`;
