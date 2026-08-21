@@ -892,7 +892,9 @@ describe('GET /web/factory/projects/:id/attention', () => {
       unreadCount: 1,
     });
 
-    expect((await json('POST', `/web/factory/projects/${PROJECT_ID}/attention/read-all`)).status).toBe(200);
+    const readAll = await json('POST', `/web/factory/projects/${PROJECT_ID}/attention/read-all`);
+    expect(readAll.status).toBe(200);
+    await expect(readAll.json()).resolves.toEqual({ ok: true, hasMore: false });
     await expect((await json('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject({
       items: [{ occurrence: 2, read: true, archived: false }],
       openCount: 1,

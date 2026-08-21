@@ -2243,6 +2243,33 @@ describe('createGithubPullRequestReconciler', () => {
     expect(await context.workItems.listDeferredDecisions('org-1', context.project.id)).toHaveLength(1);
   });
 
+  it('continues closed reconciliation when terminal decision cleanup fails', async () => {
+    const context = await setup('read');
+    const card = await createCard(context, { number: 17, stages: ['done'] });
+    vi.spyOn(context.workItems, 'supersedeDecisionsForWorkItem').mockRejectedValueOnce(
+      new Error('Decision cleanup failed'),
+    );
+    const reconcile = createReconciler(
+      context,
+      vi.fn(async () => mergedState(17)),
+    );
+
+    await expect(reconcile([repositoryTarget])).resolves.toEqual({
+      repositories: 1,
+      checked: 1,
+      merged: 1,
+      closed: 0,
+      failed: 1,
+      errors: [{ repository: 'acme/repo', pullRequestNumber: 17, error: 'Decision cleanup failed' }],
+    });
+    expect(await context.workItems.listDeferredDecisions('org-1', context.project.id)).toEqual([
+      expect.objectContaining({
+        workItemId: card.item.id,
+        decision: expect.objectContaining({ type: 'transition', board: 'review', stage: 'done' }),
+      }),
+    ]);
+  });
+
   it('keeps sweeping the remaining PRs when one state fetch fails and reports the failure', async () => {
     const context = await setup('read');
     await createCard(context, { number: 17 });

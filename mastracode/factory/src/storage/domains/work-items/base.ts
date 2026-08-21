@@ -231,6 +231,16 @@ export interface FactoryAttentionReceiptRecord extends FactoryAttentionIdentity 
   updatedAt: Date;
 }
 
+interface SetAttentionReceiptInput {
+  orgId: string;
+  factoryProjectId: string;
+  userId: string;
+  decisionId: string;
+  failureOccurrence: number;
+  action: FactoryAttentionReceiptAction;
+  now: Date;
+}
+
 export function factoryDecisionAttentionIdentity(
   decisionId: string,
   failureOccurrence: number,
@@ -777,6 +787,10 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
       {
         name: 'factory_attention_receipts_user_state_idx',
         columns: ['org_id', 'factory_project_id', 'user_id', 'state'],
+      },
+      {
+        name: 'factory_attention_receipts_source_idx',
+        columns: ['org_id', 'factory_project_id', 'kind', 'source_id', 'occurrence'],
       },
     ],
   },
@@ -1545,29 +1559,6 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     });
   }
 
-  async listDeferredDecisionsByStatuses({
-    orgId,
-    factoryProjectId,
-    statuses,
-  }: {
-    orgId: string;
-    factoryProjectId: string;
-    statuses: FactoryDispatchStatus[];
-  }): Promise<FactoryDeferredDecisionRecord[]> {
-    return (
-      await this.#db.findMany<GovernanceDbRow>(
-        'factory_deferred_decisions',
-        { org_id: orgId, factory_project_id: factoryProjectId, status: { in: statuses } },
-        {
-          orderBy: [
-            ['created_at', 'desc'],
-            ['id', 'desc'],
-          ],
-        },
-      )
-    ).map(toDeferredDecision);
-  }
-
   async getDeferredDecision(
     orgId: string,
     factoryProjectId: string,
@@ -1665,82 +1656,75 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     }
   }
 
-  async setAttentionReceipt({
-    orgId,
-    factoryProjectId,
-    userId,
-    decisionId,
-    failureOccurrence,
-    action,
-    now,
-  }: {
-    orgId: string;
-    factoryProjectId: string;
-    userId: string;
-    decisionId: string;
-    failureOccurrence: number;
-    action: FactoryAttentionReceiptAction;
-    now: Date;
-  }): Promise<FactoryAttentionReceiptRecord | null> {
-    const identity = factoryDecisionAttentionIdentity(decisionId, failureOccurrence);
-    const write = () =>
-      this.storage.withTransaction(async ops => {
-        let currentOccurrence = false;
-        const decision = await ops.updateAtomic<GovernanceDbRow>(
-          'factory_deferred_decisions',
-          { id: decisionId, org_id: orgId, factory_project_id: factoryProjectId },
-          current => {
-            currentOccurrence =
-              current.status === 'failed' && Number(current.failure_occurrence ?? 0) === failureOccurrence;
-            return null;
-          },
-        );
-        if (!decision || !currentOccurrence) return null;
+  async setAttentionReceipt(input: SetAttentionReceiptInput): Promise<FactoryAttentionReceiptRecord | null> {
+    return this.#retryAttentionReceiptWrite(() =>
+      this.storage.withTransaction(ops => this.#setAttentionReceiptWithOps(ops, input)),
+    );
+  }
 
-        const where = {
-          org_id: orgId,
-          factory_project_id: factoryProjectId,
-          user_id: userId,
-          kind: identity.kind,
-          source_id: identity.sourceId,
-          occurrence: identity.occurrence,
-        };
-        const existing = await ops.findOne<GovernanceDbRow>('factory_attention_receipts', where);
-        if (!existing) {
-          return toAttentionReceipt(
-            await ops.insertOne<GovernanceDbRow>('factory_attention_receipts', {
-              ...where,
-              state: action === 'archive' ? 'archived' : 'read',
-              read_at: now,
-              archived_at: action === 'archive' ? now : null,
-              created_at: now,
-              updated_at: now,
-            }),
-          );
-        }
-        const row = await ops.updateAtomic<GovernanceDbRow>(
-          'factory_attention_receipts',
-          { id: existing.id, ...where },
-          current => {
-            const preserveArchive = action === 'read' && current.state === 'archived';
-            const archived = action === 'archive' || preserveArchive;
-            return {
-              state: archived ? 'archived' : 'read',
-              read_at: current.read_at,
-              archived_at: action === 'archive' ? now : archived ? (current.archived_at ?? now) : null,
-              updated_at: now,
-            };
-          },
-        );
-        if (!row) throw new Error('Attention receipt disappeared during update.');
-        return toAttentionReceipt(row);
-      });
+  async #retryAttentionReceiptWrite<T>(write: () => Promise<T>): Promise<T> {
     try {
       return await write();
     } catch (error) {
       if (!(error instanceof UniqueViolationError)) throw error;
       return write();
     }
+  }
+
+  async #setAttentionReceiptWithOps(
+    ops: FactoryStorageOps,
+    { orgId, factoryProjectId, userId, decisionId, failureOccurrence, action, now }: SetAttentionReceiptInput,
+  ): Promise<FactoryAttentionReceiptRecord | null> {
+    const identity = factoryDecisionAttentionIdentity(decisionId, failureOccurrence);
+    let currentOccurrence = false;
+    const decision = await ops.updateAtomic<GovernanceDbRow>(
+      'factory_deferred_decisions',
+      { id: decisionId, org_id: orgId, factory_project_id: factoryProjectId },
+      current => {
+        currentOccurrence =
+          current.status === 'failed' && Number(current.failure_occurrence ?? 0) === failureOccurrence;
+        return null;
+      },
+    );
+    if (!decision || !currentOccurrence) return null;
+
+    const where = {
+      org_id: orgId,
+      factory_project_id: factoryProjectId,
+      user_id: userId,
+      kind: identity.kind,
+      source_id: identity.sourceId,
+      occurrence: identity.occurrence,
+    };
+    const existing = await ops.findOne<GovernanceDbRow>('factory_attention_receipts', where);
+    if (!existing) {
+      return toAttentionReceipt(
+        await ops.insertOne<GovernanceDbRow>('factory_attention_receipts', {
+          ...where,
+          state: action === 'archive' ? 'archived' : 'read',
+          read_at: now,
+          archived_at: action === 'archive' ? now : null,
+          created_at: now,
+          updated_at: now,
+        }),
+      );
+    }
+    const row = await ops.updateAtomic<GovernanceDbRow>(
+      'factory_attention_receipts',
+      { id: existing.id, ...where },
+      current => {
+        const preserveArchive = action === 'read' && current.state === 'archived';
+        const archived = action === 'archive' || preserveArchive;
+        return {
+          state: archived ? 'archived' : 'read',
+          read_at: current.read_at,
+          archived_at: action === 'archive' ? now : archived ? (current.archived_at ?? now) : null,
+          updated_at: now,
+        };
+      },
+    );
+    if (!row) throw new Error('Attention receipt disappeared during update.');
+    return toAttentionReceipt(row);
   }
 
   async markAttentionReceiptsRead({
@@ -1762,17 +1746,20 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       ).values(),
     ];
     for (let index = 0; index < uniqueOccurrences.length; index += ATTENTION_RECEIPT_WRITE_BATCH_SIZE) {
-      await Promise.all(
-        uniqueOccurrences.slice(index, index + ATTENTION_RECEIPT_WRITE_BATCH_SIZE).map(occurrence =>
-          this.setAttentionReceipt({
-            orgId,
-            factoryProjectId,
-            userId,
-            ...occurrence,
-            action: 'read',
-            now,
-          }),
-        ),
+      const batch = uniqueOccurrences.slice(index, index + ATTENTION_RECEIPT_WRITE_BATCH_SIZE);
+      await this.#retryAttentionReceiptWrite(() =>
+        this.storage.withTransaction(async ops => {
+          for (const occurrence of batch) {
+            await this.#setAttentionReceiptWithOps(ops, {
+              orgId,
+              factoryProjectId,
+              userId,
+              ...occurrence,
+              action: 'read',
+              now,
+            });
+          }
+        }),
       );
     }
   }
@@ -1977,6 +1964,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
 
   async repairLegacyAttentionState(): Promise<void> {
     let cursor: { values: Array<Date | string> } | undefined;
+    const inspectedWorkItems = new Set<string>();
     while (true) {
       const rows = await this.#db.findMany<GovernanceDbRow>(
         'factory_deferred_decisions',
@@ -2015,6 +2003,9 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           }
         }
         if (!decision.workItemId) continue;
+        const itemKey = `${decision.orgId}\0${decision.factoryProjectId}\0${decision.workItemId}`;
+        if (inspectedWorkItems.has(itemKey)) continue;
+        inspectedWorkItems.add(itemKey);
         const item = await this.get({ orgId: decision.orgId, id: decision.workItemId });
         if (!item || !isTerminalFactoryRuleStage(item.stages)) continue;
         await this.supersedeDecisionsForWorkItem({

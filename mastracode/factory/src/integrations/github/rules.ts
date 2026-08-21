@@ -866,6 +866,7 @@ export function createGithubPullRequestReconciler(
           summary.checked += 1;
           if (!state) continue;
           for (const card of cards) {
+            if (state.state === 'closed') continue;
             const metadata = card.metadata ?? {};
             const statusChanged =
               metadata.state !== state.state || metadata.draft !== state.draft || metadata.merged !== state.merged;
@@ -875,7 +876,6 @@ export function createGithubPullRequestReconciler(
             const labelsChanged = !sameStrings(metadata.labels, state.labels);
             const metadataChanged =
               statusChanged || authorChanged || assigneesChanged || reviewersChanged || labelsChanged;
-            if (state.state === 'closed') continue;
             const reconciliation = metadata[FACTORY_PULL_REQUEST_RECONCILIATION_KEY];
             if (!metadataChanged && reconciliation !== 'merged' && reconciliation !== 'closed') continue;
             try {
@@ -892,22 +892,30 @@ export function createGithubPullRequestReconciler(
           if (state.state !== 'closed') continue;
           for (const card of cards) {
             if (!isTerminalFactoryRuleStage(card.stages)) continue;
-            await options.storage.supersedeDecisionsForWorkItem({
-              orgId: card.orgId,
-              factoryProjectId: card.factoryProjectId,
-              workItemId: card.id,
-              supersededAt: new Date(),
-            });
+            try {
+              await options.storage.supersedeDecisionsForWorkItem({
+                orgId: card.orgId,
+                factoryProjectId: card.factoryProjectId,
+                workItemId: card.id,
+                supersededAt: new Date(),
+              });
+            } catch (error) {
+              recordFailure(repository, error, pullRequestNumber);
+            }
           }
           await rules.ingest(reconciledClosedEvent(repository, pullRequestNumber, state));
           await retireReconciledSubscriptions(options.integrationStorage, repository, pullRequestNumber, state.merged);
           for (const card of cards) {
-            await options.storage.update({
-              orgId: card.orgId,
-              id: card.id,
-              userId: 'factory-rule-dispatcher',
-              patch: { metadata: reconciledPullRequestMetadata(state, 'settled') },
-            });
+            try {
+              await options.storage.update({
+                orgId: card.orgId,
+                id: card.id,
+                userId: 'factory-rule-dispatcher',
+                patch: { metadata: reconciledPullRequestMetadata(state, 'settled') },
+              });
+            } catch (error) {
+              recordFailure(repository, error, pullRequestNumber);
+            }
           }
           if (state.merged) summary.merged += 1;
           else summary.closed += 1;

@@ -74,13 +74,13 @@ async function seedFactoryWithRepository(options?: { defaultModelId?: string }) 
   return { seeded, sourceControl, project, github };
 }
 
-function bindingInput(factoryProjectId: string): FactoryBindingPreparationInput {
+function bindingInput(factoryProjectId: string, stages = ['triage']): FactoryBindingPreparationInput {
   return {
     record: { id: 'decision-1', orgId: 'org-1', factoryProjectId },
     item: {
       id: 'item-1',
       title: 'Broken login',
-      stages: ['triage'],
+      stages,
       sessions: [],
       externalSource: { integrationId: 'github', type: 'issue' },
       metadata: { githubIssueNumber: 49, repository: 'mastra-ai/mastra' },
@@ -158,6 +158,24 @@ describe('prepareFactoryRuleBinding', () => {
 
     expect(error).toBeInstanceOf(FactoryDispatchError);
     expect(error).toMatchObject({ code: 'source_control_missing' });
+    expect(prepare).not.toHaveBeenCalled();
+  });
+
+  it('rejects invalid stages before creating a source-control session', async () => {
+    const { seeded, sourceControl, project, github } = await seedFactoryWithRepository();
+    const createSession = vi.spyOn(sourceControl.sessions, 'create');
+    const prepare = vi.fn<FactoryStartCoordinator['prepare']>();
+
+    const error = await prepareFactoryRuleBinding(
+      github,
+      { prepare },
+      seeded.projects,
+      bindingInput(project.id, ['review', 'done']),
+    ).catch(failure => failure);
+
+    expect(error).toBeInstanceOf(FactoryDispatchError);
+    expect(error).toMatchObject({ code: 'unsupported_provider_item' });
+    expect(createSession).not.toHaveBeenCalled();
     expect(prepare).not.toHaveBeenCalled();
   });
 });

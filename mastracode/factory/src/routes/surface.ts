@@ -201,6 +201,13 @@ export async function prepareFactoryRuleBinding(
 ): Promise<void> {
   try {
     const branch = factoryRuleBranch(input.item);
+    const destinationStage = factoryRuleStage(input.item.stages);
+    if (!destinationStage) {
+      throw new FactoryDispatchError(
+        'unsupported_provider_item',
+        'Factory skill invocation requires one exclusive board stage.',
+      );
+    }
     const repositorySlug =
       typeof input.item.metadata?.repository === 'string' ? input.item.metadata.repository : undefined;
     const preparedSession = await ensureFactorySourceSession({
@@ -210,13 +217,6 @@ export async function prepareFactoryRuleBinding(
       repositorySlug,
       branch,
     });
-    const destinationStage = factoryRuleStage(input.item.stages);
-    if (!destinationStage) {
-      throw new FactoryDispatchError(
-        'unsupported_provider_item',
-        'Factory skill invocation requires one exclusive board stage.',
-      );
-    }
 
     await coordinator.prepare({
       orgId: input.record.orgId,

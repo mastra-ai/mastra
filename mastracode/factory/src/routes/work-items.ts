@@ -73,12 +73,7 @@ function toWireWorkItem(item: WorkItemRow): WorkItemRow {
   ) {
     return item;
   }
-  const {
-    [FACTORY_RULE_MATERIALIZATION_KEY]: _materialization,
-    [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]: _reconciliation,
-    ...metadata
-  } = item.metadata;
-  return { ...item, metadata };
+  return { ...item, metadata: publicWorkItemMetadata(item.metadata) ?? {} };
 }
 
 /** Session ids of the listed cards whose agent run is in flight. */

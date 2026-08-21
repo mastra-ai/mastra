@@ -334,13 +334,16 @@ export function buildAttentionRoutes(dependencies: AttentionRouteDependencies): 
         if ('response' in resolved) return resolved.response;
         await workItems.ensureReady();
         let before: { occurredAt: Date; id: string } | undefined;
-        while (true) {
+        let pages = 0;
+        let hasMore = false;
+        while (pages < MAX_RECEIPT_SCAN_PAGES) {
           const page = await workItems.listFailedDecisionPage({
             orgId: resolved.orgId,
             factoryProjectId: resolved.factoryProjectId,
             before,
             limit: MAX_PAGE_SIZE,
           });
+          pages += 1;
           if (page.decisions.length === 0) break;
           await workItems.markAttentionReceiptsRead({
             orgId: resolved.orgId,
@@ -354,9 +357,13 @@ export function buildAttentionRoutes(dependencies: AttentionRouteDependencies): 
           });
           const last = page.decisions.at(-1);
           if (!page.hasMore || !last) break;
+          if (pages === MAX_RECEIPT_SCAN_PAGES) {
+            hasMore = true;
+            break;
+          }
           before = { occurredAt: failureOccurredAt(last), id: last.id };
         }
-        return context.json({ ok: true });
+        return context.json({ ok: true, hasMore });
       },
     }),
     receiptRoute(dependencies, 'read', 'read'),
