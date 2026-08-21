@@ -261,6 +261,19 @@ describe('E2BSandbox', () => {
       );
     });
 
+    it('forwards a custom lifecycle to Sandbox.create', async () => {
+      const { Sandbox } = await import('e2b');
+      const lifecycle = { onTimeout: 'kill' as const };
+      const sandbox = new E2BSandbox({ lifecycle });
+
+      await sandbox._start();
+
+      expect(Sandbox.create).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ lifecycle }),
+      );
+    });
+
     it('stores mastra-sandbox-id in metadata', async () => {
       const { Sandbox } = await import('e2b');
       const sandbox = new E2BSandbox({ id: 'test-id' });
@@ -715,13 +728,16 @@ describe('E2BSandbox Template Handling', () => {
       return Promise.resolve(mockSandbox);
     });
 
-    const sandbox = new E2BSandbox();
+    const lifecycle = { onTimeout: 'kill' as const };
+    const sandbox = new E2BSandbox({ lifecycle });
     await sandbox._start();
 
     // Template.build should be called to rebuild after 404
     expect(Template.build).toHaveBeenCalled();
     // And create should be called twice (retry after rebuild)
     expect(callCount).toBe(2);
+    expect(Sandbox.create).toHaveBeenNthCalledWith(1, expect.any(String), expect.objectContaining({ lifecycle }));
+    expect(Sandbox.create).toHaveBeenNthCalledWith(2, expect.any(String), expect.objectContaining({ lifecycle }));
   });
 
   it('custom template builder is built', async () => {
@@ -2722,11 +2738,22 @@ describe('E2BSandbox.clone', () => {
   });
 
   it('inherits template defaults when no overrides are passed', () => {
-    const template = new E2BSandbox({ apiKey: 'e2b-key', timeout: 120_000, env: { BASE: '1' } });
+    const lifecycle = { onTimeout: 'kill' as const };
+    const template = new E2BSandbox({
+      apiKey: 'e2b-key',
+      timeout: 120_000,
+      env: { BASE: '1' },
+      lifecycle,
+    });
 
     const child = template.clone();
 
     expect(child.id).not.toBe(template.id);
-    expect(child['_constructorOptions']).toMatchObject({ apiKey: 'e2b-key', timeout: 120_000, env: { BASE: '1' } });
+    expect(child['_constructorOptions']).toMatchObject({
+      apiKey: 'e2b-key',
+      timeout: 120_000,
+      env: { BASE: '1' },
+      lifecycle,
+    });
   });
 });

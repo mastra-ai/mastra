@@ -27,7 +27,13 @@ import type {
 type InstructionsOption = string | ((opts: { defaultInstructions: string; requestContext?: RequestContext }) => string);
 import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
 import { Sandbox, Template } from 'e2b';
-import type { SandboxInfo as E2BSandboxListInfo, SandboxNetworkOpts, TemplateBuilder, TemplateClass } from 'e2b';
+import type {
+  SandboxInfo as E2BSandboxListInfo,
+  SandboxLifecycle,
+  SandboxNetworkOpts,
+  TemplateBuilder,
+  TemplateClass,
+} from 'e2b';
 import { createDefaultMountableTemplate } from '../utils/template';
 import type { TemplateSpec } from '../utils/template';
 import { mountS3, mountGCS, mountAzure, LOG_PREFIX } from './mounts';
@@ -88,6 +94,12 @@ export interface E2BSandboxOptions extends Omit<MastraSandboxOptions, 'processes
   metadata?: Record<string, unknown>;
   /** Network configuration to use when creating the E2B sandbox */
   network?: SandboxNetworkOpts;
+  /**
+   * Lifecycle policy for the E2B sandbox.
+   *
+   * @default { onTimeout: 'pause' }
+   */
+  lifecycle?: SandboxLifecycle;
 
   /** Domain for self-hosted E2B. Falls back to E2B_DOMAIN env var. */
   domain?: string;
@@ -193,6 +205,7 @@ export class E2BSandbox extends MastraSandbox {
   private readonly env: Record<string, string>;
   private readonly metadata: Record<string, unknown>;
   private readonly network?: SandboxNetworkOpts;
+  private readonly lifecycle: SandboxLifecycle;
   private readonly connectionOpts: Record<string, string>;
   private readonly _instructionsOverride?: InstructionsOption;
   private readonly _constructorOptions: E2BSandboxOptions;
@@ -216,6 +229,7 @@ export class E2BSandbox extends MastraSandbox {
     this.env = options.env ?? {};
     this.metadata = options.metadata ?? {};
     this.network = options.network;
+    this.lifecycle = options.lifecycle ?? { onTimeout: 'pause' };
     this.connectionOpts = {
       ...(options.domain && { domain: options.domain }),
       ...(options.apiUrl && { apiUrl: options.apiUrl }),
@@ -330,13 +344,12 @@ export class E2BSandbox extends MastraSandbox {
     }
 
     // Create a new sandbox with our logical ID in metadata.
-    // lifecycle.onTimeout: 'pause' makes the sandbox pause on timeout instead of being destroyed.
     this.logger.debug(`${LOG_PREFIX} Creating new sandbox for: ${this.id} with template: ${resolvedTemplateId}`);
 
     try {
       this._sandbox = await Sandbox.create(resolvedTemplateId, {
         ...this.connectionOpts,
-        lifecycle: { onTimeout: 'pause' },
+        lifecycle: this.lifecycle,
         metadata: {
           ...this.metadata,
           'mastra-sandbox-id': this.id,
@@ -355,7 +368,7 @@ export class E2BSandbox extends MastraSandbox {
         this.logger.debug(`${LOG_PREFIX} Retrying sandbox creation with rebuilt template: ${rebuiltTemplateId}`);
         this._sandbox = await Sandbox.create(rebuiltTemplateId, {
           ...this.connectionOpts,
-          lifecycle: { onTimeout: 'pause' },
+          lifecycle: this.lifecycle,
           metadata: {
             ...this.metadata,
             'mastra-sandbox-id': this.id,
