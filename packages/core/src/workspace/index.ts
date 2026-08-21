@@ -1,5 +1,17 @@
 // Workspace
 export * from './workspace';
+export {
+  Template,
+  type AptInstallOptions,
+  type JsonPrimitive,
+  type JsonValue,
+  type NpmInstallOptions,
+  type PipInstallOptions,
+  type SandboxTemplateBuilder,
+  type SandboxTemplateMethod,
+  type SandboxTemplateOperation,
+  type SerializedSandboxTemplate,
+} from './template';
 
 // LSP
 export type { CustomLSPServer, LSPConfig, LSPDiagnostic, DiagnosticSeverity, LSPServerDef } from './lsp/types';
