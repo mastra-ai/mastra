@@ -78,10 +78,7 @@ function validate(value: FormValue, editing: boolean): string | undefined {
   }
   if (!value.displayLabel.trim()) return 'Display label is required.';
   if (!value.taskPrompt.trim() || value.taskPrompt.length > 2000) {
-    return 'Task prompt is required and must be at most 2,000 characters.';
-  }
-  if (value.extraOutputRules.length > 5 || value.extraOutputRules.some(rule => rule.length > 200)) {
-    return 'Use at most five additional rules of up to 200 characters each.';
+    return 'Signal instructions are required and must be at most 2,000 characters.';
   }
   return undefined;
 }
@@ -97,7 +94,6 @@ export function SignalDefinitionFormDialog({
 }: SignalDefinitionFormDialogProps) {
   const formId = useId();
   const [value, setValue] = useState(() => initialValue(definition));
-  const [extraOutputRules, setExtraOutputRules] = useState(() => initialValue(definition).extraOutputRules.join('\n'));
   const [validationError, setValidationError] = useState<string>();
   const editing = Boolean(definition);
 
@@ -119,25 +115,18 @@ export function SignalDefinitionFormDialog({
             className="space-y-4"
             onSubmit={event => {
               event.preventDefault();
-              const normalizedValue = {
-                ...value,
-                extraOutputRules: extraOutputRules
-                  .split('\n')
-                  .map(rule => rule.trim())
-                  .filter(Boolean),
-              };
-              const invalid = validate(normalizedValue, editing);
+              const invalid = validate(value, editing);
               setValidationError(invalid);
               if (invalid) return;
               const action = definition
                 ? onUpdate(definition.id, {
-                    displayLabel: normalizedValue.displayLabel,
-                    description: normalizedValue.description,
-                    taskPrompt: normalizedValue.taskPrompt,
-                    extraOutputRules: normalizedValue.extraOutputRules,
-                    artifactAllowlist: normalizedValue.artifactAllowlist,
+                    displayLabel: value.displayLabel,
+                    description: value.description,
+                    taskPrompt: value.taskPrompt,
+                    extraOutputRules: value.extraOutputRules,
+                    artifactAllowlist: value.artifactAllowlist,
                   })
-                : onCreate(normalizedValue);
+                : onCreate(value);
               void action.then(() => onOpenChange(false)).catch(() => undefined);
             }}
           >
@@ -172,36 +161,24 @@ export function SignalDefinitionFormDialog({
                 />
               </FieldBlock.Column>
               <FieldBlock.Column>
-                <FieldBlock.Label name="taskPrompt">Task prompt</FieldBlock.Label>
+                <FieldBlock.Label name="taskPrompt">Signal instructions</FieldBlock.Label>
                 <Textarea
                   id="input-taskPrompt"
                   rows={5}
                   value={value.taskPrompt}
                   disabled={pending}
-                  placeholder="Describe the quality of any handoff in one sentence."
+                  placeholder="Describe what this signal should evaluate and how the result should be written."
                   onChange={event => setField('taskPrompt', event.target.value)}
                 />
-                <FieldBlock.HelpText>{value.taskPrompt.length}/2,000 characters</FieldBlock.HelpText>
-              </FieldBlock.Column>
-              <FieldBlock.Column>
-                <FieldBlock.Label name="extraOutputRules">Additional response rules</FieldBlock.Label>
-                <Textarea
-                  id="input-extraOutputRules"
-                  rows={3}
-                  value={extraOutputRules}
-                  disabled={pending}
-                  placeholder="One optional rule per line"
-                  onChange={event => setExtraOutputRules(event.target.value)}
-                />
                 <FieldBlock.HelpText>
-                  Optional constraints on how the signal is written. The platform always requires one plain sentence.
+                  Tell the model what to evaluate and what the signal result should contain. {value.taskPrompt.length}
+                  /2,000 characters
                 </FieldBlock.HelpText>
               </FieldBlock.Column>
             </FieldBlock.Layout>
             {editing ? (
               <p className="text-ui-xs text-neutral3">
-                Prompt or response-rule changes create a new version and apply only to new traces. Existing analysis is
-                unchanged.
+                Instruction changes create a new version and apply only to new traces. Existing analysis is unchanged.
               </p>
             ) : null}
             {validationError ? (
