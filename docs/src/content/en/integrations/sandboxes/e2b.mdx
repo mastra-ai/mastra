@@ -323,8 +323,9 @@ const sandbox = new E2BSandbox({
 ```
 
 There is exactly one template per repository and setup command: the template
-name is a deterministic hash of those inputs, and the commit sha rides as a
-tag on that name (`mastra-repo-<hash>:sha-<sha>`). Without an explicit
+name carries the repo slug plus a short hash of the inputs, and the commit
+sha rides as a tag on that name
+(`mastra-repo-<owner>-<repo>-<hash>:sha-<sha>`). Without an explicit
 `sha`, the spec pins itself to the repository's current default-branch head
 at resolution time: right before the template lookup it runs `git ls-remote`
 (no clone, \~100ms) and keys the tag on that sha. When the default branch
@@ -341,20 +342,19 @@ reuse it without rebuilding. A changed setup command hashes to a new
 template name.
 
 The template layers on top of the default mountable base (E2B's `base` image,
-so git and common tooling are present, plus `s3fs`/FUSE for mount support).
-Because build steps run as the sandbox's non-root `user`, the spec preps the
-workspace root as root first (`mkdir` + `chown` to `user`) and then clones and
-runs setup as `user`, keeping runtime file ownership correct.
+so git and common tooling are present, plus `s3fs`/FUSE for mount support,
+plus a user-writable `/workspace` — build steps run as the sandbox's
+non-root `user`, so the base preps the workspace root as root first). The
+clone and setup then run as `user`, keeping runtime file ownership correct.
 
 Failure handling is designed so a broken template never wedges a session:
 
-- A failed build falls back to a named workspace-base template (the default
-  mountable base with a user-writable `/workspace`), so a runtime cold clone
-  still works.
-- E2B keeps a failed build's alias visible to `Template.exists`, so a broken
-  alias could otherwise be reused forever. When creating a sandbox from a
-  named alias fails, the cached resolution is dropped and creation retries
-  once on the fallback.
+- A failed build falls back to the default mountable template, whose
+  writable `/workspace` keeps a runtime cold clone working.
+- E2B keeps a failed build's ref visible to `Template.exists`, so a broken
+  ref could otherwise be reused forever. When creating a sandbox from a
+  named ref fails, the cached resolution is dropped and creation retries
+  down the fallback ladder.
 
 Private repositories build warm templates through `getAuthToken`: a callback
 that mints a fresh, short-lived credential (such as a GitHub App

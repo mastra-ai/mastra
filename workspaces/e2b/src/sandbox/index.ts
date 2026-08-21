@@ -384,24 +384,32 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
           this._resolvedTemplateId = fallbackId;
         } catch (fallbackError) {
           if (!isTemplateUnusable(fallbackError)) throw fallbackError;
-          const defaultId = await this.buildOrReuseDefaultTemplate();
-          if (defaultId === fallbackId) throw fallbackError;
-          this.logger.warn(`${LOG_PREFIX} Fallback '${fallbackId}' failed too, using default: ${fallbackError}`);
-          try {
-            this._sandbox = await createFromTemplate(defaultId);
-            this._resolvedTemplateId = defaultId;
-          } catch (defaultError) {
-            // Terminal recovery: the default alias itself may be registered
-            // by a FAILED build. Force-rebuild it once (mirrors the no-spec
-            // path's 404 recovery) — past this, the error propagates.
-            if (!isTemplateUnusable(defaultError)) throw defaultError;
-            this.logger.warn(`${LOG_PREFIX} Default '${defaultId}' broken too, rebuilding: ${defaultError}`);
+          // Terminal recovery: the default alias itself may be registered by
+          // a FAILED build. Force-rebuild it once (mirrors the no-spec
+          // path's 404 recovery) — past this, the error propagates.
+          const rebuildDefaultAndCreate = async () => {
+            this.logger.warn(`${LOG_PREFIX} Default template broken too, rebuilding: ${fallbackError}`);
             const rebuiltId = await this.buildDefaultTemplate();
             this._sandbox = await createFromTemplate(rebuiltId);
             this._resolvedTemplateId = rebuiltId;
+          };
+          const defaultId = await this.buildOrReuseDefaultTemplate();
+          if (defaultId === fallbackId) {
+            // The failed fallback WAS the default (specs without a named
+            // fallback land on it directly) — skip straight to the rebuild.
+            await rebuildDefaultAndCreate();
+          } else {
+            this.logger.warn(`${LOG_PREFIX} Fallback '${fallbackId}' failed too, using default: ${fallbackError}`);
+            try {
+              this._sandbox = await createFromTemplate(defaultId);
+              this._resolvedTemplateId = defaultId;
+            } catch (defaultError) {
+              if (!isTemplateUnusable(defaultError)) throw defaultError;
+              await rebuildDefaultAndCreate();
+            }
           }
         }
-        this.logger.debug(`${LOG_PREFIX} Created sandbox ${this._sandbox.sandboxId} from fallback for: ${this.id}`);
+        this.logger.debug(`${LOG_PREFIX} Created sandbox ${this._sandbox?.sandboxId} from fallback for: ${this.id}`);
       } else if (!this.templateSpec) {
         this.logger.debug(`${LOG_PREFIX} Template not found, rebuilding: ${resolvedTemplateId}`);
         this._resolvedTemplateId = undefined; // Clear cached ID to force rebuild
@@ -414,7 +422,7 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
       }
     }
 
-    this.logger.debug(`${LOG_PREFIX} Created sandbox ${this._sandbox.sandboxId} for logical ID: ${this.id}`);
+    this.logger.debug(`${LOG_PREFIX} Created sandbox ${this._sandbox?.sandboxId} for logical ID: ${this.id}`);
     this._createdAt = new Date();
     // Note: processPending is called by base class after start completes
   }
@@ -959,9 +967,13 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
         }
         this.logger.debug(`${LOG_PREFIX} Building template: ${alias}...`);
         const buildResult = await Template.build(namedTemplate as TemplateClass, alias, this.connectionOpts);
-        this._resolvedTemplateId = buildResult.templateId;
         this.logger.debug(`${LOG_PREFIX} Template built: ${buildResult.templateId}`);
-        return buildResult.templateId;
+        // Resolve to the alias, NOT the raw build id: creating a sandbox from
+        // a bare template id looks up its `default` tag, which a
+        // tag-qualified build (e.g. `name:sha-<sha>`) never assigns — the
+        // create would 404 and needlessly ride the fallback ladder.
+        this._resolvedTemplateId = alias;
+        return alias;
       } catch (error) {
         this.logger.warn(`${LOG_PREFIX} Template '${alias}' resolution failed, falling back: ${error}`);
         return await this.resolveFallbackTemplate(fallbackTemplate);
@@ -997,10 +1009,10 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
    * when it does not.
    */
   /**
-   * Resolve a named spec's fallback template. A named fallback (e.g. the
-   * repo template's workspace-base spec) gets its own exists-then-build
-   * resolution; anything failing past that lands on the default mountable
-   * template so a broken build never wedges a session.
+   * Resolve a named spec's fallback template. A named fallback gets its own
+   * exists-then-build resolution; anything failing past that (including
+   * specs without a fallback, e.g. repo templates) lands on the default
+   * mountable template so a broken build never wedges a session.
    */
   private async resolveFallbackTemplate(fallbackTemplate: NamedTemplateSpec['fallbackTemplate']): Promise<string> {
     if (typeof fallbackTemplate === 'string') {

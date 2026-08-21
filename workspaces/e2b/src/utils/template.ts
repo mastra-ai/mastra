@@ -119,7 +119,7 @@ export interface MountableTemplateResult {
  * Version of the default mountable template.
  * Increment this when changing the default template dependencies.
  */
-export const MOUNTABLE_TEMPLATE_VERSION = 'v1';
+export const MOUNTABLE_TEMPLATE_VERSION = 'v2';
 
 /**
  * Create a base template with FUSE mounting dependencies pre-installed.
@@ -160,7 +160,14 @@ export function createDefaultMountableTemplate(): MountableTemplateResult {
     .digest('hex')
     .slice(0, 16);
 
-  const template = Template().fromTemplate('base').aptInstall(aptPackages);
+  // The stock base runs everything as the non-root `user`, which cannot
+  // create top-level directories — prep a user-writable /workspace so
+  // deterministic workdirs (and runtime clones on the fallback path) always
+  // have a writable root, on every template derived from this base.
+  const template = Template()
+    .fromTemplate('base')
+    .aptInstall(aptPackages)
+    .runCmd('mkdir -p /workspace && chown -R user:user /workspace', { user: 'root' });
 
   // Note: gcsfuse requires adding Google's apt repo which can be flaky
   // For now, we'll install it at mount time if needed

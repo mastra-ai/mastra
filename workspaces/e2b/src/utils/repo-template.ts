@@ -116,8 +116,22 @@ function repoTemplateName(options: RepoTemplateOptions): string {
   const hash = createHash('sha256')
     .update(JSON.stringify(config, Object.keys(config).sort()))
     .digest('hex')
-    .slice(0, 16);
-  return `mastra-repo-${hash}`;
+    .slice(0, 8);
+  // Readable name: the repo slug is right in the template name; the short
+  // hash suffix keeps setup-command/workdir variants and sanitization
+  // collisions distinct.
+  const [owner, name] = options.repoFullName.split('/', 2);
+  const slug = [owner, name]
+    .map(part =>
+      (part ?? '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 24),
+    )
+    .filter(Boolean)
+    .join('-');
+  return `mastra-repo-${slug}-${hash}`;
 }
 
 function shaTag(sha: string): string {
@@ -205,9 +219,9 @@ function buildRepoTemplateSpec(options: RepoTemplateOptions, token?: string): Na
     steps.push(`cd ${workdir} && ${setupCommand}`);
   }
 
-  // Build steps run as the sandbox's default non-root `user`, which cannot
-  // create the workspace root — prepare it as root and hand it to `user`
-  // first, then clone + set up as `user` so runtime file ownership is right.
+  // The default mountable base preps a user-writable /workspace, so the
+  // clone (which creates its own leading directories) runs directly as the
+  // sandbox `user`, keeping runtime file ownership right.
   let template = createDefaultMountableTemplate().template;
   if (token) {
     // Visible to build steps; probed to NOT persist into runtime sandbox
@@ -215,14 +229,13 @@ function buildRepoTemplateSpec(options: RepoTemplateOptions, token?: string): Na
     // definition until the next rebuild.
     template = template.setEnvs({ [BUILD_TOKEN_ENV]: token });
   }
-  template = template.runCmd(workspaceRootPrepCommand(workdir), { user: 'root' }).runCmd(steps);
+  template = template.runCmd(steps);
 
   return {
     alias: repoTemplateAlias(sha ? { ...options, sha } : options),
     template,
-    // A failed repo build degrades to a template that still has a writable
-    // workspace root, so the session's runtime cold clone works.
-    fallbackTemplate: createWorkspaceBaseTemplate(),
+    // A failed repo build degrades to the default mountable template, whose
+    // writable /workspace keeps the session's runtime cold clone working.
   };
 }
 
@@ -255,31 +268,4 @@ async function resolveDefaultBranchHead(repoFullName: string, token?: string): P
 
 function defaultWorkdir(repoFullName: string): string {
   return `/workspace/${repoFullName}`;
-}
-
-function workspaceRootPrepCommand(workdir: string): string {
-  // WORKDIR_PATTERN guarantees the workdir sits under /workspace; prep and
-  // chown that fixed root only.
-  return `mkdir -p ${workdir} && chown -R user:user /workspace`;
-}
-
-export const WORKSPACE_BASE_TEMPLATE_VERSION = 'v1';
-
-/**
- * The repo template's fallback: the default mountable base plus a
- * user-writable `/workspace` root, under its own deterministic alias so a
- * broken repo build degrades to a cold start whose runtime clone can
- * actually write the deterministic workdir.
- */
-export function createWorkspaceBaseTemplate(): NamedTemplateSpec {
-  const hash = createHash('sha256')
-    .update(JSON.stringify({ version: WORKSPACE_BASE_TEMPLATE_VERSION, kind: 'workspace-base' }))
-    .digest('hex')
-    .slice(0, 16);
-  return {
-    alias: `mastra-workspace-base-${hash}`,
-    template: createDefaultMountableTemplate().template.runCmd('mkdir -p /workspace && chown -R user:user /workspace', {
-      user: 'root',
-    }),
-  };
 }

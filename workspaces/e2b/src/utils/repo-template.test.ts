@@ -22,7 +22,7 @@ function namedSpec(spec: ReturnType<typeof createRepoTemplate>): NamedTemplateSp
 describe('repoTemplateAlias', () => {
   it('is deterministic for identical inputs', () => {
     expect(repoTemplateAlias(BASE)).toBe(repoTemplateAlias({ ...BASE }));
-    expect(repoTemplateAlias(BASE)).toMatch(/^mastra-repo-[0-9a-f]{16}:sha-[0-9a-f]{12}$/);
+    expect(repoTemplateAlias(BASE)).toMatch(/^mastra-repo-octocat-hello-[0-9a-f]{8}:sha-[0-9a-f]{12}$/);
   });
 
   it('keys the sha as a tag on a sha-independent template name', () => {
@@ -171,15 +171,14 @@ describe('createRepoTemplate', () => {
     });
   });
 
-  it('preps the workspace root as root before cloning as user', async () => {
+  it('preps a user-writable /workspace (via the base steps) before cloning as user', async () => {
     const steps = await serializedSteps(namedSpec(createRepoTemplate(BASE)));
-    expect(steps).toContain('mkdir -p /workspace/octocat/hello && chown -R user:user /workspace');
+    expect(steps).toContain('mkdir -p /workspace && chown -R user:user /workspace');
   });
 
-  it('carries a named workspace-base fallback so a broken build still yields a writable workdir', () => {
+  it('carries no named fallback — a broken build degrades to the default mountable template', () => {
     const spec = namedSpec(createRepoTemplate(BASE));
-    expect(isNamedTemplateSpec(spec.fallbackTemplate as never)).toBe(true);
-    expect((spec.fallbackTemplate as { alias: string }).alias).toMatch(/^mastra-workspace-base-[0-9a-f]{16}$/);
+    expect(spec.fallbackTemplate).toBeUndefined();
   });
 
   it('pins the /workspace boundary for custom workdirs', () => {

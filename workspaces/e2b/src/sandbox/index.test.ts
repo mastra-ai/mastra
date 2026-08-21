@@ -284,29 +284,27 @@ describe('E2BSandbox', () => {
       expect((sandbox as any)._resolvedTemplateId).not.toBe(spec.alias);
     });
 
-    it('lands on the default mountable template when the fallback alias is broken too', async () => {
+    it('lands on the default mountable template when the repo ref is broken', async () => {
       const { Sandbox, Template } = await import('e2b');
       const spec = namedSpec();
       (Template.exists as any).mockResolvedValue(true);
       (Sandbox.create as any)
         .mockRejectedValueOnce(new Error('404: template not found'))
-        .mockRejectedValueOnce(new Error('404: template not found'))
         .mockResolvedValueOnce(mockSandbox);
-      (Template.build as any).mockResolvedValue({ templateId: 'default-template-id' });
 
       const sandbox = new E2BSandbox({ id: 'ladder-3', template: spec });
       const result = await sandbox.start();
 
       expect(result?.outcome).toBe('created');
       const calls = (Sandbox.create as any).mock.calls.map((c: unknown[]) => c[0]);
-      // Rung identity: repo alias -> named fallback alias -> default id.
+      // Rung identity: repo ref -> default mountable id (repo specs carry no
+      // named fallback).
       expect(calls[0]).toBe(spec.alias);
-      expect(calls[1]).toBe((spec.fallbackTemplate as { alias: string }).alias);
-      expect(calls[2]).toBe(createDefaultMountableTemplate().id);
+      expect(calls[1]).toBe(createDefaultMountableTemplate().id);
       // Cache coherence: the template that actually produced a sandbox is
       // cached, so a later create on this instance reuses it instead of
       // re-walking the ladder from the broken alias.
-      expect((sandbox as any)._resolvedTemplateId).toBe(calls[2]);
+      expect((sandbox as any)._resolvedTemplateId).toBe(calls[1]);
 
       // `_stop()` is the status-managed stop seam (public stop() is the raw
       // provider impl); the VM is gone, so the next start must create again.
@@ -314,17 +312,17 @@ describe('E2BSandbox', () => {
       (Sandbox.list as any).mockReturnValue({ nextItems: vi.fn().mockResolvedValue([]) });
       await sandbox.start();
       const later = (Sandbox.create as any).mock.calls.map((c: unknown[]) => c[0]);
-      expect(later[3]).toBe(calls[2]);
+      expect(later[2]).toBe(calls[1]);
     });
 
     it('force-rebuilds a registered-but-broken default alias as terminal recovery', async () => {
       const { Sandbox, Template } = await import('e2b');
       const spec = namedSpec();
-      // All three aliases are registered (failed builds) and 404 on create;
-      // the terminal recovery force-rebuilds the default and succeeds.
+      // Both the repo ref and the default alias are registered (failed
+      // builds) and 404 on create; the terminal recovery force-rebuilds the
+      // default and succeeds.
       (Template.exists as any).mockResolvedValue(true);
       (Sandbox.create as any)
-        .mockRejectedValueOnce(new Error('404: template not found'))
         .mockRejectedValueOnce(new Error('404: template not found'))
         .mockRejectedValueOnce(new Error('404: template not found'))
         .mockResolvedValue(mockSandbox);
@@ -335,8 +333,8 @@ describe('E2BSandbox', () => {
 
       expect(result?.outcome).toBe('created');
       const calls = (Sandbox.create as any).mock.calls.map((c: unknown[]) => c[0]);
-      expect(calls).toHaveLength(4);
-      expect(calls[3]).toBe('rebuilt-default-id');
+      expect(calls).toHaveLength(3);
+      expect(calls[2]).toBe('rebuilt-default-id');
       expect((sandbox as any)._resolvedTemplateId).toBe('rebuilt-default-id');
     });
 
