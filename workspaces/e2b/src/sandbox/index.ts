@@ -198,11 +198,13 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
   private readonly _instructionsOverride?: InstructionsOption;
   private readonly _constructorOptions: E2BSandboxOptions;
 
-  /** Resolved template ID after building (if needed) */
+  /**
+   * Resolved template ID after building (if needed). The single cache for
+   * template resolution: `resolveTemplate()` returns it when set, and the
+   * create-time fallback ladder rewrites it to whichever template actually
+   * produced a sandbox.
+   */
   private _resolvedTemplateId?: string;
-
-  /** Promise for template preparation (started in constructor) */
-  private _templatePreparePromise?: Promise<string>;
 
   constructor(options: E2BSandboxOptions = {}) {
     super({
@@ -226,19 +228,6 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
 
     this._instructionsOverride = options.instructions;
     this._constructorOptions = { ...options };
-  }
-
-  /**
-   * Kick off template resolution in the background without awaiting it.
-   * Called when `start()` begins (from `find()`), so the template build can
-   * overlap the existing-sandbox lookup — but never at construction:
-   * constructing a sandbox performs no network I/O and triggers no builds.
-   */
-  private kickTemplatePreparation(): void {
-    this._templatePreparePromise ??= this.resolveTemplate().catch(err => {
-      this.logger.debug(`${LOG_PREFIX} Template preparation error (will retry on create):`, err);
-      return ''; // Return empty string, retried in create()
-    });
   }
 
   /**
@@ -308,8 +297,6 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
    * policy, so it lives here rather than in `connect`.
    */
   protected override async find(): Promise<Sandbox | undefined> {
-    // Overlap template resolution with the lookup; create() awaits it.
-    this.kickTemplatePreparation();
     // Already have a sandbox instance
     if (this._sandbox) {
       return this._sandbox;
@@ -334,12 +321,10 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
   }
 
   protected override async create(): Promise<void> {
-    // Template preparation started in the constructor; retry here if it failed.
-    let resolvedTemplateId = await (this._templatePreparePromise || this.resolveTemplate());
-    if (!resolvedTemplateId) {
-      this.logger.debug(`${LOG_PREFIX} Template preparation failed earlier, retrying...`);
-      resolvedTemplateId = await this.resolveTemplate();
-    }
+    // Template resolution happens here — never at construction or during a
+    // reconnect — so a sandbox that only ever resumes never triggers a
+    // template build. `resolveTemplate()` caches via `_resolvedTemplateId`.
+    const resolvedTemplateId = await this.resolveTemplate();
 
     // Create a new sandbox with our logical ID in metadata.
     // lifecycle.onTimeout: 'pause' makes the sandbox pause on timeout instead of being destroyed.
@@ -385,13 +370,17 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
             : await this.buildOrReuseDefaultTemplate();
         try {
           this._sandbox = await createFromTemplate(fallbackId);
+          // Cache coherence: later creates on this instance (e.g. after the
+          // VM died) must reuse the template that actually worked, not
+          // re-walk the ladder from the broken alias.
+          this._resolvedTemplateId = fallbackId;
         } catch (fallbackError) {
           if (!isTemplateUnusable(fallbackError)) throw fallbackError;
           const defaultId = await this.buildOrReuseDefaultTemplate();
           if (defaultId === fallbackId) throw fallbackError;
-          this._resolvedTemplateId = undefined;
           this.logger.warn(`${LOG_PREFIX} Fallback '${fallbackId}' failed too, using default: ${fallbackError}`);
           this._sandbox = await createFromTemplate(defaultId);
+          this._resolvedTemplateId = defaultId;
         }
         this.logger.debug(`${LOG_PREFIX} Created sandbox ${this._sandbox.sandboxId} from fallback for: ${this.id}`);
       } else if (!this.templateSpec) {
@@ -1002,13 +991,18 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
       }
     }
     if (fallbackTemplate) {
-      const buildResult = await Template.build(
-        fallbackTemplate as unknown as TemplateClass,
-        `mastra-fallback-${this.id.replace(/[^a-zA-Z0-9-]/g, '-')}`,
-        this.connectionOpts,
-      );
-      this._resolvedTemplateId = buildResult.templateId;
-      return buildResult.templateId;
+      try {
+        const buildResult = await Template.build(
+          fallbackTemplate as unknown as TemplateClass,
+          `mastra-fallback-${this.id.replace(/[^a-zA-Z0-9-]/g, '-')}`,
+          this.connectionOpts,
+        );
+        this._resolvedTemplateId = buildResult.templateId;
+        return buildResult.templateId;
+      } catch (error) {
+        this.logger.warn(`${LOG_PREFIX} Fallback template build failed, using default: ${error}`);
+        return await this.buildOrReuseDefaultTemplate();
+      }
     }
     return await this.buildOrReuseDefaultTemplate();
   }

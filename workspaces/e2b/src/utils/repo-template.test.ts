@@ -90,6 +90,14 @@ describe('createRepoTemplate', () => {
     expect((spec.fallbackTemplate as { alias: string }).alias).toMatch(/^mastra-workspace-base-[0-9a-f]{16}$/);
   });
 
+  it('pins the /workspace boundary for custom workdirs', () => {
+    expect(() => createRepoTemplate({ ...BASE, workdir: '/' })).toThrow();
+    expect(() => createRepoTemplate({ ...BASE, workdir: '/home/repo' })).toThrow();
+    expect(() => createRepoTemplate({ ...BASE, workdir: '/tmp/repo' })).toThrow();
+    expect(() => createRepoTemplate({ ...BASE, workdir: '/workspace/../home' })).toThrow();
+    expect(createRepoTemplate({ ...BASE, workdir: '/workspace/custom/dir' }).alias).toMatch(/^mastra-repo-/);
+  });
+
   it('rejects malformed inputs', () => {
     expect(() => createRepoTemplate({ repoFullName: 'no-slash' })).toThrow(/repoFullName/);
     expect(() => createRepoTemplate({ repoFullName: 'a/b; rm -rf /' })).toThrow(/repoFullName/);

@@ -103,7 +103,7 @@ export function createRepoTemplate(options: RepoTemplateOptions): NamedTemplateS
   }
   const workdir = options.workdir ?? defaultWorkdir(repoFullName);
   if (!WORKDIR_PATTERN.test(workdir) || workdir.includes('..')) {
-    throw new Error(`Invalid workdir '${workdir}': expected an absolute path`);
+    throw new Error(`Invalid workdir '${workdir}': expected an absolute path under /workspace with no traversal`);
   }
 
   // Tokenless HTTPS by design — see the module doc's credential invariant.

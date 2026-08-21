@@ -187,17 +187,34 @@ describe('E2BSandbox', () => {
       expect(sandbox.name).toBe('E2BSandbox');
     });
 
-    it('performs no template I/O at construction; preparation kicks off on start', async () => {
+    it('performs no template I/O at construction; resolution happens on create', async () => {
       const { Template } = await import('e2b');
       const sandbox = new E2BSandbox();
 
-      // Construction is pure: no resolution promise, no network calls.
-      expect((sandbox as any)._templatePreparePromise).toBeUndefined();
+      // Construction is pure: no network calls, no builds.
       expect(Template.exists).not.toHaveBeenCalled();
       expect(Template.build).not.toHaveBeenCalled();
 
       await sandbox.start();
-      expect((sandbox as any)._templatePreparePromise).toBeDefined();
+      // Default template resolution ran during create().
+      expect(Template.exists).toHaveBeenCalled();
+    });
+
+    it('a reconnect-only start never resolves or builds templates', async () => {
+      const { Sandbox, Template } = await import('e2b');
+      (Sandbox.list as any).mockReturnValue({
+        nextItems: vi.fn().mockResolvedValue([{ sandboxId: 'existing-1', state: 'running' }]),
+      });
+
+      const sandbox = new E2BSandbox({
+        id: 'resume-only',
+        template: createRepoTemplate({ repoFullName: 'octocat/hello' }),
+      });
+      const result = await sandbox.start();
+
+      expect(result?.outcome).toBe('connected');
+      expect(Template.exists).not.toHaveBeenCalled();
+      expect(Template.build).not.toHaveBeenCalled();
     });
   });
 
@@ -252,7 +269,41 @@ describe('E2BSandbox', () => {
       const result = await sandbox.start();
 
       expect(result?.outcome).toBe('created');
-      expect(Sandbox.create as any).toHaveBeenCalledTimes(3);
+      const calls = (Sandbox.create as any).mock.calls.map((c: unknown[]) => c[0]);
+      // Rung identity: repo alias -> named fallback alias -> default id.
+      expect(calls[0]).toBe(spec.alias);
+      expect(calls[1]).toBe((spec.fallbackTemplate as { alias: string }).alias);
+      expect(calls[2]).not.toBe(calls[0]);
+      expect(calls[2]).not.toBe(calls[1]);
+      // Cache coherence: the template that actually produced a sandbox is
+      // cached, so a later create on this instance reuses it instead of
+      // re-walking the ladder from the broken alias.
+      expect((sandbox as any)._resolvedTemplateId).toBe(calls[2]);
+
+      // `_stop()` is the status-managed stop seam (public stop() is the raw
+      // provider impl); the VM is gone, so the next start must create again.
+      await (sandbox as any)._stop();
+      (Sandbox.list as any).mockReturnValue({ nextItems: vi.fn().mockResolvedValue([]) });
+      await sandbox.start();
+      const later = (Sandbox.create as any).mock.calls.map((c: unknown[]) => c[0]);
+      expect(later[3]).toBe(calls[2]);
+    });
+
+    it('a raw TemplateBuilder fallback whose build fails still reaches the default template', async () => {
+      const { Sandbox, Template } = await import('e2b');
+      const spec = namedSpec();
+      const builderFallback = { ...spec, fallbackTemplate: { runCmd: () => ({}) } as never };
+      (Template.exists as any).mockResolvedValue(false);
+      (Template.build as any)
+        .mockRejectedValueOnce(new Error('BuildError: named build failed'))
+        .mockRejectedValueOnce(new Error('BuildError: builder fallback failed'))
+        .mockResolvedValueOnce({ templateId: 'default-template-id' });
+
+      const sandbox = new E2BSandbox({ id: 'ladder-5', template: builderFallback });
+      const result = await sandbox.start();
+
+      expect(result?.outcome).toBe('created');
+      expect((Sandbox.create as any).mock.calls[0]![0]).toBe('default-template-id');
     });
 
     it('propagates non-404 create errors without retrying on another template', async () => {
