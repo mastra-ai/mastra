@@ -151,6 +151,20 @@ export interface WorkflowScorerData {
  * source for trajectory extraction, so nulling it to stop writes would silently
  * downgrade trajectory scorers to the raw-message fallback.
  */
+/**
+ * Deterministic score id for experiment score rows. Retried executions of the
+ * same (experiment, item, attempt, scorer) produce the same id, so the scores
+ * store upserts (latest wins) instead of accumulating duplicate rows.
+ */
+export function experimentScoreId(experimentId: string, itemId: string, attempt: number, scorerId: string): string {
+  return `${experimentScoreKey(experimentId, itemId, attempt)}:${scorerId}`;
+}
+
+/** Prefix shared by all scores of one (experiment, item, attempt) execution. */
+export function experimentScoreKey(experimentId: string, itemId: string, attempt: number): string {
+  return `expscore:${experimentId}:${itemId}:${attempt}`;
+}
+
 export async function runScorersForItem(
   scorers: MastraScorer<any, any, any, any>[],
   item: { input: unknown; groundTruth?: unknown; metadata?: Record<string, unknown> },
@@ -165,6 +179,7 @@ export async function runScorersForItem(
   traceId?: string,
   workflowData?: WorkflowScorerData,
   persistScores: boolean = true,
+  stableScoreKey?: string,
 ): Promise<ScorerResult[]> {
   if (scorers.length === 0) return [];
 
@@ -208,6 +223,7 @@ export async function runScorersForItem(
         try {
           // Legacy score-store emission. This path is being deprecated.
           await validateAndSaveScore(storage, {
+            ...(stableScoreKey ? { id: `${stableScoreKey}:${scorer.id}` } : {}),
             scorerId: scorer.id,
             score: result.score,
             reason: result.reason ?? undefined,

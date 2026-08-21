@@ -1840,6 +1840,48 @@ describe('ModelSpanTracker', () => {
       expect(inferenceSpan!.attributes.usage).toBeDefined();
     });
 
+    it('strips step-finish step history from MODEL_STEP and MODEL_INFERENCE outputs', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+        attributes: { model: 'gpt-test', provider: 'test', streaming: true },
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      const chunks = [
+        { type: 'step-start', payload: { messageId: 'msg-1' } },
+        { type: 'text-delta', payload: { text: 'hi' } },
+        {
+          type: 'step-finish',
+          payload: {
+            output: {
+              text: 'hi',
+              usage: { promptTokens: 4, completionTokens: 6, totalTokens: 10 },
+              steps: [{ request: { body: 'large request' } }],
+              object: { steps: ['domain step'] },
+            },
+            stepResult: { reason: 'stop', warnings: [], isContinued: false },
+            metadata: {
+              providerMetadata: { provider: { noisy: true } },
+              experimental_providerMetadata: { provider: { legacy: true } },
+              keep: 'metadata',
+            },
+          },
+        },
+      ];
+
+      await consumeStream(tracker.wrapStream(createMockStream(chunks)));
+      modelSpan.end();
+
+      const [stepSpan] = testExporter.getSpansByType(SpanType.MODEL_STEP);
+      const [inferenceSpan] = testExporter.getSpansByType(SpanType.MODEL_INFERENCE);
+
+      expect(stepSpan!.output).toEqual({ text: 'hi', object: { steps: ['domain step'] } });
+      expect(inferenceSpan!.output).toEqual({ text: 'hi', object: { steps: ['domain step'] } });
+      expect(stepSpan!.metadata).toEqual({ keep: 'metadata' });
+    });
+
     it('preserves the provider response model on MODEL_INFERENCE', async () => {
       const modelSpan = tracing.startSpan({
         type: SpanType.MODEL_GENERATION,

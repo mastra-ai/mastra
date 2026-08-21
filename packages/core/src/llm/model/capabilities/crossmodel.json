@@ -15,6 +15,7 @@
     "gemini/gemini-3.5-flash",
     "gemini/gemini-3.5-flash-lite",
     "gemini/gemini-3.6-flash",
+    "gemini/gemini-3.7-flash",
     "minimax/minimax-m3",
     "moonshot/kimi-k2.5",
     "moonshot/kimi-k2.6",
@@ -53,6 +54,7 @@
     "gemini/gemini-3.5-flash",
     "gemini/gemini-3.5-flash-lite",
     "gemini/gemini-3.6-flash",
+    "gemini/gemini-3.7-flash",
     "minimax/minimax-m2.7",
     "minimax/minimax-m3",
     "moonshot/kimi-k2.6",
@@ -74,7 +76,8 @@
     "z-ai/glm-5",
     "z-ai/glm-5-turbo",
     "z-ai/glm-5.1",
-    "z-ai/glm-5.2"
+    "z-ai/glm-5.2",
+    "z-ai/glm-5.3"
   ],
   "structuredOutput": [
     "anthropic/claude-fable-5",
@@ -94,6 +97,7 @@
     "gemini/gemini-3.5-flash",
     "gemini/gemini-3.5-flash-lite",
     "gemini/gemini-3.6-flash",
+    "gemini/gemini-3.7-flash",
     "minimax/minimax-m2.7",
     "minimax/minimax-m3",
     "moonshot/kimi-k2.5",
@@ -126,6 +130,7 @@
     "z-ai/glm-5",
     "z-ai/glm-5-turbo",
     "z-ai/glm-5.1",
-    "z-ai/glm-5.2"
+    "z-ai/glm-5.2",
+    "z-ai/glm-5.3"
   ]
 }

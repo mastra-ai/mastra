@@ -15,6 +15,7 @@ import type {
 } from '../../storage/domains/source-control/base.js';
 import type { WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import type { IntegrationContext } from '../base.js';
+import type { GithubAppIdentity } from './app-identity.js';
 import type { GithubRepositoryPermission } from './integration.js';
 import { changeRequestTargetKey } from './subscriptions.js';
 import type { ParsedGithubWebhook } from './webhook.js';
@@ -80,7 +81,14 @@ function eventName(parsed: ParsedGithubWebhook): FactoryGithubEventName | undefi
   if (parsed.event === 'issues' && action === 'closed') return 'issueClosed';
   if (parsed.event === 'issue_comment') {
     const issue = object(parsed.payload.issue);
-    if (object(issue?.pull_request)) return undefined;
+    // A comment on a PR arrives as `issue_comment` with `issue.pull_request` set.
+    // It routes to the PR's own event so it binds to the authoring Work item via
+    // provenance instead of being mistaken for a comment on an issue of the same
+    // number. Only `created` matters: edits and deletions of an existing comment
+    // are not new feedback to act on.
+    if (object(issue?.pull_request)) {
+      return action === 'created' ? 'pullRequestCommentCreated' : undefined;
+    }
     if (action === 'created') return 'issueCommentCreated';
     if (action === 'edited') return 'issueCommentEdited';
     if (action === 'deleted') return 'issueCommentDeleted';
@@ -91,6 +99,7 @@ function eventName(parsed: ParsedGithubWebhook): FactoryGithubEventName | undefi
     return boolean(object(parsed.payload.pull_request)?.merged) ? 'pullRequestMerged' : 'pullRequestClosed';
   }
   if (parsed.event === 'pull_request' && action === 'review_requested') return 'pullRequestReviewRequested';
+  if (parsed.event === 'pull_request_review' && action === 'submitted') return 'pullRequestReviewSubmitted';
   return undefined;
 }
 
@@ -163,6 +172,13 @@ function pullRequestProvenance(data: Record<string, unknown> | undefined): Facto
 
 export interface GithubRulesIntegration {
   readonly slug?: string;
+  /**
+   * Factory's own GitHub login, used to ignore its own writes. Optional because
+   * not every integration can name itself; when absent, self-recognition falls
+   * back to the configured slug and, failing that, to content Factory stamps
+   * itself (see `FACTORY_TRIAGE_COMMENT_MARKER`).
+   */
+  readonly identity?: GithubAppIdentity;
   getRepositoryCollaboratorPermission(
     installationId: number,
     repoFullName: string,
@@ -182,6 +198,21 @@ export interface GithubRulesOptions {
 
 export class GithubRules {
   constructor(private readonly options: GithubRulesOptions) {}
+
+  /**
+   * Whether a login is Factory itself. Prefers the resolved identity, which is
+   * observed from Factory's own writes, and falls back to the configured slug.
+   * An unset slug must not silently answer "not Factory" — that is what
+   * disabled every self-loop guard.
+   */
+  #isFactoryLogin(login: string | undefined): boolean {
+    const identity = this.options.github.identity;
+    if (identity?.known) return identity.matches(login);
+    const slug = this.options.github.slug?.trim();
+    if (!slug || !login) return false;
+    return login.toLowerCase() === `${slug.toLowerCase()}[bot]`;
+  }
+
 
   async ingest(parsed: ParsedGithubWebhook): Promise<{ status: 'ignored' | 'committed' | 'replayed' | 'missing' }> {
     const event = eventName(parsed);
@@ -225,8 +256,13 @@ export class GithubRules {
     const issue = object(parsed.payload.issue);
     const issueComment = object(parsed.payload.comment);
     const changes = object(parsed.payload.changes);
-    const pullRequest = object(parsed.payload.pull_request);
-    const issueNumber = number(issue?.number);
+    // A comment on a PR carries the PR under `issue` (with `pull_request` set)
+    // and has no `pull_request` payload of its own. Read the PR from `issue` in
+    // that case so provenance and `context.pullRequest` behave as they do for
+    // every other PR event, and so the number is never treated as an issue's.
+    const commentOnPullRequest = object(parsed.payload.issue)?.pull_request !== undefined;
+    const pullRequest = object(parsed.payload.pull_request) ?? (commentOnPullRequest ? issue : undefined);
+    const issueNumber = commentOnPullRequest ? undefined : number(issue?.number);
     const pullRequestNumber = number(pullRequest?.number);
     const provenance = pullRequestNumber
       ? pullRequestProvenance(
@@ -243,6 +279,13 @@ export class GithubRules {
     // sender is whoever clicked re-request, so a Factory-authored PR must not
     // brand a human requester as factory-authored.
     const reviewRequested = event === 'pullRequestReviewRequested';
+    // Provenance proves the *pull request* came from Factory, which is not the
+    // same as the sender of this event. For events where the sender is whoever
+    // reacted to the PR — re-requesting review, commenting, submitting a review
+    // — branding them from provenance would mark every human and every review
+    // bot as Factory. Only the app login identifies Factory for those.
+    const senderIsResponder =
+      reviewRequested || event === 'pullRequestCommentCreated' || event === 'pullRequestReviewSubmitted';
     const reReviewEvent = reviewRequested || event === 'pullRequestUpdated';
     const requestedReviewer = string(object(parsed.payload.requested_reviewer)?.login);
     const relatedItem = await this.#relatedItem(
@@ -254,13 +297,19 @@ export class GithubRules {
       pullRequestNumber,
       string(object(pullRequest?.head)?.ref),
       reReviewEvent ? null : provenance,
+      senderIsResponder && !reviewRequested,
     );
     const actor = await githubActor(this.options.github, {
       installationId,
       repository: repositoryName,
       login,
-      factoryAuthored: (!reviewRequested && provenance !== null) || login === `${this.options.github.slug}[bot]`,
+      factoryAuthored: (!senderIsResponder && provenance !== null) || this.#isFactoryLogin(login),
     });
+    // A marked handoff comment is ignored only when Factory authored it: a
+    // human may quote the marker to add an investigation lead, and that must
+    // still retrigger triage. Recognising the author is therefore the whole
+    // guard — when identity cannot be resolved this fails open and Factory's
+    // own handoff cancels the run that wrote it.
     if (
       actor.type === 'github' &&
       actor.factoryAuthored &&
@@ -286,6 +335,7 @@ export class GithubRules {
               title: relatedItem.title,
               url: relatedItem.externalSource?.url ?? null,
               stages: relatedItem.stages,
+              metadata: relatedItem.metadata,
             },
             board: relatedItem.externalSource?.type === 'pull-request' ? ('review' as const) : ('work' as const),
             itemRevision: relatedItem.revision,
@@ -350,7 +400,7 @@ export class GithubRules {
         ? {
             reviewRequest: {
               reviewer: requestedReviewer,
-              factoryReviewer: requestedReviewer === `${this.options.github.slug}[bot]`,
+              factoryReviewer: this.#isFactoryLogin(requestedReviewer),
             },
           }
         : {}),
@@ -414,8 +464,40 @@ export class GithubRules {
     pullRequestNumber: number | undefined,
     pullRequestHeadBranch: string | undefined,
     provenance: FactoryPullRequestProvenanceData | null,
+    preferAuthoringItem = false,
   ): Promise<WorkItemRow | undefined> {
     const items = await this.options.storage.list({ orgId, factoryProjectId: projectId });
+    const resolved = this.#resolveItem(
+      items,
+      repositoryId,
+      repositoryFullName,
+      issueNumber,
+      pullRequestNumber,
+      pullRequestHeadBranch,
+      provenance,
+    );
+    // Feedback on a pull request has to reach the item that *wrote* the code.
+    // Provenance normally lands it there directly, but when provenance is
+    // missing the PR-number lookup wins and returns the PR's own Review card
+    // instead — a board the feedback rules deliberately refuse to act on, so
+    // the wake is silently dropped. The linked card records its author in
+    // `parentWorkItemId`, so follow that link back rather than relaxing the
+    // guard, which would let a Review card react to its own posted review.
+    if (preferAuthoringItem && resolved?.externalSource?.type === 'pull-request' && resolved.parentWorkItemId) {
+      return items.find(item => item.id === resolved.parentWorkItemId) ?? resolved;
+    }
+    return resolved;
+  }
+
+  #resolveItem(
+    items: WorkItemRow[],
+    repositoryId: number,
+    repositoryFullName: string,
+    issueNumber: number | undefined,
+    pullRequestNumber: number | undefined,
+    pullRequestHeadBranch: string | undefined,
+    provenance: FactoryPullRequestProvenanceData | null,
+  ): WorkItemRow | undefined {
     if (provenance) return items.find(item => item.id === provenance.workItemId);
     if (issueNumber) {
       return (
@@ -733,15 +815,17 @@ export function createGithubPullRequestReconciler(
             const pullRequestNumber = reconcilablePullRequestNumber(item, repository);
             if (!pullRequestNumber) continue;
             const metadata = item.metadata ?? {};
-            const hasReconciledMetadata =
-              (metadata.state === 'open' || metadata.state === 'closed') &&
+            // An approving review ends the card at `done` while its pull request is
+            // still open, so only a closed pull request retires a card from the sweep.
+            const pullRequestSettled =
+              metadata.state === 'closed' &&
               typeof metadata.draft === 'boolean' &&
               typeof metadata.merged === 'boolean' &&
               typeof metadata.author === 'string' &&
               Array.isArray(metadata.assignees) &&
               Array.isArray(metadata.requestedReviewers) &&
               Array.isArray(metadata.labels);
-            if ((stage === 'done' || stage === 'canceled') && hasReconciledMetadata) continue;
+            if ((stage === 'done' || stage === 'canceled') && pullRequestSettled) continue;
             const cards = cardsByNumber.get(pullRequestNumber) ?? [];
             cards.push(item);
             cardsByNumber.set(pullRequestNumber, cards);

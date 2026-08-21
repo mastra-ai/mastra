@@ -12,7 +12,7 @@
  * terminated with `kill(signal)`.
  */
 
-import { ProcessHandle, SandboxProcessManager } from '@mastra/core/workspace';
+import { ProcessHandle, UnsupportedStdinCloseError, SandboxProcessManager } from '@mastra/core/workspace';
 import type { CommandResult, ProcessInfo, SpawnProcessOptions } from '@mastra/core/workspace';
 import type { ExecHandle, ExecResult } from 'railway';
 import type { RailwaySandbox } from './index';
@@ -117,6 +117,12 @@ class RailwayProcessHandle extends ProcessHandle {
   async sendStdin(_data: string): Promise<void> {
     // Railway's exec API does not expose stdin streaming.
     throw new Error(`${LOG_PREFIX} sending stdin is not supported by the Railway sandbox provider`);
+  }
+
+  async closeStdin(): Promise<void> {
+    throw new UnsupportedStdinCloseError(
+      `${LOG_PREFIX} closing stdin is not supported by the Railway sandbox provider`,
+    );
   }
 }
 

@@ -1,7 +1,7 @@
 import type { ModelMessage, ToolChoice } from '@internal/ai-sdk-v5';
 import type { ActorSignal } from '../auth/ee';
 import type { WaitUntilFn } from '../channels/wait-until';
-import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
+import type { MastraScorer, MastraScorers, ScoringFilter, ScoringSamplingConfig } from '../evals';
 import type { SystemMessage } from '../llm';
 import type { ProviderOptions } from '../llm/model/provider-options';
 import type { MastraLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
@@ -12,7 +12,7 @@ import type { ObservabilityContext, TracingOptions } from '../observability';
 import type { ErrorProcessorOrWorkflow, InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
 import type { MastraStreamTransformOptions } from '../stream/types';
-import type { RequireToolApproval, ToolHooks, ToolPayloadTransformPolicy } from '../tools';
+import type { MCPToolExecutionContext, RequireToolApproval, ToolHooks, ToolPayloadTransformPolicy } from '../tools';
 import type { DynamicArgument } from '../types';
 import type { OutputWriter, WorkflowRunState } from '../workflows/types';
 import type { MessageListInput } from './message-list';
@@ -215,6 +215,29 @@ export type OnDelegationCompleteHandler = (
   context: DelegationCompleteContext,
 ) => DelegationCompleteResult | void | Promise<DelegationCompleteResult | void>;
 
+/**
+ * A delegation lifecycle hook that threw.
+ *
+ * Recorded on the run's request context under `__mastra_delegationHookErrors`
+ * whenever a hook throws, regardless of the configured
+ * {@link DelegationConfig.hookErrorStrategy}, so callers can detect
+ * "delegation completed but the hook failed" without inspecting logs.
+ */
+export interface DelegationHookError {
+  /** Which hook threw */
+  hook: 'onDelegationStart' | 'onDelegationComplete' | 'messageFilter';
+  /** The ID of the delegated primitive */
+  primitiveId: string;
+  /** Tool call ID from the LLM */
+  toolCallId: string;
+  /** ID of the current run */
+  runId: string;
+  /** The error name */
+  name: string;
+  /** The error message */
+  message: string;
+}
+
 // ============================================================================
 // Iteration Hook Types
 // ============================================================================
@@ -332,6 +355,20 @@ export interface DelegationConfig {
    * ```
    */
   messageFilter?: (context: MessageFilterContext) => MastraDBMessage[] | Promise<MastraDBMessage[]>;
+
+  /**
+   * How a throwing delegation hook is handled.
+   *
+   * - `'warn'` (default): log the error and continue with unmodified values.
+   * - `'throw'`: fail the delegation. A throwing `onDelegationStart` blocks it,
+   *   and a throwing `messageFilter` or `onDelegationComplete` surfaces as a
+   *   tool failure to the parent agent.
+   *
+   * Regardless of the strategy, hook failures are recorded on the run's request
+   * context under `__mastra_delegationHookErrors` as {@link DelegationHookError}
+   * entries, so a completed-but-hook-failed delegation is always detectable.
+   */
+  hookErrorStrategy?: 'warn' | 'throw';
 }
 /**
  * Configuration for the routing agent's behavior.
@@ -510,11 +547,31 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
   /** Save messages incrementally after each stream step completes (default: false). Is disabled internally when observational memory is enabled, as OM handles its own message saving */
   savePerStep?: boolean;
 
+  /**
+   * Persist non-empty assistant text that was streamed before an abort.
+   *
+   * Disabled by default because abort signals can represent a disconnected caller,
+   * in which case partial output should not be added to memory.
+   * @default false
+   *
+   * @example
+   * ```typescript
+   * const stream = await agent.stream('Hello', {
+   *   memory: { thread: 'my-thread', resource: 'user-123' },
+   *   persistPartialOnAbort: true,
+   * });
+   * ```
+   */
+  persistPartialOnAbort?: boolean;
+
   /** Request Context containing dynamic configuration and state */
   requestContext?: RequestContext<any>; // @TODO: Figure out how to type this without breaking all the inner types
 
   /** Trusted server-side signal for this agent FGA check. */
   actor?: ActorSignal;
+
+  /** MCP protocol context forwarded to tools executed by this agent. */
+  mcp?: MCPToolExecutionContext;
 
   /**
    * Per-invocation version overrides for sub-agents (and future primitives).
@@ -575,7 +632,9 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
   modelSettings?: LoopOptions['modelSettings'];
 
   /** Evaluation scorers to run on the execution results */
-  scorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
+  scorers?:
+    | MastraScorers
+    | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig; filter?: ScoringFilter }>;
   /** Whether to return detailed scoring data in the response */
   returnScorerData?: boolean;
   /** tracing options for starting new traces */

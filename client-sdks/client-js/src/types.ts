@@ -1,3 +1,4 @@
+import type { JSONValue, ToolInvocationUIPart } from '@ai-sdk/ui-utils';
 import type {
   AgentExecutionOptions,
   MultiPrimitiveExecutionOptions,
@@ -54,6 +55,22 @@ import type { ZodType as ZodTypeV4 } from 'zod/v4';
 import type { Body, QueryParams, RouteKey, RouteResponse, Simplify } from './route-types.generated.js';
 
 export type ZodSchema = ZodSchemaV3 | ZodTypeV4;
+
+/**
+ * Provider metadata as it travels on a message part: a two-level map of
+ * provider namespace -> key -> value (e.g. `{ vertex: { thoughtSignature: '...' } }`).
+ */
+export type PartProviderMetadata = Record<string, Record<string, JSONValue>>;
+
+/** Stream chunk payloads may carry provider metadata; the AI SDK payload types don't declare it. */
+export type MaybeProviderMetadata = { providerMetadata?: PartProviderMetadata };
+
+/**
+ * `ToolInvocationUIPart` from `@ai-sdk/ui-utils` has no `providerMetadata` field, but the
+ * server reads provider metadata from the part itself (not from the nested `toolInvocation`),
+ * so the SDK has to be able to set it there.
+ */
+export type ToolInvocationUIPartWithMeta = ToolInvocationUIPart & MaybeProviderMetadata;
 
 type OptionalizeUndefined<T> = T extends Date
   ? Date
@@ -152,6 +169,8 @@ export type ListAgentSuspendedRunsParams = GeneratedRequest<QueryParams<'GET /ag
  * the rest of the client SDK.
  */
 export type ListAgentSuspendedRunsResponse = GeneratedResponse<'GET /agents/:agentId/suspended-runs'>;
+
+export type GetAgentPlanResponse = GeneratedResponse<'GET /agents/:agentId/plans/file'>;
 
 export type AgentSuspendedRun = ListAgentSuspendedRunsResponse['runs'][number];
 
@@ -1316,6 +1335,21 @@ export interface ResolvedAuthor {
 }
 
 /**
+ * Serializable durable-execution opt-in for a stored agent.
+ *
+ * `cache` and `pubsub` are live runtime objects and cannot be sent over the API —
+ * the server inherits them from its Mastra instance.
+ */
+export type StoredAgentDurableConfig =
+  | boolean
+  | {
+      /** Maximum steps for the durable agentic loop. */
+      maxSteps?: number;
+      /** Auto-cleanup timer for durable stream state (ms). `0` disables cleanup. */
+      cleanupTimeoutMs?: number;
+    };
+
+/**
  * Stored agent data returned from API
  */
 export interface StoredAgentResponse {
@@ -1353,6 +1387,7 @@ export interface StoredAgentResponse {
   workspace?: ConditionalField<StoredWorkspaceRef>;
   browser?: ConditionalField<StoredBrowserRef> | boolean | null;
   requestContextSchema?: Record<string, unknown>;
+  durable?: StoredAgentDurableConfig;
   // Favorites (EE feature, present when `favorites` feature is enabled)
   isFavorited?: boolean;
   favoriteCount?: number;
@@ -1456,6 +1491,12 @@ export interface CreateStoredAgentParams {
   browser?: ConditionalField<StoredBrowserRef> | boolean | null;
   requestContextSchema?: Record<string, unknown>;
   /**
+   * Run this agent with durable execution once it is hydrated by the server.
+   * Cache and pubsub are inherited from the server's Mastra instance — without
+   * distributed backends durability is process-local.
+   */
+  durable?: StoredAgentDurableConfig;
+  /**
    * Publish the initial version so the agent resolves at `status: 'published'`.
    * Defaults to true when omitted. Pass false to stage the agent as an unpublished
    * draft — useful when overriding a code-defined agent, whose code definition keeps
@@ -1519,6 +1560,8 @@ export interface UpdateStoredAgentParams {
   /** Browser config. `true` = use admin default, `false` = no browser. */
   browser?: ConditionalField<StoredBrowserRef> | boolean | null;
   requestContextSchema?: Record<string, unknown>;
+  /** Run this agent with durable execution once it is hydrated by the server. */
+  durable?: StoredAgentDurableConfig;
   /** Optional message describing the changes for the auto-created version */
   changeMessage?: string;
   /** Immediately activate the auto-created version. Defaults to false when omitted. */
@@ -2733,8 +2776,11 @@ export interface DatasetExperiment {
   datasetId: string | null;
   datasetVersion: number | null;
   agentVersion: string | null;
-  targetType: 'agent' | 'workflow' | 'scorer' | 'processor';
-  targetId: string;
+  /** `null` for caller-driven ingestion experiments (the caller executes items itself). */
+  targetType: 'agent' | 'workflow' | 'scorer' | 'processor' | null;
+  targetId: string | null;
+  /** Run-level scorer IDs pinned at create time for caller-driven experiments. */
+  scorerIds?: string[] | null;
   /** Human-readable name used as the primary label wherever the experiment is displayed. */
   name?: string;
   /** Longer description shown as secondary detail (e.g. in a tooltip). */
@@ -2749,6 +2795,7 @@ export interface DatasetExperiment {
   totalItems: number;
   succeededCount: number;
   failedCount: number;
+  skippedCount: number;
   startedAt: string | Date | null;
   completedAt: string | Date | null;
   createdAt: string | Date;
@@ -2767,6 +2814,7 @@ export interface DatasetExperimentResult {
   startedAt: string | Date;
   completedAt: string | Date;
   retryCount: number;
+  attempt?: number;
   traceId: string | null;
   status: 'needs-review' | 'reviewed' | 'complete' | null;
   tags: string[] | null;
@@ -2898,6 +2946,89 @@ export interface TriggerDatasetExperimentParams {
   provenance?: ExperimentProvenance;
   grouping?: ExperimentGrouping;
   requestContext?: Record<string, unknown>;
+}
+
+export interface CreateDatasetExperimentParams {
+  datasetId: string;
+  /** Caller-supplied experiment id (e.g. a workflow run id) for idempotent creates. */
+  id?: string;
+  /** Target executed per item via `runExperimentItem`. Both or neither of targetType/targetId. Omit for pure ingestion. */
+  targetType?: 'agent' | 'workflow' | 'scorer';
+  targetId?: string;
+  /** Run-level scorer IDs resolved server-side by `runExperimentItem`. Requires a target. */
+  scorerIds?: string[];
+  name?: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+  /** Pin to a specific dataset version. Defaults to the latest version. */
+  version?: number;
+  provenance?: ExperimentProvenance;
+  grouping?: ExperimentGrouping;
+}
+
+export interface CreateDatasetExperimentResponse {
+  experimentId: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  totalItems: number;
+  datasetVersion: number;
+}
+
+export interface RunExperimentItemParams {
+  datasetId: string;
+  experimentId: string;
+  itemId: string;
+  /** Zero-based repetition index. Defaults to 0. Retried calls with the same (experimentId, itemId, attempt) converge on one row. */
+  attempt?: number;
+  /** Request context merged with the item's own request context (item wins). */
+  requestContext?: Record<string, unknown>;
+}
+
+/**
+ * A single experiment result row as the server returns it: structured
+ * `error` object and no aggregated `scores` (scores live in the scores
+ * store, keyed by `runId = experimentId`).
+ */
+export type DatasetExperimentResultRow = Omit<DatasetExperimentResult, 'error' | 'scores'> & {
+  error: { message: string; stack?: string; code?: string } | null;
+};
+
+export interface RunExperimentItemResponse {
+  result: DatasetExperimentResultRow;
+  scores: Array<{
+    scorerId: string;
+    scorerName: string;
+    score: number | null;
+    reason: string | null;
+    error: string | null;
+  }>;
+}
+
+export interface SubmitExperimentResultParams {
+  datasetId: string;
+  experimentId: string;
+  itemId: string;
+  /** Zero-based repetition index. Defaults to 0. Retried submissions with the same (experimentId, itemId, attempt) converge on one row. */
+  attempt?: number;
+  input?: unknown;
+  output?: unknown;
+  groundTruth?: unknown;
+  error?: { message: string; stack?: string; code?: string } | null;
+  startedAt?: Date;
+  completedAt?: Date;
+  traceId?: string;
+  /** Externally computed scores, persisted keyed by runId = experimentId. */
+  scores?: Array<{
+    scorerId: string;
+    scorerName?: string;
+    score: number;
+    reason?: string;
+    metadata?: Record<string, unknown>;
+  }>;
+}
+
+export interface FinalizeExperimentParams {
+  datasetId: string;
+  experimentId: string;
 }
 
 export interface CompareExperimentsParams {
@@ -3570,3 +3701,72 @@ export interface BuilderRegistryInstallResponse {
   name: string;
   filesWritten: number;
 }
+
+// ============================================================================
+// AgentController
+// ============================================================================
+
+// Wire shapes derive from the published route contracts, vocabulary from core.
+// Event-stream types can't derive this way (SSE routes carry no response
+// schema) and stay hand-written in `resources/agent-controller`.
+export type { PermissionPolicy, ToolCategory } from '@mastra/core/agent-controller';
+export type { TaskItemSnapshot as AgentControllerTaskSnapshot } from '@mastra/core/tools';
+
+export type AgentControllerInfo = GeneratedResponse<'GET /agent-controller'>['agentControllers'][number];
+
+export type CreateAgentControllerSessionResponse = GeneratedResponse<'POST /agent-controller/:controllerId/sessions'>;
+
+export type AgentControllerSessionState = GeneratedResponse<'GET /agent-controller/:controllerId/sessions/:resourceId'>;
+
+/**
+ * Agent behavior settings, mirroring the TUI's `/settings` toggles. An absent
+ * `thinkingLevel` means the session inherits the configured default rather than
+ * overriding it.
+ */
+export type AgentControllerSessionSettings = NonNullable<AgentControllerSessionState['settings']>;
+
+/**
+ * Status-line relevant slice of observational-memory progress, mirroring the
+ * TUI status line. `msg` reads `pendingTokens/threshold ↓projectedMessageRemoval`
+ * (the active message window before an observation fires); `mem` reads
+ * `observationTokens/reflectionThreshold ↓projectedReflectionSavings`
+ * (accumulated observations before a reflection fires).
+ */
+export type AgentControllerOMProgress = NonNullable<AgentControllerSessionState['omProgress']>;
+
+export type AgentControllerModeInfo = GeneratedResponse<'GET /agent-controller/:controllerId/modes'>['modes'][number];
+
+export type AgentControllerAvailableModel =
+  GeneratedResponse<'GET /agent-controller/:controllerId/models'>['models'][number];
+
+export type AgentControllerActiveRun =
+  GeneratedResponse<'GET /agent-controller/:controllerId/active-runs'>['runs'][number];
+
+/**
+ * A thread as it appears in `listThreads()`. Carries the session scoping tags
+ * it was stamped with (e.g. `{ projectPath }`) and whether a run is currently
+ * executing on it, so one listing can report activity across every scope
+ * sharing the resourceId.
+ */
+export type AgentControllerThreadInfo =
+  GeneratedResponse<'GET /agent-controller/:controllerId/sessions/:resourceId/threads'>['threads'][number];
+
+/** A thread as returned by `createThread()` and `cloneThread()`. */
+export type CreateAgentControllerThreadResponse =
+  GeneratedResponse<'POST /agent-controller/:controllerId/sessions/:resourceId/threads'>;
+
+export type AgentControllerWorkspaceStatus = GeneratedResponse<'GET /agent-controller/:controllerId/workspace'>;
+
+export type AgentControllerGoalRecord = NonNullable<
+  GeneratedResponse<'GET /agent-controller/:controllerId/sessions/:resourceId/goal'>['goal']
+>;
+
+/** Per-category and per-tool approval policies. */
+export type PermissionRules = GeneratedResponse<'GET /agent-controller/:controllerId/sessions/:resourceId/permissions'>;
+
+export type SendNotificationInput = GeneratedRequest<
+  Body<'POST /agent-controller/:controllerId/sessions/:resourceId/notifications'>
+>;
+
+export type SendNotificationResult =
+  GeneratedResponse<'POST /agent-controller/:controllerId/sessions/:resourceId/notifications'>;

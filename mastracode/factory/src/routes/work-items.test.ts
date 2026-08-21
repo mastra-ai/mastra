@@ -8,6 +8,7 @@ import { builtInFactoryRules } from '../rules/defaults.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { FactoryRuleActor } from '../rules/types.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
+import { FACTORY_RULE_MATERIALIZATION_KEY } from '../storage/domains/work-items/base.js';
 
 let auditRecorded: Array<Record<string, any>> = [];
 let auditFailure: Error | undefined;
@@ -213,6 +214,28 @@ describe('POST /web/factory/projects/:id/work-items', () => {
       createBody({ externalSource: { integrationId: 'jira' } }),
     );
     expect(bad.status).toBe(400);
+  });
+});
+
+// ── Read wire ────────────────────────────────────────────────────────────
+describe('work item read wire', () => {
+  it('keeps the dispatcher idempotency token in storage and out of every read', async () => {
+    const created = await json(
+      'POST',
+      `/web/factory/projects/${PROJECT_ID}/work-items`,
+      createBody({ metadata: { number: 42, [FACTORY_RULE_MATERIALIZATION_KEY]: 'rule-7:issue-42' } }),
+    );
+    const { workItem } = await created.json();
+    expect(workItem.metadata).toEqual({ number: 42 });
+
+    const listed = await json('GET', `/web/factory/projects/${PROJECT_ID}/work-items`);
+    expect((await listed.json()).workItems[0].metadata).toEqual({ number: 42 });
+
+    const patched = await json('PATCH', `/web/factory/work-items/${workItem.id}`, { metadata: { prNumber: 7 } });
+    expect((await patched.json()).workItem.metadata).toEqual({ number: 42, prNumber: 7 });
+
+    const [stored] = await listItems();
+    expect(stored?.metadata[FACTORY_RULE_MATERIALIZATION_KEY]).toBe('rule-7:issue-42');
   });
 });
 
@@ -443,6 +466,34 @@ describe('POST /web/factory/projects/:id/runs/start', () => {
         metadata: expect.objectContaining({ bindingId: 'binding-1', role: 'plan' }),
       }),
     );
+  });
+
+  it('arms the item so the runs that follow a person’s start need no further consent', async () => {
+    const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
+    const { workItem } = await created.json();
+    const prepare = vi.fn(async (input: any) => ({
+      workItemId: input.workItem.id,
+      bindingId: 'binding-1',
+      threadId: input.sessionId,
+      resourceId: input.sessionId,
+      sessionId: input.sessionId,
+      branch: 'factory/issue-42',
+      revision: 2,
+      kickoffStatus: 'pending',
+      replayed: false,
+    }));
+    const app = buildApp(orgUser, { prepare });
+
+    const res = await app.request(`/web/factory/projects/${PROJECT_ID}/runs/start`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(startBody(workItem.id)),
+    });
+
+    expect(res.status).toBe(202);
+    // Arming rides inside prepareRunStart's transaction; the route's contract
+    // is passing the flag through to the coordinator.
+    expect(prepare).toHaveBeenCalledWith(expect.objectContaining({ armAutonomy: true }));
   });
 
   it('rejects a non-UUID kickoff identity before coordination', async () => {

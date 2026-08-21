@@ -9,9 +9,17 @@ import type { LanguageModelUsage, ProviderMetadata } from '@mastra/core/stream';
  * Provider-specific metadata shapes for type-safe access.
  * These match the actual shapes from AI SDK providers.
  */
+interface AnthropicCacheCreation {
+  ephemeral_5m_input_tokens?: number;
+  ephemeral_1h_input_tokens?: number;
+  ephemeral5mInputTokens?: number;
+  ephemeral1hInputTokens?: number;
+}
+
 interface AnthropicMetadata {
   cacheReadInputTokens?: number;
   cacheCreationInputTokens?: number;
+  cacheCreation?: AnthropicCacheCreation;
 }
 
 interface GoogleUsageMetadata {
@@ -149,8 +157,20 @@ export function extractUsageMetrics(usage?: LanguageModelUsage, providerMetadata
   if (!isDefined(inputDetails.cacheRead) && isDefined(usage.cachedInputTokens)) {
     inputDetails.cacheRead = usage.cachedInputTokens;
   }
+  if (isDefined(usage.cacheCreationInputTokens5m)) {
+    inputDetails.cacheWrite5m = usage.cacheCreationInputTokens5m;
+  }
+  if (isDefined(usage.cacheCreationInputTokens1h)) {
+    inputDetails.cacheWrite1h = usage.cacheCreationInputTokens1h;
+  }
   if (!isDefined(inputDetails.cacheWrite) && isDefined(usage.cacheCreationInputTokens)) {
     inputDetails.cacheWrite = usage.cacheCreationInputTokens;
+  }
+  if (
+    !isDefined(inputDetails.cacheWrite) &&
+    (isDefined(inputDetails.cacheWrite5m) || isDefined(inputDetails.cacheWrite1h))
+  ) {
+    inputDetails.cacheWrite = (inputDetails.cacheWrite5m ?? 0) + (inputDetails.cacheWrite1h ?? 0);
   }
 
   // reasoningTokens from usage (OpenAI o1 models)
@@ -172,8 +192,22 @@ export function extractUsageMetrics(usage?: LanguageModelUsage, providerMetadata
     if (!isDefined(inputDetails.cacheRead) && isDefined(anthropic.cacheReadInputTokens)) {
       inputDetails.cacheRead = anthropic.cacheReadInputTokens;
     }
-    if (!isDefined(inputDetails.cacheWrite) && isDefined(anthropic.cacheCreationInputTokens)) {
-      inputDetails.cacheWrite = anthropic.cacheCreationInputTokens;
+    const cacheWrite5m =
+      anthropic.cacheCreation?.ephemeral_5m_input_tokens ?? anthropic.cacheCreation?.ephemeral5mInputTokens;
+    const cacheWrite1h =
+      anthropic.cacheCreation?.ephemeral_1h_input_tokens ?? anthropic.cacheCreation?.ephemeral1hInputTokens;
+    if (!isDefined(inputDetails.cacheWrite5m) && isDefined(cacheWrite5m)) {
+      inputDetails.cacheWrite5m = cacheWrite5m;
+    }
+    if (!isDefined(inputDetails.cacheWrite1h) && isDefined(cacheWrite1h)) {
+      inputDetails.cacheWrite1h = cacheWrite1h;
+    }
+    if (!isDefined(inputDetails.cacheWrite)) {
+      if (isDefined(anthropic.cacheCreationInputTokens)) {
+        inputDetails.cacheWrite = anthropic.cacheCreationInputTokens;
+      } else if (isDefined(cacheWrite5m) || isDefined(cacheWrite1h)) {
+        inputDetails.cacheWrite = (cacheWrite5m ?? 0) + (cacheWrite1h ?? 0);
+      }
     }
 
     // Skip adjustment when inputTokens already includes cache tokens (V3 raw or any positive Mastra-aggregated cache field).
@@ -248,6 +282,8 @@ function mergeInputDetails(
     text: addOptional(a.text, b.text),
     cacheRead: addOptional(a.cacheRead, b.cacheRead),
     cacheWrite: addOptional(a.cacheWrite, b.cacheWrite),
+    cacheWrite5m: addOptional(a.cacheWrite5m, b.cacheWrite5m),
+    cacheWrite1h: addOptional(a.cacheWrite1h, b.cacheWrite1h),
     audio: addOptional(a.audio, b.audio),
     image: addOptional(a.image, b.image),
   };

@@ -1,4 +1,4 @@
-import type { AgentControllerEvent } from '@mastra/client-js';
+import type { AgentControllerEvent, AgentControllerTaskSnapshot } from '@mastra/client-js';
 import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
 import type { QueryClient } from '@tanstack/react-query';
 import { screen, waitFor } from '@testing-library/react';
@@ -15,6 +15,7 @@ import { ChatSessionTestProvider } from '../../context/ChatSessionTestProvider';
 import { useHandoffPrompt } from '../../hooks/useHandoffPrompt';
 import { ActivityLine } from '../ActivityLine';
 import { Composer } from '../Composer';
+import { TaskPanel } from '../TaskPanel';
 import { Transcript } from '../Transcript';
 
 if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollIntoView) {
@@ -34,6 +35,7 @@ interface PreparingSession {
   posted: string[];
   postedFiles: unknown[];
   delivered: string[];
+  operations: string[];
   sessionLookups: number;
   ensureRequests: number;
   controllerCreates: number;
@@ -42,6 +44,7 @@ interface PreparingSession {
 
 interface StubPreparingSessionOptions {
   createdSessionTitle?: string;
+  tasks?: AgentControllerTaskSnapshot[];
   failDispatch?: boolean;
   failWorkspace?: boolean;
   materialized?: boolean;
@@ -63,6 +66,7 @@ function readSentFiles(body: unknown): unknown[] {
 
 export function stubPreparingSession({
   createdSessionTitle,
+  tasks,
   failDispatch = false,
   failWorkspace = false,
   materialized = false,
@@ -84,6 +88,7 @@ export function stubPreparingSession({
     attachSse = resolve;
   });
   const encoder = new TextEncoder();
+  let sessionPackId: string | null = null;
   const result: PreparingSession = {
     finishEnsure: releaseEnsure,
     finishWorkspace: releaseWorkspace,
@@ -94,6 +99,7 @@ export function stubPreparingSession({
     posted: [],
     postedFiles: [],
     delivered: [],
+    operations: [],
     steerAttempts: 0,
     controllerCreates: 0,
     sessionLookups: 0,
@@ -115,6 +121,47 @@ export function stubPreparingSession({
     http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
       HttpResponse.json({ providers: [{ provider: 'openai', source: 'stored-user' }] }),
     ),
+    http.get(`${TEST_BASE_URL}/web/config/models`, () =>
+      HttpResponse.json({
+        models: [
+          { id: 'openai/gpt-4o-mini', provider: 'openai', modelName: 'gpt-4o-mini', hasApiKey: true },
+          { id: 'openai/gpt-5.4-mini', provider: 'openai', modelName: 'gpt-5.4-mini', hasApiKey: true },
+        ],
+      }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/config/model-packs`, () =>
+      HttpResponse.json({
+        packs: [
+          {
+            id: 'balanced',
+            name: 'Balanced',
+            description: '',
+            models: {
+              build: 'openai/gpt-4o-mini',
+              plan: 'openai/gpt-4o-mini',
+              fast: 'openai/gpt-4o-mini',
+            },
+            custom: false,
+            active: true,
+          },
+          {
+            id: 'mine',
+            name: 'Mine',
+            description: '',
+            models: { build: 'openai/gpt-5.4-mini', plan: 'openai/gpt-5.4-mini', fast: 'openai/gpt-5.4-mini' },
+            custom: true,
+            active: false,
+          },
+        ],
+        activePackId: 'balanced',
+        sessionPackId,
+      }),
+    ),
+    http.post(`${TEST_BASE_URL}/web/config/model-packs/:packId/activate`, async ({ params }) => {
+      sessionPackId = String(params.packId);
+      result.operations.push(`pack:${sessionPackId}`);
+      return HttpResponse.json({ ok: true, target: 'session', sessionPackId });
+    }),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId/source-control-connections`, () =>
       HttpResponse.json({
         connections: [
@@ -186,6 +233,7 @@ export function stubPreparingSession({
         modeId: 'build',
         modelId: 'openai/gpt-4o-mini',
         threadId: SESSION_ID,
+        tasks,
         settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
       }),
     ),
@@ -208,10 +256,19 @@ export function stubPreparingSession({
         ),
     ),
     http.put(`${API}/sessions/:resourceId/state`, () => HttpResponse.json({})),
-    http.post(`${API}/sessions/:resourceId/mode`, () => HttpResponse.json({ ok: true })),
-    http.post(`${API}/sessions/:resourceId/model`, () => HttpResponse.json({ ok: true })),
+    http.post(`${API}/sessions/:resourceId/mode`, async ({ request }) => {
+      const body = (await request.json()) as { modeId?: string };
+      result.operations.push(`mode:${body.modeId}`);
+      return HttpResponse.json({ ok: true });
+    }),
+    http.post(`${API}/sessions/:resourceId/model`, async ({ request }) => {
+      const body = (await request.json()) as { modelId?: string };
+      result.operations.push(`model:${body.modelId}`);
+      return HttpResponse.json({ ok: true });
+    }),
     http.post(`${API}/sessions/:resourceId/messages`, async ({ request }) => {
       const body = await request.json();
+      result.operations.push('message');
       result.posted.push(readSentMessage(body));
       result.postedFiles = readSentFiles(body);
       await workspaceReady;
@@ -242,6 +299,7 @@ function ThreadSurface() {
     <>
       <Link to="/away">go-away</Link>
       <Transcript />
+      <TaskPanel />
       <ActivityLine />
       <Composer />
     </>

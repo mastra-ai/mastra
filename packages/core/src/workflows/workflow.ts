@@ -9,7 +9,7 @@ import type { MastraDBMessage, MessageInput } from '../agent/message-list';
 import { isAgentCompatible } from '../agent/subagent';
 import type { SubAgent } from '../agent/subagent';
 import { TripWire } from '../agent/trip-wire';
-import { MastraFGAPermissions } from '../auth/ee';
+import { MastraFGAPermissions, getWorkflowFGAResourceId, requireFGA } from '../auth/ee';
 import type { ActorSignal } from '../auth/ee';
 import { MastraBase } from '../base';
 import { RequestContext } from '../di';
@@ -42,13 +42,16 @@ import {
 } from '../processors/span-payload';
 import { ProcessorStepOutputSchema, ProcessorStepInputSchema } from '../processors/step-schema';
 import type { ProcessorStepInput, ProcessorStepOutput } from '../processors/step-schema';
+import { getRequestContextInputValues } from '../request-context/input-source';
 import { standardSchemaToJSONSchema, toStandardSchema } from '../schema';
 import type { InferPublicSchema, InferStandardSchemaOutput, PublicSchema, StandardSchemaWithJSON } from '../schema';
 import type { StorageListWorkflowRunsInput } from '../storage';
+import type { WorkflowsStorage } from '../storage/domains/workflows/base';
 import { WorkflowRunOutput } from '../stream/RunOutput';
 import type { ChunkType, LanguageModelUsage, ProviderMetadata } from '../stream/types';
 import { ChunkFrom } from '../stream/types';
-import { Tool } from '../tools/tool';
+import type { Tool } from '../tools/tool';
+import { isMastraTool } from '../tools/toolchecks';
 import type { ToolExecutionContext } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import { PUBSUB_SYMBOL } from './constants';
@@ -210,7 +213,10 @@ export function mapVariable(config: any): any {
 // ============================================
 
 function isToolStep(input: unknown): input is ToolStep<any, any, any, any, any> {
-  return input instanceof Tool;
+  // `isMastraTool` also recognizes tools by their shared marker symbol, which
+  // survives module duplication (Vite SSR) and spread copies — e.g. tools
+  // renamed by `resolveStoredToolProviders` — where `instanceof` fails.
+  return isMastraTool(input);
 }
 
 /**
@@ -219,7 +225,7 @@ function isToolStep(input: unknown): input is ToolStep<any, any, any, any, any> 
  * Uses the `component` discriminator from MastraBase instead of instanceof.
  */
 function isAgentOrTool(input: unknown): boolean {
-  if (input instanceof Tool) return true;
+  if (isMastraTool(input)) return true;
   const base = input as MastraBase;
   if (base && base.component === RegisteredLogger.AGENT) return true;
   return false;
@@ -348,7 +354,12 @@ export function createStep<
   TRequestContext extends Record<string, any> | unknown = unknown,
 >(
   tool: Tool<TSchemaIn, TSchemaOut, TSuspend, TResume, TContext, TId, TRequestContext>,
-  toolOptions?: { retries?: number; scorers?: DynamicArgument<MastraScorers>; metadata?: StepMetadata },
+  toolOptions?: {
+    retries?: number;
+    scorers?: DynamicArgument<MastraScorers>;
+    metadata?: StepMetadata;
+    actor?: ActorSignal;
+  },
 ): Step<TId, unknown, TSchemaIn, TSchemaOut, TSuspend, TResume, DefaultEngineType, TRequestContext>;
 
 /**
@@ -1639,6 +1650,7 @@ export class Workflow<
   public type: WorkflowType = 'default';
   /** Where this workflow came from: 'code' for statically registered workflows, 'dynamic' for workflows rehydrated from storage. Set by rehydrateWorkflow; defaults to 'code'. */
   public origin: 'code' | 'dynamic' = 'code';
+  public isInternal = false;
   #nestedWorkflowInput?: TInput;
   public committed: boolean = false;
   protected stepFlow: StepFlowEntry<TEngineType>[];
@@ -1689,6 +1701,7 @@ export class Workflow<
     this.type = type ?? 'default';
     this.#options = {
       validateInputs: options.validateInputs ?? true,
+      emitStepEvents: options.emitStepEvents ?? true,
       shouldPersistSnapshot: options.shouldPersistSnapshot ?? (() => true),
       pruneSnapshot: options.pruneSnapshot,
       tracingPolicy: options.tracingPolicy,
@@ -1728,6 +1741,10 @@ export class Workflow<
   __registerMastra(mastra: Mastra) {
     this.#mastra = mastra;
     this.executionEngine.__registerMastra(mastra);
+  }
+
+  __markInternal() {
+    this.isInternal = true;
   }
 
   __registerPrimitives(p: MastraPrimitives) {
@@ -2552,6 +2569,7 @@ export class Workflow<
         requestContextSchema: this.requestContextSchema,
         runId: runIdToUse,
         resourceId: options?.resourceId,
+        isInternalWorkflow: this.isInternal,
         executionEngine: this.executionEngine,
         executionGraph: this.executionGraph,
         mastra: this.#mastra,
@@ -2718,7 +2736,6 @@ export class Workflow<
     const fgaProvider = mastra?.getServer()?.fga;
     if (fgaProvider) {
       const user = requestContext?.get('user' as any);
-      const { getWorkflowFGAResourceId, requireFGA } = await import('../auth/ee/fga-check');
       await requireFGA({
         fgaProvider,
         user,
@@ -3037,6 +3054,18 @@ export class Workflow<
             {} as Record<string, StepResult<any, any, any, any>>,
           );
           finalSteps = { ...finalSteps, ...updatedNestedSteps };
+
+          // Nested suspend is recorded on both the container and the flattened leaf.
+          // Demote the container in the public steps map so clients (e.g. Studio)
+          // that treat every status==='suspended' entry as a resume target only
+          // see the leaf. Keep the container entry for hierarchy; leave suspendedPaths alone.
+          const parentStep = finalSteps[step];
+          if (parentStep?.status === 'suspended') {
+            const hasSuspendedChild = Object.values(updatedNestedSteps).some(child => child?.status === 'suspended');
+            if (hasSuspendedChild) {
+              finalSteps[step] = { ...parentStep, status: 'running' };
+            }
+          }
         }
       }
     }
@@ -3231,6 +3260,8 @@ export class Run<
    */
   readonly resourceId?: string;
 
+  readonly isInternalWorkflow: boolean;
+
   /**
    * Whether to disable scorers for this run
    */
@@ -3305,6 +3336,7 @@ export class Run<
     workflowId: string;
     runId: string;
     resourceId?: string;
+    isInternalWorkflow?: boolean;
     stateSchema?: StandardSchemaWithJSON<TState>;
     inputSchema?: StandardSchemaWithJSON<TInput>;
     requestContextSchema?: StandardSchemaWithJSON<any>;
@@ -3328,6 +3360,7 @@ export class Run<
     this.workflowId = params.workflowId;
     this.runId = params.runId;
     this.resourceId = params.resourceId;
+    this.isInternalWorkflow = params.isInternalWorkflow ?? false;
     this.serializedStepGraph = params.serializedStepGraph;
     this.executionEngine = params.executionEngine;
     this.executionGraph = params.executionGraph;
@@ -3415,7 +3448,7 @@ export class Run<
 
   protected async _validateRequestContext(requestContext?: RequestContext) {
     if (this.validateInputs && this.requestContextSchema) {
-      const contextValues = requestContext?.all ?? {};
+      const contextValues = getRequestContextInputValues(requestContext);
       const validation = this.requestContextSchema['~standard'].validate(contextValues);
 
       if (validation instanceof Promise) {
@@ -4218,6 +4251,92 @@ export class Run<
     return this._restart(args);
   }
 
+  /**
+   * Atomically claims a suspended run for exactly one resume caller by flipping the persisted
+   * status from `suspended` to `running`.
+   *
+   * Throws `WORKFLOW_RESUME_ALREADY_CLAIMED` when another caller already claimed this
+   * suspension, so losing callers never enter the execution engine.
+   */
+  async #claimResume({
+    workflowsStore,
+    snapshot,
+  }: {
+    workflowsStore: WorkflowsStorage | undefined;
+    snapshot: WorkflowRunState;
+  }): Promise<void> {
+    if (!workflowsStore) {
+      return;
+    }
+
+    // The claim is a persisted state transition, so a workflow that opts out of persisting
+    // `running` snapshots cannot be claimed: writing one anyway would leave the stored snapshot
+    // in a state the caller explicitly asked us never to write.
+    const persistsRunningState = this.executionEngine.options.shouldPersistSnapshot({
+      workflowStatus: 'running',
+      stepResults: (snapshot.context ?? {}) as Record<string, StepResult<any, any, any, any>>,
+    });
+
+    if (!persistsRunningState) {
+      this.#mastra
+        ?.getLogger()
+        ?.warn(
+          `[Workflow ${this.workflowId}] shouldPersistSnapshot excludes the "running" status, so concurrent resume() calls for run ${this.runId} cannot be de-duplicated. Concurrent resumes may execute downstream steps more than once.`,
+        );
+      return;
+    }
+
+    // Stores that report no concurrent-update support cannot honor the compare-and-set: some of
+    // them (Cloudflare D1/KV/DO, ClickHouse, LanceDB) do not implement `updateWorkflowState` at all
+    // and throw. Claiming is an optimization over the pre-existing behaviour, so a store that
+    // cannot claim keeps resuming exactly as it did before rather than failing the resume.
+    if (!workflowsStore.supportsConcurrentUpdates()) {
+      this.#mastra
+        ?.getLogger()
+        ?.warn(
+          `[Workflow ${this.workflowId}] The configured workflow storage does not support concurrent updates, so concurrent resume() calls for run ${this.runId} cannot be de-duplicated atomically. Concurrent resumes may execute downstream steps more than once.`,
+        );
+      return;
+    }
+
+    const claimed = await workflowsStore.updateWorkflowState({
+      workflowName: this.workflowId,
+      runId: this.runId,
+      opts: { status: 'running', expectedStatus: 'suspended' },
+    });
+
+    if (claimed) {
+      return;
+    }
+
+    // The compare-and-set found a status other than `suspended`. Re-read so the error names the
+    // status the run actually landed in rather than guessing.
+    const current = await workflowsStore.loadWorkflowSnapshot({
+      workflowName: this.workflowId,
+      runId: this.runId,
+    });
+
+    if (!current) {
+      throw new Error('No snapshot found for this workflow run: ' + this.workflowId + ' ' + this.runId);
+    }
+
+    throw new MastraError({
+      id: 'WORKFLOW_RESUME_ALREADY_CLAIMED',
+      domain: ErrorDomain.MASTRA_WORKFLOW,
+      category: ErrorCategory.USER,
+      text:
+        `This suspended workflow run was already resumed by another caller. Workflow "${this.workflowId}" run "${this.runId}" ` +
+        `moved from "${snapshot.status}" to "${current.status}" before this resume could claim it. ` +
+        `Only one resume() call may continue a given suspension; re-read the run state before resuming again.`,
+      details: {
+        workflowId: this.workflowId,
+        runId: this.runId,
+        expectedStatus: 'suspended',
+        actualStatus: current.status ?? 'unknown',
+      },
+    });
+  }
+
   protected async _resume<TResume>(
     params: {
       resumeData?: TResume;
@@ -4246,6 +4365,26 @@ export class Run<
     } & Partial<ObservabilityContext>,
   ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     const observabilityContext = resolveObservabilityContext(params);
+    const fgaProvider = this.#mastra?.getServer()?.fga;
+    if (fgaProvider && !this.isInternalWorkflow) {
+      await requireFGA({
+        fgaProvider,
+        user: params.requestContext?.get('user' as any),
+        resource: { type: 'workflow', id: getWorkflowFGAResourceId(this.workflowId) },
+        permission: MastraFGAPermissions.WORKFLOWS_EXECUTE,
+        requestContext: params.requestContext,
+        actor: params.actor,
+        context: {
+          resourceId: this.resourceId,
+        },
+        metadata: {
+          workflowId: this.workflowId,
+          runId: this.runId,
+          resourceId: this.resourceId,
+        },
+      });
+    }
+
     const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
     const snapshot = await workflowsStore?.loadWorkflowSnapshot({
       workflowName: this.workflowId,
@@ -4397,6 +4536,66 @@ export class Run<
     const traceId = workflowSpan?.externalTraceId;
     const spanId = workflowSpan?.id;
 
+    // Claim this suspension before entering the execution engine.
+    //
+    // Everything above this point is a read of the snapshot loaded at the top of this method,
+    // and the engine does not persist `running` until the resumed step actually starts. Without
+    // an atomic claim, two concurrent resume() callers can both observe the same `suspended`
+    // snapshot and both enter the engine, running downstream steps (and their side effects)
+    // twice. See https://github.com/mastra-ai/mastra/issues/20443.
+    //
+    // The compare-and-set is executed inside the store's own critical section, so exactly one
+    // caller flips `suspended -> running` and every other caller loses and throws below.
+    await this.#claimResume({ workflowsStore, snapshot });
+
+    const releaseClaimIfUnused = async () => {
+      // Only roll the claim back when the engine never reached its first step persist, which is
+      // the only state where re-resuming is guaranteed not to duplicate work. That first persist
+      // writes the engine's own status and clears `suspendedPaths`, so a snapshot that is still
+      // `running` with the pre-claim `suspendedPaths` proves nothing downstream ran. Anything
+      // else is left alone: a stuck `running` run is strictly safer than silently re-arming a
+      // suspension whose downstream steps already fired.
+      try {
+        const current = await workflowsStore?.loadWorkflowSnapshot({
+          workflowName: this.workflowId,
+          runId: this.runId,
+        });
+
+        const claimedPaths = Object.keys(snapshot.suspendedPaths ?? {});
+        const currentPaths = Object.keys(current?.suspendedPaths ?? {});
+        const claimedStepIds = Object.keys(snapshot.context ?? {});
+        const currentStepIds = Object.keys(current?.context ?? {});
+        const resumedStepId = steps?.[0] ?? '';
+        const resumedStepResult = current?.context?.[resumedStepId] as { status?: string } | undefined;
+
+        // Every one of these must still look exactly as it did at claim time. The status alone
+        // is not enough evidence: the engine deliberately suppresses `running` step persists
+        // while the last persisted status is `suspended`, so a run that failed midway can still
+        // read back as `running`.
+        const engineNeverStarted =
+          current?.status === 'running' &&
+          currentPaths.length === claimedPaths.length &&
+          claimedPaths.every(path => currentPaths.includes(path)) &&
+          currentStepIds.length === claimedStepIds.length &&
+          claimedStepIds.every(stepId => currentStepIds.includes(stepId)) &&
+          resumedStepResult?.status === 'suspended';
+
+        if (!engineNeverStarted) {
+          return;
+        }
+
+        await workflowsStore?.updateWorkflowState({
+          workflowName: this.workflowId,
+          runId: this.runId,
+          opts: { status: 'suspended', expectedStatus: 'running' },
+        });
+      } catch (releaseError) {
+        this.#mastra
+          ?.getLogger()
+          ?.warn(`[Workflow ${this.workflowId}] Failed to release resume claim for run ${this.runId}`, releaseError);
+      }
+    };
+
     const executionResultPromise = this.executionEngine
       .execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
         workflowId: this.workflowId,
@@ -4433,6 +4632,10 @@ export class Run<
         result.traceId = traceId;
         result.spanId = spanId;
         return result;
+      })
+      .catch(async error => {
+        await releaseClaimIfUnused();
+        throw error;
       });
 
     this.executionResults = executionResultPromise;

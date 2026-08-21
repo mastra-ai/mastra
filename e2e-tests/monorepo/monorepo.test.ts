@@ -1,7 +1,7 @@
 import { it, describe, expect, beforeAll, afterAll, inject } from 'vitest';
 import { join } from 'path';
 import { setupMonorepo } from './prepare';
-import { mkdtemp, mkdir, rm, readFile, writeFile } from 'fs/promises';
+import { mkdtemp, mkdir, readdir, rm, readFile, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import getPort from 'get-port';
 import { execa, execaNode } from 'execa';
@@ -98,6 +98,14 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       expect(res.status).toBe(200);
       expect(body).toEqual({ message: 'Hello, world!', a: 'b' });
     });
+
+    it('should resolve createRoute api routes', async () => {
+      const res = await fetch(`http://localhost:${port}/create-route`);
+      const body = await res.json();
+      expect(res.status).toBe(200);
+      expect(body).toEqual({ message: 'Hello from createRoute!' });
+    });
+
     it('should resolve api ALL routes', async () => {
       let res = await fetch(`http://localhost:${port}/all`);
       let body = await res.json();
@@ -318,6 +326,21 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       expect(hasWorkspaceMappedPath).toBeFalsy();
     });
 
+    it('should keep deprecated externals out of optimized dependency bundles', async () => {
+      const outputDir = join(fixturePath, 'apps', 'custom', '.mastra', 'output');
+      const outputFiles = await readdir(outputDir);
+      const output = (
+        await Promise.all(
+          outputFiles.filter(file => file.endsWith('.mjs')).map(file => readFile(join(outputDir, file), 'utf-8')),
+        )
+      ).join('\n');
+      const packageJson = JSON.parse(await readFile(join(outputDir, 'package.json'), 'utf-8'));
+
+      expect(outputFiles).not.toContain('nodemailer.mjs');
+      expect(output).not.toContain('nodemailer/lib');
+      expect(packageJson.dependencies?.nodemailer).toBe('^7.0.0');
+    });
+
     // This stays in the monorepo E2E suite because it builds the generated fixture and validates its output manifest.
     it('should keep default and user-configured externals in the output manifest', async () => {
       const packageJsonPath = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'package.json');
@@ -410,6 +433,32 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
     }, timeout);
 
     runApiTests(port);
+
+    it(
+      'drains an in-flight response before the generated server exits on SIGTERM',
+      async () => {
+        const response = await fetch(`http://localhost:${port}/shutdown-drain`);
+        const reader = response.body!.getReader();
+        const decoder = new TextDecoder();
+        const firstChunk = await reader.read();
+        expect(decoder.decode(firstChunk.value)).toBe('started\n');
+
+        proc!.kill('SIGTERM');
+
+        let remaining = '';
+        while (true) {
+          const chunk = await reader.read();
+          if (chunk.done) break;
+          remaining += decoder.decode(chunk.value, { stream: true });
+        }
+
+        expect(remaining).toBe('finished\n');
+        await expect(proc).resolves.toMatchObject({ exitCode: 0 });
+        // Full shutdown includes the drain window plus core teardown; the vitest
+        // default 5s timeout is tighter than the server's own worst-case bounds.
+      },
+      timeout,
+    );
   });
 
   describe.sequential('build without externals', async () => {
@@ -504,6 +553,10 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
           expect(dependencies[pkg]).toMatch(/^[\d^~>=<]/);
         }
       }
+
+      // Automatic version resolution must read the copy installed for the app (0.4.0),
+      // not the older copy installed at the workspace root (0.2.0) (#18849).
+      expect(dependencies['unicorn-magic']).toBe('0.4.0');
     });
   });
 
@@ -580,6 +633,37 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
           }
 
           await writeFile(mastraConfigPath, originalMastraConfig);
+          await rm(isolatedFixturePath, { recursive: true, force: true });
+        }
+      },
+      timeout,
+    );
+  });
+
+  describe.sequential('pnpm build approvals', () => {
+    it(
+      'reports blocked native build scripts as a user configuration error',
+      async () => {
+        const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-build-approval-test-${pkgManager}-`));
+        try {
+          await setupMonorepo(isolatedFixturePath, pkgManager);
+          const workspacePath = join(isolatedFixturePath, 'pnpm-workspace.yaml');
+          const workspace = await readFile(workspacePath, 'utf8');
+          await writeFile(workspacePath, workspace.replace('  bcrypt: true\n', ''));
+
+          await removeOutputDir(isolatedFixturePath);
+          const build = await execa(pkgManager, ['build'], {
+            cwd: join(isolatedFixturePath, 'apps', 'custom'),
+            env: process.env,
+            reject: false,
+          });
+          const output = `${build.stdout}\n${build.stderr}`;
+
+          expect(build.exitCode).not.toBe(0);
+          expect(output).toContain('pnpm blocked build scripts for: bcrypt');
+          expect(output).toContain('Add these packages to allowBuilds in pnpm-workspace.yaml and retry the build.');
+          expect(output).not.toContain('DEPLOYER_BUNDLER_BUNDLE_STAGE_FAILED');
+        } finally {
           await rm(isolatedFixturePath, { recursive: true, force: true });
         }
       },

@@ -12,6 +12,7 @@ import { createOpenAI } from '@ai-sdk/openai';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { wrapLanguageModel } from 'ai';
 import type { LanguageModelMiddleware } from 'ai';
+import { ProviderAuthRequiredError } from '../auth/provider-auth-error.js';
 import { AuthStorage } from '../auth/storage.js';
 import type { CredentialStore } from '../auth/types.js';
 
@@ -139,14 +140,14 @@ async function getCodexBearer(
 
   const cred = storage.get('openai-codex');
   if (!cred || cred.type !== 'oauth') {
-    throw new Error('Not logged in to OpenAI Codex. Run /login first.');
+    throw new ProviderAuthRequiredError('Not logged in to OpenAI Codex.');
   }
 
   let accessToken = cred.access;
   if (Date.now() >= cred.expires) {
     const refreshedToken = await storage.getApiKey('openai-codex');
     if (!refreshedToken) {
-      throw new Error('Failed to refresh OpenAI Codex token. Please /login again.');
+      throw new ProviderAuthRequiredError('Failed to refresh the OpenAI Codex token.');
     }
     accessToken = refreshedToken;
     storage.reload();

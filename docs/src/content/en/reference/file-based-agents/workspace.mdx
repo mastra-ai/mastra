@@ -13,9 +13,9 @@ Breaking changes may occur without a major version bump until the API is stable.
 
 :::
 
-A [workspace](/docs/workspace/overview) gives an agent filesystem access and command execution. File-based agents get a default workspace automatically when discovered through `mastra dev` or `mastra build`, so they can read and write files and run shell commands without extra configuration.
+A [workspace](/docs/sandbox/overview) assembles capabilities such as filesystem access and command execution. The configured backends determine which tools are available. File-based agents get a default workspace automatically when discovered through `mastra dev` or `mastra build`. This default includes filesystem access and command execution, so agents can read and write files and run shell commands without extra configuration.
 
-Use this page for the file-based convention. For workspace providers, tools, search, lifecycle, and sandbox details, see [Workspaces](/docs/workspace/overview).
+Use this page for the file-based convention. For workspace providers, tools, search, lifecycle, and sandbox details, see [Sandbox](/docs/sandbox/overview).
 
 ## Default workspace
 
@@ -74,7 +74,7 @@ Customize the workspace when the default local directory isn't enough. Common re
 - Add workspace search with BM25 or vector search.
 - Share one workspace across multiple agents.
 
-For provider patterns and runtime behavior, see the [workspace overview](/docs/workspace/overview), [sandbox guide](/docs/workspace/sandbox), and [workspace search](/docs/workspace/search).
+For provider patterns and runtime behavior, see the [sandbox guide](/docs/sandbox/overview) and [workspace search](/docs/sandbox/search).
 
 ## Runtime boundary
 

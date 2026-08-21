@@ -6,6 +6,7 @@ import { MastraError, MastraNonRetryableError, ErrorDomain, ErrorCategory } from
 import type { PubSub } from '../events';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import { createObservabilityContext } from '../observability';
+import { MASTRA_AUTH_TOKEN_KEY } from '../request-context';
 import { createWorkflow } from './create';
 import { DefaultExecutionEngine } from './default';
 import type { Step } from './step';
@@ -112,6 +113,21 @@ describe('DefaultExecutionEngine.serializeRequestContext', () => {
       userId: 'user-123',
     });
     expect(result).not.toHaveProperty('rpcProxy');
+  });
+
+  it('should exclude the framework-managed auth token from snapshots', () => {
+    const engine = new DefaultExecutionEngine({
+      mastra: undefined,
+      options: { validateInputs: true, shouldPersistSnapshot: () => false },
+    });
+    const ctx = new RequestContext();
+    ctx.set('userId', 'user-123');
+    ctx.set(MASTRA_AUTH_TOKEN_KEY, 'super-secret-bearer-token');
+
+    const result = engine.serializeRequestContext(ctx);
+
+    expect(result).toEqual({ userId: 'user-123' });
+    expect(result).not.toHaveProperty(MASTRA_AUTH_TOKEN_KEY);
   });
 });
 

@@ -32,6 +32,7 @@ import { MastraFactory } from '@mastra/factory';
 import { defaultFactoryRules } from '@mastra/factory/rules/defaults';
 import type { FactoryStageRuleContext } from '@mastra/factory/rules/types';
 import { GithubIntegration } from '@mastra/factory/integrations/github/integration';
+import { parseAuthorizedBotsEnv } from '@mastra/factory/integrations/github/webhook';
 import { LinearIntegration } from '@mastra/factory/integrations/linear/integration';
 import { SlackIntegration } from '@mastra/factory/integrations/slack/integration';
 import type { IMastraAuthProvider } from '@mastra/core/server';
@@ -91,10 +92,11 @@ if (redisUrl) {
 //      `init()` derives the /auth/callback redirect from the deployment's
 //      publicUrl when WORKOS_REDIRECT_URI is unset. `fetchMemberships` lets
 //      token auth resolve the user's organization so the bootstrapped
-//      personal org works without re-auth. Note MASTRA_PLATFORM_SECRET_KEY
-//      does NOT defer to the platform here: it is a compute/integration
-//      credential (sandboxes, GitHub/Linear slots), not an identity signal —
-//      platform compute plus self-managed sign-in is a supported combination.
+//      personal org works without re-auth. Note MASTRA_PLATFORM_ACCESS_TOKEN /
+//      MASTRA_PLATFORM_SECRET_KEY do NOT defer to the platform here: they are
+//      compute/integration credentials (sandboxes, GitHub/Linear slots), not
+//      identity signals — platform compute plus self-managed sign-in is a
+//      supported combination.
 //   4. Nothing configured — leave undefined and MastraFactory installs its
 //      platform-backed default provider.
 const authDisabled = process.env.MASTRACODE_AUTH_DISABLED === '1';
@@ -132,6 +134,9 @@ const github =
         clientSecret: githubClientSecret,
         slug: githubAppSlug,
         webhookSecret: process.env.GITHUB_APP_WEBHOOK_SECRET?.trim() || undefined,
+        // Extra reviewer bot logins this deployment trusts to trigger
+        // review/comment notifications, on top of the built-in defaults.
+        authorizedBots: parseAuthorizedBotsEnv(process.env.MASTRACODE_GITHUB_AUTHORIZED_BOTS),
       })
     : undefined;
 
@@ -177,8 +182,15 @@ function localSandboxEnv(): Record<string, string> {
   return env;
 }
 
-const PLATFORM_SANDBOX_ENV_KEYS = ['MASTRA_ENVIRONMENT_ID', 'MASTRA_PROJECT_ID', 'MASTRA_PLATFORM_SECRET_KEY'] as const;
-const hasPlatformSandboxEnv = PLATFORM_SANDBOX_ENV_KEYS.every(key => Boolean(process.env[key]?.trim()));
+const PLATFORM_SANDBOX_ENV_KEYS = ['MASTRA_ENVIRONMENT_ID', 'MASTRA_PROJECT_ID'] as const;
+// MASTRA_PLATFORM_ACCESS_TOKEN is the credential Mastra Platform injects into
+// deployed projects; MASTRA_PLATFORM_SECRET_KEY is the org secret key written
+// by project scaffolding. `PlatformSandbox` only reads the former from env, so
+// whichever is present is passed to it explicitly as `accessToken`.
+const platformSandboxToken =
+  process.env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim() || process.env.MASTRA_PLATFORM_SECRET_KEY?.trim();
+const hasPlatformSandboxEnv =
+  Boolean(platformSandboxToken) && PLATFORM_SANDBOX_ENV_KEYS.every(key => Boolean(process.env[key]?.trim()));
 
 // Private-network exec: the workspace-proxy discovers each sandbox's private
 // IPv6 during `POST /v1/projects/:pid/sandbox` and returns it as an
@@ -193,7 +205,7 @@ const sandboxAddressRegistry = hasPlatformSandboxEnv ? new InProcessSandboxAddre
 // Use PlatformSandbox only when its complete identity is configured. Otherwise
 // fall back to LocalSandbox for single-user development.
 const sandbox = hasPlatformSandboxEnv
-  ? new PlatformSandbox({ addressRegistry: sandboxAddressRegistry })
+  ? new PlatformSandbox({ accessToken: platformSandboxToken, addressRegistry: sandboxAddressRegistry })
   : new LocalSandbox({
       workingDirectory:
         process.env.MASTRACODE_LOCAL_SANDBOX_ROOT?.trim() || join(homedir(), '.mastracode', 'web', 'sandboxes'),
@@ -304,8 +316,11 @@ export const factory = new MastraFactory({
   vector,
   pubsub,
   platform: {
-    // Platform's GitHub App identity is not included in the Platform credentials.
-    // Reuse the deployment's configured App slug to ignore Factory's own handoff writes.
+    // The deployment's own self-hosted App slug, when one is configured. It is
+    // NOT Platform's identity: Platform posts as its own App, which names
+    // itself. Reusing this value for that purpose left self-recognition
+    // comparing against `undefined[bot]` on every Platform deployment, where
+    // this is legitimately unset.
     githubAppSlug,
   },
   // Browser-facing origin. On the platform the SPA is hosted separately, so

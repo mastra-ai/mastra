@@ -67,6 +67,28 @@ async function invokeOnViolation(processor: Processor, error: TripWire): Promise
   }
 }
 
+function getProcessableResponseMessages(messageList: MessageList): MastraDBMessage[] {
+  const liveMessages = messageList.get.response.db();
+  const persistedMessages = messageList.getPersisted.response.db();
+
+  if (persistedMessages.length === 0) {
+    return [...liveMessages];
+  }
+  if (liveMessages.length === 0) {
+    return [...persistedMessages];
+  }
+
+  const messagesById = new Map(persistedMessages.map(message => [message.id, message]));
+  for (const message of liveMessages) {
+    messagesById.set(message.id, message);
+  }
+
+  return messageList.get.all
+    .db()
+    .filter(message => messagesById.has(message.id))
+    .map(message => messagesById.get(message.id)!);
+}
+
 /**
  * Implementation of processor state management
  */
@@ -385,12 +407,7 @@ export class ProcessorRunner {
     };
 
     const stateId = processor.stateId ?? processor.id;
-    const beforeAddStateSignal = rotateResponseMessageId
-      ? () => {
-          messageList.markResponseMessageBoundary();
-          rotateResponseMessageId();
-        }
-      : undefined;
+    const beforeAddStateSignal = rotateResponseMessageId;
     const trackingById = getStateSignalsMetadata(thread.metadata);
     const tracking = trackingById[stateId];
     const { activeStateSignals, contextWindow, lastSnapshot, deltasSinceSnapshot } = await resolveStateSignalHistory({
@@ -605,8 +622,7 @@ export class ProcessorRunner {
     result?: OutputResult,
   ): Promise<MessageList> {
     for (const [index, processorOrWorkflow] of this.outputProcessors.entries()) {
-      const allNewMessages = messageList.get.response.db();
-      let processableMessages: MastraDBMessage[] = [...allNewMessages];
+      let processableMessages = getProcessableResponseMessages(messageList);
       const idsBeforeProcessing = processableMessages.map((m: MastraDBMessage) => m.id);
       const check = messageList.makeMessageSourceChecker();
 
@@ -705,7 +721,7 @@ export class ProcessorRunner {
             });
           }
           if (mutations.length > 0) {
-            processableMessages = processResult.get.response.db();
+            processableMessages = getProcessableResponseMessages(processResult);
           }
         } else {
           if (processResult) {
@@ -1555,12 +1571,7 @@ export class ProcessorRunner {
               memoryConfig: memoryContext?.memoryConfig,
               messageList,
               defaultId: processor.stateId ?? processor.id,
-              beforeAddSignal: rotateResponseMessageId
-                ? () => {
-                    messageList.markResponseMessageBoundary();
-                    rotateResponseMessageId();
-                  }
-                : undefined,
+              beforeAddSignal: rotateResponseMessageId,
               writeSignal: signal => writer?.custom(signal.toDataPart()),
             });
             return result.skipped ? result : result.signal;

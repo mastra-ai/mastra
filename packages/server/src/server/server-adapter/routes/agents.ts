@@ -37,6 +37,7 @@ import {
   STREAM_UNTIL_IDLE_GENERATE_ROUTE,
   RESUME_STREAM_UNTIL_IDLE_ROUTE,
 } from '../../handlers/agents';
+import { READ_AGENT_PLAN_ROUTE } from '../../handlers/plans';
 import { GET_AGENT_TOOL_ROUTE, EXECUTE_AGENT_TOOL_ROUTE } from '../../handlers/tools';
 import {
   GET_SPEAKERS_ROUTE,
@@ -121,6 +122,7 @@ export const AGENTS_ROUTES: readonly ServerRoute[] = [
   // Agent Tool Routes
   // ============================================================================
   GET_AGENT_TOOL_ROUTE,
+  READ_AGENT_PLAN_ROUTE,
 
   // ============================================================================
   // Agent Skill Routes
@@ -184,6 +186,7 @@ export type AgentRoutes = readonly [
   typeof UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE,
   typeof ENHANCE_INSTRUCTIONS_ROUTE,
   typeof GET_AGENT_TOOL_ROUTE,
+  typeof READ_AGENT_PLAN_ROUTE,
   typeof GET_AGENT_SKILL_ROUTE,
   typeof GENERATE_SPEECH_ROUTE,
   typeof GENERATE_SPEECH_DEPRECATED_ROUTE,

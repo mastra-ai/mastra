@@ -37,6 +37,7 @@ import {
 import { getObservableMessages } from './message-utils';
 import type { ModelByInputTokens } from './model-by-input-tokens';
 import { didProviderChange } from './model-context';
+import { describeDegenerateOutput } from './observer-agent';
 import { registerOp, unregisterOp, isOpActiveInProcess } from './operation-registry';
 import {
   buildReflectorSystemPrompt,
@@ -57,6 +58,7 @@ import type {
   ObservationModelContext,
   ObserveHookUsage,
   ObserveHooks,
+  ReflectionCommittedContext,
   ResolvedObservationConfig,
   ResolvedReflectionConfig,
   ThresholdRange,
@@ -207,6 +209,7 @@ export class ReflectorRunner {
   ) => Promise<void>;
   private readonly getCompressionStartLevel: (requestContext?: RequestContext) => Promise<CompressionLevel>;
   private readonly memory?: Memory;
+  private readonly onReflectionCommitted?: (context: ReflectionCommittedContext) => Promise<void>;
   private mastra?: Mastra;
 
   constructor(opts: {
@@ -232,6 +235,7 @@ export class ReflectorRunner {
     resolveModel: ReflectionModelResolver;
     mastra?: Mastra;
     memory?: Memory;
+    onReflectionCommitted?: (context: ReflectionCommittedContext) => Promise<void>;
   }) {
     this.reflectionConfig = opts.reflectionConfig;
     this.observationConfig = opts.observationConfig;
@@ -246,6 +250,7 @@ export class ReflectorRunner {
     this.getCompressionStartLevel = opts.getCompressionStartLevel;
     this.mastra = opts.mastra;
     this.memory = opts.memory;
+    this.onReflectionCommitted = opts.onReflectionCommitted;
   }
 
   __registerMastra(mastra: Mastra): void {
@@ -365,6 +370,8 @@ export class ReflectorRunner {
     let parsed: ReturnType<typeof parseReflectorOutput> = { observations: '', suggestedContinuation: undefined };
     let reflectedTokens = 0;
     let attemptNumber = 0;
+    /** Observations from the previous attempt, used to detect a no-progress ladder. */
+    let previousObservations: string | undefined;
 
     while (currentLevel <= maxLevel) {
       attemptNumber++;
@@ -469,7 +476,7 @@ export class ReflectorRunner {
 
       if (parsed.degenerate) {
         omDebug(
-          `[OM:callReflector] attempt #${attemptNumber}: degenerate repetition detected, treating as compression failure`,
+          `[OM:callReflector] attempt #${attemptNumber}: degenerate repetition detected, treating as compression failure. ${describeDegenerateOutput(result.text, 2000)}`,
         );
         reflectedTokens = originalTokens;
       } else {
@@ -487,6 +494,18 @@ export class ReflectorRunner {
         omDebug(`[OM:callReflector] degenerate output persists at maxLevel=${maxLevel}, breaking`);
         break;
       }
+
+      // Escalating the level changes the prompt. If a changed prompt still produced
+      // byte-identical output, the model is not responding to the level knob and further
+      // attempts cannot improve the result — stop instead of burning the rest of the ladder
+      // on model calls, marker writes and nested runs that are known to be wasted.
+      if (!parsed.degenerate && previousObservations !== undefined && parsed.observations === previousObservations) {
+        omDebug(
+          `[OM:callReflector] attempt #${attemptNumber} returned output identical to the previous attempt; escalating cannot help, stopping the ladder`,
+        );
+        break;
+      }
+      previousObservations = parsed.observations;
 
       // Emit failed marker and start marker for next retry
       if (streamContext?.writer) {
@@ -547,6 +566,8 @@ export class ReflectorRunner {
       mainAgent,
       memory: this.memory,
       sendSignal,
+      writer: streamContext?.writer,
+      abortSignal,
       requestContext,
     });
     const extractedValues = hookedValues.values;
@@ -818,6 +839,7 @@ export class ReflectorRunner {
       previousModel?: string;
       currentModel?: string;
     },
+    committedContext?: Omit<ReflectionCommittedContext, 'observations'>,
   ): Promise<TryActivateResult> {
     const bufferKey = this.buffering.getReflectionBufferKey(lockKey);
 
@@ -921,6 +943,13 @@ export class ReflectorRunner {
       currentRecord: freshRecord,
       tokenCount: combinedTokenCount,
     });
+    if (committedContext) {
+      await this.notifyReflectionCommitted({
+        ...committedContext,
+        observations: allLines.slice(0, reflectedLineCount).join('\n').trim(),
+        writer,
+      });
+    }
 
     BufferingCoordinator.lastBufferedBoundary.delete(bufferKey);
 
@@ -968,6 +997,15 @@ export class ReflectorRunner {
     return { status: 'activated' };
   }
 
+  private async notifyReflectionCommitted(context: ReflectionCommittedContext): Promise<void> {
+    if (!this.onReflectionCommitted || !context.parentThreadId || !context.resourceId) return;
+    try {
+      await this.onReflectionCommitted(context);
+    } catch (error) {
+      omDebug(`[OM:reflect] post-commit reflection agent failed: ${error}`);
+    }
+  }
+
   /**
    * Check if reflection needed and trigger if so.
    * Supports both synchronous reflection and async buffered reflection.
@@ -981,6 +1019,7 @@ export class ReflectorRunner {
     abortSignal?: AbortSignal;
     mainAgent?: ProcessorContext['agent'];
     sendSignal?: ProcessorContext['sendSignal'];
+    sendStateSignal?: ProcessorContext['sendStateSignal'];
     messageList?: MessageList;
     currentModel?: ObservationModelContext;
     reflectionHooks?: Pick<ObserveHooks, 'onReflectionStart' | 'onReflectionEnd'>;
@@ -995,6 +1034,7 @@ export class ReflectorRunner {
       abortSignal,
       mainAgent,
       sendSignal,
+      sendStateSignal,
       messageList,
       currentModel,
       reflectionHooks,
@@ -1096,6 +1136,15 @@ export class ReflectorRunner {
         writer,
         messageList,
         activationMetadata,
+        {
+          parentThreadId: requestedThreadId ?? record.threadId ?? '',
+          resourceId: record.resourceId ?? '',
+          requestContext,
+          mainAgent,
+          sendStateSignal,
+          abortSignal,
+          observabilityContext,
+        },
       );
       if (activationResult.status === 'activated') {
         return;
@@ -1226,6 +1275,17 @@ export class ReflectorRunner {
         currentRecord: record,
         reflection: reflectResult.observations,
         tokenCount: reflectionTokenCount,
+      });
+      await this.notifyReflectionCommitted({
+        parentThreadId: requestedThreadId ?? record.threadId ?? '',
+        resourceId: record.resourceId ?? '',
+        observations: record.activeObservations ?? '',
+        requestContext,
+        mainAgent,
+        sendStateSignal,
+        writer,
+        abortSignal,
+        observabilityContext,
       });
 
       if (writer && streamContext) {

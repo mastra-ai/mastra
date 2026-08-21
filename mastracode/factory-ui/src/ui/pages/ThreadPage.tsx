@@ -16,10 +16,12 @@ import { ChatHeader } from '../domains/chat/components/ChatHeader';
 import { FactorySessionHeader } from '../domains/factory/components/RelatedFactorySessions';
 import { ComposerPanel } from '../domains/chat/components/ComposerPanel';
 import { ActivityLine } from '../domains/chat/components/ActivityLine';
-import { ConnectionNotice } from '../domains/chat/components/ConnectionNotice';
 import { EmptyThreadState } from '../domains/chat/components/EmptyThreadState';
 import { GoalPanel } from '../domains/chat/components/GoalPanel';
 import { TaskPanel } from '../domains/chat/components/TaskPanel';
+import { PageTitle } from '../domains/chat/components/PageTitle';
+import { SessionFavicon } from '../domains/chat/components/SessionFavicon';
+import { SessionPrepareSteps } from '../domains/chat/components/SessionPrepareSteps';
 import { Transcript } from '../domains/chat/components/Transcript';
 import { TranscriptHistoryLoader } from '../domains/chat/components/TranscriptHistoryLoader';
 import { ThreadRailLayer } from '../domains/chat/components/ThreadRailLayer';
@@ -48,17 +50,10 @@ export function ThreadPage() {
       sidebar={<Sidebar />}
       main={
         resolvingSession ? (
-          // bare bar stands in — the session header needs WorkspaceFilesProvider
-          <ChatShell className="flex-1">
-            <ChatShell.Bar>
-              <ChatHeader />
-            </ChatShell.Bar>
-            <div className="grid min-h-0 flex-1 place-items-center">
-              <Spinner aria-label="Loading session" className="text-icon3" />
-            </div>
-          </ChatShell>
+          <ResolvingSessionMain />
         ) : (
           <ChatSessionBoundary threadId={threadId}>
+            <PageTitle />
             <WorkspaceFilesProvider>
               <ThreadPageMain workspacePath={workspace.workspacePath} threadId={workspace.threadId} />
             </WorkspaceFilesProvider>
@@ -66,6 +61,25 @@ export function ThreadPage() {
         )
       }
     />
+  );
+}
+
+// Owns the favicon for this branch: the session boundary is not mounted yet, so
+// nothing else can write it. A bare bar stands in — the session header needs
+// WorkspaceFilesProvider.
+function ResolvingSessionMain() {
+  return (
+    <>
+      <SessionFavicon state="initializing" />
+      <ChatShell className="flex-1">
+        <ChatShell.Bar>
+          <ChatHeader />
+        </ChatShell.Bar>
+        <div className="grid min-h-0 flex-1 place-items-center">
+          <Spinner aria-label="Loading session" className="text-icon3" />
+        </div>
+      </ChatShell>
+    </>
   );
 }
 
@@ -80,7 +94,7 @@ function ThreadPageMain({
   useRouteThreadSync();
   useHandoffPrompt();
   const railBoxRef = useRef<HTMLDivElement>(null);
-  const railFits = useWiderThan(railBoxRef, RAIL_MIN_REM);
+  const { wider: railFits } = useWiderThan(railBoxRef, RAIL_MIN_REM);
 
   return (
     <ThreadShell workspacePath={workspacePath} threadId={threadId}>
@@ -96,7 +110,6 @@ function ThreadPageMain({
             {railFits && <ThreadRailLayer />}
             <ChatShell.Content className="gap-0 pt-6">
               <ChatShell.Column className="flex-1">
-                <ConnectionNotice />
                 <ChatMessageBoundary>
                   <ThreadTranscript />
                 </ChatMessageBoundary>
@@ -138,6 +151,7 @@ function ThreadShell({
     <ChatShell
       className={threadShellClass}
       scroller={{
+        autoScroll: true,
         defaultScrollPosition: 'last-anchor',
         preserveScrollOnPrepend: true,
         onReachStart: canLoadMore ? loadMore.load : undefined,
@@ -149,7 +163,9 @@ function ThreadShell({
 }
 
 function ThreadTranscript() {
-  const { transcript } = useChatTranscript();
+  const { transcript, initialHistoryReady } = useChatTranscript();
+
+  if (!initialHistoryReady) return <SessionPrepareSteps />;
 
   return (
     <>

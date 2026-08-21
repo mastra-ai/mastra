@@ -23,6 +23,8 @@ import type {
   ScoringSamplingConfig,
 } from '../evals';
 import { runScorer } from '../evals/hooks';
+import { validateScoringPredicate } from '../evals/predicate';
+import type { ScoringFilter } from '../evals/predicate';
 
 import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
@@ -94,7 +96,14 @@ import { SkillsProcessor } from '../processors/processors/skills';
 import { WorkspaceInstructionsProcessor } from '../processors/processors/workspace-instructions';
 import type { ProcessorState } from '../processors/runner';
 import { ProcessorRunner } from '../processors/runner';
-import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, MASTRA_VERSIONS_KEY } from '../request-context';
+import {
+  RequestContext,
+  MASTRA_INHERITED_MEMORY_KEY,
+  MASTRA_RESOURCE_ID_KEY,
+  MASTRA_THREAD_ID_KEY,
+  MASTRA_VERSIONS_KEY,
+} from '../request-context';
+import { getRequestContextInputValues } from '../request-context/input-source';
 import type { DeclaredAgentSchedule } from '../schedules/define';
 import type { InferStandardSchemaOutput } from '../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
@@ -147,6 +156,7 @@ import type {
   DelegationStartContext,
   DelegationStartResult,
   DelegationCompleteContext,
+  DelegationHookError,
 } from './agent.types';
 // Value import of durable constants is safe: constants.ts is a leaf module
 // with no imports, so it cannot create the runtime cycle `agent →
@@ -542,7 +552,18 @@ export class Agent<
   TAgentId extends string = string,
   TTools extends ToolsInput = ToolsInput,
   TOutput = undefined,
-  TRequestContext extends Record<string, any> | unknown = unknown,
+  /**
+   * Defaults to `any` (not `unknown`) so agents that declare a `requestContextSchema`
+   * remain assignable to the bare `Agent` type. `TRequestContext` is invariant on
+   * `Agent` (it appears in both parameter and return positions via `DynamicArgument`
+   * / private fields), so a schema-narrowed agent is not assignable to
+   * `Agent<..., unknown>` — which broke generic helpers typed as `(agent: Agent) => ...`.
+   *
+   * Construction without a schema still infers a concrete context from
+   * `requestContextSchema` when present; the `any` default only affects the
+   * unparameterized `Agent` alias used for "any agent" acceptors.
+   */
+  TRequestContext extends Record<string, any> | unknown = any,
   TEditor extends AgentEditorConfig | undefined = AgentEditorConfig | undefined,
 >
   extends MastraBase
@@ -573,6 +594,14 @@ export class Agent<
    * `__registerMastra` attaches a real Mastra later.
    */
   #ephemeralMastra?: Mastra;
+
+  /**
+   * True when this instance is a fork produced by resolving a stored agent
+   * version (see Mastra#resolveVersionedAgent). Prevents #execute from
+   * re-resolving the version and recursing.
+   * @internal
+   */
+  #storedVersionApplied = false;
   #pubsub?: PubSub;
   #inheritedPubSub?: PubSub;
   #memory?: DynamicArgument<MastraMemory, TRequestContext>;
@@ -729,6 +758,15 @@ export class Agent<
     }
 
     this.#scorers = config.scorers || ({} as MastraScorers);
+
+    // Validate statically-configured scoring filters at definition time so a
+    // typo'd root fails loud at construction instead of silently skipping all
+    // scoring at runtime. Function-based scorers are validated when resolved.
+    if (typeof this.#scorers !== 'function') {
+      for (const entry of Object.values(this.#scorers)) {
+        if (entry?.filter) validateScoringPredicate(entry.filter);
+      }
+    }
 
     this.#agents = config.agents || ({} as Record<string, SubAgent<string, TRequestContext>>);
 
@@ -1330,7 +1368,10 @@ export class Agent<
 
     // Resolve workspace-level skills (if configured)
     const workspace = workspaceOverride ?? (await this.getWorkspace({ requestContext: rc }));
-    const workspaceSkills = workspace?.skills;
+    const configuredWorkspaceSkills = workspace?.skills;
+    const workspaceSkills = configuredWorkspaceSkills?.getScoped
+      ? await configuredWorkspaceSkills.getScoped({ requestContext: rc })
+      : configuredWorkspaceSkills;
 
     // Merge if both exist (agent skills win on name conflicts)
     if (agentSkills && workspaceSkills) {
@@ -1441,7 +1482,7 @@ export class Agent<
    */
   async #validateRequestContext(requestContext?: RequestContext) {
     if (this.#requestContextSchema) {
-      const contextValues = requestContext?.all ?? {};
+      const contextValues = getRequestContextInputValues(requestContext);
       const validation = await this.#requestContextSchema['~standard'].validate(contextValues);
 
       if (validation.issues) {
@@ -2103,6 +2144,28 @@ export class Agent<
    * }
    * ```
    */
+  /**
+   * Whether this run has memory available, either configured on the agent or
+   * inherited from a delegating supervisor via the run's RequestContext.
+   */
+  #hasEffectiveMemory(requestContext?: RequestContext): boolean {
+    return Boolean(this.#memory ?? this.#inheritedMemory(requestContext));
+  }
+
+  /**
+   * Memory a delegating agent handed to this agent for the current run, if any.
+   * Addressed to a single agent id so a memory-less sub-agent that delegates
+   * further does not hand it on to its own sub-agents.
+   */
+  #inheritedMemory(requestContext?: RequestContext): DynamicArgument<MastraMemory, TRequestContext> | undefined {
+    const inherited = requestContext?.getRaw(MASTRA_INHERITED_MEMORY_KEY) as
+      | { agentId: string; memory: DynamicArgument<MastraMemory, any> }
+      | undefined;
+    return inherited?.agentId === this.id
+      ? (inherited.memory as DynamicArgument<MastraMemory, TRequestContext>)
+      : undefined;
+  }
+
   public hasOwnMemory(): boolean {
     return Boolean(this.#memory);
   }
@@ -2122,16 +2185,22 @@ export class Agent<
   public async getMemory({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}): Promise<
     MastraMemory | undefined
   > {
-    if (!this.#memory) {
+    // When a supervisor delegates to a memory-less sub-agent it passes its own
+    // memory through the delegated run's RequestContext, so the inheritance
+    // lasts for exactly that invocation instead of being grafted onto the
+    // shared sub-agent instance. See issue #21625.
+    const memoryConfig = this.#memory ?? this.#inheritedMemory(requestContext);
+
+    if (!memoryConfig) {
       return undefined;
     }
 
     let resolvedMemory: MastraMemory;
 
-    if (typeof this.#memory !== 'function') {
-      resolvedMemory = this.#memory;
+    if (typeof memoryConfig !== 'function') {
+      resolvedMemory = memoryConfig;
     } else {
-      const result = this.#memory({
+      const result = memoryConfig({
         requestContext: requestContext as RequestContext<TRequestContext>,
         mastra: this.#mastra,
       });
@@ -2404,6 +2473,12 @@ export class Agent<
         });
         this.logger.trackException(mastraError);
         throw mastraError;
+      }
+
+      // Statically-configured filters are validated in the constructor; the
+      // function form is only checkable once resolved.
+      for (const entry of Object.values(scorers)) {
+        if (entry?.filter) validateScoringPredicate(entry.filter);
       }
 
       return scorers;
@@ -3458,6 +3533,15 @@ export class Agent<
   }
 
   /**
+   * Mark this agent as a stored-version fork so execution does not attempt
+   * to resolve a version override for it again.
+   * @internal
+   */
+  __markStoredVersionApplied() {
+    this.#storedVersionApplied = true;
+  }
+
+  /**
    * Extract plain text lines from a single message's parts array.
    * Modeled after observational memory's formatObserverMessage — switches on
    * part type, emits role-prefixed text, and drops all metadata.
@@ -4139,7 +4223,7 @@ export class Agent<
     if (
       inputProcessorOverrides?.length ||
       this.#inputProcessors ||
-      this.#memory ||
+      this.#hasEffectiveMemory(requestContext) ||
       this.#skills ||
       this.#workspace ||
       this.#mastra?.getWorkspace() ||
@@ -4240,7 +4324,12 @@ export class Agent<
     let tripwire: { reason: string; retry?: boolean; metadata?: unknown; processorId?: string } | undefined;
     let nextTools = tools;
 
-    if (inputProcessorOverrides?.length || this.#inputProcessors || this.#memory || this.#skills) {
+    if (
+      inputProcessorOverrides?.length ||
+      this.#inputProcessors ||
+      this.#hasEffectiveMemory(requestContext) ||
+      this.#skills
+    ) {
       const runner = await this.getProcessorRunner({
         requestContext,
         inputProcessorOverrides,
@@ -4371,7 +4460,7 @@ export class Agent<
   }> {
     let tripwire: { reason: string; retry?: boolean; metadata?: unknown; processorId?: string } | undefined;
 
-    if (outputProcessorOverrides?.length || this.#outputProcessors || this.#memory) {
+    if (outputProcessorOverrides?.length || this.#outputProcessors || this.#hasEffectiveMemory(requestContext)) {
       const runner = await this.getProcessorRunner({
         requestContext,
         outputProcessorOverrides,
@@ -4801,7 +4890,14 @@ export class Agent<
             // durable engine's snapshot/rehydrate behavior.
             const subAgentRequestContext: RequestContext = new RequestContext<unknown>(
               [...requestContext.entries()].filter(
-                ([key]) => key !== 'MastraMemory' && key !== MASTRA_THREAD_ID_KEY && key !== MASTRA_RESOURCE_ID_KEY,
+                ([key]) =>
+                  key !== 'MastraMemory' &&
+                  key !== MASTRA_THREAD_ID_KEY &&
+                  key !== MASTRA_RESOURCE_ID_KEY &&
+                  // Inherited memory is scoped to the run that received it: a
+                  // memory-less sub-agent does not pass this agent's memory further
+                  // down to its own sub-agents.
+                  key !== MASTRA_INHERITED_MEMORY_KEY,
               ),
             );
 
@@ -4846,6 +4942,32 @@ export class Agent<
                   entityId: agentName,
                 }) || `${slugify(this.id)}-${agentName}`;
 
+            // Record a throwing delegation hook on the run's request context so
+            // callers can detect "delegation ran but the hook failed" without
+            // scraping logs. Runs for every hookErrorStrategy.
+            const recordHookError = (hook: DelegationHookError['hook'], hookError: unknown, logMessage: string) => {
+              const error = hookError instanceof Error ? hookError : new Error(String(hookError));
+              this.logger.error(logMessage, { agent: this.name, error });
+              const existing =
+                (requestContext.get('__mastra_delegationHookErrors') as DelegationHookError[] | undefined) ?? [];
+              requestContext.set('__mastra_delegationHookErrors', [
+                ...existing,
+                {
+                  hook,
+                  primitiveId: agent.id,
+                  toolCallId,
+                  runId: runId || '',
+                  name: error.name,
+                  message: error.message,
+                },
+              ]);
+              return error;
+            };
+            const hookErrorStrategy = delegation?.hookErrorStrategy ?? 'warn';
+            // A hook that just threw is not in a state to handle its own
+            // failure, so the failure path never re-invokes it.
+            let completeHookInvoked = false;
+
             // Call onDelegationStart before resolving the sub-agent's runtime
             // config so mutations of the delegated run's context in the hook
             // are visible to version, model, and default-options resolution
@@ -4856,8 +4978,26 @@ export class Agent<
               try {
                 startResult = await delegation.onDelegationStart(delegationStartContext);
               } catch (hookError) {
-                this.logger.error('onDelegationStart hook error', { agent: this.name, error: hookError });
-                // Continue with original values on hook error
+                const error = recordHookError('onDelegationStart', hookError, 'onDelegationStart hook error');
+                // Fail closed when configured: the delegation never started, so
+                // this throws directly rather than routing through
+                // onDelegationComplete. Otherwise continue with original values.
+                if (hookErrorStrategy === 'throw') {
+                  throw new MastraError(
+                    {
+                      id: 'AGENT_DELEGATION_HOOK_FAILED',
+                      domain: ErrorDomain.AGENT,
+                      category: ErrorCategory.USER,
+                      details: {
+                        agentName: this.name,
+                        subAgentName: agent.name ?? agent.id,
+                        hook: 'onDelegationStart',
+                        runId: runId || '',
+                      },
+                    },
+                    error,
+                  );
+                }
               }
             }
 
@@ -4903,7 +5043,28 @@ export class Agent<
               supportedLanguageModelSpecifications.includes(resolvedModelVersion)
             ) {
               if (!resolvedAgent.hasOwnMemory() && this.#memory) {
-                resolvedAgent.__setMemory(this.#memory as DynamicArgument<MastraMemory, TRequestContext>);
+                if (resolvedAgent instanceof Agent) {
+                  // Pass the memory through the delegated run's context so it applies to
+                  // this invocation only. Setting it on the sub-agent would permanently
+                  // graft the first supervisor's memory onto an instance that is commonly
+                  // a shared singleton reached by other supervisors and by direct
+                  // invocations. See issue #21625.
+                  subAgentRequestContext.setRaw(MASTRA_INHERITED_MEMORY_KEY, {
+                    agentId: resolvedAgent.id,
+                    memory: this.#memory,
+                  });
+                } else {
+                  // Custom SubAgent implementations only expose __setMemory, so the
+                  // in-place graft is the sole option available for them.
+                  this.logger.warn('Injecting supervisor memory into a custom sub-agent instance', {
+                    agent: this.name,
+                    targetAgent: agentName,
+                    targetAgentId: resolvedAgent.id,
+                    reason:
+                      'Custom SubAgent implementations do not support per-invocation memory inheritance, so the memory is set on the shared instance and persists for its lifetime. Configure memory on the sub-agent to avoid this.',
+                  });
+                  resolvedAgent.__setMemory(this.#memory as DynamicArgument<MastraMemory, TRequestContext>);
+                }
               }
             }
 
@@ -5067,6 +5228,13 @@ export class Agent<
 
               const { resumeData, suspend } = context?.agent ?? {};
 
+              // A delegation only resumes when the suspended-tool lookup actually found a run to
+              // resume. `resumeData` alone is model-authored and is present whenever the model
+              // decides to fill the always-exposed schema field, so branching on it would send an
+              // undefined runId into resumeGenerate/resumeStream and throw
+              // AGENT_RESUME_NO_SNAPSHOT_FOUND before the sub-agent ever runs. See issue #21608.
+              const shouldResumeSubAgent = !!resumeData && !!suspendedToolRunId;
+
               // Apply messageFilter callback (runs after onDelegationStart so effectivePrompt
               // reflects any hook modifications). Falls back to full context on error.
               let filteredContextMessages = sanitizedMessages;
@@ -5086,8 +5254,13 @@ export class Agent<
                     toolCallId,
                   });
                 } catch (filterError) {
-                  this.logger.error('messageFilter error', { agent: this.name, error: filterError });
-                  // Fall back to unfiltered context on error
+                  recordHookError('messageFilter', filterError, 'messageFilter error');
+                  // Fail closed when configured (handled by the surrounding
+                  // catch, which fails the delegation). Otherwise fall back to
+                  // the unfiltered context.
+                  if (hookErrorStrategy === 'throw') {
+                    throw filterError;
+                  }
                 }
               }
 
@@ -5156,7 +5329,7 @@ export class Agent<
                 (methodType === 'generate' || methodType === 'generateLegacy') &&
                 supportedLanguageModelSpecifications.includes(resolvedModelVersion)
               ) {
-                const generateResult = resumeData
+                const generateResult = shouldResumeSubAgent
                   ? await resolvedAgent.resumeGenerate(resumeData, {
                       runId: suspendedToolRunId,
                       requestContext: subAgentRequestContext,
@@ -5248,7 +5421,7 @@ export class Agent<
                 (methodType === 'stream' || methodType === 'streamLegacy') &&
                 supportedLanguageModelSpecifications.includes(resolvedModelVersion)
               ) {
-                const streamResult = resumeData
+                const streamResult = shouldResumeSubAgent
                   ? await resolvedAgent.resumeStream(resumeData, {
                       runId: suspendedToolRunId,
                       requestContext: subAgentRequestContext,
@@ -5413,6 +5586,7 @@ export class Agent<
                     },
                   };
 
+                  completeHookInvoked = true;
                   const completeResult = await delegation.onDelegationComplete(delegationCompleteContext);
 
                   // If bailed, add a marker to the result and signal via requestContext
@@ -5461,14 +5635,22 @@ export class Agent<
                     }
                   }
                 } catch (hookError) {
-                  this.logger.error('onDelegationComplete hook error', { agent: this.name, error: hookError });
+                  recordHookError('onDelegationComplete', hookError, 'onDelegationComplete hook error');
+                  // Fail closed when configured: the surrounding catch turns
+                  // this into a tool failure for the parent.
+                  if (hookErrorStrategy === 'throw') {
+                    throw hookError;
+                  }
                 }
               }
               return result;
             } catch (err) {
               let bailed = false;
-              // Call onDelegationComplete with error if hook is provided
-              if (delegation?.onDelegationComplete) {
+              let completeHookError: Error | undefined;
+              // Call onDelegationComplete with error if hook is provided.
+              // Skipped when the success path already invoked it — including
+              // when that invocation is what threw us into this catch.
+              if (delegation?.onDelegationComplete && !completeHookInvoked) {
                 try {
                   const delegationCompleteContext: DelegationCompleteContext = {
                     primitiveId: agent.id,
@@ -5529,10 +5711,14 @@ export class Agent<
                     }
                   }
                 } catch (hookError) {
-                  this.logger.error('onDelegationComplete hook error on failure', {
-                    agent: this.name,
-                    error: hookError,
-                  });
+                  // Never rethrown, even under `throw`: the original delegation
+                  // error is strictly more informative than the hook's, so it
+                  // is surfaced below with the hook error attached as detail.
+                  completeHookError = recordHookError(
+                    'onDelegationComplete',
+                    hookError,
+                    'onDelegationComplete hook error on failure',
+                  );
                 }
               }
 
@@ -5547,6 +5733,7 @@ export class Agent<
                     runId: runId || '',
                     threadId: threadId || '',
                     resourceId: resourceId || '',
+                    ...(completeHookError ? { hookError: completeHookError.message } : {}),
                   },
                   text: `[Agent:${this.name}] - Failed agent tool execution for ${agentName}`,
                 },
@@ -6026,6 +6213,20 @@ export class Agent<
       model,
     });
 
+    // Preserve `onOutput` from server-declared execute-less tools when the
+    // serialized client copy overwrites them below. Normal server-executed
+    // tools never hand hooks to client-controlled input. Copy instead of
+    // mutating so a future cache inside listClientTools cannot leak hooks
+    // across requests.
+    const serverDeclaredTools = { ...assignedTools, ...toolsetTools };
+    for (const [name, clientSideTool] of Object.entries(clientSideTools)) {
+      const serverTool = serverDeclaredTools[name];
+      if (!serverTool || serverTool.execute) continue;
+      if (!clientSideTool.onOutput && typeof serverTool.onOutput === 'function') {
+        clientSideTools[name] = { ...clientSideTool, onOutput: serverTool.onOutput };
+      }
+    }
+
     const agentTools = await this.listAgentTools({
       runId,
       resourceId,
@@ -6235,11 +6436,12 @@ export class Agent<
     structuredOutput?: boolean;
     overrideScorers?:
       | MastraScorers
-      | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
+      | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig; filter?: ScoringFilter }>;
     threadId?: string;
     resourceId?: string;
   } & ObservabilityContext) {
-    let scorers: Record<string, { scorer: MastraScorer; sampling?: ScoringSamplingConfig }> = {};
+    let scorers: Record<string, { scorer: MastraScorer; sampling?: ScoringSamplingConfig; filter?: ScoringFilter }> =
+      {};
     try {
       scorers = overrideScorers
         ? this.resolveOverrideScorerReferences(overrideScorers)
@@ -6288,9 +6490,12 @@ export class Agent<
    * @internal
    */
   private resolveOverrideScorerReferences(
-    overrideScorers: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>,
+    overrideScorers:
+      | MastraScorers
+      | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig; filter?: ScoringFilter }>,
   ) {
-    const result: Record<string, { scorer: MastraScorer; sampling?: ScoringSamplingConfig }> = {};
+    const result: Record<string, { scorer: MastraScorer; sampling?: ScoringSamplingConfig; filter?: ScoringFilter }> =
+      {};
     for (const [id, scorerObject] of Object.entries(overrideScorers)) {
       // If the scorer is a string (scorer name), we need to get the scorer from the mastra instance
       if (typeof scorerObject.scorer === 'string') {
@@ -6305,7 +6510,7 @@ export class Agent<
           }
 
           const scorer = this.#mastra.getScorerById(scorerObject.scorer);
-          result[id] = { scorer, sampling: scorerObject.sampling };
+          result[id] = { scorer, sampling: scorerObject.sampling, filter: scorerObject.filter };
         } catch (error) {
           this.logger.warn('Failed to get scorer', { agent: this.name, scorer: scorerObject.scorer, error });
         }
@@ -6809,6 +7014,41 @@ export class Agent<
 
     if (mergedVersions) {
       requestContext.set(MASTRA_VERSIONS_KEY, mergedVersions);
+    }
+
+    // Resolve a versioned variant of *this* agent when a version override
+    // selects it (by id or defaultStatus) and delegate execution to it. This
+    // keeps direct programmatic calls consistent with HTTP routes and
+    // sub-agent delegation, which already honor version overrides.
+    if (mergedVersions && !this.#storedVersionApplied && this.#mastra) {
+      const selfVersionSelector =
+        mergedVersions.agents?.[this.id] ??
+        (mergedVersions.defaultStatus ? { status: mergedVersions.defaultStatus } : undefined);
+      if (selfVersionSelector) {
+        try {
+          const resolved = await this.#mastra.resolveVersionedAgent(this as unknown as Agent, selfVersionSelector);
+          if (resolved !== (this as unknown as Agent)) {
+            // Cast: reassembled options are exactly this method's input. The
+            // `unknown` annotation breaks the circular return-type inference
+            // of the self-recursion (TS7023).
+            const delegated: unknown = (resolved as unknown as this).#execute<OUTPUT>({
+              methodType,
+              resumeContext,
+              _threadStreamPubSub,
+              ...options,
+              requestContext,
+            } as unknown as InnerAgentExecutionOptions<OUTPUT> & { _threadStreamPubSub?: PubSub });
+            return delegated as never;
+          }
+        } catch (versionError) {
+          this.logger.warn('Failed to resolve versioned agent for direct call, using code-defined default', {
+            agent: this.name,
+            agentId: this.id,
+            versionSelector: selfVersionSelector,
+            error: versionError,
+          });
+        }
+      }
     }
 
     // Resolve workspace early so we can get browser from it if needed

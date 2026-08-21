@@ -1,3 +1,4 @@
+import { DEFAULT_OM_MODEL_ID } from '@mastra/code-sdk/constants';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
@@ -8,6 +9,7 @@ import {
   resolveFactoryProjectForSession,
   resolveFactorySourceRepository,
 } from './factory-session.js';
+import { DEFAULT_OBSERVATION_THRESHOLD, DEFAULT_REFLECTION_THRESHOLD } from './memory-settings-hydration.js';
 
 type FactorySessionHandle = Parameters<typeof hydrateFactorySession>[0];
 
@@ -46,10 +48,10 @@ function createSessionDouble() {
   const calls: string[] = [];
   const session = {
     om: {
-      observer: { switchModel: vi.fn(async () => void calls.push('observer')) },
-      reflector: { switchModel: vi.fn(async () => void calls.push('reflector')) },
+      observer: { modelId: () => undefined, switchModel: vi.fn(async () => void calls.push('observer')) },
+      reflector: { modelId: () => undefined, switchModel: vi.fn(async () => void calls.push('reflector')) },
     },
-    state: { set: vi.fn(async () => void calls.push('state')) },
+    state: { get: () => ({}), set: vi.fn(async () => void calls.push('state')) },
     model: { switch: vi.fn(async () => void calls.push('model')) },
   };
   return { session: session as unknown as FactorySessionHandle, double: session, calls };
@@ -79,6 +81,8 @@ describe('ensureFactorySourceSession', () => {
         userId: 'user-1',
         branch: 'factory/issue-49',
         baseBranch: 'main',
+        // Autonomous runs are org-visible by default.
+        visibility: 'org',
       }),
     );
   });
@@ -139,7 +143,7 @@ describe('ensureFactorySourceSession', () => {
 });
 
 describe('hydrateFactorySession', () => {
-  it('applies stored memory settings and the factory default model', async () => {
+  it("applies the factory project's stored memory settings and the factory default model", async () => {
     const { session, double } = createSessionDouble();
     const memorySettings = {
       get: vi.fn(async () => ({
@@ -153,12 +157,12 @@ describe('hydrateFactorySession', () => {
 
     await hydrateFactorySession(session, {
       orgId: 'org-1',
-      userId: 'user-1',
+      factoryProjectId: 'proj-1',
       defaultModelId: 'anthropic/claude-opus-5',
       memorySettings: memorySettings as never,
     });
 
-    expect(memorySettings.get).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1' });
+    expect(memorySettings.get).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'factory-project:proj-1' });
     expect(double.om.observer.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-fable-5' });
     expect(double.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-opus-5' });
     expect(double.state.set).toHaveBeenCalledWith({
@@ -172,10 +176,22 @@ describe('hydrateFactorySession', () => {
   it('leaves the session on its default model when the project has none', async () => {
     const { session, double } = createSessionDouble();
 
-    await hydrateFactorySession(session, { orgId: 'org-1', userId: 'user-1' });
+    await hydrateFactorySession(session, { orgId: 'org-1', factoryProjectId: 'proj-1' });
 
     expect(double.model.switch).not.toHaveBeenCalled();
-    expect(double.state.set).not.toHaveBeenCalled();
+  });
+
+  it('resets to the built-in memory defaults when memory settings are omitted', async () => {
+    const { session, double } = createSessionDouble();
+
+    await hydrateFactorySession(session, { orgId: 'org-1', factoryProjectId: 'proj-1' });
+
+    expect(double.om.observer.switchModel).toHaveBeenCalledWith({ modelId: DEFAULT_OM_MODEL_ID });
+    expect(double.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: DEFAULT_OM_MODEL_ID });
+    expect(double.state.set).toHaveBeenCalledWith({
+      observationThreshold: DEFAULT_OBSERVATION_THRESHOLD,
+      reflectionThreshold: DEFAULT_REFLECTION_THRESHOLD,
+    });
   });
 
   it('keeps going when the default model is unknown', async () => {
@@ -184,7 +200,7 @@ describe('hydrateFactorySession', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     await expect(
-      hydrateFactorySession(session, { orgId: 'org-1', userId: 'user-1', defaultModelId: 'openai/retired' }),
+      hydrateFactorySession(session, { orgId: 'org-1', factoryProjectId: 'proj-1', defaultModelId: 'openai/retired' }),
     ).resolves.toBeUndefined();
 
     expect(warn).toHaveBeenCalledWith('[Factory Start] Failed to apply factory default model', {
@@ -201,7 +217,7 @@ describe('hydrateFactorySession', () => {
 
     await hydrateFactorySession(session, {
       orgId: 'org-1',
-      userId: 'user-1',
+      factoryProjectId: 'proj-1',
       defaultModelId: 'anthropic/claude-opus-5',
       memorySettings: memorySettings as never,
     });

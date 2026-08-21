@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render } from '@testing-library/react';
+import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -17,6 +17,7 @@ vi.mock('react-markdown', () => ({
 afterEach(() => {
   cleanup();
   parsed.length = 0;
+  vi.useRealTimers();
 });
 
 /** A settled message next to something that re-renders on every streamed delta. */
@@ -41,12 +42,21 @@ describe('MarkdownRenderer memoization', () => {
     expect(parsed).toEqual(['already **done**']);
   });
 
-  it('re-parses only the block a streamed reply is still growing', () => {
-    const { rerender } = render(<MarkdownRenderer streaming>{'First para.\n\nSecond'}</MarkdownRenderer>);
+  it('re-parses no block the reveal has landed', () => {
+    vi.useFakeTimers();
+    const reply = 'Intro para.\n\nA middle paragraph.\n\nLast';
+    const { rerender } = render(<MarkdownRenderer streaming>{reply}</MarkdownRenderer>);
+    const reveal = () => {
+      for (let frame = 0; frame < 150; frame++) act(() => void vi.advanceTimersByTime(16));
+    };
 
+    reveal();
     parsed.length = 0;
-    rerender(<MarkdownRenderer streaming>{'First para.\n\nSecond para.'}</MarkdownRenderer>);
 
-    expect(parsed).toEqual(['Second para.']);
+    rerender(<MarkdownRenderer streaming>{`${reply} para.`}</MarkdownRenderer>);
+    reveal();
+
+    expect(parsed.at(-1)).toBe('Last para.');
+    expect(parsed.some(block => block.startsWith('Intro'))).toBe(false);
   });
 });

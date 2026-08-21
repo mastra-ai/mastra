@@ -7,17 +7,17 @@
 
 export type Simplify<T> = { [K in keyof T]: T[K] } & {};
 
-type Shared_Auxiliary_294 =
+type Shared_Auxiliary_298 =
   | string
   | number
   | boolean
   | null
-  | Shared_Auxiliary_294[]
+  | Shared_Auxiliary_298[]
   | {
-      [key: string]: Shared_Auxiliary_294;
+      [key: string]: Shared_Auxiliary_298;
     };
 
-type Shared_Auxiliary_1083 =
+type Shared_Auxiliary_1095 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -62,19 +62,19 @@ type Shared_Auxiliary_1083 =
     }
   | {
       op: 'and' | 'or';
-      args: Shared_Auxiliary_1083[];
+      args: Shared_Auxiliary_1095[];
     }
   | {
       op: 'not';
-      arg: Shared_Auxiliary_1083;
+      arg: Shared_Auxiliary_1095;
     };
 
-type Shared_Auxiliary_1224 = {
+type Shared_Auxiliary_1236 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_1224[] | undefined;
+  children?: Shared_Auxiliary_1236[] | undefined;
 };
 
 type Shared_Type_0 = {
@@ -945,6 +945,16 @@ type Shared_Type_42 = {
         [key: string]: unknown;
       }
     | undefined;
+  /** Whether this agent is hydrated with durable execution enabled */
+  durable?:
+    | (
+        | boolean
+        | {
+            maxSteps?: number | undefined;
+            cleanupTimeoutMs?: number | undefined;
+          }
+      )
+    | undefined;
 };
 
 type Shared_Type_43 = {
@@ -1041,7 +1051,7 @@ type Shared_Type_49 = {
   providerOptions?:
     | {
         [key: string]: {
-          [key: string]: Shared_Auxiliary_294;
+          [key: string]: Shared_Auxiliary_298;
         };
       }
     | undefined;
@@ -1055,7 +1065,7 @@ type Shared_Type_50 = {
   providerOptions?:
     | {
         [key: string]: {
-          [key: string]: Shared_Auxiliary_294;
+          [key: string]: Shared_Auxiliary_298;
         };
       }
     | undefined;
@@ -1070,13 +1080,13 @@ type Shared_Type_51 = {
     | undefined;
   metadata?:
     | {
-        [key: string]: Shared_Auxiliary_294;
+        [key: string]: Shared_Auxiliary_298;
       }
     | undefined;
   providerOptions?:
     | {
         [key: string]: {
-          [key: string]: Shared_Auxiliary_294;
+          [key: string]: Shared_Auxiliary_298;
         };
       }
     | undefined;
@@ -1164,7 +1174,7 @@ type Shared_Type_54 = {
   createdAt?: (string | Date) | undefined;
   metadata?:
     | {
-        [key: string]: Shared_Auxiliary_294;
+        [key: string]: Shared_Auxiliary_298;
       }
     | undefined;
   attributes?:
@@ -1177,7 +1187,7 @@ type Shared_Type_54 = {
   providerOptions?:
     | {
         [key: string]: {
-          [key: string]: Shared_Auxiliary_294;
+          [key: string]: Shared_Auxiliary_298;
         };
       }
     | undefined;
@@ -1190,7 +1200,7 @@ type Shared_Type_55 = {
   createdAt?: (string | Date) | undefined;
   metadata?:
     | {
-        [key: string]: Shared_Auxiliary_294;
+        [key: string]: Shared_Auxiliary_298;
       }
     | undefined;
   attributes?:
@@ -1203,7 +1213,7 @@ type Shared_Type_55 = {
   providerOptions?:
     | {
         [key: string]: {
-          [key: string]: Shared_Auxiliary_294;
+          [key: string]: Shared_Auxiliary_298;
         };
       }
     | undefined;
@@ -1796,6 +1806,12 @@ type Shared_Type_78 = {
   scorerId?: (string | string[]) | undefined;
   /** Filter by how the score was produced */
   scoreSource?: string | undefined;
+  /** Filter by metadata key-value pairs (exact match per key) */
+  metadata?:
+    | ({
+        [key: string]: unknown;
+      } | null)
+    | undefined;
   /** Filter by how the score was produced */
   source?: string | undefined;
 };
@@ -2466,13 +2482,13 @@ type Shared_Type_107 =
   | {
       type: 'conditional';
       steps: Shared_Type_105[];
-      predicates: Shared_Auxiliary_1083[];
+      predicates: Shared_Auxiliary_1095[];
     }
   | {
       type: 'loop';
       step: Shared_Type_105;
       loopType: 'dowhile' | 'dountil';
-      predicate: Shared_Auxiliary_1083;
+      predicate: Shared_Auxiliary_1095;
     };
 
 type Shared_Type_108 = {
@@ -2809,7 +2825,7 @@ type Shared_Type_120 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1224[] | undefined;
+  files?: Shared_Auxiliary_1236[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -3186,8 +3202,9 @@ type Shared_Type_141 = {
   datasetId: string | null;
   datasetVersion: number | null;
   agentVersion?: (string | null) | undefined;
-  targetType: 'agent' | 'workflow' | 'scorer' | 'processor';
-  targetId: string;
+  targetType: ('agent' | 'workflow' | 'scorer' | 'processor') | null;
+  targetId: string | null;
+  scorerIds?: (string[] | null) | undefined;
   name?: string | undefined;
   description?: string | undefined;
   metadata?:
@@ -3259,6 +3276,7 @@ type Shared_Type_143 = {
   startedAt: Date;
   completedAt: Date;
   retryCount: number;
+  attempt?: number | undefined;
   traceId: string | null;
   status?: (('needs-review' | 'reviewed' | 'complete') | null) | undefined;
   tags?: (string[] | null) | undefined;
@@ -4933,6 +4951,44 @@ export interface GetAgentsAgentIdToolsToolId_RouteContract {
   body: never;
   request: GetAgentsAgentIdToolsToolId_Request;
   response: GetAgentsAgentIdToolsToolId_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /agents/:agentId/plans/file
+// ============================================================================
+export type GetAgentsAgentIdPlansFile_PathParams = GetAgentsAgentId_PathParams;
+
+export type GetAgentsAgentIdPlansFile_QueryParams = {
+  /** Which stored config version to resolve: draft (latest version) or published (active version, default). When both status and versionId are provided, versionId takes precedence. */
+  status?: ('draft' | 'published') | undefined;
+  /** Specific version ID to resolve. Takes precedence over status when both are provided. */
+  versionId?: string | undefined;
+  /** Relative path to a markdown plan under .mastracode/plans/ */
+  path: string;
+};
+
+export type GetAgentsAgentIdPlansFile_Response = {
+  path: string;
+  content: string;
+};
+
+export type GetAgentsAgentIdPlansFile_Request = Simplify<
+  (GetAgentsAgentIdPlansFile_PathParams extends never ? {} : { params: GetAgentsAgentIdPlansFile_PathParams }) &
+    (GetAgentsAgentIdPlansFile_QueryParams extends never
+      ? {}
+      : {} extends GetAgentsAgentIdPlansFile_QueryParams
+        ? { query?: GetAgentsAgentIdPlansFile_QueryParams }
+        : { query: GetAgentsAgentIdPlansFile_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAgentsAgentIdPlansFile_RouteContract {
+  pathParams: GetAgentsAgentIdPlansFile_PathParams;
+  queryParams: GetAgentsAgentIdPlansFile_QueryParams;
+  body: never;
+  request: GetAgentsAgentIdPlansFile_Request;
+  response: GetAgentsAgentIdPlansFile_Response;
   responseType: 'json';
 }
 
@@ -8585,7 +8641,11 @@ export type GetObservabilityTracesTraceId_PathParams = {
   traceId: string;
 };
 
-export type GetObservabilityTracesTraceId_Response = GetObservabilityTracesTraceIdBranchesSpanId_Response;
+export type GetObservabilityTracesTraceId_Response = {
+  /** Unique trace identifier */
+  traceId: string;
+  spans: Shared_Type_74[];
+};
 
 export type GetObservabilityTracesTraceId_Request = Simplify<
   (GetObservabilityTracesTraceId_PathParams extends never ? {} : { params: GetObservabilityTracesTraceId_PathParams }) &
@@ -8790,6 +8850,7 @@ export type GetObservabilityTracesTraceIdSpanIdScores_Response = {
           | 'WORKFLOW'
           | 'TRAJECTORY'
           | 'STEP'
+          | 'EXTERNAL'
           | 'agent_run'
           | 'scorer_run'
           | 'scorer_step'
@@ -9187,6 +9248,17 @@ export type GetObservabilityScores_QueryParams = {
   scorerId?: ((string | string[]) | undefined) | undefined;
   /** Filter by how the score was produced */
   scoreSource?: (string | undefined) | undefined;
+  metadata?:
+    | (
+        | (
+            | ({
+                [key: string]: unknown;
+              } | null)
+            | undefined
+          )
+        | undefined
+      )
+    | unknown;
   /** Filter by how the score was produced */
   source?: (string | undefined) | undefined;
   page?: (number | undefined) | undefined;
@@ -12598,6 +12670,19 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
         | undefined
       )
     | undefined;
+  /** Opt this agent into durable execution when it is hydrated. Cache and pubsub are inherited from the Mastra instance; without distributed backends durability is process-local. Does not enable automatic recovery — that stays `recovery.durableAgents`. */
+  durable?:
+    | (
+        | (
+            | boolean
+            | {
+                maxSteps?: number | undefined;
+                cleanupTimeoutMs?: number | undefined;
+              }
+          )
+        | undefined
+      )
+    | undefined;
 };
 
 export type PostStoredAgentsStoredAgentIdExport_Response = {
@@ -12711,6 +12796,19 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
         | {
             [key: string]: unknown;
           }
+        | undefined
+      )
+    | undefined;
+  /** Opt this agent into durable execution when it is hydrated. Cache and pubsub are inherited from the Mastra instance; without distributed backends durability is process-local. Does not enable automatic recovery — that stays `recovery.durableAgents`. */
+  durable?:
+    | (
+        | (
+            | boolean
+            | {
+                maxSteps?: number | undefined;
+                cleanupTimeoutMs?: number | undefined;
+              }
+          )
         | undefined
       )
     | undefined;
@@ -12963,6 +13061,16 @@ export type PostStoredAgents_Body = {
         [key: string]: unknown;
       }
     | undefined;
+  /** Opt this agent into durable execution when it is hydrated. Cache and pubsub are inherited from the Mastra instance; without distributed backends durability is process-local. Does not enable automatic recovery — that stays `recovery.durableAgents`. */
+  durable?:
+    | (
+        | boolean
+        | {
+            maxSteps?: number | undefined;
+            cleanupTimeoutMs?: number | undefined;
+          }
+      )
+    | undefined;
 };
 
 export type PostStoredAgents_Response = PostAgentsAgentIdClone_Response;
@@ -13209,6 +13317,19 @@ export type PatchStoredAgentsStoredAgentId_Body = {
         | {
             [key: string]: unknown;
           }
+        | undefined
+      )
+    | undefined;
+  /** Opt this agent into durable execution when it is hydrated. Cache and pubsub are inherited from the Mastra instance; without distributed backends durability is process-local. Does not enable automatic recovery — that stays `recovery.durableAgents`. */
+  durable?:
+    | (
+        | (
+            | boolean
+            | {
+                maxSteps?: number | undefined;
+                cleanupTimeoutMs?: number | undefined;
+              }
+          )
         | undefined
       )
     | undefined;
@@ -16310,7 +16431,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1224[] | undefined;
+  files?: Shared_Auxiliary_1236[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -16368,7 +16489,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (Shared_Auxiliary_1224[] | undefined) | undefined;
+  files?: (Shared_Auxiliary_1236[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
@@ -17995,10 +18116,14 @@ export interface GetDatasetsDatasetIdExperiments_RouteContract {
 export type PostDatasetsDatasetIdExperiments_PathParams = GetDatasetsDatasetId_PathParams;
 
 export type PostDatasetsDatasetIdExperiments_Body = {
-  /** Type of target to run against */
-  targetType: 'agent' | 'workflow' | 'scorer';
-  /** ID of the target */
-  targetId: string;
+  /** When true (default), spawns the in-process runner. When false, creates the experiment without running it: the caller drives the loop via run-item (targeted) or result submission (target-less). */
+  start?: boolean | undefined;
+  /** Type of target to run against. Required when start is true. Optional for create-only experiments. */
+  targetType?: ('agent' | 'workflow' | 'scorer') | undefined;
+  /** ID of the target. Required when targetType is set. */
+  targetId?: string | undefined;
+  /** Caller-supplied experiment id (e.g. a workflow run id) for idempotent create-only requests. Ignored when start is true. */
+  id?: string | undefined;
   /** Name of the experiment */
   name?: string | undefined;
   /** Description of the experiment */
@@ -18070,7 +18195,9 @@ export type PostDatasetsDatasetIdExperiments_Response = {
   totalItems: number;
   succeededCount: number;
   failedCount: number;
-  startedAt: Date;
+  /** Dataset version pinned on the experiment (create-only) */
+  datasetVersion?: number | undefined;
+  startedAt: Date | null;
   completedAt: Date | null;
   results: {
     itemId: string;
@@ -18116,14 +18243,165 @@ export interface PostDatasetsDatasetIdExperiments_RouteContract {
 }
 
 // ============================================================================
-// Route: GET /datasets/:datasetId/experiments/:experimentId
+// Route: POST /datasets/:datasetId/experiments/:experimentId/items/:itemId/run
 // ============================================================================
-export type GetDatasetsDatasetIdExperimentsExperimentId_PathParams = {
+export type PostDatasetsDatasetIdExperimentsExperimentIdItemsItemIdRun_PathParams = {
+  /** Unique identifier for the dataset */
+  datasetId: string;
+  /** Unique identifier for the experiment */
+  experimentId: string;
+  /** Unique identifier for the dataset item */
+  itemId: string;
+};
+
+export type PostDatasetsDatasetIdExperimentsExperimentIdItemsItemIdRun_Body = {
+  /** Zero-based repetition index. Defaults to 0. */
+  attempt?: number | undefined;
+  /** Request context merged with the item's own request context (item wins) */
+  requestContext?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+};
+
+export type PostDatasetsDatasetIdExperimentsExperimentIdItemsItemIdRun_Response = {
+  result: Shared_Type_143;
+  scores: {
+    scorerId: string;
+    scorerName: string;
+    score: number | null;
+    reason: string | null;
+    error: string | null;
+    failedStep?: string | undefined;
+    completedSteps?: string[] | undefined;
+    targetScope?: ('span' | 'trajectory') | undefined;
+    stepId?: string | undefined;
+  }[];
+};
+
+export type PostDatasetsDatasetIdExperimentsExperimentIdItemsItemIdRun_Request = Simplify<
+  (PostDatasetsDatasetIdExperimentsExperimentIdItemsItemIdRun_PathParams extends never
+    ? {}
+    : { params: PostDatasetsDatasetIdExperimentsExperimentIdItemsItemIdRun_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostDatasetsDatasetIdExperimentsExperimentIdItemsItemIdRun_Body extends never
+      ? {}
+      : {} extends PostDatasetsDatasetIdExperimentsExperimentIdItemsItemIdRun_Body
+        ? { body?: PostDatasetsDatasetIdExperimentsExperimentIdItemsItemIdRun_Body }
+        : { body: PostDatasetsDatasetIdExperimentsExperimentIdItemsItemIdRun_Body })
+>;
+
+export interface PostDatasetsDatasetIdExperimentsExperimentIdItemsItemIdRun_RouteContract {
+  pathParams: PostDatasetsDatasetIdExperimentsExperimentIdItemsItemIdRun_PathParams;
+  queryParams: never;
+  body: PostDatasetsDatasetIdExperimentsExperimentIdItemsItemIdRun_Body;
+  request: PostDatasetsDatasetIdExperimentsExperimentIdItemsItemIdRun_Request;
+  response: PostDatasetsDatasetIdExperimentsExperimentIdItemsItemIdRun_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /datasets/:datasetId/experiments/:experimentId/results
+// ============================================================================
+export type PostDatasetsDatasetIdExperimentsExperimentIdResults_PathParams = {
   /** Unique identifier for the dataset */
   datasetId: string;
   /** Unique identifier for the experiment */
   experimentId: string;
 };
+
+export type PostDatasetsDatasetIdExperimentsExperimentIdResults_Body = {
+  /** Dataset item this result belongs to */
+  itemId: string;
+  /** Zero-based repetition index. Defaults to 0. */
+  attempt?: number | undefined;
+  /** Input replayed by the external runner. Defaults to the dataset item input. */
+  input?: unknown | undefined;
+  /** Output produced by the external runner */
+  output?: unknown | undefined;
+  /** Ground truth. Defaults to the dataset item groundTruth. */
+  groundTruth?: unknown | undefined;
+  /** Failure info when the item run failed */
+  error?:
+    | ({
+        message: string;
+        stack?: string | undefined;
+        code?: string | undefined;
+      } | null)
+    | undefined;
+  startedAt?: Date | undefined;
+  completedAt?: Date | undefined;
+  traceId?: string | undefined;
+  /** Externally computed scores, persisted keyed by runId = experimentId */
+  scores?:
+    | {
+        scorerId: string;
+        scorerName?: string | undefined;
+        score: number;
+        reason?: string | undefined;
+        metadata?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+      }[]
+    | undefined;
+};
+
+export type PostDatasetsDatasetIdExperimentsExperimentIdResults_Response = Shared_Type_143;
+
+export type PostDatasetsDatasetIdExperimentsExperimentIdResults_Request = Simplify<
+  (PostDatasetsDatasetIdExperimentsExperimentIdResults_PathParams extends never
+    ? {}
+    : { params: PostDatasetsDatasetIdExperimentsExperimentIdResults_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostDatasetsDatasetIdExperimentsExperimentIdResults_Body extends never
+      ? {}
+      : {} extends PostDatasetsDatasetIdExperimentsExperimentIdResults_Body
+        ? { body?: PostDatasetsDatasetIdExperimentsExperimentIdResults_Body }
+        : { body: PostDatasetsDatasetIdExperimentsExperimentIdResults_Body })
+>;
+
+export interface PostDatasetsDatasetIdExperimentsExperimentIdResults_RouteContract {
+  pathParams: PostDatasetsDatasetIdExperimentsExperimentIdResults_PathParams;
+  queryParams: never;
+  body: PostDatasetsDatasetIdExperimentsExperimentIdResults_Body;
+  request: PostDatasetsDatasetIdExperimentsExperimentIdResults_Request;
+  response: PostDatasetsDatasetIdExperimentsExperimentIdResults_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /datasets/:datasetId/experiments/:experimentId/finalize
+// ============================================================================
+export type PostDatasetsDatasetIdExperimentsExperimentIdFinalize_PathParams =
+  PostDatasetsDatasetIdExperimentsExperimentIdResults_PathParams;
+
+export type PostDatasetsDatasetIdExperimentsExperimentIdFinalize_Response = Shared_Type_141;
+
+export type PostDatasetsDatasetIdExperimentsExperimentIdFinalize_Request = Simplify<
+  (PostDatasetsDatasetIdExperimentsExperimentIdFinalize_PathParams extends never
+    ? {}
+    : { params: PostDatasetsDatasetIdExperimentsExperimentIdFinalize_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface PostDatasetsDatasetIdExperimentsExperimentIdFinalize_RouteContract {
+  pathParams: PostDatasetsDatasetIdExperimentsExperimentIdFinalize_PathParams;
+  queryParams: never;
+  body: never;
+  request: PostDatasetsDatasetIdExperimentsExperimentIdFinalize_Request;
+  response: PostDatasetsDatasetIdExperimentsExperimentIdFinalize_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /datasets/:datasetId/experiments/:experimentId
+// ============================================================================
+export type GetDatasetsDatasetIdExperimentsExperimentId_PathParams =
+  PostDatasetsDatasetIdExperimentsExperimentIdResults_PathParams;
 
 export type GetDatasetsDatasetIdExperimentsExperimentId_Response = Shared_Type_141 | null;
 
@@ -18148,7 +18426,7 @@ export interface GetDatasetsDatasetIdExperimentsExperimentId_RouteContract {
 // Route: GET /datasets/:datasetId/experiments/:experimentId/results
 // ============================================================================
 export type GetDatasetsDatasetIdExperimentsExperimentIdResults_PathParams =
-  GetDatasetsDatasetIdExperimentsExperimentId_PathParams;
+  PostDatasetsDatasetIdExperimentsExperimentIdResults_PathParams;
 
 export type GetDatasetsDatasetIdExperimentsExperimentIdResults_QueryParams = GetScoresRunRunId_QueryParams;
 
@@ -18201,7 +18479,8 @@ export type PatchDatasetsDatasetIdExperimentsExperimentIdResultsResultId_Body = 
   comment?: (string | null) | undefined;
 };
 
-export type PatchDatasetsDatasetIdExperimentsExperimentIdResultsResultId_Response = Shared_Type_143;
+export type PatchDatasetsDatasetIdExperimentsExperimentIdResultsResultId_Response =
+  PostDatasetsDatasetIdExperimentsExperimentIdResults_Response;
 
 export type PatchDatasetsDatasetIdExperimentsExperimentIdResultsResultId_Request = Simplify<
   (PatchDatasetsDatasetIdExperimentsExperimentIdResultsResultId_PathParams extends never
@@ -20035,6 +20314,7 @@ export type GetAgentControllerControllerIdSessionsResourceId_PathParams = {
 
 export type GetAgentControllerControllerIdSessionsResourceId_QueryParams = {
   sessionScope?: string | undefined;
+  threadId?: string | undefined;
 };
 
 export type GetAgentControllerControllerIdSessionsResourceId_Response = {
@@ -20044,6 +20324,14 @@ export type GetAgentControllerControllerIdSessionsResourceId_Response = {
   modeId: string;
   modelId: string;
   running?: boolean | undefined;
+  tasks?:
+    | {
+        id: string;
+        content: string;
+        status: 'pending' | 'in_progress' | 'completed';
+        activeForm: string;
+      }[]
+    | undefined;
   omProgress?:
     | {
         status: string;
@@ -20059,7 +20347,15 @@ export type GetAgentControllerControllerIdSessionsResourceId_Response = {
     | undefined;
   tokenUsage?:
     | {
-        [key: string]: unknown;
+        promptTokens: number;
+        completionTokens: number;
+        totalTokens: number;
+        reasoningTokens?: number | undefined;
+        cachedInputTokens?: number | undefined;
+        cacheCreationInputTokens?: number | undefined;
+        cacheCreationInputTokens5m?: number | undefined;
+        cacheCreationInputTokens1h?: number | undefined;
+        raw?: unknown | undefined;
       }
     | undefined;
   settings?:
@@ -20153,8 +20449,9 @@ export interface GetAgentControllerControllerIdSessionsResourceIdThreads_RouteCo
 export type PostAgentControllerControllerIdSessionsResourceIdThreads_PathParams =
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
-export type PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+export type PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams = {
+  sessionScope?: string | undefined;
+};
 
 export type PostAgentControllerControllerIdSessionsResourceIdThreads_Body = {
   title?: string | undefined;
@@ -20203,7 +20500,7 @@ export type DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_P
 };
 
 export type DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Response = {
   ok: boolean;
@@ -20237,7 +20534,7 @@ export type PutAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Path
   DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_PathParams;
 
 export type PutAgentControllerControllerIdSessionsResourceIdThreadsThreadId_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PutAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Body = {
   title: string;
@@ -20278,7 +20575,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdThreadsClone_PathPa
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdThreadsClone_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdThreadsClone_Body = {
   sourceThreadId?: string | undefined;
@@ -20371,7 +20668,7 @@ export type GetAgentControllerControllerIdSessionsResourceIdStream_PathParams =
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type GetAgentControllerControllerIdSessionsResourceIdStream_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type GetAgentControllerControllerIdSessionsResourceIdStream_Request = Simplify<
   (GetAgentControllerControllerIdSessionsResourceIdStream_PathParams extends never
@@ -20401,7 +20698,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdMessages_PathParams
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdMessages_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdMessages_Body = {
   message: string;
@@ -20454,7 +20751,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdSteer_PathParams =
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdSteer_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdSteer_Body = {
   message: string;
@@ -20500,7 +20797,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdFollowUp_PathParams
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdFollowUp_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdFollowUp_Body =
   PostAgentControllerControllerIdSessionsResourceIdSteer_Body;
@@ -20540,7 +20837,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdAbort_PathParams =
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdAbort_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdAbort_Response =
   DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Response;
@@ -20573,7 +20870,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdToolApproval_PathPa
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdToolApproval_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdToolApproval_Body = {
   toolCallId: string;
@@ -20620,7 +20917,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdToolSuspension_Path
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdToolSuspension_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdToolSuspension_Body = {
   toolCallId: string;
@@ -20667,7 +20964,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdMode_PathParams =
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdMode_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdMode_Body = {
   modeId: string;
@@ -20708,7 +21005,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdModel_PathParams =
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdModel_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdModel_Body = {
   modelId: string;
@@ -20751,7 +21048,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdThread_PathParams =
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdThread_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdThread_Body = {
   threadId: string;
@@ -20792,7 +21089,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdNotifications_PathP
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdNotifications_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdNotifications_Body = {
   source: string;
@@ -20881,7 +21178,7 @@ export type GetAgentControllerControllerIdSessionsResourceIdOm_PathParams =
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type GetAgentControllerControllerIdSessionsResourceIdOm_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type GetAgentControllerControllerIdSessionsResourceIdOm_Response = {
   record?: unknown | undefined;
@@ -20915,7 +21212,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdResource_PathParams
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdResource_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdResource_Body = {
   newResourceId: string;
@@ -20956,7 +21253,7 @@ export type GetAgentControllerControllerIdSessionsResourceIdResources_PathParams
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type GetAgentControllerControllerIdSessionsResourceIdResources_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type GetAgentControllerControllerIdSessionsResourceIdResources_Response = {
   resourceIds: string[];
@@ -20990,7 +21287,7 @@ export type GetAgentControllerControllerIdSessionsResourceIdGoal_PathParams =
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type GetAgentControllerControllerIdSessionsResourceIdGoal_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type GetAgentControllerControllerIdSessionsResourceIdGoal_Response = {
   goal?:
@@ -21036,7 +21333,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdGoal_PathParams =
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdGoal_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdGoal_Body = {
   objective: string;
@@ -21079,7 +21376,7 @@ export type PutAgentControllerControllerIdSessionsResourceIdGoal_PathParams =
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type PutAgentControllerControllerIdSessionsResourceIdGoal_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PutAgentControllerControllerIdSessionsResourceIdGoal_Body = {
   judgeModelId?: string | undefined;
@@ -21122,7 +21419,7 @@ export type DeleteAgentControllerControllerIdSessionsResourceIdGoal_PathParams =
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type DeleteAgentControllerControllerIdSessionsResourceIdGoal_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type DeleteAgentControllerControllerIdSessionsResourceIdGoal_Response =
   DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Response;
@@ -21155,7 +21452,7 @@ export type GetAgentControllerControllerIdSessionsResourceIdPermissions_PathPara
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type GetAgentControllerControllerIdSessionsResourceIdPermissions_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type GetAgentControllerControllerIdSessionsResourceIdPermissions_Response = {
   categories?:
@@ -21198,7 +21495,7 @@ export type PutAgentControllerControllerIdSessionsResourceIdPermissionsCategory_
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type PutAgentControllerControllerIdSessionsResourceIdPermissionsCategory_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PutAgentControllerControllerIdSessionsResourceIdPermissionsCategory_Body = {
   category: 'read' | 'edit' | 'execute' | 'mcp' | 'other';
@@ -21240,7 +21537,7 @@ export type PutAgentControllerControllerIdSessionsResourceIdPermissionsTool_Path
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type PutAgentControllerControllerIdSessionsResourceIdPermissionsTool_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PutAgentControllerControllerIdSessionsResourceIdPermissionsTool_Body = {
   toolName: string;
@@ -21282,7 +21579,7 @@ export type PutAgentControllerControllerIdSessionsResourceIdState_PathParams =
   GetAgentControllerControllerIdSessionsResourceId_PathParams;
 
 export type PutAgentControllerControllerIdSessionsResourceIdState_QueryParams =
-  GetAgentControllerControllerIdSessionsResourceId_QueryParams;
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PutAgentControllerControllerIdSessionsResourceIdState_Body = {
   state: {
@@ -21358,6 +21655,7 @@ export interface RouteTypes {
   'POST /agents/:agentId/models/:modelConfigId': PostAgentsAgentIdModelsModelConfigId_RouteContract;
   'POST /agents/:agentId/instructions/enhance': PostAgentsAgentIdInstructionsEnhance_RouteContract;
   'GET /agents/:agentId/tools/:toolId': GetAgentsAgentIdToolsToolId_RouteContract;
+  'GET /agents/:agentId/plans/file': GetAgentsAgentIdPlansFile_RouteContract;
   'GET /agents/:agentId/skills/:skillName': GetAgentsAgentIdSkillsSkillName_RouteContract;
   'POST /agents/:agentId/voice/speak': PostAgentsAgentIdVoiceSpeak_RouteContract;
   'POST /agents/:agentId/speak': PostAgentsAgentIdSpeak_RouteContract;
@@ -21638,6 +21936,9 @@ export interface RouteTypes {
   'GET /experiments/review-summary': GetExperimentsReviewSummary_RouteContract;
   'GET /datasets/:datasetId/experiments': GetDatasetsDatasetIdExperiments_RouteContract;
   'POST /datasets/:datasetId/experiments': PostDatasetsDatasetIdExperiments_RouteContract;
+  'POST /datasets/:datasetId/experiments/:experimentId/items/:itemId/run': PostDatasetsDatasetIdExperimentsExperimentIdItemsItemIdRun_RouteContract;
+  'POST /datasets/:datasetId/experiments/:experimentId/results': PostDatasetsDatasetIdExperimentsExperimentIdResults_RouteContract;
+  'POST /datasets/:datasetId/experiments/:experimentId/finalize': PostDatasetsDatasetIdExperimentsExperimentIdFinalize_RouteContract;
   'GET /datasets/:datasetId/experiments/:experimentId': GetDatasetsDatasetIdExperimentsExperimentId_RouteContract;
   'GET /datasets/:datasetId/experiments/:experimentId/results': GetDatasetsDatasetIdExperimentsExperimentIdResults_RouteContract;
   'PATCH /datasets/:datasetId/experiments/:experimentId/results/:resultId': PatchDatasetsDatasetIdExperimentsExperimentIdResultsResultId_RouteContract;
@@ -21942,6 +22243,9 @@ export interface Client {
   '/agents/:agentId/observe': {
     POST: PostAgentsAgentIdObserve_RouteContract;
   };
+  '/agents/:agentId/plans/file': {
+    GET: GetAgentsAgentIdPlansFile_RouteContract;
+  };
   '/agents/:agentId/queue-message': {
     POST: PostAgentsAgentIdQueueMessage_RouteContract;
   };
@@ -22093,8 +22397,15 @@ export interface Client {
   '/datasets/:datasetId/experiments/:experimentId': {
     GET: GetDatasetsDatasetIdExperimentsExperimentId_RouteContract;
   };
+  '/datasets/:datasetId/experiments/:experimentId/finalize': {
+    POST: PostDatasetsDatasetIdExperimentsExperimentIdFinalize_RouteContract;
+  };
+  '/datasets/:datasetId/experiments/:experimentId/items/:itemId/run': {
+    POST: PostDatasetsDatasetIdExperimentsExperimentIdItemsItemIdRun_RouteContract;
+  };
   '/datasets/:datasetId/experiments/:experimentId/results': {
     GET: GetDatasetsDatasetIdExperimentsExperimentIdResults_RouteContract;
+    POST: PostDatasetsDatasetIdExperimentsExperimentIdResults_RouteContract;
   };
   '/datasets/:datasetId/experiments/:experimentId/results/:resultId': {
     PATCH: PatchDatasetsDatasetIdExperimentsExperimentIdResultsResultId_RouteContract;

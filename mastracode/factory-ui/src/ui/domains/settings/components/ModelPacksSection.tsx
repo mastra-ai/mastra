@@ -9,6 +9,7 @@ import { useState } from 'react';
 
 import {
   useActivateModelPack,
+  useClearDefaultModelPack,
   useModelPacksQuery,
   useRemoveModelPack,
   useSaveModelPack,
@@ -60,23 +61,14 @@ function ModelAssignment({ description, icon: Icon, label, model }: ModelAssignm
 }
 
 /**
- * Model packs. Mirrors the TUI's `/models-pack` command: a pack assigns a model
- * to each mode (build / plan / fast). Built-in packs are gated by provider
- * access; custom packs are user-defined. Activating a pack seeds the current
- * session's per-mode models — so it needs the active factory's resourceId (and
- * the session scope the web chat session was registered under).
+ * Personal model-pack defaults for interactive chats. A pack assigns a model to
+ * each mode (build / plan / fast). Thread-specific choices live in the chat UI;
+ * Factory work runs are unaffected.
  */
-export function ModelPacksSection({
-  resourceId,
-  scope,
-  models,
-}: {
-  resourceId?: string;
-  scope?: string;
-  models: AvailableModelOption[];
-}) {
-  const packsQuery = useModelPacksQuery(resourceId, scope);
-  const activateMutation = useActivateModelPack(resourceId, scope);
+export function ModelPacksSection({ models }: { models: AvailableModelOption[] }) {
+  const packsQuery = useModelPacksQuery();
+  const activateMutation = useActivateModelPack(undefined);
+  const clearDefaultMutation = useClearDefaultModelPack();
   const removeMutation = useRemoveModelPack();
   const saveMutation = useSaveModelPack();
 
@@ -85,18 +77,24 @@ export function ModelPacksSection({
 
   const packs = packsQuery.data?.packs ?? [];
   const loading = packsQuery.isPending;
-  const busy = activateMutation.isPending || removeMutation.isPending || saveMutation.isPending;
+  const busy =
+    activateMutation.isPending || clearDefaultMutation.isPending || removeMutation.isPending || saveMutation.isPending;
   const queryError = packsQuery.error instanceof Error ? packsQuery.error.message : null;
   const error = draftError ?? queryError;
 
   const activate = async (id: string) => {
-    if (!resourceId) {
-      setDraftError('Open a factory first to activate a pack.');
-      return;
-    }
     setDraftError(null);
     try {
-      await activateMutation.mutateAsync({ id });
+      await activateMutation.mutateAsync({ id, target: 'default' });
+    } catch (e) {
+      setDraftError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const clearDefault = async () => {
+    setDraftError(null);
+    try {
+      await clearDefaultMutation.mutateAsync();
     } catch (e) {
       setDraftError(e instanceof Error ? e.message : String(e));
     }
@@ -133,11 +131,10 @@ export function ModelPacksSection({
 
   return (
     <div className="flex flex-col gap-3">
-      {!resourceId && (
-        <Txt as="p" variant="ui-sm" className="text-icon3">
-          Open a factory to activate a pack on its session.
-        </Txt>
-      )}
+      <Txt as="p" variant="ui-sm" className="text-icon3">
+        Set your default for new interactive chats. Choose a different pack from within a specific chat. Factory work
+        runs continue to use the Factory default model.
+      </Txt>
       {error && (
         <Txt as="p" variant="ui-sm" className="text-notice-destructive-fg">
           {error}
@@ -206,7 +203,7 @@ export function ModelPacksSection({
                   {p.custom && <Badge size="sm">Custom</Badge>}
                   {p.active && (
                     <Badge size="sm" variant="success">
-                      Active
+                      Default
                     </Badge>
                   )}
                 </div>
@@ -232,9 +229,13 @@ export function ModelPacksSection({
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                {!p.active && (
-                  <Button size="sm" disabled={busy || !resourceId} onClick={() => void activate(p.id)}>
-                    Activate
+                {p.active ? (
+                  <Button size="sm" disabled={busy} onClick={() => void clearDefault()}>
+                    Clear default
+                  </Button>
+                ) : (
+                  <Button size="sm" disabled={busy} onClick={() => void activate(p.id)}>
+                    Set default
                   </Button>
                 )}
                 {p.custom && (

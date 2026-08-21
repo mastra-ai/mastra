@@ -7,7 +7,6 @@ import type { AIModelGenerationSpan, ExportedSpan, SpanType } from '../../../obs
 import { RequestContext } from '../../../request-context';
 import { PUBSUB_SYMBOL } from '../../../workflows/constants';
 import { createWorkflow } from '../../../workflows/create';
-import { MessageList } from '../../message-list';
 import { DurableStepIds, DurableAgentDefaults } from '../constants';
 import { globalRunRegistry } from '../run-registry';
 import { emitChunkEvent, emitFinishEvent, emitIterationCompleteEvent } from '../stream-adapter';
@@ -18,6 +17,7 @@ import type {
   DurableLLMStepOutput,
   DurableToolCallOutput,
 } from '../types';
+import { createRunMessageList } from '../utils/run-message-list';
 import { runDurableFinishSideEffects } from './finalize-run';
 import {
   modelConfigSchema,
@@ -161,6 +161,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
       // resume never reads before persisting.
       pruneSnapshot: pruneAgentLoopSnapshot,
       validateInputs: false,
+      emitStepEvents: false,
       sharePubsub: true,
       // Internal durable-agent execution plumbing — hide workflow spans;
       // the agent/tool/model spans within still surface for users.
@@ -302,6 +303,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
         // resume never reads before persisting.
         pruneSnapshot: pruneAgentLoopSnapshot,
         validateInputs: false,
+        emitStepEvents: false,
         // Internal durable-agent execution plumbing — see singleIterationWorkflow.
         tracingPolicy: {
           internal: InternalSpans.WORKFLOW,
@@ -414,14 +416,10 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
           try {
             const pendingSignals = registryEntry.drainPendingSignals('pending');
             if (pendingSignals.length > 0) {
-              const drainList = new MessageList();
-              drainList.deserialize(state.messageListState);
-              drainList.markResponseMessageBoundary();
-
-              const nextMessageId =
-                (mastra as Mastra | undefined)?.generateId?.() ??
-                globalThis.crypto?.randomUUID?.() ??
-                `msg_${Date.now()}`;
+              const drainList = createRunMessageList({ mastra: mastra as Mastra | undefined }).deserialize(
+                state.messageListState,
+              );
+              const nextMessageId = drainList.rotateResponseMessageId();
               state.messageId = nextMessageId;
 
               for (const pendingSignal of pendingSignals) {
@@ -458,7 +456,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
 
           try {
             // Deserialize messageList for the callback's messages snapshot
-            const callbackMessageList = new MessageList();
+            const callbackMessageList = createRunMessageList({ mastra: mastra as Mastra | undefined });
             try {
               callbackMessageList.deserialize(state.messageListState);
             } catch {
@@ -559,31 +557,15 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
           }
         }
 
-        // Rotate messageId for the next iteration. Each iteration's assistant
-        // response is a distinct message, mirroring the non-durable agentic
-        // loop which calls rotateResponseMessageId() between iterations. The
-        // mutated state.messageId flows into the next singleIterationWorkflow
-        // input via map-to-llm-input.
-        //
-        // We also mark the current MessageList's last assistant message as a
-        // response boundary so MessageMerger won't collapse the next
-        // iteration's assistant content into it. Without this, persisted
-        // memory keeps a single assistant message and the rotated id is never
-        // observable to consumers.
+        // Each iteration's assistant response is a distinct message, mirroring
+        // the non-durable agentic loop. The mutated state.messageId flows into
+        // the next singleIterationWorkflow input via map-to-llm-input.
         if (!isFinal) {
-          const nextMessageId =
-            (mastra as Mastra | undefined)?.generateId?.() ?? globalThis.crypto?.randomUUID?.() ?? `msg_${Date.now()}`;
-          state.messageId = nextMessageId;
-
-          try {
-            const boundaryList = new MessageList();
-            boundaryList.deserialize(state.messageListState);
-            boundaryList.markResponseMessageBoundary();
-            state.messageListState = boundaryList.serialize();
-          } catch {
-            // Boundary marking is best-effort; if deserialization fails the
-            // next iteration will still run with the un-marked state.
-          }
+          const boundaryList = createRunMessageList({ mastra: mastra as Mastra | undefined }).deserialize(
+            state.messageListState,
+          );
+          state.messageId = boundaryList.rotateResponseMessageId();
+          state.messageListState = boundaryList.serialize();
         }
 
         // Emit an iteration-complete event for observability. This fires after

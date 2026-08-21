@@ -1,10 +1,10 @@
 /**
  * Stable, scoped React Query keys for the settings API.
  *
- * Resource-scoped lists (model packs, OM) include the `resourceId` so switching
+ * Resource-scoped lists such as OM include the `resourceId` so switching
  * factories yields a distinct cache entry instead of leaking another factory's
- * data. Keeping every key in one place makes invalidation in the mutation hooks
- * unambiguous.
+ * data. Personal settings such as model packs use one user-scoped key. Keeping
+ * every key in one place makes mutation invalidation unambiguous.
  */
 /**
  * Initial (and grow-step) size of the bounded transcript window. Opening a long
@@ -16,6 +16,7 @@
 export const INITIAL_THREAD_MESSAGE_LIMIT = 100;
 
 export const queryKeys = {
+  serverFeatures: () => ['server-features'] as const,
   factoryAuth: () => ['factory-auth'] as const,
   factories: () => ['factories'] as const,
   persistedFactories: () => ['factories', 'persisted'] as const,
@@ -35,8 +36,13 @@ export const queryKeys = {
   linearIssues: (githubProjectId: string | undefined) =>
     [...queryKeys.linearIssuesAll(), githubProjectId ?? null] as const,
   intakeConfig: () => ['intake', 'config'] as const,
+  intakeBindings: () => ['intake', 'bindings'] as const,
   channelAccounts: () => ['channel-accounts'] as const,
   workItems: (factoryProjectId: string | undefined) => ['factory', 'work-items', factoryProjectId ?? null] as const,
+  knowledgeGraph: (factoryProjectId: string | undefined, threadId?: string) =>
+    ['factory', 'knowledge-graph', factoryProjectId ?? null, threadId ?? null] as const,
+  knowledgeNode: (factoryProjectId: string | undefined, nodeId: string | undefined, threadId?: string) =>
+    ['factory', 'knowledge-node', factoryProjectId ?? null, nodeId ?? null, threadId ?? null] as const,
   factoryMetrics: (githubProjectId: string | undefined, from: string, to: string) =>
     ['factory', 'metrics', githubProjectId ?? null, from, to] as const,
   factoryHealthThresholds: (githubProjectId: string | undefined) =>
@@ -58,10 +64,10 @@ export const queryKeys = {
   providers: () => ['providers'] as const,
   availableModels: () => ['available-models'] as const,
   customProviders: () => ['custom-providers'] as const,
-  modelPacks: (resourceId: string | undefined) => ['model-packs', resourceId ?? null] as const,
-  /** Prefix that matches every `modelPacks(*)` entry — pack CRUD is global, so it invalidates all of them. */
   modelPacksAll: () => ['model-packs'] as const,
-  om: (resourceId: string | undefined) => ['om', resourceId ?? null] as const,
+  modelPacks: (resourceId: string | undefined, scope: string | undefined) =>
+    [...queryKeys.modelPacksAll(), resourceId ?? null, scope ?? null] as const,
+  om: (resourceId: string | undefined, factoryId?: string) => ['om', resourceId ?? null, factoryId ?? null] as const,
   thinkingConfig: () => ['thinking-config'] as const,
   factorySkills: () => ['factory', 'skills'] as const,
   fsList: (path: string | undefined) => ['fs-list', path ?? null] as const,
@@ -70,8 +76,13 @@ export const queryKeys = {
     ['workspace-rendered-list', workspacePath ?? null, renderedRoot ?? null] as const,
   workspaceFiles: (workspacePath: string | undefined, threadId: string | undefined) =>
     ['workspace-files', workspacePath ?? null, threadId ?? null] as const,
+  workspaceFileScope: (workspacePath: string | undefined) => ['workspace-file', workspacePath ?? null] as const,
   workspaceFile: (workspacePath: string | undefined, filePath: string | undefined, threadId?: string) =>
     ['workspace-file', workspacePath ?? null, filePath ?? null, threadId ?? null] as const,
+  // Keyed by toolCallId so each plan (re)submission fetches the file fresh
+  // instead of reusing the previous submission's cached content.
+  planFile: (workspacePath: string | undefined, filePath: string | undefined, toolCallId: string | undefined) =>
+    ['plan-file', workspacePath ?? null, filePath ?? null, toolCallId ?? null] as const,
   workspaceChanges: (workspacePath: string | undefined) => ['workspace-changes', workspacePath ?? null] as const,
   workspaceDiff: (
     workspacePath: string | undefined,
@@ -104,10 +115,16 @@ export const queryKeys = {
     agentControllerId: string | undefined,
     resourceId: string | undefined,
     projectPath: string | undefined,
-  ) => [...queryKeys.agentControllerConnection(agentControllerId, resourceId, projectPath), 'state'] as const,
+    threadId?: string,
+  ) =>
+    [
+      ...queryKeys.agentControllerConnection(agentControllerId, resourceId, projectPath),
+      'state',
+      ...(threadId ? [threadId] : []),
+    ] as const,
   // Session state must stay out of the key: it would reset the query on navigation, and a reset reads as every run going idle.
-  agentControllerActivity: (agentControllerId: string | undefined) =>
-    ['agent-controller', agentControllerId ?? null, 'activity'] as const,
+  agentControllerActivity: (agentControllerId: string | undefined, baseUrl: string) =>
+    ['agent-controller', agentControllerId ?? null, 'activity', baseUrl] as const,
   agentControllerSettings: (
     agentControllerId: string | undefined,
     resourceId: string | undefined,

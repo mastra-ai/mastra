@@ -19,6 +19,7 @@ import type {
   UpdateExperimentInput,
   AddExperimentResultInput,
   UpdateExperimentResultInput,
+  UpsertExperimentResultInput,
   ListExperimentsInput,
   ListExperimentsOutput,
   ListExperimentResultsInput,
@@ -72,8 +73,9 @@ function transformExperimentRow(row: Record<string, unknown>): Experiment {
     datasetVersion: row.datasetVersion != null ? Number(row.datasetVersion) : null,
     organizationId: (row.organizationId as string | null) ?? null,
     projectId: (row.projectId as string | null) ?? null,
-    targetType: row.targetType as Experiment['targetType'],
-    targetId: row.targetId as string,
+    targetType: (row.targetType as Experiment['targetType']) ?? null,
+    targetId: (row.targetId as string | null) ?? null,
+    scorerIds: (row.scorerIds as string[] | null) ?? null,
     status: row.status as Experiment['status'],
     totalItems: Number(row.totalItems ?? 0),
     succeededCount: Number(row.succeededCount ?? 0),
@@ -102,6 +104,7 @@ function transformExperimentResultRow(row: Record<string, unknown>): ExperimentR
     startedAt: toDate(row.startedAt),
     completedAt: toDate(row.completedAt),
     retryCount: Number(row.retryCount ?? 0),
+    attempt: row.attempt != null ? Number(row.attempt) : 0,
     traceId: (row.traceId as string | null) ?? null,
     status: (row.status as ExperimentResultStatus | null) ?? null,
     tags: Array.isArray(row.tags) ? row.tags : (parseJsonField(row.tags) ?? null),
@@ -222,7 +225,13 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
       { collection: TABLE_EXPERIMENTS, keys: { organizationId: 1, projectId: 1 } },
       { collection: TABLE_EXPERIMENT_RESULTS, keys: { id: 1 }, options: { unique: true } },
       { collection: TABLE_EXPERIMENT_RESULTS, keys: { experimentId: 1 } },
-      { collection: TABLE_EXPERIMENT_RESULTS, keys: { experimentId: 1, itemId: 1 }, options: { unique: true } },
+      // The natural key includes `attempt` so external runners can record
+      // repeated trials as separate rows (retry convergence happens per attempt).
+      {
+        collection: TABLE_EXPERIMENT_RESULTS,
+        keys: { experimentId: 1, itemId: 1, attempt: 1 },
+        options: { unique: true },
+      },
       { collection: TABLE_EXPERIMENT_RESULTS, keys: { createdAt: -1 } },
       { collection: TABLE_EXPERIMENT_RESULTS, keys: { experimentId: 1, startedAt: 1, id: 1 } },
       { collection: TABLE_EXPERIMENT_RESULTS, keys: { organizationId: 1, projectId: 1 } },
@@ -231,6 +240,13 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
 
   async createDefaultIndexes(): Promise<void> {
     if (this.#skipDefaultIndexes) return;
+    // Legacy unique index without `attempt` — superseded by the (experimentId, itemId, attempt) index.
+    try {
+      const collection = await this.getCollection(TABLE_EXPERIMENT_RESULTS);
+      await collection.dropIndex('experimentId_1_itemId_1');
+    } catch {
+      // Index doesn't exist (fresh database or already migrated) — nothing to drop.
+    }
     for (const indexDef of this.getDefaultIndexDefinitions()) {
       try {
         const collection = await this.getCollection(indexDef.collection);
@@ -281,8 +297,9 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
       datasetVersion: input.datasetVersion ?? null,
       organizationId: input.organizationId ?? null,
       projectId: input.projectId ?? null,
-      targetType: input.targetType,
-      targetId: input.targetId,
+      targetType: input.targetType ?? null,
+      targetId: input.targetId ?? null,
+      scorerIds: input.scorerIds ?? null,
       status: 'pending' as const,
       totalItems: input.totalItems,
       succeededCount: 0,
@@ -517,6 +534,7 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
       startedAt: input.startedAt,
       completedAt: input.completedAt,
       retryCount: input.retryCount,
+      attempt: input.attempt ?? 0,
       traceId: input.traceId ?? null,
       status: input.status ?? null,
       tags: input.tags ?? null,
@@ -542,6 +560,7 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
         startedAt: input.startedAt,
         completedAt: input.completedAt,
         retryCount: input.retryCount,
+        attempt: input.attempt ?? 0,
         traceId: input.traceId ?? null,
         status: input.status ?? null,
         tags: input.tags ?? null,
@@ -552,6 +571,59 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
       throw new MastraError(
         {
           id: createStorageErrorId('MONGODB', 'ADD_EXPERIMENT_RESULT', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { experimentId: input.experimentId },
+        },
+        error,
+      );
+    }
+  }
+
+  async upsertExperimentResult(input: UpsertExperimentResultInput): Promise<ExperimentResult> {
+    const attempt = input.attempt ?? 0;
+    try {
+      const collection = await this.getCollection(TABLE_EXPERIMENT_RESULTS);
+
+      // Natural key: (experimentId, itemId, attempt). Last write wins while the
+      // row id and createdAt stay stable; $setOnInsert supplies them on first write.
+      const result = await collection.findOneAndUpdate(
+        {
+          experimentId: input.experimentId,
+          itemId: input.itemId,
+          $or: [{ attempt }, ...(attempt === 0 ? [{ attempt: null }, { attempt: { $exists: false } }] : [])],
+        },
+        {
+          $set: {
+            itemDatasetVersion: input.itemDatasetVersion ?? null,
+            organizationId: input.organizationId ?? null,
+            projectId: input.projectId ?? null,
+            input: input.input,
+            output: input.output ?? null,
+            groundTruth: input.groundTruth ?? null,
+            error: input.error ?? null,
+            startedAt: input.startedAt,
+            completedAt: input.completedAt,
+            retryCount: input.retryCount,
+            attempt,
+            traceId: input.traceId ?? null,
+            status: input.status ?? null,
+            tags: input.tags ?? null,
+            toolMockReport: input.toolMockReport ?? null,
+          },
+          $setOnInsert: {
+            id: randomUUID(),
+            createdAt: new Date(),
+          },
+        },
+        { upsert: true, returnDocument: 'after' },
+      );
+
+      return transformExperimentResultRow(result as unknown as Record<string, unknown>);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'UPSERT_EXPERIMENT_RESULT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { experimentId: input.experimentId },

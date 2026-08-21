@@ -18,8 +18,8 @@ import type {
 } from '../rules/start-coordinator.js';
 import { FactoryStartTransitionError } from '../rules/start-coordinator.js';
 import type { FactoryTransitionRequest, FactoryTransitionService } from '../rules/transition-service.js';
-import type { FactoryRuleBoard, FactoryRuleStage } from '../rules/types.js';
-import { FACTORY_RULE_BOARDS, FACTORY_RULE_STAGES } from '../rules/types.js';
+import type { FactoryRuleBoard } from '../rules/types.js';
+import { FACTORY_RULE_BOARDS, isFactoryRuleStage } from '../rules/types.js';
 import type { LiveSessions } from '../session/live-sessions.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
@@ -37,7 +37,7 @@ import type {
   WorkItemStage,
   WorkItemsStorage,
 } from '../storage/domains/work-items/base.js';
-import { WorkItemRelationError } from '../storage/domains/work-items/base.js';
+import { FACTORY_RULE_MATERIALIZATION_KEY, WorkItemRelationError } from '../storage/domains/work-items/base.js';
 import { computeFactoryMetrics, parseMetricsRange } from '../storage/domains/work-items/metrics.js';
 import type { RouteDependencies } from './route.js';
 import { Route } from './route.js';
@@ -56,6 +56,13 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
   startCoordinator?: Pick<FactoryStartCoordinator, 'prepare'>;
   /** Materialized sessions, read to report which of the listed cards are being worked. */
   liveSessions: Pick<LiveSessions, 'isRunning'>;
+}
+
+/** The card as clients see it, without the dispatcher's internal bookkeeping. */
+function toWireWorkItem(item: WorkItemRow): WorkItemRow {
+  if (!item.metadata || !(FACTORY_RULE_MATERIALIZATION_KEY in item.metadata)) return item;
+  const { [FACTORY_RULE_MATERIALIZATION_KEY]: _internal, ...metadata } = item.metadata;
+  return { ...item, metadata };
 }
 
 /** Session ids of the listed cards whose agent run is in flight. */
@@ -219,9 +226,7 @@ function parseTransitionBody(
   const board = FACTORY_RULE_BOARDS.includes(body.board as FactoryRuleBoard)
     ? (body.board as FactoryRuleBoard)
     : undefined;
-  const stage = FACTORY_RULE_STAGES.includes(body.stage as FactoryRuleStage)
-    ? (body.stage as FactoryRuleStage)
-    : undefined;
+  const stage = isFactoryRuleStage(body.stage) ? body.stage : undefined;
   const requestId = boundedText(body.requestId, 256);
   const cause = boundedText(body.cause, 256);
   if (
@@ -270,9 +275,7 @@ function parseStartBody(
   const threadTitle = boundedText(body.threadTitle, 512);
   const kickoffKey = boundedText(body.kickoffKey, 256);
   const invocation = parseInvocation(body.invocation);
-  const destinationStage = FACTORY_RULE_STAGES.includes(body.destinationStage as FactoryRuleStage)
-    ? (body.destinationStage as FactoryRuleStage)
-    : undefined;
+  const destinationStage = isFactoryRuleStage(body.destinationStage) ? body.destinationStage : undefined;
   const role = boundedText(body.workItem.role, 32);
   const id = body.workItem.id === undefined ? undefined : boundedText(body.workItem.id, 64);
   if (body.workItem.id !== undefined && (!id || !UUID_RE.test(id))) return null;
@@ -512,8 +515,12 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
         const decisionId = context.req.param('decisionId');
         if (!decisionId || !UUID_RE.test(decisionId)) return c.json({ error: 'invalid_decision_id' }, 422);
         await workItems.ensureReady();
-        const decision = await settle(resolved.orgId, resolved.factoryProjectId, decisionId, new Date());
+        const now = new Date();
+        const decision = await settle(resolved.orgId, resolved.factoryProjectId, decisionId, now);
         if (!decision) return c.json({ error: 'decision_not_proposed' }, 409);
+        // Releasing a proposal is a person taking the item on. Approval arms the
+        // item's autonomy inside the same storage transaction (see
+        // approveDeferredDecision), so follow-up runs no longer wait for approval.
         await audit.emit({
           context,
           input: {
@@ -546,7 +553,10 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             orgId: resolved.orgId,
             factoryProjectId: resolved.factoryProjectId,
           });
-          return c.json({ workItems: items, runningSessionIds: runningSessionIds(items, liveSessions) });
+          return c.json({
+            workItems: items.map(toWireWorkItem),
+            runningSessionIds: runningSessionIds(items, liveSessions),
+          });
         },
       }),
 
@@ -711,7 +721,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
                 patch: boundedPatch as unknown as Record<string, unknown>,
               });
             }
-            return c.json({ workItem: item });
+            return c.json({ workItem: toWireWorkItem(item) });
           } catch (error) {
             if (error instanceof WorkItemRelationError) {
               return c.json({ error: error.code, message: error.message }, 400);
@@ -785,6 +795,11 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           if (!input) return c.json({ error: 'invalid_factory_start' }, 400);
           input.requestContext = loose(c).get('requestContext');
           input.defaultModelId = resolved.defaultModelId ?? undefined;
+          // This route is only reached by a person pressing a run action, so
+          // reaching it is the commitment the approval gate is asking for.
+          // Arming rides inside prepareRunStart's transaction so a crash can't
+          // start the run while leaving its follow-up work waiting on approval.
+          input.armAutonomy = true;
           if (
             !input.workItem.id &&
             ((input.workItem.input.stages ?? ['intake']).length !== 1 ||
@@ -856,7 +871,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
               previous: updated.previous,
               patch: patch as Record<string, unknown>,
             });
-            return c.json({ workItem: updated.item });
+            return c.json({ workItem: toWireWorkItem(updated.item) });
           } catch (error) {
             if (error instanceof WorkItemRelationError) {
               return c.json({ error: error.code, message: error.message }, 400);

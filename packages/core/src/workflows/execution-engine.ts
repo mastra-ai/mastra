@@ -30,6 +30,7 @@ export interface ExecutionGraph<TEngineType = any> {
 export interface ExecutionEngineOptions {
   tracingPolicy?: TracingPolicy;
   validateInputs: boolean;
+  emitStepEvents?: boolean;
   shouldPersistSnapshot: (params: {
     stepResults: Record<string, StepResult<any, any, any, any>>;
     workflowStatus: WorkflowRunStatus;

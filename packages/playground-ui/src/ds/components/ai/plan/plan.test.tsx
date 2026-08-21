@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -33,10 +33,22 @@ const mockClipboard = (writeText: ReturnType<typeof vi.fn>) => {
   });
 };
 
+// jsdom has no layout engine, so rendered content always measures zero height.
+// Stubbing `scrollHeight` simulates content that overflows (or fits) the
+// collapsed card so clipping detection can be exercised.
+const stubContentHeight = (height: number | (() => number)) => {
+  Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
+    configurable: true,
+    get: () => (typeof height === 'function' ? height() : height),
+  });
+};
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   Reflect.deleteProperty(navigator, 'clipboard');
+  Reflect.deleteProperty(HTMLElement.prototype, 'scrollHeight');
 });
 
 describe('Plan', () => {
@@ -158,7 +170,154 @@ describe('Plan', () => {
     expect(screen.getByRole('button', { name: /approve plan/i })).toBeTruthy();
   });
 
+  it('hints that an overflowing plan is clipped and clears the hint when expanded', () => {
+    stubContentHeight(1000);
+
+    renderPlan(
+      <Plan>
+        <PlanBody>
+          <PlanMain>
+            <PlanContent>{`## Steps\n\n${'step '.repeat(150)}`}</PlanContent>
+            <PlanControls />
+          </PlanMain>
+        </PlanBody>
+      </Plan>,
+    );
+
+    const clipped = document.querySelector<HTMLElement>('[data-slot="plan-content"][data-clipped]');
+    expect(clipped).toBeTruthy();
+    expect(clipped?.classList.contains('mask-b-from-60%')).toBe(true);
+    expect(clipped?.classList.contains('mask-b-to-100%')).toBe(true);
+
+    fireEvent.click(screen.getByRole('button', { name: /expand plan/i }));
+
+    const expanded = document.querySelector<HTMLElement>('[data-slot="plan-content"]');
+    expect(expanded?.getAttribute('data-clipped')).toBeNull();
+    expect(expanded?.classList.contains('mask-b-from-60%')).toBe(false);
+    expect(expanded?.classList.contains('mask-b-to-100%')).toBe(false);
+  });
+
+  it('shows no clip hint or expand control when the plan fits the collapsed card', () => {
+    stubContentHeight(120);
+
+    renderPlan(
+      <Plan>
+        <PlanBody>
+          <PlanMain>
+            <PlanContent>{'## Steps\n\n- Move data'}</PlanContent>
+            <PlanControls />
+          </PlanMain>
+        </PlanBody>
+      </Plan>,
+    );
+
+    expect(document.querySelector('[data-slot="plan-content"][data-clipped]')).toBeNull();
+    expect(screen.queryByRole('button', { name: /expand plan/i })).toBeNull();
+    expect(document.querySelector('[data-slot="plan-controls"]')?.classList.contains('empty:hidden')).toBe(true);
+  });
+
+  it('treats content at exactly the collapsed height as fitting', () => {
+    stubContentHeight(220);
+
+    renderPlan(
+      <Plan>
+        <PlanBody>
+          <PlanMain>
+            <PlanContent>{'## Steps\n\n- Move data'}</PlanContent>
+            <PlanControls />
+          </PlanMain>
+        </PlanBody>
+      </Plan>,
+    );
+
+    expect(document.querySelector('[data-slot="plan-content"][data-clipped]')).toBeNull();
+    expect(screen.queryByRole('button', { name: /expand plan/i })).toBeNull();
+  });
+
+  it('measures against a custom collapsed height', () => {
+    stubContentHeight(150);
+
+    renderPlan(
+      <Plan collapsedHeight={100}>
+        <PlanBody>
+          <PlanMain>
+            <PlanContent>{'## Steps\n\n- Move data'}</PlanContent>
+            <PlanControls />
+          </PlanMain>
+        </PlanBody>
+      </Plan>,
+    );
+
+    expect(document.querySelector('[data-slot="plan-content"][data-clipped]')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /expand plan/i })).toBeTruthy();
+  });
+
+  it('remeasures when the collapsed height changes', () => {
+    stubContentHeight(150);
+
+    const { rerender } = renderPlan(
+      <Plan collapsedHeight={220}>
+        <PlanContent>{'## Steps\n\n- Move data'}</PlanContent>
+        <PlanControls />
+      </Plan>,
+    );
+
+    expect(screen.queryByRole('button', { name: 'Expand plan' })).toBeNull();
+
+    rerender(
+      <TooltipProvider>
+        <Plan collapsedHeight={100}>
+          <PlanContent>{'## Steps\n\n- Move data'}</PlanContent>
+          <PlanControls />
+        </Plan>
+      </TooltipProvider>,
+    );
+
+    expect(screen.getByRole('button', { name: 'Expand plan' })).toBeTruthy();
+  });
+
+  it('observes content resizing and disconnects the observer on unmount', () => {
+    let height = 120;
+    let notifyResize: (() => void) | undefined;
+    const observe = vi.fn();
+    const disconnect = vi.fn();
+    stubContentHeight(() => height);
+
+    class ResizeObserverStub implements ResizeObserver {
+      constructor(callback: ResizeObserverCallback) {
+        notifyResize = () => callback([], this);
+      }
+
+      observe = observe;
+      unobserve = vi.fn();
+      disconnect = disconnect;
+    }
+
+    vi.stubGlobal('ResizeObserver', ResizeObserverStub);
+
+    const { unmount } = renderPlan(
+      <Plan>
+        <PlanContent>{'## Steps\n\n- Move data'}</PlanContent>
+        <PlanControls />
+      </Plan>,
+    );
+
+    const measuredContent = document.querySelector('[data-slot="plan-content"] > div');
+    expect(observe).toHaveBeenCalledWith(measuredContent);
+    expect(screen.queryByRole('button', { name: 'Expand plan' })).toBeNull();
+
+    height = 500;
+    act(() => notifyResize?.());
+
+    expect(screen.getByRole('button', { name: 'Expand plan' })).toBeTruthy();
+
+    unmount();
+    expect(disconnect).toHaveBeenCalledOnce();
+  });
+
   it('expands from the composed expand button', () => {
+    stubContentHeight(1000);
+
     renderPlan(
       <Plan>
         <PlanBody>
@@ -174,15 +333,44 @@ describe('Plan', () => {
     if (!content) throw new Error('Expected plan content to render.');
 
     expect(content.style.maxHeight).toBe('220px');
+    expect(content.classList.contains('overflow-hidden')).toBe(true);
 
-    fireEvent.click(screen.getByRole('button', { name: /expand plan/i }));
+    const expandButton = screen.getByRole('button', { name: 'Expand plan' });
+    expect(expandButton.getAttribute('aria-label')).toBe('Expand plan');
+    expect(expandButton.textContent).toContain('Expand plan');
+    fireEvent.click(expandButton);
 
-    expect(screen.getByRole('button', { name: /collapse plan/i })).toBeTruthy();
+    const collapseButton = screen.getByRole('button', { name: 'Collapse plan' });
+    expect(collapseButton.getAttribute('aria-label')).toBe('Collapse plan');
+    expect(collapseButton.textContent).toContain('Collapse plan');
     expect(content.style.maxHeight).toBe('');
+    expect(content.classList.contains('overflow-hidden')).toBe(false);
+  });
+
+  it('keeps the expand and collapse action on one line without shrinking', () => {
+    stubContentHeight(1000);
+
+    renderPlan(
+      <Plan>
+        <PlanContent>{'## Steps\n\n- Move data'}</PlanContent>
+        <PlanExpandButton />
+      </Plan>,
+    );
+
+    const expandButton = screen.getByRole('button', { name: /expand plan/i });
+    expect(expandButton.classList.contains('shrink-0')).toBe(true);
+    expect(expandButton.classList.contains('whitespace-nowrap')).toBe(true);
+
+    fireEvent.click(expandButton);
+
+    const collapseButton = screen.getByRole('button', { name: /collapse plan/i });
+    expect(collapseButton.classList.contains('shrink-0')).toBe(true);
+    expect(collapseButton.classList.contains('whitespace-nowrap')).toBe(true);
   });
 
   it('preserves fixed expand behavior when unsupported button props are provided at runtime', () => {
     const overrideClick = vi.fn();
+    stubContentHeight(1000);
 
     renderPlan(
       <Plan>
@@ -195,6 +383,7 @@ describe('Plan', () => {
     if (!content) throw new Error('Expected plan content to render.');
 
     const expandButton = screen.getByRole('button', { name: /expand plan/i });
+    expect(expandButton.getAttribute('data-variant')).toBe('default');
     expect(expandButton.getAttribute('type')).toBe('button');
 
     fireEvent.click(expandButton);

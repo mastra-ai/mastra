@@ -17,7 +17,7 @@ import { useMatch, useNavigate, useParams } from 'react-router';
 
 import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../../../../api/keys';
 import { useChatCommands } from '../context/ChatCommandsProvider';
-import { useChatMessagesInitializing } from '../context/ChatSessionProvider';
+import { useChatMessagesInitializing } from '../context/useChatMessagesInitializing';
 import { useChatConnection } from '../context/useChatConnection';
 import { useChatModels } from '../context/useChatModels';
 import { useChatModes } from '../context/useChatModes';
@@ -26,11 +26,11 @@ import { useChatTranscript } from '../context/useChatTranscript';
 import {
   useAbortAgentControllerMutation,
   useSendAgentControllerMessageMutation,
-  useSteerAgentControllerMutation,
 } from '../../../../hooks/useAgentControllerRunMutations';
 import { useCreateAgentControllerThreadMutation } from '../../../../hooks/useAgentControllerThreadMutations';
 import { usePreparingThreadId } from '../hooks/usePreparingThreadId';
 import { useCreateUserSessionFromDraft } from '../hooks/useCreateUserSessionFromDraft';
+import { usePendingPlanFeedback } from '../hooks/usePendingPlanFeedback';
 import { commandRequiresReadySession, matchCommands } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { getModeColorClass } from './mode-colors';
@@ -68,7 +68,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { status } = useChatConnection();
-  const { busy, localUser, reset, clearPending, pushNotice } = useChatTranscript();
+  const { busy, localUser, failLocalUser, reset, clearPending, pushNotice } = useChatTranscript();
   const { modes, activeModeId, isLoading: modesLoading, error: modesError, setMode } = useChatModes();
   const { activeModelId, isLoading: modelLoading, error: modelError } = useChatModels();
   const { composerDraft: draft, composerInputRef: inputRef, setComposerDraft, runComposerCommand } = useChatCommands();
@@ -83,29 +83,33 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   };
   const createThreadMutation = useCreateAgentControllerThreadMutation(hookArgs);
   const sendMutation = useSendAgentControllerMessageMutation(hookArgs);
-  const steerMutation = useSteerAgentControllerMutation(hookArgs);
   const abortMutation = useAbortAgentControllerMutation(hookArgs);
+  const planFeedback = usePendingPlanFeedback();
 
   const preparingThreadId = usePreparingThreadId();
   const createDraftSessionMutation = useCreateUserSessionFromDraft();
   const blocked = onUserDraft ? !factorySessionState : status !== 'ready' && !preparingThreadId;
   const draftConfigNotReady =
     onUserDraft && (modesLoading || modesError !== undefined || modelLoading || modelError !== undefined);
-  const attachDisabled = onUserDraft || blocked || chatPreparing;
+  const attachDisabled = onUserDraft || blocked || chatPreparing || planFeedback.pending;
   const { images, setImages, fileInputRef, removeImage, onPaste, onDrop, onFileInputChange } = useComposerImages({
     onUserDraft,
-    disabled: chatPreparing,
+    disabled: chatPreparing || planFeedback.pending,
   });
   const spotlightRef = useComposerSpotlight();
   const modeSwitchPendingRef = useRef(false);
-  const suggestions = matchCommands(draft);
+  const suggestions = planFeedback.pending ? [] : matchCommands(draft);
   const showSuggestions = suggestions.length > 0;
   const [activeSuggestion, setActiveSuggestion] = useState(0);
-  const composerDisabled = createDraftSessionMutation.isPending || blocked;
-  const sendDisabled = composerDisabled || draftConfigNotReady || chatPreparing;
+  const composerDisabled = createDraftSessionMutation.isPending || blocked || planFeedback.isSubmitting;
+  const sendDisabled = composerDisabled || draftConfigNotReady || chatPreparing || planFeedback.loading;
   const textareaDisabled = composerDisabled && !chatPreparing;
   const initializingPlaceholder = useInitializingPlaceholder(chatPreparing, draft.length === 0);
-  const normalPlaceholder = busy && !preparingThreadId ? 'Steer the agent…' : 'Ask Mastra Code…';
+  const normalPlaceholder = planFeedback.pending
+    ? 'Give feedback on this plan…'
+    : busy && !preparingThreadId
+      ? 'Steer the agent…'
+      : 'Ask Mastra Code…';
   const placeholder = initializingPlaceholder ?? normalPlaceholder;
   const sendTitle = chatPreparing ? 'Initializing session…' : undefined;
 
@@ -161,17 +165,23 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
 
   const steer = async (text: string) => {
     if (!text.trim()) return;
-    localUser(text, true);
-    await steerMutation.mutateAsync(text);
+    const localId = localUser(text, true);
+    try {
+      await sendMutation.mutateAsync({ text });
+    } catch (error) {
+      failLocalUser(localId);
+      throw error;
+    }
   };
 
   const onSubmit = (e: { preventDefault: () => void }) => {
     e.preventDefault();
     if (sendDisabled) return;
     const text = draft.trim();
-    if (!text && images.length === 0) return;
+    if ((!text && images.length === 0) || (planFeedback.pending && !text)) return;
     updateDraft('');
     void handleInput(text).catch(error => {
+      if (planFeedback.pending) updateDraft(text);
       clearPending();
       pushNotice(error instanceof Error ? error.message : 'The message could not be sent.', 'error');
     });
@@ -236,6 +246,11 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   };
 
   async function handleInput(text: string) {
+    if (planFeedback.pending) {
+      await planFeedback.submitFeedback(text);
+      setImages([]);
+      return;
+    }
     if (onUserDraft && text.startsWith('/')) {
       if (commandRequiresReadySession(text)) {
         updateDraft(text);
@@ -275,11 +290,11 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   }
 
   return (
-    <ComposerRoot onSubmit={onSubmit} onDrop={onDrop} onDragOver={e => e.preventDefault()} className="relative">
-      <ComposerSuggestions suggestions={suggestions} activeIndex={activeSuggestion} onSelect={applyCommand} />
+    <ComposerRoot onSubmit={onSubmit} onDrop={onDrop} onDragOver={e => e.preventDefault()}>
       <ComposerRing busy={busy || chatPreparing} className={modeColorClass}>
         <ComposerBox ref={spotlightRef} className={cn('composer-spotlight', modeColorClass)}>
           <div aria-hidden="true" className="composer-spotlight-surface" />
+          <ComposerSuggestions suggestions={suggestions} activeIndex={activeSuggestion} onSelect={applyCommand} />
           <ComposerImageAttachments images={images} onRemove={removeImage} />
           <ComposerInput
             ref={inputRef}
@@ -331,7 +346,9 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
                 type="submit"
                 variant="outline"
                 size="icon-sm"
-                disabled={sendDisabled || (!draft.trim() && images.length === 0)}
+                disabled={
+                  sendDisabled || (!draft.trim() && images.length === 0) || (planFeedback.pending && !draft.trim())
+                }
                 aria-label="Send message"
                 title={sendTitle}
               >
