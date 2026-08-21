@@ -1,26 +1,31 @@
 /**
- * Sha-aliased repo templates.
+ * Sha-tagged repo templates.
  *
  * A repo template is an E2B template with the repository already cloned and
  * its dependencies installed at a known commit. Sessions started from it only
  * need `git fetch` + checkout of their actual ref plus setup drift, instead
  * of a cold clone + full install.
  *
- * Aliases are deterministic — `mastra-repo-<hash>` where the hash covers the
- * repo, the pinned sha, the setup command, and the workdir — so a changed
- * default-branch head or setup command produces a new alias while unchanged
- * inputs reuse the existing build. Builds are lazy: the first
- * `E2BSandbox.start()` that resolves a new alias triggers the build; nothing
- * pre-builds templates for idle repos.
+ * There is exactly ONE template per (repo, setup command, workdir): the
+ * template name is a deterministic `mastra-repo-<hash>` over those inputs,
+ * and the commit sha rides as a docker-style TAG on that name
+ * (`mastra-repo-<hash>:sha-<sha>`). A moved default branch produces a new
+ * tag via a rebuild-in-place of the same template — old sha tags remain as
+ * prunable build history instead of accumulating stale template aliases.
+ * Builds are lazy: the first `E2BSandbox.start()` that resolves a missing
+ * tag triggers the build; nothing pre-builds templates for idle repos.
  *
- * Credential invariant: template builds NEVER receive a credential. The E2B
- * template build API has no secret mechanism that is excluded from image
- * capture, so any token passed to a build step could persist in a retained
- * layer. Repo templates therefore clone over plain tokenless HTTPS — public
+ * Credential invariant: a build credential may enter the template
+ * DEFINITION (via `setEnvs`, visible to build steps but not persisted into
+ * runtime sandbox environments) and the build process — never the image
+ * filesystem. Clones authenticate through an in-shell computed
+ * `http.extraheader`, so no tokened remote URL or credential file can land
+ * in a captured layer. Callers must supply a short-lived credential (a
+ * GitHub App installation token, which self-expires); never a long-lived
+ * PAT. Without a credential the clone is plain tokenless HTTPS — public
  * repos build fine; a private repo's build fails and the sandbox falls back
  * to the fallback template, with the session's runtime setup performing the
- * full clone using its runtime-injected credential instead. Private-repo
- * template support is a follow-up pending a capture-excluded build secret.
+ * full clone using its runtime-injected credential instead.
  */
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -31,7 +36,10 @@ import type { DeferredNamedTemplateSpec, NamedTemplateSpec } from './template';
 
 const execFileAsync = promisify(execFile);
 
-const ALIAS_VERSION = 'v1';
+const ALIAS_VERSION = 'v2';
+
+/** Env var the build's git auth header is computed from. Value set via `setEnvs`. */
+const BUILD_TOKEN_ENV = 'MASTRA_BUILD_GH_TOKEN';
 
 const REPO_FULL_NAME_PATTERN = /^[\w.-]+\/[\w.-]+$/;
 const SHA_PATTERN = /^[0-9a-f]{7,40}$/i;
@@ -42,19 +50,18 @@ const SHA_PATTERN = /^[0-9a-f]{7,40}$/i;
 const WORKDIR_PATTERN = /^\/workspace\/[\w./-]+$/;
 
 export interface RepoTemplateOptions {
-  /** GitHub `owner/repo` slug. Cloned over tokenless HTTPS. */
+  /** GitHub `owner/repo` slug. */
   repoFullName: string;
   /**
    * Commit sha the template is pinned to (typically the default-branch
-   * head). Omit when unknown — the alias is then keyed on repo + setup
-   * command only and the clone stays at the default branch's head at build
-   * time.
+   * head). Becomes the template's tag. Omit when unknown — the sha is then
+   * resolved live at template-resolution time (see {@link createRepoTemplate}).
    */
   sha?: string;
   /**
    * Setup command run inside the checkout during the build (e.g.
-   * `pnpm install`). Hashed into the alias so a changed setup command
-   * produces a new template.
+   * `pnpm install`). Hashed into the template name so a changed setup
+   * command produces a new template.
    */
   setupCommand?: string;
   /**
@@ -65,26 +72,44 @@ export interface RepoTemplateOptions {
    */
   workdir?: string;
   /**
-   * Override how the default-branch head sha is resolved for the deferred
-   * (sha-less) form — e.g. an authenticated API lookup for repos whose head
-   * tokenless `git ls-remote` cannot see. Return undefined when unknown; the
-   * alias then degrades to the sha-less form. Defaults to
-   * `git ls-remote <url> HEAD`.
+   * Mints a fresh, SHORT-LIVED credential (e.g. a GitHub App installation
+   * token) for private-repo access. Called once per template resolution:
+   * the token authenticates the head lookup and, when a build is needed,
+   * the build's clone (via `setEnvs` + an in-shell `http.extraheader` — it
+   * never touches the image filesystem, and probing confirms `setEnvs`
+   * values do not persist into runtime sandbox environments). Never pass a
+   * long-lived PAT: the value enters the template definition, where only
+   * its expiry bounds the exposure. A rejection degrades to tokenless
+   * behavior.
    */
-  resolveHead?: (repoFullName: string) => Promise<string | undefined>;
+  getAuthToken?: () => Promise<string | undefined>;
+  /**
+   * Override how the default-branch head sha is resolved for the deferred
+   * (sha-less) form. Receives the auth token when {@link getAuthToken}
+   * produced one. Return undefined when unknown; the template ref then
+   * degrades to the untagged form. Defaults to `git ls-remote <url> HEAD`
+   * (authenticated via `http.extraheader` when a token is available).
+   */
+  resolveHead?: (repoFullName: string, token?: string) => Promise<string | undefined>;
 }
 
 /**
- * Compute the deterministic template alias for a set of repo template
- * inputs without constructing the builder. Exposed so callers (and proofs)
- * can predict which alias a sandbox will resolve.
+ * Compute the deterministic template ref for a set of repo template inputs
+ * without constructing the builder: `mastra-repo-<hash>` named over
+ * (repo, setup command, workdir), tag-qualified with `:sha-<sha>` when the
+ * sha is known. Exposed so callers (and proofs) can predict which ref a
+ * sandbox will resolve.
  */
 export function repoTemplateAlias(options: RepoTemplateOptions): string {
+  const name = repoTemplateName(options);
+  return options.sha ? `${name}:${shaTag(options.sha)}` : name;
+}
+
+function repoTemplateName(options: RepoTemplateOptions): string {
   const workdir = options.workdir ?? defaultWorkdir(options.repoFullName);
   const config = {
     version: ALIAS_VERSION,
     repoFullName: options.repoFullName,
-    sha: options.sha ?? null,
     setupCommand: options.setupCommand ?? null,
     workdir,
   };
@@ -95,39 +120,46 @@ export function repoTemplateAlias(options: RepoTemplateOptions): string {
   return `mastra-repo-${hash}`;
 }
 
+function shaTag(sha: string): string {
+  return `sha-${sha.slice(0, 12).toLowerCase()}`;
+}
+
 /**
- * Create a sha-aliased repo template spec for `E2BSandbox`.
+ * Create a sha-tagged repo template spec for `E2BSandbox`.
  *
- * With an explicit `sha`, returns a {@link NamedTemplateSpec}: the sandbox
- * checks `Template.exists(alias)` first and only builds when the alias is
- * missing (lazy, build-if-missing).
+ * The normal form is deferred: right before the exists-then-build check it
+ * mints the auth token (when {@link RepoTemplateOptions.getAuthToken} is
+ * configured), resolves the repository's current default-branch head
+ * (`git ls-remote`, ~100ms, no clone), and keys the template ref as
+ * `mastra-repo-<hash>:sha-<head>` — so a moved default branch produces a
+ * fresh tagged build of the SAME template on the next new session
+ * (rebuild-in-place), and an unmoved head reuses the existing tagged build.
+ * When the head cannot be resolved the ref degrades to the untagged name
+ * and the build clones whatever the default branch is at build time.
  *
- * Without a `sha` (the normal case), returns a
- * {@link DeferredNamedTemplateSpec} that pins itself to the repository's
- * current default-branch head at resolution time: right before the
- * exists-then-build check it runs `git ls-remote <url> HEAD` (tokenless,
- * ~100ms, no clone) and keys the alias on that sha — so there is exactly one
- * repo template per (repo, setup command) at any given head, and a moved
- * default branch produces a fresh build on the next new session. When the
- * head cannot be resolved (private repo, offline) the alias degrades to the
- * sha-less form and the build clones whatever the default branch is at build
- * time.
+ * With an explicit `sha` and no auth, returns a plain
+ * {@link NamedTemplateSpec} pinned to that tag (backwards-compatible sync
+ * form).
  *
- * When the build itself fails — private repo, registry flake — the sandbox
- * falls back to its fallback template and the session's runtime setup
- * performs the full clone, so a broken build never wedges a session.
+ * When the build itself fails — inaccessible repo, registry flake — the
+ * sandbox falls back to its fallback template and the session's runtime
+ * setup performs the full clone, so a broken build never wedges a session.
  */
 export function createRepoTemplate(options: RepoTemplateOptions): NamedTemplateSpec | DeferredNamedTemplateSpec {
   validateRepoTemplateOptions(options);
-  if (options.sha) {
+  if (options.sha && !options.getAuthToken) {
     return buildRepoTemplateSpec(options);
   }
   return {
     resolveSpec: async () => {
-      const resolve = options.resolveHead ?? resolveDefaultBranchHead;
-      const sha = await resolve(options.repoFullName).catch(() => undefined);
-      const pinned = sha && SHA_PATTERN.test(sha) ? sha : undefined;
-      return buildRepoTemplateSpec(pinned ? { ...options, sha: pinned } : options);
+      const token = options.getAuthToken ? await options.getAuthToken().catch(() => undefined) : undefined;
+      let sha = options.sha;
+      if (!sha) {
+        const resolve = options.resolveHead ?? resolveDefaultBranchHead;
+        const resolved = await resolve(options.repoFullName, token).catch(() => undefined);
+        sha = resolved && SHA_PATTERN.test(resolved) ? resolved : undefined;
+      }
+      return buildRepoTemplateSpec(sha ? { ...options, sha } : options, token);
     },
   };
 }
@@ -146,18 +178,28 @@ function validateRepoTemplateOptions(options: RepoTemplateOptions): void {
   }
 }
 
-function buildRepoTemplateSpec(options: RepoTemplateOptions): NamedTemplateSpec {
+/**
+ * In-shell git auth flag: computes a basic-auth header from the build env
+ * var at execution time. The stored command contains only the env-var
+ * REFERENCE — the token value never appears in the command string, and no
+ * credential is written to the build filesystem.
+ */
+function gitAuthFlag(): string {
+  return `-c http.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$${BUILD_TOKEN_ENV}" | base64 -w0)"`;
+}
+
+function buildRepoTemplateSpec(options: RepoTemplateOptions, token?: string): NamedTemplateSpec {
   const { repoFullName, sha, setupCommand } = options;
   const workdir = options.workdir ?? defaultWorkdir(repoFullName);
 
-  // Tokenless HTTPS by design — see the module doc's credential invariant.
   const cloneUrl = `https://github.com/${repoFullName}.git`;
+  const auth = token ? `${gitAuthFlag()} ` : '';
 
-  const steps: string[] = [`git clone ${cloneUrl} ${workdir}`];
+  const steps: string[] = [`git ${auth}clone ${cloneUrl} ${workdir}`];
   if (sha) {
     // GitHub serves fetches of reachable shas, so pinning after a default
     // clone is reliable without full-history flags.
-    steps.push(`git -C ${workdir} fetch origin ${sha}`, `git -C ${workdir} checkout ${sha}`);
+    steps.push(`git -C ${workdir} ${auth}fetch origin ${sha}`, `git -C ${workdir} checkout ${sha}`);
   }
   if (setupCommand) {
     steps.push(`cd ${workdir} && ${setupCommand}`);
@@ -166,12 +208,17 @@ function buildRepoTemplateSpec(options: RepoTemplateOptions): NamedTemplateSpec 
   // Build steps run as the sandbox's default non-root `user`, which cannot
   // create the workspace root — prepare it as root and hand it to `user`
   // first, then clone + set up as `user` so runtime file ownership is right.
-  const template = createDefaultMountableTemplate()
-    .template.runCmd(workspaceRootPrepCommand(workdir), { user: 'root' })
-    .runCmd(steps);
+  let template = createDefaultMountableTemplate().template;
+  if (token) {
+    // Visible to build steps; probed to NOT persist into runtime sandbox
+    // environments. Must be short-lived — it stays in the template
+    // definition until the next rebuild.
+    template = template.setEnvs({ [BUILD_TOKEN_ENV]: token });
+  }
+  template = template.runCmd(workspaceRootPrepCommand(workdir), { user: 'root' }).runCmd(steps);
 
   return {
-    alias: repoTemplateAlias(options),
+    alias: repoTemplateAlias(sha ? { ...options, sha } : options),
     template,
     // A failed repo build degrades to a template that still has a writable
     // workspace root, so the session's runtime cold clone works.
@@ -180,17 +227,25 @@ function buildRepoTemplateSpec(options: RepoTemplateOptions): NamedTemplateSpec 
 }
 
 /**
- * Resolve the repository's current default-branch head over tokenless HTTPS
- * (`git ls-remote <url> HEAD` — no clone, no credential). Returns undefined
- * when the head cannot be resolved (private repo, offline, no git binary);
- * callers degrade to the sha-less alias.
+ * Resolve the repository's current default-branch head over HTTPS
+ * (`git ls-remote <url> HEAD` — no clone; authenticated via an in-process
+ * `http.extraheader` when a token is provided). Returns undefined when the
+ * head cannot be resolved (inaccessible repo, offline, no git binary);
+ * callers degrade to the untagged template ref.
  */
-async function resolveDefaultBranchHead(repoFullName: string): Promise<string | undefined> {
+async function resolveDefaultBranchHead(repoFullName: string, token?: string): Promise<string | undefined> {
   try {
-    const { stdout } = await execFileAsync('git', ['ls-remote', `https://github.com/${repoFullName}.git`, 'HEAD'], {
-      timeout: 10_000,
-      env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
-    });
+    const authArgs = token
+      ? ['-c', `http.extraheader=AUTHORIZATION: basic ${Buffer.from(`x-access-token:${token}`).toString('base64')}`]
+      : [];
+    const { stdout } = await execFileAsync(
+      'git',
+      [...authArgs, 'ls-remote', `https://github.com/${repoFullName}.git`, 'HEAD'],
+      {
+        timeout: 10_000,
+        env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+      },
+    );
     const sha = stdout.split(/\s/, 1)[0];
     return sha && SHA_PATTERN.test(sha) ? sha : undefined;
   } catch {

@@ -58,9 +58,13 @@ export async function ensureProjectSandbox(options: {
   repoFullName: string;
   storage: SourceControlSandboxStorage;
   token: string;
+  /** Repo setup command, threaded so template keying matches the session path. */
+  setupCommand?: string;
+  /** Fresh installation-token minter for provider-side authenticated work (template builds). */
+  getGithubToken?: () => Promise<string>;
   onProgress?: ProgressFn;
 }): Promise<{ sandbox: MaterializationSandbox; workdir: string }> {
-  const { sandbox: create, row, repoFullName, storage, token, onProgress } = options;
+  const { sandbox: create, row, repoFullName, storage, token, setupCommand, getGithubToken, onProgress } = options;
   if (!create) {
     throw new MaterializeError('No sandbox provider is configured.', 'clone-failed');
   }
@@ -73,6 +77,8 @@ export async function ensureProjectSandbox(options: {
     create({
       sessionId: key,
       repoFullName,
+      ...(setupCommand ? { setupCommand } : {}),
+      ...(getGithubToken ? { getGithubToken } : {}),
       actingUserId: row.userId,
     }),
   );

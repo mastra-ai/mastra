@@ -1059,6 +1059,18 @@ async function prepareProject(options: {
     repoFullName: project.repository.slug,
     storage: github.sourceControlStorage.sandboxes,
     token: ghCliToken,
+    ...(project.setupCommand ? { setupCommand: project.setupCommand } : {}),
+    // Fresh mint per call so a later template rebuild never reuses this
+    // request's (expiring) token.
+    getGithubToken: async () => {
+      const fresh = await github.versionControl.getRepositoryAccess({
+        orgId: project.installation.orgId,
+        repositoryId: project.repository.id,
+      });
+      const minted = fresh.authorization?.token;
+      if (!minted) throw new MaterializeError('Repository access did not include a bearer token.', 'clone-failed');
+      return minted;
+    },
     onProgress,
   });
   await materializeRepo({

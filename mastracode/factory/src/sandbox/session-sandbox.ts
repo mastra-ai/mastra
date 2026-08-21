@@ -22,6 +22,14 @@ export interface FactorySandboxContext {
    * hook produces sessions whose repo never materializes.
    */
   onStart?: SandboxStartHook;
+  /**
+   * Mints a fresh short-lived GitHub App installation token for the
+   * session's repository. Providers may use it for authenticated work that
+   * runs outside the VM — e.g. resolving a private repo's head or cloning it
+   * during a template build. Always a fresh mint per call (installation
+   * tokens expire in ~1h); never an org PAT.
+   */
+  getGithubToken?: () => Promise<string>;
   /** Opaque acting-user subject for provider attribution. */
   actingUserId?: string;
 }

@@ -22,11 +22,17 @@ function namedSpec(spec: ReturnType<typeof createRepoTemplate>): NamedTemplateSp
 describe('repoTemplateAlias', () => {
   it('is deterministic for identical inputs', () => {
     expect(repoTemplateAlias(BASE)).toBe(repoTemplateAlias({ ...BASE }));
-    expect(repoTemplateAlias(BASE)).toMatch(/^mastra-repo-[0-9a-f]{16}$/);
+    expect(repoTemplateAlias(BASE)).toMatch(/^mastra-repo-[0-9a-f]{16}:sha-[0-9a-f]{12}$/);
   });
 
-  it('changes when the sha changes', () => {
-    expect(repoTemplateAlias(BASE)).not.toBe(repoTemplateAlias({ ...BASE, sha: 'b'.repeat(40) }));
+  it('keys the sha as a tag on a sha-independent template name', () => {
+    const a = repoTemplateAlias(BASE);
+    const b = repoTemplateAlias({ ...BASE, sha: 'b'.repeat(40) });
+    expect(a).not.toBe(b);
+    // Same template NAME — a moved head is a rebuild-in-place under a new
+    // tag, not a new template.
+    expect(a.split(':')[0]).toBe(b.split(':')[0]);
+    expect(a.split(':')[1]).toBe(`sha-${'a'.repeat(12)}`);
   });
 
   it('changes when the setup command changes', () => {
@@ -37,10 +43,11 @@ describe('repoTemplateAlias', () => {
     expect(repoTemplateAlias(BASE)).not.toBe(repoTemplateAlias({ ...BASE, repoFullName: 'octocat/world' }));
   });
 
-  it('supports a stable sha-less variant', () => {
+  it('degrades to the untagged template name without a sha', () => {
     const shaless = { repoFullName: BASE.repoFullName, setupCommand: BASE.setupCommand };
     expect(repoTemplateAlias(shaless)).toBe(repoTemplateAlias({ ...shaless }));
-    expect(repoTemplateAlias(shaless)).not.toBe(repoTemplateAlias(BASE));
+    // The untagged form IS the tagged form's template name.
+    expect(repoTemplateAlias(BASE)).toBe(`${repoTemplateAlias(shaless)}:sha-${'a'.repeat(12)}`);
   });
 });
 
@@ -106,6 +113,62 @@ describe('createRepoTemplate', () => {
     ]) {
       expect(steps).not.toContain(marker);
     }
+  });
+
+  describe('build auth', () => {
+    const TOKEN = 'ghs_livetoken1234567890';
+    const authed = {
+      repoFullName: BASE.repoFullName,
+      setupCommand: BASE.setupCommand,
+      getAuthToken: async () => TOKEN,
+      resolveHead: async () => 'd'.repeat(40),
+    };
+
+    it('is always deferred when an auth resolver is configured', () => {
+      expect(isDeferredNamedTemplateSpec(createRepoTemplate(authed) as never)).toBe(true);
+      expect(isDeferredNamedTemplateSpec(createRepoTemplate({ ...authed, sha: BASE.sha }) as never)).toBe(true);
+    });
+
+    it('passes the token to the head resolver and sets it only via envs', async () => {
+      let sawToken: string | undefined;
+      const spec = createRepoTemplate({
+        ...authed,
+        resolveHead: async (_repo, token) => {
+          sawToken = token;
+          return 'd'.repeat(40);
+        },
+      });
+      const resolved = await (spec as { resolveSpec(): Promise<NamedTemplateSpec> }).resolveSpec();
+      expect(sawToken).toBe(TOKEN);
+      const serialized = await serializedSteps(resolved);
+      // The token VALUE appears exactly once — in the env map — and every
+      // command references it only through the env var. No expanded header,
+      // no tokened URL, nothing a filesystem layer could capture.
+      expect(serialized).toContain('"type": "ENV"');
+      expect(serialized.split(TOKEN).length - 1).toBe(1);
+      expect(serialized).toContain('$MASTRA_BUILD_GH_TOKEN');
+      expect(serialized).toContain('http.extraheader');
+      expect(serialized).not.toContain('@github.com');
+      expect(serialized).toContain('clone https://github.com/octocat/hello.git');
+    });
+
+    it('degrades to tokenless behavior when minting fails', async () => {
+      const spec = createRepoTemplate({
+        ...authed,
+        getAuthToken: async () => {
+          throw new Error('mint failed');
+        },
+        resolveHead: async (_repo, token) => (token ? 'e'.repeat(40) : undefined),
+      });
+      const resolved = await (spec as { resolveSpec(): Promise<NamedTemplateSpec> }).resolveSpec();
+      // No token → head resolver got none → untagged ref, plain clone.
+      expect(resolved.alias).toBe(
+        repoTemplateAlias({ repoFullName: BASE.repoFullName, setupCommand: BASE.setupCommand }),
+      );
+      const serialized = await serializedSteps(resolved);
+      expect(serialized).not.toContain('MASTRA_BUILD_GH_TOKEN');
+      expect(serialized).not.toContain('extraheader');
+    });
   });
 
   it('preps the workspace root as root before cloning as user', async () => {

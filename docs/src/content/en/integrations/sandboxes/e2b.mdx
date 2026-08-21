@@ -322,22 +322,23 @@ const sandbox = new E2BSandbox({
 })
 ```
 
-Without an explicit `sha`, the spec pins itself to the repository's current
-default-branch head at resolution time: right before the template lookup it
-runs a tokenless `git ls-remote` (no clone, \~100ms) and keys the template
-alias on that sha. There is exactly one template per repository and setup
-command at any given head; when the default branch moves, the next new
-sandbox builds a fresh template. If the head can't be resolved (private
-repository, offline), the alias degrades to a sha-less form and the build
-clones whatever the default branch is at build time. Pass `sha` to pin a
-template to a specific commit instead, or `resolveHead` to supply the head
-sha from an authenticated source.
+There is exactly one template per repository and setup command: the template
+name is a deterministic hash of those inputs, and the commit sha rides as a
+tag on that name (`mastra-repo-<hash>:sha-<sha>`). Without an explicit
+`sha`, the spec pins itself to the repository's current default-branch head
+at resolution time: right before the template lookup it runs `git ls-remote`
+(no clone, \~100ms) and keys the tag on that sha. When the default branch
+moves, the next new sandbox rebuilds the same template in place under a new
+tag — old sha tags remain as prunable build history instead of piling up as
+stale templates. If the head can't be resolved, the ref degrades to the
+untagged name and the build clones whatever the default branch is at build
+time. Pass `sha` to pin a specific commit instead, or `resolveHead` to
+supply the head sha yourself.
 
-The alias is deterministic — derived from the repository, sha, and setup
-command — so the same inputs resolve to the same template. Resolution is
-lazy: the first sandbox to reference an alias checks whether it exists on E2B
-and builds it once when it doesn't; later sandboxes reuse it without
-rebuilding. A changed head or setup command hashes to a new alias.
+Resolution is lazy: the first sandbox to reference a tagged ref checks
+whether it exists on E2B and builds it once when it doesn't; later sandboxes
+reuse it without rebuilding. A changed setup command hashes to a new
+template name.
 
 The template layers on top of the default mountable base (E2B's `base` image,
 so git and common tooling are present, plus `s3fs`/FUSE for mount support).
@@ -355,14 +356,22 @@ Failure handling is designed so a broken template never wedges a session:
   named alias fails, the cached resolution is dropped and creation retries
   once on the fallback.
 
-Template builds receive no credentials: the clone is tokenless, so only
-public repositories can be baked into templates today. A private repository's
-build fails and degrades to the fallback, where the session's own runtime
-setup (with runtime-injected auth) does the clone. Private-repo template
-builds are a follow-up pending E2B build secrets.
+Private repositories build warm templates through `getAuthToken`: a callback
+that mints a fresh, short-lived credential (such as a GitHub App
+installation token) per template resolution. The token authenticates the
+head lookup and the build's clone through an in-shell `http.extraheader` —
+it enters the template definition's environment (visible to build steps but
+not persisted into runtime sandbox environments) and never touches the image
+filesystem, so no captured layer can contain it. Only pass short-lived
+credentials here — the value stays in the template definition until the next
+rebuild, so its expiry is what bounds the exposure. Note that the cloned
+repository contents become part of a team-visible template image. Without
+`getAuthToken` the clone is tokenless: public repositories build fine, and a
+private repository's build degrades to the fallback, where the session's own
+runtime setup (with runtime-injected auth) does the clone.
 
-`repoTemplateAlias` computes the alias for a spec without building anything —
-useful for pruning old templates with `e2b template delete`.
+`repoTemplateAlias` computes the tagged ref for a spec without building
+anything — useful for pruning old sha tags with the E2B CLI.
 
 ### Per-session sandboxes
 
@@ -382,7 +391,14 @@ new MastraFactory({
     new E2BSandbox({
       id: ctx.sessionId,
       ...(ctx.repoFullName
-        ? { template: createRepoTemplate({ repoFullName: ctx.repoFullName }) }
+        ? {
+            template: createRepoTemplate({
+              repoFullName: ctx.repoFullName,
+              // Short-lived installation token so private repos build warm
+              // templates too.
+              getAuthToken: ctx.getGithubToken,
+            }),
+          }
         : {}),
       onStart: ctx.onStart,
     }),

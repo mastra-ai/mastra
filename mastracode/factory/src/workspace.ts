@@ -354,6 +354,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           repoFullName,
           ...(projectRepository.setupCommand ? { setupCommand: projectRepository.setupCommand } : {}),
           onStart: setupHook,
+          // Deferred call — `getRepositoryToken` is declared below and only
+          // dereferenced when a provider mints (template build time).
+          getGithubToken: () => getRepositoryToken(),
           actingUserId: userId,
         }),
       );

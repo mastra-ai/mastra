@@ -290,6 +290,11 @@ export const factory = new MastraFactory({
               template: createRepoTemplate({
                 repoFullName: ctx.repoFullName,
                 ...(ctx.setupCommand ? { setupCommand: ctx.setupCommand } : {}),
+                // Short-lived installation token minted at template
+                // resolution — lets private repos resolve their head and
+                // build warm templates (token never touches the image
+                // filesystem; see createRepoTemplate docs).
+                ...(ctx.getGithubToken ? { getAuthToken: ctx.getGithubToken } : {}),
               }),
             }
           : {}),
