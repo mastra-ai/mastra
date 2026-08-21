@@ -22,12 +22,14 @@ import { join } from 'node:path';
 import { Mastra } from '@mastra/core/mastra';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector, PgFactoryStorage } from '@mastra/pg';
-import { InProcessSandboxAddressRegistry } from '@mastra/platform-workspace';
+import { LocalSandbox } from '@mastra/core/workspace';
+import { e2bSessionSandbox } from '@mastra/e2b';
+import { InProcessSandboxAddressRegistry, PlatformSandbox } from '@mastra/platform-workspace';
 import { RedisStreamsPubSub } from '@mastra/redis-streams';
 import { getDatabasePath } from '@mastra/code-sdk/utils/project';
 import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
 import { MastraAuthWorkos } from '@mastra/auth-workos';
-import { hasPlatformSandboxEnv, selectSandboxConfig } from './sandbox-selection';
+import type { FactorySandboxContext, MastraFactorySandboxConfig } from '@mastra/factory';
 import { MastraFactory } from '@mastra/factory';
 import { defaultFactoryRules } from '@mastra/factory/rules/defaults';
 import type { FactoryStageRuleContext } from '@mastra/factory/rules/types';
@@ -181,25 +183,45 @@ function localSandboxEnv(): Record<string, string> {
   return env;
 }
 
-const platformSandboxConfigured = hasPlatformSandboxEnv(process.env);
-
-// Private-network exec: the workspace-proxy discovers each sandbox's private
-// IPv6 during `POST /v1/projects/:pid/sandbox` and returns it as an
-// `instanceUrl` field. `PlatformSandbox.start()` copies that field into this
-// in-process registry; `PlatformSandbox.executeCommand()` reads it on every
-// exec to dial the sidecar's `POST /exec` directly over Railway's private
-// network, falling back to the lease path when no address is registered or
-// a dial fails. Only constructed when `PlatformSandbox` is in play; a
-// `LocalSandbox` dev run has no sidecar and no need for the registry.
-const sandboxAddressRegistry = platformSandboxConfigured ? new InProcessSandboxAddressRegistry() : undefined;
-
-// Sandbox selection (Platform → E2B → Local) lives in sandbox-selection.ts.
-const sandboxConfig = selectSandboxConfig({
-  env: process.env,
-  localRoot: process.env.MASTRACODE_LOCAL_SANDBOX_ROOT?.trim() || join(homedir(), '.mastracode', 'web', 'sandboxes'),
-  localEnv: localSandboxEnv,
-  addressRegistry: sandboxAddressRegistry,
-});
+// Session sandbox selection: E2B when `E2B_API_KEY` is set, the managed
+// Platform proxy when the platform identity trio is set, LocalSandbox
+// otherwise. Every branch keys the sandbox by session id (id-keyed
+// getOrCreate on `start()`), forwards factory's `ctx.onStart` setup hook so
+// session setup runs inside the start lifecycle, and only constructs — VMs
+// are provisioned lazily when a tool needs one.
+const hasPlatformSandboxEnv = ['MASTRA_ENVIRONMENT_ID', 'MASTRA_PROJECT_ID', 'MASTRA_PLATFORM_SECRET_KEY'].every(key =>
+  process.env[key]?.trim(),
+);
+const sandboxConfig: MastraFactorySandboxConfig = process.env.E2B_API_KEY?.trim()
+  ? // Sha-aliased lazy-built repo templates, pause-on-idle, resume-by-id.
+    e2bSessionSandbox()
+  : hasPlatformSandboxEnv
+    ? (() => {
+        // Private-network exec: the workspace-proxy discovers each sandbox's
+        // private IPv6 during `POST /v1/projects/:pid/sandbox` and returns it
+        // as an `instanceUrl` field. `PlatformSandbox.start()` copies that
+        // field into this in-process registry; `executeCommand()` reads it to
+        // dial the sidecar directly, falling back to the lease path. Shared
+        // across instances via this closure — only built for this branch.
+        const addressRegistry = new InProcessSandboxAddressRegistry();
+        return (ctx: FactorySandboxContext) =>
+          new PlatformSandbox({
+            id: ctx.sessionId,
+            addressRegistry,
+            ...(ctx.onStart ? { onStart: ctx.onStart } : {}),
+          });
+      })()
+    : (ctx: FactorySandboxContext) =>
+        new LocalSandbox({
+          // Rooted at the per-session directory (parent of the checkout) so
+          // the setup marker sits beside the clone, not inside it.
+          workingDirectory: join(
+            process.env.MASTRACODE_LOCAL_SANDBOX_ROOT?.trim() || join(homedir(), '.mastracode', 'web', 'sandboxes'),
+            ctx.sessionId,
+          ),
+          env: localSandboxEnv(),
+          ...(ctx.onStart ? { onStart: ctx.onStart } : {}),
+        });
 
 // One FactoryStorage backend powers agent storage, the factory app tables,
 // the distributed project lock, and better-auth. `DATABASE_URL` set →

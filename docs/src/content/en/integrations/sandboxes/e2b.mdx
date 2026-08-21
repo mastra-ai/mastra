@@ -354,6 +354,42 @@ builds are a follow-up pending E2B build secrets.
 `repoTemplateAlias` computes the alias for a spec without building anything —
 useful for pruning old templates with `e2b template delete`.
 
+### Session sandbox preset
+
+For hosts that construct one sandbox per session, such as Mastra Factory's
+`sandbox` config, `e2bSessionSandbox` packages the pattern above into a
+ready-made callback: sandbox identity is the session id, the repo template is
+derived from the session's repo intent, the sandbox pauses on idle (default
+30 minutes) and resumes by id, and the host's `onStart` setup hook runs
+inside the start lifecycle.
+
+```typescript
+import { MastraFactory } from '@mastra/factory'
+import { e2bSessionSandbox } from '@mastra/e2b'
+
+new MastraFactory({
+  sandbox: e2bSessionSandbox(),
+  // or with overrides:
+  // sandbox: e2bSessionSandbox({ idleTimeoutMinutes: 60, template: myPrebuiltTemplateId }),
+})
+```
+
+Writing the callback by hand gives the same behavior with full control:
+
+```typescript
+new MastraFactory({
+  sandbox: ctx =>
+    new E2BSandbox({
+      id: ctx.sessionId,
+      ...(ctx.repoFullName
+        ? { template: createRepoTemplate({ repoFullName: ctx.repoFullName }) }
+        : {}),
+      timeout: 30 * 60_000,
+      onStart: ctx.onStart,
+    }),
+})
+```
+
 ## Using with Code Mode
 
 [Code Mode](/docs/agents/code-mode) lets an agent write a single TypeScript program that orchestrates its tools. Because E2B runs that program in a remote micro-VM, it needs a transport that writes the program into the sandbox filesystem rather than the host. `@mastra/e2b` provides `E2BCodeModeTransport` for this. Pass it as the second argument to `createCodeMode`:
