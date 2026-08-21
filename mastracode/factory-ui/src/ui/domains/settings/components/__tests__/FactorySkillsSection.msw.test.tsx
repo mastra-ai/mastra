@@ -89,6 +89,22 @@ describe('FactorySkillsSection', () => {
     expect(screen.getByRole('heading', { name: 'Triage' })).toBeInTheDocument();
   });
 
+  it('reopens a skill on the formatted view after it was left on raw', async () => {
+    server.use(http.get(SKILLS_URL, () => HttpResponse.json(catalog)));
+
+    const user = userEvent.setup();
+    renderWithProviders(<FactorySkillsSection />);
+
+    const trigger = await screen.findByRole('button', { name: /Triage/ });
+    await user.click(trigger);
+    await user.click(screen.getByRole('button', { name: 'Show raw' }));
+    await user.click(trigger);
+    await user.click(trigger);
+
+    expect(await screen.findByRole('heading', { name: 'Triage' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Show raw' })).toBeInTheDocument();
+  });
+
   it('surfaces a load failure from the server', async () => {
     server.use(http.get(SKILLS_URL, () => HttpResponse.json({ error: 'boom' }, { status: 500 })));
 
