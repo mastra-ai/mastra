@@ -11,6 +11,8 @@ instead of deploying and waiting a day for organic usage.
    Postgres "input" database.
 2. **Replay** — reconstruct each thread's original observation cycles from those records
    and drive them through capture + curation against a local store.
+3. **A/B** — run two prompt configurations over the same cycles, each against its own fresh
+   database, and print the difference in the knowledge produced.
 
 ```sh
 pnpm simulate:extract -- \
@@ -30,6 +32,43 @@ Flags:
 
 The final lines are machine-greppable: `EXTRACTED_THREADS=`, `EXTRACTED_MESSAGES=`,
 `EXTRACTED_OM_RECORDS=`.
+
+```sh
+pnpm simulate:replay -- \
+  --input  "postgres://user@127.0.0.1:55432/simulate_input" \
+  --target "postgres://user@127.0.0.1:55432/simulate_arm_a" \
+  --org my-org --capture-model google/gemini-2.5-flash --curate-model deepseek/deepseek-chat
+
+pnpm simulate:ab -- \
+  --input "postgres://user@127.0.0.1:55432/simulate_input" \
+  --target-prefix "postgres://user@127.0.0.1:55432/simulate_run" \
+  --arm-a ./arm-a.txt --arm-b ./arm-b.txt
+```
+
+`--arm-a` / `--arm-b` point at text files holding the instructions appended to the built-in
+**capture** prompt (`--arm-a-curate` / `--arm-b-curate` do the same for the curator). The
+runner refuses to start when the two arms differ in anything else — models, cadence, scopes,
+thread selection — so a printed diff can only be attributable to the prompt.
+
+A third **control** arm re-runs arm A's own configuration. Capture and curation are live
+model calls, so identical prompts still diff; `CONTROL_CHANGED_RECORDS` is that noise floor.
+An A-vs-B diff at or below it means the prompt change had no detectable effect. Pass
+`--control false` to skip it (faster, but the A/B number is then unreadable).
+
+The summary block is machine-greppable: `ARM_A_NODES=`, `ARM_B_NODES=`, `ONLY_IN_A=`,
+`ONLY_IN_B=`, `CHANGED_RECORDS=`, `CONTROL_CHANGED_RECORDS=`, `SOURCE_THREADS=`,
+`CYCLES_REPLAYED=`, `ARM_A_CONFIG_HASH=`, `ARM_B_CONFIG_HASH=`, `MODEL=`.
+
+## What this exercises — and what it does not
+
+Cycle boundaries are **pinned**: they are reconstructed from what production actually
+recorded, not re-derived by running the observer. The observer's dynamic threshold shifts as
+observation text grows, so re-observing would let a prompt change silently move the cycle
+boundaries too, confounding every result. The cost of that choice is that the observer and
+reflector are **not** exercised here — only capture and curation are.
+
+The arms vary the **appended** instructions on the built-in capture/curate prompts; they do
+not replace the built-in contract, which the pipeline depends on.
 
 ## Database topology
 
@@ -55,4 +94,17 @@ The final lines are machine-greppable: `EXTRACTED_THREADS=`, `EXTRACTED_MESSAGES
   environment, or a local dev database all work. Nothing about the tool is specific to one
   deployment: source and target are passed as flags, and the copied columns are read from
   `information_schema` rather than hardcoded.
-- A local Postgres to extract into.
+- A local Postgres to extract into, with `pgvector` available: Subconscious knowledge is
+  semantic, so each arm needs a vector store alongside its database.
+- Model credentials for whichever providers `--capture-model`, `--curate-model`, and
+  `--embedder` resolve to (e.g. `GOOGLE_API_KEY`, `DEEPSEEK_API_KEY`, `OPENAI_API_KEY`).
+  Capture and curation may run on different models; both arms always use the same pair.
+
+## Known provider gotchas
+
+- Google models drive capture fine but currently fail the curator with
+  `parameters.any_of[n].required: only allowed for OBJECT type` when the knowledge tools are
+  converted to function declarations.
+- The curator is fail-closed: a reply that does not end in `<curation-complete through="…" />`
+  produces a `failed` curation, reported loudly and counted, rather than a silent no-op.
+  Weaker models fail this often; that is a measurement, not a tool bug.

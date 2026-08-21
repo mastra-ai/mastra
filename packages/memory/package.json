@@ -45,7 +45,8 @@
     "analyze:om-repro": "node ./scripts/analyze-om-repro.mjs",
     "sanitize:om-repro": "node ./scripts/sanitize-om-repro.mjs",
     "simulate:extract": "tsx ./scripts/simulate/extract.ts",
-    "simulate:replay": "tsx ./scripts/simulate/replay.ts"
+    "simulate:replay": "tsx ./scripts/simulate/replay.ts",
+    "simulate:ab": "tsx ./scripts/simulate/ab.ts"
   },
   "keywords": [],
   "author": "",
