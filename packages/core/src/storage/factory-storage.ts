@@ -170,7 +170,7 @@ export interface FactoryStorageOps {
     opts?: CollectionListOptions,
   ): Promise<T[]>;
 
-  count?(collection: string, where: CollectionWhere): Promise<number>;
+  count(collection: string, where: CollectionWhere): Promise<number>;
 
   /**
    * Insert one row, returning it (with the generated `uuid-pk` populated).
