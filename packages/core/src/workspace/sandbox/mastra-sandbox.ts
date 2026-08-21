@@ -40,8 +40,9 @@ import { shellQuote } from './utils';
  * Receives the sandbox instance so users can call `executeCommand`, read files, etc.
  *
  * For `onStart`, `outcome` carries the provider's {@link SandboxStartResult}:
- * `true` = this start provisioned a fresh VM, `false` = reconnected/resumed,
- * `undefined` = the provider doesn't report (not yet migrated).
+ * `'created'` = this start provisioned a fresh VM, `'connected'` =
+ * reconnected/resumed an existing one, `undefined` = the provider doesn't
+ * report (not yet migrated).
  */
 export type SandboxLifecycleHook = (args: {
   sandbox: WorkspaceSandbox;

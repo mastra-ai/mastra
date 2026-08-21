@@ -13,7 +13,7 @@ import { describe, it, expect, vi } from 'vitest';
 import type { IMastraLogger } from '../../logger';
 import type { WorkspaceFilesystem } from '../filesystem/filesystem';
 import type { MountResult } from '../filesystem/mount';
-import type { ProviderStatus } from '../lifecycle';
+import type { ProviderStatus, SandboxStartResult } from '../lifecycle';
 
 import { MastraSandbox } from './mastra-sandbox';
 import type { MastraSandboxOptions } from './mastra-sandbox';
@@ -677,7 +677,7 @@ describe('MastraSandbox start lifecycle wrap', () => {
     });
   });
 
-  it('forwards created to the onStart hook', async () => {
+  it('forwards the start outcome to the onStart hook', async () => {
     const onStart = vi.fn();
     const sandbox = new LifecycleSandbox({ onStart });
     sandbox.startResult = { outcome: 'connected' };
@@ -813,7 +813,7 @@ describe('MastraSandbox acquisition primitives', () => {
   it('a start() override wins over implemented primitives', async () => {
     class BothSandbox extends PrimitiveSandbox {
       implCalls = 0;
-      override async start(): Promise<{ created: boolean }> {
+      override async start(): Promise<SandboxStartResult> {
         this.implCalls += 1;
         return { outcome: 'connected' };
       }
