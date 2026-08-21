@@ -3357,6 +3357,7 @@ User asked about </current-task> parsing and how it works
       expect(description).toContain(`length=${text.length}`);
       expect(description).toMatch(/duplicateRatio=0\.\d+/);
       expect(description).toMatch(/duplicateLineRatio=(?:\d+\.\d+|n\/a)/);
+      expect(description).toMatch(/countedLines=\d+/);
       expect(description).toMatch(/topWindowCount=\d+/);
       expect(description).toContain('topWindow="');
       expect(description).toContain('head="');
