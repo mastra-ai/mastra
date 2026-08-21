@@ -25,5 +25,5 @@ Details:
 - Filters are validated at definition time: paths referencing unknown roots throw at agent construction (or when function-based scorer configs resolve), instead of silently skipping all scoring at runtime.
 - Filters evaluate against the flattened `requestContext` view that is persisted on score rows, so a filter remains answerable against stored records.
 - Filters are plain JSON and survive durable-agent serialization round-trips unchanged.
-- The predicate DSL used by workflow `conditional`/`loop` steps was extracted to a shared base (`core/src/predicate`); the `@mastra/core/workflows` surface is unchanged.
+- Scoring filters use the same predicate format as workflow `conditional`/`loop` conditions; existing workflow predicate behavior is unchanged.
 - Fixed: an unrecognized `sampling.type` previously fell through to scoring 100% of traffic; it now fails closed and skips scoring.

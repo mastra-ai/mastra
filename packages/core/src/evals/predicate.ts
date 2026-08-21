@@ -64,10 +64,14 @@ function resolveScoringPath(rawPath: string, ctx: ScoringPredicateContext): unkn
       // keys before filtering, so `requestContext.a.b` is stored as the
       // single key `"a.b"`. Prefer the flat lookup; fall back to nested
       // traversal for unflattened contexts.
-      if (typeof rc === 'object' && rest in rc) return rc[rest];
+      if (typeof rc === 'object' && Object.hasOwn(rc, rest)) return rc[rest];
       return walk(rc, rest);
     }
     case 'entity':
+      // An absent entity root is MISSING (matching the requestContext branch);
+      // `walk` would otherwise return the undefined root for an empty rest
+      // path, making `exists entity` qualify on runs with no entity at all.
+      if (ctx.entity === undefined || ctx.entity === null) return MISSING;
       return walk(ctx.entity, rest);
     case 'entityType':
     case 'source':
@@ -90,9 +94,10 @@ function resolveScoringPath(rawPath: string, ctx: ScoringPredicateContext): unkn
 
 /**
  * Evaluate a scoring filter against a scoring context. Never throws for path
- * resolution failures — missing paths propagate to `false` on
- * comparison/membership ops (fail closed: an unresolvable filter does not
- * score), and to `false` / `true` on `exists` / `notExists` respectively.
+ * resolution failures — missing paths propagate to `false` on comparison ops
+ * and `in` (fail closed: an unresolvable filter does not score), but to
+ * `true` on the negated ops `notIn` and `notExists` (a missing value is
+ * trivially "not in" any set), and to `false` on `exists`.
  */
 export const evaluateScoringPredicate: (pred: Predicate, ctx: ScoringPredicateContext) => boolean =
   createPredicateEvaluator(resolveScoringPath);

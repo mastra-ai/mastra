@@ -66,6 +66,27 @@ describe('evaluateScoringPredicate', () => {
     );
   });
 
+  it('pins membership-op behavior for missing paths: in fails closed, notIn passes', () => {
+    expect(evaluateScoringPredicate({ op: 'in', value: { path: 'requestContext.nope' }, set: ['x'] }, ctx)).toBe(false);
+    // A missing value is trivially "not in" any set — the one negated op that
+    // qualifies on an unresolvable path. Pinned so a change to the shared
+    // evaluator cannot flip this silently.
+    expect(evaluateScoringPredicate({ op: 'notIn', value: { path: 'requestContext.nope' }, set: ['x'] }, ctx)).toBe(
+      true,
+    );
+  });
+
+  it('treats an absent entity root as missing', () => {
+    expect(evaluateScoringPredicate({ op: 'exists', path: 'entity' }, ctx)).toBe(true);
+    expect(evaluateScoringPredicate({ op: 'exists', path: 'entity' }, {})).toBe(false);
+    expect(evaluateScoringPredicate({ op: 'notExists', path: 'entity' }, {})).toBe(true);
+  });
+
+  it('does not resolve prototype-chain keys as values', () => {
+    expect(evaluateScoringPredicate({ op: 'exists', path: 'entity.constructor.name' }, ctx)).toBe(false);
+    expect(evaluateScoringPredicate({ op: 'exists', path: 'requestContext.toString' }, ctx)).toBe(false);
+  });
+
   it('composes and/or/not', () => {
     const pred: Predicate = {
       op: 'and',

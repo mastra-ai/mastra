@@ -3,6 +3,7 @@ import type { MastraScorer, MastraScorerEntry } from '../../../../evals/base';
 import { runScorer } from '../../../../evals/hooks';
 import type { Mastra } from '../../../../mastra';
 import { createObservabilityContext } from '../../../../observability';
+import { predicateSchema } from '../../../../predicate';
 import { RequestContext } from '../../../../request-context';
 import { createStep } from '../../../../workflows/workflow';
 import { DurableStepIds } from '../../constants';
@@ -12,7 +13,7 @@ import type { SerializableScorersConfig, SerializableDurableState } from '../../
  * Input schema for the durable scorer execution step
  */
 const durableScorerInputSchema = z.object({
-  /** Scorers configuration (serialized scorer names and sampling) */
+  /** Scorers configuration (serialized scorer names, sampling, and eligibility filter) */
   scorers: z.record(
     z.string(),
     z.object({
@@ -20,6 +21,10 @@ const durableScorerInputSchema = z.object({
       sampling: z
         .union([z.object({ type: z.literal('none') }), z.object({ type: z.literal('ratio'), rate: z.number() })])
         .optional(),
+      // Declared explicitly: zod strips undeclared fields, which would drop the
+      // filter preserved by serializeScorersConfig at the workflow boundary and
+      // score traffic the configured predicate should reject.
+      filter: predicateSchema.optional(),
     }),
   ),
   /** Run identifier */

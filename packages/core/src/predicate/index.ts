@@ -87,7 +87,10 @@ export function walk(root: unknown, path: string): unknown | Missing {
     if (value === null || value === undefined) return MISSING;
     if (typeof value !== 'object') return MISSING;
     const record = value as Record<string, unknown>;
-    if (!(part in record)) return MISSING;
+    // Own properties only: `in` would match prototype-chain keys (e.g.
+    // `constructor`, `toString`), letting stored filter paths resolve to
+    // inherited values instead of MISSING.
+    if (!Object.hasOwn(record, part)) return MISSING;
     value = record[part];
   }
   return value;
@@ -100,8 +103,9 @@ export type PredicatePathResolver<TCtx> = (rawPath: string, ctx: TCtx) => unknow
  * Compose a typed predicate evaluator from a domain path resolver.
  *
  * The returned evaluator never throws for path resolution failures — missing
- * paths propagate to `false` on comparison/membership ops, and to `false` /
- * `true` on `exists` / `notExists` respectively. It throws only if the
+ * paths propagate to `false` on comparison ops and `in`, to `true` on the
+ * negated ops `notIn` and `notExists` (a missing value is trivially "not in"
+ * any set), and to `false` on `exists`. It throws only if the
  * predicate shape itself is malformed (which `predicateSchema.parse` catches
  * at load time).
  */
@@ -242,8 +246,10 @@ export function collectInvalidPredicatePaths(pred: Predicate, roots: readonly st
  * Produce a short human-readable label for a predicate, suitable for
  * rendering as a condition-node label in a graph UI.
  * Bounded output length; no user-controlled text is passed through
- * unescaped — every string literal goes through JSON.stringify so a
- * malicious label can't break out of the surrounding rendering.
+ * unescaped — string literals go through JSON.stringify, and paths that
+ * contain anything beyond plain identifier/dot characters are rendered as
+ * JSON strings too, so a malicious value can't break out of the
+ * surrounding rendering.
  */
 export function derivePredicateLabel(pred: Predicate, maxLength = 80): string {
   const raw = renderPredicate(pred);
@@ -259,9 +265,9 @@ function renderPredicate(pred: Predicate): string {
     case 'not':
       return `NOT ${wrap(pred.arg, renderPredicate(pred.arg))}`;
     case 'exists':
-      return `${pred.path} exists`;
+      return `${renderPath(pred.path)} exists`;
     case 'notExists':
-      return `${pred.path} missing`;
+      return `${renderPath(pred.path)} missing`;
     case 'truthy':
       return `${renderValue(pred.value)} is truthy`;
     case 'falsy':
@@ -292,5 +298,14 @@ function wrap(child: Predicate, rendered: string): string {
 
 function renderValue(ref: PathOrLiteral): string {
   if ('literal' in ref) return JSON.stringify(ref.literal);
-  return ref.path;
+  return renderPath(ref.path);
+}
+
+/**
+ * Paths are only schema-validated as non-empty strings, so anything beyond
+ * plain identifier/dot/template characters is escaped via JSON.stringify to
+ * keep markup or quotes from reaching the rendered label unchanged.
+ */
+function renderPath(path: string): string {
+  return /^[\w.$]+$/.test(path) ? path : JSON.stringify(path);
 }

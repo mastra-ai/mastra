@@ -112,12 +112,12 @@ For the step-level `scorers` API, see the [Step class reference](/reference/work
 - `0.1`: Score 10% of responses
 - `0.0`: Disable scoring
 
-Sampling is deterministic per trace: the decision is derived from the trace ID, not drawn at random. This has two practical consequences:
+Sampling is deterministic per trace: the decision is derived from the trace ID, not drawn at random. In practice:
 
-- Two scorers configured at the same rate score the same traces, so their scores are comparable on shared traffic.
+- Scorers configured at the same rate score the same traces, so their scores are comparable on shared traffic.
 - Re-running the same trace produces the same sampling decision, so sampled coverage is reproducible.
 
-When a run has no trace (observability not configured), the decision is derived from the run ID instead. If [trace sampling](../observability/tracing/overview) declined the trace, scorers skip that run entirely — scores are never created for traces that were not stored.
+When a run has no trace (observability not configured), the decision is derived from the run ID instead. If [trace sampling](../observability/tracing/overview) declined the trace, scorers skip that run entirely, so scores aren't created for traces that were never stored.
 
 **Eligibility filters**: The optional `filter` parameter restricts which runs a scorer is eligible for, using a declarative predicate over the run's context. Filters are evaluated before sampling, so `sampling.rate` applies only to runs that match the filter:
 
@@ -140,7 +140,7 @@ export const myAgent = new Agent({
 
 This scores 10% of enterprise-plan traffic and none of the rest. To score different segments at different rates, bind the same scorer twice with complementary filters.
 
-Predicates can reference `requestContext.*`, `entity.*`, `entityType`, `source`, `threadId`, `resourceId`, and `projectId`. They support comparisons (`eq`, `ne`, `lt`, `lte`, `gt`, `gte`), membership (`in`, `notIn`), existence (`exists`, `notExists`), truthiness (`truthy`, `falsy`), and boolean composition (`and`, `or`, `not`). A filter that references an unknown root fails at agent construction rather than silently skipping scoring at runtime. Filters are plain JSON, so they are unaffected by durable agent state serialization.
+Predicates can reference `requestContext.*`, `entity.*`, `entityType`, `source`, `threadId`, `resourceId`, and `projectId`. They support comparisons (`eq`, `ne`, `lt`, `lte`, `gt`, `gte`), membership (`in`, `notIn`), existence (`exists`, `notExists`), truthiness (`truthy`, `falsy`), and boolean composition (`and`, `or`, `not`). A filter that references an unknown root fails at agent construction rather than silently skipping scoring at runtime. Filters are plain JSON, so they're unaffected by durable agent state serialization.
 
 Eligibility filters decide _whether a scorer runs_; to filter _which messages a scorer sees_ once it runs, use [`filterRun()`](/reference/evals/filter-run).
 
