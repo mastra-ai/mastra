@@ -191,6 +191,7 @@ function addJsonStringFilters(
   const nextId = () => id++;
   let i = 0;
   for (const [rawKey, rawValue] of Object.entries(values)) {
+    if (rawValue === undefined) continue;
     const keyParam = `${keyPrefix}_${i}`;
     const src = `ifNull(${column}, '{}')`;
     out.params[keyParam] = rawKey;

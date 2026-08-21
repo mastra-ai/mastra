@@ -52,6 +52,16 @@ function addStructuralJsonConditions(
     return;
   }
 
+  if (typeof value === 'number') {
+    // Compare numbers numerically so JSON spelling differences (5 vs 5.0) still
+    // match, with a type guard so JSON strings like "5" don't coerce and match.
+    conditions.push(
+      `(json_type(${column}, ?) IN ('UBIGINT', 'BIGINT', 'DOUBLE') AND CAST(json_extract(${column}, ?) AS DOUBLE) = ?)`,
+    );
+    params.push(path, path, value);
+    return;
+  }
+
   const normalized = normalizeJsonFilterValue(value);
   if (normalized === null) return;
   conditions.push(`CAST(json_extract(${column}, ?) AS VARCHAR) = ?`);
