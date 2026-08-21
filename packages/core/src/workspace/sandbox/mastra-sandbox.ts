@@ -250,6 +250,9 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
     // Acquisition ladder rung selection: a subclass `start()` override wins
     // (fused-getOrCreate providers); otherwise the find/connect/create
     // primitives drive acquisition when `create()` is implemented.
+    // The method-syntax constraint applies to the primitives too: class-FIELD
+    // `find`/`connect`/`create` initializers run after this constructor, so
+    // they would be invisible to this selection. Implement them as methods.
     this._useAcquisitionPrimitives = !hasStartOverride && typeof this.create === 'function';
 
     // Automatically create MountManager if subclass implements mount()
