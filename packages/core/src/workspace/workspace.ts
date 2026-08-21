@@ -588,6 +588,7 @@ export class Workspace<
   /** Set as soon as `destroy()` begins, and never cleared. */
   private _teardownStarted = false;
   private _lsp?: LSPManager;
+  private _lspFactory?: () => LSPManager;
   private _logger?: IMastraLogger;
 
   constructor(config: WorkspaceConfig<TFilesystem, TSandbox, TMounts>) {
@@ -735,7 +736,11 @@ export class Workspace<
       } else {
         const lspConfig = config.lsp === true ? {} : config.lsp;
         const defaultRoot = lspConfig.root ?? findProjectRoot(process.cwd()) ?? process.cwd();
-        this._lsp = new LSPManager(processes, defaultRoot, lspConfig, this._fs);
+        // Kept as a factory so stop() can replace a shut-down manager with a
+        // fresh one — LSPManager is one-way: shutdownAll() permanently
+        // refuses new clients.
+        this._lspFactory = () => new LSPManager(processes, defaultRoot, lspConfig, this._fs);
+        this._lsp = this._lspFactory();
       }
     }
 
@@ -1335,14 +1340,16 @@ export class Workspace<
 
   private async _performStop(): Promise<void> {
     // Shutdown LSP before the sandbox — LSP clients need running processes
-    // to send shutdown/exit. Cleared so a later access lazily recreates it.
+    // to send shutdown/exit. A shut-down LSPManager permanently refuses new
+    // clients, so replace it with a fresh one; clients spawn lazily, so this
+    // costs nothing until diagnostics are next requested.
     if (this._lsp) {
       try {
         await this._lsp.shutdownAll();
       } catch {
         // LSP shutdown errors are non-blocking
       }
-      this._lsp = undefined;
+      this._lsp = this._lspFactory?.();
     }
 
     // Close browser before the sandbox
@@ -1391,6 +1398,7 @@ export class Workspace<
           // LSP shutdown errors are non-blocking
         }
         this._lsp = undefined;
+        this._lspFactory = undefined;
       }
 
       // Close browser before sandbox

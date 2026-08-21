@@ -2860,6 +2860,20 @@ Line 3 conclusion`;
       expect(workspace.lsp).toBeInstanceOf(LSPManager);
     });
 
+    it('replaces the LSP manager with a fresh one after stop()', async () => {
+      const sandbox = new LocalSandbox({ workingDirectory: tempDir });
+      const workspace = new Workspace({ sandbox, lsp: true });
+      const before = workspace.lsp;
+      expect(before).toBeInstanceOf(LSPManager);
+
+      await workspace.stop();
+
+      // A shut-down LSPManager permanently refuses new clients, so stop()
+      // must install a fresh manager for the workspace to stay usable.
+      expect(workspace.lsp).toBeInstanceOf(LSPManager);
+      expect(workspace.lsp).not.toBe(before);
+    });
+
     it('does not create LSPManager when lsp is not configured', async () => {
       const sandbox = new LocalSandbox({ workingDirectory: tempDir });
       const workspace = new Workspace({ sandbox });
