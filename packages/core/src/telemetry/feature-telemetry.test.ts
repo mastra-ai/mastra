@@ -13,6 +13,7 @@ vi.mock('posthog-node', () => ({ PostHog }));
 
 import type { Mastra } from '../mastra';
 import { InMemoryStore } from '../storage/mock';
+import { resetProjectId2CacheForTests } from './context';
 import { FEATURE_USAGE_EVENT, syncFeatureUsageTelemetry, trackFeatureUsage } from './feature-telemetry';
 import { hashTelemetryValue, resetEETelemetryForTests } from './posthog';
 
@@ -57,6 +58,7 @@ function makeMastra(overrides: Partial<Record<keyof Mastra, unknown>> = {}): Mas
 describe('feature usage telemetry', () => {
   let originalTelemetryDisabled: string | undefined;
   let originalProjectRoot: string | undefined;
+  let originalProjectId: string | undefined;
   let originalDistinctId: string | undefined;
   let originalCommand: string | undefined;
   let originalNodeEnv: string | undefined;
@@ -64,12 +66,14 @@ describe('feature usage telemetry', () => {
   beforeEach(() => {
     originalTelemetryDisabled = process.env.MASTRA_TELEMETRY_DISABLED;
     originalProjectRoot = process.env.MASTRA_PROJECT_ROOT;
+    originalProjectId = process.env.MASTRA_PROJECT_ID;
     originalDistinctId = process.env.MASTRA_CLI_DISTINCT_ID;
     originalCommand = process.env.MASTRA_TELEMETRY_COMMAND;
     originalNodeEnv = process.env.NODE_ENV;
 
     delete process.env.MASTRA_TELEMETRY_DISABLED;
     process.env.MASTRA_PROJECT_ROOT = '/tmp/feature-telemetry-project';
+    process.env.MASTRA_PROJECT_ID = 'platform-project-id';
     process.env.MASTRA_CLI_DISTINCT_ID = 'cli-distinct-id';
     process.env.MASTRA_TELEMETRY_COMMAND = 'dev';
     process.env.NODE_ENV = 'test';
@@ -78,6 +82,7 @@ describe('feature usage telemetry', () => {
     flush.mockClear();
     PostHog.mockClear();
     resetEETelemetryForTests();
+    resetProjectId2CacheForTests();
   });
 
   afterEach(() => {
@@ -85,6 +90,8 @@ describe('feature usage telemetry', () => {
     else delete process.env.MASTRA_TELEMETRY_DISABLED;
     if (originalProjectRoot !== undefined) process.env.MASTRA_PROJECT_ROOT = originalProjectRoot;
     else delete process.env.MASTRA_PROJECT_ROOT;
+    if (originalProjectId !== undefined) process.env.MASTRA_PROJECT_ID = originalProjectId;
+    else delete process.env.MASTRA_PROJECT_ID;
     if (originalDistinctId !== undefined) process.env.MASTRA_CLI_DISTINCT_ID = originalDistinctId;
     else delete process.env.MASTRA_CLI_DISTINCT_ID;
     if (originalCommand !== undefined) process.env.MASTRA_TELEMETRY_COMMAND = originalCommand;
@@ -92,6 +99,7 @@ describe('feature usage telemetry', () => {
     if (originalNodeEnv !== undefined) process.env.NODE_ENV = originalNodeEnv;
     else delete process.env.NODE_ENV;
     resetEETelemetryForTests();
+    resetProjectId2CacheForTests();
   });
 
   it('tracks a named feature with server telemetry context and metadata', () => {
@@ -104,12 +112,23 @@ describe('feature usage telemetry', () => {
       properties: {
         feature_name: 'agent_builder',
         project_id: hashTelemetryValue('/tmp/feature-telemetry-project').slice(0, 16),
+        project_id2: 'mp_platform-project-id',
         command: 'dev',
         node_env: 'test',
         action: 'open',
         count: 2,
       },
     });
+  });
+
+  it('omits project_id2 when no platform id or git remote is available', () => {
+    // MASTRA_PROJECT_ROOT points at a nonexistent directory, so the git fallback fails.
+    delete process.env.MASTRA_PROJECT_ID;
+
+    trackFeatureUsage('agent_builder');
+
+    expect(capture).toHaveBeenCalledTimes(1);
+    expect(capture.mock.calls[0]![0].properties).not.toHaveProperty('project_id2');
   });
 
   it('does not track feature usage when telemetry is disabled', () => {
@@ -168,6 +187,7 @@ describe('feature usage telemetry', () => {
       properties: {
         feature_name: 'mastra_instance_summary',
         project_id: hashTelemetryValue('/tmp/feature-telemetry-project').slice(0, 16),
+        project_id2: 'mp_platform-project-id',
         command: 'dev',
         node_env: 'test',
         agent_count: 2,

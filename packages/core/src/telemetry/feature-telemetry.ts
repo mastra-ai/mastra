@@ -79,10 +79,11 @@ export function trackFeatureUsage(name: string, metadata?: Record<string, unknow
       return;
     }
 
-    const { projectId, distinctId, command, nodeEnv } = getServerTelemetryContext();
+    const { projectId, projectId2, distinctId, command, nodeEnv } = getServerTelemetryContext();
     captureTelemetryEvent(FEATURE_USAGE_EVENT, distinctId, {
       feature_name: name,
       project_id: projectId,
+      ...(projectId2 ? { project_id2: projectId2 } : {}),
       command,
       node_env: nodeEnv,
       ...metadata,
