@@ -23,7 +23,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector, PgFactoryStorage } from '@mastra/pg';
 import { LocalSandbox } from '@mastra/core/workspace';
-import { e2bSessionSandbox } from '@mastra/e2b';
+import { E2BSandbox, createRepoTemplate } from '@mastra/e2b';
 import { InProcessSandboxAddressRegistry, PlatformSandbox } from '@mastra/platform-workspace';
 import { RedisStreamsPubSub } from '@mastra/redis-streams';
 import { getDatabasePath } from '@mastra/code-sdk/utils/project';
@@ -193,8 +193,24 @@ const hasPlatformSandboxEnv = ['MASTRA_ENVIRONMENT_ID', 'MASTRA_PROJECT_ID', 'MA
   process.env[key]?.trim(),
 );
 const sandboxConfig: MastraFactorySandboxConfig = process.env.E2B_API_KEY?.trim()
-  ? // Sha-aliased lazy-built repo templates, pause-on-idle, resume-by-id.
-    e2bSessionSandbox()
+  ? // Sha-aliased lazy-built repo template (repo cloned + setup run at the
+    // known default-branch head; sha unknown -> sha-less alias; build failure
+    // -> fallback template + runtime cold clone). E2B pauses on its own idle
+    // timeout and resumes by id on the next start.
+    (ctx: FactorySandboxContext) =>
+      new E2BSandbox({
+        id: ctx.sessionId,
+        ...(ctx.repoFullName
+          ? {
+              template: createRepoTemplate({
+                repoFullName: ctx.repoFullName,
+                ...(ctx.repoSha ? { sha: ctx.repoSha } : {}),
+                ...(ctx.setupCommand ? { setupCommand: ctx.setupCommand } : {}),
+              }),
+            }
+          : {}),
+        ...(ctx.onStart ? { onStart: ctx.onStart } : {}),
+      })
   : hasPlatformSandboxEnv
     ? (() => {
         // Private-network exec: the workspace-proxy discovers each sandbox's

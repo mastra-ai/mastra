@@ -354,29 +354,19 @@ builds are a follow-up pending E2B build secrets.
 `repoTemplateAlias` computes the alias for a spec without building anything —
 useful for pruning old templates with `e2b template delete`.
 
-### Session sandbox preset
+### Per-session sandboxes
 
-For hosts that construct one sandbox per session, such as Mastra Factory's
-`sandbox` config, `e2bSessionSandbox` packages the pattern above into a
-ready-made callback: sandbox identity is the session id, the repo template is
-derived from the session's repo intent, the sandbox pauses on idle (default
-30 minutes) and resumes by id, and the host's `onStart` setup hook runs
-inside the start lifecycle.
+Hosts that construct one sandbox per session, such as Mastra Factory's
+`sandbox` config, combine the pieces above in a small callback: sandbox
+identity is the session id (id-keyed getOrCreate — the sandbox pauses on
+E2B's idle timeout and resumes by id), the repo template comes from
+`createRepoTemplate`, and the host's `onStart` setup hook runs inside the
+start lifecycle.
 
 ```typescript
 import { MastraFactory } from '@mastra/factory'
-import { e2bSessionSandbox } from '@mastra/e2b'
+import { E2BSandbox, createRepoTemplate } from '@mastra/e2b'
 
-new MastraFactory({
-  sandbox: e2bSessionSandbox(),
-  // or with overrides:
-  // sandbox: e2bSessionSandbox({ idleTimeoutMinutes: 60, template: myPrebuiltTemplateId }),
-})
-```
-
-Writing the callback by hand gives the same behavior with full control:
-
-```typescript
 new MastraFactory({
   sandbox: ctx =>
     new E2BSandbox({
@@ -384,7 +374,6 @@ new MastraFactory({
       ...(ctx.repoFullName
         ? { template: createRepoTemplate({ repoFullName: ctx.repoFullName }) }
         : {}),
-      timeout: 30 * 60_000,
       onStart: ctx.onStart,
     }),
 })

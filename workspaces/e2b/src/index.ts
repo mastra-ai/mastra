@@ -9,11 +9,6 @@ export {
 } from './utils/template';
 export { createRepoTemplate, repoTemplateAlias, type RepoTemplateOptions } from './utils/repo-template';
 export {
-  e2bSessionSandbox,
-  type E2BSessionSandboxContext,
-  type E2BSessionSandboxOptions,
-} from './utils/session-sandbox';
-export {
   type E2BS3MountConfig,
   type E2BGCSMountConfig,
   type E2BAzureBlobMountConfig,
