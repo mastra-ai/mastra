@@ -180,7 +180,12 @@
     "@mastra/vercel": "1.4.0"
   },
   "changesets": [
+    "automated-provider-registry-20260821-061854",
     "green-birds-knock",
-    "smooth-contextual-sidebars"
+    "long-apes-build",
+    "petite-clouds-strive",
+    "smooth-contextual-sidebars",
+    "tall-moments-behave",
+    "tidy-seals-lock"
   ]
 }
