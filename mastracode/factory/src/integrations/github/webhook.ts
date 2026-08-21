@@ -395,6 +395,12 @@ async function resolveSubscriptionSession(
       console.warn('[GitHub webhook] Unable to resolve the session organization.', error);
       await seedSessionOrg(session, undefined);
     }
+  } else if (session.state?.get()?.factoryOrgUnresolved) {
+    // The org is present, so an earlier failed resolution left a stale marker
+    // behind. Clear it without a storage read — nothing else re-seeds a session
+    // once the start hook has run, so the marker would otherwise outlive its
+    // cause.
+    await seedSessionOrg(session, session.state.get()?.factoryOrgId);
   }
   if (session.thread.getId() !== threadId) {
     await session.thread.switch({ threadId, emitEvent: false });

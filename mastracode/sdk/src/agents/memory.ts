@@ -76,17 +76,28 @@ Drop caveman for: security warnings, irreversible action confirmations, multi-st
  */
 export const LOCAL_KNOWLEDGE_ORG_ID = 'local';
 
-// One error per session, not per memory resolution. Keyed on the controller so
-// the bookkeeping dies with the session — no unbounded set in a long-running
-// Factory process.
-const reportedOrgUnresolved = new WeakSet<object>();
+// One error per session, not per memory resolution. Keyed on the session id
+// rather than the controller object: the controller is read off the request
+// context on every resolution, so it is a fresh object per request and would
+// dedupe nothing. Bounded so a long-running Factory process cannot grow this
+// without limit — refusing sessions are rare, and losing the oldest ids only
+// costs one extra log line.
+const REPORTED_ORG_UNRESOLVED_LIMIT = 500;
+const reportedOrgUnresolved = new Set<string>();
 
-function reportOrgUnresolved(controller: object | undefined, factoryProjectId: string | undefined) {
-  if (controller) {
-    if (reportedOrgUnresolved.has(controller)) return;
-    reportedOrgUnresolved.add(controller);
+function reportOrgUnresolved(
+  controller: AgentControllerRequestContext<MastraCodeState> | undefined,
+  factoryProjectId: string | undefined,
+) {
+  const sessionId = controller?.session?.id;
+  if (sessionId) {
+    if (reportedOrgUnresolved.has(sessionId)) return;
+    if (reportedOrgUnresolved.size >= REPORTED_ORG_UNRESOLVED_LIMIT) {
+      reportedOrgUnresolved.delete(reportedOrgUnresolved.values().next().value as string);
+    }
+    reportedOrgUnresolved.add(sessionId);
   }
-  const session = (controller as AgentControllerRequestContext<MastraCodeState> | undefined)?.session;
+  const session = controller?.session;
   console.error(
     `[Subconscious] Knowledge capture disabled: no organization resolved for session ${session?.id ?? 'unknown'} (project ${factoryProjectId ?? 'none'}). Knowledge is not written rather than written where it cannot be read.`,
   );
