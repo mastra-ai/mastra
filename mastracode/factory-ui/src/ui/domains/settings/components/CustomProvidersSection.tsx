@@ -90,7 +90,7 @@ export function CustomProvidersSection() {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-col items-start gap-2 lg:flex-row lg:items-center lg:justify-between lg:gap-3">
         <Txt as="p" variant="ui-sm" className="text-icon3">
           OpenAI-compatible endpoints.
         </Txt>

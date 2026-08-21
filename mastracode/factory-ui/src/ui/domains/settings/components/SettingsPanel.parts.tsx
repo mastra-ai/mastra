@@ -374,20 +374,25 @@ export function Segmented<T extends string>({
   onChange: (value: T) => void;
 }) {
   return (
-    <ButtonsGroup spacing="close" role="group" aria-label={ariaLabel}>
-      {options.map(o => (
-        <Button
-          key={o.value}
-          variant={value === o.value ? 'primary' : 'outline'}
-          size="sm"
-          aria-pressed={value === o.value}
-          disabled={disabled}
-          onClick={() => onChange(o.value)}
-        >
-          {o.label}
-        </Button>
-      ))}
-    </ButtonsGroup>
+    // Below the sidebar's mobile breakpoint the group scrolls inside its own
+    // box; the negative margin + padding keep the focus ring of the edge
+    // segments from being clipped by that scrollport. lg+ renders as before.
+    <div className="-mx-1 max-w-full overflow-x-auto px-1 lg:mx-0 lg:overflow-x-visible lg:px-0">
+      <ButtonsGroup spacing="close" role="group" aria-label={ariaLabel} className="w-max">
+        {options.map(o => (
+          <Button
+            key={o.value}
+            variant={value === o.value ? 'primary' : 'outline'}
+            size="sm"
+            aria-pressed={value === o.value}
+            disabled={disabled}
+            onClick={() => onChange(o.value)}
+          >
+            {o.label}
+          </Button>
+        ))}
+      </ButtonsGroup>
+    </div>
   );
 }
 
