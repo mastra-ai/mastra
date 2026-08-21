@@ -1,16 +1,16 @@
 ---
-title: "Deploy | Mastra platform"
+title: 'Deploy | Mastra platform'
 description: Deploy your Mastra application to the Mastra platform with a single command. Build, validate, provision, and release to any environment with mastra deploy.
 ---
 
-import Steps from "@site/src/components/Steps";
-import StepItem from "@site/src/components/StepItem";
+import Steps from '@site/src/components/Steps';
+import StepItem from '@site/src/components/StepItem';
 
 # Deploy to Mastra platform
 
 [`mastra deploy`](/reference/cli/mastra#mastra-deploy) is the single command for releasing a Mastra application to the [Mastra platform](/docs/mastra-platform/overview).
 
-One command builds your project and validates it before anything includes, plus creates the platform project and environment on your first run, deploys, streams build logs, and prints your public URL once the deploy is serving traffic.
+One command builds your project and validates it before deploying, plus creates the platform project and environment on your first run, deploys, streams build logs, and prints your public URL once the deploy is serving traffic.
 
 ```bash
 mastra deploy
@@ -63,7 +63,7 @@ A local `.env` file is optional. Environment variables stored on the platform ar
     Preflight also catches database URLs that point at your local machine. A `.env` file with `REDIS_URL=redis://localhost:6379` works during development, but the deployed server can't reach your laptop — so the CLI warns and offers the same managed provisioning. If you decline, the deploy continues with your value as-is; if you accept, the managed database's connection variables take precedence at deploy time while your local `.env` keeps working for development.
 
     :::note
-    If preflight reports a hard-coded local path instead (`Build contains a host-local storage URL`), it can't offer the inline fix — guard the path with an environment variable first so the file is only used during local development:
+    If preflight reports a hard-coded local path instead (`Build contains a host-local storage URL`), it can't offer the inline fix. Guard the path with an environment variable first so the file is only used during local development:
 
     ```ts title="src/mastra/index.ts"
     new LibSQLStore({
@@ -75,10 +75,16 @@ A local `.env` file is optional. Environment variables stored on the platform ar
     ```
 
     :::
+
+    If the build statically finds `backgroundTasks.enabled: true`, the deploy artifact includes a worker manifest. Mastra Cloud automatically provisions or updates a dedicated worker service from the same artifact. No separate toggle or add-on is required.
+
+    Removing `backgroundTasks` or setting `enabled: false` in a later deploy removes the manifest and spins down the existing worker service. Values that can't be determined statically are omitted from the manifest display, but the worker process still reads the complete configuration from your bundled code.
   </StepItem>
 
   <StepItem>
-    Run `mastra deploy` again. Preflight passes, the build uploads, and the CLI streams build logs until the deploy is live. Expect the full build and deploy to take between 30 seconds and a few minutes. The success message prints only when the new version is serving traffic.
+    Run `mastra deploy` again. Preflight passes, the build uploads, and the CLI streams build logs until the deploy is
+    live. Expect the full build and deploy to take between 30 seconds and a few minutes. The success message prints only
+    when the new version is serving traffic.
   </StepItem>
 
   <StepItem>
@@ -116,7 +122,7 @@ The region is fixed when the environment is created. Databases attached to an en
 
 ## Preflight checks
 
-Preflight validates the built output before anything includes, and only flags issues in your own code:
+Preflight validates the built output before the deploy uploads and only flags issues in your own code:
 
 - **Local storage paths**: A hard block. File-backed storage (for example `file:./mastra.db`) is lost on every deploy. Preflight passes when the path is guarded by an environment variable that's set locally or stored on the platform, including values provided by a managed database:
 

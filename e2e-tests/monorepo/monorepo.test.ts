@@ -355,6 +355,34 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       );
     });
 
+    it(
+      'should emit a worker manifest when background tasks are statically enabled',
+      async () => {
+        const sourcePath = join(fixturePath, 'apps', 'custom', 'src', 'mastra', 'index.ts');
+        const originalSource = await readFile(sourcePath, 'utf-8');
+        const enabledSource = originalSource.replace(
+          'export const mastra = new Mastra({',
+          "export const mastra = new Mastra({\n  backgroundTasks: { enabled: true, globalConcurrency: 20, mode: 'worker' },",
+        );
+
+        try {
+          await writeFile(sourcePath, enabledSource);
+          await runBuild(fixturePath);
+
+          const workersPath = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'workers.json');
+          const workersConfig = JSON.parse(await readFile(workersPath, 'utf-8'));
+          expect(workersConfig).toEqual({ enabled: true, globalConcurrency: 20, mode: 'worker' });
+        } finally {
+          await writeFile(sourcePath, originalSource);
+          await runBuild(fixturePath);
+        }
+
+        const workersPath = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'workers.json');
+        expect(JSON.parse(await readFile(workersPath, 'utf-8'))).toBeNull();
+      },
+      timeout,
+    );
+
     afterAll(async () => {
       if (proc) {
         try {
