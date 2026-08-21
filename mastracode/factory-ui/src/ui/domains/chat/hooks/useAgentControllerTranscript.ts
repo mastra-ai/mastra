@@ -1,7 +1,7 @@
 import type { AgentControllerEvent, AgentControllerSessionState, MastraDBMessage } from '@mastra/client-js';
 import { useReducer } from 'react';
 
-import { createInitialTranscript, transcriptReducer } from '../services/transcript';
+import { createInitialTranscript, createLocalMessageId, transcriptReducer } from '../services/transcript';
 import type { OutgoingFile } from '../services/transcript';
 
 /** What the session-state route hydrates the status line with before the first event lands. */
@@ -43,7 +43,13 @@ export function useAgentControllerTranscript({
   };
 
   const localUser = (text: string, steer?: boolean, files?: OutgoingFile[]) => {
-    dispatch({ type: 'localUser', text, steer, files });
+    const id = createLocalMessageId();
+    dispatch({ type: 'localUser', id, text, steer, files });
+    return id;
+  };
+
+  const failLocalUser = (id: string) => {
+    dispatch({ type: 'failLocalUser', id });
   };
 
   const resolvePrompt = (id: string) => {
@@ -69,6 +75,7 @@ export function useAgentControllerTranscript({
     reset,
     onEvent,
     localUser,
+    failLocalUser,
     resolvePrompt,
     clearPending,
     pushNotice,
