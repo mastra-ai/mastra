@@ -1,5 +1,5 @@
 import { Radar } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 
 import { useEntityLearningProgress, useThemeEntities } from '../hooks';
 import { SankeySignals } from '../sankey-signals';
@@ -27,6 +27,7 @@ export function TraceIntelligenceEntityDetail({
   dateTo,
   dateRangePicker,
 }: TraceIntelligenceEntityDetailProps) {
+  const [selectedThemeId, setSelectedThemeId] = useState<string>();
   const context = useTraceIntelligence();
   const entitiesQuery = useThemeEntities(entityType);
   const entity = entitiesQuery.data?.entities.find(
@@ -71,12 +72,14 @@ export function TraceIntelligenceEntityDetail({
         <SignalsEmptyState LinkComponent={context.LinkComponent} progress={progressQuery.data} />
       ) : (
         <SankeySignals
-          key={`${entity.entityId}:${signalNames.join(',')}:${dateFrom?.toISOString() ?? 'open'}:${dateTo?.toISOString() ?? 'open'}`}
+          key={`${entity.entityId}:${signalNames.join(',')}`}
           entityId={entity.entityId}
           entityType={entity.entityType}
           signalNames={signalNames}
           dateFrom={dateFrom}
           dateTo={dateTo}
+          selectedThemeId={selectedThemeId}
+          onSelectedThemeIdChange={setSelectedThemeId}
           dateRangePicker={dateRangePicker}
         />
       )}
