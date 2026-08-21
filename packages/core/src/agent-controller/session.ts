@@ -272,8 +272,8 @@ export interface SessionMachinery {
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
   }): Promise<Record<string, unknown>>;
-  /** The run budget every initial stream and resume must carry (maxSteps, provider fallbacks, …). */
-  buildSharedRunOptions(): Record<string, unknown>;
+  /** The run budget every initial stream and resume must carry (maxSteps, host run options, provider fallbacks, …). */
+  buildSharedRunOptions(requestContext?: RequestContext): Promise<Record<string, unknown>>;
   /** Resolve the toolset (built-in controller  tools + user/subagent tools) for a run. */
   buildToolsets(requestContext: RequestContext): Promise<ToolsetsInput>;
   /** Resolve the effective request context for a run, layering controller defaults. */
@@ -3874,7 +3874,7 @@ export class Session<TState = unknown> {
 
     try {
       const resourceId = this.identity.getResourceId();
-      const sharedOptions = this.machinery.buildSharedRunOptions();
+      const sharedOptions = await this.machinery.buildSharedRunOptions(requestContext);
       // Interactive builtins suspend to collect user input, not for approval.
       // The resume data is the user's answer (a bare string), which the approval
       // re-check would reject because it cannot carry an `{ approved }` field.

@@ -35,7 +35,7 @@ function createHarness() {
       throw new Error('subscribeToThread is not used by these tests');
     },
     buildStreamOptions: async () => ({}),
-    buildSharedRunOptions: () => ({}),
+    buildSharedRunOptions: async () => ({}),
     buildToolsets: async () => ({}),
     buildRequestContext: async requestContext => requestContext ?? new RequestContext(),
     persistTokenUsage: vi.fn(async () => {}),

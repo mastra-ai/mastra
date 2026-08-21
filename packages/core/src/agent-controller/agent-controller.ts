@@ -30,6 +30,7 @@ import {
   taskUpdateTool,
   taskWriteTool,
 } from './tools';
+import { AGENT_CONTROLLER_RUN_OPTION_KEYS } from './types';
 import type {
   AvailableModel,
   IntervalHandler,
@@ -37,6 +38,7 @@ import type {
   AgentControllerMode,
   AgentControllerRequestContext,
   AgentControllerRequestStateUpdater,
+  AgentControllerRunOptions,
   AgentControllerSessionCreatedListener,
   AgentControllerSessionCreatedOptions,
   AgentControllerSessionDeletedListener,
@@ -403,7 +405,7 @@ export class AgentController<TState = {}> {
       subscribeToThread: ({ resourceId, threadId }) =>
         this.getCurrentAgent(session).subscribeToThread({ resourceId, threadId }),
       buildStreamOptions: input => this.buildAgentMessageStreamOptions({ session, ...input }),
-      buildSharedRunOptions: () => this.buildSharedRunOptions(session),
+      buildSharedRunOptions: requestContext => this.buildSharedRunOptions(session, requestContext),
       buildToolsets: requestContext => this.buildToolsets(session, requestContext),
       buildRequestContext: requestContext => this.buildRequestContext(session, requestContext),
       persistTokenUsage: () => this.persistTokenUsage(session),
@@ -1850,7 +1852,7 @@ export class AgentController<TState = {}> {
     }
 
     const streamOptions: Record<string, unknown> = {
-      ...this.buildSharedRunOptions(session),
+      ...(await this.buildSharedRunOptions(session, requestContext)),
       memory: { thread: session.thread.getId(), resource: session.identity.getResourceId() },
       abortSignal: session.run.ensureAbortController().signal,
       requestContext,
@@ -1900,7 +1902,10 @@ export class AgentController<TState = {}> {
    * missing `maxSteps` on resume silently caps the resumed run at the agent's
    * small default and ends it mid-task (see {@link HARNESS_MAX_STEPS}).
    */
-  private buildSharedRunOptions(session: Session<TState>): Record<string, unknown> {
+  private async buildSharedRunOptions(
+    session: Session<TState>,
+    requestContext?: RequestContext,
+  ): Promise<Record<string, unknown>> {
     const isYolo = (session.state.get() as Record<string, unknown>).yolo === true;
     // Channel sessions on adapters that can't render approval buttons must
     // auto-approve tools — a required approval would park the run forever on
@@ -1910,17 +1915,48 @@ export class AgentController<TState = {}> {
     const shared: Record<string, unknown> = {
       maxSteps: CONTROLLER_MAX_STEPS,
       savePerStep: false,
-      requireToolApproval: !isYolo && !channelAutoApprove,
     };
+
+    // Host-supplied loop controls override the defaults above. Copied key by
+    // key so an untyped caller cannot reach past the allowlist into a
+    // controller-owned option such as `abortSignal` or `memory`.
+    const configured = await this.resolveRunOptions(requestContext);
+    for (const key of AGENT_CONTROLLER_RUN_OPTION_KEYS) {
+      const value = configured[key];
+      if (value !== undefined) {
+        shared[key] = value;
+      }
+    }
+
+    // Controller-owned: a host cannot opt a session out of its approval gate,
+    // which is resolved from session state and the channel adapter.
+    shared.requireToolApproval = !isYolo && !channelAutoApprove;
 
     // Auto-enable Anthropic server-side fallbacks for fable-5 so a classifier
     // block is transparently retried on the fallback model instead of failing.
+    // Merged into any host-supplied provider options rather than replacing
+    // them, so the fallback does not silently drop e.g. prompt caching.
     const fableFallback = buildFableFallbackProviderOptions(session.model.get());
     if (fableFallback) {
-      shared.providerOptions = { anthropic: { ...fableFallback.anthropic } };
+      const hostProviderOptions = (configured.providerOptions ?? {}) as Record<string, Record<string, unknown>>;
+      shared.providerOptions = {
+        ...hostProviderOptions,
+        anthropic: { ...(hostProviderOptions.anthropic ?? {}), ...fableFallback.anthropic },
+      };
     }
 
     return shared;
+  }
+
+  /**
+   * Resolve the host's configured run options, supporting both a static object
+   * and a per-request factory. Returns an empty object when unconfigured.
+   */
+  private async resolveRunOptions(requestContext?: RequestContext): Promise<AgentControllerRunOptions> {
+    const configured = this.config.runOptions;
+    if (!configured) return {};
+    if (typeof configured !== 'function') return configured;
+    return await configured({ requestContext: requestContext ?? new RequestContext(), mastra: this.getMastra() });
   }
 
   /**

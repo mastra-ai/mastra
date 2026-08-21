@@ -1,4 +1,5 @@
 import type { Agent } from '../agent';
+import type { AgentExecutionOptionsBase } from '../agent/agent.types';
 import type { MastraDBMessage } from '../agent/message-list/state/types';
 import type { AgentInstructions, ToolsInput } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
@@ -240,6 +241,48 @@ export interface AgentControllerSessionCreatedOptions {
 /** Process-local listener notified after AgentController tears down a live session. */
 export type AgentControllerSessionDeletedListener<TState = {}> = (session: Session<TState>) => void | Promise<void>;
 
+/**
+ * The subset of agent execution options a host may set on controller-driven
+ * runs. Derived from {@link AgentExecutionOptionsBase} so the two stay in step.
+ *
+ * Options that carry run identity are deliberately absent: `memory`,
+ * `abortSignal`, `requestContext`, `toolsets`, `activeTools`, `instructions`,
+ * `outputWriter`, and `requireToolApproval` remain controller-owned.
+ */
+export type AgentControllerRunOptions = Pick<
+  AgentExecutionOptionsBase<unknown>,
+  | 'maxSteps'
+  | 'stopWhen'
+  | 'prepareStep'
+  | 'providerOptions'
+  | 'modelSettings'
+  | 'toolCallConcurrency'
+  | 'savePerStep'
+  | 'onStepFinish'
+  | 'onChunk'
+  | 'onFinish'
+  | 'onError'
+>;
+
+/**
+ * Keys of {@link AgentControllerRunOptions}, used to copy host-supplied run
+ * options onto the shared run options without letting an untyped caller reach
+ * a controller-owned key.
+ */
+export const AGENT_CONTROLLER_RUN_OPTION_KEYS = [
+  'maxSteps',
+  'stopWhen',
+  'prepareStep',
+  'providerOptions',
+  'modelSettings',
+  'toolCallConcurrency',
+  'savePerStep',
+  'onStepFinish',
+  'onChunk',
+  'onFinish',
+  'onError',
+] as const satisfies readonly (keyof AgentControllerRunOptions)[];
+
 export interface AgentControllerConfig<TState = {}> {
   /** Unique identifier for this controller instance */
   id: string;
@@ -285,6 +328,40 @@ export interface AgentControllerConfig<TState = {}> {
   defaultModeId?: string;
 
   instructions?: string;
+
+  /**
+   * Loop controls applied to every run the controller drives — the initial
+   * stream and every resume.
+   *
+   * The controller supplies its own defaults (`maxSteps`,
+   * `savePerStep`) and owns the options that carry run identity: `memory`,
+   * `abortSignal`, `requestContext`, `toolsets`, `activeTools`,
+   * `instructions`, `outputWriter`, and `requireToolApproval`. Those cannot be
+   * overridden here, because a run whose abort signal or thread binding came
+   * from outside the session could not be cancelled or persisted correctly.
+   *
+   * Everything else is the host's to set. Without this, an agent whose
+   * behavior depends on per-call loop control — a bounded step budget, a
+   * domain `stopWhen`, per-step tool narrowing via `prepareStep`, provider
+   * options such as prompt caching — cannot be driven through a session at
+   * all, since `maxSteps` would otherwise be pinned to the controller's
+   * effectively unbounded default.
+   *
+   * `providerOptions` is merged with, rather than replaced by, any
+   * controller-supplied provider fallback.
+   *
+   * @example
+   * ```ts
+   * new AgentController({
+   *   runOptions: {
+   *     maxSteps: 12,
+   *     stopWhen: ({ steps }) => hasCheckedAnswer(steps),
+   *     providerOptions: { anthropic: { cacheControl: { type: 'ephemeral' } } },
+   *   },
+   * })
+   * ```
+   */
+  runOptions?: DynamicArgument<AgentControllerRunOptions>;
 
   /**
    * Tools available to all agents across all modes.
