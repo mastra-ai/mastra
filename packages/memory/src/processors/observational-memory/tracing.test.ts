@@ -11,7 +11,7 @@ vi.mock('@mastra/core/observability', () => ({
   SpanType: { GENERIC: 'generic' },
 }));
 
-import { withOmTracingSpan } from '../tracing';
+import { withOmTracingSpan } from './tracing';
 
 function createMockSpan() {
   return {
@@ -56,7 +56,7 @@ describe('withOmTracingSpan', () => {
           throw failure;
         },
       }),
-    ).rejects.toThrow('observer failed');
+    ).rejects.toBe(failure);
 
     expect(span.error).toHaveBeenCalledWith({ error: failure });
     expect(span.end).not.toHaveBeenCalled();
