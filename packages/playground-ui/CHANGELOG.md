@@ -1,5 +1,53 @@
 # @mastra/playground-ui
 
+## 51.0.0
+
+### Minor Changes
+
+- Added controlled theme selection to Sankey signals so host applications can persist and restore the open theme panel. ([#21968](https://github.com/mastra-ai/mastra/pull/21968))
+
+- Added `flat` and `factory` variants to `Section`, including standard, view-only, and destructive row compositions. ([#21939](https://github.com/mastra-ai/mastra/pull/21939))
+
+  ```tsx
+  <Section variant="factory">
+    <Section.Header>
+      <div>
+        <Section.Heading>Security</Section.Heading>
+        <Section.Description>Manage sign-in requirements.</Section.Description>
+      </div>
+    </Section.Header>
+    <Section.Content>
+      <Section.Row label="Two-factor authentication">
+        <Switch />
+      </Section.Row>
+    </Section.Content>
+  </Section>
+  ```
+
+### Patch Changes
+
+- Improved floating surfaces with softer, consistent elevation. ([#21980](https://github.com/mastra-ai/mastra/pull/21980))
+
+- Improved plan cards to show expansion controls only when content is clipped and keep approval actions readable. ([#21891](https://github.com/mastra-ai/mastra/pull/21891))
+
+- Aligned the `flat` and `factory` Section layouts so their headings, row content, and actions share consistent horizontal edges. ([#21970](https://github.com/mastra-ai/mastra/pull/21970))
+
+- Fixed hidden search field labels taking up layout space. ([#21918](https://github.com/mastra-ai/mastra/pull/21918))
+
+- Updated dependencies [[`88d14ca`](https://github.com/mastra-ai/mastra/commit/88d14cac008582a618fecc3d5c7fd3bdf4f6ddc3), [`26d4016`](https://github.com/mastra-ai/mastra/commit/26d40160ff7f7d8bf95fee2039a52cbc83863533), [`480e491`](https://github.com/mastra-ai/mastra/commit/480e491588bd6a7a1c9ee4407590ad625dd33952), [`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`acc3471`](https://github.com/mastra-ai/mastra/commit/acc3471de5f3fde8027ee4e355af292b2bc1bc30), [`b6a771e`](https://github.com/mastra-ai/mastra/commit/b6a771ef23d203ddb348efca8065eff65def8191), [`84a5b69`](https://github.com/mastra-ai/mastra/commit/84a5b699f84d6bae0a34efe5a970d891090b9f41), [`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`3bb88dd`](https://github.com/mastra-ai/mastra/commit/3bb88ddf07fb98f3cd16d3bff94e51cd3b45d011), [`d23e75d`](https://github.com/mastra-ai/mastra/commit/d23e75d57cc7cf5b9bfdbee896bf5a6a2484fed7), [`c8faa4e`](https://github.com/mastra-ai/mastra/commit/c8faa4e1cfebaec56b65e754e90b9fe46d153359), [`d378d75`](https://github.com/mastra-ai/mastra/commit/d378d7511f71309ed61a8f6b93cd0361dc6cb70f), [`84a5b69`](https://github.com/mastra-ai/mastra/commit/84a5b699f84d6bae0a34efe5a970d891090b9f41), [`26d4016`](https://github.com/mastra-ai/mastra/commit/26d40160ff7f7d8bf95fee2039a52cbc83863533), [`7c60df5`](https://github.com/mastra-ai/mastra/commit/7c60df5c7872343fbac5c3e5b1175c8076a5abfd), [`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`84a5b69`](https://github.com/mastra-ai/mastra/commit/84a5b699f84d6bae0a34efe5a970d891090b9f41), [`f2031a4`](https://github.com/mastra-ai/mastra/commit/f2031a47445e8f67a89ba1309036816f97ab7a65), [`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`cad4208`](https://github.com/mastra-ai/mastra/commit/cad42082e6aa1776168a94914f523334be45d929), [`8e529d4`](https://github.com/mastra-ai/mastra/commit/8e529d4ac754efef04b225841349e0da9edf89a6), [`57c5103`](https://github.com/mastra-ai/mastra/commit/57c51035a2a36e3df3c4f32f46bb789a66ed5946), [`038b7b4`](https://github.com/mastra-ai/mastra/commit/038b7b405cb4ac25ab3f3031334111b1f87ac112), [`4132d61`](https://github.com/mastra-ai/mastra/commit/4132d61f8367077120ee9e6420d3224dffd93c93), [`d378d75`](https://github.com/mastra-ai/mastra/commit/d378d7511f71309ed61a8f6b93cd0361dc6cb70f)]:
+  - @mastra/core@1.61.0
+  - @mastra/client-js@1.42.0
+  - @mastra/react@1.4.5
+
+## 51.0.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`7c60df5`](https://github.com/mastra-ai/mastra/commit/7c60df5c7872343fbac5c3e5b1175c8076a5abfd)]:
+  - @mastra/core@1.61.0-alpha.5
+  - @mastra/client-js@1.42.0-alpha.5
+  - @mastra/react@1.4.5-alpha.5
+
 ## 51.0.0-alpha.4
 
 ### Patch Changes

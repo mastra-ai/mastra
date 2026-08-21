@@ -1,5 +1,30 @@
 # @internal/playground
 
+## 1.26.0
+
+### Patch Changes
+
+- Fixed the trace detail page in Studio so the trace summary fills the page again. Entity, Status, Duration and the timestamps were collapsing into a narrow column and getting cut to a few characters, leaving most of the row empty. ([#21928](https://github.com/mastra-ai/mastra/pull/21928))
+
+- Aligned the Studio route header with the sidebar in authenticated and public sessions. ([#21865](https://github.com/mastra-ai/mastra/pull/21865))
+
+- Updated dependencies [[`88d14ca`](https://github.com/mastra-ai/mastra/commit/88d14cac008582a618fecc3d5c7fd3bdf4f6ddc3), [`28b604b`](https://github.com/mastra-ai/mastra/commit/28b604b7023be3f3312ae0b0e2a97ab7b3795809), [`26d4016`](https://github.com/mastra-ai/mastra/commit/26d40160ff7f7d8bf95fee2039a52cbc83863533), [`7db18bb`](https://github.com/mastra-ai/mastra/commit/7db18bb46687d6bcfe4e35cefd6a1006f457bdc6), [`480e491`](https://github.com/mastra-ai/mastra/commit/480e491588bd6a7a1c9ee4407590ad625dd33952), [`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`acc3471`](https://github.com/mastra-ai/mastra/commit/acc3471de5f3fde8027ee4e355af292b2bc1bc30), [`b6a771e`](https://github.com/mastra-ai/mastra/commit/b6a771ef23d203ddb348efca8065eff65def8191), [`84a5b69`](https://github.com/mastra-ai/mastra/commit/84a5b699f84d6bae0a34efe5a970d891090b9f41), [`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`3bb88dd`](https://github.com/mastra-ai/mastra/commit/3bb88ddf07fb98f3cd16d3bff94e51cd3b45d011), [`e7bdd20`](https://github.com/mastra-ai/mastra/commit/e7bdd20fea6088771837c29db622a6695cd0df71), [`d23e75d`](https://github.com/mastra-ai/mastra/commit/d23e75d57cc7cf5b9bfdbee896bf5a6a2484fed7), [`c8faa4e`](https://github.com/mastra-ai/mastra/commit/c8faa4e1cfebaec56b65e754e90b9fe46d153359), [`d378d75`](https://github.com/mastra-ai/mastra/commit/d378d7511f71309ed61a8f6b93cd0361dc6cb70f), [`84a5b69`](https://github.com/mastra-ai/mastra/commit/84a5b699f84d6bae0a34efe5a970d891090b9f41), [`26d4016`](https://github.com/mastra-ai/mastra/commit/26d40160ff7f7d8bf95fee2039a52cbc83863533), [`7c60df5`](https://github.com/mastra-ai/mastra/commit/7c60df5c7872343fbac5c3e5b1175c8076a5abfd), [`8494dc1`](https://github.com/mastra-ai/mastra/commit/8494dc1365689536ab4b5c7ad011d0874c621ab5), [`26d4016`](https://github.com/mastra-ai/mastra/commit/26d40160ff7f7d8bf95fee2039a52cbc83863533), [`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`84a5b69`](https://github.com/mastra-ai/mastra/commit/84a5b699f84d6bae0a34efe5a970d891090b9f41), [`8bd619a`](https://github.com/mastra-ai/mastra/commit/8bd619acbbbe8f79a70c39d8d0a751a7781be900), [`f2031a4`](https://github.com/mastra-ai/mastra/commit/f2031a47445e8f67a89ba1309036816f97ab7a65), [`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`cad4208`](https://github.com/mastra-ai/mastra/commit/cad42082e6aa1776168a94914f523334be45d929), [`7264d4e`](https://github.com/mastra-ai/mastra/commit/7264d4ececece0ee907999e21b8a81e689df98d7), [`8e529d4`](https://github.com/mastra-ai/mastra/commit/8e529d4ac754efef04b225841349e0da9edf89a6), [`57c5103`](https://github.com/mastra-ai/mastra/commit/57c51035a2a36e3df3c4f32f46bb789a66ed5946), [`038b7b4`](https://github.com/mastra-ai/mastra/commit/038b7b405cb4ac25ab3f3031334111b1f87ac112), [`4132d61`](https://github.com/mastra-ai/mastra/commit/4132d61f8367077120ee9e6420d3224dffd93c93), [`d378d75`](https://github.com/mastra-ai/mastra/commit/d378d7511f71309ed61a8f6b93cd0361dc6cb70f)]:
+  - @mastra/core@1.61.0
+  - @mastra/ai-sdk@1.9.1
+  - @mastra/client-js@1.42.0
+  - @mastra/playground-ui@51.0.0
+  - @mastra/react@1.4.5
+
+## 1.26.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`7c60df5`](https://github.com/mastra-ai/mastra/commit/7c60df5c7872343fbac5c3e5b1175c8076a5abfd)]:
+  - @mastra/core@1.61.0-alpha.5
+  - @mastra/client-js@1.42.0-alpha.5
+  - @mastra/react@1.4.5-alpha.5
+  - @mastra/playground-ui@51.0.0-alpha.5
+
 ## 1.26.0-alpha.4
 
 ### Patch Changes

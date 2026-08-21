@@ -1,5 +1,66 @@
 # @mastra/client-js
 
+## 1.42.0
+
+### Minor Changes
+
+- Added `createDatasetExperiment()`, `runExperimentItem()`, `submitExperimentResult()`, and `finalizeExperiment()` methods so a caller-owned orchestrator (for example Temporal) can drive an experiment loop while Mastra either executes each item server-side or ingests externally computed results. ([#21888](https://github.com/mastra-ai/mastra/pull/21888))
+
+### Patch Changes
+
+- Added optional plan content fields to `PlanResume` so hosts can preserve submitted plans in approval history. ([#21891](https://github.com/mastra-ai/mastra/pull/21891))
+
+  ```typescript
+  const response: PlanResume = {
+    action: 'rejected',
+    title: 'Add authentication',
+    path: '.artifacts/plans/authentication.md',
+    plan: '# Add authentication\n\n1. Configure the provider.',
+    feedback: 'Use the existing session middleware.',
+  };
+  ```
+
+- Added HTTP endpoints for caller-driven experiments: `POST /datasets/:datasetId/experiments` now accepts `start: false` to create an experiment without spawning the runner (with an optional target and run-level `scorerIds`), and new routes `POST /datasets/:datasetId/experiments/:experimentId/items/:itemId/run`, `POST /datasets/:datasetId/experiments/:experimentId/results`, and `POST /datasets/:datasetId/experiments/:experimentId/finalize` let external orchestrators run one item server-side, submit externally computed per-item results (idempotent upsert on retries), and finalize the run with server-computed counts. ([#21888](https://github.com/mastra-ai/mastra/pull/21888))
+
+- Added `upsertExperimentResult()` to the experiments storage domain plus an `attempt` column on experiment results and a nullable target with an optional `scorerIds` column on experiments, enabling retry-safe result writes for caller-driven experiments (retried submissions with the same `(experimentId, itemId, attempt)` key converge on a single row). `saveScore()` now accepts an optional caller-supplied `id` and upserts on it, so retried experiment submissions replace their previous score rows (latest wins) instead of accumulating duplicates. ([#21888](https://github.com/mastra-ai/mastra/pull/21888))
+
+- Added caller-driven experiments so an external orchestrator (for example Temporal workers) can own the experiment loop while Mastra stays the system of record. ([#21888](https://github.com/mastra-ai/mastra/pull/21888))
+
+  Create an experiment with `dataset.createExperiment()` (idempotent when you pass your own id). With a target, Mastra runs each item for you: call `dataset.runExperimentItem()` per item and Mastra executes the registered agent or workflow, resolves scorers (experiment `scorers`, falling back to item `scorerIds`, then dataset `scorerIds`), and upserts the result. Without a target, run everything yourself and report per-item results with `dataset.submitExperimentResult()` (upsert semantics on `(experimentId, itemId, attempt)` so retried workers converge on a single row). Either way, close the run with `dataset.finalizeExperiment()` and Mastra computes per-item succeeded/failed/skipped counts from the persisted rows. Results go into the same storage as native runs, so Studio views, comparisons, and review summaries work unchanged.
+
+  ```typescript
+  // Caller drives the loop, Mastra runs each item
+  const { experimentId } = await dataset.createExperiment({
+    id: workflowRunId,
+    targetType: 'agent',
+    targetId: 'support-agent',
+    scorers: ['accuracy'],
+  });
+
+  await dataset.runExperimentItem({ experimentId, itemId });
+
+  // Or: caller runs everything, Mastra ingests results
+  const ingest = await dataset.createExperiment({ id: workflowRunId });
+  await dataset.submitExperimentResult({
+    experimentId: ingest.experimentId,
+    itemId,
+    output,
+    scores: [{ scorerId: 'accuracy', score: 0.92 }],
+  });
+
+  const experiment = await dataset.finalizeExperiment({ experimentId });
+  ```
+
+- Updated dependencies [[`88d14ca`](https://github.com/mastra-ai/mastra/commit/88d14cac008582a618fecc3d5c7fd3bdf4f6ddc3), [`480e491`](https://github.com/mastra-ai/mastra/commit/480e491588bd6a7a1c9ee4407590ad625dd33952), [`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`acc3471`](https://github.com/mastra-ai/mastra/commit/acc3471de5f3fde8027ee4e355af292b2bc1bc30), [`b6a771e`](https://github.com/mastra-ai/mastra/commit/b6a771ef23d203ddb348efca8065eff65def8191), [`84a5b69`](https://github.com/mastra-ai/mastra/commit/84a5b699f84d6bae0a34efe5a970d891090b9f41), [`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`3bb88dd`](https://github.com/mastra-ai/mastra/commit/3bb88ddf07fb98f3cd16d3bff94e51cd3b45d011), [`d23e75d`](https://github.com/mastra-ai/mastra/commit/d23e75d57cc7cf5b9bfdbee896bf5a6a2484fed7), [`c8faa4e`](https://github.com/mastra-ai/mastra/commit/c8faa4e1cfebaec56b65e754e90b9fe46d153359), [`d378d75`](https://github.com/mastra-ai/mastra/commit/d378d7511f71309ed61a8f6b93cd0361dc6cb70f), [`84a5b69`](https://github.com/mastra-ai/mastra/commit/84a5b699f84d6bae0a34efe5a970d891090b9f41), [`26d4016`](https://github.com/mastra-ai/mastra/commit/26d40160ff7f7d8bf95fee2039a52cbc83863533), [`7c60df5`](https://github.com/mastra-ai/mastra/commit/7c60df5c7872343fbac5c3e5b1175c8076a5abfd), [`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`84a5b69`](https://github.com/mastra-ai/mastra/commit/84a5b699f84d6bae0a34efe5a970d891090b9f41), [`f2031a4`](https://github.com/mastra-ai/mastra/commit/f2031a47445e8f67a89ba1309036816f97ab7a65), [`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`cad4208`](https://github.com/mastra-ai/mastra/commit/cad42082e6aa1776168a94914f523334be45d929), [`8e529d4`](https://github.com/mastra-ai/mastra/commit/8e529d4ac754efef04b225841349e0da9edf89a6), [`57c5103`](https://github.com/mastra-ai/mastra/commit/57c51035a2a36e3df3c4f32f46bb789a66ed5946), [`038b7b4`](https://github.com/mastra-ai/mastra/commit/038b7b405cb4ac25ab3f3031334111b1f87ac112), [`4132d61`](https://github.com/mastra-ai/mastra/commit/4132d61f8367077120ee9e6420d3224dffd93c93), [`d378d75`](https://github.com/mastra-ai/mastra/commit/d378d7511f71309ed61a8f6b93cd0361dc6cb70f)]:
+  - @mastra/core@1.61.0
+
+## 1.42.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`7c60df5`](https://github.com/mastra-ai/mastra/commit/7c60df5c7872343fbac5c3e5b1175c8076a5abfd)]:
+  - @mastra/core@1.61.0-alpha.5
+
 ## 1.42.0-alpha.4
 
 ### Patch Changes
