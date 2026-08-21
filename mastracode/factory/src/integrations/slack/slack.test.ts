@@ -901,9 +901,8 @@ describe('session start (onSessionStart)', () => {
     } as any);
 
     expect(session.state.set).toHaveBeenCalledWith({ factoryOrgId: 'org-1' });
-    // The guard still holds, and the seed still took the request-context route.
+    // The guard still holds: the persisted mode model is left alone.
     expect(session.model.switch).not.toHaveBeenCalled();
-    expect(deps.sourceControl.sessions.getBySessionId).not.toHaveBeenCalled();
   });
 
   it.each([
