@@ -1723,8 +1723,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         };
       },
     );
-    if (!row) throw new Error('Attention receipt disappeared during update.');
-    return toAttentionReceipt(row);
+    return row ? toAttentionReceipt(row) : null;
   }
 
   async markAttentionReceiptsRead({
