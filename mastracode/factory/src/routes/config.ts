@@ -420,16 +420,16 @@ async function authorizePackSession({
   if (!sessions) return c.json({ error: 'session_authorization_unavailable' }, 503);
 
   const sourceSession = await sessions.getBySessionId(resourceId);
-  // Scope matches against the live memoized workdir (the deterministic
-  // truth); the persisted column is an observability fallback for sessions
-  // materialized before this process started.
+  // Scope matches against the live memoized workdir ONLY (the deterministic
+  // truth). The persisted column is observability, never an authorization
+  // input — a row written under a previous provider could authorize a stale
+  // scope. No live memo entry means no scoped grant (fail closed).
   const liveWorkdir = peekSessionSandbox(sourceSession?.id ?? '')?.workdir;
-  const effectiveWorkdir = liveWorkdir ?? sourceSession?.sandboxWorkdir;
   if (
     !sourceSession ||
     sourceSession.orgId !== packContext.orgId ||
     sourceSession.userId !== packContext.userId ||
-    (scope !== undefined && scope !== effectiveWorkdir)
+    (scope !== undefined && scope !== liveWorkdir)
   ) {
     return c.json({ error: `No session for resourceId "${resourceId}"` }, 404);
   }

@@ -59,9 +59,9 @@ class FakeSandbox implements MaterializationSandbox {
     this.responder = responder ?? (() => OK);
   }
 
-  async start(): Promise<{ created: boolean }> {
+  async start(): Promise<{ outcome: 'created' | 'connected' }> {
     this.startCount += 1;
-    return { created: this.startCount === 1 };
+    return { outcome: this.startCount === 1 ? 'created' : 'connected' };
   }
 
   readonly env: Record<string, string> = {};
