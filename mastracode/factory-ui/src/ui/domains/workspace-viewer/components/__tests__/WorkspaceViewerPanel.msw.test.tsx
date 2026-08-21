@@ -202,4 +202,26 @@ describe('WorkspaceViewerPanel', () => {
       expect(await screen.findByRole('button', { name: /Files No files/ })).toBeInTheDocument();
     });
   });
+
+  describe('when the session sandbox is not running', () => {
+    it('reports the sandbox state instead of pretending changes are pending', async () => {
+      installHandlers();
+      // Changes are the live-VM-backed surface: the server reports
+      // `available: false` when no session sandbox is running (nothing is
+      // ever provisioned by browsing).
+      server.use(
+        http.get(CHANGES_URL, () => HttpResponse.json({ workspacePath: WORKSPACE, available: false, changes: [] })),
+      );
+      const user = userEvent.setup();
+
+      renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} threadId={THREAD} />);
+
+      const changesButton = await screen.findByRole('button', { name: /Changes No sandbox/ });
+      await user.click(changesButton);
+
+      expect(
+        await screen.findByText('No sandbox running. Changes appear once the session sandbox starts.'),
+      ).toBeInTheDocument();
+    });
+  });
 });

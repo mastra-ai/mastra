@@ -439,19 +439,16 @@ describe('two users in one org each get their own sandbox + session workspace', 
     tables.projectRepositories.push(projectRepositoryRow({ id: 'p1', orgId: 'orgA', userId: 'a1', installationId: 7 }));
   }
 
-  it('creates a distinct (project,user) sandbox row per user and hides sessions across users', async () => {
+  it('hides sessions across users while sharing the org-owned project', async () => {
     seedOrgProject();
     const user1 = buildApp({ workosId: 'a1', organizationId: 'orgA' });
     const user2 = buildApp({ workosId: 'a2', organizationId: 'orgA' });
 
-    // Both users open (ensure) the same org-owned project.
+    // Both users open (ensure) the same org-owned project. No sandbox state
+    // is created — sessions are the only sandbox-bearing unit.
     expect((await postJson(user1, '/web/github/projects/p1/ensure', {})).status).toBe(200);
     expect((await postJson(user2, '/web/github/projects/p1/ensure', {})).status).toBe(200);
-
-    // Each got their own per-(project,user) sandbox binding row.
-    expect(tables.sandboxes).toHaveLength(2);
-    expect(tables.sandboxes.filter(s => s.projectRepositoryId === 'p1' && s.userId === 'a1')).toHaveLength(1);
-    expect(tables.sandboxes.filter(s => s.projectRepositoryId === 'p1' && s.userId === 'a2')).toHaveLength(1);
+    expect(tables.sandboxes).toHaveLength(0);
 
     // User 1 creates a session identity; materialization happens in the workspace factory.
     const created = await postJson(user1, '/web/github/projects/p1/sessions', { branch: 'feat/x' });

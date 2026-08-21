@@ -21,7 +21,7 @@ function fileSummary(count: number) {
 }
 
 function changesSummary(changes: WorkspaceChanges | undefined) {
-  if (!changes?.available) return 'Not ready';
+  if (!changes?.available) return 'No sandbox';
   if (changes.changes.length === 0) return 'No changes';
   return `${changes.changes.length} changed`;
 }

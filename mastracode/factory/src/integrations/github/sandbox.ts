@@ -1,14 +1,10 @@
 /**
  * Repo materialization for GitHub-backed repositories.
  *
- * A GitHub repo is never cloned onto the server host. Instead each project gets
- * its own isolated sandbox (constructed through the deploy's `sandbox`
- * callback with id-keyed getOrCreate) and the repo is cloned *inside* that
- * sandbox. The agent's file tools and command tools then operate entirely
- * against the remote checkout.
+ * A GitHub repo is never cloned onto the server host. The repo is cloned
+ * *inside* the session's sandbox, so the agent's file tools and command tools
+ * operate entirely against the remote checkout.
  *
- * - `ensureProjectSandbox(row)` / `teardownProjectSandbox(row)` construct,
- *   start, and destroy the per-(project,user) sandbox via the session memo.
  * - `materializeRepo(row, token)` runs `git clone` (first open) or `git pull`
  *   (re-open) inside the sandbox, using a short-lived installation token that is
  *   scrubbed from the git remote afterwards so it never persists in the VM.
@@ -19,92 +15,15 @@
 
 import { reportProgress } from '../../sandbox/materialization.js';
 import type { MaterializationSandbox, ProgressFn, SandboxCommandResult } from '../../sandbox/materialization.js';
-import type { MastraFactorySandboxConfig } from '../../sandbox/session-sandbox.js';
-import { getSessionSandbox, resolveSessionWorkdir } from '../../sandbox/session-sandbox.js';
-import type {
-  ProjectRepositorySandbox,
-  SourceControlStorageHandle,
-} from '../../storage/domains/source-control/base.js';
+import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
 import { timedPhase } from '../../timing.js';
-import { releaseSessionSandbox } from './sandbox-release.js';
 
-type SourceControlSandboxStorage = SourceControlStorageHandle['sandboxes'];
-type MaterializationStore = Pick<SourceControlSandboxStorage, 'markMaterialized'>;
+type MaterializationStore = Pick<SourceControlStorageHandle['sessions'], 'markMaterialized'>;
 
 interface RepoMaterializationBinding {
   id: string;
   sandboxWorkdir: string;
   materializedAt: Date | null;
-}
-
-/**
- * Stable logical sandbox id for a per-(project,user) binding row. The
- * provider resolves this id on start — reconnect/resume when the VM exists,
- * create otherwise — so no provider id needs to be persisted or trusted.
- */
-export function projectSandboxKey(row: Pick<ProjectRepositorySandbox, 'id'>): string {
-  return `project-${row.id}`;
-}
-
-/**
- * Construct (memoized per process) and start the sandbox for a
- * per-(project,user) binding row. Returns a started, live sandbox with
- * `GH_TOKEN` injected. The persisted `sandboxId` is written for
- * observability only — nothing reads it for decisions.
- */
-export async function ensureProjectSandbox(options: {
-  sandbox?: MastraFactorySandboxConfig;
-  row: ProjectRepositorySandbox;
-  repoFullName: string;
-  storage: SourceControlSandboxStorage;
-  token: string;
-  /** Repo setup command, threaded so template keying matches the session path. */
-  setupCommand?: string;
-  /** Fresh installation-token minter for provider-side authenticated work (template builds). */
-  getGithubToken?: () => Promise<string>;
-  onProgress?: ProgressFn;
-}): Promise<{ sandbox: MaterializationSandbox; workdir: string }> {
-  const { sandbox: create, row, repoFullName, storage, token, setupCommand, getGithubToken, onProgress } = options;
-  if (!create) {
-    throw new MaterializeError('No sandbox provider is configured.', 'clone-failed');
-  }
-  reportProgress(onProgress, { phase: 'provisioning', message: 'Preparing sandbox…' });
-  const key = projectSandboxKey(row);
-  // The workdir is derived from the constructed instance (local sandboxes
-  // check out under their own workingDirectory) — never persisted, never
-  // trusted from the row.
-  const entry = getSessionSandbox(key, repoFullName, () =>
-    create({
-      sessionId: key,
-      repoFullName,
-      ...(setupCommand ? { setupCommand } : {}),
-      ...(getGithubToken ? { getGithubToken } : {}),
-      actingUserId: row.userId,
-    }),
-  );
-  const instance = entry.sandbox as unknown as MaterializationSandbox;
-  await instance.start();
-  instance.setEnvironmentVariable?.('GH_TOKEN', token);
-  void storage.setSandboxId({ id: row.id, sandboxId: instance.id }).catch(() => {});
-  // Resolved against the now-live VM (local: configured dir; remote: its
-  // home) and memoized on the entry for passive readers.
-  const workdir = await resolveSessionWorkdir(key, entry.sandbox, repoFullName);
-  return { sandbox: instance, workdir };
-}
-
-/**
- * Tear down a user's sandbox for a project: destroy the VM this process
- * holds (best-effort — other replicas' VMs are left to the provider's idle
- * lifecycle) and clear the persisted binding row so the next open starts
- * cleanly.
- */
-export async function teardownProjectSandbox(options: {
-  row: ProjectRepositorySandbox;
-  storage: SourceControlSandboxStorage;
-}): Promise<void> {
-  const { row, storage } = options;
-  await releaseSessionSandbox({ sessionId: projectSandboxKey(row), destroy: true });
-  await storage.clearBinding({ id: row.id });
 }
 
 /**

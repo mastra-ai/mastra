@@ -29,7 +29,6 @@ import type { AuditEmitter } from '../../storage/domains/audit/domain.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type {
   ProjectRepository,
-  ProjectRepositorySandbox,
   ProjectSourceControlConnection,
   SourceControlInstallation,
   SourceControlRepository,
@@ -45,9 +44,7 @@ import {
   isValidGitRef as isValidGitRefSandbox,
   MaterializeError,
   pushBranch,
-  teardownProjectSandbox,
   WorktreeError,
-  projectSandboxKey,
 } from './sandbox.js';
 import type { GitIdentity } from './sandbox.js';
 
@@ -1002,19 +999,6 @@ function identityFromUser(user: unknown): GitIdentity {
   return { name: u?.name ?? null, email: u?.email ?? null };
 }
 
-/**
- * Load (or create) the caller's per-(project,user) sandbox binding row. The
- * binding inherits its workdir from the org-owned project, but `sandboxId` /
- * `materializedAt` stay null until the user first opens the project.
- */
-async function loadOrCreateSandboxRow(
-  github: GithubIntegration,
-  project: ResolvedProjectRepository,
-  userId: string,
-): Promise<ProjectRepositorySandbox> {
-  return github.sourceControlStorage.sandboxes.getOrCreate({ projectRepository: project, userId });
-}
-
 interface EnsureResult {
   resourceId: string;
   factoryProjectId: string;
@@ -1036,13 +1020,11 @@ async function prepareProject(options: {
   userId: string;
   onProgress?: ProgressFn;
 }): Promise<EnsureResult> {
-  const { github, project, userId, onProgress } = options;
+  const { project, onProgress } = options;
   // /ensure is a metadata handshake, not a provisioner: opening a thread in
   // the UI must never start a VM. Session sandboxes boot lazily at the first
-  // real command; the project-level sandbox (workspaces panel) is only ever
-  // observed passively — when nothing is running, the panel shows nothing.
-  // The binding row is still created so panel/git routes have their anchor.
-  await loadOrCreateSandboxRow(github, project, userId);
+  // real command; file/git surfaces only ever observe them passively — when
+  // nothing is running, the panel shows nothing.
   const result: EnsureResult = {
     resourceId: project.factoryProjectId,
     factoryProjectId: project.factoryProjectId,
@@ -1083,11 +1065,10 @@ function gitErrorResponse(c: Context, err: unknown) {
 }
 
 /**
- * Load the org-owned project and the caller's per-user sandbox binding for a git
- * route. Centralizes the auth + org/ownership checks every git route shares:
- * the project is scoped by `(id, orgId)`, the sandbox binding by
- * `(projectRepositoryId, userId)`. Returns the tenant, project, and sandbox row, or
- * a ready-to-return error response.
+ * Load the org-owned project for a git route. Centralizes the auth +
+ * org/ownership checks every git route shares: the project is scoped by
+ * `(id, orgId)`. Returns the tenant and project, or a ready-to-return error
+ * response.
  */
 async function loadOwnedProject(options: {
   github: GithubIntegration;
@@ -1095,8 +1076,7 @@ async function loadOwnedProject(options: {
   sandbox?: MastraFactorySandboxConfig;
   c: RouteContext;
 }): Promise<
-  | { orgId: string; userId: string; project: ResolvedProjectRepository; sandboxRow: ProjectRepositorySandbox }
-  | { response: Response }
+  { orgId: string; userId: string; project: ResolvedProjectRepository } | { response: Response }
 > {
   const { github, auth, sandbox, c } = options;
   const resolved = await resolveOrgTenant(c, auth);
@@ -1117,8 +1097,7 @@ async function loadOwnedProject(options: {
   if (!project) {
     return { response: c.json({ error: 'Project repository not found' }, 404) };
   }
-  const sandboxRow = await loadOrCreateSandboxRow(github, project, userId);
-  return { orgId, userId, project, sandboxRow };
+  return { orgId, userId, project };
 }
 
 function buildProjectGitRoutes({
@@ -1517,38 +1496,6 @@ function buildProjectGitRoutes({
       },
     }),
 
-    // ── Tear down the caller's sandbox for a project ────────────────────────
-    // Per-user teardown only: drops the caller's `(project, user)` sandbox
-    // binding and stops the VM, freeing a slot in the per-replica budget. Project
-    // deletion at the org level is out of scope (org admin model is later).
-    registerApiRoute('/web/github/projects/:id/sandbox', {
-      method: 'DELETE',
-      requiresAuth: false,
-      handler: async c => {
-        const owned = await loadOwnedProject({ github, auth, sandbox, c: loose(c) });
-        if ('response' in owned) return owned.response;
-        const { sandboxRow } = owned;
-
-        // Teardown is unconditional and idempotent: it destroys whatever this
-        // process holds in the memo and clears the binding row. The persisted
-        // sandboxId is observability-only and must not gate the decision (its
-        // write is best-effort, so it can be absent for a live sandbox).
-        try {
-          return await withSessionOperationLock(`sandbox:${sandboxRow.id}`, async () => {
-            // Peek inside the lock: an operation queued ahead of this DELETE
-            // may have just materialized the sandbox this teardown destroys.
-            const hadLiveSandbox = peekSessionSandbox(projectSandboxKey(sandboxRow)) !== undefined;
-            await teardownProjectSandbox({
-              row: sandboxRow,
-              storage: github.sourceControlStorage.sandboxes,
-            });
-            return c.json({ tornDown: hadLiveSandbox });
-          });
-        } catch (err) {
-          return gitErrorResponse(loose(c), err);
-        }
-      },
-    }),
   ];
 }
 

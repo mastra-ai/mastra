@@ -1275,7 +1275,7 @@ describe('ensure (materialize)', () => {
     expect((await res.json()).error).toBe('sandbox_not_configured');
   });
 
-  it('creates the binding row and returns metadata WITHOUT provisioning anything', async () => {
+  it('returns metadata WITHOUT provisioning anything or touching sandbox state', async () => {
     // /ensure is a metadata handshake: opening a thread in the UI must never
     // start a VM. No sandbox construction, no repo materialization, no token
     // mint — the session sandbox boots lazily at the first real command.
@@ -1303,9 +1303,8 @@ describe('ensure (materialize)', () => {
     expect(materializeRepo).not.toHaveBeenCalled();
     expect(githubStub.versionControl.getRepositoryAccess).not.toHaveBeenCalled();
     expect(githubStub.mintInstallationToken).not.toHaveBeenCalled();
-    // A per-user sandbox binding row was created for the caller.
-    expect(tables.sandboxes).toHaveLength(1);
-    expect(tables.sandboxes[0]).toMatchObject({ projectRepositoryId: 'p1', userId: 'u1' });
+    // No per-user binding row either — /ensure touches no sandbox state at all.
+    expect(tables.sandboxes).toHaveLength(0);
   });
 
   it('never provisions even when the row carries checkpoint or stale workdir state', async () => {
@@ -2117,48 +2116,10 @@ describe('commit route', () => {
 });
 
 describe('sandbox teardown route', () => {
-  it("tears down the caller's own binding row only", async () => {
+  it('is gone: the project-level sandbox concept no longer exists', async () => {
     seedMaterializedProject();
-    // A second user's binding for the same project must be untouched.
-    tables.sandboxes.push(
-      sandboxRow({
-        id: 'sbrow-2',
-        projectRepositoryId: 'p1',
-        userId: 'u2',
-        sandboxId: 'sb-2',
-        sandboxWorkdir: '/workspace/hello',
-        materializedAt: new Date(),
-      }),
-    );
-
-    // A live memo entry for the caller's binding marks the teardown as real.
-    seedLiveSandbox('project-sbrow-1', '/workspace/hello', {
-      id: 'sb-1',
-      executeCommand: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
-    });
-
     const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/sandbox', { method: 'DELETE' });
-
-    expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ tornDown: true });
-    expect(teardownProjectSandbox).toHaveBeenCalledOnce();
-    expect(teardownProjectSandbox).toHaveBeenCalledWith(
-      expect.objectContaining({ row: expect.objectContaining({ id: 'sbrow-1', userId: 'u1' }) }),
-    );
-  });
-
-  it('still runs the idempotent teardown when nothing is live in this process', async () => {
-    // The persisted sandboxId is observability-only and must not gate the
-    // decision: teardown always runs (it no-ops on an empty memo and clears
-    // the binding), and `tornDown` reports whether a live VM was destroyed.
-    seedMaterializedProject();
-    tables.sandboxes.length = 0;
-
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/sandbox', { method: 'DELETE' });
-
-    expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ tornDown: false });
-    expect(teardownProjectSandbox).toHaveBeenCalledOnce();
+    expect(res.status).toBe(404);
   });
 });
 

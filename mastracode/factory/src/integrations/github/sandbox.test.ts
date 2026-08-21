@@ -4,8 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const dbUpdates: Array<Record<string, unknown>> = [];
 
 import type { MaterializationSandbox, SandboxCommandResult } from '../../sandbox/materialization.js';
-import type { FactorySandboxContext, MastraFactorySandboxConfig } from '../../sandbox/session-sandbox.js';
-import { __clearSessionSandboxesForTests, peekSessionSandbox } from '../../sandbox/session-sandbox.js';
+import { __clearSessionSandboxesForTests } from '../../sandbox/session-sandbox.js';
 import type {
   ProjectRepositorySandbox,
   SourceControlStorageHandle,
@@ -14,9 +13,6 @@ import {
   checkoutSessionBranch,
   configureGitIdentity,
   createPullRequest,
-  ensureProjectSandbox as ensureProjectSandboxWithStorage,
-  projectSandboxKey,
-  teardownProjectSandbox,
   isValidGitRef,
   materializeRepo as materializeRepoWithStorage,
   MaterializeError,
@@ -29,14 +25,6 @@ import {
   WorktreeError,
 } from './sandbox.js';
 import type { RepoMaterializeInfo } from './sandbox.js';
-
-/** Callback-runtime under test: records ctx per construction. */
-const createCalls: FactorySandboxContext[] = [];
-let nextSandbox: () => FakeSandbox = () => new FakeSandbox();
-const runtime: MastraFactorySandboxConfig = ctx => {
-  createCalls.push(ctx);
-  return nextSandbox() as never;
-};
 
 type Responder = (script: string) => SandboxCommandResult;
 const OK: SandboxCommandResult = { exitCode: 0, stdout: '', stderr: '' };
@@ -98,31 +86,10 @@ function makeRepoInfo(overrides: Partial<RepoMaterializeInfo> = {}): RepoMateria
 }
 
 const storage = {
-  setSandboxId: vi.fn(async ({ sandboxId }: { id: string; sandboxId: string }) => {
-    dbUpdates.push({ sandboxId });
-  }),
-  clearBinding: vi.fn(async (_input: { id: string }) => {
-    dbUpdates.push({ sandboxId: null });
-  }),
   markMaterialized: vi.fn(async (_input: { id: string }) => {
     dbUpdates.push({ materializedAt: new Date() });
   }),
-} as unknown as SourceControlStorageHandle['sandboxes'];
-
-async function ensureProjectSandbox(
-  row: ProjectRepositorySandbox,
-  onProgress?: Parameters<typeof ensureProjectSandboxWithStorage>[0]['onProgress'],
-) {
-  const { sandbox } = await ensureProjectSandboxWithStorage({
-    sandbox: runtime,
-    row,
-    repoFullName: 'octocat/hello',
-    storage,
-    token: 'install-token',
-    onProgress,
-  });
-  return sandbox;
-}
+} as unknown as SourceControlStorageHandle['sessions'];
 
 function materializeRepo(
   row: ProjectRepositorySandbox,
@@ -135,67 +102,7 @@ function materializeRepo(
 
 beforeEach(() => {
   dbUpdates.length = 0;
-  createCalls.length = 0;
-  nextSandbox = () => new FakeSandbox();
   __clearSessionSandboxesForTests();
-});
-
-describe('ensureProjectSandbox', () => {
-  it('constructs by binding key, starts, injects GH_TOKEN, and records the id for observability', async () => {
-    const sandbox = new FakeSandbox();
-    nextSandbox = () => sandbox;
-
-    const result = await ensureProjectSandbox(makeRow({ sandboxId: null }));
-
-    expect(result).toBe(sandbox);
-    expect(sandbox.startCount).toBe(1);
-    expect(sandbox.env.GH_TOKEN).toBe('install-token');
-    expect(createCalls).toEqual([
-      expect.objectContaining({
-        sessionId: 'project-sbrow-1',
-        repoFullName: 'octocat/hello',
-        actingUserId: 'user-1',
-      }),
-    ]);
-    // Observability only — nothing reads this back for decisions.
-    await vi.waitFor(() => expect(dbUpdates).toEqual([{ sandboxId: 'logical-id' }]));
-  });
-
-  it('memoizes the instance per binding key across opens', async () => {
-    const first = await ensureProjectSandbox(makeRow());
-    const second = await ensureProjectSandbox(makeRow());
-
-    expect(second).toBe(first);
-    expect(createCalls).toHaveLength(1);
-  });
-
-  it('fails loudly when no sandbox provider is configured', async () => {
-    await expect(
-      ensureProjectSandboxWithStorage({
-        sandbox: undefined,
-        row: makeRow(),
-        repoFullName: 'octocat/hello',
-        storage,
-        token: 'install-token',
-      }),
-    ).rejects.toThrow(/No sandbox provider is configured/);
-  });
-});
-
-describe('teardownProjectSandbox', () => {
-  it('destroys the memoized sandbox and clears the persisted binding', async () => {
-    const sandbox = new FakeSandbox();
-    nextSandbox = () => sandbox;
-    const row = makeRow();
-    await ensureProjectSandbox(row);
-    dbUpdates.length = 0;
-
-    await teardownProjectSandbox({ row, storage });
-
-    expect(sandbox.destroyed).toBe(true);
-    expect(peekSessionSandbox(projectSandboxKey(row))).toBeUndefined();
-    expect(dbUpdates).toEqual([{ sandboxId: null }]);
-  });
 });
 
 describe('materializeRepo', () => {
