@@ -223,7 +223,11 @@ export function emitSpanFact(
 function emitMintedFact(phase: 'started' | 'ended', ctx: LifecycleSiteContext & { runId: string }): void {
   const isEnd = phase === 'ended';
   const occ = ctx.occurrence ?? 0;
-  const pulseId = mintFactId(ctx.runId, ctx.surface, ctx.base, phase, occ);
+  // A suspend is NOT the terminal: it must not occupy the 'ended' slot,
+  // or the resumed run's real terminal would collide with it and readers
+  // would pick one nondeterministically.
+  const slotOcc = isEnd && ctx.status === 'suspended' ? `${occ}:suspended` : occ;
+  const pulseId = mintFactId(ctx.runId, ctx.surface, ctx.base, phase, slotOcc);
   // Synthetic node key: lets the existing span-keyed tree readers pair
   // started/ended minted facts and link parents with zero reader changes.
   const nodeKey = `${ctx.surface}.${ctx.base}.${occ}`;

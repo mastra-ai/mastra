@@ -201,6 +201,22 @@ describe('site context extras', () => {
     expect(c.pulses.every(p => p.type === 'state')).toBe(true);
   });
 
+  it('a suspend does not occupy the terminal slot — the real end lands beside it', async () => {
+    const bus = new PulseBus();
+    const c = collect(bus);
+    registerPulseEmitter(bus);
+    try {
+      emitSpanFact(undefined, 'ended', { runId: 'run-sr', surface: 'agent', base: 'run', status: 'suspended' });
+      // ...the run resumes and truly finishes later:
+      emitSpanFact(undefined, 'ended', { runId: 'run-sr', surface: 'agent', base: 'run', output: true });
+      await flush();
+    } finally {
+      unregisterPulseEmitter(bus);
+    }
+    expect(c.pulses.map(p => p.action)).toEqual(['run_suspended', 'run_completed']);
+    expect(c.pulses[0]!.id).not.toBe(c.pulses[1]!.id);
+  });
+
   it('span-less emission falls back to the ambient run context', async () => {
     const bus = new PulseBus();
     const c = collect(bus);
