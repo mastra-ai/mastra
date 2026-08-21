@@ -54,6 +54,19 @@ export function readRequestContextOrgId(requestContext: OrgBearingRequestContext
 }
 
 /**
+ * Whether a session state value counts as a resolved organization.
+ *
+ * The capture side trims before deciding (`sdk/src/agents/memory.ts`), so the
+ * recovery guards have to agree with it: a whitespace-only value that reads as
+ * truthy here would look resolved to a heal path while capture still refuses,
+ * and nothing would ever repair it. Not every seam routes its seed through
+ * `seedSessionOrg`, so this cannot be assumed away.
+ */
+export function hasResolvedOrg(orgId: unknown): boolean {
+  return typeof orgId === 'string' && orgId.trim().length > 0;
+}
+
+/**
  * Seed the session's organization, or mark it unresolved when there is none.
  *
  * An absent, empty, or whitespace-only org is a refusal, not a fallback: a

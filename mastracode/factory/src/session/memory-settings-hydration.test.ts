@@ -235,6 +235,17 @@ describe('hydrateSessionMemorySettings', () => {
     expect(session.state.set).toHaveBeenCalledWith({ factoryOrgUnresolved: true });
   });
 
+  it('re-resolves a tagged session whose stored org is blank', async () => {
+    // The coordinator-hydrated early return has to agree with the capture side,
+    // which trims: a blank org is unresolved, so this session still needs a seed.
+    const session = createSession({ factoryProjectId: 'project-1', factoryOrgId: '   ' });
+    const dependencies = createDependencies({ row: { orgId: 'org-1', userId: 'user-1' } as never });
+
+    await hydrateSessionMemorySettings(session, dependencies);
+
+    expect(session.state.set).toHaveBeenCalledWith(expect.objectContaining({ factoryOrgId: 'org-1' }));
+  });
+
   it('marks the session unresolved when the row lookup rejects', async () => {
     const session = createSession();
     const dependencies = createDependencies();

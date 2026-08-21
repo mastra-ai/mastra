@@ -521,6 +521,19 @@ describe('dispatchGithubWebhook org seeding', () => {
     expect(state.factoryOrgUnresolved).toBe(false);
   });
 
+  it('heals a session whose stored org is blank', async () => {
+    // Not every seam routes its seed through seedSessionOrg, so a blank org can
+    // reach state. Capture trims before deciding, so a truthiness check here
+    // would call it resolved while capture refuses, and nothing would repair it.
+    const state: Record<string, unknown> = { factoryProjectId: 'resource-1', factoryOrgId: '   ' };
+    const session = liveSession(state);
+
+    const result = await deliver(session, (async () => ({ userId: 'user-1', orgId: 'org-1' })) as never);
+
+    expect(result.delivered).toBe(1);
+    expect(state.factoryOrgId).toBe('org-1');
+  });
+
   it('leaves an already-seeded session untouched, costing no storage read', async () => {
     const state: Record<string, unknown> = { factoryProjectId: 'resource-1', factoryOrgId: 'org-1' };
     const session = liveSession(state);
