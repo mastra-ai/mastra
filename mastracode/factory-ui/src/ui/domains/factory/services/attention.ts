@@ -82,11 +82,16 @@ export function updateFactoryAttentionReceipt(
   );
 }
 
-export function markAllFactoryAttentionRead(
-  baseUrl: string,
-  factoryProjectId: string,
-): Promise<{ ok: true; hasMore: boolean }> {
-  return requestJson(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/attention/read-all`, {
-    method: 'POST',
-  });
+export async function markAllFactoryAttentionRead(baseUrl: string, factoryProjectId: string): Promise<{ ok: true }> {
+  let before: string | undefined;
+  while (true) {
+    const query = before ? `?before=${encodeURIComponent(before)}` : '';
+    const page = await requestJson<{ ok: true; hasMore: boolean; nextCursor?: string }>(
+      `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/attention/read-all${query}`,
+      { method: 'POST' },
+    );
+    if (!page.hasMore) return { ok: true };
+    if (!page.nextCursor) throw new Error('Attention read-all response is missing its continuation cursor.');
+    before = page.nextCursor;
+  }
 }

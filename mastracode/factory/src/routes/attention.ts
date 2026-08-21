@@ -332,10 +332,14 @@ export function buildAttentionRoutes(dependencies: AttentionRouteDependencies): 
       handler: async context => {
         const resolved = await dependencies.resolveProject(context);
         if ('response' in resolved) return resolved.response;
+        const cursorRaw = context.req.query('before');
+        const initialBefore = parseAttentionCursor(cursorRaw);
+        if (cursorRaw && !initialBefore) return context.json({ error: 'invalid_cursor' }, 400);
         await workItems.ensureReady();
-        let before: { occurredAt: Date; id: string } | undefined;
+        let before = initialBefore;
         let pages = 0;
         let hasMore = false;
+        let nextCursor: string | undefined;
         while (pages < MAX_RECEIPT_SCAN_PAGES) {
           const page = await workItems.listFailedDecisionPage({
             orgId: resolved.orgId,
@@ -359,11 +363,12 @@ export function buildAttentionRoutes(dependencies: AttentionRouteDependencies): 
           if (!page.hasMore || !last) break;
           if (pages === MAX_RECEIPT_SCAN_PAGES) {
             hasMore = true;
+            nextCursor = encodeAttentionCursor(last);
             break;
           }
           before = { occurredAt: failureOccurredAt(last), id: last.id };
         }
-        return context.json({ ok: true, hasMore });
+        return context.json({ ok: true, hasMore, ...(nextCursor ? { nextCursor } : {}) });
       },
     }),
     receiptRoute(dependencies, 'read', 'read'),

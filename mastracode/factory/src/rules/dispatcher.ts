@@ -159,9 +159,12 @@ function leaseIdentity(
   return { id: record.id, orgId: record.orgId, factoryProjectId: record.factoryProjectId, ownerId };
 }
 
-async function awaitNotification(result: Promise<FactoryNotificationResult>, requireDelivery = false): Promise<void> {
+async function awaitNotification(
+  send: () => Promise<FactoryNotificationResult>,
+  requireDelivery = false,
+): Promise<void> {
   try {
-    const notification = await result;
+    const notification = await send();
     await notification.persisted;
     if (!notification.accepted) {
       if (requireDelivery) {
@@ -452,12 +455,13 @@ export class FactoryDecisionDispatcher {
           ...(decision.reenter ? { reenter: true } : {}),
         });
         if (result.status === 'rejected') throw new Error(`${result.code}: ${result.reason}`);
-        if (!decision.message) return;
+        const transitionMessage = decision.message;
+        if (!transitionMessage) return;
         // Best-effort recipient lookup: no active binding (or no authenticated
         // session owner) means nobody is engaged with this item, so the
         // transition itself is the whole effect. A retry after a delivery
         // failure is safe because the transition replays by ingress identity.
-        const binding = await this.#findBinding(record, decision.message.role);
+        const binding = await this.#findBinding(record, transitionMessage.role);
         if (!binding) return;
         const startedBy = item.sessions[binding.role]?.startedBy;
         if (!startedBy) return;
@@ -467,22 +471,23 @@ export class FactoryDecisionDispatcher {
         const session = await this.#findSession(binding);
         if (!session) return;
         await awaitNotification(
-          session.sendNotificationSignal(
-            {
-              source: 'factory',
-              kind: 'rule-message',
-              summary: decision.message.text,
-              priority: 'high',
-              payload: { message: decision.message.text },
-              sourceId: record.id,
-              dedupeKey: record.idempotencyKey,
-            },
-            {
-              ifActive: { behavior: 'deliver' },
-              ifIdle: { behavior: 'wake' },
-              requestContext,
-            },
-          ),
+          () =>
+            session.sendNotificationSignal(
+              {
+                source: 'factory',
+                kind: 'rule-message',
+                summary: transitionMessage.text,
+                priority: 'high',
+                payload: { message: transitionMessage.text },
+                sourceId: record.id,
+                dedupeKey: record.idempotencyKey,
+              },
+              {
+                ifActive: { behavior: 'deliver' },
+                ifIdle: { behavior: 'wake' },
+                requestContext,
+              },
+            ),
           true,
         );
         return;
@@ -515,15 +520,16 @@ export class FactoryDecisionDispatcher {
         const delivered = await session.thread.listActiveMessages();
         if (delivered.some(message => message.id === record.id)) return;
         if (decision.cancelInFlight) session.abort();
-        if (decision.precedingMessage) {
-          await awaitNotification(
+        const precedingMessage = decision.precedingMessage;
+        if (precedingMessage) {
+          await awaitNotification(() =>
             session.sendNotificationSignal(
               {
                 source: 'factory',
                 kind: 'stage-transition',
-                summary: decision.precedingMessage,
+                summary: precedingMessage,
                 priority: 'medium',
-                payload: { message: decision.precedingMessage },
+                payload: { message: precedingMessage },
                 sourceId: `${record.id}:stage-transition`,
                 dedupeKey: `${record.idempotencyKey}:stage-transition`,
               },
@@ -650,22 +656,23 @@ export class FactoryDecisionDispatcher {
         requestContext.set('user', { workosId: startedBy, organizationId: record.orgId });
         const session = await this.#requireSession(binding);
         await awaitNotification(
-          session.sendNotificationSignal(
-            {
-              source: 'factory',
-              kind: 'rule-message',
-              summary: decision.message,
-              priority: decision.priority ?? 'high',
-              payload: { message: decision.message },
-              sourceId: record.id,
-              dedupeKey: record.idempotencyKey,
-            },
-            {
-              ifActive: { behavior: 'deliver' },
-              ifIdle: { behavior: decision.idleBehavior ?? 'wake' },
-              requestContext,
-            },
-          ),
+          () =>
+            session.sendNotificationSignal(
+              {
+                source: 'factory',
+                kind: 'rule-message',
+                summary: decision.message,
+                priority: decision.priority ?? 'high',
+                payload: { message: decision.message },
+                sourceId: record.id,
+                dedupeKey: record.idempotencyKey,
+              },
+              {
+                ifActive: { behavior: 'deliver' },
+                ifIdle: { behavior: decision.idleBehavior ?? 'wake' },
+                requestContext,
+              },
+            ),
           true,
         );
         return;
@@ -673,7 +680,7 @@ export class FactoryDecisionDispatcher {
       case 'notify': {
         const binding = await this.#requireBinding(record);
         const session = await this.#requireSession(binding);
-        await awaitNotification(
+        await awaitNotification(() =>
           session.sendNotificationSignal({
             source: 'factory',
             kind: 'rule-notification',
@@ -875,18 +882,19 @@ export class FactoryDecisionDispatcher {
           requestContext.set('user', { workosId: startedBy, organizationId: record.orgId });
           const session = await this.#requireSession(binding);
           await awaitNotification(
-            session.sendNotificationSignal(
-              {
-                source: 'factory',
-                kind: 'run-kickoff',
-                summary: record.message!,
-                priority: 'high',
-                payload: { message: record.message },
-                sourceId: record.id,
-                dedupeKey: `factory-kickoff:${record.kickoffKey}`,
-              },
-              { ifActive: { behavior: 'deliver' }, ifIdle: { behavior: 'wake' }, requestContext },
-            ),
+            () =>
+              session.sendNotificationSignal(
+                {
+                  source: 'factory',
+                  kind: 'run-kickoff',
+                  summary: record.message!,
+                  priority: 'high',
+                  payload: { message: record.message },
+                  sourceId: record.id,
+                  dedupeKey: `factory-kickoff:${record.kickoffKey}`,
+                },
+                { ifActive: { behavior: 'deliver' }, ifIdle: { behavior: 'wake' }, requestContext },
+              ),
             true,
           );
         },

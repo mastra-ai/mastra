@@ -40,5 +40,5 @@ export function factoryDispatchFailureCode(error: unknown): FactoryDispatchFailu
 export function factoryDispatchFailureMetadata(
   code: FactoryDispatchFailureCode | null,
 ): FactoryDispatchFailureMetadata {
-  return code === null ? { canRetry: true, label: 'Factory automation failed' } : FAILURE_METADATA[code];
+  return code === null ? FAILURE_METADATA.unknown : FAILURE_METADATA[code];
 }

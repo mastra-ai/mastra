@@ -890,6 +890,7 @@ export function createGithubPullRequestReconciler(
             }
           }
           if (state.state !== 'closed') continue;
+          const cleanupFailures = new Set<string>();
           for (const card of cards) {
             if (!isTerminalFactoryRuleStage(card.stages)) continue;
             try {
@@ -901,11 +902,13 @@ export function createGithubPullRequestReconciler(
               });
             } catch (error) {
               recordFailure(repository, error, pullRequestNumber);
+              cleanupFailures.add(card.id);
             }
           }
           await rules.ingest(reconciledClosedEvent(repository, pullRequestNumber, state));
           await retireReconciledSubscriptions(options.integrationStorage, repository, pullRequestNumber, state.merged);
           for (const card of cards) {
+            if (cleanupFailures.has(card.id)) continue;
             try {
               await options.storage.update({
                 orgId: card.orgId,

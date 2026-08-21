@@ -55,10 +55,12 @@ describe('AttentionPage', () => {
           hasMore: false,
         });
       }),
-      http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention/read-all`, () => {
+      http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention/read-all`, ({ request }) => {
         markAllRequests += 1;
+        const before = new URL(request.url).searchParams.get('before');
+        if (!before) return HttpResponse.json({ ok: true, hasMore: true, nextCursor: 'older-failures' });
         items = items.map(attentionItem => (attentionItem.archived ? attentionItem : { ...attentionItem, read: true }));
-        return HttpResponse.json({ ok: true });
+        return HttpResponse.json({ ok: true, hasMore: false });
       }),
       http.post(
         `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention/automation-failed/:decisionId/:occurrence/:action`,
@@ -86,7 +88,7 @@ describe('AttentionPage', () => {
     if (!goTo) throw new Error('Expected a work-item destination');
     expect(goTo).toHaveAttribute('href', `/factories/${FACTORY_ID}/work?item=item-decision-1`);
     await user.click(screen.getByRole('button', { name: 'Mark all open as read' }));
-    await waitFor(() => expect(markAllRequests).toBe(1));
+    await waitFor(() => expect(markAllRequests).toBe(2));
     await waitForMutationsIdle(client);
     await waitFor(() =>
       expect(screen.queryByRole('button', { name: 'Mark all open as read' })).not.toBeInTheDocument(),
