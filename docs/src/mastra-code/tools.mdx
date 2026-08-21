@@ -151,11 +151,16 @@ Request access to directories outside the project root. The user is prompted to 
 
 Search the web for documentation, error messages, package APIs, and other information.
 
-This tool is available through three providers:
+This tool is available through four providers, selected by the following precedence:
 
-- **Tavily**: When the `TAVILY_API_KEY` environment variable is set (takes priority).
-- **Anthropic web search**: Built into Anthropic models, used when no Tavily key is configured.
-- **OpenAI web search**: Built into OpenAI models, used when no Tavily key is configured.
+1. **Tavily**: When `TAVILY_API_KEY` is set (highest priority).
+2. **Parallel**: When `PARALLEL_API_KEY` is set and no Tavily key is configured.
+3. **Anthropic web search**: Built into Anthropic models, used when no Tavily or Parallel key is configured.
+4. **OpenAI web search**: Built into OpenAI models, used when no Tavily or Parallel key is configured.
+
+The input schema depends on the active provider:
+
+**Tavily / Anthropic / OpenAI:**
 
 | Parameter | Type | Required | Description |
 | - | - | - | - |
@@ -164,15 +169,32 @@ This tool is available through three providers:
 | `maxResults` | `number` | No | Maximum number of results (default: 10) |
 | `includeImages` | `boolean` | No | Include related images (default: false) |
 
+**Parallel:**
+
+| Parameter | Type | Required | Description |
+| - | - | - | - |
+| `search_queries` | `string[]` | Yes | Concise keyword search queries (3-6 words each). Provide 2-3 for best results. |
+| `objective` | `string` | No | Natural-language description of the goal driving the search |
+
 ### `web_extract`
 
-Extract the full content of one or more web pages. Requires a Tavily API key (`TAVILY_API_KEY`).
+Extract the full content of one or more web pages. Requires a Tavily API key (`TAVILY_API_KEY`) or Parallel API key (`PARALLEL_API_KEY`).
+
+**Tavily:**
 
 | Parameter | Type | Required | Description |
 | - | - | - | - |
 | `urls` | `string[]` | Yes | URLs to extract content from (max 20) |
 | `extractDepth` | `"basic" \| "advanced"` | No | Extraction depth (default: `"basic"`) |
 | `includeImages` | `boolean` | No | Include extracted image URLs (default: false) |
+
+**Parallel:**
+
+| Parameter | Type | Required | Description |
+| - | - | - | - |
+| `urls` | `string[]` | Yes | URLs to extract content from |
+| `objective` | `string` | No | Natural-language description of what content to focus on |
+
 
 ## Task management
 

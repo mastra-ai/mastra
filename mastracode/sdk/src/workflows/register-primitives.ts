@@ -33,7 +33,14 @@ import { LazyNotificationsStorage } from '../agents/tools.js';
 import { workflowBuilderAgent } from '../agents/workflow-builder-agent.js';
 import type { McpManager } from '../mcp';
 import { MC_TOOLS } from '../tool-names.js';
-import { createWebExtractTool, createWebSearchTool, hasTavilyKey } from '../tools/web-search.js';
+import {
+  createWebExtractTool,
+  createWebSearchTool,
+  hasTavilyKey,
+  createParallelWebSearchTool,
+  createParallelWebExtractTool,
+  hasParallelKey,
+} from '../tools/web-search.js';
 
 export interface RegisterWorkflowBuilderPrimitivesOptions {
   projectPath: string;
@@ -83,11 +90,14 @@ export async function registerWorkflowBuilderPrimitives(
     mastra.addTool(tool, toolId);
   }
 
-  // 3. Web tools — Tavily only. Provider-native web tools (Anthropic/OpenAI)
+  // 3. Web tools — Tavily or Parallel. Provider-native web tools (Anthropic/OpenAI)
   //    are model-locked and would freeze workflows to one provider.
   if (hasTavilyKey()) {
     mastra.addTool(createWebSearchTool(), 'web-search');
     mastra.addTool(createWebExtractTool(), 'web-extract');
+  } else if (hasParallelKey()) {
+    mastra.addTool(createParallelWebSearchTool(), 'web-search');
+    mastra.addTool(createParallelWebExtractTool(), 'web-extract');
   }
 
   // 4. notification_inbox — LazyNotificationsStorage resolves the notifications

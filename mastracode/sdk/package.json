@@ -67,6 +67,7 @@
     "@mastra/schema-compat": "workspace:*",
     "@mastra/stagehand": "workspace:*",
     "@mastra/tavily": "workspace:*",
+    "@parallel-web/ai-sdk-tools": "^1.0.0",
     "ai": "^6.0.236",
     "execa": "^9.6.1",
     "libsql": "^0.5.29",

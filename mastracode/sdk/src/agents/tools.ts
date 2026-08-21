@@ -15,7 +15,15 @@ import type { HookManager } from '../hooks/index.js';
 import type { McpManager } from '../mcp/index.js';
 import type { MastraCodeComposedState } from '../schema.js';
 import { MC_TOOLS } from '../tool-names.js';
-import { createWebSearchTool, createWebExtractTool, hasTavilyKey, requestSandboxAccessTool } from '../tools/index.js';
+import {
+  createWebSearchTool,
+  createWebExtractTool,
+  hasTavilyKey,
+  createParallelWebSearchTool,
+  createParallelWebExtractTool,
+  hasParallelKey,
+  requestSandboxAccessTool,
+} from '../tools/index.js';
 import { createWorkflowTool } from '../tools/workflows/create-workflow.js';
 import { deleteWorkflowTool } from '../tools/workflows/delete-workflow.js';
 import { getWorkflowTool } from '../tools/workflows/get-workflow.js';
@@ -118,11 +126,12 @@ export function createDynamicTools(
   disabledTools?: string[],
   storage?: MastraCompositeStore,
   pluginTools?: Record<string, ToolLike>,
-) {
+): any {
   return function getDynamicTools({
     requestContext,
   }: {
     requestContext: RequestContext;
+    mastra?: any;
   }): Record<string, ToolLike> | Promise<Record<string, ToolLike>> {
     const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeComposedState> | undefined;
     const state = ctx?.getState();
@@ -155,6 +164,9 @@ export function createDynamicTools(
     if (hasTavilyKey()) {
       tools.web_search = createWebSearchTool();
       tools.web_extract = createWebExtractTool();
+    } else if (hasParallelKey()) {
+      tools.web_search = createParallelWebSearchTool();
+      tools.web_extract = createParallelWebExtractTool();
     } else if (isAnthropicModel) {
       const anthropic = createAnthropic({});
       tools.web_search = anthropic.tools.webSearch_20250305();

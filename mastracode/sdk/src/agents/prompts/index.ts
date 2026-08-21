@@ -8,7 +8,7 @@ export { fastModePrompt } from './fast.js';
 
 import { buildBasePrompt } from '@mastra/core/coding-agent';
 import type { PromptContext as BasePromptContext } from '@mastra/core/coding-agent';
-import { hasTavilyKey } from '../../tools/index.js';
+import { hasTavilyKey, hasParallelKey } from '../../tools/index.js';
 import { getLocalPlansRelativeDir } from '../../utils/plans.js';
 import { loadAgentInstructions, formatAgentInstructions, createGitRefInstructionReader } from './agent-instructions.js';
 import { buildModePromptFn } from './build.js';
@@ -38,7 +38,10 @@ const modePrompts: Record<string, string | ((ctx: PromptContext) => string)> = {
 export function buildFullPrompt(ctx: PromptContext): string {
   // Determine whether web search tools are available
   const modelId = ctx.modelId;
-  const hasWebSearch = hasTavilyKey() || (!!modelId && modelId.startsWith('anthropic/'));
+  const hasWebSearch =
+    hasTavilyKey() ||
+    hasParallelKey() ||
+    (!!modelId && (modelId.startsWith('anthropic/') || modelId.startsWith('openai/')));
 
   // Collect per-tool deny rules so guidance omits denied tools
   const deniedTools = new Set<string>();

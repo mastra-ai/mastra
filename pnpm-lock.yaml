@@ -2570,6 +2570,9 @@ importers:
       '@mastra/tavily':
         specifier: workspace:*
         version: link:../../integrations/tavily
+      '@parallel-web/ai-sdk-tools':
+        specifier: ^1.0.0
+        version: 1.0.0(ai@6.0.241(zod@4.4.3))
       ai:
         specifier: ^6.0.236
         version: 6.0.241(zod@4.4.3)
@@ -18086,6 +18089,11 @@ packages:
     cpu: [x64]
     os: [win32]
 
+  '@parallel-web/ai-sdk-tools@1.0.0':
+    resolution: {integrity: sha512-OmPMRXlYDsnXXe5wjqJDv1YYoUReYwR6f4Ut5CTDh6TmtAHW2jvFSJ0jZJaM/eNJA2w1Q2Ic3axBTqnwY9QVwg==}
+    peerDependencies:
+      ai: ^6.0.0
+
   '@paralleldrive/cuid2@2.3.1':
     resolution: {integrity: sha512-XO7cAxhnTZl0Yggq6jOgjiOHhbgcO4NqFqwSmQpjK3b6TEE6Uj/jfSk6wzYyemh3+I0sHirKSetjQwn5cZktFw==}
 
@@ -28522,6 +28530,9 @@ packages:
 
   papaparse@5.5.4:
     resolution: {integrity: sha512-SwzWD9gl/ElwYLCI0nUja1mFJzjq2D8ziShfNBa7zCHzkOozeOGDwHWQ+tvCzEZcewecWZ5U7kUopDnG+DFYEQ==}
+
+  parallel-web@0.5.0:
+    resolution: {integrity: sha512-p3JR9ENwbXtQJFTn4rWrraYKzHISkG2lwoRmVQceEqepgMtpuE6v/BEMi4yAmGum6ejK2F4DDKLkcqeFxnqztg==}
 
   param-case@3.0.4:
     resolution: {integrity: sha512-RXlj7zCYokReqWpOPH9oYivUzLYZ5vAPIfEmCTNViosC78F8F0H9y7T7gG2M39ymgutxF5gcFEsyZQSph9Bp3A==}
@@ -42951,6 +42962,12 @@ snapshots:
   '@oxlint/binding-win32-x64-msvc@1.75.0':
     optional: true
 
+  '@parallel-web/ai-sdk-tools@1.0.0(ai@6.0.241(zod@4.4.3))':
+    dependencies:
+      ai: 6.0.241(zod@4.4.3)
+      parallel-web: 0.5.0
+      zod: 4.4.3
+
   '@paralleldrive/cuid2@2.3.1':
     dependencies:
       '@noble/hashes': 1.8.0
@@ -54923,6 +54940,8 @@ snapshots:
   pako@2.1.0: {}
 
   papaparse@5.5.4: {}
+
+  parallel-web@0.5.0: {}
 
   param-case@3.0.4:
     dependencies:

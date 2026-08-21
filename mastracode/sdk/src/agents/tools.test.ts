@@ -4,12 +4,16 @@ vi.mock('../tools/index.js', () => ({
   createWebSearchTool: () => ({ description: 'web search' }),
   createWebExtractTool: () => ({ description: 'web extract' }),
   hasTavilyKey: () => false,
+  createParallelWebSearchTool: () => ({ description: 'parallel web search' }),
+  createParallelWebExtractTool: () => ({ description: 'parallel web extract' }),
+  hasParallelKey: () => false,
   requestSandboxAccessTool: { description: 'request sandbox access' },
 }));
 
 import { createDynamicTools, createToolHooks } from './tools.js';
+import * as toolsIndex from '../tools/index.js';
 
-function createRequestContext(state: Record<string, unknown>, modeId: string = 'build') {
+function createRequestContext(state: Record<string, unknown>, modeId: string = 'build', modelId?: string) {
   const getState = () => state;
   return {
     get(key: string) {
@@ -17,7 +21,7 @@ function createRequestContext(state: Record<string, unknown>, modeId: string = '
       return {
         modeId,
         getState,
-        session: { state: { get: getState } },
+        session: { state: { get: getState }, modelId },
       };
     },
   } as any;
@@ -53,7 +57,36 @@ describe('createDynamicTools', () => {
     expect(allowedTools.request_access).not.toBe(requestAccessReplacement);
     expect(allowedTools.request_access.description).toBe('request sandbox access');
   });
+
+  it('selects Parallel web tools when PARALLEL_API_KEY is set but TAVILY_API_KEY is not', () => {
+    vi.spyOn(toolsIndex, 'hasParallelKey').mockReturnValue(true);
+    vi.spyOn(toolsIndex, 'hasTavilyKey').mockReturnValue(false);
+
+    const getDynamicTools = createDynamicTools();
+    const allowedTools = getDynamicTools({ requestContext: createRequestContext({}) });
+
+    expect(allowedTools.web_search).toBeDefined();
+    expect(allowedTools.web_search.description).toBe('parallel web search');
+    expect(allowedTools.web_extract).toBeDefined();
+    expect(allowedTools.web_extract.description).toBe('parallel web extract');
+
+    vi.restoreAllMocks();
+  });
+
+  it('prefers Tavily over Parallel when both keys are set', () => {
+    vi.spyOn(toolsIndex, 'hasTavilyKey').mockReturnValue(true);
+    vi.spyOn(toolsIndex, 'hasParallelKey').mockReturnValue(true);
+
+    const getDynamicTools = createDynamicTools();
+    const allowedTools = getDynamicTools({ requestContext: createRequestContext({}) });
+
+    expect(allowedTools.web_search.description).toBe('web search');
+    expect(allowedTools.web_extract.description).toBe('web extract');
+
+    vi.restoreAllMocks();
+  });
 });
+
 
 describe('createToolHooks', () => {
   it('maps PreToolUse and PostToolUse hook manager calls to agent tool hooks', async () => {

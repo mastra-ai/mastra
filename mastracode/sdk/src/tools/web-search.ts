@@ -1,5 +1,6 @@
 import { createTool } from '@mastra/core/tools';
 import { createTavilySearchTool, createTavilyExtractTool } from '@mastra/tavily';
+import { createSearchTool as createParallelSearchToolSdk, createExtractTool as createParallelExtractToolSdk } from '@parallel-web/ai-sdk-tools';
 
 import { truncateStringForTokenEstimate } from '../utils/token-estimator.js';
 
@@ -15,6 +16,15 @@ const MIN_RELEVANCE_SCORE = 0.25;
  */
 export function hasTavilyKey(): boolean {
   return !!process.env.TAVILY_API_KEY;
+}
+
+/**
+ * Check whether a Parallel API key is available in the environment.
+ * Used to decide whether to include Parallel-backed web tools when
+ * Tavily is not configured.
+ */
+export function hasParallelKey(): boolean {
+  return !!process.env.PARALLEL_API_KEY;
 }
 
 /**
@@ -76,6 +86,70 @@ export function createWebExtractTool() {
 
       for (const r of output.failedResults) {
         parts.push(`## ${r.url}\nError: ${r.error}`);
+      }
+
+      const text = parts.join('\n\n');
+      return truncateStringForTokenEstimate(text, MAX_WEB_EXTRACT_TOKENS);
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Parallel-backed web tools
+// ---------------------------------------------------------------------------
+
+/**
+ * Wraps @parallel-web/ai-sdk-tools search with mastracode-specific behavior:
+ * markdown string formatting and token truncation.
+ */
+export function createParallelWebSearchTool() {
+  const parallelSearchTool = createParallelSearchToolSdk();
+
+  return createTool({
+    id: 'web-search',
+    description: parallelSearchTool.description!,
+    inputSchema: parallelSearchTool.inputSchema as any,
+    execute: async (input, context) => {
+      const output: any = await (parallelSearchTool as any).execute!(input as any, context as any);
+
+      const parts: string[] = [];
+
+      for (const r of output.results ?? []) {
+        const header = r.title ? `## ${r.title}\n${r.url}` : `## ${r.url}`;
+        const body = (r.excerpts ?? []).join('\n\n');
+        parts.push(`${header}\n${body}`);
+      }
+
+      const text = parts.join('\n\n');
+      return truncateStringForTokenEstimate(text, MAX_WEB_SEARCH_TOKENS);
+    },
+  });
+}
+
+/**
+ * Wraps @parallel-web/ai-sdk-tools extract with mastracode-specific behavior:
+ * markdown string formatting and token truncation.
+ */
+export function createParallelWebExtractTool() {
+  const parallelExtractTool = createParallelExtractToolSdk();
+
+  return createTool({
+    id: 'web-extract',
+    description: parallelExtractTool.description!,
+    inputSchema: parallelExtractTool.inputSchema as any,
+    execute: async (input, context) => {
+      const output: any = await (parallelExtractTool as any).execute!(input as any, context as any);
+
+      const parts: string[] = [];
+
+      for (const r of output.results ?? []) {
+        const header = r.title ? `## ${r.title}\n${r.url}` : `## ${r.url}`;
+        const body = (r.excerpts ?? []).join('\n\n');
+        parts.push(`${header}\n${body}`);
+      }
+
+      for (const r of output.errors ?? []) {
+        parts.push(`## ${r.url}\nError: ${r.error_type}`);
       }
 
       const text = parts.join('\n\n');
