@@ -16,7 +16,7 @@ import type {
   UIMessage as UIMessageV6,
 } from '@internal/ai-v6';
 import { DefaultGeneratedFile, DefaultGeneratedFileWithType } from '@mastra/core/stream';
-import type { DataChunkType, ChunkType, MastraFinishReason } from '@mastra/core/stream';
+import type { DataChunkType, ChunkType, MastraFinishReason, ProviderMetadata } from '@mastra/core/stream';
 import { isDataChunkType } from './utils';
 
 /**
@@ -39,8 +39,14 @@ export function toAISDKFinishReason(reason: MastraFinishReason): FinishReason {
   return reason;
 }
 
+type MastraToolResultStreamPart = Extract<TextStreamPart<ToolSet>, { type: 'tool-result' }> & {
+  providerMetadata?: ProviderMetadata;
+};
+
+type MastraTextStreamPart = Exclude<TextStreamPart<ToolSet>, { type: 'tool-result' }> | MastraToolResultStreamPart;
+
 export type OutputChunkType<OUTPUT = undefined> =
-  | TextStreamPart<ToolSet>
+  | MastraTextStreamPart
   | ObjectStreamPart<Partial<OUTPUT>>
   | ToolApprovalRequest
   | DataChunkType
@@ -374,7 +380,7 @@ export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
         output: hasTransformedToolPayload(displayOutputTransform)
           ? displayOutputTransform.transformed
           : chunk.payload.result,
-        // providerMetadata: chunk.payload.providerMetadata, // AI v5 types don't show this?
+        providerMetadata: chunk.payload.providerMetadata,
       };
     case 'tool-error':
       return {
@@ -574,7 +580,7 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
 }: {
   // tool-output is a custom mastra chunk type used in ToolStream
   part:
-    | TextStreamPart<ToolSet>
+    | MastraTextStreamPart
     | AISDKToolOutputDenied
     | DataChunkType
     | ToolApprovalRequest
@@ -739,6 +745,7 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
         toolCallId: part.toolCallId,
         output: part.output,
         ...(part.providerExecuted != null ? { providerExecuted: part.providerExecuted } : {}),
+        ...(part.providerMetadata != null ? { providerMetadata: part.providerMetadata } : {}),
         ...(part.dynamic != null ? { dynamic: part.dynamic } : {}),
       };
     }

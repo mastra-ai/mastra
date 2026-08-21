@@ -148,6 +148,47 @@ describe('tool payload transform conversion', () => {
   });
 });
 
+describe('tool result provider metadata conversion (issue #22012)', () => {
+  it('forwards model output metadata to the UI chunk', () => {
+    const providerMetadata = {
+      mastra: {
+        modelOutput: {
+          runId: 'run-1',
+          proposalCount: 1,
+        },
+      },
+    };
+    const part = convertMastraChunkToAISDKv6({
+      chunk: {
+        type: 'tool-result',
+        runId: 'run-1',
+        from: ChunkFrom.AGENT,
+        payload: {
+          toolCallId: 'call-1',
+          toolName: 'propose',
+          result: {
+            runId: 'run-1',
+            proposals: [{ id: 'proposal-1', internalDetails: 'large raw payload' }],
+          },
+          providerMetadata,
+        },
+      },
+    }) as any;
+
+    expect(part.providerMetadata).toEqual(providerMetadata);
+    expect(
+      convertFullStreamChunkToUIMessageStream({
+        part,
+        onError: String,
+      }),
+    ).toMatchObject({
+      type: 'tool-output-available',
+      toolCallId: 'call-1',
+      providerMetadata,
+    });
+  });
+});
+
 describe('client observability carrier propagation', () => {
   it('preserves observability on tool-call and tool-input-start conversion', () => {
     const carrier = { traceparent: '00-cccccccccccccccccccccccccccccccc-dddddddddddddddd-01' };
