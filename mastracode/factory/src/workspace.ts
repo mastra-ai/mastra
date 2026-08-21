@@ -352,10 +352,6 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         createSessionSandboxInstance({
           sessionId: session.id,
           repoFullName,
-          // Default-branch head sha, when factory knows one (persisted
-          // base-checkpoint metadata). Unknown -> providers fall back to a
-          // sha-less template alias; a fresher sha source is a follow-up.
-          ...(projectRepository.baseCheckpoint?.sha ? { repoSha: projectRepository.baseCheckpoint.sha } : {}),
           ...(projectRepository.setupCommand ? { setupCommand: projectRepository.setupCommand } : {}),
           onStart: setupHook,
           actingUserId: userId,

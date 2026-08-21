@@ -18,6 +18,7 @@ import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vites
 
 import { createRepoTemplate } from '../utils/repo-template';
 import { createDefaultMountableTemplate } from '../utils/template';
+import type { NamedTemplateSpec } from '../utils/template';
 import { E2BSandbox } from './index';
 
 // Use vi.hoisted to define the mock before vi.mock is hoisted
@@ -217,10 +218,37 @@ describe('E2BSandbox', () => {
       expect(Template.exists).not.toHaveBeenCalled();
       expect(Template.build).not.toHaveBeenCalled();
     });
+
+    it('a deferred repo spec pins its alias to the resolved head at create time', async () => {
+      const { Sandbox, Template } = await import('e2b');
+      const { repoTemplateAlias } = await import('../utils/repo-template');
+      const head = 'd'.repeat(40);
+      (Sandbox.list as any).mockReturnValue({ nextItems: vi.fn().mockResolvedValue([]) });
+      (Template.exists as any).mockResolvedValue(true);
+      (Sandbox.create as any).mockResolvedValue(mockSandbox);
+
+      const sandbox = new E2BSandbox({
+        id: 'deferred-1',
+        template: createRepoTemplate({ repoFullName: 'octocat/hello', resolveHead: async () => head }),
+      });
+      const result = await sandbox.start();
+
+      expect(result?.outcome).toBe('created');
+      expect((Sandbox.create as any).mock.calls[0]![0]).toBe(
+        repoTemplateAlias({ repoFullName: 'octocat/hello', sha: head }),
+      );
+    });
   });
 
   describe('Named template fallback ladder', () => {
-    const namedSpec = () => createRepoTemplate({ repoFullName: 'octocat/hello', setupCommand: 'pnpm install' });
+    // A pinned sha keeps the spec in its plain named form — the ladder under
+    // test is identical for a deferred spec once it resolves.
+    const namedSpec = () =>
+      createRepoTemplate({
+        repoFullName: 'octocat/hello',
+        setupCommand: 'pnpm install',
+        sha: 'a'.repeat(40),
+      }) as NamedTemplateSpec;
 
     it('falls back to the named workspace-base template when the aliased build fails', async () => {
       const { Sandbox, Template } = await import('e2b');

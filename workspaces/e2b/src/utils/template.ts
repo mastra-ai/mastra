@@ -45,7 +45,12 @@ import type { TemplateBuilder } from 'e2b';
  * })
  * ```
  */
-export type TemplateSpec = string | TemplateBuilder | ((base: TemplateBuilder) => TemplateBuilder) | NamedTemplateSpec;
+export type TemplateSpec =
+  | string
+  | TemplateBuilder
+  | ((base: TemplateBuilder) => TemplateBuilder)
+  | NamedTemplateSpec
+  | DeferredNamedTemplateSpec;
 
 /**
  * A template builder paired with a deterministic alias.
@@ -74,6 +79,28 @@ export interface NamedTemplateSpec {
 
 export function isNamedTemplateSpec(spec: TemplateSpec): spec is NamedTemplateSpec {
   return typeof spec === 'object' && spec !== null && 'alias' in spec && 'template' in spec;
+}
+
+/**
+ * A named spec whose alias and build steps are computed at resolution time
+ * rather than construction time — e.g. a repo template that pins itself to
+ * the repository's current default-branch head, fetched right before the
+ * exists-then-build check. `resolveSpec()` runs once per `start()` template
+ * resolution; failures inside it must be handled by the implementation
+ * (return a degraded spec) — a rejection falls through to the sandbox's
+ * default-template fallback.
+ */
+export interface DeferredNamedTemplateSpec {
+  resolveSpec(): Promise<NamedTemplateSpec>;
+}
+
+export function isDeferredNamedTemplateSpec(spec: TemplateSpec): spec is DeferredNamedTemplateSpec {
+  return (
+    typeof spec === 'object' &&
+    spec !== null &&
+    'resolveSpec' in spec &&
+    typeof (spec as DeferredNamedTemplateSpec).resolveSpec === 'function'
+  );
 }
 
 /**

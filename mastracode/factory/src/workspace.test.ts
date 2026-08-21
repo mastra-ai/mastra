@@ -1039,19 +1039,9 @@ describe('GitHub session workspace preparation', () => {
     );
   });
 
-  it('threads the persisted baseCheckpoint sha into the sandbox callback as repoSha', async () => {
+  it('never threads persisted baseCheckpoint metadata into the sandbox callback', async () => {
     const workspace = createRemoteFactory();
     addProject({ sandboxProvider: 'railway', baseCheckpoint: { name: 'warm', sha: 'abc1234def' } });
-    addSession({ id: 'session-a' });
-
-    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
-
-    expect(mocks.createSandbox).toHaveBeenCalledWith(expect.objectContaining({ repoSha: 'abc1234def' }));
-  });
-
-  it('omits repoSha when no baseCheckpoint sha is persisted', async () => {
-    const workspace = createRemoteFactory();
-    addProject({ sandboxProvider: 'railway' });
     addSession({ id: 'session-a' });
 
     await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });

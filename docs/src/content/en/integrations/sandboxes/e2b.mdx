@@ -317,17 +317,27 @@ const sandbox = new E2BSandbox({
   id: sessionId,
   template: createRepoTemplate({
     repoFullName: 'octocat/hello-world',
-    sha: latestMainSha, // optional: omit for a sha-less alias
     setupCommand: 'pnpm install',
   }),
 })
 ```
 
-The spec carries a deterministic alias derived from the repository, sha, and
-setup command, so the same inputs resolve to the same template. Resolution is
+Without an explicit `sha`, the spec pins itself to the repository's current
+default-branch head at resolution time: right before the template lookup it
+runs a tokenless `git ls-remote` (no clone, \~100ms) and keys the template
+alias on that sha. There is exactly one template per repository and setup
+command at any given head; when the default branch moves, the next new
+sandbox builds a fresh template. If the head can't be resolved (private
+repository, offline), the alias degrades to a sha-less form and the build
+clones whatever the default branch is at build time. Pass `sha` to pin a
+template to a specific commit instead, or `resolveHead` to supply the head
+sha from an authenticated source.
+
+The alias is deterministic — derived from the repository, sha, and setup
+command — so the same inputs resolve to the same template. Resolution is
 lazy: the first sandbox to reference an alias checks whether it exists on E2B
 and builds it once when it doesn't; later sandboxes reuse it without
-rebuilding. A changed sha or setup command hashes to a new alias.
+rebuilding. A changed head or setup command hashes to a new alias.
 
 The template layers on top of the default mountable base (E2B's `base` image,
 so git and common tooling are present, plus `s3fs`/FUSE for mount support).

@@ -22,10 +22,14 @@
  * full clone using its runtime-injected credential instead. Private-repo
  * template support is a follow-up pending a capture-excluded build secret.
  */
+import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { promisify } from 'node:util';
 
 import { createDefaultMountableTemplate } from './template';
-import type { NamedTemplateSpec } from './template';
+import type { DeferredNamedTemplateSpec, NamedTemplateSpec } from './template';
+
+const execFileAsync = promisify(execFile);
 
 const ALIAS_VERSION = 'v1';
 
@@ -60,6 +64,14 @@ export interface RepoTemplateOptions {
    * deterministic remote workdir.
    */
   workdir?: string;
+  /**
+   * Override how the default-branch head sha is resolved for the deferred
+   * (sha-less) form — e.g. an authenticated API lookup for repos whose head
+   * tokenless `git ls-remote` cannot see. Return undefined when unknown; the
+   * alias then degrades to the sha-less form. Defaults to
+   * `git ls-remote <url> HEAD`.
+   */
+  resolveHead?: (repoFullName: string) => Promise<string | undefined>;
 }
 
 /**
@@ -86,15 +98,42 @@ export function repoTemplateAlias(options: RepoTemplateOptions): string {
 /**
  * Create a sha-aliased repo template spec for `E2BSandbox`.
  *
- * Returns a {@link NamedTemplateSpec}: the sandbox checks
- * `Template.exists(alias)` first and only builds when the alias is missing
- * (lazy, build-if-missing). When the build fails — private repo, registry
- * flake — the sandbox falls back to its default template and the session's
- * runtime setup performs the full clone, so a broken build never wedges a
- * session.
+ * With an explicit `sha`, returns a {@link NamedTemplateSpec}: the sandbox
+ * checks `Template.exists(alias)` first and only builds when the alias is
+ * missing (lazy, build-if-missing).
+ *
+ * Without a `sha` (the normal case), returns a
+ * {@link DeferredNamedTemplateSpec} that pins itself to the repository's
+ * current default-branch head at resolution time: right before the
+ * exists-then-build check it runs `git ls-remote <url> HEAD` (tokenless,
+ * ~100ms, no clone) and keys the alias on that sha — so there is exactly one
+ * repo template per (repo, setup command) at any given head, and a moved
+ * default branch produces a fresh build on the next new session. When the
+ * head cannot be resolved (private repo, offline) the alias degrades to the
+ * sha-less form and the build clones whatever the default branch is at build
+ * time.
+ *
+ * When the build itself fails — private repo, registry flake — the sandbox
+ * falls back to its fallback template and the session's runtime setup
+ * performs the full clone, so a broken build never wedges a session.
  */
-export function createRepoTemplate(options: RepoTemplateOptions): NamedTemplateSpec {
-  const { repoFullName, sha, setupCommand } = options;
+export function createRepoTemplate(options: RepoTemplateOptions): NamedTemplateSpec | DeferredNamedTemplateSpec {
+  validateRepoTemplateOptions(options);
+  if (options.sha) {
+    return buildRepoTemplateSpec(options);
+  }
+  return {
+    resolveSpec: async () => {
+      const resolve = options.resolveHead ?? resolveDefaultBranchHead;
+      const sha = await resolve(options.repoFullName).catch(() => undefined);
+      const pinned = sha && SHA_PATTERN.test(sha) ? sha : undefined;
+      return buildRepoTemplateSpec(pinned ? { ...options, sha: pinned } : options);
+    },
+  };
+}
+
+function validateRepoTemplateOptions(options: RepoTemplateOptions): void {
+  const { repoFullName, sha } = options;
   if (!REPO_FULL_NAME_PATTERN.test(repoFullName)) {
     throw new Error(`Invalid repoFullName '${repoFullName}': expected 'owner/repo'`);
   }
@@ -105,6 +144,11 @@ export function createRepoTemplate(options: RepoTemplateOptions): NamedTemplateS
   if (!WORKDIR_PATTERN.test(workdir) || workdir.includes('..')) {
     throw new Error(`Invalid workdir '${workdir}': expected an absolute path under /workspace with no traversal`);
   }
+}
+
+function buildRepoTemplateSpec(options: RepoTemplateOptions): NamedTemplateSpec {
+  const { repoFullName, sha, setupCommand } = options;
+  const workdir = options.workdir ?? defaultWorkdir(repoFullName);
 
   // Tokenless HTTPS by design — see the module doc's credential invariant.
   const cloneUrl = `https://github.com/${repoFullName}.git`;
@@ -133,6 +177,25 @@ export function createRepoTemplate(options: RepoTemplateOptions): NamedTemplateS
     // workspace root, so the session's runtime cold clone works.
     fallbackTemplate: createWorkspaceBaseTemplate(),
   };
+}
+
+/**
+ * Resolve the repository's current default-branch head over tokenless HTTPS
+ * (`git ls-remote <url> HEAD` — no clone, no credential). Returns undefined
+ * when the head cannot be resolved (private repo, offline, no git binary);
+ * callers degrade to the sha-less alias.
+ */
+async function resolveDefaultBranchHead(repoFullName: string): Promise<string | undefined> {
+  try {
+    const { stdout } = await execFileAsync('git', ['ls-remote', `https://github.com/${repoFullName}.git`, 'HEAD'], {
+      timeout: 10_000,
+      env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+    });
+    const sha = stdout.split(/\s/, 1)[0];
+    return sha && SHA_PATTERN.test(sha) ? sha : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function defaultWorkdir(repoFullName: string): string {

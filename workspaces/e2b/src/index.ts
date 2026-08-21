@@ -3,8 +3,10 @@ export { E2BProcessManager } from './sandbox/process-manager';
 export {
   createDefaultMountableTemplate,
   isNamedTemplateSpec,
+  isDeferredNamedTemplateSpec,
   type TemplateSpec,
   type NamedTemplateSpec,
+  type DeferredNamedTemplateSpec,
   type MountableTemplateResult,
 } from './utils/template';
 export { createRepoTemplate, repoTemplateAlias, type RepoTemplateOptions } from './utils/repo-template';

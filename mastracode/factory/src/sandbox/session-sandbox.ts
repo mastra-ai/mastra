@@ -11,14 +11,6 @@ export interface FactorySandboxContext {
   sessionId: string;
   /** owner/name of the repository, when the session is repo-backed. */
   repoFullName?: string;
-  /**
-   * Default-branch head sha, when factory knows it — for provider template
-   * keying (e.g. E2B sha-aliased templates). Sourced from the persisted
-   * `projectRepository.baseCheckpoint.sha` column (a surviving storage read,
-   * not revived base-checkpoint machinery); absent when unknown, which keys
-   * a sha-less template alias.
-   */
-  repoSha?: string;
   /** Configured repo setup command, when present — for template keying. */
   setupCommand?: string;
   /**

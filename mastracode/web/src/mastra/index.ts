@@ -278,9 +278,10 @@ export const factory = new MastraFactory({
   rules: factoryRules,
   sandbox: ctx => {
     if (process.env.E2B_API_KEY?.trim()) {
-      // Sha-aliased lazy-built repo template (repo cloned + setup run at the
-      // known default-branch head; sha unknown -> sha-less alias; build failure
-      // -> fallback template + runtime cold clone). E2B pauses on its own idle
+      // Lazy-built repo template pinned to the repo's current default-branch
+      // head at resolution time (one template per repo + setup command; a
+      // moved head builds fresh on the next new session; build failure ->
+      // fallback template + runtime cold clone). E2B pauses on its own idle
       // timeout and resumes by id on the next start.
       return new E2BSandbox({
         id: ctx.sessionId,
@@ -288,7 +289,6 @@ export const factory = new MastraFactory({
           ? {
               template: createRepoTemplate({
                 repoFullName: ctx.repoFullName,
-                ...(ctx.repoSha ? { sha: ctx.repoSha } : {}),
                 ...(ctx.setupCommand ? { setupCommand: ctx.setupCommand } : {}),
               }),
             }

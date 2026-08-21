@@ -29,8 +29,8 @@ type InstructionsOption = string | ((opts: { defaultInstructions: string; reques
 import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
 import { Sandbox, Template } from 'e2b';
 import type { SandboxInfo as E2BSandboxListInfo, SandboxNetworkOpts, TemplateBuilder, TemplateClass } from 'e2b';
-import { createDefaultMountableTemplate, isNamedTemplateSpec } from '../utils/template';
-import type { NamedTemplateSpec, TemplateSpec } from '../utils/template';
+import { createDefaultMountableTemplate, isDeferredNamedTemplateSpec, isNamedTemplateSpec } from '../utils/template';
+import type { DeferredNamedTemplateSpec, NamedTemplateSpec, TemplateSpec } from '../utils/template';
 import { mountS3, mountGCS, mountAzure, LOG_PREFIX } from './mounts';
 import type {
   E2BMountConfig,
@@ -205,6 +205,12 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
    * produced a sandbox.
    */
   private _resolvedTemplateId?: string;
+  /**
+   * The named spec a deferred template spec resolved to — kept so the
+   * 404-on-create fallback ladder can walk the same alias/fallback rungs it
+   * would for a plain named spec.
+   */
+  private _resolvedNamedSpec?: NamedTemplateSpec;
 
   constructor(options: E2BSandboxOptions = {}) {
     super({
@@ -355,7 +361,9 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
     } catch (createError) {
       if (!isTemplateUnusable(createError)) throw createError;
 
-      if (this.templateSpec && isNamedTemplateSpec(this.templateSpec)) {
+      const namedSpec =
+        this.templateSpec && isNamedTemplateSpec(this.templateSpec) ? this.templateSpec : this._resolvedNamedSpec;
+      if (namedSpec) {
         // Bounded ladder: broken alias → named fallback → default mountable
         // template. Every rung only advances on a template-unusable error, so
         // a broken build never wedges the session on a dead alias.
@@ -363,7 +371,7 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
           `${LOG_PREFIX} Creating from '${resolvedTemplateId}' failed, retrying on fallback: ${createError}`,
         );
         this._resolvedTemplateId = undefined;
-        const spec = this.templateSpec;
+        const spec = namedSpec;
         const fallbackId =
           resolvedTemplateId === spec.alias
             ? await this.resolveFallbackTemplate(spec.fallbackTemplate)
@@ -924,9 +932,25 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
 
     // Named spec (e.g. createRepoTemplate) - lazy build-if-missing under a
     // deterministic alias, with a fallback so a failed build degrades to a
-    // cold start instead of a wedged session.
-    if (isNamedTemplateSpec(this.templateSpec)) {
-      const { alias, template: namedTemplate, fallbackTemplate } = this.templateSpec;
+    // cold start instead of a wedged session. A deferred spec (sha-less
+    // createRepoTemplate) computes its alias right before the exists check —
+    // pinning to the repo's current default-branch head; a rejection there
+    // degrades to the default mountable template like any other resolution
+    // failure.
+    let spec: Exclude<TemplateSpec, DeferredNamedTemplateSpec>;
+    if (isDeferredNamedTemplateSpec(this.templateSpec)) {
+      try {
+        spec = await this.templateSpec.resolveSpec();
+        this._resolvedNamedSpec = spec;
+      } catch (error) {
+        this.logger.warn(`${LOG_PREFIX} Deferred template spec resolution failed, falling back: ${error}`);
+        return await this.resolveFallbackTemplate(undefined);
+      }
+    } else {
+      spec = this.templateSpec;
+    }
+    if (isNamedTemplateSpec(spec)) {
+      const { alias, template: namedTemplate, fallbackTemplate } = spec;
       try {
         if (await Template.exists(alias, this.connectionOpts)) {
           this.logger.debug(`${LOG_PREFIX} Using cached template: ${alias}`);
@@ -947,15 +971,15 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
     let template: TemplateBuilder;
     let templateName: string;
 
-    if (typeof this.templateSpec === 'function') {
+    if (typeof spec === 'function') {
       // Apply customization function to base mountable template
       const { template: baseTemplate } = createDefaultMountableTemplate();
-      template = this.templateSpec(baseTemplate);
+      template = spec(baseTemplate);
       // Custom templates get unique names since they're modified
       templateName = `mastra-custom-${this.id.replace(/[^a-zA-Z0-9-]/g, '-')}`;
     } else {
       // Use provided TemplateBuilder directly
-      template = this.templateSpec;
+      template = spec;
       templateName = `mastra-${this.id.replace(/[^a-zA-Z0-9-]/g, '-')}`;
     }
 
