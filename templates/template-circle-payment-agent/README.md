@@ -30,13 +30,15 @@ This demo runs in Mastra Studio, but you can connect this agent to your React, N
 ## Quickstart 🚀
 
 1. **Clone the template**
-   - Run `npx create-mastra@latest --template circle-payment-agent` to scaffold the project locally.
+   - Run `npx create-mastra@latest --template circle-payment-agent` to scaffold the project locally — this also installs dependencies for you.
+   - If you instead clone the synced standalone repo directly (see [About Mastra templates](#about-mastra-templates) below), there is no `node_modules` yet: run `npm install` yourself before continuing.
 2. **Log in to Circle**
    - Run `circle wallet login`, then `circle wallet status` to confirm the session and accept the Terms of Use if you have not already.
 3. **Add your API keys**
    - Copy `.env.example` to `.env` and fill in your keys.
 4. **Start the dev server**
    - Run `npm run dev` and open [localhost:4111](http://localhost:4111) to try it out.
+   - No skill is installed yet, and that is not a missing dependency: `npm install` only pulls the packages in `package.json`. Circle's skills are not one of them — the agent installs them itself into `~/.agents/skills` on its first message, which is why the very first prompt should be conversational (e.g. "what services are available for weather data?") rather than a check for skills up front.
 
 ## Using it
 
