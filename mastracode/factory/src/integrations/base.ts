@@ -29,7 +29,7 @@ import type { VersionControl } from '../capabilities/version-control.js';
 import type { RouteAuth } from '../routes/route.js';
 import type { FactoryRules } from '../rules/types.js';
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
-import type { FactorySandboxRuntime } from '../sandbox/session-sandbox.js';
+import type { MastraFactorySandboxConfig } from '../sandbox/session-sandbox.js';
 import type { StateSigner } from '../state-signing.js';
 import type { AuditEventRow } from '../storage/domains/audit/base.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
@@ -69,11 +69,11 @@ export interface IntegrationContext {
   /** Host auth seam — integration routes resolve callers through this. */
   auth: RouteAuth;
   /**
-   * Sandbox surface for per-project and per-session sandboxes. Always
-   * present; without a configured create callback it reports
-   * `enabled: false` and sandbox-backed routes respond 503.
+   * The deploy's sandbox callback for per-project and per-session
+   * sandboxes. Absent when no sandbox is configured — sandbox-backed
+   * routes respond 503.
    */
-  sandbox: FactorySandboxRuntime;
+  sandbox?: MastraFactorySandboxConfig;
   /**
    * Root factory storage backend and source of the `appDbConfigured`
    * diagnostic. Absent when the host runs without an application database.

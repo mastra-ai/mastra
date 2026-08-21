@@ -21,7 +21,7 @@ import type { Context } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import type { RouteAuth } from '../../routes/route.js';
 import type { MaterializationSandbox, PrepareProgress, ProgressFn } from '../../sandbox/materialization.js';
-import type { FactorySandboxRuntime } from '../../sandbox/session-sandbox.js';
+import type { MastraFactorySandboxConfig } from '../../sandbox/session-sandbox.js';
 import { peekSessionSandbox } from '../../sandbox/session-sandbox.js';
 import { computeRemoteWorkdir } from '../../sandbox/workdir.js';
 import type { StateSigner } from '../../state-signing.js';
@@ -103,7 +103,7 @@ export interface MountGithubRoutesOptions {
    * callback it reports `enabled: false` and sandbox-backed routes respond
    * 503.
    */
-  sandbox: FactorySandboxRuntime;
+  sandbox?: MastraFactorySandboxConfig;
   /** Factory storage backend used for the `appDbConfigured` diagnostic. */
   storage?: FactoryStorage;
   /**
@@ -390,7 +390,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
         if (!tenant.orgId) {
           return c.json({
             enabled: true,
-            sandboxEnabled: sandbox.enabled,
+            sandboxEnabled: !!sandbox,
             organizationRequired: true,
             connected: false,
             installations: [],
@@ -406,7 +406,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
         const connected = rows.length > 0;
         return c.json({
           enabled: true,
-          sandboxEnabled: sandbox.enabled,
+          sandboxEnabled: !!sandbox,
           connected,
           installations: rows.map(r => ({
             installationId: Number(r.externalId),
@@ -662,7 +662,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
                 ...repo,
                 installationStorageId: inst.id,
                 repositoryStorageId: repository.id,
-                sandboxProvider: sandbox.provider,
+                sandboxProvider: sandbox ? 'custom' : 'none',
                 // Display only — the runtime workdir is derived from the
                 // constructed sandbox at open time, never read from this row.
                 // The remote layout is the honest listing-time guess.
@@ -686,7 +686,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
         if ('response' in resolved) return resolved.response;
         const { orgId, userId } = resolved.tenant;
 
-        if (!sandbox.enabled) {
+        if (!sandbox) {
           return c.json({ error: 'sandbox_not_configured', message: 'No sandbox provider is configured.' }, 503);
         }
 
@@ -1032,7 +1032,7 @@ interface EnsureResult {
  */
 async function prepareProject(options: {
   github: GithubIntegration;
-  sandbox: FactorySandboxRuntime;
+  sandbox?: MastraFactorySandboxConfig;
   project: ResolvedProjectRepository;
   userId: string;
   onProgress?: ProgressFn;
@@ -1117,7 +1117,7 @@ function gitErrorResponse(c: Context, err: unknown) {
 async function loadOwnedProject(options: {
   github: GithubIntegration;
   auth: RouteAuth;
-  sandbox: FactorySandboxRuntime;
+  sandbox?: MastraFactorySandboxConfig;
   c: RouteContext;
 }): Promise<
   | { orgId: string; userId: string; project: ResolvedProjectRepository; sandboxRow: ProjectRepositorySandbox }
@@ -1128,7 +1128,7 @@ async function loadOwnedProject(options: {
   if ('response' in resolved) return { response: resolved.response };
   const { orgId, userId } = resolved.tenant;
 
-  if (!sandbox.enabled) {
+  if (!sandbox) {
     return {
       response: c.json({ error: 'sandbox_not_configured', message: 'No sandbox provider is configured.' }, 503),
     };
@@ -1156,7 +1156,7 @@ function buildProjectGitRoutes({
 }: {
   github: GithubIntegration;
   auth: RouteAuth;
-  sandbox: FactorySandboxRuntime;
+  sandbox?: MastraFactorySandboxConfig;
   controller?: MountedMastraCode['controller'];
   emitAudit?: AuditEmitter['emit'];
   sessionRetirement?: MountGithubRoutesOptions['sessionRetirement'];

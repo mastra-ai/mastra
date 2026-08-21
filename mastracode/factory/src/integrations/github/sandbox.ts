@@ -20,7 +20,7 @@
 import { createHash } from 'node:crypto';
 import { reportProgress } from '../../sandbox/materialization.js';
 import type { MaterializationSandbox, ProgressFn, SandboxCommandResult } from '../../sandbox/materialization.js';
-import type { FactorySandboxRuntime } from '../../sandbox/session-sandbox.js';
+import type { MastraFactorySandboxConfig } from '../../sandbox/session-sandbox.js';
 import { getSessionSandbox } from '../../sandbox/session-sandbox.js';
 import type {
   ProjectRepositorySandbox,
@@ -54,15 +54,15 @@ export function projectSandboxKey(row: Pick<ProjectRepositorySandbox, 'id'>): st
  * observability only — nothing reads it for decisions.
  */
 export async function ensureProjectSandbox(options: {
-  sandbox: FactorySandboxRuntime;
+  sandbox?: MastraFactorySandboxConfig;
   row: ProjectRepositorySandbox;
   repoFullName: string;
   storage: SourceControlSandboxStorage;
   token: string;
   onProgress?: ProgressFn;
 }): Promise<{ sandbox: MaterializationSandbox; workdir: string }> {
-  const { sandbox: runtime, row, repoFullName, storage, token, onProgress } = options;
-  if (!runtime.create) {
+  const { sandbox: create, row, repoFullName, storage, token, onProgress } = options;
+  if (!create) {
     throw new MaterializeError('No sandbox provider is configured.', 'clone-failed');
   }
   reportProgress(onProgress, { phase: 'provisioning', message: 'Preparing sandbox…' });
@@ -71,7 +71,7 @@ export async function ensureProjectSandbox(options: {
   // check out under their own workingDirectory) — never persisted, never
   // trusted from the row.
   const entry = getSessionSandbox(key, repoFullName, () =>
-    runtime.create!({
+    create({
       sessionId: key,
       repoFullName,
       actingUserId: row.userId,

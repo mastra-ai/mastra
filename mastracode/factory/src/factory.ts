@@ -61,7 +61,7 @@ import type { FactoryRules } from './rules/types.js';
 import { assertFactoryRules } from './rules/validation.js';
 import { registerSandboxReattach } from './sandbox/reattach.js';
 import { SessionRetirementCoordinator } from './sandbox/session-retirement.js';
-import type { FactorySandboxRuntime, MastraFactorySandboxConfig } from './sandbox/session-sandbox.js';
+import type { MastraFactorySandboxConfig } from './sandbox/session-sandbox.js';
 import { handleServerError } from './server-error.js';
 import { observeSessionCheckpoint } from './session/checkpoint-capture.js';
 import { observeSessionFilesystem } from './session/filesystem-capture.js';
@@ -393,15 +393,6 @@ export class MastraFactory {
     registerSandboxReattach();
     const workspaceRegistry = new FactoryWorkspaceRegistry();
 
-    // The sandbox surface integrations and route builders see: enablement,
-    // a provider label for diagnostics, and the create callback for paths
-    // that construct sandboxes themselves.
-    const sandboxRuntime: FactorySandboxRuntime = {
-      enabled: !!sandboxConfig,
-      provider: sandboxConfig ? 'custom' : 'none',
-      ...(sandboxConfig ? { create: sandboxConfig } : {}),
-    };
-
     // One shared OAuth state signer per boot. The deploy entry supplies a
     // replica-stable secret when needed; otherwise local development gets a
     // per-process random signer (`stable: false`).
@@ -703,7 +694,7 @@ export class MastraFactory {
             audit: auditDomain,
             publicOrigin,
             stateSigner,
-            sandbox: sandboxRuntime,
+            sandbox: sandboxConfig,
             sessionRetirement,
             factoryStorage: storage,
             integrationStorage,
@@ -860,7 +851,7 @@ export class MastraFactory {
                 publicOrigin,
                 auth: routeAuth,
                 stateSigner,
-                sandbox: sandboxRuntime,
+                sandbox: sandboxConfig,
                 factoryStorage: storage,
                 integrationStorage,
                 sourceControlStorage,
@@ -892,7 +883,7 @@ export class MastraFactory {
               publicOrigin,
               auth: routeAuth,
               stateSigner,
-              sandbox: sandboxRuntime,
+              sandbox: sandboxConfig,
               factoryStorage: storage,
               integrationStorage,
               sourceControlStorage,

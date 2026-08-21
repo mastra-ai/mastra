@@ -437,16 +437,8 @@ const createPullRequest = vi.fn(async (_input: CreatePullRequestInput) => ({
   url: 'https://github.com/octo/hello/pull/1',
 }));
 let sandboxEnabled = true;
-/** DI-injected sandbox surface stub — routes read `enabled`/`provider`. */
-const sandboxRuntime = {
-  get enabled() {
-    return sandboxEnabled;
-  },
-  get provider() {
-    return sandboxEnabled ? 'railway' : 'none';
-  },
-  create: (ctx: { sessionId: string }) => ({ id: `sbx-${ctx.sessionId}` }),
-} as any;
+/** DI-injected sandbox callback stub — presence signals "configured". */
+const sandboxCallback = ((ctx: { sessionId: string }) => ({ id: `sbx-${ctx.sessionId}` })) as any;
 vi.mock('./sandbox', () => {
   class MaterializeError extends Error {
     code: string;
@@ -632,7 +624,7 @@ function buildApp(
       baseUrl: 'http://localhost:4111',
       github: githubStub as any,
       auth: testAuth,
-      sandbox: sandboxRuntime,
+      sandbox: sandboxEnabled ? sandboxCallback : undefined,
       stateSigner: signerOverride === null ? undefined : (signerOverride ?? stateSigner),
       emitAudit: async ({ context, input }) => {
         try {

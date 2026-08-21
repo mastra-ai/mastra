@@ -597,7 +597,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         if (!tenant.orgId) {
           return c.json({
             enabled: true,
-            sandboxEnabled: ctx.sandbox.enabled,
+            sandboxEnabled: !!ctx.sandbox,
             organizationRequired: true,
             connected: false,
             installations: [],
@@ -614,7 +614,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         ]);
         return c.json({
           enabled: true,
-          sandboxEnabled: ctx.sandbox.enabled,
+          sandboxEnabled: !!ctx.sandbox,
           connected: installations.length > 0,
           installations: installations.map(installation => ({
             installationId: Number(installation.externalId),

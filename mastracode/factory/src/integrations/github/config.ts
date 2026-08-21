@@ -16,7 +16,7 @@
  */
 
 import type { RouteAuth } from '../../routes/route.js';
-import type { FactorySandboxRuntime } from '../../sandbox/session-sandbox.js';
+import type { MastraFactorySandboxConfig } from '../../sandbox/session-sandbox.js';
 import type { StateSigner } from '../../state-signing.js';
 import type { GithubIntegration } from './integration.js';
 
@@ -45,8 +45,8 @@ export interface GithubFeatureGateOptions {
   appDbConfigured: boolean;
   /** Shared OAuth/install `state` signer, when configured. */
   stateSigner?: StateSigner;
-  /** Sandbox surface, when sandboxes are configured. */
-  sandbox?: Pick<FactorySandboxRuntime, 'enabled' | 'provider'>;
+  /** The deploy's sandbox callback, when sandboxes are configured. */
+  sandbox?: MastraFactorySandboxConfig;
 }
 
 /**
@@ -85,8 +85,8 @@ export function getGithubFeatureDiagnostics(options: GithubFeatureGateOptions): 
     factoryAuthEnabled: auth.enabled(),
     appDbConfigured,
     stateSecretConfigured: stateSigner?.stable ?? false,
-    sandboxEnabled: sandbox?.enabled ?? false,
-    sandboxProvider: sandbox?.provider ?? 'none',
+    sandboxEnabled: !!sandbox,
+    sandboxProvider: sandbox ? 'custom' : 'none',
     missingGithubAppEnvVars: github ? [] : [...GITHUB_APP_ENV_VARS],
   };
 }

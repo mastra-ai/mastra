@@ -13,7 +13,7 @@ import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { FactoryRules } from '../rules/types.js';
 import { isFactoryRuleStage } from '../rules/types.js';
-import type { FactorySandboxRuntime } from '../sandbox/session-sandbox.js';
+import type { MastraFactorySandboxConfig } from '../sandbox/session-sandbox.js';
 import { ensureFactorySourceSession, resolveFactoryDefaultModelId } from '../session/factory-session.js';
 import { LiveSessions } from '../session/live-sessions.js';
 import type { StateSigner } from '../state-signing.js';
@@ -58,7 +58,7 @@ export interface FactoryApiRoutesDeps {
   publicOrigin: string;
   stateSigner?: StateSigner;
   /** Sandbox surface (enablement, provider label, create callback). */
-  sandbox: FactorySandboxRuntime;
+  sandbox?: MastraFactorySandboxConfig;
   /** Root factory storage backend (distributed locks, app-db diagnostics). */
   factoryStorage?: FactoryStorage;
   integrationStorage: IntegrationStorage;

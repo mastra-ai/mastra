@@ -294,12 +294,10 @@ describe('MastraFactory.prepare', () => {
     expect(session.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-haiku-4-5' });
   });
 
-  it('exposes an enabled sandbox surface from a sandbox callback', async () => {
+  it('passes the sandbox callback through to integrations', async () => {
     const create = () => ({ id: 'sb-cb' }) as never;
     const ctx = await prepareIntegrationContext({ storage: fakeStorage(), sandbox: create });
-    expect(ctx.sandbox.enabled).toBe(true);
-    expect(ctx.sandbox.provider).toBe('custom');
-    expect(ctx.sandbox.create).toBe(create);
+    expect(ctx.sandbox).toBe(create);
   });
 
   it('hands the terminal-stage cleanup to the transition service', async () => {
@@ -375,10 +373,9 @@ describe('MastraFactory.prepare', () => {
     expect(storage.domainNames().every(name => storage.isDomainReady(name))).toBe(true);
   });
 
-  it('disables the sandbox surface when the slot is omitted', async () => {
+  it('passes no sandbox callback when the slot is omitted', async () => {
     const ctx = await prepareIntegrationContext({ storage: fakeStorage() });
-    expect(ctx.sandbox.enabled).toBe(false);
-    expect(ctx.sandbox.provider).toBe('none');
+    expect(ctx.sandbox).toBeUndefined();
   });
 
   it('boots with a sandbox callback without provisioning anything', async () => {

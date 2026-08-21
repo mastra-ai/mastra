@@ -20,11 +20,11 @@ export interface FactorySandboxContext {
   setupCommand?: string;
   /**
    * Factory-built session setup hook (repo materialize + branch checkout +
-   * setup command, marker-guarded). Callbacks SHOULD forward this to the
+   * setup command, marker-guarded). Callbacks MUST forward this to the
    * provider constructor's `onStart` option so setup runs inside the start
    * lifecycle — any lazy start then heals a replaced VM, and a setup failure
-   * fails the start loudly. Factory also runs a marker-guarded fallback
-   * after `start()` for callbacks that do not forward it.
+   * fails the start loudly. There is no fallback: a callback that drops the
+   * hook produces sessions whose repo never materializes.
    */
   onStart?: SandboxStartHook;
   /** Opaque acting-user subject for provider attribution. */
@@ -49,19 +49,6 @@ export type MastraFactorySandboxConfig = (ctx: FactorySandboxContext) => Workspa
 
 /** The session's setup work, run against a started sandbox. Must be idempotent. */
 export type SessionSetupRun = (sandbox: WorkspaceSandbox) => Promise<void>;
-
-/**
- * The sandbox surface handed to integrations and route builders: whether
- * sandboxes are configured, a provider label for diagnostics, and the
- * deployer's create callback for paths that construct sandboxes themselves
- * (e.g. the per-project git routes).
- */
-export interface FactorySandboxRuntime {
-  enabled: boolean;
-  /** Provider label for diagnostics ('custom' when configured, 'none' otherwise). */
-  provider: string;
-  create?: (ctx: FactorySandboxContext) => WorkspaceSandbox;
-}
 
 /**
  * Per-process session-id → sandbox instance memo.
@@ -187,36 +174,4 @@ export function createSessionSetupHook(run: SessionSetupRun, repoFullName: strin
   return async ({ sandbox, outcome }) => {
     await runGuardedSetup(sandbox, run, { skipMarkerProbe: outcome === 'created', repoFullName });
   };
-}
-
-/**
- * Marker-guarded fallback for sandbox callbacks that did not forward
- * `ctx.onStart` to the provider. Runs after `start()` settled. When the
- * callback DID forward it, the hook already ran and wrote the marker, so
- * this probes and no-ops — no detection logic needed. Failures are fatal to
- * the caller: a session whose repo never materialized must fail preparation
- * loudly.
- */
-const inflightFallbackSetups = new Map<string, Promise<void>>();
-
-export async function runSessionSetupFallback(
-  sandbox: WorkspaceSandbox,
-  run: SessionSetupRun,
-  repoFullName: string,
-  sessionId?: string,
-): Promise<void> {
-  // Single-flight per logical session: two workspace variants of one session
-  // (the memo is workspace-keyed upstream) must not race the marker probe and
-  // both run the destructive materialize. Keyed by the caller's session id —
-  // provider-reported sandbox ids are not guaranteed unique per session —
-  // with the sandbox id as fallback. Cleared on settle; failures never latch.
-  const key = sessionId ?? sandbox.id;
-  let inflight = inflightFallbackSetups.get(key);
-  if (!inflight) {
-    inflight = runGuardedSetup(sandbox, run, { skipMarkerProbe: false, repoFullName }).finally(() => {
-      inflightFallbackSetups.delete(key);
-    });
-    inflightFallbackSetups.set(key, inflight);
-  }
-  await inflight;
 }

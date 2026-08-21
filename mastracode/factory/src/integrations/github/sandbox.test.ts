@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const dbUpdates: Array<Record<string, unknown>> = [];
 
 import type { MaterializationSandbox, SandboxCommandResult } from '../../sandbox/materialization.js';
-import type { FactorySandboxContext, FactorySandboxRuntime } from '../../sandbox/session-sandbox.js';
+import type { FactorySandboxContext, MastraFactorySandboxConfig } from '../../sandbox/session-sandbox.js';
 import { __clearSessionSandboxesForTests, peekSessionSandbox } from '../../sandbox/session-sandbox.js';
 import type {
   ProjectRepositorySandbox,
@@ -36,13 +36,9 @@ import type { RepoMaterializeInfo } from './sandbox.js';
 /** Callback-runtime under test: records ctx per construction. */
 const createCalls: FactorySandboxContext[] = [];
 let nextSandbox: () => FakeSandbox = () => new FakeSandbox();
-const runtime: FactorySandboxRuntime = {
-  enabled: true,
-  provider: 'stub',
-  create: ctx => {
-    createCalls.push(ctx);
-    return nextSandbox() as never;
-  },
+const runtime: MastraFactorySandboxConfig = ctx => {
+  createCalls.push(ctx);
+  return nextSandbox() as never;
 };
 
 type Responder = (script: string) => SandboxCommandResult;
@@ -177,7 +173,7 @@ describe('ensureProjectSandbox', () => {
   it('fails loudly when no sandbox provider is configured', async () => {
     await expect(
       ensureProjectSandboxWithStorage({
-        sandbox: { enabled: false, provider: 'none' },
+        sandbox: undefined,
         row: makeRow(),
         repoFullName: 'octocat/hello',
         storage,

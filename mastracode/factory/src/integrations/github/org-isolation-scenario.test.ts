@@ -231,17 +231,8 @@ const ensureWorktree = vi.fn(async (_sb: any, _workdir: string, opts: { branch: 
 const commitAll = vi.fn(async () => ({ committed: true }));
 const pushBranch = vi.fn(async () => {});
 const createPullRequest = vi.fn(async () => ({ url: 'https://github.com/octo/hello/pull/1' }));
-let sandboxEnabled = true;
-/** DI-injected sandbox surface stub — routes read `enabled`/`provider`. */
-const sandboxRuntime = {
-  get enabled() {
-    return sandboxEnabled;
-  },
-  get provider() {
-    return sandboxEnabled ? 'railway' : 'none';
-  },
-  create: (ctx: { sessionId: string }) => ({ id: `sbx-${ctx.sessionId}` }),
-} as any;
+/** DI-injected sandbox callback stub — presence signals "configured". */
+const sandboxRuntime = ((ctx: { sessionId: string }) => ({ id: `sbx-${ctx.sessionId}` })) as any;
 vi.mock('./sandbox', () => {
   class MaterializeError extends Error {
     code: string;
@@ -399,7 +390,6 @@ beforeEach(() => {
   sourceControlStorage.worktreesRows = tables.worktrees as any;
   sourceControlStorage.sessionsRows = tables.sessions as any;
   featureEnabled = true;
-  sandboxEnabled = true;
   cookieUser = null;
   bootstrapSucceeds = true;
   mintCount = 0;
@@ -623,7 +613,7 @@ describe('install flow binds the installation to the org', () => {
           installationId: 7,
           installationStorageId: tables.installations[0]!.id,
           repositoryStorageId: tables.repositories[0]!.id,
-          sandboxProvider: 'railway',
+          sandboxProvider: 'custom',
           sandboxWorkdir: '/workspace/octo/hello',
         },
       ],

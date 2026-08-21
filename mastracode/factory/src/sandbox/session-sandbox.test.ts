@@ -10,7 +10,6 @@ import {
   evictSessionSandbox,
   getSessionSandbox,
   peekSessionSandbox,
-  runSessionSetupFallback,
 } from './session-sandbox.js';
 
 afterEach(() => {
@@ -59,7 +58,7 @@ describe('session sandbox memo', () => {
   });
 });
 
-describe('session setup hook + fallback', () => {
+describe('session setup hook', () => {
   let dir: string;
 
   beforeEach(async () => {
@@ -70,11 +69,10 @@ describe('session setup hook + fallback', () => {
     await fs.rm(dir, { recursive: true, force: true });
   });
 
-  it('runs setup inside start() via the hook, and the fallback no-ops on the shared marker', async () => {
+  it('runs setup inside start() via the hook and writes the marker', async () => {
     // The callback forwarded ctx.onStart: setup runs during _start() on the
     // create branch (fresh directory → outcome: 'created').
     const boot = path.join(dir, 'fresh');
-    const workdir = path.join(boot, 'repo');
     const hook = createSessionSetupHook(
       async sb => void (await sb.executeCommand!('mkdir -p repo/.git && touch hook-ran.txt')),
       'acme/repo',
@@ -83,14 +81,6 @@ describe('session setup hook + fallback', () => {
     await sandbox._start();
     await expect(fs.stat(path.join(boot, 'hook-ran.txt'))).resolves.toBeDefined();
     await expect(fs.stat(path.join(boot, '.mastra-bootstrapped'))).resolves.toBeDefined();
-
-    // The factory fallback guards the exact same marker → no re-run.
-    await runSessionSetupFallback(
-      sandbox,
-      async sb => void (await sb.executeCommand!('touch fallback-ran.txt')),
-      'acme/repo',
-    );
-    await expect(fs.stat(path.join(boot, 'fallback-ran.txt'))).rejects.toThrow();
   });
 
   it('the hook skips setup on reconnect when the marker and checkout are present', async () => {
@@ -163,84 +153,5 @@ describe('session setup hook + fallback', () => {
     await healed._start();
     await expect(fs.stat(path.join(boot, 'healed.txt'))).resolves.toBeDefined();
     await expect(fs.stat(path.join(boot, '.mastra-bootstrapped'))).resolves.toBeDefined();
-  });
-
-  it('the fallback runs setup once for callbacks that ignored ctx.onStart', async () => {
-    const workdir = path.join(dir, 'repo');
-    const sandbox = new LocalSandbox({ workingDirectory: dir });
-    await sandbox._start();
-
-    await runSessionSetupFallback(
-      sandbox,
-      async sb => void (await sb.executeCommand!('mkdir -p repo/.git && touch fallback-ran.txt')),
-      'acme/repo',
-    );
-    await expect(fs.stat(path.join(dir, 'fallback-ran.txt'))).resolves.toBeDefined();
-
-    // Second call: marker + checkout present, no re-run.
-    await runSessionSetupFallback(
-      sandbox,
-      async sb => void (await sb.executeCommand!('touch second.txt')),
-      'acme/repo',
-    );
-    await expect(fs.stat(path.join(dir, 'second.txt'))).rejects.toThrow();
-
-    // Concurrent fallbacks single-flight: one setup run for both callers.
-    await fs.rm(path.join(dir, '.mastra-bootstrapped'), { force: true });
-    let runs = 0;
-    const run = async (sb: typeof sandbox) => {
-      runs += 1;
-      await sb.executeCommand!('mkdir -p repo/.git');
-    };
-    await Promise.all([
-      runSessionSetupFallback(sandbox, run as never, 'acme/repo'),
-      runSessionSetupFallback(sandbox, run as never, 'acme/repo'),
-    ]);
-    expect(runs).toBe(1);
-  });
-
-  it('two logical sessions sharing a provider sandbox id do not share the fallback single-flight', async () => {
-    const bootA = path.join(dir, 'a');
-    const bootB = path.join(dir, 'b');
-    const a = new LocalSandbox({ workingDirectory: bootA });
-    const b = new LocalSandbox({ workingDirectory: bootB });
-    await a._start();
-    await b._start();
-
-    let runs = 0;
-    const run = async (sb: typeof a | typeof b) => {
-      runs += 1;
-      await sb.executeCommand!('mkdir -p repo/.git');
-    };
-    // Same provider-reported id would coalesce these without the logical key.
-    Object.defineProperty(a, 'id', { value: 'shared-id' });
-    Object.defineProperty(b, 'id', { value: 'shared-id' });
-    await Promise.all([
-      runSessionSetupFallback(a, run as never, 'acme/repo', 'session-a'),
-      runSessionSetupFallback(b, run as never, 'acme/repo', 'session-b'),
-    ]);
-    expect(runs).toBe(2);
-  });
-
-  it('the fallback surfaces failures with the exit code and writes no marker', async () => {
-    const sandbox = new LocalSandbox({ workingDirectory: dir });
-    await sandbox._start();
-
-    const workdir = path.join(dir, 'repo');
-    await expect(
-      runSessionSetupFallback(
-        sandbox,
-        async () => {
-          throw new Error('Session setup failed (exit 7)');
-        },
-        'acme/repo',
-      ),
-    ).rejects.toThrow(/Session setup failed \(exit 7\)/);
-    await runSessionSetupFallback(
-      sandbox,
-      async sb => void (await sb.executeCommand!('touch retried.txt')),
-      'acme/repo',
-    );
-    await expect(fs.stat(path.join(dir, 'retried.txt'))).resolves.toBeDefined();
   });
 });

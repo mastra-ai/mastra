@@ -29,7 +29,6 @@ import {
   evictSessionSandbox,
   getSessionSandbox,
   peekSessionSandbox,
-  runSessionSetupFallback,
 } from './sandbox/session-sandbox.js';
 
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
@@ -558,13 +557,6 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         }
       }
     };
-    const asSessionSandbox = (candidate: ReturnType<typeof createSessionSandboxInstance>): SessionSandbox => {
-      if (typeof candidate.executeCommand !== 'function') {
-        throw new Error('The sandbox create callback must return a sandbox with executeCommand support');
-      }
-      return candidate as unknown as SessionSandbox;
-    };
-
     const materializeSandbox = async (): Promise<SessionSandbox> => {
       // A session already retired by the time a held lazy handle re-enters
       // materialization must not provision anything.
@@ -586,19 +578,11 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // the memo rather than reusing the resolution-scope entry: a dead-VM
       // eviction must construct a FRESH instance here (a memoized instance
       // already reporting `running` would early-return from start()).
-      // Bridge: the setup helpers speak WorkspaceSandbox while the git
-      // helpers take the narrower MaterializationSandbox surface. Same
-      // object either way.
-      const sandbox = asSessionSandbox(constructSessionEntry().sandbox);
+      // Setup runs inside start() via the `ctx.onStart` hook — the callback
+      // contract requires forwarding it, and a setup failure fails start()
+      // loudly. There is no post-start fallback.
+      const sandbox = constructSessionEntry().sandbox as unknown as SessionSandbox;
       await sandbox.start();
-      // Covers callbacks that did not forward ctx.onStart: probes the same
-      // completion marker the hook writes, so this no-ops when the hook ran.
-      await runSessionSetupFallback(
-        sandbox as unknown as Parameters<typeof runSessionSetupFallback>[0],
-        runSetupOn,
-        repoFullName,
-        session.id,
-      );
       // The `gh` CLI needs a PAT when the org configured one (installation
       // tokens 403 on integration-restricted endpoints); git clone/checkout
       // keep using the minted installation token. Review-board sessions
