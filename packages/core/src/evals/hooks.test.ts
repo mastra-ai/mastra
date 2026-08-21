@@ -197,13 +197,21 @@ describe('runScorer sampling', () => {
       const sampled = traceIds.filter(traceId =>
         didScore({ sampling: { type: 'ratio', rate }, span: validSpan(traceId) }),
       ).length;
-      expect(sampled / traceIds.length).toBeCloseTo(rate, 1);
+      // Binomial-derived bound (6 sigma): tight enough that an always-false or always-true
+      // sampler fails at every rate, loose enough to never flake on an unbiased hash.
+      const expected = traceIds.length * rate;
+      const tolerance = Math.max(10, 6 * Math.sqrt(traceIds.length * rate * (1 - rate)));
+      expect(sampled).toBeGreaterThan(expected - tolerance);
+      expect(sampled).toBeLessThan(expected + tolerance);
     });
 
     it('distributes untraced runIds at approximately the configured rate', () => {
       const runIds = Array.from({ length: 2000 }, () => randomUUID());
       const sampled = runIds.filter(runId => didScore({ sampling: { type: 'ratio', rate: 0.3 }, runId })).length;
-      expect(sampled / runIds.length).toBeCloseTo(0.3, 1);
+      const expected = runIds.length * 0.3;
+      const tolerance = Math.max(10, 6 * Math.sqrt(runIds.length * 0.3 * 0.7));
+      expect(sampled).toBeGreaterThan(expected - tolerance);
+      expect(sampled).toBeLessThan(expected + tolerance);
     });
 
     it('co-samples: two scorers at the same rate select the same traces', () => {
