@@ -274,6 +274,32 @@ describe('getDynamicMemory', () => {
     }
   });
 
+  it('logs the refusal once per session even across separate request contexts', async () => {
+    // The controller is read off the request context on every resolution, so it
+    // is a fresh object per request. Dedupe has to key on the session id, or a
+    // long-lived refusing session logs once per run forever.
+    process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = '1';
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      vi.resetModules();
+      getOmScopeMock.mockReturnValue('thread');
+      const { getDynamicMemory } = await import('./memory.js');
+      const resolve = getDynamicMemory({ storage: true } as never, { vector: true } as never);
+      const state = { projectPath: '/tmp/project', factoryProjectId: 'project-1' };
+
+      resolve({ requestContext: createRequestContext(state, 'session-same') as never });
+      resolve({ requestContext: createRequestContext(state, 'session-same') as never });
+
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+
+      // A genuinely different session still gets its own error.
+      resolve({ requestContext: createRequestContext(state, 'session-other') as never });
+      expect(errorSpy).toHaveBeenCalledTimes(2);
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
   it.each([
     ['refusing first', ['refusing', 'healthy']],
     ['healthy first', ['healthy', 'refusing']],
