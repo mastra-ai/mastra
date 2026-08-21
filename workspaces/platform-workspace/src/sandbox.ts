@@ -9,6 +9,7 @@ import type {
   SandboxCloneOptions,
   SandboxInfo,
   SandboxStartResult,
+  SerializedSandboxTemplate,
   SpawnProcessOptions,
 } from '@mastra/core/workspace';
 import {
@@ -59,6 +60,10 @@ export interface PlatformSandboxOptions extends Omit<MastraSandboxOptions, 'proc
   sandboxId?: string;
   /** Boot-only fallback checkpoint for a fresh sandbox whose primary recovery key has no state. */
   seedCheckpointName?: string;
+  /** Opaque tenant-bound template handle returned by PlatformTemplateClient. */
+  templateId?: string;
+  /** Serialized non-secret template definition bound to templateId. */
+  templateDefinition?: SerializedSandboxTemplate;
   idleTimeoutMinutes?: number;
   networkIsolation?: PlatformSandboxNetworkIsolation;
   env?: Record<string, string>;
@@ -357,6 +362,8 @@ export class PlatformSandbox extends MastraSandbox {
   private readonly _environmentId: string;
   private _sandboxId?: string;
   private readonly _seedCheckpointName?: string;
+  private readonly _templateId?: string;
+  private readonly _templateDefinition?: SerializedSandboxTemplate;
   private readonly _idleTimeoutMinutes?: number;
   private readonly _networkIsolation?: PlatformSandboxNetworkIsolation;
   private readonly _env: Record<string, string>;
@@ -441,6 +448,11 @@ export class PlatformSandbox extends MastraSandbox {
     if (!this._environmentId && !options.sandboxId) throw new Error('environmentId is required');
     this._sandboxId = options.sandboxId;
     this._seedCheckpointName = options.seedCheckpointName;
+    if ((options.templateId === undefined) !== (options.templateDefinition === undefined)) {
+      throw new Error('templateId and templateDefinition must be provided together');
+    }
+    this._templateId = options.templateId;
+    this._templateDefinition = options.templateDefinition ? structuredClone(options.templateDefinition) : undefined;
     this._idleTimeoutMinutes = options.idleTimeoutMinutes;
     this._networkIsolation = options.networkIsolation;
     this._env = options.env ?? {};
@@ -484,6 +496,9 @@ export class PlatformSandbox extends MastraSandbox {
       ...(id !== undefined && { id }),
       accessToken: this._client.accessToken,
       projectId: this._client.projectId,
+      ...(this._templateId !== undefined || this._client.sandboxProvider !== 'railway'
+        ? { sandboxProvider: this._client.sandboxProvider }
+        : {}),
       actingUserId: options.actingUserId ?? this._client.actingUserId,
       ...(this._client.sessionId !== undefined && { sessionId: this._client.sessionId }),
       ...(this._client.threadId !== undefined && { threadId: this._client.threadId }),
@@ -491,6 +506,8 @@ export class PlatformSandbox extends MastraSandbox {
       environmentId: this._environmentId,
       ...(options.sandboxId !== undefined && { sandboxId: options.sandboxId }),
       ...(seedCheckpointName !== undefined && { seedCheckpointName }),
+      ...(this._templateId !== undefined && { templateId: this._templateId }),
+      ...(this._templateDefinition !== undefined && { templateDefinition: structuredClone(this._templateDefinition) }),
       idleTimeoutMinutes: options.idleTimeoutMinutes ?? this._idleTimeoutMinutes,
       ...(this._networkIsolation !== undefined && { networkIsolation: this._networkIsolation }),
       env: options.env ?? this._env,
@@ -553,6 +570,8 @@ export class PlatformSandbox extends MastraSandbox {
       // to a fresh sandbox, matching pre-existing behavior.
       id: this.id,
       seedCheckpointName: this._seedCheckpointName,
+      templateId: this._templateId,
+      templateDefinition: this._templateDefinition,
       environmentId: this._environmentId,
       idleTimeoutMinutes: this._idleTimeoutMinutes,
       networkIsolation: this._networkIsolation,
@@ -567,7 +586,11 @@ export class PlatformSandbox extends MastraSandbox {
     const requestStartedAt = Date.now();
     for (let attempt = 1; ; attempt++) {
       try {
-        response = await this._client.request('/sandbox', {
+        const request =
+          this._templateId === undefined
+            ? this._client.request.bind(this._client)
+            : this._client.requestProvider.bind(this._client);
+        response = await request('/sandbox', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body,
