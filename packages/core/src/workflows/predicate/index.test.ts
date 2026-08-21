@@ -48,6 +48,18 @@ describe('predicateSchema', () => {
   });
 });
 
+describe('evaluatePredicate root-presence semantics', () => {
+  // Pins pre-refactor behavior: known roots resolve through the context field
+  // without checking key presence, so `exists state` is true whether the key
+  // is present-but-undefined or omitted entirely. Sub-paths under an
+  // undefined root are MISSING either way.
+  it('treats a bare known root as existing even when undefined or omitted', () => {
+    expect(evaluatePredicate({ op: 'exists', path: 'state' }, { state: undefined })).toBe(true);
+    expect(evaluatePredicate({ op: 'exists', path: 'state' }, {})).toBe(true);
+    expect(evaluatePredicate({ op: 'exists', path: 'state.foo' }, {})).toBe(false);
+  });
+});
+
 describe('evaluatePredicate', () => {
   const ctx = {
     initData: { path: '/tmp/x', count: 3 },
