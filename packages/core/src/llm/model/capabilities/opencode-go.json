@@ -11,6 +11,7 @@
     "mimo-v2.5",
     "mimo-v2.5-pro",
     "muse-spark-1.2-contributor",
+    "ox-alpha-free",
     "qwen3.5-plus",
     "qwen3.6-plus",
     "qwen3.7-plus",
@@ -35,6 +36,7 @@
     "minimax-m2.7",
     "minimax-m3",
     "muse-spark-1.2-contributor",
+    "ox-alpha-free",
     "qwen3.5-plus",
     "qwen3.6-plus",
     "qwen3.7-max",
@@ -51,6 +53,7 @@
     "kimi-k2.7-code",
     "kimi-k3",
     "muse-spark-1.2-contributor",
+    "ox-alpha-free",
     "qwen3.8-max"
   ]
 }

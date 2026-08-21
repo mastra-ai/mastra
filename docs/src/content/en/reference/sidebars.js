@@ -316,6 +316,7 @@ const sidebars = {
             { type: 'doc', id: 'evals/faithfulness', label: 'Faithfulness' },
             { type: 'doc', id: 'evals/hallucination', label: 'Hallucination' },
             { type: 'doc', id: 'evals/keyword-coverage', label: 'Keyword Coverage Scorer' },
+            { type: 'doc', id: 'evals/multi-turn-judge', label: 'Multi-turn Judge Scorer' },
             { type: 'doc', id: 'evals/noise-sensitivity', label: 'Noise Sensitivity Scorer' },
             { type: 'doc', id: 'evals/prompt-alignment', label: 'Prompt Alignment Scorer' },
             { type: 'doc', id: 'evals/rubric', label: 'Rubric Scorer' },
