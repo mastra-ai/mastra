@@ -409,7 +409,7 @@ import { createParallelTools } from '@mastra/parallel'
 export const researchAgent = new Agent({
   id: 'research-agent',
   name: 'Research Agent',
-  model: 'anthropic/claude-sonnet-4-6',
+  model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
   instructions:
     'Search the web for current sources, then extract relevant content from the best pages.',
   tools: createParallelTools(),

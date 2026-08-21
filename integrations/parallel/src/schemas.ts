@@ -6,7 +6,7 @@ export const usageItemSchema = z.object({
 });
 
 export const warningSchema = z.object({
-  type: z.enum(['spec_validation_warning', 'input_validation_warning', 'warning']),
+  type: z.string(),
   message: z.string(),
   detail: z.record(z.string(), z.unknown()).optional(),
 });

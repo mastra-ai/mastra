@@ -14,7 +14,7 @@ const { mockSearch, mockExtract, mockParallel } = vi.hoisted(() => {
 
 vi.mock('parallel-web', () => ({ default: mockParallel }));
 
-import { createParallelExtractTool } from '../extract.js';
+import { createParallelExtractTool } from './extract.js';
 
 describe('createParallelExtractTool', () => {
   beforeEach(() => {

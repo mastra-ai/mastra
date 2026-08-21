@@ -14,7 +14,7 @@ const { mockSearch, mockExtract, mockParallel } = vi.hoisted(() => {
 
 vi.mock('parallel-web', () => ({ default: mockParallel }));
 
-import { createParallelSearchTool } from '../search.js';
+import { createParallelSearchTool } from './search.js';
 
 describe('createParallelSearchTool', () => {
   beforeEach(() => {
@@ -158,6 +158,50 @@ describe('createParallelSearchTool', () => {
         excludeDomains: Array.from({ length: 100 }, (_, index) => `exclude-${index}.com`),
       }),
     ).toThrow('at most 200 domains combined');
+  });
+
+  it('accepts future warning types in the output schema', async () => {
+    mockSearch.mockResolvedValue({
+      search_id: 'search_future_warning',
+      session_id: 'session_future_warning',
+      results: [],
+      warnings: [{ type: 'future_warning', message: 'A future warning type' }],
+    });
+    const tool = createParallelSearchTool({ apiKey: 'parallel-test' });
+
+    const result = await tool.execute!({ searchQueries: ['example'] }, {} as any);
+
+    expect(() => tool.outputSchema!.parse(result)).not.toThrow();
+  });
+
+  it('validates country codes against ISO 3166-1 alpha-2', () => {
+    const tool = createParallelSearchTool({ apiKey: 'parallel-test' });
+
+    expect(tool.inputSchema!.parse({ searchQueries: ['example'], location: 'us' })).toMatchObject({
+      location: 'us',
+    });
+    expect(() => tool.inputSchema!.parse({ searchQueries: ['example'], location: '!!' })).toThrow(
+      'valid ISO 3166-1 alpha-2 country code',
+    );
+    expect(() => tool.inputSchema!.parse({ searchQueries: ['example'], location: 'ZZ' })).toThrow(
+      'valid ISO 3166-1 alpha-2 country code',
+    );
+    expect(mockSearch).not.toHaveBeenCalled();
+  });
+
+  it('validates afterDate as a real calendar date', () => {
+    const tool = createParallelSearchTool({ apiKey: 'parallel-test' });
+
+    expect(tool.inputSchema!.parse({ searchQueries: ['example'], afterDate: '2024-02-29' })).toMatchObject({
+      afterDate: '2024-02-29',
+    });
+    expect(() => tool.inputSchema!.parse({ searchQueries: ['example'], afterDate: '2026-02-30' })).toThrow(
+      'valid calendar date',
+    );
+    expect(() => tool.inputSchema!.parse({ searchQueries: ['example'], afterDate: '2025-02-29' })).toThrow(
+      'valid calendar date',
+    );
+    expect(mockSearch).not.toHaveBeenCalled();
   });
 
   it('propagates SDK errors', async () => {
