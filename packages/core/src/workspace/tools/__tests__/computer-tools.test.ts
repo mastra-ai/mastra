@@ -10,6 +10,7 @@
 import { describe, it, expect, vi } from 'vitest';
 
 import { WORKSPACE_TOOLS } from '../../constants';
+import type { SandboxComputer, WorkspaceSandbox } from '../../sandbox';
 import { Workspace } from '../../workspace';
 import { computerScreenshotTool } from '../computer-screenshot';
 import { isMediaToolResult, mediaToModelOutput } from '../media';
@@ -25,50 +26,54 @@ const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a
 const ALL_COMPUTER_TOOL_NAMES = Object.values(WORKSPACE_TOOLS.COMPUTER);
 
 /** Create a mock SandboxComputer backed by vi.fn()s. */
-function createMockComputer(overrides: Record<string, any> = {}) {
+function createMockComputer(overrides: Partial<SandboxComputer> = {}): SandboxComputer {
   return {
-    screenshot: vi.fn().mockResolvedValue({ data: PNG_BYTES, mediaType: 'image/png' }),
-    leftClick: vi.fn().mockResolvedValue(undefined),
-    rightClick: vi.fn().mockResolvedValue(undefined),
-    doubleClick: vi.fn().mockResolvedValue(undefined),
-    moveMouse: vi.fn().mockResolvedValue(undefined),
-    drag: vi.fn().mockResolvedValue(undefined),
-    scroll: vi.fn().mockResolvedValue(undefined),
-    type: vi.fn().mockResolvedValue(undefined),
-    press: vi.fn().mockResolvedValue(undefined),
-    getScreenSize: vi.fn().mockResolvedValue({ width: 1024, height: 768 }),
-    getCursorPosition: vi.fn().mockResolvedValue({ x: 12, y: 34 }),
+    screenshot: vi.fn(async () => ({ data: PNG_BYTES, mediaType: 'image/png' as const })),
+    leftClick: vi.fn(async () => {}),
+    rightClick: vi.fn(async () => {}),
+    doubleClick: vi.fn(async () => {}),
+    moveMouse: vi.fn(async () => {}),
+    drag: vi.fn(async () => {}),
+    scroll: vi.fn(async () => {}),
+    type: vi.fn(async () => {}),
+    press: vi.fn(async () => {}),
+    getScreenSize: vi.fn(async () => ({ width: 1024, height: 768 })),
+    getCursorPosition: vi.fn(async () => ({ x: 12, y: 34 })),
     ...overrides,
   };
 }
 
 /** Create a mock sandbox, optionally with the computer capability. */
-function createMockSandbox(opts: { computer?: any } = {}) {
-  const sandbox: any = {
+function createMockSandbox(opts: { computer?: SandboxComputer } = {}): WorkspaceSandbox {
+  return {
     id: 'test-sandbox',
     name: 'Test Sandbox',
     provider: 'test',
     status: 'running',
-    getInfo: vi.fn().mockResolvedValue({
+    snapshot: vi.fn(async () => {}),
+    getInfo: vi.fn(async () => ({
       id: 'test-sandbox',
       name: 'Test Sandbox',
       provider: 'test',
-      status: 'running',
+      status: 'running' as const,
       createdAt: new Date(),
-    }),
-    executeCommand: vi.fn(),
+    })),
+    executeCommand: vi.fn(async () => ({
+      success: true,
+      exitCode: 0,
+      stdout: '',
+      stderr: '',
+      executionTimeMs: 0,
+    })),
+    ...(opts.computer ? { computer: opts.computer } : {}),
   };
-  if (opts.computer) {
-    sandbox.computer = opts.computer;
-  }
-  return sandbox;
 }
 
 /**
  * Create a workspace with the mock sandbox + the emitted workspace tools.
  * `screenshotDelayMs: 0` is applied to all computer tools so tests don't sleep.
  */
-async function setup(computer: any, tools?: WorkspaceToolsConfig) {
+async function setup(computer: SandboxComputer, tools?: WorkspaceToolsConfig) {
   const toolsConfig: WorkspaceToolsConfig = { ...tools };
   for (const name of ALL_COMPUTER_TOOL_NAMES) {
     toolsConfig[name] = { screenshotDelayMs: 0, ...(tools?.[name] as object | undefined) };
@@ -102,9 +107,10 @@ describe('createWorkspaceTools computer gating', () => {
   });
 
   it('emits no computer tools when the computer capability is incomplete', async () => {
-    const workspace = new Workspace({
-      sandbox: createMockSandbox({ computer: createMockComputer({ drag: undefined }) }),
-    });
+    const incompleteComputer: unknown = { ...createMockComputer(), drag: undefined };
+    const sandbox = createMockSandbox();
+    (sandbox as { computer?: unknown }).computer = incompleteComputer;
+    const workspace = new Workspace({ sandbox });
     const tools = await createWorkspaceTools(workspace);
     for (const name of ALL_COMPUTER_TOOL_NAMES) {
       expect(tools[name], `expected ${name} to be absent`).toBeUndefined();
