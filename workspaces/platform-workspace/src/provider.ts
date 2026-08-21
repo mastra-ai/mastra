@@ -4,6 +4,113 @@ import { PlatformFilesystem } from './filesystem.js';
 import type { PlatformSandboxOptions } from './sandbox.js';
 import { PlatformSandbox } from './sandbox.js';
 
+const nonEmptyStringSchema = { type: 'string', minLength: 1, maxLength: 32 * 1024 } as const;
+const stringOrStringsSchema = {
+  oneOf: [nonEmptyStringSchema, { type: 'array', items: nonEmptyStringSchema, minItems: 1, maxItems: 512 }],
+} as const;
+const envsSchema = {
+  type: 'object',
+  propertyNames: nonEmptyStringSchema,
+  additionalProperties: { type: 'string', maxLength: 32 * 1024 },
+  maxProperties: 512,
+} as const;
+const booleanOptionsSchema = (properties: Record<string, { type: 'boolean' }>) => ({
+  type: 'object',
+  properties,
+  additionalProperties: false,
+});
+const aptInstallOptionsSchema = booleanOptionsSchema({
+  noInstallRecommends: { type: 'boolean' },
+  fixMissing: { type: 'boolean' },
+});
+const pipInstallOptionsSchema = booleanOptionsSchema({ g: { type: 'boolean' } });
+const npmInstallOptionsSchema = booleanOptionsSchema({ g: { type: 'boolean' }, dev: { type: 'boolean' } });
+const operationSchema = {
+  oneOf: [
+    {
+      type: 'object',
+      properties: {
+        method: { const: 'runCmd' },
+        args: { type: 'array', prefixItems: [stringOrStringsSchema], minItems: 1, maxItems: 1 },
+      },
+      required: ['method', 'args'],
+      additionalProperties: false,
+    },
+    {
+      type: 'object',
+      properties: {
+        method: { const: 'setWorkdir' },
+        args: { type: 'array', prefixItems: [nonEmptyStringSchema], minItems: 1, maxItems: 1 },
+      },
+      required: ['method', 'args'],
+      additionalProperties: false,
+    },
+    {
+      type: 'object',
+      properties: {
+        method: { const: 'setEnvs' },
+        args: { type: 'array', prefixItems: [envsSchema], minItems: 1, maxItems: 1 },
+      },
+      required: ['method', 'args'],
+      additionalProperties: false,
+    },
+    {
+      type: 'object',
+      properties: {
+        method: { const: 'aptInstall' },
+        args: {
+          type: 'array',
+          prefixItems: [stringOrStringsSchema, aptInstallOptionsSchema],
+          minItems: 1,
+          maxItems: 2,
+        },
+      },
+      required: ['method', 'args'],
+      additionalProperties: false,
+    },
+    {
+      type: 'object',
+      properties: {
+        method: { const: 'pipInstall' },
+        args: {
+          oneOf: [
+            { type: 'array', maxItems: 0 },
+            { type: 'array', prefixItems: [stringOrStringsSchema], minItems: 1, maxItems: 1 },
+            {
+              type: 'array',
+              prefixItems: [{ oneOf: [stringOrStringsSchema, { type: 'null' }] }, pipInstallOptionsSchema],
+              minItems: 2,
+              maxItems: 2,
+            },
+          ],
+        },
+      },
+      required: ['method', 'args'],
+      additionalProperties: false,
+    },
+    {
+      type: 'object',
+      properties: {
+        method: { const: 'npmInstall' },
+        args: {
+          oneOf: [
+            { type: 'array', maxItems: 0 },
+            { type: 'array', prefixItems: [stringOrStringsSchema], minItems: 1, maxItems: 1 },
+            {
+              type: 'array',
+              prefixItems: [{ oneOf: [stringOrStringsSchema, { type: 'null' }] }, npmInstallOptionsSchema],
+              minItems: 2,
+              maxItems: 2,
+            },
+          ],
+        },
+      },
+      required: ['method', 'args'],
+      additionalProperties: false,
+    },
+  ],
+} as const;
+
 export const platformSandboxProvider: SandboxProvider<PlatformSandboxOptions> = {
   id: 'platform',
   name: 'Mastra Platform Sandbox',
@@ -17,8 +124,32 @@ export const platformSandboxProvider: SandboxProvider<PlatformSandboxOptions> = 
       },
       projectId: { type: 'string', description: 'Platform project ID (falls back to MASTRA_PROJECT_ID)' },
       actingUserId: { type: 'string', description: 'Opaque user subject attributed to sandbox requests' },
+      sandboxProvider: {
+        type: 'string',
+        description: 'Sandbox provider (falls back to SANDBOX_PROVIDER, then railway)',
+        enum: ['railway', 'e2b'],
+      },
       environmentId: { type: 'string', description: 'Platform environment ID (falls back to MASTRA_ENVIRONMENT_ID)' },
       sandboxId: { type: 'string', description: 'Reattach to an existing Platform sandbox by ID' },
+      templateId: {
+        type: 'string',
+        minLength: 1,
+        description: 'Opaque tenant-bound Platform template handle',
+      },
+      templateDefinition: {
+        type: 'object',
+        description: 'Serialized non-secret template definition bound to templateId',
+        properties: {
+          schemaVersion: { const: 1 },
+          operations: {
+            type: 'array',
+            items: operationSchema,
+            maxItems: 256,
+          },
+        },
+        required: ['schemaVersion', 'operations'],
+        additionalProperties: false,
+      },
       idleTimeoutMinutes: { type: 'number', description: 'Minutes before the sandbox can be destroyed while idle' },
       networkIsolation: {
         type: 'string',
@@ -28,6 +159,10 @@ export const platformSandboxProvider: SandboxProvider<PlatformSandboxOptions> = 
       },
       env: { type: 'object', description: 'Environment variables', additionalProperties: { type: 'string' } },
       timeout: { type: 'number', description: 'Default command timeout in ms' },
+    },
+    dependentRequired: {
+      templateId: ['templateDefinition'],
+      templateDefinition: ['templateId'],
     },
   },
   createSandbox: config => new PlatformSandbox(config),

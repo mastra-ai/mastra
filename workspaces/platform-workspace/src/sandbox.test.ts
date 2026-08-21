@@ -1,3 +1,4 @@
+import { Template } from '@mastra/core/workspace';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DirectExecWebSocket, DirectExecWebSocketFactory } from './direct-exec.js';
 import { PlatformSandbox, type SandboxAddressRegistry } from './sandbox.js';
@@ -137,6 +138,65 @@ describe('PlatformSandbox', () => {
     // init_exec frame carries command + cwd + env.
     const init = JSON.parse(sockets[0]!.sent[0]!) as { data: Record<string, unknown> };
     expect(init.data).toEqual({ command: 'echo ok', cwd: '/workspace', env: { A: '1' } });
+  });
+
+  it.each(['railway', 'e2b'] as const)(
+    'forwards and clones tenant-bound template inputs for %s',
+    async sandboxProvider => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const definition = Template().setWorkdir('/workspace/repo').runCmd('pnpm build').toJSON();
+      const fetchMock = vi.fn().mockResolvedValue(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }));
+      const parent = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        sandboxProvider,
+        environmentId: 'env_123',
+        templateId: 'opaque-template-handle',
+        templateDefinition: definition,
+        fetch: fetchMock,
+      });
+      definition.operations[0]!.args[0] = '/mutated';
+
+      const clone = parent.clone();
+      await clone._start();
+
+      expect(String(fetchMock.mock.calls[0]![0])).toBe(
+        `https://proxy.test/v1/${sandboxProvider}/projects/proj_123/sandbox`,
+      );
+      expect(JSON.parse(fetchMock.mock.calls[0]![1].body as string)).toMatchObject({
+        environmentId: 'env_123',
+        templateId: 'opaque-template-handle',
+        templateDefinition: Template().setWorkdir('/workspace/repo').runCmd('pnpm build').toJSON(),
+      });
+    },
+  );
+
+  it('uses the provider-prefixed Railway route for templates when SANDBOX_PROVIDER is unset', async () => {
+    vi.unstubAllEnvs();
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi.fn().mockResolvedValue(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }));
+    const sandbox = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      templateId: 'opaque-template-handle',
+      templateDefinition: Template().runCmd('true').toJSON(),
+      fetch: fetchMock,
+    });
+
+    await sandbox._start();
+
+    expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v1/railway/projects/proj_123/sandbox');
+  });
+
+  it('requires templateId and templateDefinition together', () => {
+    const options = { accessToken: 'sk_test', projectId: 'proj_123', environmentId: 'env_123' };
+    expect(() => new PlatformSandbox({ ...options, templateId: 'opaque-template-handle' })).toThrow(
+      'templateId and templateDefinition must be provided together',
+    );
+    expect(() => new PlatformSandbox({ ...options, templateDefinition: Template().runCmd('true').toJSON() })).toThrow(
+      'templateId and templateDefinition must be provided together',
+    );
   });
 
   it('uses E2B direct exec for E2B leases instead of the Railway WebSocket protocol', async () => {

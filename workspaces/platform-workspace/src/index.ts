@@ -1,5 +1,21 @@
-export { PlatformClient, PlatformApiError, type PlatformClientOptions, type PlatformProxyError } from './client.js';
+export {
+  PlatformClient,
+  PlatformApiError,
+  type PlatformClientOptions,
+  type PlatformProxyError,
+  type SandboxProvider,
+} from './client.js';
 export { PlatformFilesystem, type PlatformFilesystemOptions } from './filesystem.js';
+export {
+  PlatformTemplateClient,
+  PlatformTemplateBuildError,
+  PlatformTemplateBuildTimeoutError,
+  type BuildPlatformTemplateInput,
+  type GetPlatformTemplateInput,
+  type PlatformTemplateBuild,
+  type PlatformTemplateStatus,
+  type WaitForPlatformTemplateInput,
+} from './templates.js';
 export {
   PlatformSandbox,
   SandboxExecTransportError,

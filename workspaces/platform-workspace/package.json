@@ -23,6 +23,7 @@
     "build:lib": "pnpm build",
     "build:watch": "pnpm build --watch",
     "test:unit": "vitest run --exclude '**/*.integration.test.ts'",
+    "test:types": "vitest run --typecheck src/template-compatibility.test.ts",
     "test:cloud": "vitest run --passWithNoTests ./src/**/*.integration.test.ts",
     "test:watch": "vitest watch",
     "test": "pnpm test:unit",
@@ -43,7 +44,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.4.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.62.0-0 <2.0.0-0"
   },
   "files": [
     "dist",
