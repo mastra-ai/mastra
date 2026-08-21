@@ -9,8 +9,8 @@ import {
 } from '../render-scheduler.js';
 
 describe('RenderScheduler', () => {
-  it('limits default background rendering to five frames per second', () => {
-    expect(DEFAULT_RENDER_COALESCE_MS).toBe(200);
+  it('limits default background rendering to roughly seven frames per second', () => {
+    expect(DEFAULT_RENDER_COALESCE_MS).toBe(150);
   });
 
   it('coalesces bursty render requests into one delayed render inside the throttle window', () => {
@@ -182,7 +182,7 @@ describe('RenderScheduler', () => {
     expect(render).toHaveBeenCalledTimes(2);
   });
 
-  it('schedules one follow-up when a render requests another render', () => {
+  it('schedules one delayed follow-up when a render requests another render', async () => {
     vi.useFakeTimers();
     try {
       let now = 1_000;
@@ -195,8 +195,15 @@ describe('RenderScheduler', () => {
       vi.advanceTimersByTime(0);
       expect(render).toHaveBeenCalledOnce();
 
-      now += 80;
-      vi.advanceTimersByTime(80);
+      await Promise.resolve();
+      expect(render).toHaveBeenCalledOnce();
+
+      now += 79;
+      vi.advanceTimersByTime(79);
+      expect(render).toHaveBeenCalledOnce();
+
+      now += 1;
+      vi.advanceTimersByTime(1);
       expect(render).toHaveBeenCalledTimes(2);
       scheduler.dispose();
     } finally {

@@ -1,4 +1,4 @@
-export const DEFAULT_RENDER_COALESCE_MS = 200;
+export const DEFAULT_RENDER_COALESCE_MS = 150;
 
 export class RenderScheduler {
   private timer: ReturnType<typeof setTimeout> | undefined;
@@ -73,7 +73,7 @@ export class RenderScheduler {
       this.render(force);
     } finally {
       this.rendering = false;
-      if (this.pending || this.forcePending) {
+      if (this.forcePending || (this.pending && !this.timer)) {
         this.pending = false;
         queueMicrotask(() => this.flush());
       }
