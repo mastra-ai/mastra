@@ -1,11 +1,12 @@
 import type { TraceSignalDefinition } from '@mastra/client-js';
-import { Settings, X } from 'lucide-react';
+import { Settings } from 'lucide-react';
 import { useState } from 'react';
 
 import { useTraceIntelligence } from '../use-trace-intelligence';
 import { SignalDefinitionFormDialog } from './signal-definition-form-dialog';
 import { useSignalManagementList, useSignalManagementMutations } from './use-signal-management';
 import { Button } from '@/ds/components/Button';
+import { DataDetailsPanel } from '@/ds/components/DataDetailsPanel';
 import { Notice } from '@/ds/components/Notice';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { StatusBadge } from '@/ds/components/StatusBadge';
@@ -33,20 +34,18 @@ export function TraceSignalSettingsButton({ open, onClick }: { open: boolean; on
 
 export function TraceSignalSettingsPanel({ onClose }: { onClose: () => void }) {
   return (
-    <aside
-      id="trace-signal-settings"
-      aria-label="Trace signal settings"
-      className="border-border1 bg-surface1 order-first min-h-0 overflow-y-auto border-t pt-4 lg:order-none lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6"
-    >
-      <header className="mb-5 flex items-center justify-between gap-3">
-        <h2 className="text-ui-lg text-neutral5 flex items-center gap-2 font-medium">
-          <Settings aria-hidden="true" /> Trace signal settings
-        </h2>
-        <Button type="button" variant="ghost" size="icon-md" tooltip="Close settings" onClick={onClose}>
-          <X aria-hidden="true" />
-        </Button>
-      </header>
-      <TraceSignalSettingsContent />
+    <aside id="trace-signal-settings" aria-label="Trace signal settings" className="min-h-0">
+      <DataDetailsPanel>
+        <DataDetailsPanel.Header>
+          <DataDetailsPanel.Heading className="text-neutral5 items-center font-medium">
+            <Settings aria-hidden="true" /> Trace signal settings
+          </DataDetailsPanel.Heading>
+          <DataDetailsPanel.CloseButton onClick={onClose} tooltip="Close settings" />
+        </DataDetailsPanel.Header>
+        <DataDetailsPanel.Content>
+          <TraceSignalSettingsContent />
+        </DataDetailsPanel.Content>
+      </DataDetailsPanel>
     </aside>
   );
 }

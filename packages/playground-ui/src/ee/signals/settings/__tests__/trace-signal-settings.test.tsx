@@ -119,7 +119,7 @@ describe('TraceSignalSettingsButton', () => {
     expect(screen.getByText(/enable switches apply only to this project/i)).toBeTruthy();
     expect(screen.getAllByText('Read only')).toHaveLength(4);
     expect(screen.getByText('1 of 7 active organization definitions')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Close settings' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Close Panel' }));
     await waitFor(() => expect(screen.queryByRole('complementary', { name: 'Trace signal settings' })).toBeNull());
   });
 
@@ -130,23 +130,25 @@ describe('TraceSignalSettingsButton', () => {
     await screen.findByText('Handoff Quality');
 
     fireEvent.click(screen.getByRole('button', { name: 'Create signal' }));
+    expect(screen.queryByText('Trace context')).toBeNull();
+    expect(screen.getByText(/every signal receives all available bounded trace context/i)).toBeTruthy();
     fireEvent.change(screen.getByLabelText('Signal name'), { target: { value: 'tool_usage' } });
     fireEvent.change(screen.getByLabelText('Display label'), { target: { value: 'Tool Usage' } });
     fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'How the agent used tools.' } });
     fireEvent.change(screen.getByLabelText('Task prompt'), {
       target: { value: 'Describe how the agent used tools in one sentence.' },
     });
-    fireEvent.change(screen.getByLabelText('Additional output rules'), {
+    fireEvent.change(screen.getByLabelText('Additional response rules'), {
       target: { value: 'Mention failed calls' },
     });
-    fireEvent.change(screen.getByLabelText('Additional output rules'), {
+    fireEvent.change(screen.getByLabelText('Additional response rules'), {
       target: { value: 'Mention failed calls\n' },
     });
-    expect(screen.getByLabelText('Additional output rules')).toHaveProperty('value', 'Mention failed calls\n');
-    fireEvent.change(screen.getByLabelText('Additional output rules'), {
+    expect(screen.getByLabelText('Additional response rules')).toHaveProperty('value', 'Mention failed calls\n');
+    fireEvent.change(screen.getByLabelText('Additional response rules'), {
       target: { value: 'Mention failed calls\nExclude framework internals' },
     });
-    expect(screen.getByLabelText('Additional output rules')).toHaveProperty(
+    expect(screen.getByLabelText('Additional response rules')).toHaveProperty(
       'value',
       'Mention failed calls\nExclude framework internals',
     );
@@ -158,7 +160,14 @@ describe('TraceSignalSettingsButton', () => {
         description: 'How the agent used tools.',
         taskPrompt: 'Describe how the agent used tools in one sentence.',
         extraOutputRules: ['Mention failed calls', 'Exclude framework internals'],
-        artifactAllowlist: ['latestUserInput', 'minifiedTrace'],
+        artifactAllowlist: [
+          'latestUserInput',
+          'minifiedTrace',
+          'summary',
+          'tags',
+          'entityIntent',
+          'entityIntentSummary',
+        ],
       }),
     );
 
@@ -175,7 +184,7 @@ describe('TraceSignalSettingsButton', () => {
     );
   });
 
-  it('validates artifact selection and renders server validation errors accessibly', async () => {
+  it('renders server validation errors accessibly', async () => {
     const adapter = management({ create: vi.fn().mockRejectedValue(new Error('Signal name is reserved')) });
     renderSettings(adapter);
     await openSettings();
@@ -185,12 +194,6 @@ describe('TraceSignalSettingsButton', () => {
     fireEvent.change(screen.getByLabelText('Signal name'), { target: { value: 'tool_usage' } });
     fireEvent.change(screen.getByLabelText('Display label'), { target: { value: 'Tool Usage' } });
     fireEvent.change(screen.getByLabelText('Task prompt'), { target: { value: 'Analyze tool usage.' } });
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Latest user input' }));
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Minified trace' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Create signal' }));
-    expect(await screen.findByText('Select at least one trace context artifact.')).toBeTruthy();
-
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Latest user input' }));
     fireEvent.click(screen.getByRole('button', { name: 'Create signal' }));
     expect((await screen.findByRole('alert')).textContent).toContain('Signal name is reserved');
   });

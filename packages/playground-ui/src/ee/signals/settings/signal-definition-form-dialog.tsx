@@ -7,7 +7,6 @@ import type {
 import { useId, useState } from 'react';
 
 import { Button } from '@/ds/components/Button';
-import { Checkbox } from '@/ds/components/Checkbox';
 import {
   Dialog,
   DialogBody,
@@ -21,13 +20,13 @@ import { FieldBlock, TextFieldBlock } from '@/ds/components/FormFieldBlocks';
 import { Spinner } from '@/ds/components/Spinner';
 import { Textarea } from '@/ds/components/Textarea';
 
-const artifacts: ReadonlyArray<{ value: TraceSignalArtifact; label: string }> = [
-  { value: 'latestUserInput', label: 'Latest user input' },
-  { value: 'minifiedTrace', label: 'Minified trace' },
-  { value: 'summary', label: 'Trace summary' },
-  { value: 'tags', label: 'Trace tags' },
-  { value: 'entityIntent', label: 'Entity intent' },
-  { value: 'entityIntentSummary', label: 'Entity intent summary' },
+const allTraceSignalArtifacts: TraceSignalArtifact[] = [
+  'latestUserInput',
+  'minifiedTrace',
+  'summary',
+  'tags',
+  'entityIntent',
+  'entityIntentSummary',
 ];
 const reservedNames = new Set([
   'goal',
@@ -61,7 +60,7 @@ function initialValue(definition?: TraceSignalDefinition): FormValue {
         description: definition.description,
         taskPrompt: definition.taskPrompt,
         extraOutputRules: definition.extraOutputRules,
-        artifactAllowlist: definition.artifactAllowlist,
+        artifactAllowlist: allTraceSignalArtifacts,
       }
     : {
         name: '',
@@ -69,7 +68,7 @@ function initialValue(definition?: TraceSignalDefinition): FormValue {
         description: '',
         taskPrompt: '',
         extraOutputRules: [],
-        artifactAllowlist: ['latestUserInput', 'minifiedTrace'],
+        artifactAllowlist: allTraceSignalArtifacts,
       };
 }
 
@@ -84,7 +83,6 @@ function validate(value: FormValue, editing: boolean): string | undefined {
   if (value.extraOutputRules.length > 5 || value.extraOutputRules.some(rule => rule.length > 200)) {
     return 'Use at most five additional rules of up to 200 characters each.';
   }
-  if (value.artifactAllowlist.length === 0) return 'Select at least one trace context artifact.';
   return undefined;
 }
 
@@ -112,7 +110,7 @@ export function SignalDefinitionFormDialog({
         <DialogHeader>
           <DialogTitle>{editing ? 'Edit custom signal' : 'Create custom signal'}</DialogTitle>
           <DialogDescription>
-            Definitions belong to the organization and analyze new traces using the selected context.
+            Definitions belong to the organization. Every signal receives all available bounded trace context.
           </DialogDescription>
         </DialogHeader>
         <DialogBody>
@@ -186,7 +184,7 @@ export function SignalDefinitionFormDialog({
                 <FieldBlock.HelpText>{value.taskPrompt.length}/2,000 characters</FieldBlock.HelpText>
               </FieldBlock.Column>
               <FieldBlock.Column>
-                <FieldBlock.Label name="extraOutputRules">Additional output rules</FieldBlock.Label>
+                <FieldBlock.Label name="extraOutputRules">Additional response rules</FieldBlock.Label>
                 <Textarea
                   id="input-extraOutputRules"
                   rows={3}
@@ -195,33 +193,14 @@ export function SignalDefinitionFormDialog({
                   placeholder="One optional rule per line"
                   onChange={event => setExtraOutputRules(event.target.value)}
                 />
-              </FieldBlock.Column>
-              <FieldBlock.Column>
-                <FieldBlock.Label name="signal-artifacts">Trace context</FieldBlock.Label>
-                <div id="signal-artifacts" className="grid gap-2 sm:grid-cols-2">
-                  {artifacts.map(artifact => (
-                    <label key={artifact.value} className="text-ui-sm text-neutral4 flex items-center gap-2">
-                      <Checkbox
-                        checked={value.artifactAllowlist.includes(artifact.value)}
-                        disabled={pending}
-                        onCheckedChange={checked =>
-                          setField(
-                            'artifactAllowlist',
-                            checked
-                              ? [...value.artifactAllowlist, artifact.value]
-                              : value.artifactAllowlist.filter(item => item !== artifact.value),
-                          )
-                        }
-                      />
-                      {artifact.label}
-                    </label>
-                  ))}
-                </div>
+                <FieldBlock.HelpText>
+                  Optional constraints on how the signal is written. The platform always requires one plain sentence.
+                </FieldBlock.HelpText>
               </FieldBlock.Column>
             </FieldBlock.Layout>
             {editing ? (
               <p className="text-ui-xs text-neutral3">
-                Prompt or trace-context changes create a new version and apply only to new traces. Existing analysis is
+                Prompt or response-rule changes create a new version and apply only to new traces. Existing analysis is
                 unchanged.
               </p>
             ) : null}
