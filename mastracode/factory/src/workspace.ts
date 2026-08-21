@@ -3,12 +3,11 @@ import path, { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SandboxFilesystem } from '@mastra/code-sdk/agents/sandbox-filesystem';
 import { MASTRACODE_WORKSPACE_TOOLS } from '@mastra/code-sdk/agents/tool-availability';
-import { getDynamicWorkspace } from '@mastra/code-sdk/agents/workspace';
-import type { WorkspaceSkillExtension } from '@mastra/code-sdk/agents/workspace';
+import type { getDynamicWorkspace, WorkspaceSkillExtension } from '@mastra/code-sdk/agents/workspace';
 import { DEFAULT_CONFIG_DIR } from '@mastra/code-sdk/constants';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
-import { LocalSandbox, LocalSkillSource, Workspace } from '@mastra/core/workspace';
+import { LocalSkillSource, Workspace } from '@mastra/core/workspace';
 import type { SkillSource, SkillSourceEntry, SkillSourceStat } from '@mastra/core/workspace';
 import { getFactoryAuthUserFromContext, getFactoryAuthUserId } from './auth.js';
 import type { MastraFactorySandboxConfig } from './factory.js';
@@ -32,7 +31,7 @@ import {
   peekSessionSandbox,
   runSessionSetupFallback,
 } from './sandbox/session-sandbox.js';
-import { computeLocalWorkdir, computeRemoteWorkdir } from './sandbox/workdir.js';
+
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
 
 const WORKSPACE_ID_PREFIX = 'mfw';
@@ -263,12 +262,6 @@ export class FactoryWorkspaceRegistry {
 export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = {}) {
   const { sandbox: sandboxConfig, github, workItems } = options;
   const workspaceRegistry = options.workspaceRegistry ?? new FactoryWorkspaceRegistry();
-  // Local-provider deploys configure a host root for session checkouts; its
-  // presence is what makes workdirs host paths instead of in-VM paths.
-  const isLocalSandbox = !!sandboxConfig?.localRoot || sandboxConfig?.machine instanceof LocalSandbox;
-  const localRoot =
-    sandboxConfig?.localRoot ??
-    (sandboxConfig?.machine instanceof LocalSandbox ? sandboxConfig.machine.workingDirectory : undefined);
   type GithubTokenRegistration = {
     inject: (token: string) => void;
     patKind: GithubPatKind;
@@ -299,15 +292,11 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       ctx?.resourceId && github ? await github.sourceControlStorage.sessions.getBySessionId(ctx.resourceId) : null;
 
     if (!session) {
-      if (sandboxConfig && !isLocalSandbox) {
-        // Chat-only session on a remote-sandbox deploy: there is no repository
-        // to materialize, and the server host must never execute commands on a
-        // shared deployment. Run the session without a workspace (chat works,
-        // workspace tools are simply not registered) instead of erroring on
-        // every message.
-        return undefined;
-      }
-      return getDynamicWorkspace({ requestContext, mastra, skillExtension: effectiveSkillExtension });
+      // No factory session, no workspace. Chat still works; workspace tools
+      // are simply not registered. Host-cwd behavior is opt-in via a
+      // LocalSandbox callback rooted wherever the deployer wants — the
+      // resolver never hands out the server host's own filesystem.
+      return undefined;
     }
 
     const user = getFactoryAuthUserFromContext(requestContext);
@@ -322,10 +311,10 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     if (user.organizationId !== session.orgId || (session.visibility === 'private' && userId !== session.userId)) {
       throw new Error(`Factory session ${session.sessionId} is not available to the current user`);
     }
-    if (!sandboxConfig?.create || !github) {
-      throw new Error('GitHub and a sandbox create callback are required to create a Factory session workspace');
+    if (!sandboxConfig || !github) {
+      throw new Error('GitHub and a sandbox callback are required to create a Factory session workspace');
     }
-    const createSessionSandboxInstance = sandboxConfig.create;
+    const createSessionSandboxInstance = sandboxConfig;
 
     const storage = github.sourceControlStorage;
     const projectRepository = await storage.projectRepositories.get({
@@ -344,15 +333,30 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     if (!installation) throw new Error(`GitHub installation ${connection.installationId} was not found`);
     const repoFullName = repository.slug;
 
-    // Deterministic, never persisted, never trusted from storage or client
-    // input — the stale-workdir incident class came from reusing
-    // `session.sandboxWorkdir` written under a different provider.
-    if (isLocalSandbox && !localRoot) {
-      throw new Error('Local sandbox deploys must configure sandbox.localRoot for session checkouts');
-    }
-    const workdir = isLocalSandbox
-      ? computeLocalWorkdir(localRoot!, session.id, repoFullName)
-      : computeRemoteWorkdir(repoFullName);
+    // Construct (or fetch) the session's memoized sandbox instance and derive
+    // the workdir from it. Construction is cheap and side-effect-free by the
+    // callback contract — the VM is provisioned on `start()`, which only the
+    // materialization pipeline calls. The workdir is deterministic, never
+    // persisted, never trusted from storage or client input — the
+    // stale-workdir incident class came from reusing `session.sandboxWorkdir`
+    // written under a different provider.
+    // `runSetupOn` references `runSessionSetup`, defined below — it is only
+    // invoked during start/fallback, long after this closure fully initializes.
+    const runSetupOn = (target: unknown) => runSessionSetup(target as SessionSandbox);
+    const setupHook = createSessionSetupHook(runSetupOn, repoFullName);
+    const constructSessionEntry = () =>
+      getSessionSandbox(session.id, repoFullName, () =>
+        createSessionSandboxInstance({
+          sessionId: session.id,
+          repoFullName,
+          ...(projectRepository.setupCommand ? { setupCommand: projectRepository.setupCommand } : {}),
+          onStart: setupHook,
+          actingUserId: userId,
+        }),
+      );
+    const sessionEntry = constructSessionEntry();
+    const workdir = sessionEntry.workdir;
+    const isLocalSandbox = sessionEntry.sandbox.provider === 'local';
     // The system prompt derives its working directory from `state.projectPath`
     // and falls back to the server's own process.cwd() when unset — which
     // points the agent at the host checkout (and lets it run `git checkout`
@@ -367,7 +371,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     const extensionId = effectiveSkillExtension ? `-${effectiveSkillExtension.id}` : '';
     const workspaceId = `${WORKSPACE_ID_PREFIX}-${projectRepository.id}-${session.id}${extensionId}`;
     const workspaceGeneration = workspaceRegistry.generation(session.sessionId);
-    const configDir = sandboxConfig.workdir ?? DEFAULT_CONFIG_DIR;
+    const configDir = DEFAULT_CONFIG_DIR;
 
     const getRepositoryToken = async (): Promise<string> => {
       const access = await github.versionControl.getRepositoryAccess({
@@ -578,32 +582,21 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // start (reconnect/resume an existing VM, create otherwise), and the
       // per-process memo makes the base class's start coalescing apply
       // process-wide per session. The setup hook runs inside the start
-      // lifecycle, so any lazy start heals a replaced VM.
+      // lifecycle, so any lazy start heals a replaced VM. Re-fetch through
+      // the memo rather than reusing the resolution-scope entry: a dead-VM
+      // eviction must construct a FRESH instance here (a memoized instance
+      // already reporting `running` would early-return from start()).
       // Bridge: the setup helpers speak WorkspaceSandbox while the git
       // helpers take the narrower MaterializationSandbox surface. Same
       // object either way.
-      const runSetupOn = (target: unknown) => runSessionSetup(target as SessionSandbox);
-      const setupHook = createSessionSetupHook(runSetupOn, workdir);
-      const sandbox = asSessionSandbox(
-        getSessionSandbox(session.id, workdir, () =>
-          createSessionSandboxInstance({
-            sessionId: session.id,
-            workdir,
-            repoFullName,
-            ...(projectRepository.setupCommand ? { setupCommand: projectRepository.setupCommand } : {}),
-            idleTimeoutMinutes: sandboxConfig.idleTimeoutMinutes ?? 30,
-            onStart: setupHook,
-            actingUserId: userId,
-          }),
-        ),
-      );
+      const sandbox = asSessionSandbox(constructSessionEntry().sandbox);
       await sandbox.start();
       // Covers callbacks that did not forward ctx.onStart: probes the same
       // completion marker the hook writes, so this no-ops when the hook ran.
       await runSessionSetupFallback(
         sandbox as unknown as Parameters<typeof runSessionSetupFallback>[0],
         runSetupOn,
-        workdir,
+        repoFullName,
         session.id,
       );
       // The `gh` CLI needs a PAT when the org configured one (installation
@@ -706,7 +699,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       },
       name: 'Factory Lazy Sandbox',
       get provider() {
-        return materializedSandboxes.get(workspaceId)?.provider ?? (isLocalSandbox ? 'local' : 'factory');
+        return materializedSandboxes.get(workspaceId)?.provider ?? sessionEntry.sandbox.provider;
       },
       get status() {
         return materializedSandboxes.has(workspaceId) ? 'ready' : 'pending';
@@ -716,9 +709,12 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       },
       getInstructions() {
         // Prefer the live sandbox's instructions once materialized; before
-        // that, forward the configured template machine's instructions so
-        // tool descriptions are accurate without forcing materialization.
-        return materializedSandboxes.get(workspaceId)?.getInstructions?.() ?? (sandboxConfig.instructions || '');
+        // that, forward the constructed (not yet started) instance's
+        // instructions so tool descriptions are accurate without forcing
+        // materialization.
+        return (
+          materializedSandboxes.get(workspaceId)?.getInstructions?.() ?? sessionEntry.sandbox.getInstructions?.() ?? ''
+        );
       },
       clone(): never {
         throw new Error('The Factory session sandbox cannot be cloned from a lazy handle.');
@@ -844,5 +840,3 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     return workspace;
   };
 }
-
-export const getFactoryWorkspace = createWorkspaceFactory();

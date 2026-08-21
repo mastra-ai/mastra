@@ -245,7 +245,19 @@ function seedSessionSandbox(
     const result = respond(script, command, args);
     return { exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr ?? '' };
   });
-  getSessionSandbox(sessionRowId, workdir, () => ({ id: 'sbx-1', provider: 'stub', executeCommand }) as never);
+  // The memo derives the workdir from the constructed instance: a local
+  // provider checks out under <workingDirectory>/<repo name>.
+  getSessionSandbox(
+    sessionRowId,
+    'acme/repo',
+    () =>
+      ({
+        id: 'sbx-1',
+        provider: 'local',
+        workingDirectory: workdir.slice(0, workdir.lastIndexOf('/')),
+        executeCommand,
+      }) as never,
+  );
   return { executeCommand };
 }
 

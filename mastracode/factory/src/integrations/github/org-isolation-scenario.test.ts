@@ -214,11 +214,13 @@ const stateSigner = {
 
 // Mirror production: provisioning persists a sandboxId onto the binding row so
 // the later git routes can reattach. We update the fake DB row in place.
-const ensureProjectSandbox = vi.fn(async (opts: { row: any; storage: SourceControlStorageInMemory['sandboxes'] }) => {
-  const sandboxId = opts.row.sandboxId ?? `sb-${opts.row.userId}`;
-  await opts.storage.setSandboxId({ id: opts.row.id, sandboxId });
-  return { id: sandboxId };
-});
+const ensureProjectSandbox = vi.fn(
+  async (opts: { row: any; repoFullName?: string; storage: SourceControlStorageInMemory['sandboxes'] }) => {
+    const sandboxId = opts.row.sandboxId ?? `sb-${opts.row.userId}`;
+    await opts.storage.setSandboxId({ id: opts.row.id, sandboxId });
+    return { sandbox: { id: sandboxId }, workdir: `/workspace/${opts.repoFullName ?? 'octo/hello'}` };
+  },
+);
 const materializeRepo = vi.fn(async (_opts: any) => {});
 const reattachSandbox = vi.fn(async (_id: string) => ({ id: 'sb' }));
 const ensureWorktree = vi.fn(async (_sb: any, _workdir: string, opts: { branch: string; baseBranch: string }) => ({

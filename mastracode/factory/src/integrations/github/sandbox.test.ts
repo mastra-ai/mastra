@@ -114,19 +114,19 @@ const storage = {
   }),
 } as unknown as SourceControlStorageHandle['sandboxes'];
 
-function ensureProjectSandbox(
+async function ensureProjectSandbox(
   row: ProjectRepositorySandbox,
   onProgress?: Parameters<typeof ensureProjectSandboxWithStorage>[0]['onProgress'],
 ) {
-  return ensureProjectSandboxWithStorage({
+  const { sandbox } = await ensureProjectSandboxWithStorage({
     sandbox: runtime,
     row,
     repoFullName: 'octocat/hello',
-    workdir: '/workspace/octocat/hello',
     storage,
     token: 'install-token',
     onProgress,
   });
+  return sandbox;
 }
 
 function materializeRepo(
@@ -158,7 +158,6 @@ describe('ensureProjectSandbox', () => {
     expect(createCalls).toEqual([
       expect.objectContaining({
         sessionId: 'project-sbrow-1',
-        workdir: '/workspace/octocat/hello',
         repoFullName: 'octocat/hello',
         actingUserId: 'user-1',
       }),
@@ -181,7 +180,6 @@ describe('ensureProjectSandbox', () => {
         sandbox: { enabled: false, provider: 'none' },
         row: makeRow(),
         repoFullName: 'octocat/hello',
-        workdir: '/workspace/octocat/hello',
         storage,
         token: 'install-token',
       }),

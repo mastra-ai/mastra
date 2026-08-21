@@ -20,37 +20,38 @@ afterEach(() => {
 describe('session sandbox memo', () => {
   const construct = (id: string) => ({ id, provider: 'test' }) as unknown as WorkspaceSandbox;
 
-  it('constructs once per session id and returns the memoized instance', () => {
+  it('constructs once per session id and returns the memoized entry', () => {
     const factory = vi.fn(() => construct('sb-1'));
-    const first = getSessionSandbox('sess-1', '/tmp/wd', factory);
-    const second = getSessionSandbox('sess-1', '/tmp/wd', factory);
+    const first = getSessionSandbox('sess-1', 'acme/api', factory);
+    const second = getSessionSandbox('sess-1', 'acme/api', factory);
     expect(second).toBe(first);
+    expect(first.workdir).toBe('/workspace/acme/api');
     expect(factory).toHaveBeenCalledTimes(1);
   });
 
   it('keeps sessions independent', () => {
-    const a = getSessionSandbox('sess-a', '/tmp/wd', () => construct('sb-a'));
-    const b = getSessionSandbox('sess-b', '/tmp/wd', () => construct('sb-b'));
-    expect(a).not.toBe(b);
+    const a = getSessionSandbox('sess-a', 'acme/api', () => construct('sb-a'));
+    const b = getSessionSandbox('sess-b', 'acme/api', () => construct('sb-b'));
+    expect(a.sandbox).not.toBe(b.sandbox);
   });
 
   it('peek never constructs', () => {
     expect(peekSessionSandbox('sess-1')).toBeUndefined();
-    const made = getSessionSandbox('sess-1', '/tmp/wd', () => construct('sb-1'));
-    expect(peekSessionSandbox('sess-1')?.sandbox).toBe(made);
-    expect(peekSessionSandbox('sess-1')?.workdir).toBe('/tmp/wd');
+    const made = getSessionSandbox('sess-1', 'acme/api', () => construct('sb-1'));
+    expect(peekSessionSandbox('sess-1')?.sandbox).toBe(made.sandbox);
+    expect(peekSessionSandbox('sess-1')?.workdir).toBe('/workspace/acme/api');
   });
 
   it('evict drops the instance so the next access reconstructs', () => {
-    const first = getSessionSandbox('sess-1', '/tmp/wd', () => construct('sb-1'));
+    const first = getSessionSandbox('sess-1', 'acme/api', () => construct('sb-1'));
     evictSessionSandbox('sess-1');
-    const second = getSessionSandbox('sess-1', '/tmp/wd', () => construct('sb-2'));
-    expect(second).not.toBe(first);
+    const second = getSessionSandbox('sess-1', 'acme/api', () => construct('sb-2'));
+    expect(second.sandbox).not.toBe(first.sandbox);
   });
 
   it('does not memoize when construction throws', () => {
     expect(() =>
-      getSessionSandbox('sess-1', '/tmp/wd', () => {
+      getSessionSandbox('sess-1', 'acme/api', () => {
         throw new Error('boom');
       }),
     ).toThrow('boom');
@@ -76,7 +77,7 @@ describe('session setup hook + fallback', () => {
     const workdir = path.join(boot, 'repo');
     const hook = createSessionSetupHook(
       async sb => void (await sb.executeCommand!('mkdir -p repo/.git && touch hook-ran.txt')),
-      workdir,
+      'acme/repo',
     );
     const sandbox = new LocalSandbox({ workingDirectory: boot, onStart: hook });
     await sandbox._start();
@@ -87,7 +88,7 @@ describe('session setup hook + fallback', () => {
     await runSessionSetupFallback(
       sandbox,
       async sb => void (await sb.executeCommand!('touch fallback-ran.txt')),
-      workdir,
+      'acme/repo',
     );
     await expect(fs.stat(path.join(boot, 'fallback-ran.txt'))).rejects.toThrow();
   });
@@ -99,7 +100,7 @@ describe('session setup hook + fallback', () => {
       workingDirectory: boot,
       onStart: createSessionSetupHook(
         async sb => void (await sb.executeCommand!('mkdir -p repo/.git && touch first.txt')),
-        workdir,
+        'acme/repo',
       ),
     });
     await first._start();
@@ -107,7 +108,7 @@ describe('session setup hook + fallback', () => {
     // Second instance reattaches (outcome: 'connected') → marker probe skips setup.
     const second = new LocalSandbox({
       workingDirectory: boot,
-      onStart: createSessionSetupHook(async sb => void (await sb.executeCommand!('touch second.txt')), workdir),
+      onStart: createSessionSetupHook(async sb => void (await sb.executeCommand!('touch second.txt')), 'acme/repo'),
     });
     await second._start();
     await expect(fs.stat(path.join(boot, 'second.txt'))).rejects.toThrow();
@@ -120,7 +121,7 @@ describe('session setup hook + fallback', () => {
       workingDirectory: boot,
       onStart: createSessionSetupHook(
         async sb => void (await sb.executeCommand!('mkdir -p repo/.git && touch first.txt')),
-        workdir,
+        'acme/repo',
       ),
     });
     await first._start();
@@ -132,7 +133,7 @@ describe('session setup hook + fallback', () => {
       workingDirectory: boot,
       onStart: createSessionSetupHook(
         async sb => void (await sb.executeCommand!('mkdir -p repo/.git && touch rebuilt.txt')),
-        workdir,
+        'acme/repo',
       ),
     });
     await second._start();
@@ -143,12 +144,9 @@ describe('session setup hook + fallback', () => {
     const boot = path.join(dir, 'fail');
     const failing = new LocalSandbox({
       workingDirectory: boot,
-      onStart: createSessionSetupHook(
-        async () => {
-          throw new Error('Session setup failed (exit 7)');
-        },
-        path.join(boot, 'repo'),
-      ),
+      onStart: createSessionSetupHook(async () => {
+        throw new Error('Session setup failed (exit 7)');
+      }, 'acme/repo'),
     });
 
     await expect(failing._start()).rejects.toThrow(/Session setup failed \(exit 7\)/);
@@ -159,7 +157,7 @@ describe('session setup hook + fallback', () => {
       workingDirectory: boot,
       onStart: createSessionSetupHook(
         async sb => void (await sb.executeCommand!('mkdir -p repo/.git && touch healed.txt')),
-        path.join(boot, 'repo'),
+        'acme/repo',
       ),
     });
     await healed._start();
@@ -175,12 +173,16 @@ describe('session setup hook + fallback', () => {
     await runSessionSetupFallback(
       sandbox,
       async sb => void (await sb.executeCommand!('mkdir -p repo/.git && touch fallback-ran.txt')),
-      workdir,
+      'acme/repo',
     );
     await expect(fs.stat(path.join(dir, 'fallback-ran.txt'))).resolves.toBeDefined();
 
     // Second call: marker + checkout present, no re-run.
-    await runSessionSetupFallback(sandbox, async sb => void (await sb.executeCommand!('touch second.txt')), workdir);
+    await runSessionSetupFallback(
+      sandbox,
+      async sb => void (await sb.executeCommand!('touch second.txt')),
+      'acme/repo',
+    );
     await expect(fs.stat(path.join(dir, 'second.txt'))).rejects.toThrow();
 
     // Concurrent fallbacks single-flight: one setup run for both callers.
@@ -191,8 +193,8 @@ describe('session setup hook + fallback', () => {
       await sb.executeCommand!('mkdir -p repo/.git');
     };
     await Promise.all([
-      runSessionSetupFallback(sandbox, run as never, workdir),
-      runSessionSetupFallback(sandbox, run as never, workdir),
+      runSessionSetupFallback(sandbox, run as never, 'acme/repo'),
+      runSessionSetupFallback(sandbox, run as never, 'acme/repo'),
     ]);
     expect(runs).toBe(1);
   });
@@ -214,8 +216,8 @@ describe('session setup hook + fallback', () => {
     Object.defineProperty(a, 'id', { value: 'shared-id' });
     Object.defineProperty(b, 'id', { value: 'shared-id' });
     await Promise.all([
-      runSessionSetupFallback(a, run as never, path.join(bootA, 'repo'), 'session-a'),
-      runSessionSetupFallback(b, run as never, path.join(bootB, 'repo'), 'session-b'),
+      runSessionSetupFallback(a, run as never, 'acme/repo', 'session-a'),
+      runSessionSetupFallback(b, run as never, 'acme/repo', 'session-b'),
     ]);
     expect(runs).toBe(2);
   });
@@ -231,10 +233,14 @@ describe('session setup hook + fallback', () => {
         async () => {
           throw new Error('Session setup failed (exit 7)');
         },
-        workdir,
+        'acme/repo',
       ),
     ).rejects.toThrow(/Session setup failed \(exit 7\)/);
-    await runSessionSetupFallback(sandbox, async sb => void (await sb.executeCommand!('touch retried.txt')), workdir);
+    await runSessionSetupFallback(
+      sandbox,
+      async sb => void (await sb.executeCommand!('touch retried.txt')),
+      'acme/repo',
+    );
     await expect(fs.stat(path.join(dir, 'retried.txt'))).resolves.toBeDefined();
   });
 });

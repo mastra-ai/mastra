@@ -398,6 +398,7 @@ const stateSigner = {
 const ensureProjectSandbox = vi.fn(
   async (opts: {
     row: any;
+    repoFullName?: string;
     storage: SourceControlStorageInMemory['sandboxes'];
     token: string;
     onProgress?: (e: any) => void;
@@ -407,8 +408,11 @@ const ensureProjectSandbox = vi.fn(
     await opts.storage.setSandboxId({ id: opts.row.id, sandboxId: 'sb' });
     opts.onProgress?.({ phase: 'provisioning', message: 'Provisioning a new sandbox…' });
     return {
-      id: 'sb',
-      ...(freshProvision && opts.seedCheckpointName ? { seedCheckpointNameUsed: opts.seedCheckpointName } : {}),
+      sandbox: {
+        id: 'sb',
+        ...(freshProvision && opts.seedCheckpointName ? { seedCheckpointNameUsed: opts.seedCheckpointName } : {}),
+      },
+      workdir: `/workspace/${opts.repoFullName ?? 'octo/hello'}`,
     };
   },
 );
@@ -1348,9 +1352,7 @@ describe('ensure (materialize)', () => {
     const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/ensure', { method: 'POST' });
     expect(res.status).toBe(200);
     expect(ensureProjectSandbox).toHaveBeenCalledOnce();
-    expect(ensureProjectSandbox).toHaveBeenCalledWith(
-      expect.objectContaining({ repoFullName: 'octo/hello', workdir: '/workspace/octo/hello' }),
-    );
+    expect(ensureProjectSandbox).toHaveBeenCalledWith(expect.objectContaining({ repoFullName: 'octo/hello' }));
     expect(ensureProjectSandbox.mock.calls[0]![0].seedCheckpointName).toBeUndefined();
     // The stale persisted workdir was never read for decisions.
     expect(materializeRepo).toHaveBeenCalledWith(
@@ -1482,13 +1484,22 @@ function seedMaterializedSession() {
   });
   // The session's live sandbox in the per-process memo — git write routes
   // resolve through it (they never provision).
-  getSessionSandbox('stored-session-1', '/workspace/worktrees/feat-x', () =>
-    ({
-      id: 'sb-1',
-      provider: 'stub',
-      executeCommand: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
-    }) as never,
-  );
+  seedLiveSandbox('stored-session-1', '/workspace/worktrees/feat-x', {
+    id: 'sb-1',
+    executeCommand: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
+  });
+}
+
+/**
+ * Seed the per-process session-sandbox memo with a live instance whose
+ * derived workdir equals `workdir` exactly: a local-provider instance checks
+ * out under `<workingDirectory>/<repo name>`.
+ */
+function seedLiveSandbox(sessionRowId: string, workdir: string, sandbox: Record<string, unknown>) {
+  const cut = workdir.lastIndexOf('/');
+  // Mutate in place so callers can assert on the exact seeded instance.
+  Object.assign(sandbox, { provider: 'local', workingDirectory: workdir.slice(0, cut) });
+  getSessionSandbox(sessionRowId, `seed/${workdir.slice(cut + 1)}`, () => sandbox as never);
 }
 
 function postJson(app: ReturnType<typeof buildApp>, path: string, body: unknown) {
@@ -2002,11 +2013,10 @@ describe('Factory session routes', () => {
     // Seed the per-process memo: the session's sandbox is live in this replica.
     const live = {
       id: 'sb-live',
-      provider: 'stub',
       destroy: vi.fn(async () => order.push('destroy')),
       executeCommand: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
     };
-    getSessionSandbox(row.id, '/workspace/hello', () => live as never);
+    seedLiveSandbox(row.id, '/workspace/hello', live);
     runWorktreeTeardown.mockImplementationOnce(async () => {
       order.push('teardown');
     });
@@ -2052,11 +2062,10 @@ describe('Factory session routes', () => {
     const row = tables.sessions.find(r => r.sessionId === sessionId)!;
     const live = {
       id: 'sb-live',
-      provider: 'stub',
       destroy: vi.fn(async () => {}),
       executeCommand: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
     };
-    getSessionSandbox(row.id, '/workspace/hello', () => live as never);
+    seedLiveSandbox(row.id, '/workspace/hello', live);
 
     const deleted = await app.request(`/web/user-sessions/${sessionId}`, { method: 'DELETE' });
 
@@ -2076,11 +2085,10 @@ describe('Factory session routes', () => {
     const row = tables.sessions.find(r => r.sessionId === sessionId)!;
     const live = {
       id: 'sb-live',
-      provider: 'stub',
       destroy: vi.fn(async () => {}),
       executeCommand: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
     };
-    getSessionSandbox(row.id, '/workspace/hello', () => live as never);
+    seedLiveSandbox(row.id, '/workspace/hello', live);
 
     const deleted = await app.request(`/web/user-sessions/${sessionId}`, { method: 'DELETE' });
 
@@ -2158,9 +2166,10 @@ describe('sandbox teardown route', () => {
     );
 
     // A live memo entry for the caller's binding marks the teardown as real.
-    getSessionSandbox(`project-sbrow-1`, '/workspace/hello', () =>
-      ({ id: 'sb-1', provider: 'stub', executeCommand: async () => ({ exitCode: 0, stdout: '', stderr: '' }) }) as never,
-    );
+    seedLiveSandbox('project-sbrow-1', '/workspace/hello', {
+      id: 'sb-1',
+      executeCommand: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
+    });
 
     const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/sandbox', { method: 'DELETE' });
 

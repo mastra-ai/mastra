@@ -33,21 +33,24 @@ export function computeRemoteWorkdir(repoFullName: string): string {
 }
 
 /**
- * Host checkout directory for a local-provider session:
- * `<localRoot>/<session-id>/<repo-name>`. The session directory
- * (`<localRoot>/<session-id>`) is the sandbox's working directory — the repo
- * is a subdirectory so the bootstrap sentinel sits beside the clone instead
- * of polluting `git status` inside it. Refuses any path that escapes the
- * configured root.
+ * Derive the checkout workdir from a constructed sandbox instance. Local
+ * sandboxes expose their host `workingDirectory` (the per-session directory
+ * the deploy's callback chose — e.g. `<root>/<sessionId>`); the repo checks
+ * out as a contained subdirectory so the setup marker sits beside the clone
+ * instead of polluting `git status` inside it. Every other provider gets the
+ * deterministic remote layout. Never persisted, never trusted from storage
+ * or client input.
  */
-export function computeLocalWorkdir(localRoot: string, sessionId: string, repoFullName: string): string {
-  const [, name] = repoFullName.split('/', 2);
-  return resolveContainedLocalWorkdir(localRoot, sanitizeSegment(sessionId), sanitizeSegment(name || 'repo'));
-}
-
-/** Host session directory for a local-provider session: `<localRoot>/<session-id>`. */
-export function computeLocalSessionDir(localRoot: string, sessionId: string): string {
-  return resolveContainedLocalWorkdir(localRoot, sanitizeSegment(sessionId));
+export function deriveSandboxWorkdir(
+  sandbox: { provider: string; workingDirectory?: unknown },
+  repoFullName: string,
+): string {
+  const wd = sandbox.workingDirectory;
+  if (sandbox.provider === 'local' && typeof wd === 'string' && wd.length > 0) {
+    const [, name] = repoFullName.split('/', 2);
+    return resolveContainedLocalWorkdir(wd, sanitizeSegment(name || 'repo'));
+  }
+  return computeRemoteWorkdir(repoFullName);
 }
 
 /** Resolve a workdir under `root`, refusing any path that escapes the configured root. */

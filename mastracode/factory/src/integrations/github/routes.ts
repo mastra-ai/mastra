@@ -23,7 +23,7 @@ import type { RouteAuth } from '../../routes/route.js';
 import type { MaterializationSandbox, PrepareProgress, ProgressFn } from '../../sandbox/materialization.js';
 import type { FactorySandboxRuntime } from '../../sandbox/session-sandbox.js';
 import { peekSessionSandbox } from '../../sandbox/session-sandbox.js';
-import { computeLocalWorkdir, computeRemoteWorkdir } from '../../sandbox/workdir.js';
+import { computeRemoteWorkdir } from '../../sandbox/workdir.js';
 import type { StateSigner } from '../../state-signing.js';
 import type { AuditEmitter } from '../../storage/domains/audit/domain.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
@@ -663,9 +663,10 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
                 installationStorageId: inst.id,
                 repositoryStorageId: repository.id,
                 sandboxProvider: sandbox.provider,
-                // Snapshot for display only — the runtime workdir is computed
-                // deterministically at open time, never read from this row.
-                sandboxWorkdir: computeProjectWorkdir(sandbox, repo.fullName),
+                // Display only — the runtime workdir is derived from the
+                // constructed sandbox at open time, never read from this row.
+                // The remote layout is the honest listing-time guess.
+                sandboxWorkdir: computeRemoteWorkdir(repo.fullName),
               };
             }),
           );
@@ -1038,10 +1039,6 @@ async function prepareProject(options: {
 }): Promise<EnsureResult> {
   const { github, sandbox: runtime, project, userId, onProgress } = options;
   const sandboxRow = await loadOrCreateSandboxRow(github, project, userId);
-  // Deterministic — never read from the project or binding rows, so a
-  // provider switch or stale snapshot cannot point the clone at another
-  // provider's filesystem (the stale-workdir incident class).
-  const workdir = computeProjectWorkdir(runtime, project.repository.slug, sandboxRow.id);
   const access = await github.versionControl.getRepositoryAccess({
     orgId: project.installation.orgId,
     repositoryId: project.repository.id,
@@ -1053,11 +1050,14 @@ async function prepareProject(options: {
   // there. Git clone/pull below keep the minted installation token.
   const ghCliToken =
     (await getGithubPat(() => github.integrationStorage, project.installation.orgId)) ?? access.authorization.token;
-  const sandbox = await ensureProjectSandbox({
+  // The workdir is derived from the constructed sandbox — never read from
+  // the project or binding rows, so a provider switch or stale snapshot
+  // cannot point the clone at another provider's filesystem (the
+  // stale-workdir incident class).
+  const { sandbox, workdir } = await ensureProjectSandbox({
     sandbox: runtime,
     row: sandboxRow,
     repoFullName: project.repository.slug,
-    workdir,
     storage: github.sourceControlStorage.sandboxes,
     token: ghCliToken,
     onProgress,
@@ -1080,18 +1080,6 @@ async function prepareProject(options: {
   const done: PrepareProgress = { phase: 'done', message: 'Workspace ready.' };
   onProgress?.(done);
   return result;
-}
-
-/**
- * Deterministic workdir for a per-(project,user) sandbox. Local deploys nest
- * under the binding key so users don't share checkouts; remote VMs are
- * one-per-binding so the repo path alone suffices.
- */
-function computeProjectWorkdir(runtime: FactorySandboxRuntime, repoFullName: string, bindingId?: string): string {
-  if (runtime.localRoot) {
-    return computeLocalWorkdir(runtime.localRoot, bindingId ? `project-${bindingId}` : 'projects', repoFullName);
-  }
-  return computeRemoteWorkdir(repoFullName);
 }
 
 /** Shape an /ensure failure into an HTTP status + JSON body (also used as the SSE error payload). */

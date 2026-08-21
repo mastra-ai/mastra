@@ -1,9 +1,8 @@
 import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
-  computeLocalSessionDir,
-  computeLocalWorkdir,
   computeRemoteWorkdir,
+  deriveSandboxWorkdir,
   resolveContainedLocalWorkdir,
   sanitizeSegment,
 } from './workdir.js';
@@ -44,22 +43,35 @@ describe('computeRemoteWorkdir', () => {
   });
 });
 
-describe('computeLocalWorkdir', () => {
+describe('deriveSandboxWorkdir', () => {
   const root = path.resolve('/srv/sandboxes');
 
-  it('nests repo under the session directory so the sentinel sits beside the clone', () => {
-    expect(computeLocalWorkdir(root, 'sess-1', 'acme/api')).toBe(path.join(root, 'sess-1', 'api'));
-    expect(computeLocalSessionDir(root, 'sess-1')).toBe(path.join(root, 'sess-1'));
+  it('nests the repo under a local sandbox workingDirectory so the marker sits beside the clone', () => {
+    const sandbox = { provider: 'local', workingDirectory: path.join(root, 'sess-1') };
+    expect(deriveSandboxWorkdir(sandbox, 'acme/api')).toBe(path.join(root, 'sess-1', 'api'));
   });
 
-  it('keeps same-name repos apart per session', () => {
-    expect(computeLocalWorkdir(root, 'sess-a', 'acme/api')).not.toBe(computeLocalWorkdir(root, 'sess-b', 'acme/api'));
+  it('keeps same-name repos apart when callbacks use per-session directories', () => {
+    const a = { provider: 'local', workingDirectory: path.join(root, 'sess-a') };
+    const b = { provider: 'local', workingDirectory: path.join(root, 'sess-b') };
+    expect(deriveSandboxWorkdir(a, 'acme/api')).not.toBe(deriveSandboxWorkdir(b, 'acme/api'));
   });
 
-  it('refuses escapes through hostile session ids or repo names', () => {
+  it('refuses escapes through hostile repo names', () => {
+    const sandbox = { provider: 'local', workingDirectory: path.join(root, 'sess') };
     // Sanitization neutralizes traversal rather than throwing.
-    expect(computeLocalWorkdir(root, '../../sess', 'acme/api').startsWith(root + path.sep)).toBe(true);
-    expect(computeLocalWorkdir(root, 'sess', 'acme/../../..').startsWith(root + path.sep)).toBe(true);
+    expect(deriveSandboxWorkdir(sandbox, 'acme/../../..').startsWith(root + path.sep)).toBe(true);
+  });
+
+  it('uses the deterministic remote layout for non-local providers', () => {
+    expect(deriveSandboxWorkdir({ provider: 'e2b' }, 'acme/api')).toBe('/workspace/acme/api');
+    expect(deriveSandboxWorkdir({ provider: 'platform', workingDirectory: undefined }, 'acme/api')).toBe(
+      '/workspace/acme/api',
+    );
+  });
+
+  it('falls back to the remote layout for a local sandbox without a usable workingDirectory', () => {
+    expect(deriveSandboxWorkdir({ provider: 'local', workingDirectory: '' }, 'acme/api')).toBe('/workspace/acme/api');
   });
 });
 

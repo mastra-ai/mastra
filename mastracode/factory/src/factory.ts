@@ -61,7 +61,7 @@ import type { FactoryRules } from './rules/types.js';
 import { assertFactoryRules } from './rules/validation.js';
 import { registerSandboxReattach } from './sandbox/reattach.js';
 import { SessionRetirementCoordinator } from './sandbox/session-retirement.js';
-import type { FactorySandboxContext, FactorySandboxRuntime } from './sandbox/session-sandbox.js';
+import type { FactorySandboxRuntime, MastraFactorySandboxConfig } from './sandbox/session-sandbox.js';
 import { handleServerError } from './server-error.js';
 import { observeSessionCheckpoint } from './session/checkpoint-capture.js';
 import { observeSessionFilesystem } from './session/filesystem-capture.js';
@@ -182,55 +182,7 @@ export interface MastraFactoryConfig {
   };
 }
 
-export interface MastraFactorySandboxConfig {
-  /**
-   * Construct a session's sandbox from intent. The sandbox identity is the
-   * session id; the provider must honor id-keyed getOrCreate on `start()`
-   * (reconnect/resume an existing VM for the id, create otherwise).
-   * Callbacks SHOULD forward `ctx.onStart` to the provider's `onStart`
-   * option so session setup runs inside the start lifecycle.
-   *
-   * @example
-   * ```typescript
-   * sandbox: {
-   *   create: ({ sessionId, onStart }) => new E2BSandbox({ id: sessionId, onStart }),
-   * }
-   * ```
-   */
-  create?: (ctx: FactorySandboxContext) => WorkspaceSandbox;
-  /** Host root for local-provider session checkouts (drives workdir + containment). */
-  localRoot?: string;
-  /** Advisory idle window passed to the callback as `ctx.idleTimeoutMinutes`. Default: 30. */
-  idleTimeoutMinutes?: number;
-  /** Optional provider instructions surfaced in tool descriptions pre-materialization. */
-  instructions?: string;
-  /**
-   * Template machine — `RailwaySandbox` (`@mastra/railway`), core
-   * `LocalSandbox` (`@mastra/core/workspace`), or any `WorkspaceSandbox` that
-   * implements `clone()`. Each project-repository execution environment gets
-   * its own sandbox cloned from this machine; the machine itself is never
-   * started. `prepare()` fails fast when the instance lacks `clone()`.
-   *
-   * @deprecated Use `create` — the fleet-machine model is being removed.
-   */
-  machine?: WorkspaceSandbox;
-  /**
-   * In-sandbox base directory repos check out under (nested `owner/name` per
-   * repo). Default: the machine's own `workingDirectory` when it exposes one
-   * (core `LocalSandbox` does), else `/workspace`.
-   *
-   * @deprecated No-op. Session workdirs are computed deterministically from
-   * intent; this field is ignored and will be removed.
-   */
-  workdir?: string;
-  /**
-   * Per-replica cap on concurrently provisioned sandboxes.
-   *
-   * @deprecated No-op. The per-replica sandbox budget was removed with the
-   * fleet; this field is ignored and will be removed.
-   */
-  maxSandboxes?: number;
-}
+export type { MastraFactorySandboxConfig } from './sandbox/session-sandbox.js';
 
 /**
  * Per-process cap on concurrent background Factory dispatches. Omitted means
@@ -245,17 +197,6 @@ const CONTROLLER_ID = 'code';
 
 function hasPlatformSecretKey(): boolean {
   return Boolean(process.env.MASTRA_PLATFORM_SECRET_KEY?.trim());
-}
-
-/**
- * The template sandbox's own working directory, when it exposes one as a
- * string (core `LocalSandbox` does; remote providers generally don't).
- * Used as the default checkout base so a local template rooted at a host
- * directory checks repos out under that same root.
- */
-function templateWorkingDirectory(sandbox: WorkspaceSandbox): string | undefined {
-  const wd = (sandbox as { workingDirectory?: unknown }).workingDirectory;
-  return typeof wd === 'string' && wd.length > 0 ? wd : undefined;
 }
 
 /**
@@ -436,24 +377,14 @@ export class MastraFactory {
       },
     });
 
-    // Repository execution needs one sandbox per project-repository link,
-    // cloned from the configured machine. A machine without `clone()` would
-    // only fail on first use, so fail fast at boot instead.
+    // The sandbox config is a bare callback constructing a session's sandbox
+    // from intent. Shape-only validation: probing it with a synthetic ctx at
+    // boot would construct against a fake session, so only the type is
+    // checked.
     const sandboxConfig = this.#config.sandbox;
-    // Shape-only validation for the callback config: probing `create` with a
-    // synthetic ctx at boot would provision a VM, so only the type is checked.
-    if (sandboxConfig?.create !== undefined && typeof sandboxConfig.create !== 'function') {
+    if (sandboxConfig !== undefined && typeof sandboxConfig !== 'function') {
       throw new Error(
-        `MastraFactory: 'sandbox.create' must be a function constructing a WorkspaceSandbox from a FactorySandboxContext.`,
-      );
-    }
-    const machine = sandboxConfig?.machine;
-    if (machine && typeof machine.clone !== 'function') {
-      throw new Error(
-        `MastraFactory: the configured sandbox machine (provider '${machine.provider}') does not implement clone(). ` +
-          `Project repositories each get their own sandbox cloned from the configured machine. ` +
-          `Pass a machine that implements clone() — e.g. RailwaySandbox (@mastra/railway) or ` +
-          `LocalSandbox (@mastra/core/workspace) — or omit 'sandbox' to disable sandboxes.`,
+        `MastraFactory: 'sandbox' must be a function constructing a WorkspaceSandbox from a FactorySandboxContext.`,
       );
     }
 
@@ -462,38 +393,13 @@ export class MastraFactory {
     registerSandboxReattach();
     const workspaceRegistry = new FactoryWorkspaceRegistry();
 
-    // Compat shim (dies with the deprecated `machine` surface): a machine-configured deploy gets a
-    // `create` callback synthesized from `clone()`, so the intent path serves
-    // every deploy while the machine surface is deprecated. Cloned sandboxes
-    // do not receive `ctx.onStart` (clone options predate it); the workspace
-    // seam's marker-guarded fallback covers their setup.
-    const effectiveSandboxConfig =
-      sandboxConfig && !sandboxConfig.create && machine
-        ? {
-            ...sandboxConfig,
-            create: (ctx: FactorySandboxContext) =>
-              machine.clone!({
-                id: ctx.sessionId,
-                ...(typeof (machine as { workingDirectory?: unknown }).workingDirectory === 'string'
-                  ? { workingDirectory: ctx.workdir.slice(0, ctx.workdir.lastIndexOf('/')) }
-                  : {}),
-              }),
-          }
-        : sandboxConfig;
-    const sandboxLocalRoot = effectiveSandboxConfig?.localRoot ?? (machine && templateWorkingDirectory(machine));
     // The sandbox surface integrations and route builders see: enablement,
     // a provider label for diagnostics, and the create callback for paths
     // that construct sandboxes themselves.
     const sandboxRuntime: FactorySandboxRuntime = {
-      enabled: !!effectiveSandboxConfig?.create,
-      provider:
-        machine?.provider ?? (effectiveSandboxConfig?.create ? (sandboxLocalRoot ? 'local' : 'custom') : 'none'),
-      ...(sandboxLocalRoot ? { localRoot: sandboxLocalRoot } : {}),
-      ...(effectiveSandboxConfig?.idleTimeoutMinutes !== undefined
-        ? { idleTimeoutMinutes: effectiveSandboxConfig.idleTimeoutMinutes }
-        : {}),
-      ...(effectiveSandboxConfig?.create ? { create: effectiveSandboxConfig.create } : {}),
-      ...(effectiveSandboxConfig?.instructions ? { instructions: effectiveSandboxConfig.instructions } : {}),
+      enabled: !!sandboxConfig,
+      provider: sandboxConfig ? 'custom' : 'none',
+      ...(sandboxConfig ? { create: sandboxConfig } : {}),
     };
 
     // One shared OAuth state signer per boot. The deploy entry supplies a
@@ -576,7 +482,7 @@ export class MastraFactory {
       | undefined;
     const workItemsReady = storage.isDomainReady('work-items');
     const sessionRetirement =
-      effectiveSandboxConfig?.create && storage.isDomainReady('source-control')
+      sandboxConfig && storage.isDomainReady('source-control')
         ? new SessionRetirementCoordinator({
             invalidateSession: sessionId => workspaceRegistry.invalidateSession(sessionId),
           })
@@ -690,7 +596,7 @@ export class MastraFactory {
       prepareAgentControllerMount({
         controllerId: CONTROLLER_ID,
         workspace: createWorkspaceFactory({
-          ...(effectiveSandboxConfig ? { sandbox: effectiveSandboxConfig } : {}),
+          ...(sandboxConfig ? { sandbox: sandboxConfig } : {}),
           ...(githubIntegration ? { github: githubIntegration } : {}),
           ...(workItemsStorage ? { workItems: workItemsStorage } : {}),
           workspaceRegistry,

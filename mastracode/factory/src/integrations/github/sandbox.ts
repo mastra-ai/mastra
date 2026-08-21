@@ -57,30 +57,31 @@ export async function ensureProjectSandbox(options: {
   sandbox: FactorySandboxRuntime;
   row: ProjectRepositorySandbox;
   repoFullName: string;
-  workdir: string;
   storage: SourceControlSandboxStorage;
   token: string;
   onProgress?: ProgressFn;
-}): Promise<MaterializationSandbox> {
-  const { sandbox: runtime, row, repoFullName, workdir, storage, token, onProgress } = options;
+}): Promise<{ sandbox: MaterializationSandbox; workdir: string }> {
+  const { sandbox: runtime, row, repoFullName, storage, token, onProgress } = options;
   if (!runtime.create) {
     throw new MaterializeError('No sandbox provider is configured.', 'clone-failed');
   }
   reportProgress(onProgress, { phase: 'provisioning', message: 'Preparing sandbox…' });
   const key = projectSandboxKey(row);
-  const instance = getSessionSandbox(key, workdir, () =>
+  // The workdir is derived from the constructed instance (local sandboxes
+  // check out under their own workingDirectory) — never persisted, never
+  // trusted from the row.
+  const entry = getSessionSandbox(key, repoFullName, () =>
     runtime.create!({
       sessionId: key,
-      workdir,
       repoFullName,
-      idleTimeoutMinutes: runtime.idleTimeoutMinutes ?? 30,
       actingUserId: row.userId,
     }),
-  ) as unknown as MaterializationSandbox;
+  );
+  const instance = entry.sandbox as unknown as MaterializationSandbox;
   await instance.start();
   instance.setEnvironmentVariable?.('GH_TOKEN', token);
   void storage.setSandboxId({ id: row.id, sandboxId: instance.id }).catch(() => {});
-  return instance;
+  return { sandbox: instance, workdir: entry.workdir };
 }
 
 /**

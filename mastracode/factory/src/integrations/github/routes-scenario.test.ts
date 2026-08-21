@@ -207,10 +207,12 @@ vi.mock('./subscriptions', () => ({
   subscribeToPullRequest: (input: unknown) => subscribeToPullRequest(input),
 }));
 
-const ensureProjectSandbox = vi.fn(async (opts: { row: any; storage: SourceControlStorageInMemory['sandboxes'] }) => {
-  await opts.storage.setSandboxId({ id: opts.row.id, sandboxId: 'sb' });
-  return { id: 'sb' };
-});
+const ensureProjectSandbox = vi.fn(
+  async (opts: { row: any; repoFullName?: string; storage: SourceControlStorageInMemory['sandboxes'] }) => {
+    await opts.storage.setSandboxId({ id: opts.row.id, sandboxId: 'sb' });
+    return { sandbox: { id: 'sb' }, workdir: `/workspace/${opts.repoFullName ?? 'octo/hello'}` };
+  },
+);
 const materializeRepo = vi.fn(async (_opts: any) => {});
 const reattachSandbox = vi.fn(async (_id: string) => ({ id: 'sb' }));
 const ensureWorktree = vi.fn(async (_sb: any, _workdir: string, opts: { branch: string; baseBranch: string }) => ({
@@ -466,10 +468,12 @@ describe('S1: full write-back journey through the real route handlers', () => {
     expect(tables.sessions).toHaveLength(1);
     expect(tables.worktrees).toHaveLength(0);
     const persistedSessionWorkdir = '/workspace/session-feat-x';
-    getSessionSandbox(session.id, persistedSessionWorkdir, () =>
+    // Local-provider seed: the memo derives `<workingDirectory>/<repo name>`.
+    getSessionSandbox(session.id, 'seed/session-feat-x', () =>
       ({
         id: 'sb-session',
-        provider: 'stub',
+        provider: 'local',
+        workingDirectory: '/workspace',
         executeCommand: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
       }) as never,
     );
@@ -599,10 +603,11 @@ describe('S2: concurrent pushes', () => {
       materializedAt: new Date(),
     });
     const now = new Date();
-    getSessionSandbox(`stored-session-${id}`, '/workspace/hello', () =>
+    getSessionSandbox(`stored-session-${id}`, 'seed/hello', () =>
       ({
         id: `sb-${id}`,
-        provider: 'stub',
+        provider: 'local',
+        workingDirectory: '/workspace',
         executeCommand: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
       }) as never,
     );

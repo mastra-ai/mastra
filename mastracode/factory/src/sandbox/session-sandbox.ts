@@ -1,4 +1,5 @@
 import type { SandboxLifecycleHook, WorkspaceSandbox } from '@mastra/core/workspace';
+import { deriveSandboxWorkdir } from './workdir.js';
 
 /**
  * Everything factory knows about a session's sandbox needs — the whole
@@ -8,26 +9,15 @@ import type { SandboxLifecycleHook, WorkspaceSandbox } from '@mastra/core/worksp
 export interface FactorySandboxContext {
   /** Stable session id — the sandbox identity. */
   sessionId: string;
-  /**
-   * Deterministic in-sandbox working directory for the session's checkout.
-   * Local providers should root the sandbox's `workingDirectory` at the
-   * PARENT of this path (the per-session directory) — the setup marker is
-   * written beside the checkout, not inside it, so it never shows up in
-   * `git status` or gets committed.
-   */
-  workdir: string;
   /** owner/name of the repository, when the session is repo-backed. */
   repoFullName?: string;
   /**
    * Default-branch head sha, when factory knows it — for provider template
-   * keying (e.g. E2B sha-aliased templates). Not yet populated; the E2B
-   * wiring segment threads it from source-control storage.
+   * keying (e.g. E2B sha-aliased templates).
    */
   repoSha?: string;
   /** Configured repo setup command, when present — for template keying. */
   setupCommand?: string;
-  /** Idle window advisory (minutes). */
-  idleTimeoutMinutes: number;
   /**
    * Factory-built session setup hook (repo materialize + branch checkout +
    * setup command, marker-guarded). Callbacks SHOULD forward this to the
@@ -41,6 +31,22 @@ export interface FactorySandboxContext {
   actingUserId?: string;
 }
 
+/**
+ * The deploy's sandbox configuration: construct a session's sandbox from
+ * intent. The sandbox identity is the session id; the provider must honor
+ * id-keyed getOrCreate on `start()` (reconnect/resume an existing VM for the
+ * id, create otherwise). Construction must be cheap and side-effect-free —
+ * VMs are provisioned on `start()` only. Local sandboxes should root their
+ * `workingDirectory` at a per-session directory (e.g.
+ * `join(root, ctx.sessionId)`); the repo checks out as a subdirectory of it.
+ *
+ * @example
+ * ```typescript
+ * sandbox: ({ sessionId, onStart }) => new E2BSandbox({ id: sessionId, onStart })
+ * ```
+ */
+export type MastraFactorySandboxConfig = (ctx: FactorySandboxContext) => WorkspaceSandbox;
+
 /** The session's setup work, run against a started sandbox. Must be idempotent. */
 export type SessionSetupRun = (sandbox: WorkspaceSandbox) => Promise<void>;
 
@@ -52,14 +58,9 @@ export type SessionSetupRun = (sandbox: WorkspaceSandbox) => Promise<void>;
  */
 export interface FactorySandboxRuntime {
   enabled: boolean;
-  /** Provider label for diagnostics ('local', 'e2b', 'platform', 'custom', 'none'). */
+  /** Provider label for diagnostics ('custom' when configured, 'none' otherwise). */
   provider: string;
-  /** Host root for local sandbox checkouts, when the deploy is local. */
-  localRoot?: string;
   create?: (ctx: FactorySandboxContext) => WorkspaceSandbox;
-  /** Advisory idle window forwarded as `ctx.idleTimeoutMinutes`. Default: 30. */
-  idleTimeoutMinutes?: number;
-  instructions?: string;
 }
 
 /**
@@ -80,17 +81,23 @@ interface SessionSandboxEntry {
 
 const sessionSandboxes = new Map<string, SessionSandboxEntry>();
 
-/** Get the session's memoized sandbox, constructing (and memoizing) it on first access. */
+/**
+ * Get the session's memoized sandbox entry, constructing (and memoizing) it on
+ * first access. The workdir is derived from the constructed instance —
+ * construction is cheap and side-effect-free by contract; VMs are provisioned
+ * on `start()` only.
+ */
 export function getSessionSandbox(
   sessionId: string,
-  workdir: string,
+  repoFullName: string,
   construct: () => WorkspaceSandbox,
-): WorkspaceSandbox {
+): SessionSandboxEntry {
   const existing = sessionSandboxes.get(sessionId);
-  if (existing) return existing.sandbox;
+  if (existing) return existing;
   const sandbox = construct();
-  sessionSandboxes.set(sessionId, { sandbox, workdir });
-  return sandbox;
+  const entry = { sandbox, workdir: deriveSandboxWorkdir(sandbox, repoFullName) };
+  sessionSandboxes.set(sessionId, entry);
+  return entry;
 }
 
 /**
@@ -156,11 +163,14 @@ async function writeMarker(sandbox: WorkspaceSandbox): Promise<void> {
 async function runGuardedSetup(
   sandbox: WorkspaceSandbox,
   run: SessionSetupRun,
-  { skipMarkerProbe, workdir }: { skipMarkerProbe: boolean; workdir: string },
+  { skipMarkerProbe, repoFullName }: { skipMarkerProbe: boolean; repoFullName: string },
 ): Promise<void> {
   if (!sandbox.executeCommand) {
     throw new Error(`Sandbox '${sandbox.id}' cannot run the session setup: no executeCommand implementation`);
   }
+  // Derived from the live instance — the hook is built before the sandbox is
+  // constructed, so the workdir cannot be an input here.
+  const workdir = deriveSandboxWorkdir(sandbox, repoFullName);
   if (!skipMarkerProbe && (await markerPresent(sandbox, workdir))) return;
   await run(sandbox);
   await writeMarker(sandbox);
@@ -173,9 +183,9 @@ async function runGuardedSetup(
  * crash-interrupted attempt. Throwing fails `start()` loudly — core treats
  * onStart errors as fatal.
  */
-export function createSessionSetupHook(run: SessionSetupRun, workdir: string): SandboxLifecycleHook {
+export function createSessionSetupHook(run: SessionSetupRun, repoFullName: string): SandboxLifecycleHook {
   return async ({ sandbox, outcome }) => {
-    await runGuardedSetup(sandbox, run, { skipMarkerProbe: outcome === 'created', workdir });
+    await runGuardedSetup(sandbox, run, { skipMarkerProbe: outcome === 'created', repoFullName });
   };
 }
 
@@ -192,7 +202,7 @@ const inflightFallbackSetups = new Map<string, Promise<void>>();
 export async function runSessionSetupFallback(
   sandbox: WorkspaceSandbox,
   run: SessionSetupRun,
-  workdir: string,
+  repoFullName: string,
   sessionId?: string,
 ): Promise<void> {
   // Single-flight per logical session: two workspace variants of one session
@@ -203,7 +213,7 @@ export async function runSessionSetupFallback(
   const key = sessionId ?? sandbox.id;
   let inflight = inflightFallbackSetups.get(key);
   if (!inflight) {
-    inflight = runGuardedSetup(sandbox, run, { skipMarkerProbe: false, workdir }).finally(() => {
+    inflight = runGuardedSetup(sandbox, run, { skipMarkerProbe: false, repoFullName }).finally(() => {
       inflightFallbackSetups.delete(key);
     });
     inflightFallbackSetups.set(key, inflight);

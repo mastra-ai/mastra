@@ -22,7 +22,6 @@ import type { MemorySettingsStorage } from './storage/domains/memory-settings/ba
 import type { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import type { SourceControlStorage } from './storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
-import { getFactoryWorkspace } from './workspace.js';
 /** A real in-memory FactoryStorage with init spied for boot-order assertions. */
 function fakeStorage(): LibSQLFactoryStorage {
   const storage = new LibSQLFactoryStorage({ url: ':memory:', id: 'factory-test-storage' });
@@ -295,19 +294,9 @@ describe('MastraFactory.prepare', () => {
     expect(session.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-haiku-4-5' });
   });
 
-  it('exposes an enabled sandbox surface from the configured machine', async () => {
-    const sandbox = new LocalSandbox({ workingDirectory: '/tmp/mc-factory-test' });
-    const ctx = await prepareIntegrationContext({ storage: fakeStorage(), sandbox: { machine: sandbox } });
-    expect(ctx.sandbox.enabled).toBe(true);
-    expect(ctx.sandbox.provider).toBe('local');
-    // The machine compat shim synthesizes a create callback from clone().
-    expect(ctx.sandbox.create).toBeTypeOf('function');
-    expect(ctx.sandbox.localRoot).toBe('/tmp/mc-factory-test');
-  });
-
-  it('exposes an enabled sandbox surface from a create callback', async () => {
+  it('exposes an enabled sandbox surface from a sandbox callback', async () => {
     const create = () => ({ id: 'sb-cb' }) as never;
-    const ctx = await prepareIntegrationContext({ storage: fakeStorage(), sandbox: { create } });
+    const ctx = await prepareIntegrationContext({ storage: fakeStorage(), sandbox: create });
     expect(ctx.sandbox.enabled).toBe(true);
     expect(ctx.sandbox.provider).toBe('custom');
     expect(ctx.sandbox.create).toBe(create);
@@ -392,46 +381,20 @@ describe('MastraFactory.prepare', () => {
     expect(ctx.sandbox.provider).toBe('none');
   });
 
-  it('boots with a sandbox create callback without provisioning anything', async () => {
+  it('boots with a sandbox callback without provisioning anything', async () => {
     const create = vi.fn(() => new LocalSandbox({ workingDirectory: '/tmp/mc-factory-test' }));
-    const factory = new MastraFactory({
-      storage: fakeStorage(),
-      sandbox: { create, instructions: 'runs in an isolated VM' },
-    });
+    const factory = new MastraFactory({ storage: fakeStorage(), sandbox: create });
     await factory.prepare();
     // Boot validation is shape-only — the callback must never be probed.
     expect(create).not.toHaveBeenCalled();
   });
 
-  it('rejects a non-function sandbox create callback', async () => {
+  it('rejects a non-function sandbox config', async () => {
     const factory = new MastraFactory({
       storage: fakeStorage(),
-      sandbox: { create: 'nope' as unknown as () => never },
+      sandbox: { create: () => ({}) } as unknown as () => never,
     });
-    await expect(factory.prepare()).rejects.toThrow(/sandbox\.create.*must be a function/);
-  });
-
-  it('rejects a sandbox that does not implement clone()', async () => {
-    const uncloneable = {
-      id: 'sb-1',
-      name: 'Uncloneable',
-      provider: 'custom',
-    } as unknown as WorkspaceSandbox;
-    const factory = new MastraFactory({ storage: fakeStorage(), sandbox: { machine: uncloneable } });
-    await expect(factory.prepare()).rejects.toThrow(/does not implement clone\(\)/);
-  });
-
-  it('labels a remote machine surface with its provider and no local root', async () => {
-    const remote = {
-      id: 'sb-2',
-      name: 'Remote',
-      provider: 'railway',
-      clone: () => remote,
-    } as unknown as WorkspaceSandbox;
-    const ctx = await prepareIntegrationContext({ storage: fakeStorage(), sandbox: { machine: remote } });
-    expect(ctx.sandbox.enabled).toBe(true);
-    expect(ctx.sandbox.provider).toBe('railway');
-    expect(ctx.sandbox.localRoot).toBeUndefined();
+    await expect(factory.prepare()).rejects.toThrow(/'sandbox' must be a function/);
   });
 
   it("forwards the backend's Mastra store and the vector instance to the SDK mount", async () => {
@@ -462,10 +425,9 @@ describe('MastraFactory.prepare', () => {
     expect(config.disableSettingsOmSeed).toBe(true);
   });
 
-  it('installs a Web Factory session workspace resolver instead of changing the SDK default', async () => {
+  it('installs a Web Factory session workspace resolver', async () => {
     const config = await prepareFactory({ storage: fakeStorage() });
     expect(config.workspace).toEqual(expect.any(Function));
-    expect(config.workspace).not.toBe(getFactoryWorkspace);
   });
 
   it('omits vector when no instance is configured', async () => {
