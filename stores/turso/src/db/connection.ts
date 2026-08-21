@@ -21,10 +21,16 @@
  *    write on that connection, so an unrelated autocommit write issued while a
  *    transaction is open would be swept into it and committed or rolled back
  *    with it. All access is therefore serialized through a queue.
+ *
+ * 4. `PRAGMA busy_timeout` is accepted and read back, but not honoured:
+ *    contended writers fail immediately with "database is locked" instead of
+ *    waiting. The queue only serializes work on *this* connection, so writers
+ *    on separate connections still collide and `transactionWithRetry` is what
+ *    makes them converge.
  */
 
 import { connect } from '@tursodatabase/database';
-import { normalizeTursoError, TursoError } from './errors';
+import { isRetryableTursoError, normalizeTursoError, TursoError } from './errors';
 import { fromRow, toBindParams } from './values';
 import type { TursoBindParams, TursoRow } from './values';
 
@@ -65,6 +71,10 @@ const normalizeStatement = (statement: TursoStatement | string): TursoStatement 
   typeof statement === 'string' ? { sql: statement } : statement;
 
 /** Leading keywords of statements that yield rows. */
+/** Retry budget for transactions that lose a write race. */
+const DEFAULT_MAX_RETRIES = 5;
+const DEFAULT_INITIAL_BACKOFF_MS = 10;
+
 const ROW_RETURNING_PREFIX = /^\s*(?:SELECT|WITH|PRAGMA|EXPLAIN)\b/i;
 /** `RETURNING` turns an INSERT/UPDATE/DELETE into a row-producing statement. */
 const RETURNING_CLAUSE = /\bRETURNING\b/i;
@@ -243,6 +253,46 @@ export class TursoConnection {
         fn({ execute: statement => this.#run(db, normalizeStatement(statement)) }),
       );
     });
+  }
+
+  /**
+   * Runs a transaction, replaying it from the start when it loses a write race.
+   *
+   * Turso fails contended writers immediately rather than blocking, so any
+   * read-modify-write against a table other connections touch needs this.
+   * `fn` is re-invoked on each attempt, so it must re-read anything it depends
+   * on — replaying the write alone would apply it to a stale snapshot and lose
+   * the concurrent update.
+   *
+   * Retries are safe here precisely because the conflicting transaction was
+   * rolled back whole: a lost race writes nothing.
+   */
+  async transactionWithRetry<T>(
+    fn: (tx: TursoTransactionContext) => Promise<T>,
+    options: { mode?: TursoTransactionMode; maxRetries?: number; initialBackoffMs?: number } = {},
+  ): Promise<T> {
+    const {
+      mode = 'immediate',
+      maxRetries = DEFAULT_MAX_RETRIES,
+      initialBackoffMs = DEFAULT_INITIAL_BACKOFF_MS,
+    } = options;
+
+    let attempt = 0;
+    for (;;) {
+      try {
+        return await this.transaction(fn, mode);
+      } catch (error) {
+        // Give up on real failures, and on contention we have stopped waiting
+        // out, so the caller sees the engine's error rather than a hang.
+        if (attempt >= maxRetries || !isRetryableTursoError(error)) throw error;
+
+        // Full jitter: contended writers that back off in lockstep would just
+        // collide again on the next attempt.
+        const ceiling = initialBackoffMs * 2 ** attempt;
+        await new Promise(resolve => setTimeout(resolve, Math.random() * ceiling));
+        attempt++;
+      }
+    }
   }
 
   /**

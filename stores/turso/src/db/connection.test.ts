@@ -220,6 +220,106 @@ describe('TursoConnection', () => {
     });
   });
 
+  describe('transactionWithRetry', () => {
+    // Separate connections are the point: the queue serializes work within one
+    // connection, so cross-connection writers are the only way to make the
+    // engine's real contention behaviour observable.
+    const openConnections = (count: number) =>
+      Array.from({ length: count }, () => new TursoConnection({ path: join(dir, 'test.db') }));
+
+    it('converges concurrent read-modify-writes without losing an update', async () => {
+      await conn.execute(`INSERT INTO t VALUES ('counter', 0)`);
+
+      const writers = openConnections(8);
+      try {
+        await Promise.all(
+          writers.map(writer =>
+            writer.transactionWithRetry(async tx => {
+              const current = await tx.execute(`SELECT n FROM t WHERE id = 'counter'`);
+              const n = Number(current.rows[0]!.n);
+              // Widen the window between read and write so the increments
+              // genuinely overlap rather than happening to serialize.
+              await new Promise(resolve => setTimeout(resolve, 5));
+              await tx.execute({ sql: `UPDATE t SET n = ? WHERE id = 'counter'`, params: [n + 1] });
+            }),
+          ),
+        );
+
+        // Every increment must be visible: a lost update would land under 8.
+        const result = await conn.execute(`SELECT n FROM t WHERE id = 'counter'`);
+        expect(Number(result.rows[0]!.n)).toBe(8);
+      } finally {
+        await Promise.all(writers.map(writer => writer.close()));
+      }
+    });
+
+    it('proves the retry is load-bearing, not incidental serialization', async () => {
+      // Guards the test above: if plain transactions also converged, that test
+      // would pass with the retry deleted and prove nothing.
+      await conn.execute(`INSERT INTO t VALUES ('counter', 0)`);
+
+      const writers = openConnections(8);
+      try {
+        const results = await Promise.allSettled(
+          writers.map(writer =>
+            writer.transaction(async tx => {
+              const current = await tx.execute(`SELECT n FROM t WHERE id = 'counter'`);
+              await new Promise(resolve => setTimeout(resolve, 5));
+              await tx.execute({
+                sql: `UPDATE t SET n = ? WHERE id = 'counter'`,
+                params: [Number(current.rows[0]!.n) + 1],
+              });
+            }),
+          ),
+        );
+
+        expect(results.some(result => result.status === 'rejected')).toBe(true);
+      } finally {
+        await Promise.all(writers.map(writer => writer.close()));
+      }
+    });
+
+    it('does not retry a deterministic failure', async () => {
+      let attempts = 0;
+
+      await expect(
+        conn.transactionWithRetry(async tx => {
+          attempts++;
+          await tx.execute(`INSERT INTO t VALUES ('dup', 1)`);
+          await tx.execute(`INSERT INTO t VALUES ('dup', 2)`);
+        }),
+      ).rejects.toMatchObject({ code: 'SQLITE_CONSTRAINT_PRIMARYKEY' });
+
+      expect(attempts).toBe(1);
+    });
+
+    it('surfaces the engine error once the retry budget is spent', async () => {
+      const blocker = new TursoConnection({ path: join(dir, 'test.db') });
+      try {
+        // Hold a write lock open for longer than the retry budget can outlast.
+        let release!: () => void;
+        const held = new Promise<void>(resolve => (release = resolve));
+        const blocking = blocker.transaction(async tx => {
+          await tx.execute(`INSERT INTO t VALUES ('held', 1)`);
+          await held;
+        });
+        await new Promise(resolve => setTimeout(resolve, 20));
+
+        await expect(
+          conn.transactionWithRetry(async tx => tx.execute(`INSERT INTO t VALUES ('blocked', 1)`), {
+            maxRetries: 2,
+            initialBackoffMs: 1,
+          }),
+        ).rejects.toBeInstanceOf(TursoError);
+
+        release();
+        await blocking;
+      } finally {
+        await blocker.close();
+      }
+    });
+  });
+
   describe('close', () => {
     it('is idempotent', async () => {
       await conn.close();

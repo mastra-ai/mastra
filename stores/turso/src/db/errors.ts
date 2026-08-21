@@ -28,6 +28,7 @@
 /** SQLite result/extended codes this driver reconstructs from Turso messages. */
 export type TursoErrorCode =
   | 'SQLITE_BUSY'
+  | 'SQLITE_BUSY_SNAPSHOT'
   | 'SQLITE_CONSTRAINT'
   | 'SQLITE_CONSTRAINT_PRIMARYKEY'
   | 'SQLITE_CONSTRAINT_UNIQUE'
@@ -76,6 +77,12 @@ const MESSAGE_PATTERNS: ReadonlyArray<readonly [RegExp, TursoErrorCode, string |
   // Lock contention. Turso surfaces the bare SQLite phrasing with no code.
   [/database (?:table )?is locked/i, 'SQLITE_BUSY', undefined],
   [/database is busy/i, 'SQLITE_BUSY', undefined],
+  // MVCC write conflict: a concurrent transaction committed underneath this
+  // one, so its snapshot can no longer be used. Distinct from lock contention
+  // because the transaction is already dead — the caller must replay its reads
+  // rather than wait and retry the failed statement.
+  [/snapshot is stale/i, 'SQLITE_BUSY_SNAPSHOT', undefined],
+  [/write-write conflict/i, 'SQLITE_BUSY_SNAPSHOT', undefined],
   // Transaction misuse: nesting a BEGIN, or committing with none open. These
   // signal a driver/caller bug rather than a transient fault, so they must not
   // be classified as retryable.
@@ -125,12 +132,20 @@ export function normalizeTursoError(error: unknown, context?: string): TursoErro
   return new TursoError(context ? `${context}: ${message}` : message, code, extendedCode, { cause: error });
 }
 
-/** SQLite codes worth retrying: the write blocked on a lock rather than failed. */
-const RETRYABLE_CODES: ReadonlySet<TursoErrorCode> = new Set(['SQLITE_BUSY']);
+/**
+ * SQLite codes worth retrying: the write lost a race rather than being invalid.
+ *
+ * Turso does not honour `busy_timeout` — contended writers fail immediately
+ * instead of waiting — so retrying is the only way concurrent writers converge.
+ */
+const RETRYABLE_CODES: ReadonlySet<TursoErrorCode> = new Set(['SQLITE_BUSY', 'SQLITE_BUSY_SNAPSHOT']);
 
 /**
- * Whether an error represents transient lock contention and the operation can
- * be retried after a backoff.
+ * Whether an error represents transient contention and the operation can be
+ * retried after a backoff.
+ *
+ * Retrying is only safe for whole units of work that re-read what they modify;
+ * replaying a single statement inside a dead transaction cannot succeed.
  */
 export function isRetryableTursoError(error: unknown): boolean {
   const code = error instanceof TursoError ? error.code : classifyTursoMessage(messageOf(error))[0];
@@ -145,7 +160,6 @@ export function isRetryableTursoError(error: unknown): boolean {
  * defects and must surface.
  */
 export function isUniqueViolation(error: unknown): boolean {
-  const extendedCode =
-    error instanceof TursoError ? error.extendedCode : classifyTursoMessage(messageOf(error))[1];
+  const extendedCode = error instanceof TursoError ? error.extendedCode : classifyTursoMessage(messageOf(error))[1];
   return extendedCode === 'SQLITE_CONSTRAINT_UNIQUE';
 }
