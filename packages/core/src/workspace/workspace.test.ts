@@ -566,6 +566,44 @@ Line 3 conclusion`;
       expect(stops).toBe(1);
     });
 
+    it('destroy() waits for an in-flight stop() and wins', async () => {
+      let stopStarted!: () => void;
+      const stopStartedGate = new Promise<void>(resolve => {
+        stopStarted = resolve;
+      });
+      let releaseStop!: () => void;
+      const stopGate = new Promise<void>(resolve => {
+        releaseStop = resolve;
+      });
+      const order: string[] = [];
+      const sandbox = {
+        provider: 'fake',
+        stop: async () => {
+          order.push('stop:start');
+          stopStarted();
+          await stopGate;
+          order.push('stop:end');
+        },
+        destroy: async () => {
+          order.push('destroy');
+        },
+      } as any;
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+        sandbox,
+      });
+
+      const stopping = workspace.stop();
+      await stopStartedGate;
+      const destroying = workspace.destroy();
+      releaseStop();
+      await Promise.all([stopping, destroying]);
+
+      // The destroy must not interleave with the stop's teardown.
+      expect(order).toEqual(['stop:start', 'stop:end', 'destroy']);
+      expect(workspace.status).toBe('destroyed');
+    });
+
     it('should release the search index even when a resource fails to destroy', async () => {
       const filesystem = new LocalFilesystem({ basePath: tempDir });
       const workspace = new Workspace({

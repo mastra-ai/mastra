@@ -1349,7 +1349,9 @@ export class Workspace<
       } catch {
         // LSP shutdown errors are non-blocking
       }
-      this._lsp = this._lspFactory?.();
+      // Skip the recreate when a destroy began while we were stopping — a
+      // destroyed workspace must not resurrect an LSP manager.
+      this._lsp = this._teardownStarted ? undefined : this._lspFactory?.();
     }
 
     // Close browser before the sandbox
@@ -1379,6 +1381,13 @@ export class Workspace<
 
     this._teardownStarted = true;
     this._status = 'destroying';
+    // Let an in-flight stop() settle before destructive cleanup so the two
+    // teardowns never interleave on the same LSP manager, browser, and
+    // sandbox. _teardownStarted is already set, so the stop cannot recreate
+    // the LSP manager under us.
+    if (this._stopPromise) {
+      await this._stopPromise.catch(() => {});
+    }
     this._destroyPromise = this._performDestroy();
 
     try {

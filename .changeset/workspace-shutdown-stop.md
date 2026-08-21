@@ -7,3 +7,11 @@
 - New `Workspace.stop()`: shuts down language servers, closes the browser, and stops the sandbox without destroying anything. The workspace stays usable and the sandbox can start again later.
 - `LocalSandbox.stop()` now kills background processes (previously only `destroy()` did), so the stop-on-shutdown behavior cannot leak child processes on local sandboxes. Files in the working directory are untouched.
 - Full teardown remains explicit: `workspace.destroy()` or `mastra.removeWorkspace(id, { destroy: true })`.
+
+```typescript
+// Suspend live resources; the workspace stays usable
+await workspace.stop();
+
+// Full teardown is explicit
+await workspace.destroy();
+```
