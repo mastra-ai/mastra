@@ -62,9 +62,13 @@ export async function recreateDatabase(connectionString: string): Promise<void> 
   url.pathname = '/postgres';
   const admin = new Client({ connectionString: url.toString() });
   await admin.connect();
-  await admin.query(`DROP DATABASE IF EXISTS "${database}" WITH (FORCE)`);
-  await admin.query(`CREATE DATABASE "${database}"`);
-  await admin.end();
+  try {
+    // WITH (FORCE) requires Postgres 13+; see scripts/simulate/README.md prerequisites.
+    await admin.query(`DROP DATABASE IF EXISTS "${database}" WITH (FORCE)`);
+    await admin.query(`CREATE DATABASE "${database}"`);
+  } finally {
+    await admin.end();
+  }
 }
 
 /** Read every OM record generation out of the immutable input database, grouped by thread. */
@@ -72,10 +76,14 @@ export async function readRecordsByThread(inputUrl: string): Promise<Map<string,
   assertLocalTarget(inputUrl);
   const client = new Client({ connectionString: inputUrl });
   await client.connect();
-  const records: Record<string, unknown>[] = await client
-    .query('SELECT * FROM mastra_observational_memory ORDER BY "threadId", "generationCount"')
-    .then((result: { rows: Record<string, unknown>[] }) => result.rows);
-  await client.end();
+  let records: Record<string, unknown>[];
+  try {
+    records = await client
+      .query('SELECT * FROM mastra_observational_memory ORDER BY "threadId", "generationCount"')
+      .then((result: { rows: Record<string, unknown>[] }) => result.rows);
+  } finally {
+    await client.end();
+  }
 
   const byThread = new Map<string, Record<string, unknown>[]>();
   for (const record of records) {
@@ -133,31 +141,37 @@ export async function runArm(options: ArmRunOptions): Promise<ArmRunResult> {
   const onlyThreads = options.onlyThreads ?? [];
   const log = options.onEvent ?? (line => console.log(line));
 
-  for (const [threadId, threadRecords] of byThread) {
-    if (onlyThreads.length && !onlyThreads.includes(threadId)) continue;
-    const { cycles, warnings } = reconstructCycles(threadRecords as never);
-    if (!cycles.length) continue;
-    const resourceId = (threadRecords[0]?.resourceId as string) ?? threadId;
-    threadsReplayed++;
+  try {
+    for (const [threadId, threadRecords] of byThread) {
+      if (onlyThreads.length && !onlyThreads.includes(threadId)) continue;
+      const { cycles, warnings } = reconstructCycles(threadRecords as never);
+      if (!cycles.length) continue;
+      const resourceId = (threadRecords[0]?.resourceId as string) ?? threadId;
+      threadsReplayed++;
 
-    const result = await replayCycles({
-      cycles,
-      threadId,
-      resourceId,
-      organizationId,
-      memory: memory as never,
-      subconscious,
-      captureAgent,
-      curationCadence: arm.curationCadence,
-      onEvent: line => log(`[${arm.name}][${threadId.slice(0, 8)}] ${line}`),
-    });
+      const result = await replayCycles({
+        cycles,
+        threadId,
+        resourceId,
+        organizationId,
+        memory: memory as never,
+        subconscious,
+        captureAgent,
+        curationCadence: arm.curationCadence,
+        onEvent: line => log(`[${arm.name}][${threadId.slice(0, 8)}] ${line}`),
+      });
 
-    cyclesReplayed += result.cyclesReplayed;
-    for (const curation of result.curations) outcomes[curation.outcome] = (outcomes[curation.outcome] ?? 0) + 1;
-    for (const warning of [...warnings.map(w => w.kind), ...result.warnings]) log(`WARNING: ${warning}`);
+      cyclesReplayed += result.cyclesReplayed;
+      for (const curation of result.curations) outcomes[curation.outcome] = (outcomes[curation.outcome] ?? 0) + 1;
+      for (const warning of [...warnings.map(w => w.kind), ...result.warnings]) log(`WARNING: ${warning}`);
+    }
+
+    return { threadsReplayed, cyclesReplayed, outcomes };
+  } finally {
+    // ab.ts runs up to three arms in one process, so each arm releases its pools before the next.
+    await storage.close();
+    await vector.disconnect();
   }
-
-  return { threadsReplayed, cyclesReplayed, outcomes };
 }
 
 /** Read an arm's resulting knowledge for content comparison. */
@@ -165,14 +179,17 @@ export async function snapshotArm(targetUrl: string): Promise<ArmSnapshot> {
   assertLocalTarget(targetUrl);
   const client = new Client({ connectionString: targetUrl });
   await client.connect();
-  const nodes = await client
-    .query('SELECT id, name FROM mastra_knowledge_nodes')
-    .then((result: { rows: { id: string; name: string }[] }) => result.rows);
-  const records = await client
-    .query('SELECT id, node, text FROM mastra_knowledge_records WHERE "deletedAt" IS NULL')
-    .then((result: { rows: { id: string; node: string; text: string }[] }) => result.rows);
-  await client.end();
-  return { nodes, records };
+  try {
+    const nodes = await client
+      .query('SELECT id, name FROM mastra_knowledge_nodes')
+      .then((result: { rows: { id: string; name: string }[] }) => result.rows);
+    const records = await client
+      .query('SELECT id, node, text FROM mastra_knowledge_records WHERE "deletedAt" IS NULL')
+      .then((result: { rows: { id: string; node: string; text: string }[] }) => result.rows);
+    return { nodes, records };
+  } finally {
+    await client.end();
+  }
 }
 
 async function main() {

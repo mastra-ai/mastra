@@ -114,8 +114,13 @@ export function parseArgs(argv: string[]): Args {
 type PgClient = {
   connect(): Promise<void>;
   end(): Promise<void>;
-  query(text: string, params?: unknown[]): Promise<{ rows: any[] }>;
+  query(text: string, params?: unknown[]): Promise<{ rows: Record<string, unknown>[] }>;
 };
+
+/** Identifiers cannot be bound as parameters, so any source-provided name is escaped by hand. */
+function quoteIdentifier(identifier: string): string {
+  return `"${identifier.replace(/"/g, '""')}"`;
+}
 
 function loadPg(): { Client: new (config: { connectionString: string }) => PgClient } {
   // `pg` is not a dependency of this package; borrow the workspace copy rather than adding one.
@@ -138,10 +143,10 @@ async function copyTable(
   ).rows as { column_name: string; data_type: string }[];
   if (columns.length === 0) throw new Error(`source has no table ${spec.table}`);
 
-  const quoted = columns.map(c => `"${c.column_name}"`).join(', ');
+  const quoted = columns.map(c => quoteIdentifier(c.column_name)).join(', ');
   await target.query(`DROP TABLE IF EXISTS "${spec.table}"`);
   await target.query(
-    `CREATE TABLE "${spec.table}" (${columns.map(c => `"${c.column_name}" ${c.data_type}`).join(', ')})`,
+    `CREATE TABLE "${spec.table}" (${columns.map(c => `${quoteIdentifier(c.column_name)} ${c.data_type}`).join(', ')})`,
   );
 
   const rows = (
@@ -159,7 +164,7 @@ async function copyTable(
       const value = row[c.column_name];
       return isJson[i] && value !== null && value !== undefined ? JSON.stringify(value) : value;
     });
-    await target.query(`INSERT INTO "${spec.table}" (${quoted}) VALUES (${placeholders})`, values);
+    await target.query(`INSERT INTO ${quoteIdentifier(spec.table)} (${quoted}) VALUES (${placeholders})`, values);
   }
   return rows.length;
 }
@@ -171,9 +176,15 @@ export async function main(argv: string[]): Promise<void> {
   const { Client } = loadPg();
   const source = new Client({ connectionString: args.source });
   const target = new Client({ connectionString: args.target });
-  await source.connect();
-  await target.connect();
+  let sourceConnected = false;
+  let targetConnected = false;
   try {
+    // Track each connection independently: if the second one rejects, the first still gets closed.
+    await source.connect();
+    sourceConnected = true;
+    await target.connect();
+    targetConnected = true;
+
     // Any write against the source now fails loudly instead of succeeding quietly.
     await source.query('SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY');
 
@@ -198,8 +209,10 @@ export async function main(argv: string[]): Promise<void> {
     console.log(`EXTRACTED_MESSAGES=${counts['mastra_messages']}`);
     console.log(`EXTRACTED_OM_RECORDS=${counts['mastra_observational_memory']}`);
   } finally {
-    await source.end();
-    await target.end();
+    await Promise.all([
+      sourceConnected ? source.end() : Promise.resolve(),
+      targetConnected ? target.end() : Promise.resolve(),
+    ]);
   }
 }
 

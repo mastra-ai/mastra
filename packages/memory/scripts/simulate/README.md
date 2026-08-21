@@ -94,8 +94,9 @@ not replace the built-in contract, which the pipeline depends on.
   environment, or a local dev database all work. Nothing about the tool is specific to one
   deployment: source and target are passed as flags, and the copied columns are read from
   `information_schema` rather than hardcoded.
-- A local Postgres to extract into, with `pgvector` available: Subconscious knowledge is
-  semantic, so each arm needs a vector store alongside its database.
+- A local Postgres **13 or newer** to extract into, with `pgvector` available: Subconscious
+  knowledge is semantic, so each arm needs a vector store alongside its database, and the
+  per-arm database reset uses `DROP DATABASE ... WITH (FORCE)`, which Postgres 13 introduced.
 - Model credentials for whichever providers `--capture-model`, `--curate-model`, and
   `--embedder` resolve to (e.g. `GOOGLE_API_KEY`, `DEEPSEEK_API_KEY`, `OPENAI_API_KEY`).
   Capture and curation may run on different models; both arms always use the same pair.
