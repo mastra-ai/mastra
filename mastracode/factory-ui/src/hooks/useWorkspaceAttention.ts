@@ -1,5 +1,5 @@
 import { type QueryClient, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import { useEffect, useEffectEvent } from 'react';
 
 import { queryKeys } from '../api/keys';
 import { playDoneSound } from '../ui/domains/settings/services/doneSound';
@@ -49,7 +49,7 @@ function useWorkspaceAttentionCache({ projectRepositoryId, sessionKind }: Worksp
   });
   const clearAttention = (path: string) =>
     clearWorkspaceAttention(queryClient, { projectRepositoryId, sessionKind }, path);
-  return { queryClient, queryKey, data, clearAttention };
+  return { queryClient, data, clearAttention };
 }
 
 export function useWorkspaceAttentionState(scope: WorkspaceAttentionScope) {
@@ -67,13 +67,15 @@ export function useWorkspaceAttention({
   attentionByPath: Record<string, true>;
   clearAttention: (path: string) => void;
 } {
-  const { queryClient, queryKey, data, clearAttention } = useWorkspaceAttentionCache({
+  const { queryClient, data, clearAttention } = useWorkspaceAttentionCache({
     projectRepositoryId,
     sessionKind,
   });
+  const runsFinished = useEffectEvent(() => onRunsFinished?.());
 
   useEffect(() => {
     if (!ready) return;
+    const queryKey = queryKeys.workspaceAttention(projectRepositoryId, sessionKind);
     const current = queryClient.getQueryData<WorkspaceAttentionState>(queryKey) ?? {
       runningByPath: {},
       attentionByPath: {},
@@ -100,9 +102,9 @@ export function useWorkspaceAttention({
     queryClient.setQueryData<WorkspaceAttentionState>(queryKey, { runningByPath, attentionByPath });
     if (finished.length > 0) {
       playDoneSound();
-      onRunsFinished?.();
+      runsFinished();
     }
-  }, [onRunsFinished, projectRepositoryId, queryClient, queryKey, ready, runningByPath, sessionKind]);
+  }, [projectRepositoryId, queryClient, ready, runningByPath, sessionKind]);
 
   return { attentionByPath: data.attentionByPath, clearAttention };
 }

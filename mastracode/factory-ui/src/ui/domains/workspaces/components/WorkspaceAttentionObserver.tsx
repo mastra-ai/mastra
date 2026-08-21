@@ -1,5 +1,4 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useCallback } from 'react';
 
 import { queryKeys } from '../../../../api/keys';
 import { useActiveRunResources } from '../../../../hooks/useActiveRunResources';
@@ -22,10 +21,8 @@ export function WorkspaceAttentionObserver({ projectRepositoryId }: { projectRep
   const userRunning = Object.fromEntries(
     userSessions.map(session => [session.sessionId, runningBySessionId[session.sessionId] === true]),
   );
-  const refreshSessions = useCallback(
-    () => void queryClient.invalidateQueries({ queryKey: queryKeys.sessions(projectRepositoryId) }),
-    [projectRepositoryId, queryClient],
-  );
+  const refreshSessions = () =>
+    void queryClient.invalidateQueries({ queryKey: queryKeys.sessions(projectRepositoryId) });
 
   useWorkspaceAttention({
     projectRepositoryId,
