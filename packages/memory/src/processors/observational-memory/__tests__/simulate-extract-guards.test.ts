@@ -6,6 +6,7 @@ import {
   isLocalPostgresUrl,
   parseArgs,
 } from '../../../../scripts/simulate/extract';
+import { positiveInt } from '../../../../scripts/simulate/replay';
 
 describe('simulate extract — local target guard', () => {
   it.each([
@@ -70,5 +71,19 @@ describe('simulate extract — arg parsing', () => {
 
   it('rejects unknown flags', () => {
     expect(() => parseArgs(['--nope'])).toThrow(/unknown flag/);
+  });
+});
+
+describe('simulate replay — numeric flag parsing', () => {
+  it('falls back when the flag is absent', () => {
+    expect(positiveInt('cadence', undefined, 3)).toBe(3);
+  });
+
+  it('accepts a positive integer', () => {
+    expect(positiveInt('cadence', '7', 3)).toBe(7);
+  });
+
+  it.each(['abc', '0', '-1', '2.5', ''])('rejects %j instead of silently producing NaN', value => {
+    expect(() => positiveInt('cadence', value, 3)).toThrow(/positive integer/);
   });
 });

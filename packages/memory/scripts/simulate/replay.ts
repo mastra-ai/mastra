@@ -10,6 +10,7 @@
  * Both databases must be local: this tool never writes to a remote deployment.
  */
 import { createRequire } from 'node:module';
+import { pathToFileURL } from 'node:url';
 
 import { Agent } from '@mastra/core/agent';
 
@@ -35,6 +36,14 @@ export function parseFlags(argv: string[]): Map<string, string[]> {
   return out;
 }
 
+/** A bare `Number()` turns a typo into NaN, which silently disables cadence comparisons. */
+export function positiveInt(flag: string, value: string | undefined, fallback: number): number {
+  if (value === undefined) return fallback;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1) throw new Error(`--${flag} must be a positive integer, got "${value}"`);
+  return parsed;
+}
+
 // `pg` and `@mastra/pg` are not dependencies of this package; borrow the workspace
 // copies rather than adding one for a dev tool.
 const require = createRequire(new URL('../../../../stores/pg/package.json', import.meta.url));
@@ -58,7 +67,8 @@ async function loadVector(connectionString: string) {
 export async function recreateDatabase(connectionString: string): Promise<void> {
   assertLocalTarget(connectionString);
   const url = new URL(connectionString);
-  const database = url.pathname.replace(/^\//, '');
+  // Quote-escaped: the database name comes from a URL, and identifiers cannot be bound as parameters.
+  const database = url.pathname.replace(/^\//, '').replace(/"/g, '""');
   url.pathname = '/postgres';
   const admin = new Client({ connectionString: url.toString() });
   await admin.connect();
@@ -215,10 +225,10 @@ async function main() {
   const arm: ArmConfig = {
     name: args.get('arm') ?? 'a',
     prompts: { capture: args.get('capture-instructions'), curate: args.get('curate-instructions') },
-    curationCadence: Number(args.get('cadence') ?? 3),
+    curationCadence: positiveInt('cadence', args.get('cadence'), 3),
     defaultScope: 'resource',
     maxScope: 'resource',
-    curateMaxSteps: Number(args.get('curate-max-steps') ?? 25),
+    curateMaxSteps: positiveInt('curate-max-steps', args.get('curate-max-steps'), 25),
   };
 
   const result = await runArm({
@@ -243,7 +253,7 @@ async function main() {
 }
 
 // Only run the CLI when invoked directly; `ab.ts` imports the helpers above.
-if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch(error => {
     console.error(error instanceof Error ? error.message : error);
     process.exit(1);

@@ -7,7 +7,7 @@ Add a conversation simulation tool that replays real conversation threads throug
 ```sh
 pnpm --filter @mastra/memory simulate:ab -- \
   --input "$SIMULATE_INPUT_URL" \
-  --target-prefix simulate_demo \
+  --target-prefix "postgres://user@127.0.0.1:5432/simulate_demo" \
   --arm-a ./arm-a.txt \
   --arm-b ./arm-b.txt
 ```
