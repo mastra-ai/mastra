@@ -439,6 +439,11 @@ export const createTimeTravelExecutionParams = (params: {
   const stepResults: Record<string, StepResult<any, any, any, any>> = {};
   const snapshotContext = snapshot.context as Record<string, any>;
 
+  const foreachSuspendPayload = Object.values(snapshotContext).find(value => {
+    const meta = value?.suspendPayload?.__workflow_meta;
+    return meta?.foreachOutput && Object.values(meta.resumeLabels ?? {}).some((label: any) => label?.stepId === firstStepId);
+  })?.suspendPayload;
+
   for (const [index, entry] of graph.steps.entries()) {
     const currentExecPathLength = executionPath.length;
     //if there is resumeData, steps down the graph until the suspended step will have stepResult info to use
@@ -525,7 +530,7 @@ export const createTimeTravelExecutionParams = (params: {
           ? (context?.[stepId]?.output ?? stepOutput ?? snapshotContext[stepId]?.output ?? {})
           : undefined,
         resumePayload: stepContext?.resumePayload,
-        suspendPayload: stepContext?.suspendPayload,
+        suspendPayload: stepContext?.suspendPayload ?? (isTargetEntry ? foreachSuspendPayload : undefined),
         suspendOutput: stepContext?.suspendOutput,
         startedAt: stepContext?.startedAt ?? Date.now(),
         endedAt: isCompleteStatus ? (stepContext?.endedAt ?? Date.now()) : undefined,
