@@ -75,12 +75,6 @@ export interface IntegrationContext {
    */
   sandbox: FactorySandboxRuntime;
   /**
-   * Base-checkpoint trigger surface — present when the factory constructed a
-   * builder (fleet enabled + a source-control owner registered). Integrations
-   * feed webhook events and reconcile sweeps into it so connected repos keep
-   * a warm base checkpoint.
-   */
-  /**
    * Root factory storage backend and source of the `appDbConfigured`
    * diagnostic. Absent when the host runs without an application database.
    */

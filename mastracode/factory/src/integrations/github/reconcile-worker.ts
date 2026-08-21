@@ -35,10 +35,6 @@ export interface GithubReconcileWorkerConfig {
   reconcile?: GithubPullRequestReconciler;
   reconcileIssues?: GithubIssueReconciler;
   sourceControl: GithubReconcileRepositorySource;
-  /**
-   * Base-checkpoint freshness sweep, run after the reconcilers within the same
-   * lease. Rebuilds stale/missing base checkpoints for configured repos.
-   */
   intervalMs?: number;
   issueIntervalMs?: number;
   now?: () => number;

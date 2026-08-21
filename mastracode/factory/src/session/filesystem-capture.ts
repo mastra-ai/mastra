@@ -55,9 +55,12 @@ export async function captureSessionFilesystem(
     const sandbox = session.getWorkspace()?.sandbox;
     if (!sourceSession || !sandbox?.executeCommand) return;
     // The live workdir comes from the per-process memo (the deterministic
-    // truth), not the persisted observability column — a row written under a
-    // previous provider can point at a workdir that no longer exists.
-    const workdir = peekSessionSandbox(sourceSession.id)?.workdir ?? sourceSession.sandboxWorkdir;
+    // truth) ONLY — never the persisted observability column, which a row
+    // written under a previous provider can point at a workdir that no
+    // longer exists (the stale-workdir incident class). No memo entry means
+    // no live sandbox worth capturing in this replica; capture is
+    // best-effort telemetry, so skip.
+    const workdir = peekSessionSandbox(sourceSession.id)?.workdir;
     if (!workdir) return;
 
     const result = await sandbox.executeCommand('git', ['-C', workdir, ...GIT_STATUS_ARGS], {

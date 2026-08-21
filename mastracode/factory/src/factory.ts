@@ -511,7 +511,7 @@ export class MastraFactory {
             await factoryProcessor?.reconcileBinding(binding);
           },
           // Session retirement supersedes the older direct sandbox release: it
-          // invalidates the session and hands its sandbox back to the pool.
+          // invalidates the session and stops/destroys its sandbox.
           ...(retireTerminalSessions ? { releaseSandboxes: retireTerminalSessions } : {}),
         })
       : retireTerminalSessions;

@@ -1118,8 +1118,6 @@ export class GithubIntegration implements FactoryIntegration {
    */
   routes(ctx: IntegrationContext): ApiRoute[] {
     this.#storage = ctx.storage;
-    // Every parsed webhook also feeds the base-checkpoint triggers (merged
-    // PRs / pushes to the default branch rebuild the repo's warm checkpoint).
     const ingestFactoryEvent = attachGithubRules(this, ctx);
     return buildGithubRoutes({
       github: this,

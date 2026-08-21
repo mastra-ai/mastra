@@ -2,7 +2,7 @@
  * Repo materialization for GitHub-backed repositories.
  *
  * A GitHub repo is never cloned onto the server host. Instead each project gets
- * its own isolated sandbox (constructed through the deploy's `sandbox.create`
+ * its own isolated sandbox (constructed through the deploy's `sandbox`
  * callback with id-keyed getOrCreate) and the repo is cloned *inside* that
  * sandbox. The agent's file tools and command tools then operate entirely
  * against the remote checkout.

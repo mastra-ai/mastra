@@ -657,8 +657,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       return sandbox;
     };
 
-    // Memoized deferred phase. The first caller (a background warm-up at
-    // session start, or the first FS/sandbox operation) materializes; followers
+    // Memoized deferred phase. The first FS/sandbox operation materializes
+    // (fully lazy — nothing provisions ahead of use); followers
     // await the same in-flight promise. Failures are dropped from the map so
     // the next use retries instead of caching a broken sandbox.
     const ensureMaterialized = async (): Promise<SessionSandbox> => {
