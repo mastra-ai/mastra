@@ -606,6 +606,9 @@ describe('PlatformSandbox', () => {
       // triggers a fresh ensureRunning + provision cycle instead of picking
       // up the stale id.
       expect((sandbox as unknown as { _sandboxId: unknown })._sandboxId).toBeUndefined();
+      // Status must reset too: the next `ensureRunning()` re-runs the full
+      // start lifecycle (acquisition + onStart hook), not just a new lease.
+      expect(sandbox.status).toBe('stopped');
     });
 
     it('propagates non-410 errors from the exec-lease mint instead of falling back silently', async () => {
