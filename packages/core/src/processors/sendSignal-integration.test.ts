@@ -449,4 +449,121 @@ describe('sendSignal integration through ProcessorRunner', () => {
     expect((signals[0]!.content.metadata?.signal as Record<string, unknown>).transient).toBe(true);
     expect(isTransientSignalMessage(signals[0]!)).toBe(true);
   });
+
+  describe('transient signals are deduplicated and kept last', () => {
+    const MARKER = 'stay on the current task';
+
+    /**
+     * Drive N steps of one turn through the same runner and MessageList, measuring the
+     * prompt as the model would receive it: right after the step's processors run, and
+     * before the loop appends the assistant turn that follows.
+     */
+    async function runSteps(runner: ProcessorRunner, steps: number) {
+      const seen: { copies: number; lastIndex: number; total: number }[] = [];
+      for (let step = 0; step < steps; step++) {
+        // Each step but the first is preceded by the previous step's assistant turn.
+        if (step > 0) {
+          messageList.add([{ role: 'assistant', content: `step ${step - 1}` }], 'response');
+        }
+
+        await runner.runProcessInputStep({
+          messageList,
+          stepNumber: step,
+          steps: [],
+          model: {} as any,
+          tools: {},
+          retryCount: 0,
+          messageId: `response-${step}`,
+          writer: { custom: async () => {} },
+        });
+
+        const prompt = messageList.get.all.aiV5.prompt();
+        const texts = prompt.map(extractPromptText);
+        seen.push({
+          copies: texts.filter(t => t.includes(MARKER)).length,
+          lastIndex: texts.reduce((acc, t, i) => (t.includes(MARKER) ? i : acc), -1),
+          total: prompt.length,
+        });
+      }
+      return seen;
+    }
+
+    function makeRunner(returnMode: 'nothing' | 'messageList' | 'ctxMessages') {
+      return new ProcessorRunner({
+        inputProcessors: [
+          {
+            id: 'steering-reminder',
+            processInputStep: async (args: any) => {
+              await args.sendSignal?.({ type: 'reactive', contents: MARKER, transient: true });
+              if (returnMode === 'messageList') return args.messageList;
+              if (returnMode === 'ctxMessages') return args.messages;
+              return undefined;
+            },
+          },
+        ],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+    }
+
+    it('keeps exactly one copy across the steps of a turn', async () => {
+      const seen = await runSteps(makeRunner('nothing'), 4);
+
+      expect(seen.map(s => s.copies)).toEqual([1, 1, 1, 1]);
+      expect(messageList.get.all.db().filter(m => m.role === 'signal')).toHaveLength(1);
+    });
+
+    it('re-emits the reminder as the last prompt message on every step', async () => {
+      const seen = await runSteps(makeRunner('nothing'), 4);
+
+      // The reminder is always the final entry, so the model reads it last.
+      expect(seen.every(s => s.lastIndex === s.total - 1)).toBe(true);
+    });
+
+    it('reuses the same stable id instead of minting a new one per step', async () => {
+      await runSteps(makeRunner('nothing'), 3);
+
+      const signals = messageList.get.all.db().filter(m => m.role === 'signal');
+      expect(signals).toHaveLength(1);
+      expect(signals[0]!.id).toBe('transient:steering-reminder:system-reminder');
+    });
+
+    it('behaves the same when the processor returns the messageList it mutated', async () => {
+      const seen = await runSteps(makeRunner('messageList'), 4);
+
+      expect(seen.map(s => s.copies)).toEqual([1, 1, 1, 1]);
+      expect(seen.every(s => s.lastIndex === s.total - 1)).toBe(true);
+    });
+
+    it('does not duplicate the reminder when the processor returns the ctx.messages snapshot', async () => {
+      // Returning the pre-call snapshot makes the runner re-apply it, which reverts the
+      // reposition — but the stable id means the row is replaced, never duplicated.
+      const seen = await runSteps(makeRunner('ctxMessages'), 4);
+
+      expect(seen.map(s => s.copies)).toEqual([1, 1, 1, 1]);
+      expect(messageList.get.all.db().filter(m => m.role === 'signal')).toHaveLength(1);
+    });
+
+    it('leaves a non-transient signal untouched', async () => {
+      const runner = new ProcessorRunner({
+        inputProcessors: [
+          {
+            id: 'persisted-reminder',
+            processInputStep: async ({ sendSignal }: any) => {
+              await sendSignal?.({ type: 'reactive', contents: MARKER });
+            },
+          },
+        ],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const seen = await runSteps(runner, 3);
+
+      // No stable id and no removal: the pre-existing accumulate-per-step behaviour stands.
+      expect(seen.map(s => s.copies)).toEqual([1, 2, 3]);
+    });
+  });
 });

@@ -704,7 +704,7 @@ export class ProcessorRunner {
           requestContext,
           retryCount,
           writer,
-          sendSignal: createProcessorSendSignal({ messageList, writer }),
+          sendSignal: createProcessorSendSignal({ messageList, writer, processorId: processor.id }),
         });
 
         // Stop recording and get mutations for this processor
@@ -1205,7 +1205,7 @@ export class ProcessorRunner {
           messageList,
           requestContext,
           retryCount,
-          sendSignal: createProcessorSendSignal({ messageList }),
+          sendSignal: createProcessorSendSignal({ messageList, processorId: processor.id }),
         });
 
         // Handle MessageList, MastraDBMessage[], or { messages, systemMessages } return types
@@ -1536,7 +1536,12 @@ export class ProcessorRunner {
           writer,
           abortSignal: args.abortSignal,
           agent: this.agent,
-          sendSignal: createProcessorSendSignal({ messageList, writer, rotateResponseMessageId }),
+          sendSignal: createProcessorSendSignal({
+            messageList,
+            writer,
+            rotateResponseMessageId,
+            processorId: processor.id,
+          }),
           sendStateSignal: async (
             stateSignal: AgentStateSignalInput | (Omit<AgentStateSignalInput, 'id'> & { id?: string }),
           ) => {
@@ -1969,7 +1974,7 @@ export class ProcessorRunner {
           agent: this.agent,
           retryCount,
           writer,
-          sendSignal: createProcessorSendSignal({ messageList, writer }),
+          sendSignal: createProcessorSendSignal({ messageList, writer, processorId: processor.id }),
         });
 
         // Stop recording and get mutations for this processor
@@ -2353,7 +2358,12 @@ export class ProcessorRunner {
           abortSignal,
           messageId: args.messageId,
           ...(rotateResponseMessageId ? { rotateResponseMessageId } : {}),
-          sendSignal: createProcessorSendSignal({ messageList, writer, rotateResponseMessageId }),
+          sendSignal: createProcessorSendSignal({
+            messageList,
+            writer,
+            rotateResponseMessageId,
+            processorId: processor.id,
+          }),
         });
 
         // Stop recording and get mutations for this processor

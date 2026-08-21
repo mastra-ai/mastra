@@ -1099,6 +1099,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 messageList: processorMessageList,
                 writer: processorWriter,
                 rotateResponseMessageId: rotateCurrentResponseMessageId,
+                processorId: processor.id,
               }),
             }
           : {}),
