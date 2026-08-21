@@ -17,6 +17,7 @@ import { createSandboxLifecycleTests, createMountOperationsTests } from '@intern
 import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
 
 import { createRepoTemplate } from '../utils/repo-template';
+import { createDefaultMountableTemplate } from '../utils/template';
 import { E2BSandbox } from './index';
 
 // Use vi.hoisted to define the mock before vi.mock is hoisted
@@ -273,8 +274,7 @@ describe('E2BSandbox', () => {
       // Rung identity: repo alias -> named fallback alias -> default id.
       expect(calls[0]).toBe(spec.alias);
       expect(calls[1]).toBe((spec.fallbackTemplate as { alias: string }).alias);
-      expect(calls[2]).not.toBe(calls[0]);
-      expect(calls[2]).not.toBe(calls[1]);
+      expect(calls[2]).toBe(createDefaultMountableTemplate().id);
       // Cache coherence: the template that actually produced a sandbox is
       // cached, so a later create on this instance reuses it instead of
       // re-walking the ladder from the broken alias.
@@ -287,6 +287,29 @@ describe('E2BSandbox', () => {
       await sandbox.start();
       const later = (Sandbox.create as any).mock.calls.map((c: unknown[]) => c[0]);
       expect(later[3]).toBe(calls[2]);
+    });
+
+    it('force-rebuilds a registered-but-broken default alias as terminal recovery', async () => {
+      const { Sandbox, Template } = await import('e2b');
+      const spec = namedSpec();
+      // All three aliases are registered (failed builds) and 404 on create;
+      // the terminal recovery force-rebuilds the default and succeeds.
+      (Template.exists as any).mockResolvedValue(true);
+      (Sandbox.create as any)
+        .mockRejectedValueOnce(new Error('404: template not found'))
+        .mockRejectedValueOnce(new Error('404: template not found'))
+        .mockRejectedValueOnce(new Error('404: template not found'))
+        .mockResolvedValue(mockSandbox);
+      (Template.build as any).mockResolvedValue({ templateId: 'rebuilt-default-id' });
+
+      const sandbox = new E2BSandbox({ id: 'ladder-6', template: spec });
+      const result = await sandbox.start();
+
+      expect(result?.outcome).toBe('created');
+      const calls = (Sandbox.create as any).mock.calls.map((c: unknown[]) => c[0]);
+      expect(calls).toHaveLength(4);
+      expect(calls[3]).toBe('rebuilt-default-id');
+      expect((sandbox as any)._resolvedTemplateId).toBe('rebuilt-default-id');
     });
 
     it('a raw TemplateBuilder fallback whose build fails still reaches the default template', async () => {

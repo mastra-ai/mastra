@@ -379,8 +379,19 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
           const defaultId = await this.buildOrReuseDefaultTemplate();
           if (defaultId === fallbackId) throw fallbackError;
           this.logger.warn(`${LOG_PREFIX} Fallback '${fallbackId}' failed too, using default: ${fallbackError}`);
-          this._sandbox = await createFromTemplate(defaultId);
-          this._resolvedTemplateId = defaultId;
+          try {
+            this._sandbox = await createFromTemplate(defaultId);
+            this._resolvedTemplateId = defaultId;
+          } catch (defaultError) {
+            // Terminal recovery: the default alias itself may be registered
+            // by a FAILED build. Force-rebuild it once (mirrors the no-spec
+            // path's 404 recovery) — past this, the error propagates.
+            if (!isTemplateUnusable(defaultError)) throw defaultError;
+            this.logger.warn(`${LOG_PREFIX} Default '${defaultId}' broken too, rebuilding: ${defaultError}`);
+            const rebuiltId = await this.buildDefaultTemplate();
+            this._sandbox = await createFromTemplate(rebuiltId);
+            this._resolvedTemplateId = rebuiltId;
+          }
         }
         this.logger.debug(`${LOG_PREFIX} Created sandbox ${this._sandbox.sandboxId} from fallback for: ${this.id}`);
       } else if (!this.templateSpec) {
