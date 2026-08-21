@@ -184,9 +184,7 @@ function addJsonStringFilters(
       // Objects/arrays: raw-text comparison against the as-provided and canonical
       // serializations (see doc comment above for the key-order caveat).
       const altParam = `${valuePrefix}_alt_${i}`;
-      out.conditions.push(
-        `JSONExtractRaw(${src}, ${keyRef}) IN ({${valParam}:String}, {${altParam}:String})`,
-      );
+      out.conditions.push(`JSONExtractRaw(${src}, ${keyRef}) IN ({${valParam}:String}, {${altParam}:String})`);
       out.params[valParam] = JSON.stringify(value);
       out.params[altParam] = JSON.stringify(canonicalizeJson(value));
     }
