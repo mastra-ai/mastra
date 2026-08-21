@@ -2,7 +2,7 @@ import { DEFAULT_OM_MODEL_ID } from '@mastra/code-sdk/constants';
 
 import type { MemorySettingsRecord, MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
-import { seedSessionOrg } from './org-seed.js';
+import { hasResolvedOrg, seedSessionOrg } from './org-seed.js';
 
 /** Default thresholds mirror the TUI `/om` fallbacks. */
 export const DEFAULT_OBSERVATION_THRESHOLD = 30_000;
@@ -117,7 +117,7 @@ export async function hydrateSessionMemorySettings(
   const state = session.state.get() ?? {};
   const isFactoryRun = Boolean(state.factoryProjectId);
   // A coordinator-hydrated run already carries both halves. Nothing to add.
-  if (isFactoryRun && state.factoryOrgId) return;
+  if (isFactoryRun && hasResolvedOrg(state.factoryOrgId)) return;
   try {
     const record = await sourceControl.sessions.getBySessionId(session.identity.getResourceId());
     // No row, or a row whose org is blank, leaves the session with no tenant.
