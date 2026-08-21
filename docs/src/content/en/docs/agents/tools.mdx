@@ -560,6 +560,25 @@ The resolved tool ID comes from the provider: `openai.web_search`, `anthropic.we
 
 The `search` key is only the agent-local tool name. Use any key. The `webSearchTool` value tells Mastra to use provider web search.
 
+The provider reports what it did in the tool result, not the input: OpenAI's tool takes an empty input and answers with an `action` (`search`, `openPage`, or `findInPage`), while Anthropic's takes a `query` and answers with an array of results. To show the call in your own UI, read the result with `@mastra/core/tools/provider-web-search` instead of parsing each provider's payload:
+
+```typescript
+import {
+  isWebSearchToolName,
+  webSearchAction,
+  webSearchLinks,
+  webSearchTarget,
+} from '@mastra/core/tools/provider-web-search'
+
+if (isWebSearchToolName(toolName)) {
+  const action = webSearchAction(result) // { type: 'openPage', url: 'https://mastra.ai/docs' }
+  const target = action && webSearchTarget(action) // the query, pattern, or page the action aimed at
+  const links = webSearchLinks(result) // [{ url, title, pageAge }]
+}
+```
+
+`isWebSearchToolName` accepts the plain name and the suffixed ones providers use, such as `web_search_20250305` or `web_search_preview`. `webSearchLinks` leaves out the `encryptedContent` blob Anthropic attaches to each result. `action.type` is left open, so an action kind a provider adds later still arrives with its target.
+
 ### Fetch a web page
 
 Import `webFetchTool` from `@mastra/core/tools` when the agent needs to read a specific URL. The tool requests the page over HTTP or HTTPS and returns its text content plus response metadata.
