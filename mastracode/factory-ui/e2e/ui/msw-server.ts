@@ -27,5 +27,20 @@ export const server = setupServer(
   http.get('*/web/factory/projects', () => HttpResponse.json({ projects: [] })),
   http.get('*/web/factory/projects/:id/source-control-connections', () => HttpResponse.json({ connections: [] })),
   http.get('*/web/factory/projects/:id/audit', () => HttpResponse.json({ events: [], actors: {} })),
+  http.get('*/web/factory/projects/:id/attention', () =>
+    HttpResponse.json({
+      items: [],
+      openCount: 0,
+      approvalCount: 0,
+      badgeCount: 0,
+      unreadCount: 0,
+      hasMore: false,
+      latestOccurrenceKey: null,
+      latestOccurrenceAt: null,
+      latestOccurrenceUnread: false,
+    }),
+  ),
+  http.get('*/web/factory/projects/:id/decisions', () => HttpResponse.json({ decisions: [] })),
+  http.get('*/web/factory/projects/:id/work-items', () => HttpResponse.json({ workItems: [] })),
   http.get('*/web/github/projects/:projectRepositoryId/worktrees', () => HttpResponse.json({ worktrees: [] })),
 );

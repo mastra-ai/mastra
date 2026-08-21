@@ -3,6 +3,7 @@ import { builtInFactoryRules, defaultFactoryRules } from '../../rules/defaults.j
 import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../../rules/transition-service.js';
+import { FACTORY_PULL_REQUEST_RECONCILIATION_KEY } from '../../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import { GithubAppIdentity } from './app-identity.js';
 import type { GithubIntegration } from './integration.js';
@@ -1450,8 +1451,9 @@ describe('GithubRules', () => {
       }),
     ]);
     const decisions = await workItems.listDeferredDecisions('org-1', project.id);
-    expect(decisions.filter(decision => decision.decision.type === 'sendMessage').map(decision => decision.status)).
-      toEqual(['succeeded']);
+    expect(
+      decisions.filter(decision => decision.decision.type === 'sendMessage').map(decision => decision.status),
+    ).toEqual(['succeeded']);
   });
 
   it('routes a comment on a pull request back to the Work item that authored it', async () => {
@@ -1855,6 +1857,7 @@ describe('createGithubPullRequestReconciler', () => {
         assignees: [],
         requestedReviewers: [],
         labels: [],
+        [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]: 'merged',
       },
     });
     await createCard(context, { number: 18 });
@@ -1889,6 +1892,43 @@ describe('createGithubPullRequestReconciler', () => {
         labels: [],
       },
     });
+    const now = new Date('2030-01-01T00:00:00.000Z');
+    await context.workItems.commitRuleEvaluation({
+      orgId: 'org-1',
+      factoryProjectId: context.project.id,
+      workItemId: card.item.id,
+      ingress: { identity: 'settled-proposal', triggerType: 'test' },
+      ruleSetVersion: 'rules-v1',
+      expectedRevision: card.item.revision,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [
+        {
+          type: 'invokeSkill',
+          role: 'review',
+          skillName: 'factory-review',
+          idempotencyKey: 'settled-proposal-review',
+        },
+      ],
+      causalChain: [],
+      now,
+    });
+    const [claimed] = await context.workItems.claimDeferredDecisions({
+      ownerId: 'worker-1',
+      now,
+      leaseExpiresAt: new Date(now.getTime() + 30_000),
+      limit: 1,
+    });
+    if (!claimed) throw new Error('Expected a proposal');
+    await context.workItems.proposeDeferredDecision(
+      {
+        id: claimed.id,
+        orgId: claimed.orgId,
+        factoryProjectId: claimed.factoryProjectId,
+        ownerId: 'worker-1',
+      },
+      now,
+    );
     const fetchPullRequest = vi.fn(async () => ({ ...mergedState(17), state: 'open' as const, merged: false }));
     const reconcile = createReconciler(context, fetchPullRequest);
 
@@ -1901,6 +1941,82 @@ describe('createGithubPullRequestReconciler', () => {
     expect(fetchPullRequest).toHaveBeenCalledTimes(2);
     await expect(context.workItems.get({ orgId: 'org-1', id: card.item.id })).resolves.toMatchObject({
       metadata: { state: 'closed', merged: true },
+    });
+    expect(
+      (await context.workItems.listDeferredDecisions('org-1', context.project.id)).find(
+        decision => decision.id === claimed.id,
+      )?.status,
+    ).toBe('superseded');
+  });
+
+  it('settles failed attention when closed pull request metadata already matches', async () => {
+    const context = await setup('read');
+    const card = await createCard(context, {
+      number: 17,
+      stages: ['done'],
+      metadata: {
+        author: 'pr-author',
+        state: 'closed',
+        draft: false,
+        merged: true,
+        assignees: ['assignee'],
+        requestedReviewers: ['reviewer'],
+        labels: ['bug'],
+      },
+    });
+    const now = new Date('2030-01-01T00:00:00.000Z');
+    await context.workItems.commitRuleEvaluation({
+      orgId: 'org-1',
+      factoryProjectId: context.project.id,
+      workItemId: card.item.id,
+      ingress: { identity: 'failed-before-settlement', triggerType: 'test' },
+      ruleSetVersion: 'rules-v1',
+      expectedRevision: card.item.revision,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [
+        {
+          type: 'sendMessage',
+          role: 'review',
+          message: 'Notify the review session.',
+          idempotencyKey: 'failed-before-settlement',
+        },
+      ],
+      causalChain: [],
+      now,
+    });
+    const [claimed] = await context.workItems.claimDeferredDecisions({
+      ownerId: 'worker-1',
+      now,
+      leaseExpiresAt: new Date(now.getTime() + 30_000),
+      limit: 1,
+    });
+    if (!claimed) throw new Error('Expected a deferred decision');
+    await context.workItems.failDeferredDecision({
+      id: claimed.id,
+      orgId: claimed.orgId,
+      factoryProjectId: claimed.factoryProjectId,
+      ownerId: 'worker-1',
+      now,
+      availableAt: now,
+      lastError: 'No active review session.',
+      failureCode: 'session_unavailable',
+      terminal: true,
+    });
+    const fetchPullRequest = vi.fn(async () => mergedState(17));
+    const reconcile = createReconciler(context, fetchPullRequest);
+
+    await reconcile([repositoryTarget]);
+    await reconcile([repositoryTarget]);
+
+    expect(fetchPullRequest).toHaveBeenCalledTimes(1);
+    expect(
+      (await context.workItems.listDeferredDecisions('org-1', context.project.id)).find(
+        decision => decision.id === claimed.id,
+      )?.status,
+    ).toBe('superseded');
+    await expect(context.workItems.get({ orgId: 'org-1', id: card.item.id })).resolves.toMatchObject({
+      metadata: { [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]: 'merged' },
     });
   });
 

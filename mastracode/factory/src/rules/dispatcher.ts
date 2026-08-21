@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
-import type { AgentController, AgentControllerEventListener } from '@mastra/core/agent-controller';
+import type { AgentController, AgentControllerEventListener, Session } from '@mastra/core/agent-controller';
 import { RequestContext } from '@mastra/core/request-context';
 
 import { resolvePromptInvocation, resolveSkillInvocation } from '../skills/service.js';
@@ -14,6 +14,7 @@ import type {
   WorkItemsStorage,
 } from '../storage/domains/work-items/base.js';
 import { FACTORY_RULE_MATERIALIZATION_KEY } from '../storage/domains/work-items/base.js';
+import { FactoryDispatchError, factoryDispatchFailureCode } from './dispatch-errors.js';
 import type { FactoryTransitionService } from './transition-service.js';
 import type { FactoryCommitDecision, FactoryRuleActor, FactoryRuleCausalEntry } from './types.js';
 import { FACTORY_RULE_STAGES } from './types.js';
@@ -51,6 +52,20 @@ function waitForAgentEndOrTimeout(agentEnd: Promise<void>): Promise<boolean> {
   });
 }
 
+interface ThreadSwitchSession {
+  thread: {
+    switch(input: { threadId: string }): Promise<unknown>;
+  };
+}
+
+interface FactoryNotificationResult {
+  persisted?: Promise<unknown>;
+  accepted?: Promise<{
+    action?: string;
+    output?: { consumeStream(): Promise<unknown> };
+  }>;
+}
+
 interface DispatcherSession extends SkillSession {
   thread: {
     switch(input: { threadId: string }): Promise<unknown>;
@@ -65,6 +80,7 @@ interface DispatcherSession extends SkillSession {
 }
 
 type FactoryController = Pick<AgentController<MastraCodeState>, 'getSessionByResource'>;
+type BoundDispatcherSession = Session<MastraCodeState>;
 
 export interface FactoryBindingPreparationInput {
   record: FactoryDeferredDecisionRecord;
@@ -143,23 +159,41 @@ function leaseIdentity(
   return { id: record.id, orgId: record.orgId, factoryProjectId: record.factoryProjectId, ownerId };
 }
 
-async function awaitNotification(
-  result: Awaited<ReturnType<SkillSession['sendNotificationSignal']>>,
-  requireDelivery = false,
-): Promise<void> {
-  await result.persisted;
-  if (!result.accepted) {
-    if (requireDelivery) throw new Error('Factory notification was persisted without agent delivery.');
-    return;
-  }
-  const accepted = await result.accepted;
-  if (!requireDelivery) return;
-  if (accepted.action === 'wake') {
-    await accepted.output.consumeStream();
-    return;
-  }
-  if (accepted.action !== 'deliver') {
-    throw new Error(`Factory notification did not reach the agent (${String(accepted.action)}).`);
+async function awaitNotification(result: Promise<FactoryNotificationResult>, requireDelivery = false): Promise<void> {
+  try {
+    const notification = await result;
+    await notification.persisted;
+    if (!notification.accepted) {
+      if (requireDelivery) {
+        throw new FactoryDispatchError(
+          'notification_delivery_failed',
+          'Factory notification was persisted without agent delivery.',
+        );
+      }
+      return;
+    }
+    const accepted = await notification.accepted;
+    if (!requireDelivery) return;
+    if (accepted.action === 'wake') {
+      if (!accepted.output) {
+        throw new FactoryDispatchError('notification_delivery_failed', 'Factory notification wake had no output.');
+      }
+      await accepted.output.consumeStream();
+      return;
+    }
+    if (accepted.action !== 'deliver') {
+      throw new FactoryDispatchError(
+        'notification_delivery_failed',
+        `Factory notification did not reach the agent (${String(accepted.action)}).`,
+      );
+    }
+  } catch (error) {
+    if (error instanceof FactoryDispatchError) throw error;
+    throw new FactoryDispatchError(
+      'notification_delivery_failed',
+      `Factory notification delivery failed: ${sanitizeDispatchError(error)}`,
+      { cause: error },
+    );
   }
 }
 
@@ -354,6 +388,7 @@ export class FactoryDecisionDispatcher {
         now: new Date(),
         availableAt: retryAt(now, record.attempts),
         lastError: sanitizeDispatchError(error),
+        failureCode: factoryDispatchFailureCode(error),
         terminal,
       });
     }
@@ -369,12 +404,12 @@ export class FactoryDecisionDispatcher {
   async #supersedeProposals(record: FactoryDeferredDecisionRecord, decision: FactoryCommitDecision): Promise<void> {
     if (decision.type !== 'invokeSkill' || !record.workItemId) return;
     try {
-      await this.#storage.dismissProposalsForWorkItem({
+      await this.#storage.supersedeDecisionsForWorkItem({
         orgId: record.orgId,
         factoryProjectId: record.factoryProjectId,
         workItemId: record.workItemId,
         role: decision.role,
-        dismissedAt: new Date(),
+        supersededAt: new Date(),
       });
     } catch (error) {
       // Best-effort: a stale badge is not worth failing the run it describes.
@@ -429,9 +464,10 @@ export class FactoryDecisionDispatcher {
         await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
         const requestContext = new RequestContext();
         requestContext.set('user', { workosId: startedBy, organizationId: record.orgId });
-        const session = await this.#requireSession(binding);
+        const session = await this.#findSession(binding);
+        if (!session) return;
         await awaitNotification(
-          await session.sendNotificationSignal(
+          session.sendNotificationSignal(
             {
               source: 'factory',
               kind: 'rule-message',
@@ -481,7 +517,7 @@ export class FactoryDecisionDispatcher {
         if (decision.cancelInFlight) session.abort();
         if (decision.precedingMessage) {
           await awaitNotification(
-            await session.sendNotificationSignal(
+            session.sendNotificationSignal(
               {
                 source: 'factory',
                 kind: 'stage-transition',
@@ -614,7 +650,7 @@ export class FactoryDecisionDispatcher {
         requestContext.set('user', { workosId: startedBy, organizationId: record.orgId });
         const session = await this.#requireSession(binding);
         await awaitNotification(
-          await session.sendNotificationSignal(
+          session.sendNotificationSignal(
             {
               source: 'factory',
               kind: 'rule-message',
@@ -638,7 +674,7 @@ export class FactoryDecisionDispatcher {
         const binding = await this.#requireBinding(record);
         const session = await this.#requireSession(binding);
         await awaitNotification(
-          await session.sendNotificationSignal({
+          session.sendNotificationSignal({
             source: 'factory',
             kind: 'rule-notification',
             summary: decision.title,
@@ -736,7 +772,12 @@ export class FactoryDecisionDispatcher {
 
   async #requireBinding(record: FactoryDeferredDecisionRecord, role?: string): Promise<FactoryRunBindingRecord> {
     const binding = await this.#findBinding(record, role);
-    if (!binding) throw new Error(role ? `No active Factory binding for role ${role}.` : 'No active Factory binding.');
+    if (!binding) {
+      throw new FactoryDispatchError(
+        'session_unavailable',
+        role ? `No active Factory binding for role ${role}.` : 'No active Factory binding.',
+      );
+    }
     return binding;
   }
 
@@ -750,22 +791,31 @@ export class FactoryDecisionDispatcher {
       if (session) return binding;
     }
     if (!this.#prepareBinding) {
-      throw new Error(binding ? 'Bound Factory session not found.' : `No active Factory binding for role ${role}.`);
+      throw new FactoryDispatchError(
+        'session_unavailable',
+        binding ? 'Bound Factory session not found.' : `No active Factory binding for role ${role}.`,
+      );
     }
     const item = await this.#requireItem(record);
     await this.#prepareBinding({ record, item, role });
     return this.#requireBinding(record, role);
   }
 
-  async #requireSession(binding: FactoryRunBindingRecord): Promise<DispatcherSession> {
-    const session = (await this.#controller.getSessionByResource(binding.resourceId)) as DispatcherSession | undefined;
-    if (!session) throw new Error('Bound Factory session not found.');
+  async #findSession(binding: FactoryRunBindingRecord): Promise<BoundDispatcherSession | undefined> {
+    const session = await this.#controller.getSessionByResource(binding.resourceId);
+    if (!session) return undefined;
     await this.#switchThread(session, binding);
     return session;
   }
 
-  async #switchThread(session: SkillSession, binding: FactoryRunBindingRecord): Promise<void> {
-    await (session as DispatcherSession).thread.switch({ threadId: binding.threadId });
+  async #requireSession(binding: FactoryRunBindingRecord): Promise<BoundDispatcherSession> {
+    const session = await this.#findSession(binding);
+    if (!session) throw new FactoryDispatchError('session_unavailable', 'Bound Factory session not found.');
+    return session;
+  }
+
+  async #switchThread(session: ThreadSwitchSession, binding: FactoryRunBindingRecord): Promise<void> {
+    await session.thread.switch({ threadId: binding.threadId });
   }
 
   async #withLease(
@@ -809,7 +859,12 @@ export class FactoryDecisionDispatcher {
           const binding = bindings.find(
             candidate => candidate.id === record.bindingId && candidate.status === 'active',
           );
-          if (!binding) throw new Error('Prepared Factory binding is unavailable or revoked.');
+          if (!binding) {
+            throw new FactoryDispatchError(
+              'session_unavailable',
+              'Prepared Factory binding is unavailable or revoked.',
+            );
+          }
           // Wake runs build the Factory workspace, which requires the
           // authenticated session owner on the request context.
           const item = await this.#storage.get({ orgId: record.orgId, id: binding.workItemId });
@@ -820,7 +875,7 @@ export class FactoryDecisionDispatcher {
           requestContext.set('user', { workosId: startedBy, organizationId: record.orgId });
           const session = await this.#requireSession(binding);
           await awaitNotification(
-            await session.sendNotificationSignal(
+            session.sendNotificationSignal(
               {
                 source: 'factory',
                 kind: 'run-kickoff',
@@ -844,6 +899,7 @@ export class FactoryDecisionDispatcher {
         now: new Date(),
         availableAt: retryAt(now, record.attempts),
         lastError: sanitizeDispatchError(error),
+        failureCode: factoryDispatchFailureCode(error),
         terminal: record.attempts >= MAX_ATTEMPTS,
       });
     }

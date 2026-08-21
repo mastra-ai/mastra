@@ -16,6 +16,7 @@ import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../
 import { AGENT_CONTROLLER_ID } from '../../../chat/services/constants';
 import type { FactoryUserSession } from '../../services/github';
 import { UserSessionsSection } from '../UserSessionsSection';
+import { WorkspaceAttentionObserver } from '../WorkspaceAttentionObserver';
 
 const factoryId = 'fp-1';
 const projectRepositoryId = 'ghp-1';
@@ -86,7 +87,15 @@ function renderSection() {
   return renderWithProviders(
     <MemoryRouter initialEntries={[`/factories/${factoryId}`]}>
       <Routes>
-        <Route path="/factories/:factoryId" element={<UserSessionsSection />} />
+        <Route
+          path="/factories/:factoryId"
+          element={
+            <>
+              <WorkspaceAttentionObserver projectRepositoryId={projectRepositoryId} />
+              <UserSessionsSection />
+            </>
+          }
+        />
       </Routes>
     </MemoryRouter>,
   );

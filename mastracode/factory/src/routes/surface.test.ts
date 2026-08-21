@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { GithubIntegration } from '../integrations/github/integration.js';
+import { FactoryDispatchError } from '../rules/dispatch-errors.js';
 import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import type { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
@@ -137,5 +138,26 @@ describe('prepareFactoryRuleBinding', () => {
     await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toEqual(
       expect.objectContaining({ branch: 'factory/issue-49', baseBranch: 'main', userId: 'user-1' }),
     );
+  });
+
+  it('classifies a missing source-control connection', async () => {
+    const { seeded, github } = await seedFactoryWithRepository();
+    const disconnected = await seeded.projects.create({
+      orgId: 'org-1',
+      userId: 'user-1',
+      input: { name: 'Disconnected' },
+    });
+    const prepare = vi.fn<FactoryStartCoordinator['prepare']>();
+
+    const error = await prepareFactoryRuleBinding(
+      github,
+      { prepare },
+      seeded.projects,
+      bindingInput(disconnected.id),
+    ).catch(failure => failure);
+
+    expect(error).toBeInstanceOf(FactoryDispatchError);
+    expect(error).toMatchObject({ code: 'source_control_missing' });
+    expect(prepare).not.toHaveBeenCalled();
   });
 });

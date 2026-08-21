@@ -14,6 +14,7 @@ import type {
   SourceControlStorageHandle,
 } from '../../storage/domains/source-control/base.js';
 import type { WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
+import { FACTORY_PULL_REQUEST_RECONCILIATION_KEY } from '../../storage/domains/work-items/base.js';
 import type { IntegrationContext } from '../base.js';
 import type { GithubAppIdentity } from './app-identity.js';
 import type { GithubRepositoryPermission } from './integration.js';
@@ -213,7 +214,6 @@ export class GithubRules {
     return login.toLowerCase() === `${slug.toLowerCase()}[bot]`;
   }
 
-
   async ingest(parsed: ParsedGithubWebhook): Promise<{ status: 'ignored' | 'committed' | 'replayed' | 'missing' }> {
     const event = eventName(parsed);
     const repository = object(parsed.payload.repository);
@@ -371,8 +371,12 @@ export class GithubRules {
               id: number(issueComment?.id)!,
               ...(string(issueComment?.body) ? { body: string(issueComment?.body) } : {}),
               ...(string(issueComment?.html_url) ? { url: string(issueComment?.html_url) } : {}),
-              ...(string(object(issueComment?.user)?.login) ? { author: string(object(issueComment?.user)?.login) } : {}),
-              ...(string(object(issueComment?.user)?.type) ? { authorType: string(object(issueComment?.user)?.type) } : {}),
+              ...(string(object(issueComment?.user)?.login)
+                ? { author: string(object(issueComment?.user)?.login) }
+                : {}),
+              ...(string(object(issueComment?.user)?.type)
+                ? { authorType: string(object(issueComment?.user)?.type) }
+                : {}),
               ...(string(issueComment?.created_at) ? { createdAt: string(issueComment?.created_at) } : {}),
               ...(string(issueComment?.updated_at) ? { updatedAt: string(issueComment?.updated_at) } : {}),
             },
@@ -724,6 +728,28 @@ export function reconciledClosedEvent(
   };
 }
 
+function reconciledPullRequestMetadata(
+  state: ReconcilePullRequestState,
+  reconciliation: 'clear' | 'settled',
+): Record<string, unknown> {
+  return {
+    state: state.state,
+    draft: state.draft,
+    merged: state.merged,
+    ...(state.author ? { author: state.author } : {}),
+    ...(state.assignees ? { assignees: state.assignees } : {}),
+    ...(state.requestedReviewers ? { requestedReviewers: state.requestedReviewers } : {}),
+    ...(state.labels ? { labels: state.labels } : {}),
+    [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]:
+      reconciliation === 'settled' ? (state.merged ? 'merged' : 'closed') : null,
+  };
+}
+
+function reconciledPullRequestOutcome(metadata: Record<string, unknown>): 'merged' | 'closed' | undefined {
+  if (metadata.state !== 'closed' || typeof metadata.merged !== 'boolean') return undefined;
+  return metadata.merged ? 'merged' : 'closed';
+}
+
 /**
  * The webhook handler retires subscriptions itself; the sweep replays only the
  * rules ingress, so without this the thread's PR chip and the workspace row
@@ -768,11 +794,7 @@ export function createGithubPullRequestReconciler(
       failed: 0,
       errors: [],
     };
-    const recordFailure = (
-      repository: ReconcileRepository,
-      error: unknown,
-      pullRequestNumber?: number,
-    ) => {
+    const recordFailure = (repository: ReconcileRepository, error: unknown, pullRequestNumber?: number) => {
       summary.failed += 1;
       if (summary.errors.length < RECONCILE_ERROR_SAMPLE_LIMIT) {
         summary.errors.push({
@@ -815,17 +837,15 @@ export function createGithubPullRequestReconciler(
             const pullRequestNumber = reconcilablePullRequestNumber(item, repository);
             if (!pullRequestNumber) continue;
             const metadata = item.metadata ?? {};
-            // An approving review ends the card at `done` while its pull request is
-            // still open, so only a closed pull request retires a card from the sweep.
-            const pullRequestSettled =
-              metadata.state === 'closed' &&
-              typeof metadata.draft === 'boolean' &&
-              typeof metadata.merged === 'boolean' &&
-              typeof metadata.author === 'string' &&
-              Array.isArray(metadata.assignees) &&
-              Array.isArray(metadata.requestedReviewers) &&
-              Array.isArray(metadata.labels);
-            if ((stage === 'done' || stage === 'canceled') && pullRequestSettled) continue;
+            const reconciliation = metadata[FACTORY_PULL_REQUEST_RECONCILIATION_KEY];
+            const reconciledOutcome = reconciledPullRequestOutcome(metadata);
+            if (
+              (stage === 'done' || stage === 'canceled') &&
+              reconciledOutcome !== undefined &&
+              reconciliation === reconciledOutcome
+            ) {
+              continue;
+            }
             const cards = cardsByNumber.get(pullRequestNumber) ?? [];
             cards.push(item);
             cardsByNumber.set(pullRequestNumber, cards);
@@ -852,31 +872,41 @@ export function createGithubPullRequestReconciler(
             const assigneesChanged = !sameStrings(metadata.assignees, state.assignees);
             const reviewersChanged = !sameStrings(metadata.requestedReviewers, state.requestedReviewers);
             const labelsChanged = !sameStrings(metadata.labels, state.labels);
-            if (!statusChanged && !authorChanged && !assigneesChanged && !reviewersChanged && !labelsChanged) continue;
+            const metadataChanged =
+              statusChanged || authorChanged || assigneesChanged || reviewersChanged || labelsChanged;
+            if (state.state === 'closed') continue;
+            const reconciliation = metadata[FACTORY_PULL_REQUEST_RECONCILIATION_KEY];
+            if (!metadataChanged && reconciliation !== 'merged' && reconciliation !== 'closed') continue;
             try {
               await options.storage.update({
                 orgId: card.orgId,
                 id: card.id,
                 userId: 'factory-rule-dispatcher',
-                patch: {
-                  metadata: {
-                    state: state.state,
-                    draft: state.draft,
-                    merged: state.merged,
-                    ...(state.author ? { author: state.author } : {}),
-                    ...(state.assignees ? { assignees: state.assignees } : {}),
-                    ...(state.requestedReviewers ? { requestedReviewers: state.requestedReviewers } : {}),
-                    ...(state.labels ? { labels: state.labels } : {}),
-                  },
-                },
+                patch: { metadata: reconciledPullRequestMetadata(state, 'clear') },
               });
             } catch (error) {
               recordFailure(repository, error, pullRequestNumber);
             }
           }
           if (state.state !== 'closed') continue;
+          for (const card of cards) {
+            await options.storage.supersedeDecisionsForWorkItem({
+              orgId: card.orgId,
+              factoryProjectId: card.factoryProjectId,
+              workItemId: card.id,
+              supersededAt: new Date(),
+            });
+          }
           await rules.ingest(reconciledClosedEvent(repository, pullRequestNumber, state));
           await retireReconciledSubscriptions(options.integrationStorage, repository, pullRequestNumber, state.merged);
+          for (const card of cards) {
+            await options.storage.update({
+              orgId: card.orgId,
+              id: card.id,
+              userId: 'factory-rule-dispatcher',
+              patch: { metadata: reconciledPullRequestMetadata(state, 'settled') },
+            });
+          }
           if (state.merged) summary.merged += 1;
           else summary.closed += 1;
         } catch (error) {
