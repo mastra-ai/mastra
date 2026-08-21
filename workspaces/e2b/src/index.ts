@@ -9,7 +9,13 @@ export {
   type DeferredNamedTemplateSpec,
   type MountableTemplateResult,
 } from './utils/template';
-export { createRepoTemplate, repoTemplateAlias, type RepoTemplateOptions } from './utils/repo-template';
+export {
+  createRepoTemplate,
+  refreshRepoTemplate,
+  repoTemplateAlias,
+  type RepoTemplateOptions,
+  type RefreshRepoTemplateResult,
+} from './utils/repo-template';
 export {
   type E2BS3MountConfig,
   type E2BGCSMountConfig,

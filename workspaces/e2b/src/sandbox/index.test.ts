@@ -96,6 +96,9 @@ const { mockSandbox, createMockSandboxApi, resetMockDefaults, createMockCommandH
     // Add static methods
     templateFn.exists = vi.fn().mockResolvedValue(false);
     templateFn.build = vi.fn().mockResolvedValue({ templateId: 'mock-template-id' });
+    templateFn.buildInBackground = vi
+      .fn()
+      .mockResolvedValue({ templateId: 'mock-template-id', buildId: 'mock-build-id' });
     return templateFn;
   };
 
@@ -129,6 +132,10 @@ const { mockSandbox, createMockSandboxApi, resetMockDefaults, createMockCommandH
     ((Sandbox as any).kill as any).mockResolvedValue(true);
     (Template.exists as any).mockResolvedValue(false);
     (Template.build as any).mockResolvedValue({ templateId: 'mock-template-id' });
+    ((Template as any).buildInBackground as any).mockResolvedValue({
+      templateId: 'mock-template-id',
+      buildId: 'mock-build-id',
+    });
     // Default run mock handles both foreground and background modes
     mockSandbox.commands.run.mockImplementation((_cmd: string, opts?: any) => {
       const result = { exitCode: 0, stdout: '', stderr: '' };
@@ -249,6 +256,45 @@ describe('E2BSandbox', () => {
         setupCommand: 'pnpm install',
         sha: 'a'.repeat(40),
       }) as NamedTemplateSpec;
+
+    it('boots from the stale current build and rebuilds the missing sha ref in the background', async () => {
+      const { Sandbox, Template } = await import('e2b');
+      const spec = createRepoTemplate({
+        repoFullName: 'octocat/stale-first',
+        setupCommand: 'pnpm install',
+        sha: 'b'.repeat(40),
+      }) as NamedTemplateSpec;
+      // The exact sha tag doesn't exist yet, but a previous build does.
+      (Template.exists as any).mockImplementation(async (ref: string) => ref === spec.staleRef);
+
+      const sandbox = new E2BSandbox({ id: 'stale-1', template: spec });
+      const result = await sandbox.start();
+
+      expect(result?.outcome).toBe('created');
+      // Boots from the previous build immediately — no blocking build.
+      expect((Sandbox.create as any).mock.calls[0]![0]).toBe(spec.staleRef);
+      expect(Template.build).not.toHaveBeenCalled();
+      // The fresh sha ref rebuilds in the background, moving `current`.
+      expect((Template as any).buildInBackground).toHaveBeenCalledTimes(1);
+      const [, ref, opts] = ((Template as any).buildInBackground as any).mock.calls[0]!;
+      expect(ref).toBe(spec.alias);
+      expect(opts).toMatchObject({ tags: ['current'] });
+    });
+
+    it('dedupes background rebuild triggers for the same ref', async () => {
+      const { Template } = await import('e2b');
+      const spec = createRepoTemplate({
+        repoFullName: 'octocat/stale-dedupe',
+        setupCommand: 'pnpm install',
+        sha: 'c'.repeat(40),
+      }) as NamedTemplateSpec;
+      (Template.exists as any).mockImplementation(async (ref: string) => ref === spec.staleRef);
+
+      await new E2BSandbox({ id: 'stale-2a', template: spec }).start();
+      await new E2BSandbox({ id: 'stale-2b', template: spec }).start();
+
+      expect((Template as any).buildInBackground).toHaveBeenCalledTimes(1);
+    });
 
     it('falls back to the named workspace-base template when the aliased build fails', async () => {
       const { Sandbox, Template } = await import('e2b');

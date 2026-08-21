@@ -332,14 +332,34 @@ at resolution time: right before the template lookup it runs `git ls-remote`
 moves, the next new sandbox rebuilds the same template in place under a new
 tag — old sha tags remain as prunable build history instead of piling up as
 stale templates. If the head can't be resolved, the ref degrades to the
-untagged name and the build clones whatever the default branch is at build
-time. Pass `sha` to pin a specific commit instead, or `resolveHead` to
+stable `current` tag and the build clones whatever the default branch is at
+build time. Pass `sha` to pin a specific commit instead, or `resolveHead` to
 supply the head sha yourself.
 
-Resolution is lazy: the first sandbox to reference a tagged ref checks
-whether it exists on E2B and builds it once when it doesn't; later sandboxes
-reuse it without rebuilding. A changed setup command hashes to a new
-template name.
+Resolution is lazy and only ever blocks on a template's very first build.
+Every successful build also moves a stable `current` tag, so when the head
+moves, the next sandbox boots immediately from the previous build while the
+fresh sha ref builds in the background on E2B's side (its runtime setup
+`git fetch` fast-forwards the slightly stale checkout — freshness never
+depends on the template). A changed setup command hashes to a new template
+name.
+
+To warm templates proactively instead of waiting for the first session
+after a merge, call `refreshRepoTemplate` with the same options from a
+scheduled job or a merge-to-main event handler. It performs the same
+resolution as sandbox start — resolves the current head, reuses the build
+when it already exists, and otherwise builds it (moving `current`) — and
+reports `{ ref, action, sha }`:
+
+```typescript
+import { refreshRepoTemplate } from '@mastra/e2b'
+
+const result = await refreshRepoTemplate({
+  repoFullName: 'octocat/hello-world',
+  setupCommand: 'pnpm install',
+})
+// { ref: 'mastra-repo-octocat-hello-world-…:sha-…', action: 'built' | 'reused', sha: '…' }
+```
 
 The template layers on top of the default mountable base (E2B's `base` image,
 so git and common tooling are present, plus `s3fs`/FUSE for mount support,

@@ -1,7 +1,7 @@
 import { Template } from 'e2b';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { createRepoTemplate, repoTemplateAlias } from './repo-template';
+import { createRepoTemplate, refreshRepoTemplate, repoTemplateAlias } from './repo-template';
 import { isDeferredNamedTemplateSpec, isNamedTemplateSpec } from './template';
 import type { NamedTemplateSpec } from './template';
 
@@ -43,11 +43,14 @@ describe('repoTemplateAlias', () => {
     expect(repoTemplateAlias(BASE)).not.toBe(repoTemplateAlias({ ...BASE, repoFullName: 'octocat/world' }));
   });
 
-  it('degrades to the untagged template name without a sha', () => {
+  it('degrades to the current tag without a sha', () => {
     const shaless = { repoFullName: BASE.repoFullName, setupCommand: BASE.setupCommand };
     expect(repoTemplateAlias(shaless)).toBe(repoTemplateAlias({ ...shaless }));
-    // The untagged form IS the tagged form's template name.
-    expect(repoTemplateAlias(BASE)).toBe(`${repoTemplateAlias(shaless)}:sha-${'a'.repeat(12)}`);
+    // Same template NAME as the tagged form, pinned to the stable `current`
+    // tag — never a bare name, whose create would resolve the unassigned
+    // `default` tag and 404.
+    const name = repoTemplateAlias(BASE).split(':')[0];
+    expect(repoTemplateAlias(shaless)).toBe(`${name}:current`);
   });
 });
 
@@ -181,6 +184,13 @@ describe('createRepoTemplate', () => {
     expect(spec.fallbackTemplate).toBeUndefined();
   });
 
+  it('carries a current-tag staleRef and build tag for stale-first resolution', () => {
+    const spec = namedSpec(createRepoTemplate(BASE));
+    const name = spec.alias.split(':')[0];
+    expect(spec.staleRef).toBe(`${name}:current`);
+    expect(spec.buildTags).toEqual(['current']);
+  });
+
   it('pins the /workspace boundary for custom workdirs', () => {
     expect(() => createRepoTemplate({ ...BASE, workdir: '/' })).toThrow();
     expect(() => createRepoTemplate({ ...BASE, workdir: '/home/repo' })).toThrow();
@@ -195,5 +205,51 @@ describe('createRepoTemplate', () => {
     expect(() => createRepoTemplate({ ...BASE, sha: 'not-hex!' })).toThrow(/sha/);
     expect(() => createRepoTemplate({ ...BASE, workdir: 'relative/path' })).toThrow(/workdir/);
     expect(() => createRepoTemplate({ ...BASE, workdir: '/tmp/../etc' })).toThrow(/workdir/);
+  });
+});
+
+describe('refreshRepoTemplate', () => {
+  const head = 'f'.repeat(40);
+  const options = { repoFullName: BASE.repoFullName, setupCommand: BASE.setupCommand, resolveHead: async () => head };
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('reuses an existing build at the current head without building', async () => {
+    const exists = vi.spyOn(Template, 'exists').mockResolvedValue(true);
+    const build = vi.spyOn(Template, 'build').mockRejectedValue(new Error('must not build'));
+    const result = await refreshRepoTemplate(options);
+    expect(result).toEqual({ ref: repoTemplateAlias({ ...options, sha: head }), action: 'reused', sha: head });
+    expect(exists).toHaveBeenCalledWith(result.ref, undefined);
+    expect(build).not.toHaveBeenCalled();
+  });
+
+  it('builds the missing head ref and moves the current tag', async () => {
+    vi.spyOn(Template, 'exists').mockResolvedValue(false);
+    const build = vi
+      .spyOn(Template, 'build')
+      .mockResolvedValue({ alias: 'x', name: 'x', tags: [], templateId: 't', buildId: 'b' });
+    const result = await refreshRepoTemplate(options);
+    expect(result.action).toBe('built');
+    expect(result.ref).toBe(repoTemplateAlias({ ...options, sha: head }));
+    expect(build).toHaveBeenCalledTimes(1);
+    expect(build.mock.calls[0]?.[1]).toBe(result.ref);
+    expect(build.mock.calls[0]?.[2]).toMatchObject({ tags: ['current'] });
+  });
+
+  it('rejects on build failure so external warmers can observe it', async () => {
+    vi.spyOn(Template, 'exists').mockResolvedValue(false);
+    vi.spyOn(Template, 'build').mockRejectedValue(new Error('registry flake'));
+    await expect(refreshRepoTemplate(options)).rejects.toThrow('registry flake');
+  });
+
+  it('degrades to the current-tag ref when the head cannot be resolved', async () => {
+    vi.spyOn(Template, 'exists').mockResolvedValue(true);
+    const result = await refreshRepoTemplate({ ...options, resolveHead: async () => undefined });
+    expect(result).toEqual({
+      ref: repoTemplateAlias({ repoFullName: options.repoFullName, setupCommand: options.setupCommand }),
+      action: 'reused',
+    });
   });
 });

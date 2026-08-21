@@ -75,6 +75,19 @@ export interface NamedTemplateSpec {
    * mountable template.
    */
   fallbackTemplate?: string | TemplateBuilder | NamedTemplateSpec;
+  /**
+   * Ref (`name:tag`) of a previous successful build of this template. When
+   * `alias` does not exist yet but this ref does, the sandbox is created
+   * from the stale build immediately and the `alias` build is kicked off in
+   * the background (non-blocking rebuild-in-place) — only the very first
+   * build of a template ever blocks a sandbox start.
+   */
+  staleRef?: string;
+  /**
+   * Extra tags assigned alongside the alias tag on every successful build
+   * (e.g. a stable `current` pointer that {@link staleRef} targets).
+   */
+  buildTags?: string[];
 }
 
 export function isNamedTemplateSpec(spec: TemplateSpec): spec is NamedTemplateSpec {

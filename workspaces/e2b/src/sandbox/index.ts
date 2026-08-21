@@ -28,7 +28,13 @@ import type {
 type InstructionsOption = string | ((opts: { defaultInstructions: string; requestContext?: RequestContext }) => string);
 import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
 import { Sandbox, Template } from 'e2b';
-import type { SandboxInfo as E2BSandboxListInfo, SandboxNetworkOpts, TemplateBuilder, TemplateClass } from 'e2b';
+import type {
+  BuildOptions,
+  SandboxInfo as E2BSandboxListInfo,
+  SandboxNetworkOpts,
+  TemplateBuilder,
+  TemplateClass,
+} from 'e2b';
 import { createDefaultMountableTemplate, isDeferredNamedTemplateSpec, isNamedTemplateSpec } from '../utils/template';
 import type { DeferredNamedTemplateSpec, NamedTemplateSpec, TemplateSpec } from '../utils/template';
 import { mountS3, mountGCS, mountAzure, LOG_PREFIX } from './mounts';
@@ -54,6 +60,14 @@ function validateMountPath(mountPath: string): void {
 
 /** Allowlist for marker filenames from ls output — e.g. "mount-abc123" */
 const SAFE_MARKER_NAME = /^mount-[a-z0-9]+$/;
+
+/**
+ * Per-process dedupe of background template rebuild triggers, keyed by
+ * template ref. Retained on successful trigger (the ref only ever needs one
+ * build; once it exists the exists-check short-circuits before this path),
+ * cleared on trigger failure so a later start can retry.
+ */
+const inFlightBackgroundBuilds = new Set<string>();
 
 // =============================================================================
 // E2B Sandbox Options
@@ -958,15 +972,27 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
       spec = this.templateSpec;
     }
     if (isNamedTemplateSpec(spec)) {
-      const { alias, template: namedTemplate, fallbackTemplate } = spec;
+      const { alias, template: namedTemplate, fallbackTemplate, staleRef, buildTags } = spec;
+      const buildOpts = { ...this.connectionOpts, ...(buildTags?.length ? { tags: buildTags } : {}) };
       try {
         if (await Template.exists(alias, this.connectionOpts)) {
           this.logger.debug(`${LOG_PREFIX} Using cached template: ${alias}`);
           this._resolvedTemplateId = alias;
           return alias;
         }
+        // Stale-build-first: when the exact ref is missing but a previous
+        // build exists, boot from it immediately and rebuild the fresh ref
+        // in the background — only a template's very first build ever
+        // blocks a sandbox start. Runtime setup fast-forwards the slightly
+        // stale checkout, so freshness never depends on the template.
+        if (staleRef && staleRef !== alias && (await Template.exists(staleRef, this.connectionOpts))) {
+          this.logger.debug(`${LOG_PREFIX} Using stale build ${staleRef}; rebuilding ${alias} in background`);
+          this.triggerBackgroundBuild(namedTemplate as TemplateClass, alias, buildOpts);
+          this._resolvedTemplateId = staleRef;
+          return staleRef;
+        }
         this.logger.debug(`${LOG_PREFIX} Building template: ${alias}...`);
-        const buildResult = await Template.build(namedTemplate as TemplateClass, alias, this.connectionOpts);
+        const buildResult = await Template.build(namedTemplate as TemplateClass, alias, buildOpts);
         this.logger.debug(`${LOG_PREFIX} Template built: ${buildResult.templateId}`);
         // Resolve to the alias, NOT the raw build id: creating a sandbox from
         // a bare template id looks up its `default` tag, which a
@@ -1014,6 +1040,28 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
    * specs without a fallback, e.g. repo templates) lands on the default
    * mountable template so a broken build never wedges a session.
    */
+  /**
+   * Trigger a non-blocking template rebuild via `Template.buildInBackground`
+   * (the build runs on E2B's side, so it outlives this process). Deduped
+   * per-process by ref so concurrent session starts on the same moved head
+   * don't stack duplicate builds; a failed TRIGGER clears the guard so a
+   * later start retries. A build that fails server-side simply never
+   * registers the ref — the next start falls back to the stale build again
+   * and re-triggers.
+   */
+  private triggerBackgroundBuild(template: TemplateClass, ref: string, buildOpts: Omit<BuildOptions, 'alias'>): void {
+    if (inFlightBackgroundBuilds.has(ref)) return;
+    inFlightBackgroundBuilds.add(ref);
+    void Template.buildInBackground(template, ref, buildOpts)
+      .then(result => {
+        this.logger.debug(`${LOG_PREFIX} Background template build triggered: ${ref} (${result.buildId})`);
+      })
+      .catch(error => {
+        inFlightBackgroundBuilds.delete(ref);
+        this.logger.warn(`${LOG_PREFIX} Background template build trigger failed for '${ref}': ${error}`);
+      });
+  }
+
   private async resolveFallbackTemplate(fallbackTemplate: NamedTemplateSpec['fallbackTemplate']): Promise<string> {
     if (typeof fallbackTemplate === 'string') {
       this._resolvedTemplateId = fallbackTemplate;

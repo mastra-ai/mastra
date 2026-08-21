@@ -31,12 +31,22 @@ import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { promisify } from 'node:util';
 
+import { Template } from 'e2b';
+import type { ConnectionOpts, TemplateClass } from 'e2b';
+
 import { createDefaultMountableTemplate } from './template';
 import type { DeferredNamedTemplateSpec, NamedTemplateSpec } from './template';
 
 const execFileAsync = promisify(execFile);
 
 const ALIAS_VERSION = 'v2';
+
+/**
+ * Stable tag assigned to every successful repo-template build. Points at the
+ * latest build regardless of sha, so a moved head can boot from the previous
+ * build (`name:current`) while the fresh sha builds in the background.
+ */
+const CURRENT_TAG = 'current';
 
 /** Env var the build's git auth header is computed from. Value set via `setEnvs`. */
 const BUILD_TOKEN_ENV = 'MASTRA_BUILD_GH_TOKEN';
@@ -102,7 +112,12 @@ export interface RepoTemplateOptions {
  */
 export function repoTemplateAlias(options: RepoTemplateOptions): string {
   const name = repoTemplateName(options);
-  return options.sha ? `${name}:${shaTag(options.sha)}` : name;
+  // The sha-less degrade also pins a tag (`current`) rather than the bare
+  // name: `Template.exists(name)` is true whenever ANY tagged build exists,
+  // but creating from a bare name resolves its `default` tag — which
+  // sha-tagged builds never assign — so an untagged ref could pass the
+  // exists check and still 404 on create.
+  return options.sha ? `${name}:${shaTag(options.sha)}` : `${name}:${CURRENT_TAG}`;
 }
 
 function repoTemplateName(options: RepoTemplateOptions): string {
@@ -165,17 +180,63 @@ export function createRepoTemplate(options: RepoTemplateOptions): NamedTemplateS
     return buildRepoTemplateSpec(options);
   }
   return {
-    resolveSpec: async () => {
-      const token = options.getAuthToken ? await options.getAuthToken().catch(() => undefined) : undefined;
-      let sha = options.sha;
-      if (!sha) {
-        const resolve = options.resolveHead ?? resolveDefaultBranchHead;
-        const resolved = await resolve(options.repoFullName, token).catch(() => undefined);
-        sha = resolved && SHA_PATTERN.test(resolved) ? resolved : undefined;
-      }
-      return buildRepoTemplateSpec(sha ? { ...options, sha } : options, token);
-    },
+    resolveSpec: async () => (await resolveSpecAtHead(options)).spec,
   };
+}
+
+/**
+ * Mint the auth token (when configured), resolve the current default-branch
+ * head, and produce the concrete sha-tagged spec. Shared by the deferred
+ * spec form and {@link refreshRepoTemplate}.
+ */
+async function resolveSpecAtHead(options: RepoTemplateOptions): Promise<{ spec: NamedTemplateSpec; sha?: string }> {
+  const token = options.getAuthToken ? await options.getAuthToken().catch(() => undefined) : undefined;
+  let sha = options.sha;
+  if (!sha) {
+    const resolve = options.resolveHead ?? resolveDefaultBranchHead;
+    const resolved = await resolve(options.repoFullName, token).catch(() => undefined);
+    sha = resolved && SHA_PATTERN.test(resolved) ? resolved : undefined;
+  }
+  return { spec: buildRepoTemplateSpec(sha ? { ...options, sha } : options, token), ...(sha ? { sha } : {}) };
+}
+
+/** Result of a {@link refreshRepoTemplate} call. */
+export interface RefreshRepoTemplateResult {
+  /** Template ref (`name:tag`) that is now current. */
+  ref: string;
+  /** Whether an up-to-date build already existed or a fresh build ran. */
+  action: 'reused' | 'built';
+  /** Resolved head sha, when it could be determined. */
+  sha?: string;
+}
+
+/**
+ * Ensure the repo template is built at the repository's current
+ * default-branch head, building it (and moving the `current` tag) when it
+ * is not. This is the same resolution the lazy sandbox-start path performs
+ * — exposed standalone so template warming can be driven externally: call
+ * it from a scheduled workflow (cron) or a merge-to-main event handler and
+ * the next session boots warm instead of paying the build.
+ *
+ * The build is awaited; a build failure rejects so callers can observe it.
+ * An unresolvable head degrades to the sha-less `name:current` form, same
+ * as the lazy path.
+ */
+export async function refreshRepoTemplate(
+  options: RepoTemplateOptions,
+  connection?: ConnectionOpts,
+): Promise<RefreshRepoTemplateResult> {
+  validateRepoTemplateOptions(options);
+  const { spec, sha } = await resolveSpecAtHead(options);
+  const shaField = sha ? { sha } : {};
+  if (await Template.exists(spec.alias, connection)) {
+    return { ref: spec.alias, action: 'reused', ...shaField };
+  }
+  await Template.build(spec.template as TemplateClass, spec.alias, {
+    ...connection,
+    ...(spec.buildTags?.length ? { tags: spec.buildTags } : {}),
+  });
+  return { ref: spec.alias, action: 'built', ...shaField };
 }
 
 function validateRepoTemplateOptions(options: RepoTemplateOptions): void {
@@ -236,6 +297,13 @@ function buildRepoTemplateSpec(options: RepoTemplateOptions, token?: string): Na
     template,
     // A failed repo build degrades to the default mountable template, whose
     // writable /workspace keeps the session's runtime cold clone working.
+    //
+    // Every successful build also moves the stable `current` tag; when a
+    // moved head means the exact sha tag doesn't exist yet, the sandbox
+    // boots from `name:current` immediately (runtime setup fast-forwards
+    // the checkout) while the fresh sha builds in the background.
+    staleRef: `${repoTemplateName(options)}:${CURRENT_TAG}`,
+    buildTags: [CURRENT_TAG],
   };
 }
 
