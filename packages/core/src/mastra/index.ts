@@ -677,7 +677,10 @@ export interface MastraRecoveryConfig {
 // Tracks which Mastra instance last attached observability to a logger, so
 // sharing one logger instance across multiple Mastras warns instead of
 // silently re-targeting the export (weak: never pins loggers or Mastras).
-const attachedLoggerOwners = new WeakMap<IMastraLogger, unknown>();
+// Keyed on the logger's attachment identity (`__observabilityAttachmentKey`,
+// e.g. PinoLogger's family-shared ref cell) so attaching a child of an
+// already-wired family also warns; falls back to the instance itself.
+const attachedLoggerOwners = new WeakMap<object, unknown>();
 
 export class Mastra<
   TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
@@ -5312,7 +5315,8 @@ export class Mastra<
       // instances' logs export to the newest Mastra's observability (and the
       // logger holds a strong reference to it). Surface this instead of
       // silently clobbering.
-      const previousOwner = attachedLoggerOwners.get(inner);
+      const ownershipKey = inner.__observabilityAttachmentKey?.() ?? inner;
+      const previousOwner = attachedLoggerOwners.get(ownershipKey);
       if (previousOwner && previousOwner !== this) {
         try {
           inner.warn(
@@ -5324,7 +5328,7 @@ export class Mastra<
           // A throwing logger must not break Mastra construction.
         }
       }
-      attachedLoggerOwners.set(inner, this);
+      attachedLoggerOwners.set(ownershipKey, this);
       inner.__attachObservability({
         resolveTraceFields,
         getLogSink: () => {

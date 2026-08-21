@@ -64,6 +64,14 @@ export interface LoggerAdapterContext {
  */
 export interface AdaptableLogger extends IMastraLogger {
   __attachObservability(ctx: LoggerAdapterContext): void;
+  /**
+   * Stable identity for the attachment target. Loggers whose adapter context
+   * lives in state shared across a root/child family (e.g. PinoLogger's
+   * mixin ref cell) return that shared object, so attaching any family
+   * member is recognized as re-attaching the whole family. Defaults to the
+   * logger instance itself when absent.
+   */
+  __observabilityAttachmentKey?(): object;
 }
 
 export function isAdaptableLogger(logger: IMastraLogger): logger is AdaptableLogger {

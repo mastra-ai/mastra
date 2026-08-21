@@ -163,6 +163,15 @@ export class PinoLogger<CustomLevels extends string = never> extends MastraLogge
   }
 
   /**
+   * The adapter context lives on the ref cell shared by the whole
+   * root/child family, so re-attach detection (multi-Mastra warning) must
+   * key on that cell — attaching to a child re-targets the root too.
+   */
+  __observabilityAttachmentKey(): object {
+    return this.#adapterContextRef;
+  }
+
+  /**
    * Export the record derived from the same native call to observability.
    * Runs regardless of pino's level filter and never throws into the caller.
    */
@@ -173,12 +182,10 @@ export class PinoLogger<CustomLevels extends string = never> extends MastraLogge
       // An Error passed as the args value often has no enumerable keys but
       // must still be exported (serialized by buildLogRecordData).
       const hasPayload = args instanceof Error || Object.keys(args).length > 0;
-      // Mirror the native record: the mixin injects trace fields into the
-      // pino record, so the exported payload carries them too (trace fields
-      // win over user data on key conflicts).
-      const traceFields = ctx.options.correlation ? ctx.resolveTraceFields() : undefined;
-      const data = buildLogRecordData(hasPayload ? [args] : []);
-      ctx.getLogSink()?.[level](message, traceFields ? { ...data, ...traceFields } : data);
+      // Trace identity travels on ExportedLog.traceId/spanId (the sink is
+      // span-correlated); data stays reserved for the user payload. The mixin
+      // still injects trace fields into the native pino record for stdout.
+      ctx.getLogSink()?.[level](message, buildLogRecordData(hasPayload ? [args] : []));
     } catch {
       // Never let observability export break the primary logger
     }

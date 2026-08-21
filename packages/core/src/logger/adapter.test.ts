@@ -270,6 +270,29 @@ describe('Mastra logger wiring', () => {
     expect(warnSpy.mock.calls[0]![0]).toContain('already wired to another Mastra instance');
   });
 
+  it('warns when a different family member sharing an attachment key is attached to a second Mastra instance', () => {
+    // Models PinoLogger's family-shared ref cell: root and child are distinct
+    // instances whose adapter context lives on one shared cell, so attaching
+    // the child re-targets the root's export too and must warn.
+    const sharedKey = {};
+    const makeFamilyLogger = () =>
+      Object.assign(makePlainLogger(), {
+        __attachObservability: vi.fn(),
+        __observabilityAttachmentKey: () => sharedKey,
+      });
+    const root = makeFamilyLogger();
+    const child = makeFamilyLogger();
+
+    new Mastra({ logger: root as any, __ephemeral: true });
+    expect(child.warn).not.toHaveBeenCalled();
+
+    new Mastra({ logger: child as any, __ephemeral: true });
+    expect(child.warn).toHaveBeenCalledTimes(1);
+    expect((child.warn as ReturnType<typeof vi.fn>).mock.calls[0]![0]).toContain(
+      'already wired to another Mastra instance',
+    );
+  });
+
   it('getLogSink prefers the span-correlated logger context over the global one', async () => {
     const globalSink = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
     const spanSink = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };

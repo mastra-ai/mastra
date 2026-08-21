@@ -70,7 +70,7 @@ describe('MultiLogger observability adapter', () => {
     multi.info('hello', { a: 1 });
     infoSpy.mockRestore();
 
-    expect(sink.calls).toEqual([{ level: 'info', message: 'hello', data: { a: 1, ...TRACE_FIELDS } }]);
+    expect(sink.calls).toEqual([{ level: 'info', message: 'hello', data: { a: 1 } }]);
   });
 
   it('exports tracked exceptions once with MastraError fields', () => {

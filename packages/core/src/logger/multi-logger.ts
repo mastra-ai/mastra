@@ -31,10 +31,9 @@ export class MultiLogger implements IMastraLogger {
     const ctx = this.#adapterContext;
     if (!ctx?.options.export) return;
     try {
-      // Mirror the correlated record the wrapped loggers write natively.
-      const traceFields = ctx.options.correlation ? ctx.resolveTraceFields() : undefined;
-      const base = buildLogRecordData(args);
-      ctx.getLogSink()?.[level](message, traceFields ? { ...(base ?? {}), ...traceFields } : base);
+      // Trace identity travels on ExportedLog.traceId/spanId (the sink is
+      // span-correlated); data stays reserved for the user payload.
+      ctx.getLogSink()?.[level](message, buildLogRecordData(args));
     } catch {
       // Never let observability export break the primary loggers
     }
