@@ -441,7 +441,7 @@ export const createTimeTravelExecutionParams = (params: {
 
   const foreachSuspendPayload = Object.values(snapshotContext).find(value => {
     const meta = value?.suspendPayload?.__workflow_meta;
-    return meta?.foreachOutput && Object.values(meta.resumeLabels ?? {}).some((label: any) => label?.stepId === firstStepId);
+    return meta?.foreachStepId === firstStepId;
   })?.suspendPayload;
 
   for (const [index, entry] of graph.steps.entries()) {

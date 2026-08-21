@@ -1259,6 +1259,7 @@ export async function executeForeach(
         ...finalErrorResult.suspendPayload,
         __workflow_meta: {
           ...finalErrorResult.suspendPayload?.__workflow_meta,
+          foreachStepId: stepId,
           foreachOutput: prevForeachOutput,
           resumeLabels,
         },
