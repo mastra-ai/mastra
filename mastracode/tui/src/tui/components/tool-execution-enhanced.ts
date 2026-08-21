@@ -8,7 +8,12 @@ import { Box, Spacer, Text, visibleWidth } from '@earendil-works/pi-tui';
 import type { TUI } from '@earendil-works/pi-tui';
 import { MC_TOOLS } from '@mastra/code-sdk/tool-names';
 import type { TaskItemInput } from '@mastra/core/signals';
-import { isWebSearchToolName, webSearchAction, webSearchLinks } from '@mastra/core/tools/provider-web-search';
+import {
+  isWebSearchToolName,
+  webSearchAction,
+  webSearchLinks,
+  webSearchTarget,
+} from '@mastra/core/tools/provider-web-search';
 import chalk from 'chalk';
 import { highlight } from 'cli-highlight';
 import type { Theme as HighlightTheme } from 'cli-highlight';
@@ -1209,15 +1214,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     if (argsObj?.query) return String(argsObj.query);
 
     const action = webSearchAction(this.args) ?? webSearchAction(this.parsedWebSearchResult());
-    if (!action) return '';
-    switch (action.type) {
-      case 'search':
-        return action.query ?? '';
-      case 'openPage':
-        return action.url ?? '';
-      case 'findInPage':
-        return action.pattern ?? action.url ?? '';
-    }
+    return action ? (webSearchTarget(action) ?? '') : '';
   }
 
   private parsedWebSearchResult(): unknown {

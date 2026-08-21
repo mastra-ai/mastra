@@ -1,4 +1,4 @@
-import { isWebSearchToolName, webSearchAction } from '@mastra/core/tools/provider-web-search';
+import { isWebSearchToolName, webSearchAction, webSearchTarget } from '@mastra/core/tools/provider-web-search';
 import {
   BookOpen,
   Braces,
@@ -93,6 +93,12 @@ function withoutCdPrefix(command: string): string {
   return command.replace(/^\s*cd\s+(?:'[^']*'|"[^"]*"|[^\s&|;]+)\s*&&\s*/, '') || command;
 }
 
+const WEB_SEARCH_LABELS: Record<string, string> = {
+  search: 'Search the web',
+  openPage: 'Open page',
+  findInPage: 'Find in page',
+};
+
 /** Provider-run search has no input to read: the call it made comes back in the result. */
 function presentWebSearch(args: unknown, result: unknown): ToolPresentation {
   const query = stringArg(args, 'query');
@@ -100,14 +106,11 @@ function presentWebSearch(args: unknown, result: unknown): ToolPresentation {
 
   const action = webSearchAction(result);
   if (!action) return { icon: Globe, label: 'Search the web' };
-  switch (action.type) {
-    case 'search':
-      return { icon: Globe, label: 'Search the web', detail: action.query };
-    case 'openPage':
-      return { icon: Globe, label: 'Open page', detail: action.url };
-    case 'findInPage':
-      return { icon: Globe, label: 'Find in page', detail: action.pattern ?? action.url };
-  }
+  return {
+    icon: Globe,
+    label: WEB_SEARCH_LABELS[action.type] ?? 'Search the web',
+    detail: webSearchTarget(action),
+  };
 }
 
 export function presentTool({ toolName, args, result }: ToolCallPresentation): ToolPresentation {

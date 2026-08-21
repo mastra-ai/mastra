@@ -5,10 +5,17 @@
  * with a bare array of results.
  */
 
-export type WebSearchAction =
-  | { type: 'search'; query?: string }
-  | { type: 'openPage'; url?: string }
-  | { type: 'findInPage'; url?: string; pattern?: string };
+/**
+ * Flat on purpose: `type` is whichever name the provider gave the action — `search`,
+ * `openPage`, `findInPage`, or one it adds later — so a new kind reaches callers with
+ * its target intact instead of breaking a closed union they switch over.
+ */
+export interface WebSearchAction {
+  type: string;
+  query?: string;
+  url?: string;
+  pattern?: string;
+}
 
 export interface WebSearchLink {
   url: string;
@@ -34,16 +41,19 @@ function stringField(value: unknown, key: string): string | undefined {
 export function webSearchAction(result: unknown): WebSearchAction | undefined {
   if (!isRecord(result)) return undefined;
   const action = result.action;
-  switch (stringField(action, 'type')) {
-    case 'search':
-      return { type: 'search', query: stringField(action, 'query') };
-    case 'openPage':
-      return { type: 'openPage', url: stringField(action, 'url') };
-    case 'findInPage':
-      return { type: 'findInPage', url: stringField(action, 'url'), pattern: stringField(action, 'pattern') };
-    default:
-      return undefined;
-  }
+  const type = stringField(action, 'type');
+  if (!type) return undefined;
+  return {
+    type,
+    query: stringField(action, 'query'),
+    url: stringField(action, 'url'),
+    pattern: stringField(action, 'pattern'),
+  };
+}
+
+/** What the action was aimed at, whichever kind it is. */
+export function webSearchTarget(action: WebSearchAction): string | undefined {
+  return action.query ?? action.pattern ?? action.url;
 }
 
 function resultEntries(result: unknown): unknown[] {
@@ -64,7 +74,6 @@ export function webSearchLinks(result: unknown): WebSearchLink[] {
   });
   if (links.length > 0) return links;
 
-  const action = webSearchAction(result);
-  const url = action && 'url' in action ? action.url : undefined;
+  const url = webSearchAction(result)?.url;
   return url ? [{ url }] : [];
 }
