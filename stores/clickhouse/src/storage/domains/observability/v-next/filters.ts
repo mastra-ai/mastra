@@ -123,11 +123,29 @@ function addStringMapFilters(
   }
 }
 
+/** Recursively sorts object keys so JSON.stringify produces a canonical serialization. */
+function canonicalizeJson(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalizeJson);
+  if (value != null && typeof value === 'object') {
+    const sorted: Record<string, unknown> = {};
+    for (const key of Object.keys(value as Record<string, unknown>).sort()) {
+      sorted[key] = canonicalizeJson((value as Record<string, unknown>)[key]);
+    }
+    return sorted;
+  }
+  return value;
+}
+
 /**
  * Adds key/value filters against a JSON-encoded string column (e.g. scores.metadata).
- * Emits one predicate per requested key with exact-value equality for any JSON value.
- * The column is written via JSON.stringify, so comparing the raw extracted JSON text
- * against JSON.stringify(value) yields exact per-key equality (matching in-memory semantics).
+ * Emits one predicate per requested key with exact-value equality for any JSON value,
+ * mirroring the in-memory deep-equality semantics:
+ * - scalars (string/number/boolean/null) use type-checked typed extraction
+ * - objects/arrays are compared by raw JSON text against both the as-provided and the
+ *   canonical (recursively key-sorted) serialization of the filter value. Structural
+ *   comparison of arbitrarily nested JSON is not expressible in portable ClickHouse SQL
+ *   (the JSON data type needed for it is only GA in recent versions), so a stored nested
+ *   object matches when its serialized key order is either the writer's order or sorted.
  */
 function addJsonStringFilters(
   column: string,
@@ -138,12 +156,40 @@ function addJsonStringFilters(
 ): void {
   if (values == null || typeof values !== 'object') return;
   let i = 0;
-  for (const [key, value] of Object.entries(values)) {
+  for (const [rawKey, rawValue] of Object.entries(values)) {
+    const value = rawValue === undefined ? null : rawValue;
     const keyParam = `${keyPrefix}_${i}`;
     const valParam = `${valuePrefix}_${i}`;
-    out.conditions.push(`JSONExtractRaw(ifNull(${column}, '{}'), {${keyParam}:String}) = {${valParam}:String}`);
-    out.params[keyParam] = key;
-    out.params[valParam] = JSON.stringify(value ?? null);
+    const src = `ifNull(${column}, '{}')`;
+    const keyRef = `{${keyParam}:String}`;
+    out.params[keyParam] = rawKey;
+    if (value === null) {
+      out.conditions.push(`JSONHas(${src}, ${keyRef}) AND JSONType(${src}, ${keyRef}) = 'Null'`);
+    } else if (typeof value === 'string') {
+      out.conditions.push(
+        `JSONType(${src}, ${keyRef}) = 'String' AND JSONExtractString(${src}, ${keyRef}) = {${valParam}:String}`,
+      );
+      out.params[valParam] = value;
+    } else if (typeof value === 'number') {
+      out.conditions.push(
+        `JSONType(${src}, ${keyRef}) IN ('Int64', 'UInt64', 'Double') AND JSONExtractFloat(${src}, ${keyRef}) = {${valParam}:Float64}`,
+      );
+      out.params[valParam] = value;
+    } else if (typeof value === 'boolean') {
+      out.conditions.push(
+        `JSONType(${src}, ${keyRef}) = 'Bool' AND JSONExtractBool(${src}, ${keyRef}) = {${valParam}:UInt8}`,
+      );
+      out.params[valParam] = value ? 1 : 0;
+    } else {
+      // Objects/arrays: raw-text comparison against the as-provided and canonical
+      // serializations (see doc comment above for the key-order caveat).
+      const altParam = `${valuePrefix}_alt_${i}`;
+      out.conditions.push(
+        `JSONExtractRaw(${src}, ${keyRef}) IN ({${valParam}:String}, {${altParam}:String})`,
+      );
+      out.params[valParam] = JSON.stringify(value);
+      out.params[altParam] = JSON.stringify(canonicalizeJson(value));
+    }
     i++;
   }
 }
