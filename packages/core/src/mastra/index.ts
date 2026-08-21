@@ -87,7 +87,7 @@ import {
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
 import { computeNextFireAt } from '../workflows/scheduler';
 import type { WorkflowScheduleConfig, SchedulerConfig, Scheduler } from '../workflows/scheduler';
-import type { AnyWorkspace, RegisteredWorkspace, Workspace, WorkspaceShutdownBehavior } from '../workspace';
+import type { AnyWorkspace, RegisteredWorkspace, Workspace } from '../workspace';
 import {
   declaredSchedulesOf,
   findFsAgentScheduleHandler,
@@ -3254,13 +3254,7 @@ export class Mastra<
   public addWorkspace(
     workspace: AnyWorkspace,
     key?: string,
-    metadata?: {
-      source?: 'mastra' | 'agent';
-      agentId?: string;
-      agentName?: string;
-      /** What `shutdown()` does with this workspace. Defaults to `'stop'`. */
-      shutdownBehavior?: WorkspaceShutdownBehavior;
-    },
+    metadata?: { source?: 'mastra' | 'agent'; agentId?: string; agentName?: string },
   ): void {
     if (!workspace) {
       throw createUndefinedPrimitiveError('workspace', workspace, key);
@@ -3285,7 +3279,6 @@ export class Mastra<
       source,
       ...(metadata?.agentId ? { agentId: metadata.agentId } : {}),
       ...(metadata?.agentName ? { agentName: metadata.agentName } : {}),
-      ...(metadata?.shutdownBehavior ? { shutdownBehavior: metadata.shutdownBehavior } : {}),
     };
   }
 
@@ -6564,25 +6557,17 @@ export class Mastra<
       }
     });
 
-    // Tear down registered workspaces per their shutdown behavior. The default
-    // is 'stop', not 'destroy': remote sandboxes suspend/pause and stay
-    // resumable across process restarts, and LocalSandbox.stop() kills its
-    // background processes, so nothing leaks. 'destroy' remains available as
-    // an explicit registration override, and 'none' leaves the workspace
-    // untouched (e.g. when the provider's idle lifecycle owns suspension).
+    // Stop — don't destroy — registered workspaces. Remote sandboxes
+    // suspend/pause and stay resumable across process restarts, and
+    // LocalSandbox.stop() kills its background processes, so nothing leaks.
+    // Callers that want a full teardown destroy workspaces explicitly via
+    // removeWorkspace(id, { destroy: true }) or workspace.destroy().
     const workspaceIds = Object.keys(this.#workspaces);
     const teardownResults = await Promise.allSettled(
       workspaceIds.map(async id => {
         const entry = this.#workspaces[id];
         if (!entry) return;
-        const behavior = entry.shutdownBehavior ?? 'stop';
-        if (behavior === 'destroy') {
-          await this.removeWorkspace(id, { destroy: true });
-          return;
-        }
-        if (behavior === 'stop') {
-          await entry.workspace.stop();
-        }
+        await entry.workspace.stop();
         await this.removeWorkspace(id);
       }),
     );

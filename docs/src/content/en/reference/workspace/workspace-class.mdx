@@ -435,7 +435,7 @@ await workspace.stop()
 
 `stop()` shuts down language servers, closes the browser, and stops the sandbox provider. Remote sandbox providers suspend or pause the sandbox so it can resume later; `LocalSandbox` kills its background processes and unmounts filesystems. The workspace itself stays usable: the filesystem, search index, and skills are untouched, and a later sandbox operation can start the sandbox again.
 
-`mastra.shutdown()` calls `stop()` for registered workspaces by default, so a process restart suspends remote sandboxes instead of deleting them. Register a workspace with `mastra.addWorkspace(workspace, undefined, { shutdownBehavior: 'destroy' })` to destroy it on shutdown instead, or `{ shutdownBehavior: 'none' }` to leave it untouched.
+`mastra.shutdown()` calls `stop()` for registered workspaces, so a process restart suspends remote sandboxes instead of deleting them. To fully tear a workspace down, call `destroy()` or `mastra.removeWorkspace(id, { destroy: true })` explicitly.
 
 #### `destroy()`
 

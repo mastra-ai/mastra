@@ -91,34 +91,6 @@ describe('Workspace cleanup', () => {
       expect(mastra.listWorkspaces()).toEqual({});
     });
 
-    it('destroys a workspace registered with shutdownBehavior "destroy"', async () => {
-      const mastra = new Mastra({ logger: false });
-      const workspace = createWorkspace('destroy-on-shutdown');
-      const destroy = vi.spyOn(workspace, 'destroy').mockResolvedValue(undefined);
-      const stop = vi.spyOn(workspace, 'stop').mockResolvedValue(undefined);
-      mastra.addWorkspace(workspace, undefined, { shutdownBehavior: 'destroy' });
-
-      await mastra.shutdown();
-
-      expect(destroy).toHaveBeenCalledTimes(1);
-      expect(stop).not.toHaveBeenCalled();
-      expect(mastra.listWorkspaces()).toEqual({});
-    });
-
-    it('leaves a workspace registered with shutdownBehavior "none" untouched', async () => {
-      const mastra = new Mastra({ logger: false });
-      const workspace = createWorkspace('leave-alone');
-      const destroy = vi.spyOn(workspace, 'destroy').mockResolvedValue(undefined);
-      const stop = vi.spyOn(workspace, 'stop').mockResolvedValue(undefined);
-      mastra.addWorkspace(workspace, undefined, { shutdownBehavior: 'none' });
-
-      await mastra.shutdown();
-
-      expect(destroy).not.toHaveBeenCalled();
-      expect(stop).not.toHaveBeenCalled();
-      expect(mastra.listWorkspaces()).toEqual({});
-    });
-
     it('continues shutdown after a workspace stop failure and keeps failed workspaces registered', async () => {
       const mastra = new Mastra({ logger: false });
       const failingWorkspace = createWorkspace('failing-workspace');
