@@ -61,11 +61,12 @@ describe('createRepoTemplate', () => {
     expect(namedSpec(spec).alias).toBe(repoTemplateAlias(BASE));
   });
 
-  it('clones, pins the sha, and runs the setup command in the workdir', async () => {
+  it('clones into $HOME, pins the sha, and runs the setup command in the workdir', async () => {
     const steps = await serializedSteps(namedSpec(createRepoTemplate(BASE)));
-    expect(steps).toContain('git clone https://github.com/octocat/hello.git /workspace/octocat/hello');
+    // Serialized as JSON, so the shell double quotes appear escaped.
+    expect(steps).toContain('git clone https://github.com/octocat/hello.git \\"$HOME/hello\\"');
     expect(steps).toContain(`checkout ${BASE.sha}`);
-    expect(steps).toContain('cd /workspace/octocat/hello && pnpm install');
+    expect(steps).toContain('cd \\"$HOME/hello\\" && pnpm install');
   });
 
   it('returns a deferred spec without a sha and pins it to the resolved head', async () => {
@@ -174,9 +175,10 @@ describe('createRepoTemplate', () => {
     });
   });
 
-  it('preps a user-writable /workspace (via the base steps) before cloning as user', async () => {
+  it('needs no root prep — the clone lands in the build user home', async () => {
     const steps = await serializedSteps(namedSpec(createRepoTemplate(BASE)));
-    expect(steps).toContain('mkdir -p /workspace && chown -R user:user /workspace');
+    expect(steps).not.toContain('chown');
+    expect(steps).not.toContain('mkdir -p /workspace');
   });
 
   it('carries no named fallback — a broken build degrades to the default mountable template', () => {
@@ -191,12 +193,13 @@ describe('createRepoTemplate', () => {
     expect(spec.buildTags).toEqual(['current']);
   });
 
-  it('pins the /workspace boundary for custom workdirs', () => {
+  it('constrains custom workdirs to plain $HOME-relative or absolute paths', () => {
     expect(() => createRepoTemplate({ ...BASE, workdir: '/' })).toThrow();
-    expect(() => createRepoTemplate({ ...BASE, workdir: '/home/repo' })).toThrow();
-    expect(() => createRepoTemplate({ ...BASE, workdir: '/tmp/repo' })).toThrow();
-    expect(() => createRepoTemplate({ ...BASE, workdir: '/workspace/../home' })).toThrow();
-    expect(namedSpec(createRepoTemplate({ ...BASE, workdir: '/workspace/custom/dir' })).alias).toMatch(/^mastra-repo-/);
+    expect(() => createRepoTemplate({ ...BASE, workdir: '$HOME' })).toThrow();
+    expect(() => createRepoTemplate({ ...BASE, workdir: '$HOME/../etc' })).toThrow();
+    expect(() => createRepoTemplate({ ...BASE, workdir: '$HOME/a;rm -rf /' })).toThrow();
+    expect(namedSpec(createRepoTemplate({ ...BASE, workdir: '$HOME/custom/dir' })).alias).toMatch(/^mastra-repo-/);
+    expect(namedSpec(createRepoTemplate({ ...BASE, workdir: '/srv/checkout' })).alias).toMatch(/^mastra-repo-/);
   });
 
   it('rejects malformed inputs', () => {

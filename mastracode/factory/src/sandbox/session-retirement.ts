@@ -143,7 +143,9 @@ export class SessionRetirementCoordinator {
       });
     }
 
-    if (projectRepository?.teardownCommand) {
+    // An unresolved workdir means the sandbox never started in this process:
+    // nothing was set up, so there is nothing for a teardown command to undo.
+    if (projectRepository?.teardownCommand && entry.workdir) {
       try {
         await runWorktreeTeardown(
           entry.sandbox as unknown as MaterializationSandbox,

@@ -68,7 +68,10 @@ export async function captureSessionFilesystem(
     // capture an empty git status. Only capture when the turn already has a
     // running sandbox.
     if (entry.sandbox.status !== 'running') return;
+    // Running-but-unresolved should not happen (the start hook resolves the
+    // workdir), but capture is best-effort — skip rather than guess.
     const workdir = entry.workdir;
+    if (!workdir) return;
 
     const result = await sandbox.executeCommand('git', ['-C', workdir, ...GIT_STATUS_ARGS], {
       timeout: 30_000,

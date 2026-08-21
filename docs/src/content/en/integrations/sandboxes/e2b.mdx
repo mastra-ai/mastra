@@ -361,16 +361,18 @@ const result = await refreshRepoTemplate({
 // { ref: 'mastra-repo-octocat-hello-world-…:sha-…', action: 'built' | 'reused', sha: '…' }
 ```
 
-The template layers on top of the default mountable base (E2B's `base` image,
-so git and common tooling are present, plus `s3fs`/FUSE for mount support,
-plus a user-writable `/workspace` — build steps run as the sandbox's
-non-root `user`, so the base preps the workspace root as root first). The
-clone and setup then run as `user`, keeping runtime file ownership correct.
+The template layers on top of the default mountable base (E2B's `base`
+image, so git and common tooling are present, plus `s3fs`/FUSE for mount
+support). The clone lands in the build user's home directory
+(`$HOME/<repo>` by default) — build steps and runtime commands both run as
+the sandbox's non-root `user` in its home, so no directory prep is needed
+and runtime file ownership stays correct. Pass `workdir` to clone somewhere
+else.
 
 Failure handling is designed so a broken template never wedges a session:
 
-- A failed build falls back to the default mountable template, whose
-  writable `/workspace` keeps a runtime cold clone working.
+- A failed build falls back to the default mountable template; the
+  session's runtime cold clone into `$HOME` keeps working.
 - E2B keeps a failed build's ref visible to `Template.exists`, so a broken
   ref could otherwise be reused forever. When creating a sandbox from a
   named ref fails, the cached resolution is dropped and creation retries

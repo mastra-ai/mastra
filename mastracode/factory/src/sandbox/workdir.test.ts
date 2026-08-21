@@ -1,11 +1,6 @@
 import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import {
-  computeRemoteWorkdir,
-  deriveSandboxWorkdir,
-  resolveContainedLocalWorkdir,
-  sanitizeSegment,
-} from './workdir.js';
+import { deriveLocalWorkdir, remoteWorkdirFromHome, resolveContainedLocalWorkdir, sanitizeSegment } from './workdir.js';
 
 describe('sanitizeSegment', () => {
   it('keeps safe characters and replaces separators and traversal', () => {
@@ -28,50 +23,50 @@ describe('sanitizeSegment', () => {
   });
 });
 
-describe('computeRemoteWorkdir', () => {
-  it('nests owner/repo under the remote base', () => {
-    expect(computeRemoteWorkdir('acme/api')).toBe('/workspace/acme/api');
+describe('remoteWorkdirFromHome', () => {
+  it('nests the sanitized repo name under the probed home', () => {
+    expect(remoteWorkdirFromHome('/home/user', 'acme/api')).toBe('/home/user/api');
+    expect(remoteWorkdirFromHome('/home/daytona', 'acme/api')).toBe('/home/daytona/api');
   });
 
-  it('sanitizes hostile repo names', () => {
-    // `..` owner collapses to the fallback segment; the name keeps only its first piece.
-    expect(computeRemoteWorkdir('../etc/passwd')).toBe('/workspace/repo/etc');
+  it('tolerates a trailing slash on the probed home', () => {
+    expect(remoteWorkdirFromHome('/home/user/', 'acme/api')).toBe('/home/user/api');
   });
 
-  it('tolerates a bare name without an owner', () => {
-    expect(computeRemoteWorkdir('api')).toBe('/workspace/api/repo');
+  it('sanitizes hostile repo names into a single segment', () => {
+    // The name piece is `..` → traversal neutralized to the fallback segment.
+    expect(remoteWorkdirFromHome('/home/user', 'acme/../../..')).toBe('/home/user/repo');
+    expect(remoteWorkdirFromHome('/home/user', 'api')).toBe('/home/user/repo');
   });
 });
 
-describe('deriveSandboxWorkdir', () => {
+describe('deriveLocalWorkdir', () => {
   const root = path.resolve('/srv/sandboxes');
 
   it('nests the repo under a local sandbox workingDirectory so the marker sits beside the clone', () => {
     const sandbox = { provider: 'local', workingDirectory: path.join(root, 'sess-1') };
-    expect(deriveSandboxWorkdir(sandbox, 'acme/api')).toBe(path.join(root, 'sess-1', 'api'));
+    expect(deriveLocalWorkdir(sandbox, 'acme/api')).toBe(path.join(root, 'sess-1', 'api'));
   });
 
   it('keeps same-name repos apart when callbacks use per-session directories', () => {
     const a = { provider: 'local', workingDirectory: path.join(root, 'sess-a') };
     const b = { provider: 'local', workingDirectory: path.join(root, 'sess-b') };
-    expect(deriveSandboxWorkdir(a, 'acme/api')).not.toBe(deriveSandboxWorkdir(b, 'acme/api'));
+    expect(deriveLocalWorkdir(a, 'acme/api')).not.toBe(deriveLocalWorkdir(b, 'acme/api'));
   });
 
   it('refuses escapes through hostile repo names', () => {
     const sandbox = { provider: 'local', workingDirectory: path.join(root, 'sess') };
     // Sanitization neutralizes traversal rather than throwing.
-    expect(deriveSandboxWorkdir(sandbox, 'acme/../../..').startsWith(root + path.sep)).toBe(true);
+    expect(deriveLocalWorkdir(sandbox, 'acme/../../..')!.startsWith(root + path.sep)).toBe(true);
   });
 
-  it('uses the deterministic remote layout for non-local providers', () => {
-    expect(deriveSandboxWorkdir({ provider: 'e2b' }, 'acme/api')).toBe('/workspace/acme/api');
-    expect(deriveSandboxWorkdir({ provider: 'platform', workingDirectory: undefined }, 'acme/api')).toBe(
-      '/workspace/acme/api',
-    );
+  it('answers undefined for remote providers — their workdir is a runtime fact of the VM', () => {
+    expect(deriveLocalWorkdir({ provider: 'e2b' }, 'acme/api')).toBeUndefined();
+    expect(deriveLocalWorkdir({ provider: 'platform', workingDirectory: undefined }, 'acme/api')).toBeUndefined();
   });
 
-  it('falls back to the remote layout for a local sandbox without a usable workingDirectory', () => {
-    expect(deriveSandboxWorkdir({ provider: 'local', workingDirectory: '' }, 'acme/api')).toBe('/workspace/acme/api');
+  it('answers undefined for a local sandbox without a usable workingDirectory', () => {
+    expect(deriveLocalWorkdir({ provider: 'local', workingDirectory: '' }, 'acme/api')).toBeUndefined();
   });
 });
 

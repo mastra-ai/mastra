@@ -466,13 +466,13 @@ describe('two users in one org each get their own sandbox + session workspace', 
     });
     // Materialization memoizes the session sandbox in-process; git write
     // routes resolve through the memo, not persisted columns.
-    getSessionSandbox(session.id, '/workspace/a1/feat-x', () =>
+    getSessionSandbox(session.id, 'a1/feat-x', () =>
       ({
         id: 'sb-a1-session',
         provider: 'stub',
         executeCommand: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
       }) as never,
-    );
+    ).workdir = '/workspace/a1/feat-x';
 
     // User 2 cannot address user 1's session workspace.
     const crossCommit = await postJson(user2, '/web/github/projects/p1/commit', {
@@ -521,13 +521,13 @@ describe('cross-user session workspaces are rejected', () => {
         sandboxId: `sb-${userId}`,
         sandboxWorkdir: `/workspace/sessions/${userId}/feat-x`,
       });
-      getSessionSandbox(session.id, `/workspace/sessions/${userId}/feat-x`, () =>
+      getSessionSandbox(session.id, `sessions/${userId}`, () =>
         ({
           id: `sb-${userId}`,
           provider: 'stub',
           executeCommand: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
         }) as never,
-      );
+      ).workdir = `/workspace/sessions/${userId}/feat-x`;
       sessions.set(userId, session);
     }
 
@@ -607,7 +607,8 @@ describe('install flow binds the installation to the org', () => {
           installationStorageId: tables.installations[0]!.id,
           repositoryStorageId: tables.repositories[0]!.id,
           sandboxProvider: 'custom',
-          sandboxWorkdir: '/workspace/octo/hello',
+          // Display-only listing guess: repos clone into the VM's home.
+          sandboxWorkdir: '~/hello',
         },
       ],
     });

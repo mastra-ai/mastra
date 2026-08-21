@@ -1,11 +1,16 @@
 import * as path from 'node:path';
 
 /**
- * Deterministic session workdir computation. Workdirs are always computed
- * from intent (session id + repo full name) and never persisted or trusted
- * from storage or client input — the stale-workdir class of production bugs
- * came from reading `session.sandboxWorkdir` written under a different
- * provider.
+ * Session workdir derivation. Workdirs are never persisted or trusted from
+ * storage or client input — the stale-workdir class of production bugs came
+ * from reading `session.sandboxWorkdir` written under a different provider.
+ *
+ * Local sandboxes derive their workdir synchronously from the sandbox's own
+ * `workingDirectory` (the per-session directory the deploy's callback chose).
+ * Remote sandboxes have no invented path: the repo clones into the VM's own
+ * default cwd (its home dir), so the workdir is only knowable once a VM is
+ * running — resolved lazily by `resolveSessionWorkdir` via a one-time `pwd`
+ * probe and memoized on the session entry.
  */
 
 /** Keep each path piece a single safe segment (no separators or traversal). */
@@ -15,42 +20,28 @@ export function sanitizeSegment(segment: string): string {
 }
 
 /**
- * In-sandbox base directory for remote (VM-per-session) providers. Absolute
- * rather than home-relative: `$HOME` differs per provider and cannot be
- * resolved before the VM starts, while every exec path (shell quoting, cwd
- * options, filesystem ids) assumes a fixed absolute string. Matches current
- * production layout; provider templates ensure it is writable.
+ * Synchronously derivable workdir: local sandboxes expose their host
+ * `workingDirectory`; the repo checks out as a contained subdirectory so the
+ * setup marker sits beside the clone instead of polluting `git status`
+ * inside it. Returns undefined for remote providers, whose workdir is a
+ * runtime fact of the VM (`<home>/<repo>`).
  */
-export const REMOTE_WORKDIR_BASE = '/workspace';
-
-/**
- * In-sandbox working directory for a remote (VM-per-session) provider:
- * `/workspace/<owner>/<repo>`.
- */
-export function computeRemoteWorkdir(repoFullName: string): string {
-  const [owner, name] = repoFullName.split('/', 2);
-  return `${REMOTE_WORKDIR_BASE}/${sanitizeSegment(owner || 'unknown')}/${sanitizeSegment(name || 'repo')}`;
-}
-
-/**
- * Derive the checkout workdir from a constructed sandbox instance. Local
- * sandboxes expose their host `workingDirectory` (the per-session directory
- * the deploy's callback chose — e.g. `<root>/<sessionId>`); the repo checks
- * out as a contained subdirectory so the setup marker sits beside the clone
- * instead of polluting `git status` inside it. Every other provider gets the
- * deterministic remote layout. Never persisted, never trusted from storage
- * or client input.
- */
-export function deriveSandboxWorkdir(
+export function deriveLocalWorkdir(
   sandbox: { provider: string; workingDirectory?: unknown },
   repoFullName: string,
-): string {
+): string | undefined {
   const wd = sandbox.workingDirectory;
   if (sandbox.provider === 'local' && typeof wd === 'string' && wd.length > 0) {
     const [, name] = repoFullName.split('/', 2);
     return resolveContainedLocalWorkdir(wd, sanitizeSegment(name || 'repo'));
   }
-  return computeRemoteWorkdir(repoFullName);
+  return undefined;
+}
+
+/** `<home>/<repo>` — where a remote VM's default-cwd clone lands. */
+export function remoteWorkdirFromHome(home: string, repoFullName: string): string {
+  const [, name] = repoFullName.split('/', 2);
+  return `${home.replace(/\/+$/, '')}/${sanitizeSegment(name || 'repo')}`;
 }
 
 /** Resolve a workdir under `root`, refusing any path that escapes the configured root. */

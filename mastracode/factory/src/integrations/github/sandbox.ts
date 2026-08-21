@@ -20,7 +20,7 @@
 import { reportProgress } from '../../sandbox/materialization.js';
 import type { MaterializationSandbox, ProgressFn, SandboxCommandResult } from '../../sandbox/materialization.js';
 import type { MastraFactorySandboxConfig } from '../../sandbox/session-sandbox.js';
-import { getSessionSandbox } from '../../sandbox/session-sandbox.js';
+import { getSessionSandbox, resolveSessionWorkdir } from '../../sandbox/session-sandbox.js';
 import type {
   ProjectRepositorySandbox,
   SourceControlStorageHandle,
@@ -86,7 +86,10 @@ export async function ensureProjectSandbox(options: {
   await instance.start();
   instance.setEnvironmentVariable?.('GH_TOKEN', token);
   void storage.setSandboxId({ id: row.id, sandboxId: instance.id }).catch(() => {});
-  return { sandbox: instance, workdir: entry.workdir };
+  // Resolved against the now-live VM (local: configured dir; remote: its
+  // home) and memoized on the entry for passive readers.
+  const workdir = await resolveSessionWorkdir(key, entry.sandbox, repoFullName);
+  return { sandbox: instance, workdir };
 }
 
 /**

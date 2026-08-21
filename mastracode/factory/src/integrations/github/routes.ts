@@ -23,7 +23,7 @@ import type { RouteAuth } from '../../routes/route.js';
 import type { MaterializationSandbox, PrepareProgress, ProgressFn } from '../../sandbox/materialization.js';
 import type { MastraFactorySandboxConfig } from '../../sandbox/session-sandbox.js';
 import { peekSessionSandbox } from '../../sandbox/session-sandbox.js';
-import { computeRemoteWorkdir } from '../../sandbox/workdir.js';
+import { sanitizeSegment } from '../../sandbox/workdir.js';
 import type { StateSigner } from '../../state-signing.js';
 import type { AuditEmitter } from '../../storage/domains/audit/domain.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
@@ -661,10 +661,11 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
                 installationStorageId: inst.id,
                 repositoryStorageId: repository.id,
                 sandboxProvider: sandbox ? 'custom' : 'none',
-                // Display only — the runtime workdir is derived from the
-                // constructed sandbox at open time, never read from this row.
-                // The remote layout is the honest listing-time guess.
-                sandboxWorkdir: computeRemoteWorkdir(repo.fullName),
+                // Display only — the runtime workdir is resolved from the
+                // live sandbox at open time, never read from this row. Repos
+                // clone into the VM's home; `~/<repo>` is the honest
+                // listing-time guess.
+                sandboxWorkdir: `~/${sanitizeSegment(repo.fullName.split('/', 2)[1] || 'repo')}`,
               };
             }),
           );
@@ -1566,9 +1567,11 @@ async function resolveSessionWorkspace(
     return undefined;
   }
   // Session sandboxes live in the per-process memo, keyed by the session row
-  // id. Passive resolution only — git write routes never provision.
+  // id. Passive resolution only — git write routes never provision. An
+  // unresolved workdir means the sandbox never started here: nothing is
+  // materialized, so there is no workspace to operate on.
   const entry = peekSessionSandbox(session.id);
-  if (!entry) return undefined;
+  if (!entry?.workdir) return undefined;
   return {
     session,
     workdir: entry.workdir,

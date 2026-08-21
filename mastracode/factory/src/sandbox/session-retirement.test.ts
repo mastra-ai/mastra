@@ -120,7 +120,9 @@ function seedMemoSandbox(
       return { exitCode: 0, stdout: '', stderr: '' };
     },
   };
-  getSessionSandbox(session.id, '/workspace/mastra', () => fake as never);
+  const entry = getSessionSandbox(session.id, 'acme/mastra', () => fake as never);
+  // Model a sandbox whose first start already resolved the workdir.
+  entry.workdir = '/workspace/mastra';
   return fake;
 }
 

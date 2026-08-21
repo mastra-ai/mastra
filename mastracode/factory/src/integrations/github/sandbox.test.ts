@@ -74,6 +74,8 @@ class FakeSandbox implements MaterializationSandbox {
   async executeCommand(command: string, args?: string[]): Promise<SandboxCommandResult> {
     const script = command === 'sh' && args?.[0] === '-c' ? args[1]! : [command, ...(args ?? [])].join(' ');
     this.calls.push(script);
+    // The workdir resolver probes the VM's default cwd (its home dir).
+    if (script === 'pwd') return { exitCode: 0, stdout: '/home/user\n', stderr: '' };
     return this.responder(script);
   }
 }

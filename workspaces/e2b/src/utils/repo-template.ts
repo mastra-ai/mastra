@@ -39,7 +39,7 @@ import type { DeferredNamedTemplateSpec, NamedTemplateSpec } from './template';
 
 const execFileAsync = promisify(execFile);
 
-const ALIAS_VERSION = 'v2';
+const ALIAS_VERSION = 'v3';
 
 /**
  * Stable tag assigned to every successful repo-template build. Points at the
@@ -53,11 +53,10 @@ const BUILD_TOKEN_ENV = 'MASTRA_BUILD_GH_TOKEN';
 
 const REPO_FULL_NAME_PATTERN = /^[\w.-]+\/[\w.-]+$/;
 const SHA_PATTERN = /^[0-9a-f]{7,40}$/i;
-// Workdirs are constrained beneath /workspace so the build's root prep step
-// only ever creates and chowns the /workspace tree — never an arbitrary
-// top-level directory (a workdir of `/` or `/home` would otherwise derive a
-// recursive chown over it).
-const WORKDIR_PATTERN = /^\/workspace\/[\w./-]+$/;
+// Workdirs interpolate into build shell commands, so constrain them to
+// plain path characters: either `$HOME/...` (expanded by the build shell —
+// the default) or an absolute path. `..` traversal is rejected separately.
+const WORKDIR_PATTERN = /^(?:\$HOME|)(?:\/[\w.-]+)+$/;
 
 export interface RepoTemplateOptions {
   /** GitHub `owner/repo` slug. */
@@ -75,10 +74,11 @@ export interface RepoTemplateOptions {
    */
   setupCommand?: string;
   /**
-   * Absolute path the repo is cloned to inside the image. Must sit under
-   * `/workspace` (the build preps and chowns that root for the sandbox
-   * user). Defaults to `/workspace/<owner>/<repo>`, matching factory's
-   * deterministic remote workdir.
+   * Path the repo is cloned to inside the image — `$HOME/...` (expanded by
+   * the build shell) or an absolute path. Defaults to `$HOME/<repo>`: build
+   * steps and runtime commands both run as the sandbox user in its home
+   * directory, so the checkout lands exactly where a runtime `$HOME` probe
+   * resolves it.
    */
   workdir?: string;
   /**
@@ -249,7 +249,7 @@ function validateRepoTemplateOptions(options: RepoTemplateOptions): void {
   }
   const workdir = options.workdir ?? defaultWorkdir(repoFullName);
   if (!WORKDIR_PATTERN.test(workdir) || workdir.includes('..')) {
-    throw new Error(`Invalid workdir '${workdir}': expected an absolute path under /workspace with no traversal`);
+    throw new Error(`Invalid workdir '${workdir}': expected a $HOME-relative or absolute path with no traversal`);
   }
 }
 
@@ -270,19 +270,20 @@ function buildRepoTemplateSpec(options: RepoTemplateOptions, token?: string): Na
   const cloneUrl = `https://github.com/${repoFullName}.git`;
   const auth = token ? `${gitAuthFlag()} ` : '';
 
-  const steps: string[] = [`git ${auth}clone ${cloneUrl} ${workdir}`];
+  // Double quotes so a `$HOME`-relative workdir expands in the build shell.
+  const steps: string[] = [`git ${auth}clone ${cloneUrl} "${workdir}"`];
   if (sha) {
     // GitHub serves fetches of reachable shas, so pinning after a default
     // clone is reliable without full-history flags.
-    steps.push(`git -C ${workdir} ${auth}fetch origin ${sha}`, `git -C ${workdir} checkout ${sha}`);
+    steps.push(`git -C "${workdir}" ${auth}fetch origin ${sha}`, `git -C "${workdir}" checkout ${sha}`);
   }
   if (setupCommand) {
-    steps.push(`cd ${workdir} && ${setupCommand}`);
+    steps.push(`cd "${workdir}" && ${setupCommand}`);
   }
 
-  // The default mountable base preps a user-writable /workspace, so the
-  // clone (which creates its own leading directories) runs directly as the
-  // sandbox `user`, keeping runtime file ownership right.
+  // Build steps run as the sandbox `user` in its own home directory, so the
+  // default `$HOME/<repo>` clone needs no directory prep and keeps runtime
+  // file ownership right.
   let template = createDefaultMountableTemplate().template;
   if (token) {
     // Visible to build steps; probed to NOT persist into runtime sandbox
@@ -295,8 +296,8 @@ function buildRepoTemplateSpec(options: RepoTemplateOptions, token?: string): Na
   return {
     alias: repoTemplateAlias(sha ? { ...options, sha } : options),
     template,
-    // A failed repo build degrades to the default mountable template, whose
-    // writable /workspace keeps the session's runtime cold clone working.
+    // A failed repo build degrades to the default mountable template; the
+    // session's runtime cold clone into `$HOME` keeps working.
     //
     // Every successful build also moves the stable `current` tag; when a
     // moved head means the exact sha tag doesn't exist yet, the sandbox
@@ -335,5 +336,7 @@ async function resolveDefaultBranchHead(repoFullName: string, token?: string): P
 }
 
 function defaultWorkdir(repoFullName: string): string {
-  return `/workspace/${repoFullName}`;
+  const [, name] = repoFullName.split('/', 2);
+  const repo = (name ?? '').replace(/[^\w.-]/g, '-').replace(/^\.+/, '') || 'repo';
+  return `$HOME/${repo}`;
 }

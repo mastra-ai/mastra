@@ -54,8 +54,10 @@ const mocks = vi.hoisted(() => ({
           await sandbox.ensureRunning();
           return { metadata: { sandboxId: `sbx-${ctx.sessionId}` } };
         }),
-        executeCommand: vi.fn(async () => {
+        executeCommand: vi.fn(async (command: string) => {
           await sandbox.ensureRunning();
+          // The workdir resolver probes the VM's default cwd (its home dir).
+          if (command === 'pwd') return { exitCode: 0, stdout: '/home/user\n', stderr: '' };
           return { exitCode: 0, stdout: '', stderr: '' };
         }),
         setEnvironmentVariable: mocks.setEnvironmentVariable,
@@ -1034,8 +1036,9 @@ describe('GitHub session workspace preparation', () => {
         actingUserId: 'user-1',
       }),
     );
+    // The workdir came from the live VM's probed home, never a persisted row.
     expect(mocks.materializeRepo).toHaveBeenCalledWith(
-      expect.objectContaining({ row: expect.objectContaining({ sandboxWorkdir: '/workspace/octocat/hello' }) }),
+      expect.objectContaining({ row: expect.objectContaining({ sandboxWorkdir: '/home/user/hello' }) }),
     );
   });
 

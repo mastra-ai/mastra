@@ -487,7 +487,9 @@ interface SessionSandboxHandle {
  */
 async function sessionSandbox(session: SourceControlSession): Promise<SessionSandboxHandle | null> {
   const entry = peekSessionSandbox(session.id);
-  if (!entry) return null;
+  // An unresolved workdir means the sandbox never started in this process —
+  // nothing is materialized, so there are no files to browse.
+  if (!entry?.workdir) return null;
   const sandbox = entry.sandbox as unknown as MaterializationSandbox;
   return {
     sandbox,

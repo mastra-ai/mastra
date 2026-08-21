@@ -24,7 +24,12 @@ import {
 import { registerGithubPatKind, registerGithubTokenInjector } from './integrations/github/token-refresh.js';
 import { getFactorySessionAddress } from './rules/binding-context.js';
 import type { MaterializationSandbox } from './sandbox/materialization.js';
-import { createSessionSetupHook, evictSessionSandbox, getSessionSandbox } from './sandbox/session-sandbox.js';
+import {
+  createSessionSetupHook,
+  evictSessionSandbox,
+  getSessionSandbox,
+  resolveSessionWorkdir,
+} from './sandbox/session-sandbox.js';
 
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
 
@@ -278,17 +283,18 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     if (!installation) throw new Error(`GitHub installation ${connection.installationId} was not found`);
     const repoFullName = repository.slug;
 
-    // Construct (or fetch) the session's memoized sandbox instance and derive
-    // the workdir from it. Construction is cheap and side-effect-free by the
-    // callback contract — the VM is provisioned on `start()`, which only the
-    // materialization pipeline calls. The workdir is deterministic, never
-    // persisted, never trusted from storage or client input — the
-    // stale-workdir incident class came from reusing `session.sandboxWorkdir`
-    // written under a different provider.
+    // Construct (or fetch) the session's memoized sandbox instance.
+    // Construction is cheap and side-effect-free by the callback contract —
+    // the VM is provisioned on `start()`, which only the materialization
+    // pipeline calls. The workdir is never persisted or trusted from storage
+    // or client input (the stale-workdir incident class came from reusing
+    // `session.sandboxWorkdir` written under a different provider): local
+    // sandboxes derive it at construction, remote sandboxes clone into the
+    // VM's own home so it resolves lazily at first start.
     // `runSetupOn` references `runSessionSetup`, defined below — it is only
     // invoked during start, long after this closure fully initializes.
-    const runSetupOn = (target: unknown) => runSessionSetup(target as SessionSandbox);
-    const guardedSetup = createSessionSetupHook(runSetupOn, repoFullName);
+    const runSetupOn = (target: unknown, workdir: string) => runSessionSetup(target as SessionSandbox, workdir);
+    const guardedSetup = createSessionSetupHook(runSetupOn, session.id, repoFullName);
     // Composed start hook: marker-guarded repo setup, then per-start
     // credential install. It runs inside the provider's start lifecycle on
     // EVERY start (create or reconnect) — providers own lazy start
@@ -321,9 +327,10 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       const ghCliToken =
         (await getGithubPat(() => github.integrationStorage, session.orgId, patKind)) ?? (await getRepositoryToken());
       target.setEnvironmentVariable?.('GH_TOKEN', ghCliToken);
-      // Observability only — nothing reads these columns for decisions.
+      // Observability only — nothing reads these columns for decisions. The
+      // workdir was resolved (and memoized on the entry) by the guarded setup.
       void storage.sessions
-        .setSandbox({ id: session.id, sandboxId: target.id, sandboxWorkdir: workdir })
+        .setSandbox({ id: session.id, sandboxId: target.id, sandboxWorkdir: sessionEntry.workdir ?? '' })
         .catch(() => {});
       const tokenRegistration: GithubTokenRegistration = {
         inject: freshToken => {
@@ -366,10 +373,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     // The system prompt derives its working directory from `state.projectPath`
     // and falls back to the server's own process.cwd() when unset — which
     // points the agent at the host checkout (and lets it run `git checkout`
-    // there instead of in its session workdir). Pin it to the session workdir.
-    // During createSession this seeds the session's initial state (the
-    // workspace resolves before the session is built); on later requests it
-    // self-heals live state.
+    // there instead of in its session workdir). Pin it to the session workdir
+    // once known. A remote workdir resolves at the sandbox's first start, so
+    // the pin self-heals on the next resolution after the VM has run.
     if (ctx && workdir && ctx.getState()?.projectPath !== workdir) {
       await ctx.setState({ projectPath: workdir, projectName: repoFullName });
     }
@@ -518,7 +524,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     // check out the session branch, run the configured setup command. Minted
     // tokens are fetched inside the run so a replacement VM healed mid-session
     // gets fresh credentials, not ones captured at workspace construction.
-    const runSessionSetup = async (target: SessionSandbox): Promise<void> => {
+    const runSessionSetup = async (target: SessionSandbox, workdir: string): Promise<void> => {
       const token = await getRepositoryToken();
       // The configured setup command may shell out to `gh`/https fetches, so
       // GH_TOKEN must exist before setup runs — and it must be the same
@@ -571,9 +577,12 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     const sessionSandbox = sessionEntry.sandbox as unknown as SessionSandbox;
 
     const filesystem = new SandboxFilesystem({
-      id: `sandbox-fs:${workspaceId}:${workdir}`,
+      id: `sandbox-fs:${workspaceId}`,
       sandbox: sessionSandbox,
-      workdir,
+      // Lazy: a remote workdir is only knowable once a VM runs. The first
+      // file operation resolves it (starting the VM — which materializes the
+      // repo via the onStart hook — when needed) and memoizes it.
+      workdir: () => resolveSessionWorkdir(session.id, sessionEntry.sandbox, repoFullName),
     });
     const projectSkillPaths = [path.join(configDir, 'skills'), '.claude/skills', '.agents/skills'];
     const guardedSkillFallback = new UnmaterializedAwareSkillSource(

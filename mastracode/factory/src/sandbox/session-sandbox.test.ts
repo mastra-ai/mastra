@@ -10,6 +10,7 @@ import {
   evictSessionSandbox,
   getSessionSandbox,
   peekSessionSandbox,
+  resolveSessionWorkdir,
 } from './session-sandbox.js';
 
 afterEach(() => {
@@ -24,7 +25,8 @@ describe('session sandbox memo', () => {
     const first = getSessionSandbox('sess-1', 'acme/api', factory);
     const second = getSessionSandbox('sess-1', 'acme/api', factory);
     expect(second).toBe(first);
-    expect(first.workdir).toBe('/workspace/acme/api');
+    // Remote workdirs are a runtime fact of the VM — unresolved until start.
+    expect(first.workdir).toBeUndefined();
     expect(factory).toHaveBeenCalledTimes(1);
   });
 
@@ -38,7 +40,43 @@ describe('session sandbox memo', () => {
     expect(peekSessionSandbox('sess-1')).toBeUndefined();
     const made = getSessionSandbox('sess-1', 'acme/api', () => construct('sb-1'));
     expect(peekSessionSandbox('sess-1')?.sandbox).toBe(made.sandbox);
-    expect(peekSessionSandbox('sess-1')?.workdir).toBe('/workspace/acme/api');
+    expect(peekSessionSandbox('sess-1')?.workdir).toBeUndefined();
+  });
+
+  it('resolves a remote workdir from the live VM home and memoizes it on the entry', async () => {
+    const executeCommand = vi.fn(async () => ({ exitCode: 0, stdout: '/home/user\n', stderr: '' }));
+    const sandbox = { id: 'sb-1', provider: 'e2b', executeCommand } as unknown as WorkspaceSandbox;
+    const entry = getSessionSandbox('sess-1', 'acme/api', () => sandbox);
+    expect(entry.workdir).toBeUndefined();
+
+    await expect(resolveSessionWorkdir('sess-1', sandbox, 'acme/api')).resolves.toBe('/home/user/api');
+    expect(peekSessionSandbox('sess-1')?.workdir).toBe('/home/user/api');
+
+    // Memoized: the second resolution never probes again.
+    await expect(resolveSessionWorkdir('sess-1', sandbox, 'acme/api')).resolves.toBe('/home/user/api');
+    expect(executeCommand).toHaveBeenCalledTimes(1);
+    expect(executeCommand).toHaveBeenCalledWith('pwd');
+  });
+
+  it('rejects a failed home probe without memoizing', async () => {
+    const executeCommand = vi
+      .fn()
+      .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'no shell' })
+      .mockResolvedValue({ exitCode: 0, stdout: '/home/user\n', stderr: '' });
+    const sandbox = { id: 'sb-1', provider: 'e2b', executeCommand } as unknown as WorkspaceSandbox;
+    getSessionSandbox('sess-1', 'acme/api', () => sandbox);
+
+    await expect(resolveSessionWorkdir('sess-1', sandbox, 'acme/api')).rejects.toThrow(/default cwd probe failed/);
+    expect(peekSessionSandbox('sess-1')?.workdir).toBeUndefined();
+    await expect(resolveSessionWorkdir('sess-1', sandbox, 'acme/api')).resolves.toBe('/home/user/api');
+  });
+
+  it('resolves a local workdir synchronously at construction', async () => {
+    const local = { id: 'sb-l', provider: 'local', workingDirectory: '/srv/sess-1' } as unknown as WorkspaceSandbox;
+    const entry = getSessionSandbox('sess-l', 'acme/api', () => local);
+    expect(entry.workdir).toBe(path.resolve('/srv/sess-1', 'api'));
+    // Resolution answers from the memo without any probe.
+    await expect(resolveSessionWorkdir('sess-l', local, 'acme/api')).resolves.toBe(entry.workdir);
   });
 
   it('evict drops the instance so the next access reconstructs', () => {
@@ -75,6 +113,7 @@ describe('session setup hook', () => {
     const boot = path.join(dir, 'fresh');
     const hook = createSessionSetupHook(
       async sb => void (await sb.executeCommand!('mkdir -p repo/.git && touch hook-ran.txt')),
+      'sess-hook',
       'acme/repo',
     );
     const sandbox = new LocalSandbox({ workingDirectory: boot, onStart: hook });
@@ -90,6 +129,7 @@ describe('session setup hook', () => {
       workingDirectory: boot,
       onStart: createSessionSetupHook(
         async sb => void (await sb.executeCommand!('mkdir -p repo/.git && touch first.txt')),
+        'sess-hook',
         'acme/repo',
       ),
     });
@@ -98,7 +138,11 @@ describe('session setup hook', () => {
     // Second instance reattaches (outcome: 'connected') → marker probe skips setup.
     const second = new LocalSandbox({
       workingDirectory: boot,
-      onStart: createSessionSetupHook(async sb => void (await sb.executeCommand!('touch second.txt')), 'acme/repo'),
+      onStart: createSessionSetupHook(
+        async sb => void (await sb.executeCommand!('touch second.txt')),
+        'sess-hook',
+        'acme/repo',
+      ),
     });
     await second._start();
     await expect(fs.stat(path.join(boot, 'second.txt'))).rejects.toThrow();
@@ -111,6 +155,7 @@ describe('session setup hook', () => {
       workingDirectory: boot,
       onStart: createSessionSetupHook(
         async sb => void (await sb.executeCommand!('mkdir -p repo/.git && touch first.txt')),
+        'sess-hook',
         'acme/repo',
       ),
     });
@@ -123,6 +168,7 @@ describe('session setup hook', () => {
       workingDirectory: boot,
       onStart: createSessionSetupHook(
         async sb => void (await sb.executeCommand!('mkdir -p repo/.git && touch rebuilt.txt')),
+        'sess-hook',
         'acme/repo',
       ),
     });
@@ -134,9 +180,13 @@ describe('session setup hook', () => {
     const boot = path.join(dir, 'fail');
     const failing = new LocalSandbox({
       workingDirectory: boot,
-      onStart: createSessionSetupHook(async () => {
-        throw new Error('Session setup failed (exit 7)');
-      }, 'acme/repo'),
+      onStart: createSessionSetupHook(
+        async () => {
+          throw new Error('Session setup failed (exit 7)');
+        },
+        'sess-hook',
+        'acme/repo',
+      ),
     });
 
     await expect(failing._start()).rejects.toThrow(/Session setup failed \(exit 7\)/);
@@ -147,6 +197,7 @@ describe('session setup hook', () => {
       workingDirectory: boot,
       onStart: createSessionSetupHook(
         async sb => void (await sb.executeCommand!('mkdir -p repo/.git && touch healed.txt')),
+        'sess-hook',
         'acme/repo',
       ),
     });

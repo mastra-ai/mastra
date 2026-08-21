@@ -1,5 +1,5 @@
 import type { SandboxStartHook, WorkspaceSandbox } from '@mastra/core/workspace';
-import { deriveSandboxWorkdir } from './workdir.js';
+import { deriveLocalWorkdir, remoteWorkdirFromHome } from './workdir.js';
 
 /**
  * Everything factory knows about a session's sandbox needs — the whole
@@ -51,7 +51,7 @@ export interface FactorySandboxContext {
 export type MastraFactorySandboxConfig = (ctx: FactorySandboxContext) => WorkspaceSandbox;
 
 /** The session's setup work, run against a started sandbox. Must be idempotent. */
-export type SessionSetupRun = (sandbox: WorkspaceSandbox) => Promise<void>;
+export type SessionSetupRun = (sandbox: WorkspaceSandbox, workdir: string) => Promise<void>;
 
 /**
  * Per-process session-id → sandbox instance memo.
@@ -65,17 +65,23 @@ export type SessionSetupRun = (sandbox: WorkspaceSandbox) => Promise<void>;
  */
 interface SessionSandboxEntry {
   sandbox: WorkspaceSandbox;
-  /** The session's deterministic workdir, recorded for passive readers (fs routes). */
-  workdir: string;
+  /**
+   * The session's repo checkout root, recorded for passive readers (fs
+   * routes, capture, authz). Local sandboxes derive it at construction;
+   * remote sandboxes clone into the VM's own home, so it is undefined until
+   * `resolveSessionWorkdir` probes the first started VM — passive readers
+   * treat an unresolved workdir as "nothing materialized".
+   */
+  workdir?: string;
 }
 
 const sessionSandboxes = new Map<string, SessionSandboxEntry>();
 
 /**
  * Get the session's memoized sandbox entry, constructing (and memoizing) it on
- * first access. The workdir is derived from the constructed instance —
- * construction is cheap and side-effect-free by contract; VMs are provisioned
- * on `start()` only.
+ * first access. Construction is cheap and side-effect-free by contract; VMs
+ * are provisioned on `start()` only. Local sandboxes get their workdir here;
+ * remote workdirs are a runtime fact of the VM, resolved on first start.
  */
 export function getSessionSandbox(
   sessionId: string,
@@ -85,9 +91,49 @@ export function getSessionSandbox(
   const existing = sessionSandboxes.get(sessionId);
   if (existing) return existing;
   const sandbox = construct();
-  const entry = { sandbox, workdir: deriveSandboxWorkdir(sandbox, repoFullName) };
+  const local = deriveLocalWorkdir(sandbox, repoFullName);
+  const entry: SessionSandboxEntry = { sandbox, ...(local ? { workdir: local } : {}) };
   sessionSandboxes.set(sessionId, entry);
   return entry;
+}
+
+/**
+ * Resolve (and memoize on the session entry) the session's repo checkout
+ * root. Local sandboxes answer synchronously from their configured
+ * `workingDirectory`; remote sandboxes clone into the VM's own default cwd,
+ * so the first resolution probes it with one `pwd` — the VM tells us where
+ * home is, we never invent a path. Calling this against a stopped sandbox
+ * lazily starts it (the probe is a command), so passive readers must peek
+ * `entry.workdir` instead.
+ */
+export async function resolveSessionWorkdir(
+  sessionId: string,
+  sandbox: WorkspaceSandbox,
+  repoFullName: string,
+): Promise<string> {
+  const entry = sessionSandboxes.get(sessionId);
+  if (entry?.workdir && entry.sandbox === sandbox) return entry.workdir;
+  const workdir =
+    deriveLocalWorkdir(sandbox, repoFullName) ?? remoteWorkdirFromHome(await probeHome(sandbox), repoFullName);
+  if (entry && entry.sandbox === sandbox) entry.workdir = workdir;
+  return workdir;
+}
+
+/** One `pwd` in the VM's default shell cwd — its home dir, by provider convention. */
+async function probeHome(sandbox: WorkspaceSandbox): Promise<string> {
+  if (!sandbox.executeCommand) {
+    throw new Error(`Sandbox '${sandbox.id}' cannot resolve its workdir: no executeCommand implementation`);
+  }
+  const probe = await sandbox.executeCommand('pwd');
+  const home = probe.stdout.trim().split('\n').pop()?.trim() ?? '';
+  if (probe.exitCode !== 0 || !home.startsWith('/')) {
+    throw new Error(
+      `Sandbox '${sandbox.id}' default cwd probe failed (exit ${probe.exitCode}): ${
+        probe.stderr.trim() || probe.stdout.trim() || 'empty output'
+      }`,
+    );
+  }
+  return home;
 }
 
 /**
@@ -124,18 +170,11 @@ function markerShellPath(sandbox: Pick<WorkspaceSandbox, 'provider'>): string {
   return sandbox.provider === 'local' ? `./${SESSION_SETUP_MARKER}` : `$HOME/${SESSION_SETUP_MARKER}`;
 }
 
-/** Shell-expandable form of a workdir: `~/a/b` → `$HOME/a/b` (tilde does not expand inside quotes). */
-function workdirShellPath(workdir: string): string {
-  return workdir.startsWith('~/') ? `$HOME/${workdir.slice(2)}` : workdir;
-}
-
 async function markerPresent(sandbox: WorkspaceSandbox, workdir: string): Promise<boolean> {
   // The marker is a skip cache — it sits beside the checkout, not inside it,
   // so it can outlive a removed checkout (e.g. a wiped local session dir or
   // a recovered VM). Trust it only when the checkout it describes exists.
-  const probe = await sandbox.executeCommand!(
-    `test -f "${markerShellPath(sandbox)}" && test -d "${workdirShellPath(workdir)}/.git"`,
-  );
+  const probe = await sandbox.executeCommand!(`test -f "${markerShellPath(sandbox)}" && test -d "${workdir}/.git"`);
   return probe.exitCode === 0;
 }
 
@@ -153,16 +192,16 @@ async function writeMarker(sandbox: WorkspaceSandbox): Promise<void> {
 async function runGuardedSetup(
   sandbox: WorkspaceSandbox,
   run: SessionSetupRun,
-  { skipMarkerProbe, repoFullName }: { skipMarkerProbe: boolean; repoFullName: string },
+  { skipMarkerProbe, sessionId, repoFullName }: { skipMarkerProbe: boolean; sessionId: string; repoFullName: string },
 ): Promise<void> {
   if (!sandbox.executeCommand) {
     throw new Error(`Sandbox '${sandbox.id}' cannot run the session setup: no executeCommand implementation`);
   }
-  // Derived from the live instance — the hook is built before the sandbox is
-  // constructed, so the workdir cannot be an input here.
-  const workdir = deriveSandboxWorkdir(sandbox, repoFullName);
+  // Resolved from the live instance (the hook runs inside `start()`, so the
+  // VM is up) and memoized on the session entry for passive readers.
+  const workdir = await resolveSessionWorkdir(sessionId, sandbox, repoFullName);
   if (!skipMarkerProbe && (await markerPresent(sandbox, workdir))) return;
-  await run(sandbox);
+  await run(sandbox, workdir);
   await writeMarker(sandbox);
 }
 
@@ -173,8 +212,12 @@ async function runGuardedSetup(
  * crash-interrupted attempt. Throwing fails `start()` loudly — core treats
  * onStart errors as fatal.
  */
-export function createSessionSetupHook(run: SessionSetupRun, repoFullName: string): SandboxStartHook {
+export function createSessionSetupHook(
+  run: SessionSetupRun,
+  sessionId: string,
+  repoFullName: string,
+): SandboxStartHook {
   return async ({ sandbox, outcome }) => {
-    await runGuardedSetup(sandbox, run, { skipMarkerProbe: outcome === 'created', repoFullName });
+    await runGuardedSetup(sandbox, run, { skipMarkerProbe: outcome === 'created', sessionId, repoFullName });
   };
 }
