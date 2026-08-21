@@ -524,6 +524,22 @@ Line 3 conclusion`;
       expect(await workspace.search('lazy')).toEqual([]);
     });
 
+    it('stop() stops the sandbox but keeps the workspace usable', async () => {
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const sandbox = new LocalSandbox({ workingDirectory: tempDir });
+      const workspace = new Workspace({ filesystem, sandbox, bm25: true });
+
+      await workspace.index('/doc1.txt', 'The quick brown fox jumps over the lazy dog');
+      await sandbox._start();
+      expect(sandbox.status).toBe('running');
+
+      await workspace.stop();
+
+      expect(sandbox.status).toBe('stopped');
+      // Not a teardown: the search index survives and the workspace stays usable.
+      expect((await workspace.search('quick')).length).toBeGreaterThan(0);
+    });
+
     it('should release the search index even when a resource fails to destroy', async () => {
       const filesystem = new LocalFilesystem({ basePath: tempDir });
       const workspace = new Workspace({

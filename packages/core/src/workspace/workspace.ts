@@ -458,12 +458,27 @@ export type { WorkspaceStatus } from './types';
  */
 export type AnyWorkspace = Workspace<WorkspaceFilesystem | undefined, WorkspaceSandbox | undefined, any>;
 
+/**
+ * What `Mastra.shutdown()` does with a registered workspace:
+ * - `'stop'` (default) — stop live resources ({@link Workspace.stop}): remote
+ *   sandboxes suspend/pause and stay resumable, local sandboxes kill their
+ *   background processes. Nothing is deleted.
+ * - `'destroy'` — full teardown ({@link Workspace.destroy}), including
+ *   destroying the sandbox.
+ * - `'none'` — leave the workspace entirely alone (e.g. sandboxes whose
+ *   lifecycle is owned elsewhere, or where the provider's idle timeout
+ *   already handles suspension).
+ */
+export type WorkspaceShutdownBehavior = 'destroy' | 'stop' | 'none';
+
 /** A workspace entry in the Mastra registry, enriched with source metadata. */
 export interface RegisteredWorkspace {
   workspace: Workspace;
   source: 'mastra' | 'agent';
   agentId?: string;
   agentName?: string;
+  /** Override for what `Mastra.shutdown()` does with this workspace. Defaults to `'stop'`. */
+  shutdownBehavior?: WorkspaceShutdownBehavior;
 }
 
 // =============================================================================
@@ -1298,6 +1313,50 @@ export class Workspace<
   private assertSearchWritable(): void {
     if (this._teardownStarted) {
       throw new WorkspaceNotReadyError(this.id, this._status);
+    }
+  }
+
+  /**
+   * Stop the workspace's live resources without destroying them.
+   *
+   * Shuts down LSP clients, closes the browser, and stops the sandbox
+   * (`stop`, not `destroy` — remote providers pause/suspend so the sandbox
+   * can be resumed later; {@link LocalSandbox} kills its background
+   * processes). The workspace itself stays usable: filesystem, search index,
+   * and skills are untouched, and a later sandbox operation may start the
+   * sandbox again.
+   *
+   * This is what `Mastra.shutdown()` calls for registered workspaces by
+   * default, so a process restart suspends remote sandboxes instead of
+   * deleting them.
+   */
+  async stop(): Promise<void> {
+    if (this._teardownStarted || this._status === 'destroyed') {
+      return;
+    }
+
+    // Shutdown LSP before the sandbox — LSP clients need running processes
+    // to send shutdown/exit. Cleared so a later access lazily recreates it.
+    if (this._lsp) {
+      try {
+        await this._lsp.shutdownAll();
+      } catch {
+        // LSP shutdown errors are non-blocking
+      }
+      this._lsp = undefined;
+    }
+
+    // Close browser before the sandbox
+    if (this._browser) {
+      try {
+        await this._browser.close();
+      } catch {
+        // Browser close errors are non-blocking
+      }
+    }
+
+    if (this._sandbox) {
+      await callLifecycle(this._sandbox, 'stop');
     }
   }
 
