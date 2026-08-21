@@ -12,7 +12,7 @@ export function buildJsonPath(key: string): string {
 
 function normalizeJsonFilterValue(value: unknown): string | null {
   if (value === undefined) return null;
-  if (typeof value === 'string') return value;
+  // Serialize to JSON text for comparison against raw json_extract output.
   const json = JSON.stringify(value);
   return json ?? null;
 }
@@ -95,7 +95,8 @@ export function buildWhereClause(
       for (const [jsonKey, jsonValue] of Object.entries(jsonObj)) {
         const normalized = normalizeJsonFilterValue(jsonValue);
         if (normalized === null) continue;
-        conditions.push(`json_extract_string(${column}, ?) = ?`);
+        // Compare raw JSON text so value types are preserved (5 !== '5', null matches JSON null).
+        conditions.push(`CAST(json_extract(${column}, ?) AS VARCHAR) = ?`);
         params.push(buildJsonPath(jsonKey), normalized);
       }
       continue;
