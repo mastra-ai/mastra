@@ -306,6 +306,19 @@ describe('computer action tools', () => {
     expect(computer.press).toHaveBeenCalledWith(['ctrl', 's']);
   });
 
+  it('press_key rejects empty key values before calling the capability', async () => {
+    const computer = createMockComputer();
+    const { workspace, emitted } = await setup(computer, {
+      [WORKSPACE_TOOLS.COMPUTER.PRESS_KEY]: { screenshotAfterAction: false },
+    });
+    const tool = emitted[WORKSPACE_TOOLS.COMPUTER.PRESS_KEY];
+
+    for (const key of ['', [''], ['ctrl', '']]) {
+      await expect(tool.execute({ key }, { workspace })).resolves.toMatchObject({ error: true });
+    }
+    expect(computer.press).not.toHaveBeenCalled();
+  });
+
   it('scroll defaults the amount to 3', async () => {
     const computer = createMockComputer();
     const { workspace, emitted } = await setup(computer, {
