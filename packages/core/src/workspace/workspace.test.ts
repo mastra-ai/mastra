@@ -604,6 +604,42 @@ Line 3 conclusion`;
       expect(workspace.status).toBe('destroyed');
     });
 
+    it('concurrent destroy() calls during an in-flight stop() destroy once', async () => {
+      let stopStarted!: () => void;
+      const stopStartedGate = new Promise<void>(resolve => {
+        stopStarted = resolve;
+      });
+      let releaseStop!: () => void;
+      const stopGate = new Promise<void>(resolve => {
+        releaseStop = resolve;
+      });
+      let destroys = 0;
+      const sandbox = {
+        provider: 'fake',
+        stop: async () => {
+          stopStarted();
+          await stopGate;
+        },
+        destroy: async () => {
+          destroys += 1;
+        },
+      } as any;
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+        sandbox,
+      });
+
+      const stopping = workspace.stop();
+      await stopStartedGate;
+      const firstDestroy = workspace.destroy();
+      const secondDestroy = workspace.destroy();
+      releaseStop();
+      await Promise.all([stopping, firstDestroy, secondDestroy]);
+
+      expect(destroys).toBe(1);
+      expect(workspace.status).toBe('destroyed');
+    });
+
     it('should release the search index even when a resource fails to destroy', async () => {
       const filesystem = new LocalFilesystem({ basePath: tempDir });
       const workspace = new Workspace({

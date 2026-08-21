@@ -1373,14 +1373,18 @@ export class Workspace<
 
     this._teardownStarted = true;
     this._status = 'destroying';
-    // Let an in-flight stop() settle before destructive cleanup so the two
-    // teardowns never interleave on the same LSP manager, browser, and
-    // sandbox. _teardownStarted is already set, so the stop cannot recreate
-    // the LSP manager under us.
-    if (this._stopPromise) {
-      await this._stopPromise.catch(() => {});
-    }
-    this._destroyPromise = this._performDestroy();
+    // Assigned before any await so a concurrent destroy() during the
+    // stop-drain below joins this promise instead of starting a second
+    // destroy path.
+    this._destroyPromise = (async () => {
+      // Let an in-flight stop() settle before destructive cleanup so the two
+      // teardowns never interleave on the same LSP manager, browser, and
+      // sandbox.
+      if (this._stopPromise) {
+        await this._stopPromise.catch(() => {});
+      }
+      await this._performDestroy();
+    })();
 
     try {
       await this._destroyPromise;
