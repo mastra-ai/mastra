@@ -157,10 +157,19 @@ function argsBlockText(tool: ToolCall): string | undefined {
   return text && text !== '{}' ? text : undefined;
 }
 
+/** A component, not a string: a collapsed card never pays for serializing a large result. */
+function ResultBlock({ result, className }: { result: unknown; className: string }) {
+  const text = stripSerializedAnsi(stringify(result));
+  return (
+    <MonoBlock copyText={text} className={className}>
+      {truncate(text, 800)}
+    </MonoBlock>
+  );
+}
+
 function toolBody(tool: ToolCall, command?: string): ReactNode {
   const edit = editArgs(tool.toolName, tool.args);
-  const resultText =
-    tool.status !== 'running' && tool.result !== undefined ? stripSerializedAnsi(stringify(tool.result)) : undefined;
+  const hasResult = tool.status !== 'running' && tool.result !== undefined;
 
   if (edit) {
     return (
@@ -175,11 +184,7 @@ function toolBody(tool: ToolCall, command?: string): ReactNode {
             overflow="scroll"
           />
         )}
-        {tool.status === 'error' && resultText !== undefined && (
-          <MonoBlock copyText={resultText} className="text-error/90">
-            {truncate(resultText, 800)}
-          </MonoBlock>
-        )}
+        {tool.status === 'error' && hasResult && <ResultBlock result={tool.result} className="text-error/90" />}
       </>
     );
   }
@@ -196,11 +201,7 @@ function toolBody(tool: ToolCall, command?: string): ReactNode {
             {tool.output}
           </MonoBlock>
         ) : (
-          resultText !== undefined && (
-            <MonoBlock copyText={resultText} className="text-icon3">
-              {truncate(resultText, 800)}
-            </MonoBlock>
-          )
+          hasResult && <ResultBlock result={tool.result} className="text-icon3" />
         )}
       </>
     );
@@ -209,15 +210,11 @@ function toolBody(tool: ToolCall, command?: string): ReactNode {
   if (isWebSearchToolName(tool.toolName) && tool.status !== 'error') {
     const links = webSearchLinks(tool.result);
     if (links.length > 0) return <WebPageLinks links={links} />;
-    return typeof tool.result === 'string' ? (
-      <MonoBlock copyText={tool.result} className="text-icon3">
-        {truncate(tool.result, 800)}
-      </MonoBlock>
-    ) : null;
+    return typeof tool.result === 'string' ? <ResultBlock result={tool.result} className="text-icon3" /> : null;
   }
 
   const argsPretty = argsBlockText(tool);
-  if (!argsPretty && !tool.output && resultText === undefined) return null;
+  if (!argsPretty && !tool.output && !hasResult) return null;
   return (
     <>
       {argsPretty && (
@@ -230,11 +227,7 @@ function toolBody(tool: ToolCall, command?: string): ReactNode {
           {tool.output}
         </MonoBlock>
       )}
-      {resultText !== undefined && (
-        <MonoBlock copyText={resultText} className="text-icon3">
-          {truncate(resultText, 800)}
-        </MonoBlock>
-      )}
+      {hasResult && <ResultBlock result={tool.result} className="text-icon3" />}
     </>
   );
 }
