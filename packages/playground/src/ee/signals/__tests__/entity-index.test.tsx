@@ -60,11 +60,9 @@ describe('Trace Intelligence index route', () => {
 
       renderIndex();
 
-      expect(await screen.findByText('support-agent')).not.toBeNull();
+      const entityName = await screen.findByText('support-agent');
       expect(screen.queryByRole('region', { name: 'Trace signal theme flow' })).toBeNull();
-      expect(screen.getByRole('link', { name: 'Open entity support-agent' }).getAttribute('href')).toBe(
-        '/intelligence/entities/agent/support-agent',
-      );
+      expect(entityName.closest('a')?.getAttribute('href')).toBe('/intelligence/entities/agent/support-agent');
     });
 
     it('preserves date range state in entity detail links', async () => {
@@ -76,7 +74,8 @@ describe('Trace Intelligence index route', () => {
         '/intelligence?datePreset=custom&dateFrom=2026-07-01T00%3A00%3A00.000Z&dateTo=2026-07-15T00%3A00%3A00.000Z',
       );
 
-      const href = (await screen.findByRole('link', { name: 'Open entity support-agent' })).getAttribute('href');
+      const entityName = await screen.findByText('support-agent');
+      const href = entityName.closest('a')?.getAttribute('href');
       expect(href).toContain('/intelligence/entities/agent/support-agent?');
       expect(href).toContain('datePreset=custom');
       expect(href).toContain('dateFrom=2026-07-01T00%3A00%3A00.000Z');
