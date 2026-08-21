@@ -17,6 +17,7 @@ import { ChatModelsProvider } from './ChatModelsProvider';
 import { ChatModesProvider } from './ChatModesProvider';
 import { ChatSessionContext } from './ChatSessionContext';
 import { ChatThreadMessagesContext } from './ChatThreadMessagesContext';
+import { ChatTranscriptContext } from './ChatTranscriptContext';
 import type { ChatThreadMessagesApi } from './ChatThreadMessagesContext';
 import { ChatTranscriptProvider } from './ChatTranscriptProvider';
 import { SessionPrepareSteps } from '../components/SessionPrepareSteps';
@@ -123,6 +124,7 @@ export function ChatSessionConfigProvider({
     resourceReady,
     sandboxPreparing,
     sandboxProgress,
+    sandboxWarming,
     resourceEnabled,
     sessionError,
     warmupError,
@@ -214,7 +216,10 @@ export function ChatSessionBoundary({
 export function ChatMessageBoundary({ children }: { children: ReactNode }) {
   const value = useContext(ChatThreadMessagesContext);
   if (!value) throw new Error('ChatMessageBoundary must be used within a ChatSessionBoundary');
-  const { sessionError, warmupError, sandboxPreparing } = useChatSessionContext();
+  const { sessionError, warmupError, sandboxPreparing, sandboxWarming } = useChatSessionContext();
+  // Null-tolerant: the deferred branch of `ChatSessionBoundary` renders this
+  // boundary outside the transcript provider while messages are still pending.
+  const transcriptApi = useContext(ChatTranscriptContext);
 
   // A denied or missing session is fatal — replace the chat instead of
   // spinning on the preparing loader. A failed workspace warm-up is
@@ -228,7 +233,18 @@ export function ChatMessageBoundary({ children }: { children: ReactNode }) {
   // them under one loader keeps the composer's spinning ring continuously
   // meaningful through the whole preparing window.
   const messagesInitializing = Boolean(value.threadId) && value.isPending;
-  if (sandboxPreparing || messagesInitializing) {
+  // Messages usually resolve before the `/ensure` warm-up, so a fresh session
+  // would drop the stepper on step 1/3 — which reads like a crash. An empty,
+  // idle transcript has nothing else to show, so it keeps the stepper until
+  // the warm-up finishes. Real history or a user-initiated run takes over
+  // immediately (the composer lives outside this boundary, so the warm-up
+  // still never blocks input).
+  const emptyIdleWarming =
+    sandboxWarming === true &&
+    transcriptApi !== null &&
+    transcriptApi.transcript.entries.length === 0 &&
+    !transcriptApi.busy;
+  if (sandboxPreparing || messagesInitializing || emptyIdleWarming) {
     return (
       <>
         {warmupBanner}

@@ -3015,6 +3015,101 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         expect(result.scores[0]!.traceId).toBe('trace-legacy-score');
         expect(result.scores[0]!.scoreSource).toBe('manual');
       });
+
+      describe('metadata filtering', () => {
+        const seedMetadataScores = async () => {
+          const seeds: Array<{ scoreId: string; metadata: Record<string, unknown> | null }> = [
+            { scoreId: 'score-meta-string', metadata: { env: 'prod', region: 'us' } },
+            { scoreId: 'score-meta-typed', metadata: { count: 5, active: true, note: null } },
+            { scoreId: 'score-meta-nested', metadata: { config: { retries: 2, mode: 'fast' } } },
+            { scoreId: 'score-meta-none', metadata: null },
+          ];
+          for (const seed of seeds) {
+            await storage.createScore({
+              score: {
+                scoreId: seed.scoreId,
+                timestamp: new Date('2026-01-01T00:00:00Z'),
+                traceId: 'trace-meta',
+                spanId: null,
+                scorerId: 'meta-scorer',
+                score: 1,
+                reason: null,
+                experimentId: null,
+                metadata: seed.metadata,
+              },
+            });
+          }
+        };
+
+        it('filters scores by string metadata values with exact equality', async () => {
+          await seedMetadataScores();
+
+          const filtered = await storage.listScores({ filters: { metadata: { env: 'prod' } } });
+          expect(filtered.scores.map(s => s.scoreId)).toEqual(['score-meta-string']);
+
+          const multi = await storage.listScores({ filters: { metadata: { env: 'prod', region: 'us' } } });
+          expect(multi.scores.map(s => s.scoreId)).toEqual(['score-meta-string']);
+
+          const miss = await storage.listScores({ filters: { metadata: { env: 'staging' } } });
+          expect(miss.scores).toHaveLength(0);
+        });
+
+        it('filters scores by typed scalar metadata values (number, boolean, null)', async () => {
+          await seedMetadataScores();
+
+          const byNumber = await storage.listScores({ filters: { metadata: { count: 5 } } });
+          expect(byNumber.scores.map(s => s.scoreId)).toEqual(['score-meta-typed']);
+
+          const byBoolean = await storage.listScores({ filters: { metadata: { active: true } } });
+          expect(byBoolean.scores.map(s => s.scoreId)).toEqual(['score-meta-typed']);
+
+          const byNull = await storage.listScores({ filters: { metadata: { note: null } } });
+          expect(byNull.scores.map(s => s.scoreId)).toEqual(['score-meta-typed']);
+
+          const wrongNumber = await storage.listScores({ filters: { metadata: { count: 6 } } });
+          expect(wrongNumber.scores).toHaveLength(0);
+
+          const wrongType = await storage.listScores({ filters: { metadata: { count: '5' } } });
+          expect(wrongType.scores).toHaveLength(0);
+        });
+
+        it('matches nested metadata values with exact top-level equality (no partial matching)', async () => {
+          await seedMetadataScores();
+
+          const exact = await storage.listScores({
+            filters: { metadata: { config: { retries: 2, mode: 'fast' } } },
+          });
+          expect(exact.scores.map(s => s.scoreId)).toEqual(['score-meta-nested']);
+
+          const partial = await storage.listScores({
+            filters: { metadata: { config: { retries: 2 } } },
+          });
+          expect(partial.scores).toHaveLength(0);
+        });
+
+        it('matches nested metadata values structurally regardless of key order', async () => {
+          await seedMetadataScores();
+
+          const reordered = await storage.listScores({
+            filters: { metadata: { config: { mode: 'fast', retries: 2 } } },
+          });
+          expect(reordered.scores.map(s => s.scoreId)).toEqual(['score-meta-nested']);
+        });
+
+        it('treats an empty metadata filter as a no-op', async () => {
+          await seedMetadataScores();
+
+          const result = await storage.listScores({ filters: { metadata: {} } });
+          expect(result.scores).toHaveLength(4);
+        });
+
+        it('excludes scores without metadata when a metadata filter is set', async () => {
+          await seedMetadataScores();
+
+          const filtered = await storage.listScores({ filters: { metadata: { env: 'prod' } } });
+          expect(filtered.scores.map(s => s.scoreId)).not.toContain('score-meta-none');
+        });
+      });
     });
 
     describe('feedback (create + list)', () => {

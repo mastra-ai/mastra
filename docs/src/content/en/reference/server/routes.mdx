@@ -373,6 +373,117 @@ On authenticated servers, the read routes require the `stored-workflows:read` pe
 }
 ```
 
+## Datasets and experiments
+
+| Method | Path | Description |
+| - | - | - |
+| `GET` | `/api/datasets` | List datasets |
+| `POST` | `/api/datasets` | Create a dataset |
+| `GET` | `/api/datasets/:datasetId` | Get dataset by ID |
+| `PATCH` | `/api/datasets/:datasetId` | Update a dataset |
+| `DELETE` | `/api/datasets/:datasetId` | Delete a dataset |
+| `GET` | `/api/datasets/:datasetId/items` | List dataset items |
+| `POST` | `/api/datasets/:datasetId/items` | Add a dataset item |
+| `GET` | `/api/experiments` | List experiments across datasets |
+| `GET` | `/api/datasets/:datasetId/experiments` | List experiments for a dataset |
+| `POST` | `/api/datasets/:datasetId/experiments` | Trigger an experiment, or create one without starting it (`start: false`) |
+| `POST` | `/api/datasets/:datasetId/experiments/:experimentId/items/:itemId/run` | Execute one experiment item server-side |
+| `POST` | `/api/datasets/:datasetId/experiments/:experimentId/results` | Submit an externally computed item result |
+| `POST` | `/api/datasets/:datasetId/experiments/:experimentId/finalize` | Finalize a caller-driven experiment |
+| `GET` | `/api/datasets/:datasetId/experiments/:experimentId` | Get experiment by ID |
+| `GET` | `/api/datasets/:datasetId/experiments/:experimentId/results` | List experiment results |
+| `POST` | `/api/datasets/:datasetId/compare` | Compare two experiments |
+
+### Caller-driven experiment routes
+
+Use these routes when your own orchestrator (for example a Temporal workflow) owns the experiment loop and Mastra acts as the system of record. Item runs, result submission, and finalization are safe to retry. Creation is safe to retry only when the request includes a caller-supplied `id`; without one, each retry creates a new experiment. Item runs and result submissions upsert on `(experimentId, itemId, attempt)`. Finalize returns the stored record if the experiment is already completed.
+
+#### Create experiment request body
+
+Post to `/api/datasets/:datasetId/experiments` with `start: false` to create the experiment without running it. Include `targetType` and `targetId` when Mastra should execute items via the run-item route. Omit both for pure ingestion via the results route.
+
+```typescript prettier:false
+{
+  start?: boolean;              // false creates the experiment without running it. Defaults to true.
+  id?: string;                  // Caller-supplied experiment id (e.g. a workflow run id) for idempotent creates
+  targetType?: 'agent' | 'workflow' | 'scorer'; // Provide with targetId, or omit both
+  targetId?: string;
+  scorerIds?: string[];         // Run-level scorer ids, resolved server-side. Requires a target when start is false.
+  name?: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+  version?: number;             // Pin to a specific dataset version (defaults to latest)
+  provenance?: {
+    source?: string;
+    sourceId?: string;
+    sourceVersion?: string;
+    metadata?: Record<string, unknown>;
+  };
+  grouping?: {                  // Stable grouping dimensions for comparisons and repeated trials
+    experimentSetId?: string;
+    comparisonId?: string;
+    variantId?: string;
+    trialIndex?: number;
+  };
+}
+```
+
+Returns `{ experimentId, status, totalItems, datasetVersion }` when `start` is `false`.
+
+#### Run experiment item request body
+
+`POST /api/datasets/:datasetId/experiments/:experimentId/items/:itemId/run` executes the experiment's target against one item and runs the resolved scorers, then upserts the result. Requires an experiment created with a target.
+
+```typescript prettier:false
+{
+  attempt?: number;             // Zero-based repetition index. Defaults to 0.
+  requestContext?: Record<string, unknown>; // Merged with the item's own request context (item wins)
+}
+```
+
+Returns `{ result, scores }` with the persisted result row and the scores produced for the item.
+
+#### Submit experiment result request body
+
+```typescript prettier:false
+{
+  itemId: string;               // Dataset item this result belongs to
+  attempt?: number;             // Zero-based repetition index. Defaults to 0.
+  input?: unknown;              // Defaults to the dataset item input
+  output?: unknown;             // Output produced by the external runner
+  groundTruth?: unknown;        // Defaults to the dataset item groundTruth
+  error?: {                     // Failure info when the item run failed
+    message: string;
+    stack?: string;
+    code?: string;
+  } | null;
+  startedAt?: string;           // ISO date
+  completedAt?: string;         // ISO date
+  traceId?: string;
+  scores?: Array<{              // Externally computed scores, persisted keyed by runId = experimentId
+    scorerId: string;
+    scorerName?: string;
+    score: number;
+    reason?: string;
+    metadata?: Record<string, unknown>;
+  }>;
+}
+```
+
+Returns the persisted experiment result row.
+
+#### Finalize experiment
+
+`POST /api/datasets/:datasetId/experiments/:experimentId/finalize` takes no body. The server computes per-item counts from the persisted result rows and marks the experiment `completed`: `succeededCount` (at least one attempt without an error), `failedCount` (every attempt errored), and `skippedCount` (never submitted). Returns the updated experiment record.
+
+#### Caller-driven experiment error responses
+
+| Status | Condition |
+| - | - |
+| `400` | Result submitted to an experiment that has a target (`EXPERIMENT_HAS_TARGET`), item run requested on a target-less experiment (`EXPERIMENT_HAS_NO_TARGET`), `targetType` and `targetId` weren't provided together (`EXPERIMENT_INVALID_TARGET`), or the dataset has no items at the pinned version (`EXPERIMENT_NO_ITEMS`) |
+| `404` | Dataset, experiment, dataset item, or target not found (`EXPERIMENT_TARGET_NOT_FOUND`) |
+| `409` | Caller-supplied experiment `id` already exists for a different dataset or target (`EXPERIMENT_ID_CONFLICT`), or a call arrived after finalization (`EXPERIMENT_ALREADY_FINALIZED`) |
+
 ## MCP
 
 | Method | Path | Description |

@@ -1,5 +1,85 @@
 # mastra
 
+## 1.26.1-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`f95f468`](https://github.com/mastra-ai/mastra/commit/f95f468cf1e7c2b924a13826494f98b8f2ccd581)]:
+  - @mastra/core@1.61.1-alpha.1
+  - @mastra/deployer@1.61.1-alpha.1
+
+## 1.26.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`1e47b75`](https://github.com/mastra-ai/mastra/commit/1e47b7520cab4cfaa8daed52f17e2e6d14ff7539)]:
+  - @mastra/core@1.61.1-alpha.0
+  - @mastra/deployer@1.61.1-alpha.0
+
+## 1.26.0
+
+### Minor Changes
+
+- Added managed Redis autoprovisioning to `mastra deploy`. When your project bundle references `REDIS_URL` (for example a `RedisStreamsPubSub` configured with `process.env.REDIS_URL`) and the env var is missing on the target environment, the deploy preflight now offers to attach a managed Redis instance on the Mastra platform and injects `REDIS_URL` into the deploy in one step. Preflight also warns when a database env var like `REDIS_URL` points at localhost — a value that works in local dev but is unreachable from the deployed server — and offers the same managed provisioning. You can also opt in explicitly with `mastra env db create --kind redis`. Non-interactive runs (CI, `--yes`) surface the exact `mastra env db create` command instead of silently creating infrastructure. ([#21629](https://github.com/mastra-ai/mastra/pull/21629))
+
+### Patch Changes
+
+- Improved model selection in Factory chats. The status line now shows one combined picker with the effective model for the current mode. ([#21871](https://github.com/mastra-ai/mastra/pull/21871))
+
+  The picker offers:
+
+  - Model packs as presets, with your personal default marked.
+  - Models grouped by provider, to override the model for the current mode.
+  - A reset action that returns the chat to your default pack.
+  - A link to pack management in settings.
+  - Search across packs and models.
+
+  The picker works in draft chats and in active user chats. A pack chosen in a draft applies before the first prompt runs. Live user chats can now switch models directly from the status line.
+
+- Ignore `.env.schema` (varlock) when discovering deploy env files. `mastra lint` no longer lints against `.env.schema`, and `mastra deploy` no longer offers it in the env file selector. ([#21959](https://github.com/mastra-ai/mastra/pull/21959))
+
+- Fixed Factory plan approvals to load submitted plans, preserve resolved history, and accept revision feedback in the composer. ([#21891](https://github.com/mastra-ai/mastra/pull/21891))
+
+- `mastra start` now forwards SIGINT/SIGTERM to the server and waits for it to exit instead of exiting immediately. Exiting right away left the server running as an orphan during its graceful shutdown, so in-flight requests were never drained and the server's exit code was lost. ([#21996](https://github.com/mastra-ai/mastra/pull/21996))
+
+- Updated dependencies [[`88d14ca`](https://github.com/mastra-ai/mastra/commit/88d14cac008582a618fecc3d5c7fd3bdf4f6ddc3), [`480e491`](https://github.com/mastra-ai/mastra/commit/480e491588bd6a7a1c9ee4407590ad625dd33952), [`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`acc3471`](https://github.com/mastra-ai/mastra/commit/acc3471de5f3fde8027ee4e355af292b2bc1bc30), [`b6a771e`](https://github.com/mastra-ai/mastra/commit/b6a771ef23d203ddb348efca8065eff65def8191), [`b6a771e`](https://github.com/mastra-ai/mastra/commit/b6a771ef23d203ddb348efca8065eff65def8191), [`84a5b69`](https://github.com/mastra-ai/mastra/commit/84a5b699f84d6bae0a34efe5a970d891090b9f41), [`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`3bb88dd`](https://github.com/mastra-ai/mastra/commit/3bb88ddf07fb98f3cd16d3bff94e51cd3b45d011), [`d23e75d`](https://github.com/mastra-ai/mastra/commit/d23e75d57cc7cf5b9bfdbee896bf5a6a2484fed7), [`c8faa4e`](https://github.com/mastra-ai/mastra/commit/c8faa4e1cfebaec56b65e754e90b9fe46d153359), [`d378d75`](https://github.com/mastra-ai/mastra/commit/d378d7511f71309ed61a8f6b93cd0361dc6cb70f), [`84a5b69`](https://github.com/mastra-ai/mastra/commit/84a5b699f84d6bae0a34efe5a970d891090b9f41), [`26d4016`](https://github.com/mastra-ai/mastra/commit/26d40160ff7f7d8bf95fee2039a52cbc83863533), [`7c60df5`](https://github.com/mastra-ai/mastra/commit/7c60df5c7872343fbac5c3e5b1175c8076a5abfd), [`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`84a5b69`](https://github.com/mastra-ai/mastra/commit/84a5b699f84d6bae0a34efe5a970d891090b9f41), [`f2031a4`](https://github.com/mastra-ai/mastra/commit/f2031a47445e8f67a89ba1309036816f97ab7a65), [`7c60df5`](https://github.com/mastra-ai/mastra/commit/7c60df5c7872343fbac5c3e5b1175c8076a5abfd), [`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`cad4208`](https://github.com/mastra-ai/mastra/commit/cad42082e6aa1776168a94914f523334be45d929), [`8e529d4`](https://github.com/mastra-ai/mastra/commit/8e529d4ac754efef04b225841349e0da9edf89a6), [`57c5103`](https://github.com/mastra-ai/mastra/commit/57c51035a2a36e3df3c4f32f46bb789a66ed5946), [`038b7b4`](https://github.com/mastra-ai/mastra/commit/038b7b405cb4ac25ab3f3031334111b1f87ac112), [`034d353`](https://github.com/mastra-ai/mastra/commit/034d3534130ae6f17d1e81a1dcf956bac0a820ee), [`4132d61`](https://github.com/mastra-ai/mastra/commit/4132d61f8367077120ee9e6420d3224dffd93c93), [`d378d75`](https://github.com/mastra-ai/mastra/commit/d378d7511f71309ed61a8f6b93cd0361dc6cb70f)]:
+  - @mastra/core@1.61.0
+  - @mastra/deployer@1.61.0
+
+## 1.26.0-alpha.5
+
+### Patch Changes
+
+- `mastra start` now forwards SIGINT/SIGTERM to the server and waits for it to exit instead of exiting immediately. Exiting right away left the server running as an orphan during its graceful shutdown, so in-flight requests were never drained and the server's exit code was lost. ([#21996](https://github.com/mastra-ai/mastra/pull/21996))
+
+- Updated dependencies [[`7c60df5`](https://github.com/mastra-ai/mastra/commit/7c60df5c7872343fbac5c3e5b1175c8076a5abfd), [`7c60df5`](https://github.com/mastra-ai/mastra/commit/7c60df5c7872343fbac5c3e5b1175c8076a5abfd)]:
+  - @mastra/core@1.61.0-alpha.5
+  - @mastra/deployer@1.61.0-alpha.5
+
+## 1.26.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`034d353`](https://github.com/mastra-ai/mastra/commit/034d3534130ae6f17d1e81a1dcf956bac0a820ee)]:
+  - @mastra/deployer@1.61.0-alpha.4
+  - @mastra/core@1.61.0-alpha.4
+
+## 1.26.0-alpha.3
+
+### Minor Changes
+
+- Added managed Redis autoprovisioning to `mastra deploy`. When your project bundle references `REDIS_URL` (for example a `RedisStreamsPubSub` configured with `process.env.REDIS_URL`) and the env var is missing on the target environment, the deploy preflight now offers to attach a managed Redis instance on the Mastra platform and injects `REDIS_URL` into the deploy in one step. Preflight also warns when a database env var like `REDIS_URL` points at localhost — a value that works in local dev but is unreachable from the deployed server — and offers the same managed provisioning. You can also opt in explicitly with `mastra env db create --kind redis`. Non-interactive runs (CI, `--yes`) surface the exact `mastra env db create` command instead of silently creating infrastructure. ([#21629](https://github.com/mastra-ai/mastra/pull/21629))
+
+### Patch Changes
+
+- Ignore `.env.schema` (varlock) when discovering deploy env files. `mastra lint` no longer lints against `.env.schema`, and `mastra deploy` no longer offers it in the env file selector. ([#21959](https://github.com/mastra-ai/mastra/pull/21959))
+
+- Fixed Factory plan approvals to load submitted plans, preserve resolved history, and accept revision feedback in the composer. ([#21891](https://github.com/mastra-ai/mastra/pull/21891))
+
+- Updated dependencies [[`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`acc3471`](https://github.com/mastra-ai/mastra/commit/acc3471de5f3fde8027ee4e355af292b2bc1bc30), [`b6a771e`](https://github.com/mastra-ai/mastra/commit/b6a771ef23d203ddb348efca8065eff65def8191), [`b6a771e`](https://github.com/mastra-ai/mastra/commit/b6a771ef23d203ddb348efca8065eff65def8191), [`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`26d4016`](https://github.com/mastra-ai/mastra/commit/26d40160ff7f7d8bf95fee2039a52cbc83863533), [`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`57c5103`](https://github.com/mastra-ai/mastra/commit/57c51035a2a36e3df3c4f32f46bb789a66ed5946)]:
+  - @mastra/core@1.61.0-alpha.3
+  - @mastra/deployer@1.61.0-alpha.3
+
 ## 1.25.2-alpha.2
 
 ### Patch Changes

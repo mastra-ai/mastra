@@ -8,7 +8,9 @@ packages:
 
 # Arize
 
-[Arize](https://arize.com/) provides observability platforms for AI applications through [Phoenix](https://phoenix.arize.com/) (open-source) and [Arize AX](https://arize.com/generative-ai/) (enterprise). The Arize exporter sends traces using OpenTelemetry and [OpenInference](https://github.com/Arize-ai/openinference/tree/main/spec) semantic conventions, compatible with any OpenTelemetry platform that supports OpenInference.
+[Arize AI](https://arize.com/?utm_source=mastra-docs\&utm_medium=partner\&utm_campaign=partner-docs\&utm_content=observability-arize) provides observability and evaluation for AI applications through [Arize Phoenix](https://arize.com/phoenix/) and [Arize AX](https://arize.com/products/ax/). Use Phoenix for a local or self-hosted open-source workflow, and use Arize AX for managed cloud or enterprise self-hosted production observability. The Arize exporter sends traces using OpenTelemetry and [OpenInference](https://github.com/Arize-ai/openinference/tree/main/spec) semantic conventions, compatible with any OpenTelemetry platform that supports OpenInference.
+
+For workflows that use traces to improve quality, see Arize's [agent evaluation guide](https://arize.com/guides/ai-agent-handbook/agent-evaluation/) and [LLM evaluation guide](https://arize.com/resources/llm-evaluation/).
 
 ## Installation
 
@@ -20,18 +22,18 @@ npm install @mastra/arize@latest
 
 ### Phoenix Setup
 
-Phoenix is an open-source observability platform that can be self-hosted or used via Phoenix Cloud.
+Phoenix is an open-source observability platform that can run locally or be self-hosted.
 
 #### Prerequisites
 
-1. **Phoenix Instance**: Deploy using Docker or sign up at [Phoenix Cloud](https://app.phoenix.arize.com/login)
+1. **Phoenix Instance**: Run Phoenix locally with Docker or connect to your self-hosted deployment
 1. **Endpoint**: Your Phoenix endpoint URL (ends in `/v1/traces`)
-1. **API Key**: Optional for unauthenticated instances, required for Phoenix Cloud
+1. **API Key**: Optional for unauthenticated instances, required for authenticated deployments
 1. **Environment Variables**: Set your configuration
 
 ```bash title=".env"
 # Required
-PHOENIX_COLLECTOR_ENDPOINT=http://localhost:6006/v1/traces  # Or your Phoenix Cloud URL
+PHOENIX_COLLECTOR_ENDPOINT=http://localhost:6006/v1/traces  # Or your self-hosted Phoenix URL
 
 # Optional
 PHOENIX_API_KEY=your-api-key  # For authenticated Phoenix instances
@@ -102,7 +104,7 @@ Set `PHOENIX_COLLECTOR_ENDPOINT=http://localhost:6006/v1/traces` and run your Ma
 
 ### Arize AX Setup
 
-Arize AX is an enterprise observability platform with advanced features for production AI systems.
+Arize AX is a managed cloud and enterprise self-hosted observability platform with advanced features for production AI systems.
 
 #### Prerequisites
 

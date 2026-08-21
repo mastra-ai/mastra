@@ -93,10 +93,11 @@ if (redisUrl) {
 //      `init()` derives the /auth/callback redirect from the deployment's
 //      publicUrl when WORKOS_REDIRECT_URI is unset. `fetchMemberships` lets
 //      token auth resolve the user's organization so the bootstrapped
-//      personal org works without re-auth. Note MASTRA_PLATFORM_SECRET_KEY
-//      does NOT defer to the platform here: it is a compute/integration
-//      credential (sandboxes, GitHub/Linear slots), not an identity signal —
-//      platform compute plus self-managed sign-in is a supported combination.
+//      personal org works without re-auth. Note MASTRA_PLATFORM_ACCESS_TOKEN /
+//      MASTRA_PLATFORM_SECRET_KEY do NOT defer to the platform here: they are
+//      compute/integration credentials (sandboxes, GitHub/Linear slots), not
+//      identity signals — platform compute plus self-managed sign-in is a
+//      supported combination.
 //   4. Nothing configured — leave undefined and MastraFactory installs its
 //      platform-backed default provider.
 const authDisabled = process.env.MASTRACODE_AUTH_DISABLED === '1';
@@ -261,9 +262,15 @@ export const factoryRules = defaultFactoryRules({
   },
 });
 
-const hasPlatformSandboxEnv = ['MASTRA_ENVIRONMENT_ID', 'MASTRA_PROJECT_ID', 'MASTRA_PLATFORM_SECRET_KEY'].every(key =>
-  process.env[key]?.trim(),
-);
+// MASTRA_PLATFORM_ACCESS_TOKEN is the credential Mastra Platform injects into
+// deployed projects; MASTRA_PLATFORM_SECRET_KEY is the org secret key written
+// by project scaffolding. `PlatformSandbox` only reads the former from env, so
+// whichever is present is passed to it explicitly as `accessToken`.
+const platformSandboxToken =
+  process.env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim() || process.env.MASTRA_PLATFORM_SECRET_KEY?.trim();
+const hasPlatformSandboxEnv =
+  Boolean(platformSandboxToken) &&
+  ['MASTRA_ENVIRONMENT_ID', 'MASTRA_PROJECT_ID'].every(key => Boolean(process.env[key]?.trim()));
 // Private-network exec: the workspace-proxy discovers each sandbox's private
 // IPv6 during `POST /v1/projects/:pid/sandbox` and returns it as an
 // `instanceUrl` field. `PlatformSandbox.start()` copies that field into this
@@ -303,6 +310,7 @@ export const factory = new MastraFactory({
     } else if (hasPlatformSandboxEnv) {
       return new PlatformSandbox({
         id: ctx.sessionId,
+        accessToken: platformSandboxToken,
         addressRegistry,
         ...(ctx.onStart ? { onStart: ctx.onStart } : {}),
       });

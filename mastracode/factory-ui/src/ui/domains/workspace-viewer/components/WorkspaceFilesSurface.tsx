@@ -16,7 +16,7 @@ export function WorkspaceFilesSurface() {
       data-testid="workspace-files-card"
       className={cn(
         'border-border1 bg-surface3 absolute top-3 right-3 z-20 flex flex-col overflow-hidden rounded-xl border',
-        'shadow-[0_1px_2px_-1px_oklch(0%_0_0deg/12%),0_16px_40px_-20px_oklch(0%_0_0deg/22%)]',
+        'shadow-dialog',
         '[interpolate-size:allow-keywords] duration-360 ease-out-custom transition-[translate,scale,opacity,width,height]',
         'will-change-[translate,opacity] motion-reduce:transition-none',
         'w-(--workspace-files-card)',

@@ -52,14 +52,11 @@ const activityPage: AuditEventPage = {
   events: [
     {
       id: 'event-1',
-      orgId: 'org-1',
       actorId: 'user-ada',
       actorType: 'human',
       action: 'factory.work_item.stage_moved',
       targets: [{ type: 'work_item', id: item.id }],
       metadata: {},
-      githubProjectId: 'factory-1',
-      context: {},
       occurredAt: '2026-08-05T09:00:00.000Z',
     },
   ],

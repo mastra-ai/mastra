@@ -30,6 +30,7 @@ function renderActivity(status: ChatConnectionApi['status'], busy: boolean) {
     busy,
     initialHistoryReady: true,
     localUser: vi.fn(),
+    failLocalUser: vi.fn(),
     reset: vi.fn(),
     resolvePrompt: vi.fn(),
     clearPending: vi.fn(),

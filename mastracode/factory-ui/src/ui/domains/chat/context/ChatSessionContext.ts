@@ -38,6 +38,12 @@ export interface ChatSessionContextApi {
    * progress. Informational only — never blocks the chat UI.
    */
   sandboxProgress: PrepareProgress | undefined;
+  /**
+   * The background `/ensure` warm-up is still in flight. Lets the prepare
+   * stepper keep "Preparing sandbox" active before the first progress event
+   * arrives instead of skipping ahead to message loading.
+   */
+  sandboxWarming?: boolean;
   resourceEnabled: boolean;
   /**
    * Failure resolving the session itself (denied/missing/errored session

@@ -8,6 +8,7 @@ import {
   TraceIntelligenceProvider,
   useEntityLearningProgress,
 } from '@mastra/playground-ui/ee/signals';
+import { useState } from 'react';
 
 import { Link } from '../../lib/link';
 import { useSelectedThemeEntity } from './use-selected-theme-entity';
@@ -24,6 +25,7 @@ export function SignalsOverviewPage() {
 function SignalsOverviewContent() {
   const { entitiesQuery, entity } = useSelectedThemeEntity();
   const url = useSignalsDateUrlState();
+  const [selectedThemeId, setSelectedThemeId] = useState<string>();
   const signalNames = entity
     ? SIGNAL_PROCESSING_ORDER.filter(signalName => entity.availableSignals.includes(signalName))
     : [];
@@ -59,6 +61,8 @@ function SignalsOverviewContent() {
       signalNames={signalNames}
       dateFrom={url.selectedDateFrom}
       dateTo={url.selectedDateTo}
+      selectedThemeId={selectedThemeId}
+      onSelectedThemeIdChange={setSelectedThemeId}
       dateRangePicker={
         <DateTimeRangePicker
           preset={url.datePreset}
