@@ -1474,7 +1474,8 @@ export class AgentChannels {
    * (what `startTyping` maps to) only auto-clears on `chat.postMessage`, not
    * on `chat.stopStream`, so a status set during streaming would stick after
    * the run ends. The static driver leaves the gate `false` so typing works
-   * normally in cards/hidden modes.
+   * normally in cards/hidden modes. Slack statuses are explicitly cleared
+   * when the per-run stream closes because a run may end without posting.
    */
   private async *withTypingStatus(
     stream: AsyncIterable<AgentChunkType<any>>,
@@ -1492,35 +1493,59 @@ export class AgentChannels {
           : defaultTypingStatus;
 
     let currentTypingStatus: string | undefined;
+    let typingStatusStarted = false;
+    let pendingTypingStatus = Promise.resolve();
 
-    for await (const chunk of stream) {
-      if (typingStatusFn && !typingGate.active) {
-        let result: ReturnType<TypingStatusFn>;
-        try {
-          const ctx: TypingStatusContext = {
-            platform,
-            threadId: chatThread.id,
-            currentStatus: currentTypingStatus,
-            channelTools: this.channelToolNames,
-          };
-          result = typingStatusFn(chunk, ctx);
-        } catch (e) {
-          this.logger?.debug('[CHANNEL] typingStatus function threw (continuing)', { error: e });
-          result = undefined;
-        }
-        if (typeof result === 'string' && result.length > 0 && result !== currentTypingStatus) {
-          currentTypingStatus = result;
-          chatThread.startTyping(result).catch(e => {
-            this.logger?.debug('[CHANNEL] Typing indicator failed (best-effort)', { error: e });
-          });
-        }
+    const sendTypingStatus = async (status: string) => {
+      try {
+        await chatThread.startTyping(status);
+      } catch (e) {
+        this.logger?.debug('[CHANNEL] Typing indicator failed (best-effort)', { error: e });
       }
-      // Reset the dedup state on run boundaries so the next run can re-emit
-      // its first status even if it matches the previous run's last status.
-      if (chunk.type === 'finish' || chunk.type === 'error' || chunk.type === 'abort') {
-        currentTypingStatus = undefined;
+    };
+
+    const queueTypingStatus = (status: string) => {
+      if (platform === 'slack') {
+        pendingTypingStatus = pendingTypingStatus.then(() => sendTypingStatus(status));
+      } else {
+        void sendTypingStatus(status);
       }
-      yield chunk;
+    };
+
+    try {
+      for await (const chunk of stream) {
+        if (typingStatusFn && !typingGate.active) {
+          let result: ReturnType<TypingStatusFn>;
+          try {
+            const ctx: TypingStatusContext = {
+              platform,
+              threadId: chatThread.id,
+              currentStatus: currentTypingStatus,
+              channelTools: this.channelToolNames,
+            };
+            result = typingStatusFn(chunk, ctx);
+          } catch (e) {
+            this.logger?.debug('[CHANNEL] typingStatus function threw (continuing)', { error: e });
+            result = undefined;
+          }
+          if (typeof result === 'string' && result.length > 0 && result !== currentTypingStatus) {
+            currentTypingStatus = result;
+            typingStatusStarted = true;
+            queueTypingStatus(result);
+          }
+        }
+        // Reset the dedup state on step/run boundaries so the next step can
+        // re-emit its first status even if it matches the previous one.
+        if (chunk.type === 'finish' || chunk.type === 'error' || chunk.type === 'abort') {
+          currentTypingStatus = undefined;
+        }
+        yield chunk;
+      }
+    } finally {
+      if (platform === 'slack' && typingStatusStarted) {
+        queueTypingStatus('');
+        await pendingTypingStatus;
+      }
     }
   }
 
