@@ -547,23 +547,6 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
   /** Save messages incrementally after each stream step completes (default: false). Is disabled internally when observational memory is enabled, as OM handles its own message saving */
   savePerStep?: boolean;
 
-  /**
-   * Persist non-empty assistant text that was streamed before an abort.
-   *
-   * Disabled by default because abort signals can represent a disconnected caller,
-   * in which case partial output should not be added to memory.
-   * @default false
-   *
-   * @example
-   * ```typescript
-   * const stream = await agent.stream('Hello', {
-   *   memory: { thread: 'my-thread', resource: 'user-123' },
-   *   persistPartialOnAbort: true,
-   * });
-   * ```
-   */
-  persistPartialOnAbort?: boolean;
-
   /** Request Context containing dynamic configuration and state */
   requestContext?: RequestContext<any>; // @TODO: Figure out how to type this without breaking all the inner types
 
