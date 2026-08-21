@@ -124,6 +124,30 @@ function addStringMapFilters(
 }
 
 /**
+ * Adds key/value filters against a JSON-encoded string column (e.g. scores.metadata).
+ * Mirrors addStringMapFilters semantics: only string values are matched.
+ */
+function addJsonStringFilters(
+  column: string,
+  values: Record<string, unknown> | null | undefined,
+  keyPrefix: string,
+  valuePrefix: string,
+  out: FilterResult,
+): void {
+  if (values == null || typeof values !== 'object') return;
+  let i = 0;
+  for (const [key, value] of Object.entries(values)) {
+    if (typeof value !== 'string') continue;
+    const keyParam = `${keyPrefix}_${i}`;
+    const valParam = `${valuePrefix}_${i}`;
+    out.conditions.push(`JSONExtractString(ifNull(${column}, '{}'), {${keyParam}:String}) = {${valParam}:String}`);
+    out.params[keyParam] = key;
+    out.params[valParam] = value;
+    i++;
+  }
+}
+
+/**
  * Adds shared context filter conditions (commonFilterFields) to the output.
  * Used by logs, metrics, scores, and feedback filter builders.
  */
@@ -289,6 +313,8 @@ export function buildScoresFilterConditions(filters: ScoresFilter | undefined, t
   } else if (Array.isArray(filters.scorerId)) {
     addIn(col('scorerId'), filters.scorerId, 'scorerIds', out);
   }
+
+  addJsonStringFilters(col('metadata'), filters.metadata, 'score_meta_k', 'score_meta_v', out);
 
   return out;
 }

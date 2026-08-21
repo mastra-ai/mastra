@@ -60,6 +60,10 @@ function applyScoreFilters(
     acc.conditions.push(`"scoreSource" = $${acc.next++}`);
     acc.params.push(filters.scoreSource ?? filters.source);
   }
+  if (filters?.metadata && Object.keys(filters.metadata).length > 0) {
+    acc.conditions.push(`"metadata" @> $${acc.next++}::jsonb`);
+    acc.params.push(JSON.stringify(filters.metadata));
+  }
 }
 
 /** OLAP queries take an explicit scorerId / scoreSource pair as identity. */

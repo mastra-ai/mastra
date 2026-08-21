@@ -2103,6 +2103,35 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(filtered.scores[0]!.scoreSource).toBe('manual');
     });
 
+    it('filters scores by metadata key-value pairs', async () => {
+      await storage.batchCreateScores({
+        scores: [
+          {
+            scoreId: 'score-meta-1',
+            timestamp: new Date('2026-01-02T00:00:00Z'),
+            traceId: 'trace-meta-1',
+            scorerId: 'relevance',
+            score: 0.9,
+            metadata: { env: 'prod', region: 'us' },
+          },
+          {
+            scoreId: 'score-meta-2',
+            timestamp: new Date('2026-01-02T00:00:00Z'),
+            traceId: 'trace-meta-2',
+            scorerId: 'relevance',
+            score: 0.4,
+            metadata: { env: 'dev', region: 'us' },
+          },
+        ],
+      });
+
+      const filtered = await storage.listScores({
+        filters: { metadata: { env: 'prod', region: 'us' } },
+      });
+
+      expect(filtered.scores.map(score => score.scoreId)).toEqual(['score-meta-1']);
+    });
+
     it('supports page deltaCursor and delta polling for scores', async () => {
       await storage.createScore({
         score: {
