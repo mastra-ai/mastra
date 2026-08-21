@@ -1,5 +1,25 @@
 # @mastra/playground-ui
 
+## 51.0.1-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`f95f468`](https://github.com/mastra-ai/mastra/commit/f95f468cf1e7c2b924a13826494f98b8f2ccd581)]:
+  - @mastra/core@1.61.1-alpha.1
+  - @mastra/client-js@1.42.1-alpha.1
+  - @mastra/react@1.4.6-alpha.1
+
+## 51.0.1-alpha.0
+
+### Patch Changes
+
+- Fixed code blocks stretching the page. A long line inside a fenced markdown block used to widen everything around it, pushing the layout past the window. A code block now keeps to the width it is given, and scrolls horizontally inside itself when set to `overflow="scroll"`. ([#22018](https://github.com/mastra-ai/mastra/pull/22018))
+
+- Updated dependencies [[`1e47b75`](https://github.com/mastra-ai/mastra/commit/1e47b7520cab4cfaa8daed52f17e2e6d14ff7539)]:
+  - @mastra/core@1.61.1-alpha.0
+  - @mastra/client-js@1.42.1-alpha.0
+  - @mastra/react@1.4.6-alpha.0
+
 ## 51.0.0
 
 ### Minor Changes

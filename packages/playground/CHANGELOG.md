@@ -1,5 +1,36 @@
 # @internal/playground
 
+## 1.26.1-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`f95f468`](https://github.com/mastra-ai/mastra/commit/f95f468cf1e7c2b924a13826494f98b8f2ccd581)]:
+  - @mastra/core@1.61.1-alpha.1
+  - @mastra/client-js@1.42.1-alpha.1
+  - @mastra/react@1.4.6-alpha.1
+  - @mastra/playground-ui@51.0.1-alpha.1
+
+## 1.26.1-alpha.0
+
+### Patch Changes
+
+- Studio now respects the `editor` config on code-defined agents when locking editable fields. ([#21733](https://github.com/mastra-ai/mastra/pull/21733))
+
+  Previously, an agent declared with `editor: { instructions: false }` still rendered an editable instructions block in the agent editor, so users could type changes the server would then reject on save. Only the `editor: false` shape locked anything, and it locked everything.
+
+  Two behaviors are fixed:
+
+  - `editor: { instructions: false }` renders the instructions as read-only content, matching how `editor: { tools: false }` already locked the tools surface.
+  - An `editor` object that locks every editable field (for example `{ instructions: false, tools: false }`) is now treated the same as `editor: false`: the editor shows the "Read-only" badge and the Save and Publish buttons are disabled.
+
+  Ownership is derived in one place and mirrors the server's rules — a field is editable only when it is explicitly `true` or when no `editor` config is set at all. Agents that are not code-defined are unaffected and stay fully editable.
+
+- Updated dependencies [[`1e47b75`](https://github.com/mastra-ai/mastra/commit/1e47b7520cab4cfaa8daed52f17e2e6d14ff7539), [`aba23b5`](https://github.com/mastra-ai/mastra/commit/aba23b551d9f45029422f70a3cb1e6966e058a6a)]:
+  - @mastra/core@1.61.1-alpha.0
+  - @mastra/playground-ui@51.0.1-alpha.0
+  - @mastra/client-js@1.42.1-alpha.0
+  - @mastra/react@1.4.6-alpha.0
+
 ## 1.26.0
 
 ### Patch Changes

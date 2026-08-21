@@ -1,5 +1,32 @@
 # @mastra/factory
 
+## 0.10.0-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`f95f468`](https://github.com/mastra-ai/mastra/commit/f95f468cf1e7c2b924a13826494f98b8f2ccd581)]:
+  - @mastra/core@1.61.1-alpha.1
+  - @mastra/code-sdk@1.4.1-alpha.1
+
+## 0.10.0-alpha.0
+
+### Minor Changes
+
+- Improved the Factory audit log with a density timeline, category filters, responsive rows, and automatic history loading. Intake binding changes now appear in the affected project's audit history. ([#22023](https://github.com/mastra-ai/mastra/pull/22023))
+
+  ```ts
+  const response = await fetch(`/web/factory/projects/${factoryProjectId}/audit?actions=factory.run.started&limit=50`);
+  const page = await response.json();
+  ```
+
+### Patch Changes
+
+- Factory skill playbooks in Settings › Agent › Skills now render as formatted markdown instead of a wall of plain text, with a toggle on hover to read the raw SKILL.md source. Long skills scroll inside the card rather than stretching the page. ([#22018](https://github.com/mastra-ai/mastra/pull/22018))
+
+- Updated dependencies [[`1e47b75`](https://github.com/mastra-ai/mastra/commit/1e47b7520cab4cfaa8daed52f17e2e6d14ff7539)]:
+  - @mastra/core@1.61.1-alpha.0
+  - @mastra/code-sdk@1.4.1-alpha.0
+
 ## 0.9.0
 
 ### Minor Changes
