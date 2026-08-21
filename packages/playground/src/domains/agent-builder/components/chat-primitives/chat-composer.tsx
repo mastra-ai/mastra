@@ -1,5 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ArrowUpIcon, Loader2 } from 'lucide-react';
+import { ArrowUpIcon, CircleStop, Loader2 } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { useEffect, useMemo, useRef } from 'react';
 import { useAgentColor } from '../../contexts/agent-color-context';
@@ -13,9 +13,15 @@ interface ChatComposerProps {
   disabled: boolean;
   canSubmit: boolean;
   isRunning?: boolean;
+  /**
+   * When provided, the trailing action becomes a stop button while a run is in
+   * flight. Composers that omit it keep the non-interactive running indicator.
+   */
+  onCancel?: () => void;
   placeholder?: string;
   inputTestId?: string;
   submitTestId?: string;
+  cancelTestId?: string;
   containerTestId?: string;
 }
 
@@ -27,9 +33,11 @@ export const ChatComposer = ({
   disabled,
   canSubmit,
   isRunning = false,
+  onCancel,
   placeholder = 'Ask a follow-up…',
   inputTestId,
   submitTestId,
+  cancelTestId,
   containerTestId,
 }: ChatComposerProps) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -65,19 +73,55 @@ export const ChatComposer = ({
           disabled={disabled}
         />
         <div className="flex items-center justify-end pb-3">
-          <Button
-            type="submit"
-            variant="default"
-            size="icon-sm"
-            tooltip={isRunning ? 'Generating…' : 'Send'}
-            disabled={!canSubmit}
-            data-testid={submitTestId}
-            className="rounded-full"
-          >
-            {isRunning ? <Loader2 className="animate-spin" /> : <ArrowUpIcon />}
-          </Button>
+          <ComposerAction
+            isRunning={isRunning}
+            canSubmit={canSubmit}
+            onCancel={onCancel}
+            submitTestId={submitTestId}
+            cancelTestId={cancelTestId}
+          />
         </div>
       </div>
     </form>
+  );
+};
+
+interface ComposerActionProps {
+  isRunning: boolean;
+  canSubmit: boolean;
+  onCancel?: () => void;
+  submitTestId?: string;
+  cancelTestId?: string;
+}
+
+const ComposerAction = ({ isRunning, canSubmit, onCancel, submitTestId, cancelTestId }: ComposerActionProps) => {
+  if (isRunning && onCancel) {
+    return (
+      <Button
+        type="button"
+        variant="default"
+        size="icon-sm"
+        tooltip="Stop generating"
+        onClick={onCancel}
+        data-testid={cancelTestId}
+        className="rounded-full"
+      >
+        <CircleStop />
+      </Button>
+    );
+  }
+
+  return (
+    <Button
+      type="submit"
+      variant="default"
+      size="icon-sm"
+      tooltip={isRunning ? 'Generating…' : 'Send'}
+      disabled={!canSubmit}
+      data-testid={submitTestId}
+      className="rounded-full"
+    >
+      {isRunning ? <Loader2 className="animate-spin" /> : <ArrowUpIcon />}
+    </Button>
   );
 };

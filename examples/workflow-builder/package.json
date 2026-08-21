@@ -1,0 +1,36 @@
+{
+  "name": "examples-workflow-builder",
+  "type": "module",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "dev": "pnpm mastra dev",
+    "build": "pnpm mastra build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "^3.0.0",
+    "@mastra/core": "beta",
+    "@mastra/editor": "beta",
+    "@mastra/libsql": "beta",
+    "@mastra/loggers": "beta",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "mastra": "link:../../packages/cli",
+    "typescript": "^5.9.3"
+  },
+  "pnpm": {
+    "overrides": {
+      "@mastra/client-js": "link:../../client-sdks/client-js",
+      "@mastra/core": "link:../../packages/core",
+      "@mastra/editor": "link:../../packages/editor",
+      "@mastra/libsql": "link:../../stores/libsql",
+      "@mastra/loggers": "link:../../packages/loggers",
+      "@mastra/memory": "link:../../packages/memory",
+      "@mastra/ai-sdk": "link:../../client-sdks/ai-sdk",
+      "mastra": "link:../../packages/cli"
+    }
+  },
+  "packageManager": "pnpm@10.29.3+sha512.498e1fb4cca5aa06c1dcf2611e6fafc50972ffe7189998c409e90de74566444298ffe43e6cd2acdc775ba1aa7cc5e092a8b7054c811ba8c5770f84693d33d2dc"
+}

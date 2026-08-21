@@ -1,7 +1,8 @@
 import type { Agent } from '../agent';
-import type { AgentBuilderOptions, IAgentBuilder } from '../agent-builder/ee';
+import type { AgentBuilderOptions, BuilderModelPolicy, IAgentBuilder } from '../agent-builder/ee';
 import type { MastraBrowser } from '../browser/browser';
 import type { MastraScorer } from '../evals';
+import type { MastraModelConfig } from '../llm/model/shared.types';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { MCPServerBase } from '../mcp';
@@ -165,6 +166,30 @@ export interface WorkspaceProvider<TConfig = Record<string, unknown>> {
   createWorkspace(config: TConfig): Workspace<any, any, any> | Promise<Workspace<any, any, any>>;
 }
 
+export interface WorkflowBuilderOptions {
+  /** Whether the workflow builder is enabled. Default: true. */
+  enabled?: boolean;
+  /** Admin-controlled model/provider policy for Studio workflow authoring. */
+  modelPolicy?: BuilderModelPolicy;
+  /** Model used by the hidden workflow builder agent. Defaults to the built-in model when omitted. */
+  model?: MastraModelConfig;
+  /**
+   * How many recent messages the workflow builder agent recalls. Default: 100.
+   *
+   * Authoring turns are tool-heavy — a single request can persist dozens of
+   * inspection and submission records — so the memory default of 10 is far too
+   * small here. Raise it for models that need longer repair conversations, or
+   * lower it to cut token cost on a smaller context window.
+   */
+  lastMessages?: number;
+}
+
+export interface IWorkflowBuilder {
+  readonly enabled: boolean;
+  getAgent(): Agent;
+  getModelPolicy(): BuilderModelPolicy | undefined;
+}
+
 export interface MastraEditorConfig {
   logger?: IMastraLogger;
   /** Tool providers for integration tools (e.g., Composio) */
@@ -210,6 +235,11 @@ export interface MastraEditorConfig {
    * When present and enabled, the editor provides agent building capabilities.
    */
   builder?: AgentBuilderOptions;
+  /**
+   * Configuration for the persisted workflow builder EE feature.
+   * When present and enabled, the editor provides workflow building capabilities.
+   */
+  workflowBuilder?: WorkflowBuilderOptions;
   /**
    * Source of truth for agent overrides — controls how they are persisted and
    * surfaced in Studio.
@@ -496,6 +526,12 @@ export interface IMastraEditor {
    * Optional for backwards compatibility.
    */
   resolveBuilder?(): Promise<IAgentBuilder | undefined>;
+
+  /** Check whether the persisted workflow builder is configured and enabled. */
+  hasEnabledWorkflowBuilderConfig?(): boolean;
+
+  /** Resolve the persisted workflow builder without registering its agent publicly. */
+  resolveWorkflowBuilder?(): Promise<IWorkflowBuilder | undefined>;
 
   /**
    * Returns the editor's configured source (`'code'` | `'db'`), or `undefined`

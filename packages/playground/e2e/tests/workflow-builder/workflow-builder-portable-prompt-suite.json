@@ -1,0 +1,85 @@
+{
+  "version": 1,
+  "scenarios": [
+    {
+      "id": "portable-echo-workflow",
+      "fixture": "workflow-builder-portable-echo",
+      "expectedGraphEntry": "echo-message",
+      "liveGraphPinned": true,
+      "prompt": "Create a workflow named portable-echo-workflow with no tool, agent, or nested workflow dependencies. It accepts a required message string and returns that same value in a message field using a mapping step.",
+      "runInput": {
+        "message": "hello"
+      }
+    },
+    {
+      "id": "portable-greeting-workflow",
+      "fixture": "workflow-builder-portable-greeting",
+      "expectedGraphEntry": "format-greeting",
+      "liveGraphPinned": true,
+      "prompt": "Create a workflow named portable-greeting-workflow with no tool, agent, or nested workflow dependencies. It accepts a required name string and returns a message formatted as Hello, <name>! using a mapping template.",
+      "runInput": {
+        "name": "Ada"
+      }
+    },
+    {
+      "id": "portable-order-status-workflow",
+      "fixture": "workflow-builder-portable-order-status",
+      "expectedGraphEntry": "shape-order-status",
+      "liveGraphPinned": true,
+      "prompt": "Create a workflow named portable-order-status-workflow with no tool, agent, or nested workflow dependencies. It accepts a required orderId string and returns the same orderId with a constant status of received using one mapping step.",
+      "runInput": {
+        "orderId": "order-123"
+      }
+    },
+    {
+      "id": "portable-profile-workflow",
+      "fixture": "workflow-builder-portable-profile",
+      "expectedGraphEntry": "project-profile",
+      "liveGraphPinned": true,
+      "prompt": "Create a workflow named portable-profile-workflow with no tool, agent, or nested workflow dependencies. It accepts required name and age fields and returns an object containing those same fields using a mapping step.",
+      "runInput": {
+        "name": "Ada",
+        "age": 37
+      }
+    },
+    {
+      "id": "portable-tags-workflow",
+      "fixture": "workflow-builder-portable-tags",
+      "expectedGraphEntry": "copy-tags",
+      "liveGraphPinned": true,
+      "prompt": "Create a workflow named portable-tags-workflow with no tool, agent, or nested workflow dependencies. It accepts a required tags array of strings and returns that array in a tags field using a mapping step.",
+      "runInput": {
+        "tags": ["alpha", "beta"]
+      }
+    },
+    {
+      "id": "portable-chained-mapping-workflow",
+      "fixture": "workflow-builder-portable-chained-mapping",
+      "expectedGraphEntry": "copy-normalized-value",
+      "liveGraphPinned": true,
+      "prompt": "Create a workflow named portable-chained-mapping-workflow with no tool, agent, or nested workflow dependencies. It accepts a required value string, maps it into a normalizedValue field, then uses a second mapping step to return that prior step value in a result field.",
+      "runInput": {
+        "value": "hello"
+      }
+    },
+    {
+      "id": "portable-receipt-workflow",
+      "fixture": "workflow-builder-portable-receipt",
+      "expectedGraphEntry": "format-receipt",
+      "liveGraphPinned": true,
+      "prompt": "Create a workflow named portable-receipt-workflow with no tool, agent, or nested workflow dependencies. It accepts required item and quantity fields and returns a summary string formatted as Ordered <quantity> x <item> using a mapping template.",
+      "runInput": {
+        "item": "book",
+        "quantity": 2
+      }
+    },
+    {
+      "id": "portable-defaults-workflow",
+      "fixture": "workflow-builder-portable-defaults",
+      "expectedGraphEntry": "create-defaults",
+      "liveGraphPinned": true,
+      "prompt": "Create a workflow named portable-defaults-workflow with no tool, agent, or nested workflow dependencies. It accepts an empty object and returns enabled true, retries 3, and mode safe using one mapping step with constant values.",
+      "runInput": {}
+    }
+  ]
+}

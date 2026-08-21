@@ -24,7 +24,7 @@ import {
 } from './extract-tasks';
 import { extractRunIdFromMessages } from './extractRunIdFromMessages';
 import { convertSignalDataToBase64String } from './signal-data';
-import type { ClientToolsInput, ModelSettings } from './types';
+import type { ClientToolsInput, ClientToolsResolver, ModelSettings } from './types';
 
 const extractPendingToolApprovalIdsFromMessages = (messages: MastraDBMessage[]) => {
   const pendingToolApprovalIds = new Set<string>();
@@ -151,6 +151,7 @@ type SignalContinuationOptions = {
     topP?: number;
   };
   instructions?: ModelSettings['instructions'];
+  system?: ModelSettings['system'];
   providerOptions?: ModelSettings['providerOptions'];
   requireToolApproval?: boolean;
   tracingOptions?: TracingOptions;
@@ -182,6 +183,8 @@ export interface MastraChatProps {
    * Defaults to `false`; set to `true` to opt into thread signals.
    */
   enableThreadSignals?: boolean;
+  /** Override the legacy stream route for editor-owned hidden agents. */
+  streamPath?: string;
 }
 
 interface SharedArgs {
@@ -204,11 +207,13 @@ export type SendMessageArgs = { message: string; coreUserMessages?: CoreUserMess
 export type GenerateArgs = SharedArgs & {
   onFinish?: (messages: MastraDBMessage[]) => Promise<void>;
   clientTools?: ClientToolsInput;
+  clientToolsResolver?: ClientToolsResolver;
 };
 
 export type StreamArgs = SharedArgs & {
   onChunk?: (chunk: ChunkType) => Promise<void>;
   clientTools?: ClientToolsInput;
+  clientToolsResolver?: ClientToolsResolver;
   signalId?: string;
   /**
    * Client-generated correlation id stamped on the optimistic pending bubble
@@ -282,6 +287,7 @@ export const useChat = ({
   onSignalEcho,
   onThreadSignalsUnsupported,
   enableThreadSignals = false,
+  streamPath,
 }: MastraChatProps) => {
   const threadSignalsDisabled = enableThreadSignals === false;
   const _currentRunId = useRef<string | undefined>(undefined);
@@ -484,7 +490,7 @@ export const useChat = ({
         ...baseClient!.options,
         abortSignal: subscriptionAbort.signal,
       });
-      const subscriptionAgent = clientWithAbort.getAgent(agentId);
+      const subscriptionAgent = clientWithAbort.getAgent(agentId, undefined, { stream: streamPath });
 
       _threadSubscriptionPromiseRef.current = subscriptionAgent
         .subscribeToThread({ resourceId, threadId })
@@ -564,6 +570,7 @@ export const useChat = ({
     onFinish,
     tracingOptions,
     clientTools,
+    clientToolsResolver,
   }: GenerateArgs) => {
     const {
       frequencyPenalty,
@@ -574,6 +581,7 @@ export const useChat = ({
       topK,
       topP,
       instructions,
+      system,
       providerOptions,
       maxSteps,
       requireToolApproval,
@@ -591,7 +599,7 @@ export const useChat = ({
       abortSignal: signal,
     });
 
-    const agent = clientWithAbort.getAgent(agentId);
+    const agent = clientWithAbort.getAgent(agentId, undefined, { stream: streamPath });
 
     const runId = uuid();
     _currentRunId.current = runId;
@@ -610,12 +618,14 @@ export const useChat = ({
         topP,
       },
       instructions,
+      system,
       requestContext: resolvedRequestContext,
       ...(threadId ? { memory: { thread: threadId, resource: resourceId || agentId } } : {}),
       providerOptions,
       tracingOptions,
       requireToolApproval,
       clientTools: resolvedClientTools,
+      clientToolsResolver,
     });
 
     // Check if suspended for tool approval
@@ -659,6 +669,7 @@ export const useChat = ({
     signal,
     tracingOptions,
     clientTools,
+    clientToolsResolver,
     signalId,
     clientMessageId,
   }: StreamArgs) => {
@@ -671,6 +682,7 @@ export const useChat = ({
       topK,
       topP,
       instructions,
+      system,
       providerOptions,
       maxSteps,
       requireToolApproval,
@@ -691,6 +703,7 @@ export const useChat = ({
         topP,
       },
       instructions,
+      system,
       providerOptions,
       requireToolApproval,
       tracingOptions,
@@ -715,7 +728,7 @@ export const useChat = ({
       abortSignal: internalAbort.signal,
     });
 
-    const agent = clientWithAbort.getAgent(agentId);
+    const agent = clientWithAbort.getAgent(agentId, undefined, { stream: streamPath });
 
     const streamWithLegacyRoute = async () => {
       const runId = uuid();
@@ -734,12 +747,14 @@ export const useChat = ({
           topP,
         },
         instructions,
+        system,
         requestContext: resolvedRequestContext,
         ...(threadId ? { memory: { thread: threadId, resource: resourceId || agentId } } : {}),
         providerOptions,
         requireToolApproval,
         tracingOptions,
         clientTools: resolvedClientTools,
+        clientToolsResolver,
       });
 
       _onChunk.current = onChunk;
@@ -787,6 +802,7 @@ export const useChat = ({
         topP,
       },
       instructions,
+      system,
       requestContext: requestContextRecord,
       providerOptions: providerOptions as any,
       requireToolApproval,
@@ -878,7 +894,7 @@ export const useChat = ({
       abortSignal: signal,
     });
 
-    const agent = clientWithAbort.getAgent(agentId);
+    const agent = clientWithAbort.getAgent(agentId, undefined, { stream: streamPath });
 
     const runId = uuid();
 
@@ -947,7 +963,7 @@ export const useChat = ({
     setIsRunning(true);
     setToolCallApprovals(prev => ({ ...prev, [toolCallId]: { status: 'approved' } }));
 
-    const agent = baseClient.getAgent(agentId);
+    const agent = baseClient.getAgent(agentId, undefined, { stream: streamPath });
     if (_threadSubscriptionKeyRef.current && threadId) {
       try {
         await agent.sendToolApproval({
@@ -1015,7 +1031,7 @@ export const useChat = ({
 
     setIsRunning(true);
     setToolCallApprovals(prev => ({ ...prev, [toolCallId]: { status: 'declined' } }));
-    const agent = baseClient.getAgent(agentId);
+    const agent = baseClient.getAgent(agentId, undefined, { stream: streamPath });
     if (_threadSubscriptionKeyRef.current && threadId) {
       try {
         await agent.sendToolApproval({
@@ -1067,7 +1083,7 @@ export const useChat = ({
     setIsRunning(true);
     setToolCallApprovals(prev => ({ ...prev, [toolCallId]: { status: 'approved' } }));
 
-    const agent = baseClient.getAgent(agentId);
+    const agent = baseClient.getAgent(agentId, undefined, { stream: streamPath });
     const response = await agent.approveToolCallGenerate({
       runId: currentRunId,
       toolCallId,
@@ -1094,7 +1110,7 @@ export const useChat = ({
     setIsRunning(true);
     setToolCallApprovals(prev => ({ ...prev, [toolCallId]: { status: 'declined' } }));
 
-    const agent = baseClient.getAgent(agentId);
+    const agent = baseClient.getAgent(agentId, undefined, { stream: streamPath });
     const response = await agent.declineToolCallGenerate({
       runId: currentRunId,
       toolCallId,
@@ -1125,7 +1141,7 @@ export const useChat = ({
       [runId ? `${runId}-${toolName}` : toolName]: { status: 'approved' },
     }));
 
-    const agent = baseClient.getAgent(agentId);
+    const agent = baseClient.getAgent(agentId, undefined, { stream: streamPath });
     const response = await agent.approveNetworkToolCall({
       runId: networkRunId,
       ...continuation,
@@ -1158,7 +1174,7 @@ export const useChat = ({
       [runId ? `${runId}-${toolName}` : toolName]: { status: 'declined' },
     }));
 
-    const agent = baseClient.getAgent(agentId);
+    const agent = baseClient.getAgent(agentId, undefined, { stream: streamPath });
     const response = await agent.declineNetworkToolCall({
       runId: networkRunId,
       ...continuation,
