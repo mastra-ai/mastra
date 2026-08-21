@@ -12,11 +12,12 @@ export async function renameProject(projectPath: string, projectName: string): P
 
 /** Best-effort conversion of a directory name into a valid npm package name. */
 export function toPackageName(name: string): string {
-  const cleaned = name
-    .toLowerCase()
-    .replace(/[^a-z0-9-_.~]+/g, '-')
-    .replace(/^[-_.]+|[-_.]+$/g, '');
-  return cleaned || 'mastra-factory';
+  const cleaned = name.toLowerCase().replace(/[^a-z0-9-_.~]+/g, '-');
+  let start = 0;
+  let end = cleaned.length;
+  while (start < end && '-_.'.includes(cleaned[start]!)) start++;
+  while (end > start && '-_.'.includes(cleaned[end - 1]!)) end--;
+  return cleaned.slice(start, end) || 'mastra-factory';
 }
 
 async function pathExists(filePath: string): Promise<boolean> {

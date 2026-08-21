@@ -24,9 +24,10 @@
   ],
   "scripts": {
     "generate:api-manifest": "pnpm --filter @mastra/server generate:api-cli-route-metadata",
-    "build:lib": "tsdown --silent --config tsdown.config.ts",
+    "generate:factory-scaffold": "node scripts/generate-factory-scaffold.mjs",
+    "build:lib": "pnpm generate:factory-scaffold && tsdown --silent --config tsdown.config.ts",
     "prepack": "tsx ../../scripts/generate-package-docs.ts",
-    "test": "vitest run",
+    "test": "pnpm generate:factory-scaffold && vitest run",
     "test:watch": "vitest watch",
     "clean": "rm -rf dist && rm -rf node_modules",
     "typecheck": "tsc --noEmit --incremental",
@@ -71,6 +72,7 @@
     "semver": "^7.7.4",
     "serve-handler": "^6.1.7",
     "strip-json-comments": "^5.0.3",
+    "tinyexec": "^1.2.4",
     "tinyglobby": "^0.2.17",
     "yocto-spinner": "^1.1.0"
   },

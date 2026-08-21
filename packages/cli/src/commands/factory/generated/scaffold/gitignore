@@ -1,0 +1,8 @@
+node_modules/
+.env
+.env.*
+!.env.example
+!.env.schema
+.mastra/
+*.log
+.DS_Store

@@ -15,7 +15,7 @@
     "build": "tsdown --silent --config tsdown.config.ts",
     "prepack": "npm run build",
     "check": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run --passWithNoTests",
     "lint": "oxlint . && eslint .",
     "lint:fix": "oxlint --fix . && eslint --fix ."
   },

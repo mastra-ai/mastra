@@ -101,7 +101,7 @@ Slack only delivers events to public HTTPS origins, so local development needs a
 
 ## Versions
 
-The Mastra packages are pinned to `latest`, so `npm install` pulls the current published set. Upgrade them together by re-running `npm install` (or by rescaffolding).
+The scaffold pins a tested set of compatible stable Mastra release ranges. Upgrade the Mastra packages together, then run `npm run check` and `npm run build` before deploying.
 
 ## License
 
