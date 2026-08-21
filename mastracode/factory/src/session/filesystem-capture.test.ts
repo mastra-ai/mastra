@@ -54,11 +54,11 @@ function createSession(results = [commandResult(), commandResult()], resourceId 
  * reads the workdir from the memo ONLY — the persisted column is
  * observability, never a decision input.
  */
-function seedLiveWorkdir(sessionRowId = 'source-session-1') {
+function seedLiveWorkdir(sessionRowId = 'source-session-1', status = 'running') {
   getSessionSandbox(
     sessionRowId,
     'seed/worktree',
-    () => ({ id: 'sb-live', provider: 'local', workingDirectory: '/sessions/s1' }) as never,
+    () => ({ id: 'sb-live', provider: 'local', status, workingDirectory: '/sessions/s1' }) as never,
   );
 }
 
@@ -113,6 +113,21 @@ describe('captureSessionFilesystem', () => {
     // provider points at a path that no longer exists. With no live memo
     // entry there is nothing trustworthy to capture against.
     __clearSessionSandboxesForTests();
+    const { session, executeCommand } = createSession([]);
+    const dependencies = createDependencies();
+
+    await captureSessionFilesystem(session, dependencies);
+
+    expect(executeCommand).not.toHaveBeenCalled();
+    expect(dependencies.filesystem.replaceFiles).not.toHaveBeenCalled();
+  });
+
+  it('skips capture when the memoized sandbox is not running (telemetry never boots a VM)', async () => {
+    // executeCommand lazily starts the sandbox via ensureRunning — a
+    // chat-only turn whose sandbox was constructed but never started must
+    // not have a VM provisioned just to read an empty git status.
+    __clearSessionSandboxesForTests();
+    seedLiveWorkdir('source-session-1', 'pending');
     const { session, executeCommand } = createSession([]);
     const dependencies = createDependencies();
 

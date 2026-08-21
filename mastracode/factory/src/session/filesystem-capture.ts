@@ -60,8 +60,15 @@ export async function captureSessionFilesystem(
     // longer exists (the stale-workdir incident class). No memo entry means
     // no live sandbox worth capturing in this replica; capture is
     // best-effort telemetry, so skip.
-    const workdir = peekSessionSandbox(sourceSession.id)?.workdir;
-    if (!workdir) return;
+    const entry = peekSessionSandbox(sourceSession.id);
+    if (!entry) return;
+    // Telemetry must never provision a VM: executeCommand lazily starts the
+    // sandbox via ensureRunning, so a chat turn that never touched the
+    // workspace would otherwise boot (and clone into) a fresh VM just to
+    // capture an empty git status. Only capture when the turn already has a
+    // running sandbox.
+    if (entry.sandbox.status !== 'running') return;
+    const workdir = entry.workdir;
 
     const result = await sandbox.executeCommand('git', ['-C', workdir, ...GIT_STATUS_ARGS], {
       timeout: 30_000,
