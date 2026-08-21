@@ -29,7 +29,6 @@ import { RedisStreamsPubSub } from '@mastra/redis-streams';
 import { getDatabasePath } from '@mastra/code-sdk/utils/project';
 import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
 import { MastraAuthWorkos } from '@mastra/auth-workos';
-import type { FactorySandboxContext, MastraFactorySandboxConfig } from '@mastra/factory';
 import { MastraFactory } from '@mastra/factory';
 import { defaultFactoryRules } from '@mastra/factory/rules/defaults';
 import type { FactoryStageRuleContext } from '@mastra/factory/rules/types';
@@ -183,62 +182,6 @@ function localSandboxEnv(): Record<string, string> {
   return env;
 }
 
-// Session sandbox selection: E2B when `E2B_API_KEY` is set, the managed
-// Platform proxy when the platform identity trio is set, LocalSandbox
-// otherwise. Every branch keys the sandbox by session id (id-keyed
-// getOrCreate on `start()`), forwards factory's `ctx.onStart` setup hook so
-// session setup runs inside the start lifecycle, and only constructs — VMs
-// are provisioned lazily when a tool needs one.
-const hasPlatformSandboxEnv = ['MASTRA_ENVIRONMENT_ID', 'MASTRA_PROJECT_ID', 'MASTRA_PLATFORM_SECRET_KEY'].every(key =>
-  process.env[key]?.trim(),
-);
-const sandboxConfig: MastraFactorySandboxConfig = process.env.E2B_API_KEY?.trim()
-  ? // Sha-aliased lazy-built repo template (repo cloned + setup run at the
-    // known default-branch head; sha unknown -> sha-less alias; build failure
-    // -> fallback template + runtime cold clone). E2B pauses on its own idle
-    // timeout and resumes by id on the next start.
-    (ctx: FactorySandboxContext) =>
-      new E2BSandbox({
-        id: ctx.sessionId,
-        ...(ctx.repoFullName
-          ? {
-              template: createRepoTemplate({
-                repoFullName: ctx.repoFullName,
-                ...(ctx.repoSha ? { sha: ctx.repoSha } : {}),
-                ...(ctx.setupCommand ? { setupCommand: ctx.setupCommand } : {}),
-              }),
-            }
-          : {}),
-        ...(ctx.onStart ? { onStart: ctx.onStart } : {}),
-      })
-  : hasPlatformSandboxEnv
-    ? (() => {
-        // Private-network exec: the workspace-proxy discovers each sandbox's
-        // private IPv6 during `POST /v1/projects/:pid/sandbox` and returns it
-        // as an `instanceUrl` field. `PlatformSandbox.start()` copies that
-        // field into this in-process registry; `executeCommand()` reads it to
-        // dial the sidecar directly, falling back to the lease path. Shared
-        // across instances via this closure — only built for this branch.
-        const addressRegistry = new InProcessSandboxAddressRegistry();
-        return (ctx: FactorySandboxContext) =>
-          new PlatformSandbox({
-            id: ctx.sessionId,
-            addressRegistry,
-            ...(ctx.onStart ? { onStart: ctx.onStart } : {}),
-          });
-      })()
-    : (ctx: FactorySandboxContext) =>
-        new LocalSandbox({
-          // Rooted at the per-session directory (parent of the checkout) so
-          // the setup marker sits beside the clone, not inside it.
-          workingDirectory: join(
-            process.env.MASTRACODE_LOCAL_SANDBOX_ROOT?.trim() || join(homedir(), '.mastracode', 'web', 'sandboxes'),
-            ctx.sessionId,
-          ),
-          env: localSandboxEnv(),
-          ...(ctx.onStart ? { onStart: ctx.onStart } : {}),
-        });
-
 // One FactoryStorage backend powers agent storage, the factory app tables,
 // the distributed project lock, and better-auth. `DATABASE_URL` set →
 // Postgres (the paired PgVector rides the same database for recall search).
@@ -318,11 +261,59 @@ export const factoryRules = defaultFactoryRules({
   },
 });
 
+const hasPlatformSandboxEnv = ['MASTRA_ENVIRONMENT_ID', 'MASTRA_PROJECT_ID', 'MASTRA_PLATFORM_SECRET_KEY'].every(key =>
+  process.env[key]?.trim(),
+);
+// Private-network exec: the workspace-proxy discovers each sandbox's private
+// IPv6 during `POST /v1/projects/:pid/sandbox` and returns it as an
+// `instanceUrl` field. `PlatformSandbox.start()` copies that field into this
+// in-process registry; `executeCommand()` reads it to dial the sidecar
+// directly, falling back to the lease path. Shared across instances, so it
+// lives outside the callback — only built for the platform branch.
+const addressRegistry = hasPlatformSandboxEnv ? new InProcessSandboxAddressRegistry() : undefined;
+
 export const factory = new MastraFactory({
   auth,
   integrations,
   rules: factoryRules,
-  sandbox: sandboxConfig,
+  sandbox: ctx => {
+    if (process.env.E2B_API_KEY?.trim()) {
+      // Sha-aliased lazy-built repo template (repo cloned + setup run at the
+      // known default-branch head; sha unknown -> sha-less alias; build failure
+      // -> fallback template + runtime cold clone). E2B pauses on its own idle
+      // timeout and resumes by id on the next start.
+      return new E2BSandbox({
+        id: ctx.sessionId,
+        ...(ctx.repoFullName
+          ? {
+              template: createRepoTemplate({
+                repoFullName: ctx.repoFullName,
+                ...(ctx.repoSha ? { sha: ctx.repoSha } : {}),
+                ...(ctx.setupCommand ? { setupCommand: ctx.setupCommand } : {}),
+              }),
+            }
+          : {}),
+        ...(ctx.onStart ? { onStart: ctx.onStart } : {}),
+      });
+    } else if (hasPlatformSandboxEnv) {
+      return new PlatformSandbox({
+        id: ctx.sessionId,
+        addressRegistry,
+        ...(ctx.onStart ? { onStart: ctx.onStart } : {}),
+      });
+    } else {
+      return new LocalSandbox({
+        // Rooted at the per-session directory (parent of the checkout) so
+        // the setup marker sits beside the clone, not inside it.
+        workingDirectory: join(
+          process.env.MASTRACODE_LOCAL_SANDBOX_ROOT?.trim() || join(homedir(), '.mastracode', 'web', 'sandboxes'),
+          ctx.sessionId,
+        ),
+        env: localSandboxEnv(),
+        ...(ctx.onStart ? { onStart: ctx.onStart } : {}),
+      });
+    }
+  },
   // Per-replica cap on concurrent Factory background dispatches. Unset means
   // the dispatcher default; invalid and non-positive values are ignored.
   dispatcher: {
