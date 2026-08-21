@@ -315,59 +315,59 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
       });
     }, 500000);
 
-    it('should not save any message if interrupted before any part is emitted', async () => {
+    it('should persist the input when the provider fails before producing output', async () => {
+      if (version === 'v1') return;
+
       const mockMemory = new MockMemory();
-      let saveCallCount = 0;
-
-      mockMemory.saveMessages = async function (...args) {
-        saveCallCount++;
-        return MockMemory.prototype.saveMessages.apply(this, args);
-      };
-
+      let outputProcessorCalls = 0;
+      let onFinishCalls = 0;
       const agent = new Agent({
         id: 'immediate-interrupt-agent-generate',
         name: 'Immediate Interrupt Agent Generate',
         instructions: 'test',
         model: errorResponseModel,
         memory: mockMemory,
+        outputProcessors: [
+          {
+            id: 'failed-run-output-processor',
+            processOutputResult: async ({ messageList }) => {
+              outputProcessorCalls++;
+              return messageList;
+            },
+          },
+        ],
       });
 
-      try {
-        if (version === 'v1') {
-          await agent.generateLegacy('interrupt before step', {
-            threadId: 'thread-3-generate',
-            resourceId: 'resource-3-generate',
-          });
-        } else {
-          await agent.generate('interrupt before step', {
-            memory: {
-              thread: 'thread-3-generate',
-              resource: 'resource-3-generate',
-            },
-          });
-        }
-      } catch (err: any) {
-        expect(err.message).toBe('Immediate interruption');
-      }
+      await expect(
+        agent.generate('interrupt before step', {
+          memory: {
+            thread: 'thread-3-generate',
+            resource: 'resource-3-generate',
+          },
+          onFinish: () => {
+            onFinishCalls++;
+          },
+        }),
+      ).rejects.toThrow('Immediate interruption');
 
       const result = await mockMemory.recall({
         threadId: 'thread-3-generate',
         resourceId: 'resource-3-generate',
       });
-
-      // TODO: output processors in v2 still run when the model throws an error! that doesn't seem right.
-      // it means in v2 our message history processor saves the input message.
-      if (version === `v1`) {
-        expect(result.messages.length).toBe(0);
-        expect(saveCallCount).toBe(0);
-      }
+      expect(result.messages).toHaveLength(1);
+      expect(result.messages[0]).toMatchObject({
+        role: 'user',
+        content: { parts: [{ type: 'text', text: 'interrupt before step' }] },
+      });
+      expect(result.messages[0]?.id).toBeTruthy();
+      expect(new Set(result.messages.map(message => message.id)).size).toBe(1);
+      expect(outputProcessorCalls).toBe(1);
+      expect(onFinishCalls).toBe(0);
     });
 
-    it('should save thread but not messages if error occurs during LLM generation', async () => {
-      // Both v1 and v2: Threads are now created upfront to prevent race conditions with
-      // storage backends like PostgresStore that validate thread existence before saving
-      // messages. When an error occurs during LLM generation, the thread will exist but
-      // no messages will be saved since the response never completed.
+    it('should save the thread and submitted input if error occurs during LLM generation', async () => {
+      // Threads are created upfront so storage backends that validate thread existence can
+      // persist the submitted input even when the provider fails before producing output.
       const mockMemory = new MockMemory();
       const saveMessagesSpy = vi.spyOn(mockMemory, 'saveMessages');
 
@@ -426,12 +426,20 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
 
       const thread = await mockMemory.getThreadById({ threadId: 'thread-err' });
 
-      // Both v1 and v2: Thread should exist (created upfront to prevent race conditions
-      // with storage backends like PostgresStore that validate thread existence before saving messages)
       expect(thread).not.toBeNull();
       expect(thread?.id).toBe('thread-err');
-      // But no messages should be saved since the LLM call failed
-      expect(saveMessagesSpy).not.toHaveBeenCalled();
+
+      if (version === 'v1') {
+        expect(saveMessagesSpy).not.toHaveBeenCalled();
+      } else {
+        const recalled = await mockMemory.recall({ threadId: 'thread-err', resourceId: 'user-err' });
+        expect(recalled.messages).toHaveLength(1);
+        expect(recalled.messages[0]).toMatchObject({
+          role: 'user',
+          content: { parts: [{ type: 'text', text: 'trigger error' }] },
+        });
+        expect(new Set(recalled.messages.map(message => message.id)).size).toBe(1);
+      }
     });
   });
 
@@ -913,14 +921,33 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
             }),
           });
 
+          const mockMemory = new MockMemory();
+          let outputProcessorCalls = 0;
+          let onFinishCalls = 0;
           const agent = new Agent({
             id: 'test-error-stream-non-error-finish',
             name: 'Test Error Stream NonError Finish',
             model: errorModel,
             instructions: 'You are a helpful assistant.',
+            memory: mockMemory,
+            outputProcessors: [
+              {
+                id: 'partial-failure-output-processor',
+                processOutputResult: async ({ messageList }) => {
+                  outputProcessorCalls++;
+                  return messageList;
+                },
+              },
+            ],
           });
 
-          const output = await agent.stream('Hello', { modelSettings: { maxRetries: 0 } });
+          const output = await agent.stream('Hello', {
+            modelSettings: { maxRetries: 0 },
+            memory: { thread: 'partial-failure-thread', resource: 'partial-failure-resource' },
+            onFinish: () => {
+              onFinishCalls++;
+            },
+          });
 
           let errorChunk: any;
           for await (const chunk of output.fullStream) {
@@ -934,6 +961,20 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
           expect((errorChunk.payload.error as Error).message).toBe('Mid-stream error with stop finish');
           expect(output.error).toBeInstanceOf(Error);
           expect((output.error as Error).message).toBe('Mid-stream error with stop finish');
+          expect(outputProcessorCalls).toBe(1);
+          expect(onFinishCalls).toBe(0);
+
+          const recalled = await mockMemory.recall({
+            threadId: 'partial-failure-thread',
+            resourceId: 'partial-failure-resource',
+          });
+          expect(recalled.messages.map(message => message.role)).toEqual(['user', 'assistant']);
+          expect(new Set(recalled.messages.map(message => message.id)).size).toBe(2);
+          expect(
+            recalled.messages[1]?.content.parts
+              ?.filter(part => part.type === 'text')
+              .map(part => ({ type: part.type, text: part.text })),
+          ).toEqual([{ type: 'text', text: 'partial' }]);
         });
 
         it('should call onError in generate when error chunk has non-error finishReason', async () => {
@@ -1382,168 +1423,147 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
         expect(abortEvent).toBeDefined();
       });
 
-      it('should persist only partial response when opted in and stream is aborted mid-generation', async () => {
-        if (version === 'v1') return; // Only test for v2 (VNext) path
-
+      it('should persist an immediate abort and recall it on the next turn', async () => {
         const abortController = new AbortController();
-        const totalChunks = 20;
-        const abortAfterChunks = 5;
-
-        // Simulate an LLM provider that does NOT respect the abort signal -
-        // it continues streaming all chunks even after the signal fires.
-        // This is realistic: many providers buffer data and continue sending
-        // even after the client signals cancellation.
-        const slowStreamModel = new MockLanguageModelV2({
+        const prompts: unknown[] = [];
+        let streamCallCount = 0;
+        const model = new MockLanguageModelV2({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
             finishReason: 'stop',
-            usage: { inputTokens: 10, outputTokens: 200, totalTokens: 210 },
-            content: [{ type: 'text', text: 'Full long response' }],
+            usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            content: [{ type: 'text', text: 'next response' }],
             warnings: [],
           }),
-          doStream: async () => {
-            // Build all chunks upfront - model does NOT check abort signal
-            const allChunks = [
-              { type: 'stream-start' as const, warnings: [] },
-              {
-                type: 'response-metadata' as const,
-                id: 'id-0',
-                modelId: 'mock-model-id',
-                timestamp: new Date(0),
-              },
-              { type: 'text-start' as const, id: 'text-1' },
-              ...Array.from({ length: totalChunks }, (_, i) => ({
-                type: 'text-delta' as const,
-                id: 'text-1',
-                delta: `chunk-${i + 1} `,
-              })),
-              { type: 'text-end' as const, id: 'text-1' },
-              {
-                type: 'finish' as const,
-                finishReason: 'stop' as const,
-                usage: { inputTokens: 10, outputTokens: 200, totalTokens: 210 },
-              },
-            ];
+          doStream: async options => {
+            prompts.push(options.prompt);
+            streamCallCount++;
 
-            let index = 0;
+            if (streamCallCount === 1) {
+              let pullCount = 0;
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                warnings: [],
+                stream: new ReadableStream({
+                  pull(controller) {
+                    if (pullCount++ === 0) {
+                      controller.enqueue({ type: 'stream-start', warnings: [] });
+                    } else {
+                      abortController.abort();
+                      controller.error(new DOMException('The user aborted a request.', 'AbortError'));
+                    }
+                  },
+                }),
+              };
+            }
+
             return {
               rawCall: { rawPrompt: null, rawSettings: {} },
               warnings: [],
-              stream: new ReadableStream({
-                async pull(controller) {
-                  if (index < allChunks.length) {
-                    await new Promise(resolve => setTimeout(resolve, 5));
-                    const chunk = allChunks[index++]!;
-
-                    // Fire abort after a few text-delta chunks, but keep streaming
-                    // This simulates the HTTP disconnect signal firing mid-stream
-                    const textDeltaCount = index - 3; // offset for header chunks
-                    if (chunk.type === 'text-delta' && textDeltaCount === abortAfterChunks) {
-                      abortController.abort();
-                    }
-
-                    controller.enqueue(chunk);
-                  } else {
-                    controller.close();
-                  }
+              stream: convertArrayToReadableStream([
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: 'next-response', modelId: 'mock-model-id', timestamp: new Date(0) },
+                { type: 'text-start', id: 'next-text' },
+                { type: 'text-delta', id: 'next-text', delta: 'next response' },
+                { type: 'text-end', id: 'next-text' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
                 },
-              }),
+              ]),
             };
           },
         });
 
         const mockMemory = new MockMemory();
-        let savedMessages: MastraDBMessage[] = [];
-        const origSaveMessages = mockMemory.saveMessages.bind(mockMemory);
-        mockMemory.saveMessages = async function (args) {
-          savedMessages.push(...args.messages);
-          return origSaveMessages(args);
+        const persistedBatches: MastraDBMessage[][] = [];
+        const originalSaveMessages = mockMemory.saveMessages.bind(mockMemory);
+        mockMemory.saveMessages = async args => {
+          persistedBatches.push(structuredClone(args.messages));
+          return originalSaveMessages(args);
         };
-
+        let outputProcessorCalls = 0;
+        let onAbortCalls = 0;
+        let onFinishCalls = 0;
         const agent = new Agent({
-          id: 'test-abort-no-persist-full',
-          name: 'Test Abort No Persist Full',
-          model: slowStreamModel,
-          instructions: 'You are a helpful assistant.',
+          id: 'immediate-abort-memory-agent',
+          name: 'Immediate Abort Memory Agent',
+          model,
+          instructions: 'test',
           memory: mockMemory,
+          outputProcessors: [
+            {
+              id: 'abort-output-processor',
+              processOutputResult: async ({ messageList }) => {
+                outputProcessorCalls++;
+                return messageList;
+              },
+            },
+          ],
         });
+        const memory = {
+          thread: 'immediate-abort-thread',
+          resource: 'immediate-abort-resource',
+          options: { lastMessages: 10 },
+        } as const;
 
-        const stream = await agent.stream('Write a very long essay', {
+        const abortedStream = await agent.stream('message before abort', {
           abortSignal: abortController.signal,
-          persistPartialOnAbort: true,
-          memory: {
-            thread: 'abort-test-thread',
-            resource: 'abort-test-resource',
+          memory,
+          onAbort: () => {
+            onAbortCalls++;
+          },
+          onFinish: () => {
+            onFinishCalls++;
           },
         });
-
-        // Consume the stream - it should end due to abort
         try {
-          await stream.consumeStream();
+          await abortedStream.consumeStream();
         } catch {
-          // Expected - abort error
+          // Expected abort error.
         }
 
-        // Wait a bit for any background persistence to complete
-        await new Promise(resolve => setTimeout(resolve, 500));
-
-        // Collect all text that was persisted across all saved assistant messages
-        const assistantMessages = savedMessages.filter(m => m.role === 'assistant');
-        const savedText = assistantMessages
-          .map(m => {
-            if (typeof m.content === 'string') return m.content;
-            if (m.content.parts) {
-              return m.content.parts
-                .filter((p: any) => p.type === 'text')
-                .map((p: any) => p.text)
-                .join('');
-            }
-            return '';
-          })
-          .join('');
-
-        // Also check the memory store directly for messages on this thread
-        const recalled = await mockMemory.recall({
-          threadId: 'abort-test-thread',
-          count: 100,
+        const afterAbort = await mockMemory.recall({
+          threadId: memory.thread,
+          resourceId: memory.resource,
         });
-        const recalledAssistant = recalled.messages.filter(m => m.role === 'assistant');
-        const recalledText = recalledAssistant
-          .map(m => {
-            if (typeof m.content === 'string') return m.content;
-            if (m.content.parts) {
-              return m.content.parts
-                .filter((p: any) => p.type === 'text')
-                .map((p: any) => p.text)
-                .join('');
-            }
-            return '';
-          })
-          .join('');
+        expect(afterAbort.messages).toHaveLength(1);
+        expect(afterAbort.messages[0]).toMatchObject({
+          role: 'user',
+          content: { parts: [{ type: 'text', text: 'message before abort' }] },
+        });
+        expect(afterAbort.messages[0]?.id).toBeTruthy();
+        expect(persistedBatches).toHaveLength(1);
+        expect(persistedBatches[0]?.map(message => message.id)).toEqual([afterAbort.messages[0]?.id]);
+        expect(outputProcessorCalls).toBe(0);
+        expect(onAbortCalls).toBe(1);
+        expect(onFinishCalls).toBe(0);
 
-        const allPersistedText = savedText + recalledText;
+        const nextStream = await agent.stream('message after abort', { memory });
+        await nextStream.consumeStream();
 
-        expect(allPersistedText).toContain('chunk-1 ');
-
-        // The persisted text should NOT contain the later chunks that were generated
-        // after the abort signal fired. The model produced all 20 chunks, but chunks
-        // after the abort point (chunk 5) should not be in memory.
-        // Using a generous buffer (checking chunks 10+) to account for buffering.
-        for (let i = 10; i <= totalChunks; i++) {
-          expect(allPersistedText).not.toContain(`chunk-${i} `);
-        }
+        expect(JSON.stringify(prompts[1])).toContain('message before abort');
+        expect(JSON.stringify(prompts[1])).toContain('message after abort');
+        const afterNextTurn = await mockMemory.recall({
+          threadId: memory.thread,
+          resourceId: memory.resource,
+        });
+        expect(afterNextTurn.messages.map(message => message.role)).toEqual(['user', 'user', 'assistant']);
+        expect(new Set(afterNextTurn.messages.map(message => message.id)).size).toBe(3);
+        expect(afterNextTurn.messages[0]?.id).toBe(afterAbort.messages[0]?.id);
       });
 
-      it('should not persist any assistant text on abort by default', async () => {
-        if (version === 'v1') return; // Only test for v2 (VNext) path
-
+      it('should persist exactly the assistant text emitted before abort', async () => {
         const abortController = new AbortController();
         const totalChunks = 20;
         const abortAfterChunks = 5;
-
-        // Same provider behavior as the opted-in test: it ignores cancellation and
-        // keeps streaming after the abort signal fires.
-        const slowStreamModel = new MockLanguageModelV2({
+        let generatedTextChunkCount = 0;
+        let resolveProviderFinished!: () => void;
+        const providerFinished = new Promise<void>(resolve => {
+          resolveProviderFinished = resolve;
+        });
+        const model = new MockLanguageModelV2({
           doGenerate: async () => ({
             rawCall: { rawPrompt: null, rawSettings: {} },
             finishReason: 'stop',
@@ -1561,10 +1581,10 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
                 timestamp: new Date(0),
               },
               { type: 'text-start' as const, id: 'text-1' },
-              ...Array.from({ length: totalChunks }, (_, i) => ({
+              ...Array.from({ length: totalChunks }, (_, index) => ({
                 type: 'text-delta' as const,
                 id: 'text-1',
-                delta: `chunk-${i + 1} `,
+                delta: `chunk-${index + 1} `,
               })),
               { type: 'text-end' as const, id: 'text-1' },
               {
@@ -1573,26 +1593,41 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
                 usage: { inputTokens: 10, outputTokens: 200, totalTokens: 210 },
               },
             ];
-
             let index = 0;
+
             return {
               rawCall: { rawPrompt: null, rawSettings: {} },
               warnings: [],
               stream: new ReadableStream({
-                async pull(controller) {
-                  if (index < allChunks.length) {
-                    await new Promise(resolve => setTimeout(resolve, 5));
-                    const chunk = allChunks[index++]!;
+                start(controller) {
+                  void (async () => {
+                    try {
+                      while (index < allChunks.length) {
+                        await new Promise(resolve => setTimeout(resolve, 5));
+                        const chunk = allChunks[index++]!;
+                        const textDeltaCount = index - 3;
+                        if (chunk.type === 'text-delta') {
+                          generatedTextChunkCount++;
+                          if (textDeltaCount === abortAfterChunks) {
+                            abortController.abort();
+                          }
+                        }
 
-                    const textDeltaCount = index - 3;
-                    if (chunk.type === 'text-delta' && textDeltaCount === abortAfterChunks) {
-                      abortController.abort();
+                        try {
+                          controller.enqueue(chunk);
+                        } catch {
+                          // This provider ignores cancellation and keeps generating output.
+                        }
+                      }
+                      try {
+                        controller.close();
+                      } catch {
+                        // The consumer canceled while the provider kept generating.
+                      }
+                    } finally {
+                      resolveProviderFinished();
                     }
-
-                    controller.enqueue(chunk);
-                  } else {
-                    controller.close();
-                  }
+                  })();
                 },
               }),
             };
@@ -1600,61 +1635,53 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
         });
 
         const mockMemory = new MockMemory();
-        const savedMessages: MastraDBMessage[] = [];
-        const origSaveMessages = mockMemory.saveMessages.bind(mockMemory);
-        mockMemory.saveMessages = async function (args) {
-          savedMessages.push(...args.messages);
-          return origSaveMessages(args);
+        const persistedBatches: MastraDBMessage[][] = [];
+        const originalSaveMessages = mockMemory.saveMessages.bind(mockMemory);
+        mockMemory.saveMessages = async args => {
+          persistedBatches.push(structuredClone(args.messages));
+          return originalSaveMessages(args);
         };
-
         const agent = new Agent({
-          id: 'test-abort-default-off',
-          name: 'Test Abort Default Off',
-          model: slowStreamModel,
-          instructions: 'You are a helpful assistant.',
+          id: 'bounded-abort-agent',
+          name: 'Bounded Abort Agent',
+          model,
+          instructions: 'test',
           memory: mockMemory,
         });
 
         const stream = await agent.stream('Write a very long essay', {
           abortSignal: abortController.signal,
           memory: {
-            thread: 'abort-default-thread',
-            resource: 'abort-test-resource',
+            thread: 'bounded-abort-thread',
+            resource: 'bounded-abort-resource',
           },
         });
-
         try {
           await stream.consumeStream();
         } catch {
-          // Expected - abort error
+          // Expected abort error.
         }
 
-        await new Promise(resolve => setTimeout(resolve, 500));
-
+        await providerFinished;
         const recalled = await mockMemory.recall({
-          threadId: 'abort-default-thread',
-          count: 100,
+          threadId: 'bounded-abort-thread',
+          resourceId: 'bounded-abort-resource',
         });
-
-        const collectText = (messages: MastraDBMessage[]) =>
-          messages
-            .filter(m => m.role === 'assistant')
-            .map(m => {
-              if (typeof m.content === 'string') return m.content;
-              if (m.content.parts) {
-                return m.content.parts
-                  .filter((p: any) => p.type === 'text')
-                  .map((p: any) => p.text)
-                  .join('');
-              }
-              return '';
-            })
-            .join('');
-
-        const allPersistedText = collectText(savedMessages) + collectText(recalled.messages);
-
-        // Default behavior is unchanged: an aborted stream persists no assistant output.
-        expect(allPersistedText).toBe('');
+        expect(generatedTextChunkCount).toBe(totalChunks);
+        expect(recalled.messages.map(message => message.role)).toEqual(['user', 'assistant']);
+        expect(new Set(recalled.messages.map(message => message.id)).size).toBe(2);
+        expect(
+          recalled.messages[0]?.content.parts
+            ?.filter(part => part.type === 'text')
+            .map(part => ({ type: part.type, text: part.text })),
+        ).toEqual([{ type: 'text', text: 'Write a very long essay' }]);
+        expect(
+          recalled.messages[1]?.content.parts
+            ?.filter(part => part.type === 'text')
+            .map(part => ({ type: part.type, text: part.text })),
+        ).toEqual([{ type: 'text', text: 'chunk-1 chunk-2 chunk-3 chunk-4 ' }]);
+        expect(persistedBatches).toHaveLength(1);
+        expect(persistedBatches[0]?.map(message => message.id)).toEqual(recalled.messages.map(message => message.id));
       });
     });
   }
@@ -1664,18 +1691,11 @@ saveAndErrorTests('v1');
 saveAndErrorTests('v2');
 
 /**
- * Regression test for https://github.com/mastra-ai/mastra/issues/13984
- *
- * savePerStep: true does not actually persist messages to storage during step execution.
- * It only accumulates messages in the in-memory MessageList via saveStepMessages(),
- * which calls messageList.add() but never calls saveQueueManager.flushMessages().
- *
- * The actual persistence only happens in executeOnFinish, which is gated by
- * !abortSignal.aborted. This means if the stream is aborted mid-generation,
- * executeOnFinish is skipped and NO messages are persisted — including the user's
- * original message.
+ * Submitted messages and completed tool side effects are historical facts. Aborting a run
+ * must not erase them, especially because a completed tool may have caused an irreversible
+ * external action even though the assistant never produced a final response.
  */
-describe('savePerStep should persist messages during step execution (issue #13984)', () => {
+describe('message persistence across completed steps', () => {
   it('should persist raw tool results separately from providerMetadata.mastra.modelOutput during savePerStep', async () => {
     let doStreamCallCount = 0;
 
@@ -1849,7 +1869,12 @@ describe('savePerStep should persist messages during step execution (issue #1398
     });
 
     const mockMemory = new MockMemory();
-    const saveMessagesSpy = vi.spyOn(mockMemory, 'saveMessages');
+    const persistedBatches: MastraDBMessage[][] = [];
+    const originalSaveMessages = mockMemory.saveMessages.bind(mockMemory);
+    mockMemory.saveMessages = async args => {
+      persistedBatches.push(structuredClone(args.messages));
+      return originalSaveMessages(args);
+    };
 
     const echoTool = createTool({
       id: 'echo-tool',
@@ -1875,14 +1900,10 @@ describe('savePerStep should persist messages during step execution (issue #1398
         thread: 'thread-save-per-step-abort',
         resource: 'resource-save-per-step-abort',
       },
-      savePerStep: true,
       abortSignal: abortController.signal,
       onStepFinish: async () => {
         stepFinishCount++;
         if (stepFinishCount === 1) {
-          // Abort after the first step completes (simulating page refresh).
-          // At this point savePerStep should have already persisted the user message
-          // and the first step's response to storage.
           abortController.abort();
         }
       },
@@ -1897,27 +1918,30 @@ describe('savePerStep should persist messages during step execution (issue #1398
       // Expected: stream may error on abort
     }
 
-    // Wait a tick for any async persistence to complete
-    await new Promise(resolve => setTimeout(resolve, 200));
+    expect(stepFinishCount).toBe(1);
 
-    // The first step completed and onStepFinish fired with savePerStep: true.
-    // The abort signal then fired, causing executeOnFinish to be skipped.
-    //
-    // BUG: saveMessages should have been called at least once during step execution
-    // to persist the user message and/or the first step's response messages.
-    // Currently, onStepFinish only calls messageList.add() via saveStepMessages()
-    // but never calls saveQueueManager.flushMessages(), so nothing is persisted.
-    // executeOnFinish (the only persistence path) is gated by !abortSignal.aborted.
-    expect(stepFinishCount).toBeGreaterThanOrEqual(1);
-    expect(saveMessagesSpy).toHaveBeenCalled();
-
-    // Verify the persisted messages include the user's original message
     const recalled = await mockMemory.recall({
       threadId: 'thread-save-per-step-abort',
       resourceId: 'resource-save-per-step-abort',
     });
-    expect(recalled.messages.length).toBeGreaterThan(0);
-    expect(recalled.messages.some(m => m.role === 'user')).toBe(true);
+    expect(recalled.messages.map(message => message.role)).toEqual(['user', 'assistant']);
+    expect(new Set(recalled.messages.map(message => message.id)).size).toBe(2);
+    expect(persistedBatches).toHaveLength(1);
+    expect(persistedBatches[0]?.map(message => message.id)).toEqual(recalled.messages.map(message => message.id));
+
+    const toolInvocationParts = recalled.messages
+      .flatMap(message => message.content.parts ?? [])
+      .filter(part => part.type === 'tool-invocation');
+    expect(toolInvocationParts).toHaveLength(1);
+    expect(toolInvocationParts[0]).toMatchObject({
+      toolInvocation: {
+        toolCallId: 'call-1',
+        toolName: 'echo-tool',
+        state: 'result',
+        args: { input: 'hello' },
+        result: { output: 'hello' },
+      },
+    });
   });
 });
 
