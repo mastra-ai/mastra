@@ -1,18 +1,11 @@
-/**
- * Reads a provider-executed web search, whose call is described by its result rather
- * than its input: OpenAI's `webSearch` declares an empty input schema and answers with
- * an `action`, while Anthropic's `webSearch_20250305` sends a `query` input and answers
- * with a bare array of results.
- */
+// OpenAI's web search declares an empty input and reports the call it made in the result `action`;
+// Anthropic's takes a `query` and answers with a bare array of results.
 
-/**
- * Flat on purpose: `type` is whichever name the provider gave the action — `search`,
- * `openPage`, `findInPage`, or one it adds later — so a new kind reaches callers with
- * its target intact instead of breaking a closed union they switch over.
- */
+/** `type` stays whatever the provider named the action, so a kind added later still arrives with its target. */
 export interface WebSearchAction {
   type: string;
   query?: string;
+  queries?: string[];
   url?: string;
   pattern?: string;
 }
@@ -23,9 +16,9 @@ export interface WebSearchLink {
   pageAge?: string;
 }
 
-/** Matches both the plain name and the dated one providers use (`web_search_20250305`). */
+/** Providers suffix their own tool name: `web_search_20250305`, `web_search_preview`. */
 export function isWebSearchToolName(toolName: string): boolean {
-  return toolName === 'web_search' || /^web_search_\d+$/.test(toolName);
+  return /^web_search(?:_\w+)?$/.test(toolName);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -38,6 +31,14 @@ function stringField(value: unknown, key: string): string | undefined {
   return typeof field === 'string' && field.length > 0 ? field : undefined;
 }
 
+function stringListField(value: unknown, key: string): string[] | undefined {
+  if (!isRecord(value)) return undefined;
+  const field = value[key];
+  if (!Array.isArray(field)) return undefined;
+  const items = field.filter((item): item is string => typeof item === 'string' && item.length > 0);
+  return items.length > 0 ? items : undefined;
+}
+
 export function webSearchAction(result: unknown): WebSearchAction | undefined {
   if (!isRecord(result)) return undefined;
   const action = result.action;
@@ -46,14 +47,14 @@ export function webSearchAction(result: unknown): WebSearchAction | undefined {
   return {
     type,
     query: stringField(action, 'query'),
+    queries: stringListField(action, 'queries'),
     url: stringField(action, 'url'),
     pattern: stringField(action, 'pattern'),
   };
 }
 
-/** What the action was aimed at, whichever kind it is. */
 export function webSearchTarget(action: WebSearchAction): string | undefined {
-  return action.query ?? action.pattern ?? action.url;
+  return action.query ?? action.queries?.join(', ') ?? action.pattern ?? action.url;
 }
 
 function resultEntries(result: unknown): unknown[] {
@@ -62,10 +63,7 @@ function resultEntries(result: unknown): unknown[] {
   return [];
 }
 
-/**
- * Pages the call touched, whichever provider ran it. Anthropic entries also carry a
- * large `encryptedContent` blob, left out here rather than handed to a renderer.
- */
+/** Anthropic entries also carry a large `encryptedContent` blob, dropped here. */
 export function webSearchLinks(result: unknown): WebSearchLink[] {
   const links = resultEntries(result).flatMap(entry => {
     const url = stringField(entry, 'url');

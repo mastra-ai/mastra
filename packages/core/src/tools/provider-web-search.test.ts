@@ -52,12 +52,27 @@ describe('webSearchAction', () => {
     expect(webSearchTarget({ type: 'findInPage', pattern: 'loop', url: 'https://mastra.ai' })).toBe('loop');
     expect(webSearchTarget({ type: 'openPage', url: 'https://mastra.ai' })).toBe('https://mastra.ai');
   });
+
+  it('joins the several queries one OpenAI search can run, and ignores an empty list', () => {
+    const action = webSearchAction({ action: { type: 'search', queries: ['mastra memory', 'mastra agents'] } });
+    expect(webSearchTarget(action!)).toBe('mastra memory, mastra agents');
+
+    expect(webSearchAction({ action: { type: 'search', queries: [], url: 'https://mastra.ai' } })).toEqual({
+      type: 'search',
+      query: undefined,
+      queries: undefined,
+      url: 'https://mastra.ai',
+      pattern: undefined,
+    });
+  });
 });
 
 describe('isWebSearchToolName', () => {
-  it('covers the dated name providers give their own tool', () => {
+  it('covers the suffixed names providers give their own tool', () => {
     expect(isWebSearchToolName('web_search')).toBe(true);
     expect(isWebSearchToolName('web_search_20250305')).toBe(true);
+    expect(isWebSearchToolName('web_search_preview')).toBe(true);
     expect(isWebSearchToolName('web_extract')).toBe(false);
+    expect(isWebSearchToolName('tavily-search')).toBe(false);
   });
 });
