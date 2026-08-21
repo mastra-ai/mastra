@@ -7,7 +7,7 @@ instead of deploying and waiting a day for organic usage.
 ## Flow
 
 1. **Extract** — copy a bounded set of threads (thread rows, messages, and _all_
-   Observational Memory record generations) out of a Shipyard-shaped source into a local
+   Observational Memory record generations) out of any Mastra-schema Postgres into a local
    Postgres "input" database.
 2. **Replay** — reconstruct each thread's original observation cycles from those records
    and drive them through capture + curation against a local store.
@@ -35,7 +35,7 @@ The final lines are machine-greppable: `EXTRACTED_THREADS=`, `EXTRACTED_MESSAGES
 
 | Role                          | Lifecycle                                  |
 | ----------------------------- | ------------------------------------------ |
-| Source (Shipyard snapshot)    | Read-only, never written, never dropped    |
+| Source (any Mastra Postgres)  | Read-only, never written, never dropped    |
 | Input DB (`simulate_input`)   | Written once by extraction, then immutable |
 | Arm DBs (`simulate_arm_a`, …) | Dropped and recreated per arm, per run     |
 
@@ -45,11 +45,14 @@ The final lines are machine-greppable: `EXTRACTED_THREADS=`, `EXTRACTED_MESSAGES
   attempt fails loudly rather than succeeding quietly.
 - The target host must be `127.0.0.1`, `localhost`, or `[::1]`. Anything else exits
   non-zero. A hostname that merely _contains_ "localhost" is rejected.
-- **Write-back to Shipyard is out of scope.** This tooling never writes to a remote
+- **Write-back to the source is out of scope.** This tooling never writes to a remote
   database.
 
 ## Prerequisites
 
-- Access to a Shipyard-shaped Postgres (tables `mastra_threads`, `mastra_messages`,
-  `mastra_observational_memory`).
+- Access to any Postgres carrying the Mastra memory schema (tables `mastra_threads`,
+  `mastra_messages`, `mastra_observational_memory`) — a production deployment, a staging
+  environment, or a local dev database all work. Nothing about the tool is specific to one
+  deployment: source and target are passed as flags, and the copied columns are read from
+  `information_schema` rather than hardcoded.
 - A local Postgres to extract into.
