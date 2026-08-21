@@ -31,7 +31,7 @@ describe('Subconscious configuration', () => {
         { name: 'remind', builtIn: true, maxSteps: 5 },
       ],
       reflection: [
-        { name: 'curate', builtIn: true, maxSteps: 5 },
+        { name: 'curate', builtIn: true, maxSteps: 200 },
         { name: 'learn', builtIn: true, maxSteps: 5 },
       ],
       defaultScope: 'resource',
@@ -70,6 +70,15 @@ describe('Subconscious configuration', () => {
     });
   });
 
+  it('lets a global maxSteps override the per-agent curation default', () => {
+    const subconscious = new Subconscious({ maxSteps: 7 });
+
+    expect(subconscious.resolved.reflection.map(agent => [agent.name, agent.maxSteps])).toEqual([
+      ['curate', 7],
+      ['learn', 7],
+    ]);
+  });
+
   it('validates custom agents, duplicate names, and bounds', () => {
     expect(() => new Subconscious({ observation: ['capture', 'capture'] })).toThrow(/Duplicate/);
     expect(() => new Subconscious({ observation: ['unknown' as 'capture'] })).toThrow(/Unknown/);
@@ -81,7 +90,8 @@ describe('Subconscious configuration', () => {
     ).toThrow(/custom capture schema requires an onExtracted hook/i);
     expect(() => new Subconscious({ reflection: [{ name: 'audit' }] })).toThrow(/requires instructions or agent/);
     expect(() => new Subconscious({ activity: { recentUpdates: 101 } })).toThrow(/between 1 and 100/);
-    expect(() => new Subconscious({ maxSteps: 0 })).toThrow(/between 1 and 25/);
+    expect(() => new Subconscious({ maxSteps: 0 })).toThrow(/between 1 and 500/);
+    expect(() => new Subconscious({ maxSteps: 501 })).toThrow(/between 1 and 500/);
     expect(() => new Subconscious({ observation: [{ name: 'capture', model, maxSteps: 2 } as any] })).toThrow(
       /shares the Observer model/,
     );

@@ -16,6 +16,13 @@ import type {
 const BUILT_IN_OBSERVATION = new Set(['capture', 'remind']);
 const BUILT_IN_REFLECTION = new Set(['curate', 'learn']);
 const DEFAULT_MAX_STEPS = 5;
+/**
+ * Curation walks a worklist that can reach hundreds of records, and its completion marker is
+ * fail-closed: a curator that runs out of steps advances no cursor at all. It gets a much larger
+ * default budget than the other agents, which each handle a single bounded prompt.
+ */
+const DEFAULT_MAX_STEPS_BY_AGENT: Record<string, number> = { curate: 200 };
+const MAX_MAX_STEPS = 500;
 const DEFAULT_RECENT_UPDATES = 10;
 const MAX_RECENT_UPDATES = 100;
 
@@ -35,8 +42,8 @@ function assertUniqueNames(entries: Array<string | { name: string }>, phase: str
 
 function boundedSteps(entry: { maxSteps?: number } | undefined, fallback: number): number {
   const steps = entry?.maxSteps ?? fallback;
-  if (!Number.isInteger(steps) || steps < 1 || steps > 25) {
-    throw new Error('Subconscious maxSteps must be an integer between 1 and 25.');
+  if (!Number.isInteger(steps) || steps < 1 || steps > MAX_MAX_STEPS) {
+    throw new Error(`Subconscious maxSteps must be an integer between 1 and ${MAX_MAX_STEPS}.`);
   }
   return steps;
 }
@@ -55,16 +62,17 @@ function resolveAgent(
   entry: string | { name: string; instructions?: string; model?: any; agent?: any; maxSteps?: number },
   builtIns: Set<string>,
   globalModel: SubconsciousConfig['model'],
-  globalMaxSteps: number,
+  globalMaxSteps: number | undefined,
 ): ResolvedSubconsciousAgent {
   const config = typeof entry === 'string' ? undefined : entry;
   const name = entryName(entry);
+  const fallbackMaxSteps = globalMaxSteps ?? DEFAULT_MAX_STEPS_BY_AGENT[name] ?? DEFAULT_MAX_STEPS;
   return {
     name,
     instructions: config?.instructions,
     model: config?.model ?? globalModel,
     agent: config?.agent,
-    maxSteps: boundedSteps(config, globalMaxSteps),
+    maxSteps: boundedSteps(config, fallbackMaxSteps),
     builtIn: builtIns.has(name),
   };
 }
@@ -84,7 +92,7 @@ export class Subconscious {
     assertUniqueNames(observation, 'observation');
     assertUniqueNames(reflection, 'reflection');
 
-    const maxSteps = boundedSteps(config, DEFAULT_MAX_STEPS);
+    const maxSteps = config.maxSteps === undefined ? undefined : boundedSteps(config, DEFAULT_MAX_STEPS);
     for (const entry of observation) this.#validateObservationEntry(entry);
     for (const entry of reflection) this.#validateReflectionEntry(entry);
 
