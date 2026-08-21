@@ -588,7 +588,6 @@ export class Workspace<
   /** Set as soon as `destroy()` begins, and never cleared. */
   private _teardownStarted = false;
   private _lsp?: LSPManager;
-  private _lspFactory?: () => LSPManager;
   private _logger?: IMastraLogger;
 
   constructor(config: WorkspaceConfig<TFilesystem, TSandbox, TMounts>) {
@@ -736,11 +735,7 @@ export class Workspace<
       } else {
         const lspConfig = config.lsp === true ? {} : config.lsp;
         const defaultRoot = lspConfig.root ?? findProjectRoot(process.cwd()) ?? process.cwd();
-        // Kept as a factory so stop() can replace a shut-down manager with a
-        // fresh one — LSPManager is one-way: shutdownAll() permanently
-        // refuses new clients.
-        this._lspFactory = () => new LSPManager(processes, defaultRoot, lspConfig, this._fs);
-        this._lsp = this._lspFactory();
+        this._lsp = new LSPManager(processes, defaultRoot, lspConfig, this._fs);
       }
     }
 
@@ -1340,18 +1335,15 @@ export class Workspace<
 
   private async _performStop(): Promise<void> {
     // Shutdown LSP before the sandbox — LSP clients need running processes
-    // to send shutdown/exit. A shut-down LSPManager permanently refuses new
-    // clients, so replace it with a fresh one; clients spawn lazily, so this
-    // costs nothing until diagnostics are next requested.
+    // to send shutdown/exit. The manager is kept: shutdownAll() drains its
+    // clients and resets it, so it spawns clients again on the next
+    // diagnostics request.
     if (this._lsp) {
       try {
         await this._lsp.shutdownAll();
       } catch {
         // LSP shutdown errors are non-blocking
       }
-      // Skip the recreate when a destroy began while we were stopping — a
-      // destroyed workspace must not resurrect an LSP manager.
-      this._lsp = this._teardownStarted ? undefined : this._lspFactory?.();
     }
 
     // Close browser before the sandbox
@@ -1407,7 +1399,6 @@ export class Workspace<
           // LSP shutdown errors are non-blocking
         }
         this._lsp = undefined;
-        this._lspFactory = undefined;
       }
 
       // Close browser before sandbox
