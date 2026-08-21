@@ -2,6 +2,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
+import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SankeySignals } from '../sankey-signals';
@@ -42,11 +43,24 @@ class ChartResizeObserver implements ResizeObserver {
   disconnect() {}
 }
 
+function ControlledSankeySignals() {
+  const [selectedThemeId, setSelectedThemeId] = useState<string>();
+  return (
+    <SankeySignals
+      entityId="support-agent"
+      entityType="agent"
+      signalNames={['goal', 'outcome', 'behavior']}
+      selectedThemeId={selectedThemeId}
+      onSelectedThemeIdChange={setSelectedThemeId}
+    />
+  );
+}
+
 function renderSignals() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <SankeySignals entityId="support-agent" entityType="agent" signalNames={['goal', 'outcome', 'behavior']} />
+      <ControlledSankeySignals />
     </QueryClientProvider>,
   );
 }

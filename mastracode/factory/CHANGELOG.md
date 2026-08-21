@@ -1,5 +1,180 @@
 # @mastra/factory
 
+## 0.10.0-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`f95f468`](https://github.com/mastra-ai/mastra/commit/f95f468cf1e7c2b924a13826494f98b8f2ccd581)]:
+  - @mastra/core@1.61.1-alpha.1
+  - @mastra/code-sdk@1.4.1-alpha.1
+
+## 0.10.0-alpha.0
+
+### Minor Changes
+
+- Improved the Factory audit log with a density timeline, category filters, responsive rows, and automatic history loading. Intake binding changes now appear in the affected project's audit history. ([#22023](https://github.com/mastra-ai/mastra/pull/22023))
+
+  ```ts
+  const response = await fetch(`/web/factory/projects/${factoryProjectId}/audit?actions=factory.run.started&limit=50`);
+  const page = await response.json();
+  ```
+
+### Patch Changes
+
+- Factory skill playbooks in Settings › Agent › Skills now render as formatted markdown instead of a wall of plain text, with a toggle on hover to read the raw SKILL.md source. Long skills scroll inside the card rather than stretching the page. ([#22018](https://github.com/mastra-ai/mastra/pull/22018))
+
+- Updated dependencies [[`1e47b75`](https://github.com/mastra-ai/mastra/commit/1e47b7520cab4cfaa8daed52f17e2e6d14ff7539)]:
+  - @mastra/core@1.61.1-alpha.0
+  - @mastra/code-sdk@1.4.1-alpha.0
+
+## 0.9.0
+
+### Minor Changes
+
+- Added a `/login` command to the web chat composer. Credential errors used to name a command the web UI did not have, leaving no way to act on them from the browser. Typing `/login` now opens Settings → Models, where providers are connected. ([#21860](https://github.com/mastra-ai/mastra/pull/21860))
+
+### Patch Changes
+
+- Fixed the chat jumping every time a session's stream hiccuped. Losing the connection used to push a banner above the transcript and shove every message down; the reconnect state now lives only in the status line under the composer, where the model and token readouts already are. ([#21850](https://github.com/mastra-ai/mastra/pull/21850))
+
+  The state is also honest during a run: a drop while the agent works used to stay hidden behind the working indicator, and now shows as `Reconnecting…`. A connection lost for good reads as `Disconnected` in the alert color.
+
+- Improved slash commands with a composer-integrated menu and consistent workspace panel elevation. ([#21980](https://github.com/mastra-ai/mastra/pull/21980))
+
+- Improved loaded Factory conversations with a smooth staggered reveal. ([#21937](https://github.com/mastra-ai/mastra/pull/21937))
+
+- Fixed assistant turns showing up twice in the chat transcript, with the first copy stripped of the tool cards that belong to it. ([#21851](https://github.com/mastra-ai/mastra/pull/21851))
+
+  Tool cards stay attached to the text they ran under. The double came from the same turn arriving under a second identity after a stream gap; the transcript now recognises that copy as the turn it is already drawing and updates it in place.
+
+- Improved model selection in Factory chats. The status line now shows one combined picker with the effective model for the current mode. ([#21871](https://github.com/mastra-ai/mastra/pull/21871))
+
+  The picker offers:
+
+  - Model packs as presets, with your personal default marked.
+  - Models grouped by provider, to override the model for the current mode.
+  - A reset action that returns the chat to your default pack.
+  - A link to pack management in settings.
+  - Search across packs and models.
+
+  The picker works in draft chats and in active user chats. A pack chosen in a draft applies before the first prompt runs. Live user chats can now switch models directly from the status line.
+
+- Trimmed what the Factory sidebar fetches while it polls. ([#21862](https://github.com/mastra-ai/mastra/pull/21862))
+
+  The activity dots used to cost one request per user session every five seconds. They now share a single request whatever the sidebar holds, so ten sessions poll once instead of eleven times.
+
+  Work item responses also stop carrying `factoryRuleMaterializationKey`, an internal field no client reads and the heaviest one on a large board.
+
+- Fixed Platform GitHub/Linear integrations and the Platform API client ignoring `MASTRA_PLATFORM_ACCESS_TOKEN`, the credential Mastra Platform injects into deployed projects. Integration auto-detection and the API client now accept `MASTRA_PLATFORM_ACCESS_TOKEN` (checked first) or `MASTRA_PLATFORM_SECRET_KEY`, so platform deployments work without manually copying the secret key into the environment. ([#21982](https://github.com/mastra-ai/mastra/pull/21982))
+
+- Creating a new Factory no longer takes over the whole screen once you already have one. The flow now runs inline at `/factories/:factoryId/new-factory`, so the sidebar stays in place and you keep the context of the Factory you were in. The full-screen version is still what you get on first run, when no Factory exists yet. ([#21932](https://github.com/mastra-ai/mastra/pull/21932))
+
+  Each step is now a searchable list you type into instead of a form: name the Factory, pick a repository, pick the Linear project that feeds its board (or skip Linear entirely), then choose the provider and model your runs start on. Picking a Linear project routes it to the new Factory and turns its issue sync on, so the board fills up without a detour through Settings. Repository search hits GitHub directly, so large accounts are usable, and keyboard navigation works throughout (arrows to move, Enter to select, Esc to leave).
+
+  Nothing is written to the server until the last step: the name, the repository and the Linear choice stay in the draft, and the Factory is created with all of them at once when you pick its model. Quitting the wizard halfway leaves nothing behind. Back walks the steps in reverse and only leaves the wizard from the first one.
+
+- Factory projects now have their own configurable observational-memory settings. Board runs and channel sessions hydrate from the factory project's shared settings row (falling back to built-in defaults) instead of any individual user's personal configuration, and the OM config routes accept a `factoryId` to read and update the factory-scoped row. In settings, a dedicated Memory page shows the factory-wide and personal observational-memory configuration side by side, so factory defaults and personal chat settings are edited separately. ([#21899](https://github.com/mastra-ai/mastra/pull/21899))
+
+  To read or update the factory-scoped configuration, pass the factory project id:
+
+  ```ts
+  await fetch(`/web/config/om?factoryId=${factoryId}`);
+  await fetch(`/web/config/om/observer/model`, {
+    method: 'PUT',
+    body: JSON.stringify({ modelId: 'anthropic/claude-haiku-4-5', factoryId }),
+  });
+  ```
+
+  Requests without `factoryId` keep operating on the caller's personal settings.
+
+- Provider OAuth sign-in can now be shared with the whole organization. Org admins get a "Just me" / "Everyone in org" toggle on the OAuth provider list; org-scoped sign-ins are stored as shared org credentials, reported with an "Org sign-in" badge, and can be removed at org scope (admin-gated). ([#21899](https://github.com/mastra-ai/mastra/pull/21899))
+
+- Factory runs now resolve provider credentials with org > user precedence, so an org-wide "Everyone in org" key takes priority over a run's acting user's personal key. This means factory automation always bills against the org's shared credentials when they exist, regardless of who triggered the run. Interactive (non-factory) sessions keep the existing user > org precedence, so personal plan subscriptions and keys still take priority there. ([#21899](https://github.com/mastra-ai/mastra/pull/21899))
+
+- Provider credentials can now be managed per scope after initial setup. The provider listing reports the caller's personal and org credentials independently (`userCredential`/`orgCredential` on `ProviderInfo`), so the settings UI shows separate sign-out actions for each scope and lets org admins add an org-wide OAuth sign-in while personally signed in (and vice versa) without signing out first. ([#21899](https://github.com/mastra-ai/mastra/pull/21899))
+
+- Provider-aware observational-memory defaults for factories. The factory creation wizard now fills the factory-scoped OM row (POST /web/config/om/provider-defaults accepts factoryId), and factory session hydration derives the OM fallback model from the factory's default model provider (e.g. anthropic/claude-haiku-4-5 when the default model is anthropic) instead of always using google/gemini-3.5-flash. GET/PUT OM routes report the same derived fallback so the settings UI no longer shows "Model credentials required" for factories whose default model provider is credentialed. ([#21899](https://github.com/mastra-ai/mastra/pull/21899))
+
+- Interactive messages and model switches on factory sessions now resolve provider credentials org-first (org > user), matching board-run kickoff. The credential resolver keys off the session's `factoryProjectId` in controller state, so any run on a factory-owned session rides the org's shared keys with the caller's personal credentials as fallback — switching to a personal-only model still works through that fallback. Repo-backed Slack channel sessions now stamp the owning factory project onto session state so they get the same behavior. ([#21899](https://github.com/mastra-ai/mastra/pull/21899))
+
+- Fixed factory board runs and Slack channel sessions inheriting the GitHub connection owner's personal observational-memory model settings. Factory sessions now always use the project's default model and the built-in observational-memory defaults, so runs no longer fail when the connection owner has a model configured that the workspace has no API key for. Web chat sessions still use each user's own memory settings. ([#21899](https://github.com/mastra-ai/mastra/pull/21899))
+
+  Note: sessions created before this change keep the settings they were hydrated with. Recreate existing factory sessions after deploying to pick up the corrected defaults.
+
+- Fixed Factory steering messages so they no longer interrupt active work. Pending steering messages now show their delivery state and use the same neutral style as other user messages. ([#21983](https://github.com/mastra-ai/mastra/pull/21983))
+
+- Fixed shared threads running with a stale model in multi-server deployments. The model selected for a mode is now re-read from the thread's persisted settings at the start of every run, so a model switch made in one browser session or server replica is picked up by all others instead of silently diverging until the next mode switch. ([#21899](https://github.com/mastra-ai/mastra/pull/21899))
+
+- Fixed pull request cards that stayed marked as open after an approving review. A card that an approving review moved to `done` was dropped from the GitHub reconcile sweep, so a merge landing afterwards never reached it — the board card kept saying `open` and the merged marker never appeared on its review session in the sidebar. Cards now stay in the sweep until their pull request is actually closed. ([#21870](https://github.com/mastra-ai/mastra/pull/21870))
+
+- Split thinking defaults on the Models settings page: the factory defaults section now has a base thinking level widget, and per-mode thinking defaults moved into the personal "Your defaults" section. ([#21899](https://github.com/mastra-ai/mastra/pull/21899))
+
+- Updated dependencies [[`88d14ca`](https://github.com/mastra-ai/mastra/commit/88d14cac008582a618fecc3d5c7fd3bdf4f6ddc3), [`480e491`](https://github.com/mastra-ai/mastra/commit/480e491588bd6a7a1c9ee4407590ad625dd33952), [`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`acc3471`](https://github.com/mastra-ai/mastra/commit/acc3471de5f3fde8027ee4e355af292b2bc1bc30), [`b6a771e`](https://github.com/mastra-ai/mastra/commit/b6a771ef23d203ddb348efca8065eff65def8191), [`84a5b69`](https://github.com/mastra-ai/mastra/commit/84a5b699f84d6bae0a34efe5a970d891090b9f41), [`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`3bb88dd`](https://github.com/mastra-ai/mastra/commit/3bb88ddf07fb98f3cd16d3bff94e51cd3b45d011), [`d23e75d`](https://github.com/mastra-ai/mastra/commit/d23e75d57cc7cf5b9bfdbee896bf5a6a2484fed7), [`c8faa4e`](https://github.com/mastra-ai/mastra/commit/c8faa4e1cfebaec56b65e754e90b9fe46d153359), [`d378d75`](https://github.com/mastra-ai/mastra/commit/d378d7511f71309ed61a8f6b93cd0361dc6cb70f), [`84a5b69`](https://github.com/mastra-ai/mastra/commit/84a5b699f84d6bae0a34efe5a970d891090b9f41), [`26d4016`](https://github.com/mastra-ai/mastra/commit/26d40160ff7f7d8bf95fee2039a52cbc83863533), [`7c60df5`](https://github.com/mastra-ai/mastra/commit/7c60df5c7872343fbac5c3e5b1175c8076a5abfd), [`57c5103`](https://github.com/mastra-ai/mastra/commit/57c51035a2a36e3df3c4f32f46bb789a66ed5946), [`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`10de311`](https://github.com/mastra-ai/mastra/commit/10de311e93baea36468463d25bf0f97046239d5e), [`84a5b69`](https://github.com/mastra-ai/mastra/commit/84a5b699f84d6bae0a34efe5a970d891090b9f41), [`f2031a4`](https://github.com/mastra-ai/mastra/commit/f2031a47445e8f67a89ba1309036816f97ab7a65), [`4c2b973`](https://github.com/mastra-ai/mastra/commit/4c2b97396066e97c95c3d0429b2f63a92e6af127), [`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`cad4208`](https://github.com/mastra-ai/mastra/commit/cad42082e6aa1776168a94914f523334be45d929), [`57c5103`](https://github.com/mastra-ai/mastra/commit/57c51035a2a36e3df3c4f32f46bb789a66ed5946), [`8e529d4`](https://github.com/mastra-ai/mastra/commit/8e529d4ac754efef04b225841349e0da9edf89a6), [`57c5103`](https://github.com/mastra-ai/mastra/commit/57c51035a2a36e3df3c4f32f46bb789a66ed5946), [`038b7b4`](https://github.com/mastra-ai/mastra/commit/038b7b405cb4ac25ab3f3031334111b1f87ac112), [`4132d61`](https://github.com/mastra-ai/mastra/commit/4132d61f8367077120ee9e6420d3224dffd93c93), [`d378d75`](https://github.com/mastra-ai/mastra/commit/d378d7511f71309ed61a8f6b93cd0361dc6cb70f)]:
+  - @mastra/core@1.61.0
+  - @mastra/code-sdk@1.4.0
+
+## 0.9.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`7c60df5`](https://github.com/mastra-ai/mastra/commit/7c60df5c7872343fbac5c3e5b1175c8076a5abfd)]:
+  - @mastra/core@1.61.0-alpha.5
+  - @mastra/code-sdk@1.4.0-alpha.5
+
+## 0.9.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies:
+  - @mastra/code-sdk@1.4.0-alpha.4
+  - @mastra/core@1.61.0-alpha.4
+
+## 0.9.0-alpha.3
+
+### Patch Changes
+
+- Improved slash commands with a composer-integrated menu and consistent workspace panel elevation. ([#21980](https://github.com/mastra-ai/mastra/pull/21980))
+
+- Fixed Platform GitHub/Linear integrations and the Platform API client ignoring `MASTRA_PLATFORM_ACCESS_TOKEN`, the credential Mastra Platform injects into deployed projects. Integration auto-detection and the API client now accept `MASTRA_PLATFORM_ACCESS_TOKEN` (checked first) or `MASTRA_PLATFORM_SECRET_KEY`, so platform deployments work without manually copying the secret key into the environment. ([#21982](https://github.com/mastra-ai/mastra/pull/21982))
+
+- Factory projects now have their own configurable observational-memory settings. Board runs and channel sessions hydrate from the factory project's shared settings row (falling back to built-in defaults) instead of any individual user's personal configuration, and the OM config routes accept a `factoryId` to read and update the factory-scoped row. In settings, a dedicated Memory page shows the factory-wide and personal observational-memory configuration side by side, so factory defaults and personal chat settings are edited separately. ([#21899](https://github.com/mastra-ai/mastra/pull/21899))
+
+  To read or update the factory-scoped configuration, pass the factory project id:
+
+  ```ts
+  await fetch(`/web/config/om?factoryId=${factoryId}`);
+  await fetch(`/web/config/om/observer/model`, {
+    method: 'PUT',
+    body: JSON.stringify({ modelId: 'anthropic/claude-haiku-4-5', factoryId }),
+  });
+  ```
+
+  Requests without `factoryId` keep operating on the caller's personal settings.
+
+- Provider OAuth sign-in can now be shared with the whole organization. Org admins get a "Just me" / "Everyone in org" toggle on the OAuth provider list; org-scoped sign-ins are stored as shared org credentials, reported with an "Org sign-in" badge, and can be removed at org scope (admin-gated). ([#21899](https://github.com/mastra-ai/mastra/pull/21899))
+
+- Factory runs now resolve provider credentials with org > user precedence, so an org-wide "Everyone in org" key takes priority over a run's acting user's personal key. This means factory automation always bills against the org's shared credentials when they exist, regardless of who triggered the run. Interactive (non-factory) sessions keep the existing user > org precedence, so personal plan subscriptions and keys still take priority there. ([#21899](https://github.com/mastra-ai/mastra/pull/21899))
+
+- Provider credentials can now be managed per scope after initial setup. The provider listing reports the caller's personal and org credentials independently (`userCredential`/`orgCredential` on `ProviderInfo`), so the settings UI shows separate sign-out actions for each scope and lets org admins add an org-wide OAuth sign-in while personally signed in (and vice versa) without signing out first. ([#21899](https://github.com/mastra-ai/mastra/pull/21899))
+
+- Provider-aware observational-memory defaults for factories. The factory creation wizard now fills the factory-scoped OM row (POST /web/config/om/provider-defaults accepts factoryId), and factory session hydration derives the OM fallback model from the factory's default model provider (e.g. anthropic/claude-haiku-4-5 when the default model is anthropic) instead of always using google/gemini-3.5-flash. GET/PUT OM routes report the same derived fallback so the settings UI no longer shows "Model credentials required" for factories whose default model provider is credentialed. ([#21899](https://github.com/mastra-ai/mastra/pull/21899))
+
+- Interactive messages and model switches on factory sessions now resolve provider credentials org-first (org > user), matching board-run kickoff. The credential resolver keys off the session's `factoryProjectId` in controller state, so any run on a factory-owned session rides the org's shared keys with the caller's personal credentials as fallback — switching to a personal-only model still works through that fallback. Repo-backed Slack channel sessions now stamp the owning factory project onto session state so they get the same behavior. ([#21899](https://github.com/mastra-ai/mastra/pull/21899))
+
+- Fixed factory board runs and Slack channel sessions inheriting the GitHub connection owner's personal observational-memory model settings. Factory sessions now always use the project's default model and the built-in observational-memory defaults, so runs no longer fail when the connection owner has a model configured that the workspace has no API key for. Web chat sessions still use each user's own memory settings. ([#21899](https://github.com/mastra-ai/mastra/pull/21899))
+
+  Note: sessions created before this change keep the settings they were hydrated with. Recreate existing factory sessions after deploying to pick up the corrected defaults.
+
+- Fixed Factory steering messages so they no longer interrupt active work. Pending steering messages now show their delivery state and use the same neutral style as other user messages. ([#21983](https://github.com/mastra-ai/mastra/pull/21983))
+
+- Fixed shared threads running with a stale model in multi-server deployments. The model selected for a mode is now re-read from the thread's persisted settings at the start of every run, so a model switch made in one browser session or server replica is picked up by all others instead of silently diverging until the next mode switch. ([#21899](https://github.com/mastra-ai/mastra/pull/21899))
+
+- Split thinking defaults on the Models settings page: the factory defaults section now has a base thinking level widget, and per-mode thinking defaults moved into the personal "Your defaults" section. ([#21899](https://github.com/mastra-ai/mastra/pull/21899))
+
+- Updated dependencies [[`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`acc3471`](https://github.com/mastra-ai/mastra/commit/acc3471de5f3fde8027ee4e355af292b2bc1bc30), [`b6a771e`](https://github.com/mastra-ai/mastra/commit/b6a771ef23d203ddb348efca8065eff65def8191), [`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`26d4016`](https://github.com/mastra-ai/mastra/commit/26d40160ff7f7d8bf95fee2039a52cbc83863533), [`57c5103`](https://github.com/mastra-ai/mastra/commit/57c51035a2a36e3df3c4f32f46bb789a66ed5946), [`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`57c5103`](https://github.com/mastra-ai/mastra/commit/57c51035a2a36e3df3c4f32f46bb789a66ed5946), [`57c5103`](https://github.com/mastra-ai/mastra/commit/57c51035a2a36e3df3c4f32f46bb789a66ed5946)]:
+  - @mastra/core@1.61.0-alpha.3
+  - @mastra/code-sdk@1.4.0-alpha.3
+
 ## 0.9.0-alpha.2
 
 ### Patch Changes

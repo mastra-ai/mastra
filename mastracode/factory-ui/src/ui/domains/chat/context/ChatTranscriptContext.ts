@@ -17,7 +17,8 @@ export interface ChatTranscriptApi {
   transcript: TranscriptState;
   busy: boolean;
   initialHistoryReady: boolean;
-  localUser: (text: string, steer?: boolean, files?: OutgoingFile[]) => void;
+  localUser: (text: string, steer?: boolean, files?: OutgoingFile[]) => string;
+  failLocalUser: (id: string) => void;
   reset: (threadId?: string, state?: SessionStateSnapshot) => void;
   resolvePrompt: (id: string) => void;
   clearPending: () => void;

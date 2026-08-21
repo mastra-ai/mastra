@@ -1,5 +1,267 @@
 # @mastra/core
 
+## 1.61.1-alpha.1
+
+### Patch Changes
+
+- Make scorer sampling deterministic and tie it to the trace sampling decision ([#22008](https://github.com/mastra-ai/mastra/pull/22008))
+
+  Ratio-based scorer sampling previously called `Math.random()` on every scorer invocation. It
+  now hashes the trace ID (falling back to the run ID when observability is not configured), so
+  the decision is reproducible and every scorer at a given rate selects the same traces. Two
+  scorers sampling at 10% now cover the same 10% of traffic instead of overlapping on roughly 1%
+  by chance, which makes their scores comparable on the same population.
+
+  Scorers also now respect the tracing sampler. If the tracer declined a trace, scorers no
+  longer run against it — those scores referenced a trace that was never stored and could not be
+  drilled into.
+
+  Two behavior changes when upgrading:
+
+  - **Score volume drops if your trace sampling rate is lower than your scorer sampling rate.**
+    The scores you lose are ones whose traces were never recorded. To keep the same score
+    volume, raise your trace sampling to cover the traffic you score (or lower your scorer
+    sampling to match — the effective rate is now bounded by the trace rate):
+
+    ```ts
+    // Before: scorer sampled 50% of invocations, but only 10% had a stored trace,
+    // so up to 40% of scores referenced traces that were never recorded.
+    new Observability({
+      configs: { default: { sampling: { type: 'ratio', probability: 0.1 }, exporters } },
+    });
+    new Agent({
+      scorers: { myScorer: { scorer: myScorer, sampling: { type: 'ratio', rate: 0.5 } } },
+    });
+
+    // After: raise trace sampling so every sampled score has a stored trace.
+    new Observability({
+      configs: { default: { sampling: { type: 'ratio', probability: 0.5 }, exporters } },
+    });
+    new Agent({
+      scorers: { myScorer: { scorer: myScorer, sampling: { type: 'ratio', rate: 0.5 } } },
+    });
+    ```
+
+  - **Which traces get scored changes, even at an unchanged rate.** Score counts before and
+    after the upgrade are drawn from a different set of traces, not just a different number.
+
+  Scoring is unaffected when observability is not configured: with no tracing set up there is no
+  trace decision to inherit, so scorers run as before, now keyed deterministically on run ID.
+
+## 1.61.1-alpha.0
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`1e47b75`](https://github.com/mastra-ai/mastra/commit/1e47b7520cab4cfaa8daed52f17e2e6d14ff7539))
+
+## 1.61.0
+
+### Minor Changes
+
+- Added graceful shutdown options for generated servers ([#20678](https://github.com/mastra-ai/mastra/issues/20678)). Configure how long in-flight HTTP requests may drain, or disable Mastra's built-in signal handlers when managing the server lifecycle yourself. ([#21990](https://github.com/mastra-ai/mastra/pull/21990))
+
+  ```ts
+  export const mastra = new Mastra({
+    server: {
+      drainTimeout: 600_000,
+      handleShutdownSignals: false,
+    },
+  });
+  ```
+
+- The session now marks a message you send while the agent is working, and every client gets it for free. Any user message submitted with a run in flight — including the one `session.steer()` sends after interrupting a run — carries `delivery: 'while-active'`, so the agent reads it as context for the work in progress and a reloaded transcript can still tell a steer apart from a normal message. A message that opens a new turn is unmarked, as before. ([#21842](https://github.com/mastra-ai/mastra/pull/21842))
+
+  The attribute used to be resolved from the run state at dispatch time, which reads idle for a steer (a steer aborts its own run before sending), so each client had to describe both delivery routes itself.
+
+  ```ts
+  // before
+  session.sendSignal({
+    content,
+    ifActive: { attributes: { delivery: 'while-active' } },
+    ifIdle: { attributes: { delivery: 'message' } },
+  });
+
+  // now
+  session.sendSignal({ content });
+  ```
+
+  A `delivery` the caller sets on the signal still wins.
+
+- Added caller-driven experiments so an external orchestrator (for example Temporal workers) can own the experiment loop while Mastra stays the system of record. ([#21888](https://github.com/mastra-ai/mastra/pull/21888))
+
+  Create an experiment with `dataset.createExperiment()` (idempotent when you pass your own id). With a target, Mastra runs each item for you: call `dataset.runExperimentItem()` per item and Mastra executes the registered agent or workflow, resolves scorers (experiment `scorers`, falling back to item `scorerIds`, then dataset `scorerIds`), and upserts the result. Without a target, run everything yourself and report per-item results with `dataset.submitExperimentResult()` (upsert semantics on `(experimentId, itemId, attempt)` so retried workers converge on a single row). Either way, close the run with `dataset.finalizeExperiment()` and Mastra computes per-item succeeded/failed/skipped counts from the persisted rows. Results go into the same storage as native runs, so Studio views, comparisons, and review summaries work unchanged.
+
+  ```typescript
+  // Caller drives the loop, Mastra runs each item
+  const { experimentId } = await dataset.createExperiment({
+    id: workflowRunId,
+    targetType: 'agent',
+    targetId: 'support-agent',
+    scorers: ['accuracy'],
+  });
+
+  await dataset.runExperimentItem({ experimentId, itemId });
+
+  // Or: caller runs everything, Mastra ingests results
+  const ingest = await dataset.createExperiment({ id: workflowRunId });
+  await dataset.submitExperimentResult({
+    experimentId: ingest.experimentId,
+    itemId,
+    output,
+    scores: [{ scorerId: 'accuracy', score: 0.92 }],
+  });
+
+  const experiment = await dataset.finalizeExperiment({ experimentId });
+  ```
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`88d14ca`](https://github.com/mastra-ai/mastra/commit/88d14cac008582a618fecc3d5c7fd3bdf4f6ddc3))
+
+- Fixed the coding agent's instructions for a message that arrives while it is already working. They described that message as `<user-message delivery="…">`, a tag the runtime never emits, so the rule and the wrapper the agent actually receives (`<user delivery="…">`) never matched by name. ([#21879](https://github.com/mastra-ai/mastra/pull/21879))
+
+  No API change, and no change to how a message is delivered: one that lands mid-work is still marked `while-active` and still meant as context for the work in flight. The instructions now name it the way it arrives.
+
+- Added HTTP endpoints for caller-driven experiments: `POST /datasets/:datasetId/experiments` now accepts `start: false` to create an experiment without spawning the runner (with an optional target and run-level `scorerIds`), and new routes `POST /datasets/:datasetId/experiments/:experimentId/items/:itemId/run`, `POST /datasets/:datasetId/experiments/:experimentId/results`, and `POST /datasets/:datasetId/experiments/:experimentId/finalize` let external orchestrators run one item server-side, submit externally computed per-item results (idempotent upsert on retries), and finalize the run with server-computed counts. ([#21888](https://github.com/mastra-ai/mastra/pull/21888))
+
+- Fixed versioned dataset item lookups to return the item visible in the requested dataset snapshot. ([#21979](https://github.com/mastra-ai/mastra/pull/21979))
+
+- Fixed concurrent resume() calls on the same suspended workflow run executing downstream steps more than once. A resume now atomically claims the run before executing anything, so only one caller continues a given suspension. Losing callers throw WORKFLOW_RESUME_ALREADY_CLAIMED without running any steps. Fixes #20443 ([#21725](https://github.com/mastra-ai/mastra/pull/21725))
+
+- Added `createDatasetExperiment()`, `runExperimentItem()`, `submitExperimentResult()`, and `finalizeExperiment()` methods so a caller-owned orchestrator (for example Temporal) can drive an experiment loop while Mastra either executes each item server-side or ingests externally computed results. ([#21888](https://github.com/mastra-ai/mastra/pull/21888))
+
+- Fixed Code Mode instructions to reference custom tool IDs. ([#21920](https://github.com/mastra-ai/mastra/pull/21920))
+
+- Reduced agent-controller memory usage during long streamed responses by reusing the live accumulated message across `message_start`, `message_update`, and `message_end` events, including events queued for server-sent event delivery. `display_state_changed.currentMessage` references the same live message. Consumers that require point-in-time values should copy or serialize before deferring event processing. ([#21813](https://github.com/mastra-ai/mastra/pull/21813))
+
+- Removed a catch that hid a broken durable run. When a durable run's state could not be read between iterations, the loop kept going and crashed one step later with an error that pointed at the wrong place. It now fails where the unreadable state is found, carrying the real cause. ([#21889](https://github.com/mastra-ai/mastra/pull/21889))
+
+- Workflow state updates now support an optional expectedStatus guard, so a status change is only applied when the stored run is in an expected state. This is what makes concurrent workflow resumes safe. ([#21725](https://github.com/mastra-ai/mastra/pull/21725))
+
+- Preserved plan revision feedback in submit_plan results so hosts can replay resolved approvals. ([#21891](https://github.com/mastra-ai/mastra/pull/21891))
+
+- Fixed a security issue where the framework-managed auth bearer token (`mastra__authToken`) was persisted in cleartext in workflow snapshots, score rows, and durable agent workflow inputs. The token is now excluded from all durable persistence; resumed authenticated requests use their own fresh live token. Fixes https://github.com/mastra-ai/mastra/issues/21975 ([#21996](https://github.com/mastra-ai/mastra/pull/21996))
+
+- Added `upsertExperimentResult()` to the experiments storage domain plus an `attempt` column on experiment results and a nullable target with an optional `scorerIds` column on experiments, enabling retry-safe result writes for caller-driven experiments (retried submissions with the same `(experimentId, itemId, attempt)` key converge on a single row). `saveScore()` now accepts an optional caller-supplied `id` and upserts on it, so retried experiment submissions replace their previous score rows (latest wins) instead of accumulating duplicates. ([#21888](https://github.com/mastra-ai/mastra/pull/21888))
+
+- Resume conflicts now return 409 Conflict. When a suspended workflow run has already been resumed by another caller, the resume endpoints respond with 409 instead of a generic error. ([#21725](https://github.com/mastra-ai/mastra/pull/21725))
+
+- Fixed a reply coming back duplicated after an interrupted turn. When an error-retry processor or the durable loop moved the response message id without sealing the stored response, the streamed message split where the stored one did not, so the second half reappeared under its own id on reload. Rotating a response message id now seals the response it leaves behind, so the two can no longer drift apart. ([#21868](https://github.com/mastra-ai/mastra/pull/21868))
+
+  Durable runs now honour the same error-retry hooks as regular runs: `processAPIError` receives `messageId` and a working `rotateResponseMessageId`, so a processor can close the failed response and answer the retry in a message of its own instead of appending to it. The same handler was also working on a throwaway copy of the conversation, so anything it added there was dropped: a signal sent from `processAPIError` never reached the retried request. It does now.
+
+  ```ts
+  const agent = new Agent({
+    name: 'support',
+    model: 'openai/gpt-5-nano',
+    maxProcessorRetries: 1,
+    errorProcessors: [
+      {
+        id: 'retry-in-a-new-message',
+        processAPIError: async ({ rotateResponseMessageId }) => {
+          rotateResponseMessageId?.();
+          return { retry: true };
+        },
+      },
+    ],
+  });
+  ```
+
+  Message ids minted during a durable run also honour a custom `generateId` configured on `Mastra`, which some paths silently ignored.
+
+- Fixed Code Mode sandbox resolution for resolver-backed workspaces. ([#21922](https://github.com/mastra-ai/mastra/pull/21922))
+
+- Improved Agent Controller session startup by initializing workspaces only when used. ([#21874](https://github.com/mastra-ai/mastra/pull/21874))
+
+  Agent Controller no longer initializes configured workspaces during controller or session creation.
+
+  Before, session creation implicitly initialized the configured workspace:
+
+  ```ts
+  const session = await controller.createSession({ id: 'session-id' });
+  ```
+
+  After, applications that require eager initialization must request it explicitly:
+
+  ```ts
+  const session = await controller.createSession({ id: 'session-id' });
+  await session.getWorkspace()?.init();
+  ```
+
+  Workspace operations otherwise initialize their resources lazily.
+
+- Fixed shared threads running with a stale model in multi-server deployments. The model selected for a mode is now re-read from the thread's persisted settings at the start of every run, so a model switch made in one browser session or server replica is picked up by all others instead of silently diverging until the next mode switch. ([#21899](https://github.com/mastra-ai/mastra/pull/21899))
+
+- Fixed streaming output processors reacting to errors that the agent recovered from. Previously, an error raised by a single model call (for example a transient rate limit delivered in the response stream) was passed to every output processor immediately, before error processor retries or fallback models had a chance to recover. Processors now only see an error once the run has actually failed on it, and they see it exactly once. ([#21738](https://github.com/mastra-ai/mastra/pull/21738))
+
+- Fixed the streamed reply splitting differently from the stored one. When the agent's turn was interrupted mid-run — a message sent while it was working, a resumed tool approval, a state signal — the live stream kept everything in one assistant message while storage had already sealed it and opened a new one. Coming back to the thread (tab switch, reload) replayed the second half as an extra copy. The stream now closes its message at the same boundary the run loop does. ([#21841](https://github.com/mastra-ai/mastra/pull/21841))
+
+- Removed a catch that hid a broken durable run. When a durable run's state could not be read between iterations, the loop kept going and crashed one step later with an error that pointed at the wrong place. It now fails where the unreadable state is found, carrying the real cause. ([#21889](https://github.com/mastra-ai/mastra/pull/21889))
+
+## 1.61.0-alpha.5
+
+### Patch Changes
+
+- Fixed a security issue where the framework-managed auth bearer token (`mastra__authToken`) was persisted in cleartext in workflow snapshots, score rows, and durable agent workflow inputs. The token is now excluded from all durable persistence; resumed authenticated requests use their own fresh live token. Fixes https://github.com/mastra-ai/mastra/issues/21975 ([#21996](https://github.com/mastra-ai/mastra/pull/21996))
+
+## 1.61.0-alpha.4
+
+## 1.61.0-alpha.3
+
+### Minor Changes
+
+- Added graceful shutdown options for generated servers ([#20678](https://github.com/mastra-ai/mastra/issues/20678)). Configure how long in-flight HTTP requests may drain, or disable Mastra's built-in signal handlers when managing the server lifecycle yourself. ([#21990](https://github.com/mastra-ai/mastra/pull/21990))
+
+  ```ts
+  export const mastra = new Mastra({
+    server: {
+      drainTimeout: 600_000,
+      handleShutdownSignals: false,
+    },
+  });
+  ```
+
+- Added caller-driven experiments so an external orchestrator (for example Temporal workers) can own the experiment loop while Mastra stays the system of record. ([#21888](https://github.com/mastra-ai/mastra/pull/21888))
+
+  Create an experiment with `dataset.createExperiment()` (idempotent when you pass your own id). With a target, Mastra runs each item for you: call `dataset.runExperimentItem()` per item and Mastra executes the registered agent or workflow, resolves scorers (experiment `scorers`, falling back to item `scorerIds`, then dataset `scorerIds`), and upserts the result. Without a target, run everything yourself and report per-item results with `dataset.submitExperimentResult()` (upsert semantics on `(experimentId, itemId, attempt)` so retried workers converge on a single row). Either way, close the run with `dataset.finalizeExperiment()` and Mastra computes per-item succeeded/failed/skipped counts from the persisted rows. Results go into the same storage as native runs, so Studio views, comparisons, and review summaries work unchanged.
+
+  ```typescript
+  // Caller drives the loop, Mastra runs each item
+  const { experimentId } = await dataset.createExperiment({
+    id: workflowRunId,
+    targetType: 'agent',
+    targetId: 'support-agent',
+    scorers: ['accuracy'],
+  });
+
+  await dataset.runExperimentItem({ experimentId, itemId });
+
+  // Or: caller runs everything, Mastra ingests results
+  const ingest = await dataset.createExperiment({ id: workflowRunId });
+  await dataset.submitExperimentResult({
+    experimentId: ingest.experimentId,
+    itemId,
+    output,
+    scores: [{ scorerId: 'accuracy', score: 0.92 }],
+  });
+
+  const experiment = await dataset.finalizeExperiment({ experimentId });
+  ```
+
+### Patch Changes
+
+- Added HTTP endpoints for caller-driven experiments: `POST /datasets/:datasetId/experiments` now accepts `start: false` to create an experiment without spawning the runner (with an optional target and run-level `scorerIds`), and new routes `POST /datasets/:datasetId/experiments/:experimentId/items/:itemId/run`, `POST /datasets/:datasetId/experiments/:experimentId/results`, and `POST /datasets/:datasetId/experiments/:experimentId/finalize` let external orchestrators run one item server-side, submit externally computed per-item results (idempotent upsert on retries), and finalize the run with server-computed counts. ([#21888](https://github.com/mastra-ai/mastra/pull/21888))
+
+- Fixed versioned dataset item lookups to return the item visible in the requested dataset snapshot. ([#21979](https://github.com/mastra-ai/mastra/pull/21979))
+
+- Added `createDatasetExperiment()`, `runExperimentItem()`, `submitExperimentResult()`, and `finalizeExperiment()` methods so a caller-owned orchestrator (for example Temporal) can drive an experiment loop while Mastra either executes each item server-side or ingests externally computed results. ([#21888](https://github.com/mastra-ai/mastra/pull/21888))
+
+- Preserved plan revision feedback in submit_plan results so hosts can replay resolved approvals. ([#21891](https://github.com/mastra-ai/mastra/pull/21891))
+
+- Added `upsertExperimentResult()` to the experiments storage domain plus an `attempt` column on experiment results and a nullable target with an optional `scorerIds` column on experiments, enabling retry-safe result writes for caller-driven experiments (retried submissions with the same `(experimentId, itemId, attempt)` key converge on a single row). `saveScore()` now accepts an optional caller-supplied `id` and upserts on it, so retried experiment submissions replace their previous score rows (latest wins) instead of accumulating duplicates. ([#21888](https://github.com/mastra-ai/mastra/pull/21888))
+
+- Fixed shared threads running with a stale model in multi-server deployments. The model selected for a mode is now re-read from the thread's persisted settings at the start of every run, so a model switch made in one browser session or server replica is picked up by all others instead of silently diverging until the next mode switch. ([#21899](https://github.com/mastra-ai/mastra/pull/21899))
+
 ## 1.61.0-alpha.2
 
 ### Patch Changes

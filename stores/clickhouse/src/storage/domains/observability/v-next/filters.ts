@@ -124,6 +124,83 @@ function addStringMapFilters(
 }
 
 /**
+ * Adds conditions asserting the JSON value at `pathRefs` inside `src` deep-equals `value`.
+ *
+ * Scalars (string/number/boolean/null) use type-checked typed extraction. Objects and
+ * arrays are decomposed recursively into per-leaf comparisons plus length checks, so
+ * nested values match structurally regardless of key serialization order while still
+ * requiring complete (exact, not partial) equality — mirroring the in-memory
+ * deep-equality semantics.
+ */
+function addJsonValueConditions(
+  src: string,
+  pathRefs: string[],
+  value: unknown,
+  valuePrefix: string,
+  nextId: () => number,
+  out: FilterResult,
+): void {
+  const path = pathRefs.join(', ');
+  if (value === null || value === undefined) {
+    out.conditions.push(`JSONHas(${src}, ${path}) AND JSONType(${src}, ${path}) = 'Null'`);
+  } else if (typeof value === 'string') {
+    const p = `${valuePrefix}_${nextId()}`;
+    out.conditions.push(`JSONType(${src}, ${path}) = 'String' AND JSONExtractString(${src}, ${path}) = {${p}:String}`);
+    out.params[p] = value;
+  } else if (typeof value === 'number') {
+    const p = `${valuePrefix}_${nextId()}`;
+    out.conditions.push(
+      `JSONType(${src}, ${path}) IN ('Int64', 'UInt64', 'Double') AND JSONExtractFloat(${src}, ${path}) = {${p}:Float64}`,
+    );
+    out.params[p] = value;
+  } else if (typeof value === 'boolean') {
+    const p = `${valuePrefix}_${nextId()}`;
+    out.conditions.push(`JSONType(${src}, ${path}) = 'Bool' AND JSONExtractBool(${src}, ${path}) = {${p}:UInt8}`);
+    out.params[p] = value ? 1 : 0;
+  } else if (Array.isArray(value)) {
+    out.conditions.push(`JSONType(${src}, ${path}) = 'Array' AND JSONLength(${src}, ${path}) = ${value.length}`);
+    value.forEach((item, idx) => {
+      // ClickHouse JSON path indices are 1-based.
+      addJsonValueConditions(src, [...pathRefs, String(idx + 1)], item, valuePrefix, nextId, out);
+    });
+  } else {
+    const entries = Object.entries(value as Record<string, unknown>).filter(([, v]) => v !== undefined);
+    out.conditions.push(`JSONType(${src}, ${path}) = 'Object' AND JSONLength(${src}, ${path}) = ${entries.length}`);
+    for (const [subKey, subValue] of entries) {
+      const p = `${valuePrefix}_k_${nextId()}`;
+      out.params[p] = subKey;
+      addJsonValueConditions(src, [...pathRefs, `{${p}:String}`], subValue, valuePrefix, nextId, out);
+    }
+  }
+}
+
+/**
+ * Adds key/value filters against a JSON-encoded string column (e.g. scores.metadata).
+ * Emits predicates per requested key with exact-value deep equality for any JSON value,
+ * mirroring the in-memory deep-equality semantics (structural, key-order independent).
+ */
+function addJsonStringFilters(
+  column: string,
+  values: Record<string, unknown> | null | undefined,
+  keyPrefix: string,
+  valuePrefix: string,
+  out: FilterResult,
+): void {
+  if (values == null || typeof values !== 'object') return;
+  let id = 0;
+  const nextId = () => id++;
+  let i = 0;
+  for (const [rawKey, rawValue] of Object.entries(values)) {
+    if (rawValue === undefined) continue;
+    const keyParam = `${keyPrefix}_${i}`;
+    const src = `ifNull(${column}, '{}')`;
+    out.params[keyParam] = rawKey;
+    addJsonValueConditions(src, [`{${keyParam}:String}`], rawValue, valuePrefix, nextId, out);
+    i++;
+  }
+}
+
+/**
  * Adds shared context filter conditions (commonFilterFields) to the output.
  * Used by logs, metrics, scores, and feedback filter builders.
  */
@@ -289,6 +366,8 @@ export function buildScoresFilterConditions(filters: ScoresFilter | undefined, t
   } else if (Array.isArray(filters.scorerId)) {
     addIn(col('scorerId'), filters.scorerId, 'scorerIds', out);
   }
+
+  addJsonStringFilters(col('metadata'), filters.metadata, 'score_meta_k', 'score_meta_v', out);
 
   return out;
 }
