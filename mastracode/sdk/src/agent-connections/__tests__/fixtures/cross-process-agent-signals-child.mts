@@ -14,6 +14,7 @@ const resourceId = resourceIdArg;
 const ownerThreadId = 'owner-thread';
 const senderThreadId = 'sender-thread';
 const transitionedSenderThreadId = 'sender-thread-2';
+const contentionThreadId = 'contended-thread';
 const threadId = role === 'owner' ? ownerThreadId : senderThreadId;
 const peerThreadId = role === 'owner' ? senderThreadId : ownerThreadId;
 const pubsub = createSignalsPubSub(resourceId);
@@ -107,6 +108,36 @@ async function runRequestReply() {
   subscription.unsubscribe();
 }
 
+async function runClaimOnly() {
+  const claim = await claimThread(threadId);
+  emit('thread-owned', { threadId });
+  await waitForCommand('close');
+  claim.unsubscribe();
+}
+
+async function runDiscoveryProbe() {
+  const peers = await agent.discoverThreadPeers({ timeoutMs: 1_000 });
+  const peer = peers.find(candidate => candidate.threadId === peerThreadId);
+  emit('discovered', {
+    hasPeer: Boolean(peer),
+    peerId: peer?.id,
+    peerThreadId: peer?.threadId,
+  });
+  await waitForCommand('close');
+}
+
+async function runOwnershipContention() {
+  const claim = await agent.claimThreadOwnership({
+    resourceId,
+    threadId: contentionThreadId,
+    streamOptions: { memory: { resource: resourceId, thread: contentionThreadId } },
+    peer: { label: `${role}:${contentionThreadId}`, metadata: { pid: process.pid, role } },
+  });
+  emit('claim-result', { claimed: claim.claimed, threadId: contentionThreadId });
+  await waitForCommand('close');
+  claim.unsubscribe();
+}
+
 async function runThreadTransition() {
   const initialSubscription = await agent.subscribeToThread({ resourceId, threadId });
   const initialIterator = initialSubscription.stream[Symbol.asyncIterator]();
@@ -175,6 +206,9 @@ async function runThreadTransition() {
 
 async function main() {
   if (scenario === 'thread-transition') await runThreadTransition();
+  else if (scenario === 'claim-only') await runClaimOnly();
+  else if (scenario === 'discovery-probe') await runDiscoveryProbe();
+  else if (scenario === 'ownership-contention') await runOwnershipContention();
   else await runRequestReply();
   commandLines.close();
   await pubsub.close();

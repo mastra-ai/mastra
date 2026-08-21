@@ -153,4 +153,72 @@ describe.skipIf(process.platform === 'win32')('cross-agent signals over Unix soc
     } catch {}
     expect(leftoverSockets).toEqual([]);
   }, 30_000);
+
+  it('isolates discovery between resource socket namespaces', async () => {
+    const isolatedResourceId = `${resourceId}-isolated`;
+    const owner = startChild('owner', resourceId, 'claim-only');
+    await owner.waitFor('thread-owned');
+
+    const observer = startChild('sender', isolatedResourceId, 'discovery-probe');
+    const discovery = await observer.waitFor('discovered');
+
+    owner.child.stdin.write('close\n');
+    observer.child.stdin.write('close\n');
+    owner.child.stdin.end();
+    observer.child.stdin.end();
+    const [ownerCode, observerCode] = await Promise.all([owner.result, observer.result]);
+
+    expect(discovery).toMatchObject({ hasPeer: false });
+    expect(owner.stderr).toBe('');
+    expect(observer.stderr).toBe('');
+    expect(ownerCode).toBe(0);
+    expect(observerCode).toBe(0);
+    rmSync(`/tmp/mc/${isolatedResourceId}`, { recursive: true, force: true });
+  }, 30_000);
+
+  it('allows exactly one process to claim ownership of a thread', async () => {
+    const owner = startChild('owner', resourceId, 'ownership-contention');
+    const ownerClaim = await owner.waitFor('claim-result');
+
+    const contender = startChild('sender', resourceId, 'ownership-contention');
+    const contenderClaim = await contender.waitFor('claim-result');
+
+    owner.child.stdin.write('close\n');
+    contender.child.stdin.write('close\n');
+    owner.child.stdin.end();
+    contender.child.stdin.end();
+    const [ownerCode, contenderCode] = await Promise.all([owner.result, contender.result]);
+
+    expect(ownerClaim).toMatchObject({ claimed: true, threadId: 'contended-thread' });
+    expect(contenderClaim).toMatchObject({ claimed: false, threadId: 'contended-thread' });
+    expect(owner.stderr).toBe('');
+    expect(contender.stderr).toBe('');
+    expect(ownerCode).toBe(0);
+    expect(contenderCode).toBe(0);
+  }, 30_000);
+
+  it('stops advertising a thread after its owner process exits abruptly', async () => {
+    const owner = startChild('owner', resourceId, 'claim-only');
+    await owner.waitFor('thread-owned');
+
+    const before = startChild('sender', resourceId, 'discovery-probe');
+    const beforeDiscovery = await before.waitFor('discovered');
+    before.child.stdin.write('close\n');
+    before.child.stdin.end();
+    expect(await before.result).toBe(0);
+
+    owner.child.kill('SIGKILL');
+    expect(await owner.result).not.toBe(0);
+
+    const after = startChild('sender', resourceId, 'discovery-probe');
+    const afterDiscovery = await after.waitFor('discovered');
+    after.child.stdin.write('close\n');
+    after.child.stdin.end();
+    expect(await after.result).toBe(0);
+
+    expect(beforeDiscovery).toMatchObject({ hasPeer: true, peerThreadId: 'owner-thread' });
+    expect(afterDiscovery).toMatchObject({ hasPeer: false });
+    expect(before.stderr).toBe('');
+    expect(after.stderr).toBe('');
+  }, 30_000);
 });
