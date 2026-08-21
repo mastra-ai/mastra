@@ -868,7 +868,21 @@ describe('session start (onSessionStart)', () => {
     expect(session.model.switch).not.toHaveBeenCalled();
     // The factory stamp still lands: org-first credential resolution keys off
     // controller state even when the model choice is already persisted.
-    expect(session.state.set).toHaveBeenCalledWith({ factoryProjectId: 'fp-1', factoryOrgId: 'org-1' });
+    expect(session.state.set).toHaveBeenCalledWith({ factoryProjectId: 'fp-1' });
+    expect(session.state.set).toHaveBeenCalledWith(expect.objectContaining({ factoryOrgId: 'org-1' }));
+  });
+
+  // An ungated dispatch marks the session unresolved above every guard. Owner
+  // recovery is the resolution, so it has to take the marker down with it —
+  // otherwise capture refuses for the life of the session over a stale flag.
+  it('clears the unresolved marker when owner recovery resolves the organization', async () => {
+    const deps = makeStartDeps();
+    const session = makeSession();
+    session.state.get = vi.fn(() => ({ factoryOrgUnresolved: true })) as any;
+
+    await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
+
+    expect(session.state.set).toHaveBeenCalledWith({ factoryOrgId: 'org-1', factoryOrgUnresolved: false });
   });
 
   // The org rung knowledge capture scopes on. `gateDispatch` stamps it on the

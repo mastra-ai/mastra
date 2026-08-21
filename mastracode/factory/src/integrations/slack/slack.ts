@@ -415,7 +415,11 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
     // Repo-backed Slack sessions are factory sessions: stamp the owning
     // project onto controller state so downstream reads (org-first credential
     // resolution, authority gates) recognize them, same as board runs.
-    await session.state.set({ factoryProjectId: owner.factoryProjectId, factoryOrgId: owner.orgId });
+    await session.state.set({ factoryProjectId: owner.factoryProjectId });
+    // Route the org through the seed helper rather than stamping it directly:
+    // an ungated dispatch marked this session unresolved above, and owner
+    // recovery is the resolution that has to clear that marker with it.
+    await seedSessionOrg(session, owner.orgId);
 
     const modeModelKey = `modeModelId_${session.mode.get()}`;
     if (await session.thread.getSetting({ key: modeModelKey })) return;
