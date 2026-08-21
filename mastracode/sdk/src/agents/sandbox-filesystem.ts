@@ -36,6 +36,8 @@ import { FileExistsError, FileNotFoundError, IsDirectoryError } from '@mastra/co
 const EXIT_NOT_FOUND = 20;
 const EXIT_IS_DIRECTORY = 21;
 const EXIT_EXISTS = 22;
+const EXIT_CONTAINMENT_ESCAPE = 23;
+const EXIT_CANNOT_CANONICALIZE = 24;
 
 /** Minimal command result shape we depend on. */
 export interface SandboxCommandResult {
@@ -170,6 +172,46 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
   }
 
   /**
+   * Shell prelude with the same containment logic as assertContainedRealpath,
+   * for folding into a read op's script so the whole operation is ONE sandbox
+   * exec instead of two (containment round-trips dominate skills discovery
+   * over remote sandboxes).
+   *
+   * A missing path skips the check (nothing to canonicalize; the op body
+   * produces its own not-found error, matching the two-exec behavior).
+   * An existing path that cannot be canonicalized fails CLOSED with
+   * EXIT_CANNOT_CANONICALIZE; a realpath outside the canonicalized root exits
+   * EXIT_CONTAINMENT_ESCAPE. Map both with throwIfContainmentError.
+   */
+  private containedPrelude(abs: string): string {
+    return [
+      `p=${shellQuote(abs)}`,
+      `if [ -e "$p" ] || [ -L "$p" ]; then`,
+      // The workdir itself may contain symlinked components (/tmp on macOS),
+      // so canonicalize it as the comparison root.
+      `  root=$(cd ${shellQuote(this.basePath)} 2>/dev/null && pwd -P)`,
+      `  [ -n "$root" ] || exit ${EXIT_CANNOT_CANONICALIZE}`,
+      `  rp=$(realpath "$p" 2>/dev/null) || rp=$(readlink -f "$p" 2>/dev/null) || { [ -d "$p" ] && rp=$(cd "$p" 2>/dev/null && pwd -P); }`,
+      `  [ -n "$rp" ] || exit ${EXIT_CANNOT_CANONICALIZE}`,
+      `  case "$rp" in`,
+      `    "$root" | "$root"/*) ;;`,
+      `    *) exit ${EXIT_CONTAINMENT_ESCAPE} ;;`,
+      `  esac`,
+      `fi`,
+    ].join('\n');
+  }
+
+  /** Map the containedPrelude sentinel exit codes to the containment errors. */
+  private throwIfContainmentError(result: SandboxCommandResult, inputPath: string): void {
+    if (result.exitCode === EXIT_CONTAINMENT_ESCAPE) {
+      throw new Error(`Path escapes workspace root (symlink): ${inputPath}`);
+    }
+    if (result.exitCode === EXIT_CANNOT_CANONICALIZE) {
+      throw new Error(`Unable to verify path stays within workspace root: ${inputPath}`);
+    }
+  }
+
+  /**
    * Guard for write destinations. The lexical guard catches `..`, but a symlink
    * inside the workdir can redirect a write outside it. For an existing target
    * we check its realpath; for a not-yet-existing target we check the realpath
@@ -199,12 +241,13 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
 
   async readFile(path: string, options?: ReadOptions): Promise<string | Buffer> {
     const abs = this.resolve(path);
-    await this.assertContainedRealpath(abs, path);
+    // Containment is folded into the same script as the read (one exec).
     // Guard clauses first: redirecting from a directory "succeeds" with empty
     // output on some shells, so classify before reading.
     const result = await this.exec(
-      `if [ -d ${shellQuote(abs)} ]; then exit ${EXIT_IS_DIRECTORY}; elif [ ! -e ${shellQuote(abs)} ]; then exit ${EXIT_NOT_FOUND}; fi; base64 < ${shellQuote(abs)}`,
+      `${this.containedPrelude(abs)}\nif [ -d ${shellQuote(abs)} ]; then exit ${EXIT_IS_DIRECTORY}; elif [ ! -e ${shellQuote(abs)} ]; then exit ${EXIT_NOT_FOUND}; fi; base64 < ${shellQuote(abs)}`,
     );
+    this.throwIfContainmentError(result, path);
     if (result.exitCode === EXIT_IS_DIRECTORY) throw new IsDirectoryError(path);
     if (result.exitCode === EXIT_NOT_FOUND) throw new FileNotFoundError(path);
     if (result.exitCode !== 0) {
@@ -374,14 +417,15 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
 
   async readdir(path: string, options?: ListOptions): Promise<FileEntry[]> {
     const abs = this.resolve(path);
-    await this.assertContainedRealpath(abs, path);
+    // Containment is folded into the same script as the listing (one exec).
     if (options?.recursive) {
       // Recursive listing emitting "type\tpath". `find -printf` is GNU-only
       // (fails on macOS/BSD hosts backing a local sandbox), so classify each
       // entry with a portable shell loop instead.
       const result = await this.exec(
-        `test -d ${shellQuote(abs)} && find ${shellQuote(abs)} -mindepth 1 ${options.maxDepth ? `-maxdepth ${Number(options.maxDepth)} ` : ''}2>/dev/null | while IFS= read -r f; do if [ -d "$f" ]; then printf 'd\\t%s\\n' "$f"; else printf 'f\\t%s\\n' "$f"; fi; done`,
+        `${this.containedPrelude(abs)}\ntest -d ${shellQuote(abs)} && find ${shellQuote(abs)} -mindepth 1 ${options.maxDepth ? `-maxdepth ${Number(options.maxDepth)} ` : ''}2>/dev/null | while IFS= read -r f; do if [ -d "$f" ]; then printf 'd\\t%s\\n' "$f"; else printf 'f\\t%s\\n' "$f"; fi; done`,
       );
+      this.throwIfContainmentError(result, path);
       if (result.exitCode !== 0) throw new Error(`Directory not found: ${path}`);
       return this.parseFindOutput(result.stdout, abs, options);
     }
@@ -389,8 +433,9 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
     // not echo — bash-as-/bin/sh (macOS local sandboxes) does not expand \t
     // in echo arguments.
     const result = await this.exec(
-      `cd ${shellQuote(abs)} 2>/dev/null && for f in * .[!.]*; do [ -e "$f" ] || continue; if [ -d "$f" ]; then printf 'd\\t%s\\n' "$f"; else printf 'f\\t%s\\n' "$f"; fi; done`,
+      `${this.containedPrelude(abs)}\ncd ${shellQuote(abs)} 2>/dev/null && for f in * .[!.]*; do [ -e "$f" ] || continue; if [ -d "$f" ]; then printf 'd\\t%s\\n' "$f"; else printf 'f\\t%s\\n' "$f"; fi; done`,
     );
+    this.throwIfContainmentError(result, path);
     if (result.exitCode !== 0) throw new Error(`Directory not found: ${path}`);
     return this.parseListOutput(result.stdout, options);
   }
@@ -442,15 +487,16 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
 
   async stat(path: string): Promise<FileStat> {
     const abs = this.resolve(path);
-    await this.assertContainedRealpath(abs, path);
+    // Containment is folded into the same script as the stat (one exec).
     // GNU stat: %F=type, %s=size, %Y=mtime (epoch seconds), %W=birth (or -1).
     // BSD/macOS stat (local sandbox hosts) rejects `-c`; fall back to its
     // `-f` format with the same field order (%HT=type, %z=size, %m=mtime,
     // %B=birth). Delimit with `|` — neither stat interprets `\t` escapes in
     // its format string.
     const result = await this.exec(
-      `stat -c '%F|%s|%Y|%W' ${shellQuote(abs)} 2>/dev/null || stat -f '%HT|%z|%m|%B' ${shellQuote(abs)}`,
+      `${this.containedPrelude(abs)}\nstat -c '%F|%s|%Y|%W' ${shellQuote(abs)} 2>/dev/null || stat -f '%HT|%z|%m|%B' ${shellQuote(abs)}`,
     );
+    this.throwIfContainmentError(result, path);
     if (result.exitCode !== 0) {
       throw new FileNotFoundError(path);
     }

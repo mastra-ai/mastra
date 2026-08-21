@@ -9,12 +9,12 @@
  */
 
 import { execFile } from 'node:child_process';
-import { mkdtempSync, rmSync, realpathSync } from 'node:fs';
+import { mkdtempSync, rmSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { createFilesystemTestSuite } from '@internal/workspace-test-utils';
-import { afterAll } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
 
 import type { SandboxCommandResult, SandboxExec } from './sandbox-filesystem';
 import { SandboxFilesystem } from './sandbox-filesystem';
@@ -63,6 +63,24 @@ function createSandboxFilesystem(): SandboxFilesystem {
   tmpDirs.push(workdir);
   return new SandboxFilesystem({ sandbox: createLocalShellExec(), workdir });
 }
+
+// Real-shell containment coverage: the unit tests exercise the folded
+// containment scripts against scripted mock exit codes; these run the actual
+// prelude in a real `sh` against a real escaping symlink.
+describe('SandboxFilesystem containment (real shell)', () => {
+  it('rejects a symlink escaping the workspace root for readFile, stat, and readdir', async () => {
+    const workdir = realpathSync(mkdtempSync(join(tmpdir(), 'mastra-sandbox-fs-escape-')));
+    const outside = realpathSync(mkdtempSync(join(tmpdir(), 'mastra-sandbox-fs-outside-')));
+    tmpDirs.push(workdir, outside);
+    writeFileSync(join(outside, 'secret.txt'), 'secret');
+    symlinkSync(outside, join(workdir, 'link'));
+    const fs = new SandboxFilesystem({ sandbox: createLocalShellExec(), workdir });
+
+    await expect(fs.readFile('link/secret.txt')).rejects.toThrow(/escapes workspace root/);
+    await expect(fs.stat('link/secret.txt')).rejects.toThrow(/escapes workspace root/);
+    await expect(fs.readdir('link')).rejects.toThrow(/escapes workspace root/);
+  });
+});
 
 createFilesystemTestSuite({
   suiteName: 'SandboxFilesystem Conformance (local shell)',
