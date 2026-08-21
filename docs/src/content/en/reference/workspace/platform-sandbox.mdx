@@ -1,18 +1,18 @@
 ---
-title: "Reference: PlatformSandbox | Workspace"
-description: "Documentation for the PlatformSandbox provider for executing commands in a Mastra Platform environment."
+title: 'Reference: PlatformSandbox | Workspace'
+description: 'Documentation for the PlatformSandbox provider for executing commands in a Mastra Platform environment.'
 packages:
-  - "@mastra/platform-workspace"
+  - '@mastra/platform-workspace'
 ---
 
-import Tabs from "@theme/Tabs";
-import TabItem from "@theme/TabItem";
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
 
 # PlatformSandbox
 
 Client for provisioning sandboxes in a Mastra Platform environment. Each `PlatformSandbox` instance owns one remote sandbox: `start()` provisions it, `executeCommand()` runs against it, and `destroy()` tears it down. Construct additional instances to own additional remote sandboxes. Use `clone()` to derive them from a configured template (see [Cloning](#cloning-for-a-fleet-of-sandboxes)).
 
-Sandboxes boot from a pre-built recipe checkpoint with Python 3, Node 22, TypeScript, tsx, and common build tooling already installed. Pass a stable `id` to opt into [checkpoint recovery](#checkpoint-recovery) so a new sandbox boots from the previous one's filesystem.
+Sandboxes boot from a pre-built provider template with Python 3, Node 22, TypeScript, tsx, and common build tooling already installed. You can also build a [reusable template](#reusable-templates) from a providerless serialized definition. Pass a stable `id` to opt into [checkpoint recovery](#checkpoint-recovery) so a new sandbox boots from the previous one's filesystem.
 
 Related providers: [`RailwaySandbox`](/integrations/sandboxes/railway) for self-hosted Railway sandboxes, [`LocalSandbox`](/reference/workspace/local-sandbox) for local sandboxes.
 
@@ -36,6 +36,7 @@ Configure the platform credentials. The access token, project ID, and environmen
     MASTRA_PLATFORM_ACCESS_TOKEN=your-platform-access-token
     MASTRA_PROJECT_ID=your-project-id
     MASTRA_ENVIRONMENT_ID=your-environment-id
+    SANDBOX_PROVIDER=railway
     ```
   </TabItem>
 
@@ -51,6 +52,8 @@ Configure the platform credentials. The access token, project ID, and environmen
 </Tabs>
 
 On a Mastra Platform deployment, `MASTRA_PLATFORM_ACCESS_TOKEN`, `MASTRA_PROJECT_ID`, and `MASTRA_ENVIRONMENT_ID` are injected automatically, so the constructor can be called with no options. For local development, `MASTRA_PLATFORM_ACCESS_TOKEN` can contain an `sk_` API token from your organization's settings page under **API Tokens**.
+
+The sandbox provider resolves from the constructor's `sandboxProvider` option, then `SANDBOX_PROVIDER`, then defaults to `railway`.
 
 ## Usage
 
@@ -112,6 +115,52 @@ const result = await sandbox.executeCommand('cat', ['/workspace/state.json'])
 
 When `sandboxId` is set, `environmentId` isn't required because the sandbox already exists.
 
+### Reusable templates
+
+Build a reusable sandbox template from a providerless definition before creating the sandbox:
+
+```typescript
+import { Template } from '@mastra/core/workspace'
+import { PlatformSandbox, PlatformTemplateClient } from '@mastra/platform-workspace'
+
+const environmentId = 'env_abc'
+const sandboxProvider = 'e2b' as const
+const commitSha = process.env.REPOSITORY_COMMIT_SHA!
+const definition = Template()
+  .setWorkdir('/workspace/repo')
+  .setEnvs({ BUILD_CONFIG_MARKER: 'template-v1' })
+  .aptInstall(['git', 'jq'])
+  .runCmd('git clone https://github.com/mastra-ai/mastra.git /workspace/repo')
+  .runCmd(`git checkout ${commitSha}`)
+  .runCmd('pnpm install --frozen-lockfile')
+  .toJSON()
+
+const templates = new PlatformTemplateClient({ sandboxProvider })
+const build = await templates.build({ environmentId, definition })
+const ready = await templates.waitUntilReady({
+  environmentId,
+  templateId: build.templateId,
+})
+
+const sandbox = new PlatformSandbox({
+  environmentId,
+  sandboxProvider,
+  templateId: ready.templateId,
+  templateDefinition: definition,
+})
+await sandbox.start()
+```
+
+`Template()` supports `runCmd`, `setWorkdir`, `setEnvs`, `aptInstall`, `pipInstall`, and `npmInstall`. Platform replays these operations for E2B or converts them to equivalent Railway template operations.
+
+The opaque `templateId` is bound to the authenticated organization, project, environment, provider, and definition digest. `PlatformSandbox` requires the same `templateDefinition` with the handle. A handle from another tenant, environment, provider, or definition isn't usable.
+
+:::warning
+
+Every template operation is serialized and sent to the provider. Use `setEnvs` only for non-sensitive build configuration. Template definitions don't support credentials, private-repository tokens, or other secrets.
+
+:::
+
 ### Checkpoint recovery
 
 The constructor `id` (explicit or auto-generated) is sent to the platform on `POST /sandbox` as an advisory recovery key:
@@ -149,7 +198,7 @@ const sandbox = new PlatformSandbox({
 
 ### Cloning for a fleet of sandboxes
 
-`clone()` returns an independent sibling `PlatformSandbox` that inherits credentials and defaults (access token, project, environment, network isolation, timeout, instructions, env, idle timeout) with per-instance overrides. The returned sandbox is unstarted and provisions on its own `start()`, so `clone()` performs no I/O:
+`clone()` returns an independent sibling `PlatformSandbox` that inherits credentials and defaults (access token, project, environment, provider, template, network isolation, timeout, instructions, env, idle timeout) with per-instance overrides. The returned sandbox is unstarted and provisions on its own `start()`, so `clone()` performs no I/O:
 
 ```typescript
 const template = new PlatformSandbox({
@@ -201,6 +250,12 @@ The `command` argument is a shell string and is concatenated verbatim into the r
     isOptional: true,
   },
   {
+    name: 'sandboxProvider',
+    type: "'railway' | 'e2b'",
+    description: 'Provider used for sandbox and template routes. Falls back to SANDBOX_PROVIDER, then railway.',
+    isOptional: true,
+  },
+  {
     name: 'environmentId',
     type: 'string',
     description:
@@ -219,6 +274,20 @@ The `command` argument is a shell string and is concatenated verbatim into the r
     type: 'string',
     description:
       'Boot-only fallback checkpoint used when the primary recovery checkpoint for id has no stored state. Later snapshots continue writing to the checkpoint for id.',
+    isOptional: true,
+  },
+  {
+    name: 'templateId',
+    type: 'string',
+    description:
+      'Opaque tenant-bound template handle returned by PlatformTemplateClient. Must be provided with templateDefinition.',
+    isOptional: true,
+  },
+  {
+    name: 'templateDefinition',
+    type: 'SerializedSandboxTemplate',
+    description:
+      'Providerless template definition whose digest is bound to templateId. Must be provided with templateId.',
     isOptional: true,
   },
   {
@@ -337,7 +406,7 @@ The `command` argument is a shell string and is concatenated verbatim into the r
     name: 'clone',
     type: '(options?: SandboxCloneOptions) => PlatformSandbox',
     description:
-      'Construct an unstarted sibling PlatformSandbox that inherits credentials and defaults with per-instance overrides (id, sandboxId, env, idleTimeoutMinutes). Performs no I/O. Use to build a fleet of independent sandboxes from one configured template.',
+      'Construct an unstarted sibling PlatformSandbox that inherits credentials, provider, template, and defaults with per-instance overrides (id, sandboxId, env, idleTimeoutMinutes). Performs no I/O. Use to build a fleet of independent sandboxes from one configured template.',
   },
   {
     name: 'snapshot',
