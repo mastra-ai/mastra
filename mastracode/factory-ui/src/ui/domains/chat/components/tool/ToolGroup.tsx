@@ -82,7 +82,7 @@ function GroupKinds({ tools }: { tools: ToolCall[] }) {
       className="flex shrink-0 items-center gap-1.5"
     >
       {kinds.map(([label, Kind]) => (
-        <Kind key={label} size={12} strokeWidth={1.75} className="text-icon2" />
+        <Kind key={label} width={12} height={12} strokeWidth={1.75} className="text-icon2" />
       ))}
     </span>
   );
