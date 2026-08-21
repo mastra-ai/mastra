@@ -162,7 +162,7 @@ export function __clearSessionSandboxesForTests(): void {
  * skip cache, not a correctness mechanism — the setup work is idempotent by
  * construction (materialize probes the disk, checkout/setup re-run safely).
  */
-const SESSION_SETUP_MARKER = '.mastra-bootstrapped';
+const SESSION_SETUP_MARKER = '.mastra-factory/bootstrap';
 
 function markerShellPath(sandbox: Pick<WorkspaceSandbox, 'provider'>): string {
   // Local sandboxes exec with cwd = the session working directory; remote
@@ -180,7 +180,8 @@ async function markerPresent(sandbox: WorkspaceSandbox, workdir: string): Promis
 
 async function writeMarker(sandbox: WorkspaceSandbox): Promise<void> {
   // Best-effort: a missing marker only re-runs the idempotent setup later.
-  await sandbox.executeCommand!(`touch "${markerShellPath(sandbox)}"`).catch(() => {});
+  const marker = markerShellPath(sandbox);
+  await sandbox.executeCommand!(`mkdir -p "$(dirname "${marker}")" && touch "${marker}"`).catch(() => {});
 }
 
 /**

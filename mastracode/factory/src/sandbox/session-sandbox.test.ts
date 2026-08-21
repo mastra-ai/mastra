@@ -119,7 +119,7 @@ describe('session setup hook', () => {
     const sandbox = new LocalSandbox({ workingDirectory: boot, onStart: hook });
     await sandbox._start();
     await expect(fs.stat(path.join(boot, 'hook-ran.txt'))).resolves.toBeDefined();
-    await expect(fs.stat(path.join(boot, '.mastra-bootstrapped'))).resolves.toBeDefined();
+    await expect(fs.stat(path.join(boot, '.mastra-factory/bootstrap'))).resolves.toBeDefined();
   });
 
   it('the hook skips setup on reconnect when the marker and checkout are present', async () => {
@@ -190,7 +190,7 @@ describe('session setup hook', () => {
     });
 
     await expect(failing._start()).rejects.toThrow(/Session setup failed \(exit 7\)/);
-    await expect(fs.stat(path.join(boot, '.mastra-bootstrapped'))).rejects.toThrow();
+    await expect(fs.stat(path.join(boot, '.mastra-factory/bootstrap'))).rejects.toThrow();
 
     // Reconnect (outcome: 'connected'), marker absent → setup re-runs and heals.
     const healed = new LocalSandbox({
@@ -203,6 +203,6 @@ describe('session setup hook', () => {
     });
     await healed._start();
     await expect(fs.stat(path.join(boot, 'healed.txt'))).resolves.toBeDefined();
-    await expect(fs.stat(path.join(boot, '.mastra-bootstrapped'))).resolves.toBeDefined();
+    await expect(fs.stat(path.join(boot, '.mastra-factory/bootstrap'))).resolves.toBeDefined();
   });
 });
