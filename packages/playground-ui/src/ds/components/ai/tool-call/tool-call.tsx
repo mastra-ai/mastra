@@ -349,7 +349,7 @@ function boundedLines(value: string): { lines: string[]; hidden: number } {
   return { lines: lines.slice(0, DIFF_MAX_LINES), hidden: Math.max(0, lines.length - DIFF_MAX_LINES) };
 }
 
-function DiffSide({ lines, side }: { lines: string[]; side: keyof typeof DIFF_SIDES }) {
+function DiffSide({ lines, side, lang }: { lines: string[]; side: keyof typeof DIFF_SIDES; lang?: string }) {
   const { sign, row, gutter } = DIFF_SIDES[side];
   const highlighted = useHighlightedCode(lines.join('\n'), lang);
   const highlightedLines = highlighted?.code.split('\n');
@@ -387,8 +387,6 @@ function DiffView({ oldText, newText, path }: { oldText: string; newText: string
   const removed = boundedLines(oldText);
   const added = boundedLines(newText);
   const hidden = removed.hidden + added.hidden;
-  const highlightedRemoved = highlightCodeLines(removed.lines.join('\n'), lang);
-  const highlightedAdded = highlightCodeLines(added.lines.join('\n'), lang);
 
   return (
     <div
@@ -396,8 +394,8 @@ function DiffView({ oldText, newText, path }: { oldText: string; newText: string
       role="group"
       aria-label="File change"
     >
-      <DiffSide lines={highlightedRemoved} side="removed" />
-      <DiffSide lines={highlightedAdded} side="added" />
+      <DiffSide lines={removed.lines} side="removed" lang={lang} />
+      <DiffSide lines={added.lines} side="added" lang={lang} />
       {hidden > 0 && <div className="text-icon3 px-2.5 py-1 select-none">… {hidden} more lines</div>}
     </div>
   );
