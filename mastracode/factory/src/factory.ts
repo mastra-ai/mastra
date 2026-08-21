@@ -595,7 +595,12 @@ export class MastraFactory {
         // A factory reads the repository it works on and its skill, never the
         // ~/.claude instructions of whoever hosts the process. On the controller
         // rather than per session, so webhook-recreated sessions keep it too.
-        initialState: { skipGlobalInstructions: true },
+        // Blank project identity for the same reason: the SDK's defaults seed
+        // sessions with the HOST process's own project root / name / branch,
+        // which must never reach a hosted session's prompt. Repo-backed
+        // sessions get their real workdir pinned by workspace resolution;
+        // chat-only sessions legitimately have no project.
+        initialState: { skipGlobalInstructions: true, projectPath: '', projectName: '', gitBranch: '' },
         storage: storage.getMastraStorage(),
         ...(mastraStorageBackend ? { storageBackend: mastraStorageBackend } : {}),
         ...(factoryProcessor ? { inputProcessors: [factoryProcessor] } : {}),
