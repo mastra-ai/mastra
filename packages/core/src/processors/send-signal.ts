@@ -8,8 +8,8 @@ import type { ProcessorStreamWriter } from './index';
  *
  * A transient signal is meant to be re-injected — typically from `processInputStep`, which runs
  * once per model call — and the message-list upsert is keyed on `id`. Without a stable id every
- * re-injection mints a fresh UUID and lands as an additional copy in the same turn, so by the fifth
- * step of a tool loop the model sees five copies of one reminder. Keying on the emitting processor
+ * re-injection mints a fresh UUID and lands as an additional copy in the same turn, so every step
+ * of a tool loop adds another copy of the same reminder. Keying on the emitting processor
  * plus the tag name gives each emitter one slot per tag without the caller having to know that ids
  * are what drive deduplication.
  *
@@ -26,7 +26,7 @@ import type { ProcessorStreamWriter } from './index';
  * from the same processor and tag distinguishes them itself.
  */
 function defaultTransientSignalId(processorId: string, tagName: string): string {
-  return `transient:${processorId}:${tagName}`;
+  return `transient:${encodeURIComponent(processorId)}:${encodeURIComponent(tagName)}`;
 }
 
 export function createProcessorSendSignal(args: {

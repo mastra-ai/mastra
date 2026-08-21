@@ -4,7 +4,7 @@
 
 Fixed `transient: true` signals so they deliver a single, fresh reminder instead of piling up.
 
-`processInputStep` runs once per model call, not once per turn, so a processor that re-sends a transient reminder each step was adding a new copy each time — by the fifth step of a tool loop the model received five copies of the same `<system-reminder>`. `transient` only ever suppressed persistence, so it never bounded the number of in-prompt copies.
+`processInputStep` runs once per model call, not once per turn, so a processor that re-sends a transient reminder each step was adding a new copy each time, so the same `<system-reminder>` piled up across the steps of a turn. `transient` only ever suppressed persistence, so it never bounded the number of in-prompt copies.
 
 A transient signal now reuses one stable id per emitting processor and tag when the caller doesn't supply one, and re-sending it replaces the previous copy and moves it to the end of the prompt. That gives what the docs describe — one fresh copy near the latest message — with no caller changes.
 
@@ -13,7 +13,7 @@ export class SteeringReminderProcessor implements Processor {
   readonly id = 'steering-reminder';
 
   async processInputStep({ sendSignal }: ProcessInputStepArgs) {
-    // Before: one copy per step (1, 2, 3, 4, 5 by the fifth step).
+    // Before: a new copy added on every step, piling up across the turn.
     // After:  one copy, always last.
     await sendSignal?.({
       type: 'reactive',
