@@ -532,6 +532,25 @@ describe('dispatchGithubWebhook org seeding', () => {
     expect(state.factoryOrgId).toBe('org-1');
   });
 
+  it('clears a stale unresolved marker on a session that already has its org', async () => {
+    // An earlier failed resolution left the marker behind. Nothing re-seeds a
+    // session after its start hook, so the marker would refuse capture forever.
+    const state: Record<string, unknown> = {
+      factoryProjectId: 'resource-1',
+      factoryOrgId: 'org-1',
+      factoryOrgUnresolved: true,
+    };
+    const session = liveSession(state);
+    const getBySessionId = vi.fn(async () => ({ userId: 'user-1', orgId: 'org-other' }));
+
+    const result = await deliver(session, getBySessionId as never);
+
+    expect(result.delivered).toBe(1);
+    expect(getBySessionId).not.toHaveBeenCalled();
+    expect(state.factoryOrgId).toBe('org-1');
+    expect(state.factoryOrgUnresolved).toBe(false);
+  });
+
   it.each([
     ['the row lookup rejects', async () => { throw new Error('storage down'); }],
     ['the row is gone', async () => null],
