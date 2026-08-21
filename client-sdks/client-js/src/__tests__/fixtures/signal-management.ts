@@ -1,12 +1,4 @@
-import type {
-  CreateTraceSignalDefinitionInput,
-  ProjectTraceSignalSetting,
-  TraceSignalDefinition,
-  TraceSignalManagementListResponse,
-  UpdateTraceSignalDefinitionInput,
-} from '../../agent-learning';
-
-export const customSignalDefinitionFixture: TraceSignalDefinition = {
+export const customSignalDefinitionFixture = {
   id: '11111111-1111-4111-8111-111111111111',
   name: 'handoff_quality',
   displayLabel: 'Handoff Quality',
@@ -21,7 +13,7 @@ export const customSignalDefinitionFixture: TraceSignalDefinition = {
   updatedAt: '2026-08-18T12:00:00.000Z',
 };
 
-export const archivedSignalDefinitionFixture: TraceSignalDefinition = {
+export const archivedSignalDefinitionFixture = {
   ...customSignalDefinitionFixture,
   id: '22222222-2222-4222-8222-222222222222',
   name: 'resolution_detail',
@@ -29,12 +21,12 @@ export const archivedSignalDefinitionFixture: TraceSignalDefinition = {
   status: 'archived',
 };
 
-export const signalManagementListFixture: TraceSignalManagementListResponse = {
+export const signalManagementListFixture = {
   definitions: [customSignalDefinitionFixture, archivedSignalDefinitionFixture],
   limits: { maxDefinitionsPerOrganization: 7 },
 };
 
-export const createSignalDefinitionInputFixture: CreateTraceSignalDefinitionInput = {
+export const createSignalDefinitionInputFixture = {
   name: 'tool_usage',
   displayLabel: 'Tool Usage',
   description: 'How the agent used tools.',
@@ -43,7 +35,7 @@ export const createSignalDefinitionInputFixture: CreateTraceSignalDefinitionInpu
   artifactAllowlist: ['latestUserInput', 'minifiedTrace'],
 };
 
-export const updateSignalDefinitionInputFixture: UpdateTraceSignalDefinitionInput = {
+export const updateSignalDefinitionInputFixture = {
   displayLabel: 'Handoff Clarity',
   description: customSignalDefinitionFixture.description,
   taskPrompt: customSignalDefinitionFixture.taskPrompt,
@@ -51,7 +43,7 @@ export const updateSignalDefinitionInputFixture: UpdateTraceSignalDefinitionInpu
   artifactAllowlist: ['latestUserInput', 'minifiedTrace'],
 };
 
-export const projectSignalSettingFixture: ProjectTraceSignalSetting = {
+export const projectSignalSettingFixture = {
   projectId: 'project-1',
   signalDefinitionId: customSignalDefinitionFixture.id,
   enabled: true,
