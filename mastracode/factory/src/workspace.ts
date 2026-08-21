@@ -8,7 +8,7 @@ import { DEFAULT_CONFIG_DIR } from '@mastra/code-sdk/constants';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import { LocalSkillSource, Workspace } from '@mastra/core/workspace';
-import type { SkillSource, SkillSourceEntry, SkillSourceStat } from '@mastra/core/workspace';
+import type { SandboxStartHook, SkillSource, SkillSourceEntry, SkillSourceStat } from '@mastra/core/workspace';
 import { getFactoryAuthUserFromContext, getFactoryAuthUserId } from './auth.js';
 import type { MastraFactorySandboxConfig } from './factory.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
@@ -24,57 +24,11 @@ import {
 import { registerGithubPatKind, registerGithubTokenInjector } from './integrations/github/token-refresh.js';
 import { getFactorySessionAddress } from './rules/binding-context.js';
 import type { MaterializationSandbox } from './sandbox/materialization.js';
-import {
-  createSessionSetupHook,
-  evictSessionSandbox,
-  getSessionSandbox,
-  peekSessionSandbox,
-} from './sandbox/session-sandbox.js';
+import { createSessionSetupHook, evictSessionSandbox, getSessionSandbox } from './sandbox/session-sandbox.js';
 
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
 
 const WORKSPACE_ID_PREFIX = 'mfw';
-/**
- * Whether a command failure means the sandbox itself is gone (destroyed by
- * idle GC or provider teardown) AND the command provably never started, so
- * reviving the sandbox and replaying the command cannot run a side effect
- * twice. Matched by error name so any provider's equivalent error classes
- * participate without a package dependency.
- *
- * `SandboxExecTransportError` means both WebSocket attempts closed without an
- * exit frame against a live sandbox. It only proves the command never started
- * when the transport never opened (`opened: false` — the upgrade was refused
- * outright). When the transport opened, the command may have run and mutated
- * state before the result was lost, so replaying `git commit`, uploads, or
- * arbitrary shell commands could execute the side effect twice; those errors
- * surface to the caller instead.
- */
-export function isDeadSandboxError(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-  if (error.name === 'SandboxDestroyedError') return true;
-  if (error.name === 'SandboxExecTransportError') {
-    return (error as Error & { opened?: boolean }).opened === false;
-  }
-  return /sandbox .*(destroyed|no longer exists|not found)/i.test(error.message);
-}
-
-/**
- * The local-provider equivalent of {@link isDeadSandboxError}: a local sandbox
- * is just a directory, so it "dies" when that directory is removed — which
- * session retirement does while an in-flight run still holds the handle.
- *
- * Node surfaces a missing `cwd` as ENOENT against the binary it tried to spawn
- * (`spawn /bin/sh ENOENT`), which is textually identical to the shell itself
- * being absent, and is also what a genuinely missing command reports. Probing
- * the working directory is what separates "the sandbox is gone" from "that
- * command does not exist", so only the former triggers a rebuild.
- */
-export function isMissingWorkdirError(error: unknown, workdir: string | undefined): boolean {
-  if (!workdir) return false;
-  if ((error as NodeJS.ErrnoException | null)?.code !== 'ENOENT') return false;
-  return !existsSync(workdir);
-}
-
 const bundleDirectory = dirname(fileURLToPath(import.meta.url));
 const bundledFactorySkillsPath = join(bundleDirectory, 'factory-skills');
 export const FACTORY_SKILLS_SOURCE_PATH =
@@ -271,14 +225,6 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
   type SessionSandbox = MaterializationSandbox;
   const githubTokenInjectors = new Map<string, GithubTokenRegistration>();
   const githubTokenReconciliations = new Map<string, Promise<void>>();
-  // Concurrent requests for the same session (thread list + activity polling +
-  // chat) must not each provision a sandbox and clone the repository. The
-  // first caller materializes; followers await the same promise. Failed
-  // materializations are dropped from the map so the next use retries.
-  const inflightMaterializations = new Map<string, Promise<SessionSandbox>>();
-  // Fully materialized sandboxes, keyed by workspace id. The lazy sandbox
-  // handle delegates here once materialization completed.
-  const materializedSandboxes = new Map<string, SessionSandbox>();
   // Workspace identity cache: concurrent resolutions of the same session must
   // observe the same Workspace object even when no Mastra registry is wired
   // (the registry stays the source of truth when present).
@@ -340,9 +286,67 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     // stale-workdir incident class came from reusing `session.sandboxWorkdir`
     // written under a different provider.
     // `runSetupOn` references `runSessionSetup`, defined below — it is only
-    // invoked during start/fallback, long after this closure fully initializes.
+    // invoked during start, long after this closure fully initializes.
     const runSetupOn = (target: unknown) => runSessionSetup(target as SessionSandbox);
-    const setupHook = createSessionSetupHook(runSetupOn, repoFullName);
+    const guardedSetup = createSessionSetupHook(runSetupOn, repoFullName);
+    // Composed start hook: marker-guarded repo setup, then per-start
+    // credential install. It runs inside the provider's start lifecycle on
+    // EVERY start (create or reconnect) — providers own lazy start
+    // (`ensureRunning()` on first command) and dead-VM self-healing (E2B
+    // `retryOnDead`, Platform status reset on destroy), so a replacement VM
+    // re-enters this hook and heals itself with credentials at least as
+    // fresh as the start that installed them.
+    const setupHook: SandboxStartHook = async args => {
+      // A session retired before its first start must not set anything up.
+      if (workspaceRegistry.generation(session.sessionId) !== workspaceGeneration) {
+        throw retiredError();
+      }
+      await guardedSetup(args);
+      // Re-check after the (long) setup: a session retired mid-setup must not
+      // register credentials for a workspace whose retirement teardown has
+      // already run — the entry would leak forever. The VM itself is left to
+      // the provider's idle timeout (accepted).
+      if (workspaceRegistry.generation(session.sessionId) !== workspaceGeneration) {
+        throw retiredError();
+      }
+      // Core's `WorkspaceSandbox` type does not declare the command/env
+      // surface every real provider implements; the helpers type against
+      // the structural `MaterializationSandbox` instead.
+      const target = args.sandbox as unknown as SessionSandbox;
+      // The `gh` CLI needs a PAT when the org configured one (installation
+      // tokens 403 on integration-restricted endpoints); git clone/checkout
+      // keep using the minted installation token. Resolved per start so the
+      // installed credential never outlives rotation.
+      const patKind = await resolveGithubPatKind('default');
+      const ghCliToken =
+        (await getGithubPat(() => github.integrationStorage, session.orgId, patKind)) ?? (await getRepositoryToken());
+      target.setEnvironmentVariable?.('GH_TOKEN', ghCliToken);
+      // Observability only — nothing reads these columns for decisions.
+      void storage.sessions
+        .setSandbox({ id: session.id, sandboxId: target.id, sandboxWorkdir: workdir })
+        .catch(() => {});
+      const tokenRegistration: GithubTokenRegistration = {
+        inject: freshToken => {
+          if (!target.setEnvironmentVariable) {
+            throw new Error('The active sandbox provider does not support runtime GitHub token refresh.');
+          }
+          target.setEnvironmentVariable('GH_TOKEN', freshToken);
+          tokenRegistration.ghToken = freshToken;
+        },
+        patKind,
+        ghToken: ghCliToken,
+        generation: 0,
+        tokenReplacementPending: false,
+      };
+      githubTokenInjectors.set(workspaceId, tokenRegistration);
+      registerGithubTokenContext(tokenRegistration);
+      // Project skill roots were reported empty by the unmaterialized-source
+      // guard before the checkout existed; rescan now. Fire-and-forget.
+      void constructedWorkspaces
+        .get(workspaceId)
+        ?.skills?.refresh()
+        .catch(() => {});
+    };
     const constructSessionEntry = () =>
       getSessionSandbox(session.id, repoFullName, () =>
         createSessionSandboxInstance({
@@ -474,7 +478,6 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           }
           if (evicted && githubTokenInjectors.get(workspaceId) === registered) {
             githubTokenInjectors.delete(workspaceId);
-            materializedSandboxes.delete(workspaceId);
             constructedWorkspaces.delete(workspaceId);
           }
         }
@@ -557,224 +560,29 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         }
       }
     };
-    const materializeSandbox = async (): Promise<SessionSandbox> => {
-      // A session already retired by the time a held lazy handle re-enters
-      // materialization must not provision anything.
-      if (workspaceRegistry.generation(session.sessionId) !== workspaceGeneration) {
-        throw retiredError();
-      }
-
-      // Fail fast on credential resolution BEFORE constructing a VM: a
-      // session whose repo token cannot be minted must not provision, and
-      // this await is the ordering seam that keeps metadata-only resolution
-      // from reaching the provider.
-      await getRepositoryToken();
-
-      // Sandbox identity is the session id: the provider resolves it on
-      // start (reconnect/resume an existing VM, create otherwise), and the
-      // per-process memo makes the base class's start coalescing apply
-      // process-wide per session. The setup hook runs inside the start
-      // lifecycle, so any lazy start heals a replaced VM. Re-fetch through
-      // the memo rather than reusing the resolution-scope entry: a dead-VM
-      // eviction must construct a FRESH instance here (a memoized instance
-      // already reporting `running` would early-return from start()).
-      // Setup runs inside start() via the `ctx.onStart` hook — the callback
-      // contract requires forwarding it, and a setup failure fails start()
-      // loudly. There is no post-start fallback.
-      const sandbox = constructSessionEntry().sandbox as unknown as SessionSandbox;
-      await sandbox.start();
-      // The `gh` CLI needs a PAT when the org configured one (installation
-      // tokens 403 on integration-restricted endpoints); git clone/checkout
-      // keep using the minted installation token. Review-board sessions
-      // (run-binding role `review`) authenticate `gh` as the reviewer account
-      // when a reviewer token is configured; everything else — including
-      // sessions with no resolvable run binding — uses the worker token.
-      // Resolved AFTER start + setup so the installed credential is at least
-      // as fresh as the one the setup hook used; injected post-start rather
-      // than baked into the VM's creation env, so it never outlives rotation.
-      const patKind = await resolveGithubPatKind('default');
-      const ghCliToken =
-        (await getGithubPat(() => github.integrationStorage, session.orgId, patKind)) ?? (await getRepositoryToken());
-      sandbox.setEnvironmentVariable?.('GH_TOKEN', ghCliToken);
-      // Observability only — nothing reads these columns for decisions.
-      void storage.sessions
-        .setSandbox({ id: session.id, sandboxId: sandbox.id, sandboxWorkdir: workdir })
-        .catch(() => {});
-
-      const tokenRegistration: GithubTokenRegistration = {
-        inject: freshToken => {
-          if (!sandbox.setEnvironmentVariable) {
-            throw new Error('The active sandbox provider does not support runtime GitHub token refresh.');
-          }
-          sandbox.setEnvironmentVariable('GH_TOKEN', freshToken);
-          tokenRegistration.ghToken = freshToken;
-        },
-        patKind,
-        ghToken: ghCliToken,
-        generation: 0,
-        tokenReplacementPending: false,
-      };
-      // The session can be retired while this deferred phase is in flight.
-      // Registration happened back at construction time (the workspace exists
-      // before it materializes), so the retirement callback has already torn
-      // the workspace down — stop the just-built sandbox and surface the
-      // retirement instead of handing back a sandbox for a dead session.
-      if (workspaceRegistry.generation(session.sessionId) !== workspaceGeneration) {
-        // The retirement callback ran before this instance was memoized, so
-        // its eviction missed it — evict here or a later re-open of a
-        // non-deleted session would reuse a stopped handle.
-        evictSessionSandbox(session.id);
-        try {
-          const stoppable = sandbox as unknown as { _stop?: () => Promise<void>; stop?: () => Promise<void> };
-          await (stoppable._stop ?? stoppable.stop)?.call(stoppable);
-        } catch (teardownError) {
-          console.warn('[Mastra Factory] Sandbox stop after mid-materialization retirement failed', {
-            orgId: session.orgId,
-            sessionId: session.sessionId,
-            error: teardownError instanceof Error ? teardownError.message.slice(-2000) : String(teardownError),
-          });
-        }
-        throw retiredError();
-      }
-      githubTokenInjectors.set(workspaceId, tokenRegistration);
-      registerGithubTokenContext(tokenRegistration);
-      return sandbox;
-    };
-
-    // Memoized deferred phase. The first FS/sandbox operation materializes
-    // (fully lazy — nothing provisions ahead of use); followers
-    // await the same in-flight promise. Failures are dropped from the map so
-    // the next use retries instead of caching a broken sandbox.
-    const ensureMaterialized = async (): Promise<SessionSandbox> => {
-      const ready = materializedSandboxes.get(workspaceId);
-      if (ready) return ready;
-      let inflight = inflightMaterializations.get(workspaceId);
-      if (!inflight) {
-        inflight = materializeSandbox();
-        inflightMaterializations.set(workspaceId, inflight);
-        inflight.then(
-          sb => {
-            materializedSandboxes.set(workspaceId, sb);
-            // Project skill roots (.claude/skills etc.) were reported empty by
-            // the unmaterialized-source guard during discovery; rescan now that
-            // the checkout exists so repo-local skills become visible without
-            // waiting for the maybeRefresh cooldown. Fire-and-forget.
-            void workspace.skills?.refresh().catch(() => {});
-          },
-          () => {},
-        );
-      }
-      try {
-        return await inflight;
-      } finally {
-        if (inflightMaterializations.get(workspaceId) === inflight) {
-          inflightMaterializations.delete(workspaceId);
-        }
-      }
-    };
-
-    // Lazy sandbox handle: resolution returns immediately and the sandbox
-    // work (provision/boot-from-checkpoint + materialize + checkout + setup)
-    // runs on first use. Metadata-only resolutions (thread-list polling)
-    // never touch it.
-    const lazySandbox = {
-      get id() {
-        return materializedSandboxes.get(workspaceId)?.id ?? workspaceId;
-      },
-      name: 'Factory Lazy Sandbox',
-      get provider() {
-        return materializedSandboxes.get(workspaceId)?.provider ?? sessionEntry.sandbox.provider;
-      },
-      get status() {
-        return materializedSandboxes.has(workspaceId) ? 'ready' : 'pending';
-      },
-      get supportsCheckpoints() {
-        return materializedSandboxes.get(workspaceId)?.supportsCheckpoints ?? false;
-      },
-      getInstructions() {
-        // Prefer the live sandbox's instructions once materialized; before
-        // that, forward the constructed (not yet started) instance's
-        // instructions so tool descriptions are accurate without forcing
-        // materialization.
-        return (
-          materializedSandboxes.get(workspaceId)?.getInstructions?.() ?? sessionEntry.sandbox.getInstructions?.() ?? ''
-        );
-      },
-      clone(): never {
-        throw new Error('The Factory session sandbox cannot be cloned from a lazy handle.');
-      },
-      async start() {
-        // Intentionally a no-op. `Workspace.init()` calls `sandbox.start()`
-        // during session creation, and sessions are get-or-created by
-        // metadata-only GET routes (/threads, /messages). Materializing here
-        // would provision a sandbox for every read-only poll. The sandbox
-        // materializes on first real use (executeCommand/getInfo) instead.
-      },
-      async getInfo() {
-        const sandbox = await ensureMaterialized();
-        return sandbox.getInfo();
-      },
-      async executeCommand(command: string, args?: string[], options?: Record<string, unknown>) {
-        const sandbox = await ensureMaterialized();
-        try {
-          return await sandbox.executeCommand(command, args, options);
-        } catch (error) {
-          if (!isDeadSandboxError(error) && !(isLocalSandbox && isMissingWorkdirError(error, workdir))) throw error;
-          // The sandbox died mid-session (idle GC, provider destroy, broken
-          // transport, or a retired local checkout removed from under us).
-          // Drop the dead handle and re-run the materialization pipeline —
-          // the provider's id-keyed start resolves the session id again
-          // (reconnect, or provision a replacement VM whose setup hook
-          // re-materializes the repo) — then retry the command once.
-          // Concurrent failures coalesce through `inflightMaterializations`.
-          if (materializedSandboxes.get(workspaceId) === sandbox) {
-            materializedSandboxes.delete(workspaceId);
-          }
-          // Evict the session memo too: the memoized instance already reports
-          // `running`, so its `start()` would early-return without
-          // re-acquiring. A fresh instance re-resolves the session id at the
-          // provider (reconnect, or provision a replacement VM). Conditional
-          // on the memo still holding THIS failed instance — a concurrent
-          // failure may already have installed a replacement that a blind
-          // evict would orphan.
-          if (peekSessionSandbox(session.id)?.sandbox === (sandbox as unknown)) {
-            evictSessionSandbox(session.id);
-          }
-          const revived = await ensureMaterialized();
-          return revived.executeCommand(command, args, options);
-        }
-      },
-      setEnvironmentVariable(name: string, value: string) {
-        const sandbox = materializedSandboxes.get(workspaceId);
-        if (!sandbox?.setEnvironmentVariable) {
-          throw new Error('The Factory session sandbox is not materialized yet.');
-        }
-        sandbox.setEnvironmentVariable(name, value);
-      },
-      async snapshot() {
-        // Nothing to checkpoint before the sandbox exists.
-        await materializedSandboxes.get(workspaceId)?.snapshot?.();
-      },
-      async stop() {
-        await materializedSandboxes.get(workspaceId)?.stop?.();
-      },
-    };
+    // The session's real sandbox goes straight onto the Workspace. Providers
+    // own lazy start (`ensureRunning()` inside the first command/process op)
+    // and dead-VM self-healing, and the composed `onStart` hook runs the repo
+    // setup + credential install inside that lifecycle. Metadata-only
+    // resolutions (thread-list polling) construct but never start.
+    const sessionSandbox = sessionEntry.sandbox as unknown as SessionSandbox;
 
     const filesystem = new SandboxFilesystem({
       id: `sandbox-fs:${workspaceId}:${workdir}`,
-      sandbox: lazySandbox,
+      sandbox: sessionSandbox,
       workdir,
     });
     const projectSkillPaths = [path.join(configDir, 'skills'), '.claude/skills', '.agents/skills'];
-    const guardedSkillFallback = new UnmaterializedAwareSkillSource(filesystem, () =>
-      materializedSandboxes.has(workspaceId),
+    const guardedSkillFallback = new UnmaterializedAwareSkillSource(
+      filesystem,
+      () => sessionEntry.sandbox.status === 'running',
     );
     const skillPaths = [...(effectiveSkillExtension?.paths ?? []), ...projectSkillPaths];
     const workspace = new Workspace({
       id: workspaceId,
       name: 'Mastra Code Factory Session Workspace',
       filesystem,
-      sandbox: lazySandbox as unknown as ConstructorParameters<typeof Workspace>[0]['sandbox'],
+      sandbox: sessionSandbox as unknown as ConstructorParameters<typeof Workspace>[0]['sandbox'],
       tools: MASTRACODE_WORKSPACE_TOOLS,
       skills: skillPaths,
       // Project skill roots live in the sandbox checkout; guard them so skill
@@ -787,16 +595,16 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     // the workspace via `mastra.getWorkspaceById(id)` (file tree, permissions
     // probe, MCP/tool routes) find it instead of throwing
     // `MASTRA_GET_WORKSPACE_BY_ID_NOT_FOUND`. `addWorkspace` is idempotent on
-    // key collision, so concurrent first resolutions stay race-safe (the
-    // deferred phase is deduped separately through `inflightMaterializations`).
+    // key collision, so concurrent first resolutions stay race-safe (start
+    // itself is coalesced by the sandbox base class + the session memo).
     mastra?.addWorkspace(workspace, workspaceId, { source: 'mastra' });
     // Cache synchronously with construction: the `await` below is a suspension
     // point, and a concurrent resolution for the same session must observe this
     // workspace rather than build a second one.
     constructedWorkspaces.set(workspaceId, workspace);
     // Retirement is registered against the workspace itself rather than the
-    // sandbox: construction is now eager while materialization is deferred, so
-    // a session retired before its first tool call still has a workspace (and a
+    // sandbox: construction is eager while the VM start is lazy, so a session
+    // retired before its first tool call still has a workspace (and possibly a
     // token injector) that must be torn down.
     const registered = await workspaceRegistry.register(
       session.sessionId,
@@ -804,7 +612,6 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       workspaceGeneration,
       async () => {
         githubTokenInjectors.delete(workspaceId);
-        materializedSandboxes.delete(workspaceId);
         constructedWorkspaces.delete(workspaceId);
         // Retirement drops the memoized session sandbox so a later re-open
         // constructs (and the provider resolves) fresh instead of reusing an
@@ -817,10 +624,10 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       throw new Error(`Factory session ${session.sessionId} was retired during workspace materialization`);
     }
 
-    // Fully lazy: nothing provisions until the first real sandbox operation.
-    // A background warm-up at session start was considered and dropped — it
-    // speculatively created a VM for every session, including ones whose
-    // agent never touches the workspace.
+    // Fully lazy: nothing provisions until the first real sandbox operation
+    // (`ensureRunning()` inside the provider). A background warm-up at session
+    // start was considered and dropped — it speculatively created a VM for
+    // every session, including ones whose agent never touches the workspace.
     return workspace;
   };
 }
