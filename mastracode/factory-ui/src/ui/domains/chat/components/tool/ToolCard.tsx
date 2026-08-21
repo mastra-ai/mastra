@@ -1,6 +1,7 @@
 import { CodeBlock as DsCodeBlock } from '@mastra/playground-ui/components/CodeBlock';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { X } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -11,6 +12,8 @@ import { stripSerializedAnsi } from '../../services/ansi';
 import type { ToolCall } from '../../services/transcript';
 import { ROW_RAIL, ROW_TRIGGER, TranscriptRow } from '../TranscriptRow';
 import { presentTool } from './tool-presentation';
+import type { WebSearchLink } from './web-search';
+import { isWebSearchTool, webSearchLinks } from './web-search';
 
 function truncate(s: string, max: number): string {
   return s.length > max ? s.slice(0, max) + '…' : s;
@@ -122,7 +125,39 @@ function editArgs(toolName: string, args: unknown): EditArgs | undefined {
   return isReplace || isWrite ? edit : undefined;
 }
 
-function ToolBody({ tool, command }: { tool: ToolCall; command?: string }) {
+function WebPageLinks({ links }: { links: WebSearchLink[] }) {
+  return (
+    <ul className="flex min-w-0 flex-col gap-1.5">
+      {links.map((link, index) => (
+        <li key={`${link.url}#${index}`} className="min-w-0">
+          <a
+            href={link.url}
+            target="_blank"
+            rel="noreferrer"
+            className="text-icon3 hover:text-icon5 flex min-w-0 flex-col transition-colors"
+          >
+            {link.title && (
+              <Txt as="span" variant="ui-sm" className="truncate">
+                {link.title}
+              </Txt>
+            )}
+            <Txt as="span" variant="ui-xs" font="mono" className="truncate">
+              {link.url}
+            </Txt>
+          </a>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** Provider-executed tools declare an empty input schema, so `{}` is noise, not an argument. */
+function argsBlockText(tool: ToolCall): string | undefined {
+  const text = tool.args !== undefined ? stringify(tool.args) : tool.argsText;
+  return text && text !== '{}' ? text : undefined;
+}
+
+function toolBody(tool: ToolCall, command?: string): ReactNode {
   const edit = editArgs(tool.toolName, tool.args);
   const resultText =
     tool.status !== 'running' && tool.result !== undefined ? stripSerializedAnsi(stringify(tool.result)) : undefined;
@@ -171,7 +206,18 @@ function ToolBody({ tool, command }: { tool: ToolCall; command?: string }) {
     );
   }
 
-  const argsPretty = tool.args !== undefined ? stringify(tool.args) : tool.argsText;
+  if (isWebSearchTool(tool.toolName) && tool.status !== 'error') {
+    const links = webSearchLinks(tool.result);
+    if (links.length > 0) return <WebPageLinks links={links} />;
+    return typeof tool.result === 'string' ? (
+      <MonoBlock copyText={tool.result} className="text-icon3">
+        {truncate(tool.result, 800)}
+      </MonoBlock>
+    ) : null;
+  }
+
+  const argsPretty = argsBlockText(tool);
+  if (!argsPretty && !tool.output && resultText === undefined) return null;
   return (
     <>
       {argsPretty && (
@@ -195,34 +241,37 @@ function ToolBody({ tool, command }: { tool: ToolCall; command?: string }) {
 
 export function ToolCard({ tool }: { tool: ToolCall }) {
   const [expanded, setExpanded] = useState(false);
-  const { icon: Icon, label, detail, command } = presentTool(tool.toolName, tool.args);
+  const { icon: Icon, label, detail, command } = presentTool(tool);
+  const body = toolBody(tool, command);
   const failed = tool.status === 'error';
   // A card already on screen when the transcript loaded was not just called.
   const [arrivedLive] = useState(() => tool.status === 'running');
 
+  const card = {
+    className: cn('max-w-full min-w-0', arrivedLive && 'motion-safe:animate-in fade-in-0 slide-in-from-bottom-1'),
+    role: 'group',
+    'aria-label': `Tool: ${tool.toolName}`,
+    'aria-busy': tool.status === 'running',
+  } as const;
+
+  const row = (
+    <TranscriptRow
+      icon={<Icon size={14} strokeWidth={1.75} aria-hidden className={failed ? 'text-error/80' : 'text-icon2'} />}
+      label={label}
+      detail={detail}
+      running={tool.status === 'running'}
+      expanded={body ? expanded : undefined}
+      trailing={failed && <X size={13} role="img" aria-label="Failed" className="text-error shrink-0" />}
+    />
+  );
+
+  if (!body) return <div {...card}>{row}</div>;
+
   return (
-    <Collapsible
-      open={expanded}
-      onOpenChange={setExpanded}
-      className={cn('max-w-full min-w-0', arrivedLive && 'motion-safe:animate-in fade-in-0 slide-in-from-bottom-1')}
-      role="group"
-      aria-label={`Tool: ${tool.toolName}`}
-      aria-busy={tool.status === 'running'}
-    >
-      <CollapsibleTrigger className={ROW_TRIGGER}>
-        <TranscriptRow
-          icon={<Icon size={14} strokeWidth={1.75} aria-hidden className={failed ? 'text-error/80' : 'text-icon2'} />}
-          label={label}
-          detail={detail}
-          running={tool.status === 'running'}
-          expanded={expanded}
-          trailing={failed && <X size={13} role="img" aria-label="Failed" className="text-error shrink-0" />}
-        />
-      </CollapsibleTrigger>
+    <Collapsible open={expanded} onOpenChange={setExpanded} {...card}>
+      <CollapsibleTrigger className={ROW_TRIGGER}>{row}</CollapsibleTrigger>
       <CollapsibleContent className="max-w-full min-w-0">
-        <div className={cn(ROW_RAIL, 'flex flex-col gap-1.5')}>
-          <ToolBody tool={tool} command={command} />
-        </div>
+        <div className={cn(ROW_RAIL, 'flex flex-col gap-1.5')}>{body}</div>
       </CollapsibleContent>
     </Collapsible>
   );

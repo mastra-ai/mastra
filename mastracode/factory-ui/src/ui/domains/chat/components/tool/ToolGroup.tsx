@@ -16,7 +16,7 @@ export const TOOL_GROUP_MIN = 3;
 export function ToolGroup({ tools }: { tools: ToolCall[] }) {
   const [expanded, setExpanded] = useState(false);
   const running = tools.find(tool => tool.status === 'running');
-  const liveDetail = running ? presentTool(running.toolName, running.args).detail : undefined;
+  const liveDetail = running ? presentTool(running).detail : undefined;
 
   return (
     <Collapsible
@@ -70,9 +70,7 @@ function GroupProgress({ tools }: { tools: ToolCall[] }) {
 
 /** What the collapsed group holds, one glyph per distinct kind of call. */
 function GroupKinds({ tools }: { tools: ToolCall[] }) {
-  const byLabel = new Map(
-    tools.map(tool => presentTool(tool.toolName, tool.args)).map(({ label, icon }) => [label, icon]),
-  );
+  const byLabel = new Map(tools.map(presentTool).map(({ label, icon }) => [label, icon]));
   const kinds = [...byLabel].slice(0, 4);
 
   return (

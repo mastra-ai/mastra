@@ -16,6 +16,11 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
+import type { ToolCall } from '../../services/transcript';
+import { isWebSearchTool, webSearchAction } from './web-search';
+
+type ToolCallPresentation = Pick<ToolCall, 'toolName' | 'args' | 'result'>;
+
 export interface ToolPresentation {
   icon: LucideIcon;
   label: string;
@@ -68,7 +73,6 @@ const TOOL_STYLES: Record<string, ToolStyle> = {
   grep: { icon: Search, label: 'Search', detailKeys: ['pattern', 'path'] },
   search_content: { icon: Search, label: 'Search', detailKeys: ['pattern', 'query'] },
   search: { icon: Search, label: 'Search', detailKeys: ['query'] },
-  web_search: { icon: Globe, label: 'Search the web', detailKeys: ['query'] },
   lsp_inspect: { icon: Braces, label: 'Inspect code', detailKeys: ['path'] },
   file_stat: { icon: FileSearch, label: 'File info', detailKeys: ['path'] },
   delete: { icon: Trash2, label: 'Delete', detailKeys: ['path'] },
@@ -89,8 +93,28 @@ function withoutCdPrefix(command: string): string {
   return command.replace(/^\s*cd\s+(?:'[^']*'|"[^"]*"|[^\s&|;]+)\s*&&\s*/, '') || command;
 }
 
-export function presentTool(toolName: string, args: unknown): ToolPresentation {
-  const style = TOOL_STYLES[toolName.replace(/^mastra_workspace_/, '')];
+/** Provider-run search has no input to read: the call it made comes back in the result. */
+function presentWebSearch(args: unknown, result: unknown): ToolPresentation {
+  const query = stringArg(args, 'query');
+  if (query) return { icon: Globe, label: 'Search the web', detail: query };
+
+  const action = webSearchAction(result);
+  if (!action) return { icon: Globe, label: 'Search the web' };
+  switch (action.type) {
+    case 'search':
+      return { icon: Globe, label: 'Search the web', detail: action.query };
+    case 'openPage':
+      return { icon: Globe, label: 'Open page', detail: action.url };
+    case 'findInPage':
+      return { icon: Globe, label: 'Find in page', detail: action.pattern ?? action.url };
+  }
+}
+
+export function presentTool({ toolName, args, result }: ToolCallPresentation): ToolPresentation {
+  const name = toolName.replace(/^mastra_workspace_/, '');
+  if (isWebSearchTool(name)) return presentWebSearch(args, result);
+
+  const style = TOOL_STYLES[name];
   if (!style) return { icon: Wrench, label: prettifyToolName(toolName) };
 
   const detail = style.detailKeys ? firstStringArg(args, style.detailKeys) : undefined;

@@ -109,6 +109,84 @@ describe('TranscriptEntries tool rows', () => {
     expect(within(row).queryByText('execute_command')).not.toBeInTheDocument();
   });
 
+  it('names the web action a provider ran and links the page instead of dumping its JSON', async () => {
+    const url = 'https://github.com/mastra-ai/mastra/pull/21870';
+    renderEntries([
+      assistantMessage('msg-1', [
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'call-1',
+            toolName: 'web_search',
+            args: {},
+            result: { action: { type: 'openPage', url } },
+          },
+        },
+      ]),
+    ]);
+
+    const row = screen.getByRole('group', { name: 'Tool: web_search' });
+    expect(within(row).getByText('Open page')).toBeInTheDocument();
+    expect(within(row).queryByText('{}')).not.toBeInTheDocument();
+
+    await userEvent.click(within(row).getByRole('button'));
+    expect(within(row).getByRole('link', { name: url })).toHaveAttribute('href', url);
+  });
+
+  it('lists the pages a search found rather than the provider payload around them', async () => {
+    renderEntries([
+      assistantMessage('msg-1', [
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'call-1',
+            toolName: 'web_search',
+            args: { query: 'mastra memory' },
+            result: [
+              {
+                type: 'web_search_result',
+                url: 'https://mastra.ai/docs/memory',
+                title: 'Memory',
+                pageAge: '2 days',
+                encryptedContent: 'x'.repeat(2000),
+              },
+            ],
+          },
+        },
+      ]),
+    ]);
+
+    const row = screen.getByRole('group', { name: 'Tool: web_search' });
+    expect(within(row).getByText('mastra memory')).toBeInTheDocument();
+
+    await userEvent.click(within(row).getByRole('button'));
+    expect(within(row).getByRole('link', { name: /Memory/ })).toHaveAttribute('href', 'https://mastra.ai/docs/memory');
+    expect(row.textContent).not.toContain('encryptedContent');
+  });
+
+  it('drops the disclosure when a call has nothing behind it', () => {
+    renderEntries([
+      assistantMessage('msg-1', [
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'call-1',
+            toolName: 'web_search',
+            args: {},
+            result: { action: { type: 'search', query: 'mastra' } },
+          },
+        },
+      ]),
+    ]);
+
+    const row = screen.getByRole('group', { name: 'Tool: web_search' });
+    expect(within(row).getByText('mastra')).toBeInTheDocument();
+    expect(within(row).queryByRole('button')).not.toBeInTheDocument();
+  });
+
   it('collapses three or more consecutive tool calls into a single group row', async () => {
     renderEntries([
       assistantMessage('msg-1', [
