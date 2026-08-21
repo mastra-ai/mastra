@@ -1,9 +1,23 @@
+import { createHash } from 'node:crypto';
 import { AvailableHooks, executeHook } from '../hooks';
 import { setScorerHookOwner } from '../hooks/scorer-owner';
 import type { Mastra } from '../mastra';
 import type { ObservabilityContext } from '../observability';
+import { MASTRA_AUTH_TOKEN_KEY } from '../request-context';
 import type { MastraScorerEntry } from './base';
 import type { ScoringEntityType, ScoringHookInput, ScoringSource } from './types';
+
+/**
+ * Maps a key to a stable value in [0, 1) for sampling decisions.
+ *
+ * Uses sha256 so the distribution is uniform across the realistic key space (hex trace IDs,
+ * UUID run IDs) rather than only for synthetic sequential inputs. Reads 6 bytes (48 bits) —
+ * well within the 53-bit integer range, so no precision loss.
+ */
+export function hashToUnitInterval(key: string): number {
+  const digest = createHash('sha256').update(key).digest();
+  return Number(digest.readUIntBE(0, 6)) / 2 ** 48;
+}
 
 export function runScorer({
   runId,
@@ -37,6 +51,16 @@ export function runScorer({
   projectId?: string;
   mastra?: Mastra;
 } & ObservabilityContext) {
+  const currentSpan = observabilityContext.tracing?.currentSpan;
+
+  // The tracer already declined this trace, so the span is a NoOpSpan and nothing about this
+  // trace was stored. Scoring it would emit a score pointing at a traceId that cannot be
+  // drilled into. Checked explicitly against `false`: an absent span means observability is
+  // not configured at all, which is not a decline and must still score.
+  if (currentSpan?.isValid === false) {
+    return;
+  }
+
   let shouldExecute = false;
 
   if (!scorerObject?.sampling || scorerObject?.sampling?.type === 'none') {
@@ -45,9 +69,17 @@ export function runScorer({
 
   if (scorerObject?.sampling?.type) {
     switch (scorerObject?.sampling?.type) {
-      case 'ratio':
-        shouldExecute = Math.random() < scorerObject?.sampling?.rate;
+      case 'ratio': {
+        // Key on the trace so that every scorer at a given rate selects the same traces,
+        // making scores on sampled traffic comparable across scorers. Falls back to runId
+        // when untraced so the decision stays reproducible without observability configured.
+        // Safe to read traceId here only because declined spans returned above — a NoOpSpan's
+        // traceId is a shared constant and would collapse the whole declined population into
+        // one all-or-nothing decision.
+        const samplingKey = currentSpan?.traceId ?? runId;
+        shouldExecute = hashToUnitInterval(samplingKey) < scorerObject?.sampling?.rate;
         break;
+      }
       default:
         shouldExecute = true;
     }
@@ -74,6 +106,8 @@ export function runScorer({
         typeof (obj as any).entries === 'function' ? (obj as any).entries() : Object.entries(obj);
       for (const [key, value] of entries) {
         const flatKey = prefix ? `${prefix}.${key}` : key;
+        // Never persist the framework-managed bearer token in score rows.
+        if (flatKey === MASTRA_AUTH_TOKEN_KEY) continue;
         if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
           safeContext[flatKey] = value;
         } else if (value && typeof value === 'object' && !Array.isArray(value)) {

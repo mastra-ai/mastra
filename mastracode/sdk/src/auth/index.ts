@@ -3,6 +3,7 @@
  */
 
 export * from './types.js';
+export * from './provider-auth-error.js';
 export * from './storage.js';
 export { anthropicOAuthProvider } from './providers/anthropic.js';
 export { githubCopilotOAuthProvider } from './providers/github-copilot.js';

@@ -6,12 +6,14 @@
  */
 import { Container, TUI, ProcessTerminal } from '@earendil-works/pi-tui';
 import type { CombinedAutocompleteProvider, Component, Terminal, Text } from '@earendil-works/pi-tui';
+import type { KnowledgeInspector } from '@mastra/code-sdk';
 import type { MastraCodeAnalytics } from '@mastra/code-sdk/analytics';
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import type { HookManager } from '@mastra/code-sdk/hooks/index';
 import type { McpManager } from '@mastra/code-sdk/mcp/manager';
 import { loadSettings } from '@mastra/code-sdk/onboarding/settings';
 import type { PluginManager } from '@mastra/code-sdk/plugins/manager';
+import type { ProcessMemoryDiagnostics } from '@mastra/code-sdk/process-memory-diagnostics';
 import { detectProject } from '@mastra/code-sdk/utils/project';
 import type { ProjectInfo } from '@mastra/code-sdk/utils/project';
 import type { SlashCommandMetadata } from '@mastra/code-sdk/utils/slash-command-loader';
@@ -19,6 +21,7 @@ import type { StorageMaintenance } from '@mastra/code-sdk/utils/storage-maintena
 import type { AgentController, MastraDBMessage, Session } from '@mastra/core/agent-controller';
 import type { SkillMetadata, Workspace } from '@mastra/core/workspace';
 import type { GithubSignals } from '@mastra/github-signals';
+import { AssistantRenderRegistry } from './assistant-render-registry.js';
 import type { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import type { AssistantMessageComponent } from './components/assistant-message.js';
 import { CustomEditor } from './components/custom-editor.js';
@@ -144,8 +147,17 @@ export interface MastraTUIOptions {
   /** Storage maintenance handle for /prune (retention pruning + disk reclamation). */
   storageMaintenance?: StorageMaintenance;
 
+  /** Process-wide memory diagnostics handle for /profile. */
+  processMemoryDiagnostics?: ProcessMemoryDiagnostics;
+
+  /** Session-scoped, read-only Subconscious knowledge inspection capability. */
+  knowledgeInspector?: KnowledgeInspector;
+
   /** Optional terminal injection for in-process tests. Defaults to ProcessTerminal. */
   terminal?: Terminal;
+
+  /** Process adapter exit hook. Defaults to process.exit. */
+  exit?: (exitCode: number) => void;
 }
 
 // =============================================================================
@@ -179,6 +191,7 @@ export interface TUIState {
   // ── Agent / streaming ─────────────────────────────────────────────────
   isInitialized: boolean;
   gradientAnimator?: GradientAnimator;
+  assistantRenderRegistry: AssistantRenderRegistry;
   streamingComponent?: AssistantMessageComponent;
   streamingMessage?: MastraDBMessage;
   pendingTools: Map<string, IToolExecutionComponent>;
@@ -351,7 +364,13 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     });
   }
   const ui = new TUI(terminal);
-  const renderScheduler = new RenderScheduler(() => ui.requestRender());
+  const assistantRenderRegistry = new AssistantRenderRegistry();
+  const renderScheduler = new RenderScheduler(
+    () => ui.requestRender(),
+    undefined,
+    undefined,
+    () => assistantRenderRegistry.applyPending(),
+  );
 
   // Perf profiling removed
 
@@ -383,6 +402,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
 
     // Agent / streaming
     isInitialized: false,
+    assistantRenderRegistry,
     pendingTools: new Map(),
     pendingTaskToolIds: new Set(),
     taskToolInsertIndex: -1,

@@ -74,6 +74,71 @@ describe('Composer on a lazy user-session draft', () => {
     expect(screen.getAllByText('fix the login bug')).toHaveLength(1);
   });
 
+  it('applies a draft-selected pack before dispatching the first prompt', async () => {
+    const preparation = stubPreparingSession({ createdSessionTitle: 'use my pack' });
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/github/projects/${PROJECT_REPOSITORY_ID}/sessions`, () =>
+        HttpResponse.json({ session: createdDraftSession('use my pack') }),
+      ),
+    );
+    const user = userEvent.setup();
+    const { client } = renderDraft();
+
+    const modelPicker = await screen.findByLabelText('Session model');
+    await waitFor(() => expect(modelPicker).toHaveAttribute('title', expect.stringContaining('Balanced')));
+    await user.click(modelPicker);
+    await user.click(await screen.findByRole('option', { name: /Model pack Mine/ }));
+    expect(modelPicker).toHaveAttribute('title', expect.stringContaining('Mine'));
+    expect(preparation.operations).toEqual([]);
+
+    const message = screen.getByRole('textbox', { name: 'Message' });
+    await user.type(message, 'use my pack');
+    await user.keyboard('{Enter}');
+    await waitFor(() =>
+      expect(screen.getByTestId('pathname')).toHaveTextContent(`/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`),
+    );
+
+    preparation.finishWorkspace();
+    await waitForMutationsIdle(client);
+    await waitFor(() => expect(preparation.delivered).toEqual(['use my pack']));
+    // Activation applies the pack's models server-side, so no separate model
+    // switch is sent for the pack-derived model.
+    expect(preparation.operations).toEqual(['mode:build', 'pack:mine', 'message']);
+  });
+
+  it('still dispatches the first prompt when draft pack activation fails', async () => {
+    const preparation = stubPreparingSession({ createdSessionTitle: 'keep my prompt' });
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/github/projects/${PROJECT_REPOSITORY_ID}/sessions`, () =>
+        HttpResponse.json({ session: createdDraftSession('keep my prompt') }),
+      ),
+      http.post(`${TEST_BASE_URL}/web/config/model-packs/mine/activate`, () =>
+        HttpResponse.json({ error: 'Pack unavailable' }, { status: 500 }),
+      ),
+    );
+    const user = userEvent.setup();
+    const { client } = renderDraft();
+
+    const modelPicker = await screen.findByLabelText('Session model');
+    await user.click(modelPicker);
+    await user.click(await screen.findByRole('option', { name: /Model pack Mine/ }));
+    const message = screen.getByRole('textbox', { name: 'Message' });
+    await user.type(message, 'keep my prompt');
+    await user.keyboard('{Enter}');
+    await waitFor(() =>
+      expect(screen.getByTestId('pathname')).toHaveTextContent(`/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`),
+    );
+
+    preparation.finishWorkspace();
+    await waitForMutationsIdle(client);
+    await waitFor(() => expect(preparation.delivered).toEqual(['keep my prompt']));
+    // The user must learn the pack was not applied.
+    expect(await screen.findByText('Pack unavailable')).toBeInTheDocument();
+    // The pack failed, so its build model must not be half-applied either —
+    // the session keeps its own defaults.
+    expect(preparation.operations).toEqual(['mode:build', 'message']);
+  });
+
   it('restores the exact prompt after failure and retries with the same route UUID', async () => {
     const preparation = stubPreparingSession({ createdSessionTitle: 'retry this prompt' });
     const createBodies: unknown[] = [];

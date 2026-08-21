@@ -257,7 +257,8 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
         ctx.stop();
         const label = backend === 'pg' ? 'PostgreSQL' : 'LibSQL';
         console.info(`\nStorage backend changed to ${label}. Restarting is required.\n`);
-        process.exit(0);
+        if (ctx.exit) ctx.exit(0);
+        else process.exit(0);
       },
       onExperimentalGithubSignalsChange: async enabled => {
         if (enabled && !(await ensureGitcrawlReady(ctx))) return false;

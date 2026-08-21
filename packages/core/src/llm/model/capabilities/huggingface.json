@@ -19,7 +19,8 @@
     "stepfun-ai/Step-3.7-Flash",
     "thinkingmachines/Inkling",
     "thinkingmachines/Inkling-Small",
-    "zai-org/GLM-4.5V"
+    "zai-org/GLM-4.5V",
+    "zai-org/GLM-4.6V-Flash"
   ],
   "temperature": [
     "MiniMaxAI/MiniMax-M2",
@@ -81,6 +82,7 @@
     "zai-org/GLM-4.5-Air",
     "zai-org/GLM-4.5V",
     "zai-org/GLM-4.6",
+    "zai-org/GLM-4.6V-Flash",
     "zai-org/GLM-4.7",
     "zai-org/GLM-4.7-Flash",
     "zai-org/GLM-5",

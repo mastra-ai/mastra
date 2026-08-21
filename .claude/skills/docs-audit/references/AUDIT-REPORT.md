@@ -97,7 +97,7 @@ I can convert these findings into an implementation plan for approval.
 Header:
 
 - `Page path`: repository-relative path.
-- `Page type`: `docs overview`, `docs standard`, `guide quickstart`, `guide tutorial`, `guide integration`, `guide deployment`, `reference`, or `other`.
+- `Page type`: `docs overview`, `docs page`, `integration`, `deployment integration`, or `reference`.
 - `Packages covered`: doc frontmatter `packages:` plus packages imported in code blocks.
 - `Temporary artifact directory`: exact script-printed `$RUN_DIR`.
 - `Source paths inspected`: every source directory/file used as evidence.

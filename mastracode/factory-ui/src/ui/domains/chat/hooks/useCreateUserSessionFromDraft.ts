@@ -14,7 +14,7 @@ import { promptHandoffState } from './useHandoffPrompt';
 export function useCreateUserSessionFromDraft() {
   const { baseUrl, factorySessionState } = useChatSessionContext();
   const { activeModeId } = useChatModes();
-  const { activeModelId } = useChatModels();
+  const { activeModelId, draftModelPackId, modelPacks } = useChatModels();
   const { factoryId, draftSessionId } = useParams<{ factoryId: string; draftSessionId: string }>();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -29,18 +29,36 @@ export function useCreateUserSessionFromDraft() {
         throw new Error('Session configuration is not ready. Try again.');
       }
 
+      // Activating the pack applies its models server-side, so only hand off a
+      // model when the draft explicitly deviated from the selected pack.
+      const modeKey =
+        activeModeId === 'build' || activeModeId === 'plan' || activeModeId === 'fast' ? activeModeId : undefined;
+      const packModelId =
+        draftModelPackId && modeKey
+          ? modelPacks.find(pack => pack.id === draftModelPackId)?.models[modeKey]
+          : undefined;
+      const handoffModelId = activeModelId === packModelId ? undefined : activeModelId;
+
       try {
         const session = await createUserSession(baseUrl, projectRepositoryId, {
           sessionId: draftSessionId,
           title: prompt,
         });
-        return { session, prompt, factoryId, projectRepositoryId, activeModeId, activeModelId };
+        return { session, prompt, factoryId, projectRepositoryId, activeModeId, handoffModelId, draftModelPackId };
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Session creation failed';
         throw new Error(`Could not create the session: ${message}. Try again.`, { cause: error });
       }
     },
-    onSuccess: ({ session, prompt, factoryId, projectRepositoryId, activeModeId, activeModelId }) => {
+    onSuccess: ({
+      session,
+      prompt,
+      factoryId,
+      projectRepositoryId,
+      activeModeId,
+      handoffModelId,
+      draftModelPackId,
+    }) => {
       queryClient.setQueryData(queryKeys.userSession(session.sessionId), session);
       addCachedSession(queryClient, projectRepositoryId, session);
       queryClient.setQueryData<MastraDBMessage[]>(
@@ -54,7 +72,11 @@ export function useCreateUserSessionFromDraft() {
       );
       void navigate(`/factories/${factoryId}/user/threads/${session.sessionId}`, {
         replace: true,
-        state: promptHandoffState(prompt, { modeId: activeModeId, modelId: activeModelId }),
+        state: promptHandoffState(prompt, {
+          modeId: activeModeId,
+          modelId: handoffModelId,
+          modelPackId: draftModelPackId,
+        }),
       });
     },
   });

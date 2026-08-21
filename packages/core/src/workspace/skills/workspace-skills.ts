@@ -125,7 +125,18 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   #globDirCache: Map<string, string[]> = new Map();
   #globResolveTimes: Map<string, number> = new Map();
   static readonly GLOB_RESOLVE_INTERVAL = 5_000; // Re-walk glob dirs every 5s
-  static readonly STALENESS_CHECK_COOLDOWN = 2_000; // Skip staleness check for 2s after discovery
+  // Staleness walks issue a stat/readdir per skill root and a stat per skill
+  // directory; over remote sandbox filesystems each of those is a network
+  // round-trip costing hundreds of milliseconds. 30s bounds how often any
+  // caller (turn-boundary processors and skill tools alike) pays that walk,
+  // so skill edits are picked up within at most 30s of the last check.
+  static readonly STALENESS_CHECK_COOLDOWN = 30_000;
+
+  /** In-flight refresh, shared by concurrent refresh() callers */
+  #refreshPromise: Promise<void> | null = null;
+
+  /** In-flight maybeRefresh, shared so overlapping callers run one staleness walk */
+  #maybeRefreshPromise: Promise<void> | null = null;
 
   constructor(config: WorkspaceSkillsImplConfig) {
     this.#source = config.source;
@@ -366,23 +377,125 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   async refresh(): Promise<void> {
     this.#assertAvailable?.();
 
-    // Remove only skill entries from the shared search engine (not workspace content)
-    for (const candidates of this.#skills.values()) {
-      for (const skill of candidates) {
-        await this.#removeSkillFromIndex(skill);
+    // Coalesce concurrent refresh() calls onto one in-flight rebuild.
+    // Invariant: #refreshPromise is never non-null-and-satisfied - the
+    // success path clears it synchronously inside #doRefresh, so a caller
+    // arriving in the settle microtask gap starts a fresh rebuild instead of
+    // coalescing onto one that may have used stale paths.
+    if (this.#refreshPromise) {
+      return this.#refreshPromise;
+    }
+    const inFlight = this.#doRefresh().finally(() => {
+      // Rejection path only; the success path already cleared it.
+      if (this.#refreshPromise === inFlight) {
+        this.#refreshPromise = null;
+      }
+    });
+    this.#refreshPromise = inFlight;
+    return inFlight;
+  }
+
+  /**
+   * Rebuild the catalog into fresh state and swap it in atomically.
+   *
+   * The current #skills map keeps serving list()/get() for the whole
+   * re-discovery; only when the new catalog is complete is #skills swapped,
+   * so readers always see a complete catalog (old or new, never partial).
+   * The shared search engine is then reconciled entry-by-entry (it also
+   * holds workspace content and cannot be rebuilt wholesale).
+   */
+  async #doRefresh(): Promise<void> {
+    // Loop: a coalesced maybeRefresh may swap #resolvedPaths while a rebuild
+    // is in flight (the in-flight walk captured the old paths). Re-run the
+    // rebuild until the paths it used are still current at completion, so a
+    // paths-changed caller is never satisfied by a stale-path rebuild.
+    for (;;) {
+      const pathsAtStart = this.#resolvedPaths;
+      const newSkills = new Map<string, InternalSkill[]>();
+      await this.#discoverSkills(newSkills);
+
+      // Snapshot the currently indexed skills just before the swap
+      const oldSkills = this.#skills;
+      this.#skills = newSkills;
+      this.#initialized = true;
+
+      await this.#reconcileIndex(oldSkills, newSkills);
+
+      if (this.#resolvedPaths === pathsAtStart) {
+        // Clear the coalescing handle in the same synchronous step as the
+        // success decision. If this waited for the wrapper's .finally (one
+        // microtask after settle), a paths-changed refresh() landing in that
+        // gap would coalesce onto this already-finished rebuild and its new
+        // paths would never be discovered.
+        this.#refreshPromise = null;
+        return;
       }
     }
-    this.#skills.clear();
-    this.#initialized = false;
-    this.#initPromise = null;
-    await this.#discoverSkills();
-    this.#initialized = true;
+  }
+
+  /**
+   * Reconcile the shared search index after a catalog swap:
+   * remove entries for skills that disappeared, re-index skills whose
+   * content changed, index new skills. Unchanged skills are left alone.
+   * Transient index states during reconcile are acceptable; catalog
+   * consistency is guaranteed by the map swap, not by the index.
+   */
+  async #reconcileIndex(
+    oldSkills: Map<string, InternalSkill[]>,
+    newSkills: Map<string, InternalSkill[]>,
+  ): Promise<void> {
+    const flatten = (map: Map<string, InternalSkill[]>): Map<string, InternalSkill> => {
+      const byPath = new Map<string, InternalSkill>();
+      for (const candidates of map.values()) {
+        for (const skill of candidates) {
+          byPath.set(skill.path, skill);
+        }
+      }
+      return byPath;
+    };
+
+    const oldByPath = flatten(oldSkills);
+    const newByPath = flatten(newSkills);
+
+    for (const [path, oldSkill] of oldByPath) {
+      if (!newByPath.has(path)) {
+        await this.#removeSkillFromIndex(oldSkill);
+      }
+    }
+
+    for (const [path, newSkill] of newByPath) {
+      const oldSkill = oldByPath.get(path);
+      const unchanged =
+        oldSkill &&
+        oldSkill.instructions === newSkill.instructions &&
+        oldSkill.references.length === newSkill.references.length &&
+        oldSkill.references.every((r, i) => r === newSkill.references[i]);
+      if (unchanged) continue;
+
+      if (oldSkill) {
+        // Remove first so reference docs dropped by the new version don't linger
+        await this.#removeSkillFromIndex(oldSkill);
+      }
+      await this.#indexSkill(newSkill);
+    }
   }
 
   async maybeRefresh(context?: SkillsContext): Promise<void> {
     // Ensure initial discovery is complete
     await this.#ensureInitialized();
 
+    // Coalesce overlapping revalidations (e.g. skills processor and
+    // skill-search in the same turn) onto one staleness walk
+    if (this.#maybeRefreshPromise) {
+      return this.#maybeRefreshPromise;
+    }
+    this.#maybeRefreshPromise = this.#doMaybeRefresh(context).finally(() => {
+      this.#maybeRefreshPromise = null;
+    });
+    return this.#maybeRefreshPromise;
+  }
+
+  async #doMaybeRefresh(context?: SkillsContext): Promise<void> {
     // Resolve current paths (may be dynamic based on context)
     const currentPaths = await this.#resolvePaths(context);
 
@@ -679,8 +792,12 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
         if (this.#resolvedPaths.length === 0) {
           this.#resolvedPaths = await this.#resolvePaths();
         }
-        await this.#discoverSkills();
+        const newSkills = new Map<string, InternalSkill[]>();
+        await this.#discoverSkills(newSkills);
+        const oldSkills = this.#skills;
+        this.#skills = newSkills;
         this.#initialized = true;
+        await this.#reconcileIndex(oldSkills, newSkills);
       } finally {
         this.#initPromise = null;
       }
@@ -690,18 +807,18 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   }
 
   /**
-   * Add a skill to the candidates map, keyed by name.
+   * Add a skill to a candidates map, keyed by name.
    * Replaces an existing entry at the same path (update case), otherwise appends.
    */
-  #addToSkillsMap(skill: InternalSkill): void {
-    const candidates = this.#skills.get(skill.name) ?? [];
+  #addToSkillsMap(skill: InternalSkill, target: Map<string, InternalSkill[]>): void {
+    const candidates = target.get(skill.name) ?? [];
     const idx = candidates.findIndex(s => s.path === skill.path);
     if (idx >= 0) {
       candidates[idx] = skill;
     } else {
       candidates.push(skill);
     }
-    this.#skills.set(skill.name, candidates);
+    target.set(skill.name, candidates);
   }
 
   /**
@@ -715,7 +832,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
    * pointing to SKILL.md are loaded directly; directory matches are
    * tried as direct skills first, then scanned for subdirectories.
    */
-  async #discoverSkills(): Promise<void> {
+  async #discoverSkills(target: Map<string, InternalSkill[]>): Promise<void> {
     // Clear glob cache so discovery gets fresh results
     this.#globDirCache.clear();
     this.#globResolveTimes.clear();
@@ -754,12 +871,12 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
           resolved.map(async entry => {
             if (entry.type === 'file') {
               // File match (e.g., **/SKILL.md) — load as direct skill
-              await this.#discoverDirectSkill(entry.path, source);
+              await this.#discoverDirectSkill(entry.path, source, target);
             } else {
               // Directory match — try as direct skill first, then scan subdirectories
-              const isDirect = await this.#discoverDirectSkill(entry.path, source);
+              const isDirect = await this.#discoverDirectSkill(entry.path, source, target);
               if (!isDirect) {
-                await this.#discoverSkillsInPath(entry.path, source);
+                await this.#discoverSkillsInPath(entry.path, source, target);
               }
             }
           }),
@@ -776,10 +893,10 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
         }
       } else {
         // Check if the path is a direct skill reference (directory with SKILL.md or SKILL.md file)
-        const isDirect = await this.#discoverDirectSkill(skillsPath, source);
+        const isDirect = await this.#discoverDirectSkill(skillsPath, source, target);
         if (!isDirect) {
           // Plain path: scan subdirectories for skills
-          await this.#discoverSkillsInPath(skillsPath, source);
+          await this.#discoverSkillsInPath(skillsPath, source, target);
         }
       }
     }
@@ -790,7 +907,11 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   /**
    * Discover skills in a single path
    */
-  async #discoverSkillsInPath(skillsPath: string, source: ContentSource): Promise<void> {
+  async #discoverSkillsInPath(
+    skillsPath: string,
+    source: ContentSource,
+    target: Map<string, InternalSkill[]>,
+  ): Promise<void> {
     try {
       if (!(await this.#source.exists(skillsPath))) {
         return;
@@ -834,11 +955,12 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
           }),
       );
 
-      // Apply results sequentially to preserve overwrite semantics
+      // Apply results sequentially to preserve overwrite semantics.
+      // Discovery only collects into the target map; the live search index
+      // is reconciled after the catalog swap (see #reconcileIndex).
       for (const result of results) {
         if (result.status === 'fulfilled' && result.value) {
-          this.#addToSkillsMap(result.value);
-          await this.#indexSkill(result.value);
+          this.#addToSkillsMap(result.value, target);
         } else if (result.status === 'rejected') {
           const error = result.reason;
           if (error instanceof Error) {
@@ -863,7 +985,11 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
    * Returns `true` if the path was a direct skill reference (skip subdirectory scan),
    * `false` to fall through to the normal subdirectory scan.
    */
-  async #discoverDirectSkill(skillsPath: string, source: ContentSource): Promise<boolean> {
+  async #discoverDirectSkill(
+    skillsPath: string,
+    source: ContentSource,
+    target: Map<string, InternalSkill[]>,
+  ): Promise<boolean> {
     try {
       // Case 1: Path points directly to a SKILL.md file
       if (isSkillFilePath(skillsPath)) {
@@ -876,8 +1002,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
 
         try {
           const skill = await this.#parseSkillFile(skillsPath, dirName, source);
-          this.#addToSkillsMap(skill);
-          await this.#indexSkill(skill);
+          this.#addToSkillsMap(skill, target);
         } catch (error) {
           if (error instanceof Error) {
             console.error(`[WorkspaceSkills] Failed to load skill from ${skillsPath}:`, error.message);
@@ -894,8 +1019,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
 
           try {
             const skill = await this.#parseSkillFile(skillFilePath, dirName, source);
-            this.#addToSkillsMap(skill);
-            await this.#indexSkill(skill);
+            this.#addToSkillsMap(skill, target);
           } catch (error) {
             if (error instanceof Error) {
               console.error(`[WorkspaceSkills] Failed to load skill from ${skillFilePath}:`, error.message);

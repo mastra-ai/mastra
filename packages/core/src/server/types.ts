@@ -264,6 +264,27 @@ export type ServerConfig = {
    */
   timeout?: number;
   /**
+   * Max time (ms) to drain in-flight requests after SIGINT/SIGTERM. Must be a
+   * finite number from 0 through 2_147_483_647. When the window passes,
+   * remaining HTTP connections are force-closed. Mastra shutdown then runs
+   * either way (bounded separately) before the process exits. Set 0 to skip
+   * the drain entirely.
+   * @default 5000
+   */
+  drainTimeout?: number;
+  /**
+   * Whether the generated server installs its own SIGINT/SIGTERM handlers
+   * (drain in-flight requests + `mastra.shutdown()` + `process.exit`). Set
+   * false to manage signals yourself (e.g. a handler registered in your
+   * Mastra config module that calls `mastra.shutdown()`). Note: user code
+   * has no access to the HTTP server handle in the generated entry, so HTTP
+   * drain is unavailable with false — prefer `drainTimeout`, or a server
+   * adapter for full custom lifecycle. With false and no user handler,
+   * Node's default signal behavior applies (immediate termination, no drain).
+   * @default true
+   */
+  handleShutdownSignals?: boolean;
+  /**
    * Custom API routes for the server
    */
   apiRoutes?: ApiRoute[];

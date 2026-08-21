@@ -92,14 +92,21 @@ describe('generateStubs', () => {
 });
 
 describe('createCodeModeInstructions', () => {
-  it('includes the usage contract and all stubs', () => {
+  it('includes the default tool id, usage contract, and all stubs', () => {
     const a = createTool({ id: 'a', description: 'tool a', inputSchema: z.object({}), execute: async () => ({}) });
     const b = createTool({ id: 'b', description: 'tool b', inputSchema: z.object({}), execute: async () => ({}) });
     const instructions = createCodeModeInstructions({ tools: { a, b } });
+    expect(instructions).toContain('You have access to the `execute_typescript` tool.');
     expect(instructions).toContain('# Code Mode');
     expect(instructions).toContain('external_a');
     expect(instructions).toContain('external_b');
     expect(instructions).toContain('Promise.all');
+  });
+
+  it('includes a custom tool id in the usage contract', () => {
+    const instructions = createCodeModeInstructions({ tools: {}, id: 'slack' });
+    expect(instructions).toContain('You have access to the `slack` tool.');
+    expect(instructions).not.toContain('You have access to the `execute_typescript` tool.');
   });
 });
 

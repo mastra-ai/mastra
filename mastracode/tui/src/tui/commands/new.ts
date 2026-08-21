@@ -1,3 +1,4 @@
+import { disposeAssistantRenderState } from '../assistant-render-registry.js';
 import type { SlashCommandContext } from './types.js';
 
 export async function handleNewCommand(ctx: SlashCommandContext): Promise<void> {
@@ -10,6 +11,7 @@ export async function handleNewCommand(ctx: SlashCommandContext): Promise<void> 
   state.session.thread.detachFromCurrent();
 
   state.pendingNewThread = true;
+  disposeAssistantRenderState(state);
   state.chatContainer.clear();
   state.pendingTools.clear();
   state.pendingTaskToolIds?.clear();

@@ -40,6 +40,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'gateways/merge-gateway',
+          label: 'Merge Gateway',
+        },
+        {
+          type: 'doc',
           id: 'gateways/neon',
           label: 'Neon',
         },
@@ -326,6 +331,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/llmgateway',
+          label: 'DevPass (LLM Gateway)',
+        },
+        {
+          type: 'doc',
           id: 'providers/digitalocean',
           label: 'DigitalOcean',
         },
@@ -338,6 +348,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/ebcloud',
           label: 'EBCloud',
+        },
+        {
+          type: 'doc',
+          id: 'providers/echo',
+          label: 'Echo',
         },
         {
           type: 'doc',
@@ -501,7 +516,7 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/llmgateway',
+          id: 'providers/llmgateway-providers',
           label: 'LLM Gateway',
         },
         {
@@ -533,11 +548,6 @@ const sidebars = {
           type: 'doc',
           id: 'providers/meganova',
           label: 'Meganova',
-        },
-        {
-          type: 'doc',
-          id: 'providers/merge-gateway',
-          label: 'Merge Gateway',
         },
         {
           type: 'doc',
@@ -766,7 +776,7 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/scx',
+          id: 'providers/scx-ai',
           label: 'SCX.ai',
         },
         {

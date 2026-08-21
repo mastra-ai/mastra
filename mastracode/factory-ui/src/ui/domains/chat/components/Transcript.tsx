@@ -28,6 +28,7 @@ import { isTerminalInvocationState } from '../services/transcript';
 import { MESSAGE_HOVER, MessageMeta } from './MessageMeta';
 import { ToolCard } from './tool/ToolCard';
 import { ToolGroup, TOOL_GROUP_MIN } from './tool/ToolGroup';
+import { SubmitPlanCard } from './SubmitPlanCard';
 import { isTranscriptToolVisible, ToolFactory } from './ToolFactory';
 import { ROW_RAIL, ROW_TRIGGER, TranscriptRow } from './TranscriptRow';
 
@@ -193,34 +194,12 @@ function SuspensionCard({
 
   if (prompt.toolName === 'submit_plan') {
     return (
-      <div className={promptCardSuspension} role="group" aria-label="Plan approval">
-        <div className={promptTitle}>Plan: {payload.plan?.title ?? payload.title ?? 'Proposed plan'}</div>
-        {payload.plan?.summary && (
-          <div className="text-ui-smd text-icon5 font-mono leading-relaxed break-words whitespace-pre-wrap">
-            {payload.plan.summary}
-          </div>
-        )}
-        <div className={promptActions}>
-          <Button
-            variant="primary"
-            size="sm"
-            aria-label="Approve the plan and switch to build"
-            autoFocus
-            disabled={isSubmitting}
-            onClick={() => onRespond(prompt.toolCallId, { action: 'approved' }, prompt.id)}
-          >
-            Approve &amp; build
-          </Button>
-          <Button
-            size="sm"
-            aria-label="Reject the plan"
-            disabled={isSubmitting}
-            onClick={() => onRespond(prompt.toolCallId, { action: 'rejected' }, prompt.id)}
-          >
-            Reject
-          </Button>
-        </div>
-      </div>
+      <SubmitPlanCard
+        toolCallId={prompt.toolCallId}
+        input={prompt.suspendPayload}
+        isSubmitting={isSubmitting}
+        onRespond={response => onRespond(prompt.toolCallId, response, prompt.id)}
+      />
     );
   }
 
@@ -498,6 +477,18 @@ function SignalRow({ kind, label, message }: { kind: string; label: string; mess
 // ---------------------------------------------------------------------------
 // Transcript
 // ---------------------------------------------------------------------------
+const HISTORY_ENTRY_STAGGER_MS = 55;
+const HISTORY_ENTRY_STAGGER_LIMIT = 10;
+
+interface PreparedTranscriptEntry {
+  entry: TimelineEntry;
+  content: ReactNode;
+}
+
+function createHistoryRevealDelays(entries: PreparedTranscriptEntry[]): Record<string, number> {
+  const visibleEntries = entries.filter(({ content }) => content !== null).slice(-HISTORY_ENTRY_STAGGER_LIMIT);
+  return Object.fromEntries(visibleEntries.map(({ entry }, index) => [entry.id, index * HISTORY_ENTRY_STAGGER_MS]));
+}
 
 export function Transcript({ tail }: { tail?: ReactNode }) {
   const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
@@ -524,6 +515,7 @@ export function Transcript({ tail }: { tail?: ReactNode }) {
   return (
     <TranscriptEntries
       entries={transcript.entries}
+      revealInitialEntries
       isSubmitting={approveMutation.isPending || respondMutation.isPending}
       onApprove={onApprove}
       onRespond={onRespond}
@@ -535,6 +527,7 @@ export function Transcript({ tail }: { tail?: ReactNode }) {
 
 export function TranscriptEntries({
   entries,
+  revealInitialEntries = false,
   isSubmitting = false,
   onApprove,
   onRespond,
@@ -542,6 +535,7 @@ export function TranscriptEntries({
   tail,
 }: {
   entries: TimelineEntry[];
+  revealInitialEntries?: boolean;
   isSubmitting?: boolean;
   onApprove: (toolCallId: string, approved: boolean, promptId: string) => void;
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
@@ -566,9 +560,7 @@ export function TranscriptEntries({
   const renderEntry = (entry: TimelineEntry): ReactNode => {
     switch (entry.kind) {
       case 'message':
-        return (
-          <MessageBubble entry={entry} suspensions={suspensions} isSubmitting={isSubmitting} onRespond={onRespond} />
-        );
+        return renderMessageBubble({ entry, suspensions, isSubmitting, onRespond });
       case 'notice':
         return <NoticeCard entry={entry} />;
       case 'approval':
@@ -588,6 +580,11 @@ export function TranscriptEntries({
     }
   };
 
+  const preparedEntries = entries.map(entry => ({ entry, content: renderEntry(entry) }));
+  const [historyRevealDelays] = useState(() =>
+    revealInitialEntries ? createHistoryRevealDelays(preparedEntries) : {},
+  );
+
   // A turn is what you can see: the run echoes the message you sent back as a signal
   // that draws nothing, and letting that open a turn would take the room off your bubble.
   const drawsContent = (entry: MessageEntry): boolean =>
@@ -595,18 +592,22 @@ export function TranscriptEntries({
   const opensTurn = (entry: TimelineEntry): boolean =>
     entry.kind === 'message' && startsUserTurn(entry.message) && drawsContent(entry);
 
-  const turnGroups: { key: string; entries: TimelineEntry[]; opensTurn: boolean }[] = [];
-  for (const entry of entries) {
-    const opens = opensTurn(entry);
+  const turnGroups: { key: string; entries: PreparedTranscriptEntry[]; opensTurn: boolean }[] = [];
+  for (const preparedEntry of preparedEntries) {
+    const opens = opensTurn(preparedEntry.entry);
     if (!opens && turnGroups.length > 0) {
-      turnGroups.at(-1)?.entries.push(entry);
+      turnGroups.at(-1)?.entries.push(preparedEntry);
       continue;
     }
     // A gap sorts above the turn it introduces but arrives after it: inside that turn the
     // room absorbs its height, outside it shifts the transcript a beat later.
     const previous = turnGroups.at(-1);
-    const introduction = previous && isTimeGap(previous.entries.at(-1)) ? previous.entries.splice(-1) : [];
-    turnGroups.push({ key: entry.id, entries: [...introduction, entry], opensTurn: opens });
+    const introduction = previous && isTimeGap(previous.entries.at(-1)?.entry) ? previous.entries.splice(-1) : [];
+    turnGroups.push({
+      key: preparedEntry.entry.id,
+      entries: [...introduction, preparedEntry],
+      opensTurn: opens,
+    });
   }
 
   return (
@@ -620,9 +621,8 @@ export function TranscriptEntries({
             key={group.key}
             className={cn('flex flex-col', group.opensTurn && 'turn-room', holdsRoom && 'turn-room-open')}
           >
-            {group.entries.map(entry => {
-              const rendered = renderEntry(entry);
-              if (!rendered) return null;
+            {group.entries.map(({ entry, content }) => {
+              const historyRevealDelay = historyRevealDelays[entry.id];
 
               return (
                 <MessageScrollerItem
@@ -631,9 +631,13 @@ export function TranscriptEntries({
                   scrollAnchor={opensTurn(entry)}
                   // Estimated off-screen heights would make the prepend anchor restore
                   // the wrong offset — measure the real thing.
-                  className="[content-visibility:visible]"
+                  className={cn(
+                    '[content-visibility:visible]',
+                    historyRevealDelay !== undefined && 'transcript-history-enter',
+                  )}
+                  style={historyRevealDelay === undefined ? undefined : { animationDelay: `${historyRevealDelay}ms` }}
                 >
-                  {rendered}
+                  {content}
                 </MessageScrollerItem>
               );
             })}
@@ -686,7 +690,13 @@ export function ChannelOriginBadge({ origin }: { origin: { platform: string; aut
   );
 }
 
-function MessageBubble({
+function steeringLabel(entry: MessageEntry): string | undefined {
+  if (!entry.steer) return undefined;
+  if (entry.deliveryStatus === 'pending') return 'Steering…';
+  if (entry.deliveryStatus === 'failed') return 'Not sent';
+  return 'Steered message';
+}
+function renderMessageBubble({
   entry,
   suspensions,
   isSubmitting,
@@ -698,6 +708,7 @@ function MessageBubble({
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
 }) {
   const messageParts = entry.message.content.parts ?? [];
+
   const parts = messageParts.filter(part => isRenderablePart(part, suspensions, entry.runtimeTools));
   const message =
     parts.length === messageParts.length
@@ -708,17 +719,28 @@ function MessageBubble({
   const toolGroups = collectToolGroups(parts, suspensions, entry.runtimeTools);
   const origin = channelOrigin(entry);
   const prose = messageText(parts);
+  const steeringStatus = steeringLabel(entry);
+  const steeringPending = entry.deliveryStatus === 'pending';
+  const steeringFailed = entry.deliveryStatus === 'failed';
   const roles: MessageRoleRenderers = {
     User: ({ children }) => (
       <div className={cn(MESSAGE_HOVER, 'my-3 ml-auto flex w-fit max-w-[70%] flex-col items-end')}>
         <div
           className={cn(
-            'text-text1 rounded-xl px-4 py-2 break-words',
-            entry.steer ? 'bg-warning1/10' : 'bg-neutral6/5',
+            'text-text1 bg-neutral6/5 rounded-xl border border-transparent px-4 py-2 break-words',
+            steeringPending && 'border-border1 border-dashed',
           )}
         >
           {children}
         </div>
+        {steeringStatus && (
+          <span
+            className={cn('text-ui-xs text-icon3 mt-1', steeringFailed && 'text-notice-destructive-fg')}
+            aria-live="polite"
+          >
+            {steeringStatus}
+          </span>
+        )}
         {origin && <ChannelOriginBadge origin={origin} />}
         {prose ? <MessageMeta text={prose} createdAt={entry.message.createdAt} align="end" /> : null}
       </div>
