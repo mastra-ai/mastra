@@ -540,6 +540,32 @@ Line 3 conclusion`;
       expect((await workspace.search('quick')).length).toBeGreaterThan(0);
     });
 
+    it('coalesces concurrent stop() calls onto one in-flight teardown', async () => {
+      let stops = 0;
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => {
+        release = resolve;
+      });
+      const sandbox = {
+        provider: 'fake',
+        stop: async () => {
+          stops += 1;
+          await gate;
+        },
+      } as any;
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+        sandbox,
+      });
+
+      const first = workspace.stop();
+      const second = workspace.stop();
+      release();
+      await Promise.all([first, second]);
+
+      expect(stops).toBe(1);
+    });
+
     it('should release the search index even when a resource fails to destroy', async () => {
       const filesystem = new LocalFilesystem({ basePath: tempDir });
       const workspace = new Workspace({

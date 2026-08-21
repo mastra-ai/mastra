@@ -569,6 +569,7 @@ export class Workspace<
 
   private _status: WorkspaceStatus = 'pending';
   private _destroyPromise?: Promise<void>;
+  private _stopPromise?: Promise<void>;
   private readonly _fs?: WorkspaceFilesystem;
   private readonly _filesystemResolver?: WorkspaceFilesystemResolver;
   private readonly _sandbox?: WorkspaceSandbox;
@@ -1318,7 +1319,21 @@ export class Workspace<
     if (this._teardownStarted || this._status === 'destroyed') {
       return;
     }
+    // Coalesce concurrent stop() calls onto one in-flight teardown, same as
+    // destroy() does with _destroyPromise.
+    if (this._stopPromise) {
+      return await this._stopPromise;
+    }
 
+    this._stopPromise = this._performStop();
+    try {
+      await this._stopPromise;
+    } finally {
+      this._stopPromise = undefined;
+    }
+  }
+
+  private async _performStop(): Promise<void> {
     // Shutdown LSP before the sandbox — LSP clients need running processes
     // to send shutdown/exit. Cleared so a later access lazily recreates it.
     if (this._lsp) {
