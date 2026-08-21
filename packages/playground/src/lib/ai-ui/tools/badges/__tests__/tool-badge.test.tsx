@@ -54,6 +54,25 @@ describe('ToolBadge', () => {
     expect(screen.queryByLabelText('Code editor')).toBeNull();
   });
 
+  it('leaves out the arguments section when the tool ran with no input', () => {
+    renderWithProviders(
+      <ToolBadge
+        toolName="web_search"
+        args={{}}
+        result={{ action: { type: 'openPage', url: 'https://mastra.ai' } }}
+        toolOutput={[]}
+        toolCallId="call-1"
+        toolApprovalMetadata={undefined}
+        isNetwork={false}
+      />,
+    );
+
+    fireEvent.click(screen.getByText('web_search'));
+
+    expect(screen.queryByText('Tool arguments')).toBeNull();
+    expect(screen.getByTestId('tool-result').textContent).toContain('openPage');
+  });
+
   it('renders tool results as a static code block', () => {
     renderWithProviders(
       <ToolBadge
