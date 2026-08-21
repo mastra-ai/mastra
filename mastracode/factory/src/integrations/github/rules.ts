@@ -6,6 +6,7 @@ import type {
   FactoryRuleDecision,
   FactoryRules,
 } from '../../rules/types.js';
+import { isTerminalFactoryRuleStage } from '../../rules/types.js';
 import { validateFactoryRuleDecisions } from '../../rules/validation.js';
 import type { IntegrationStorageHandle } from '../../storage/domains/integrations/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
@@ -890,6 +891,7 @@ export function createGithubPullRequestReconciler(
           }
           if (state.state !== 'closed') continue;
           for (const card of cards) {
+            if (!isTerminalFactoryRuleStage(card.stages)) continue;
             await options.storage.supersedeDecisionsForWorkItem({
               orgId: card.orgId,
               factoryProjectId: card.factoryProjectId,

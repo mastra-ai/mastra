@@ -6,8 +6,7 @@ import { FactoryTransitionService } from '../../rules/transition-service.js';
 import { FACTORY_PULL_REQUEST_RECONCILIATION_KEY } from '../../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import { GithubAppIdentity } from './app-identity.js';
-import type { GithubIntegration } from './integration.js';
-import { createGithubPullRequestReconciler, GithubRules } from './rules.js';
+import { createGithubPullRequestReconciler, GithubRules, reconciledClosedEvent } from './rules.js';
 import type { ReconcileIssueState, ReconcilePullRequestState } from './rules.js';
 import { changeRequestTargetKey } from './subscriptions.js';
 
@@ -2017,6 +2016,53 @@ describe('createGithubPullRequestReconciler', () => {
     ).toBe('superseded');
     await expect(context.workItems.get({ orgId: 'org-1', id: card.item.id })).resolves.toMatchObject({
       metadata: { [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]: 'merged' },
+    });
+  });
+
+  it('keeps a failed close transition actionable until the card reaches a terminal stage', async () => {
+    const context = await setup('read');
+    const card = await createCard(context, { number: 17 });
+    const rules = new GithubRules({
+      github: context.github,
+      sourceControl: context.sourceControl,
+      integrationStorage: context.integrationStorage,
+      projects: context.projects,
+      storage: context.workItems,
+      rules: builtInFactoryRules(),
+    });
+    const now = new Date('2030-01-01T00:00:00.000Z');
+    await rules.ingest(reconciledClosedEvent(repositoryTarget, 17, mergedState(17)));
+    const [claimed] = await context.workItems.claimDeferredDecisions({
+      ownerId: 'worker-1',
+      now,
+      leaseExpiresAt: new Date(now.getTime() + 30_000),
+      limit: 1,
+    });
+    if (!claimed) throw new Error('Expected a deferred decision');
+    await context.workItems.failDeferredDecision({
+      id: claimed.id,
+      orgId: claimed.orgId,
+      factoryProjectId: claimed.factoryProjectId,
+      ownerId: 'worker-1',
+      now,
+      availableAt: now,
+      lastError: 'Transition delivery failed.',
+      failureCode: 'unknown',
+      terminal: true,
+    });
+
+    await createReconciler(
+      context,
+      vi.fn(async () => mergedState(17)),
+    )([repositoryTarget]);
+
+    expect(
+      (await context.workItems.listDeferredDecisions('org-1', context.project.id)).find(
+        decision => decision.id === claimed.id,
+      )?.status,
+    ).toBe('failed');
+    await expect(context.workItems.get({ orgId: 'org-1', id: card.item.id })).resolves.toMatchObject({
+      stages: ['review'],
     });
   });
 
