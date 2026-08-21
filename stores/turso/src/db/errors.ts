@@ -135,8 +135,8 @@ export function normalizeTursoError(error: unknown, context?: string): TursoErro
 /**
  * SQLite codes worth retrying: the write lost a race rather than being invalid.
  *
- * Turso does not honour `busy_timeout` — contended writers fail immediately
- * instead of waiting — so retrying is the only way concurrent writers converge.
+ * `busy_timeout` only delays these failures rather than preventing them, so
+ * retrying the work is the only way concurrent writers converge.
  */
 const RETRYABLE_CODES: ReadonlySet<TursoErrorCode> = new Set(['SQLITE_BUSY', 'SQLITE_BUSY_SNAPSHOT']);
 

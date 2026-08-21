@@ -279,6 +279,34 @@ describe('TursoConnection', () => {
       }
     });
 
+    it('fails fast on contention instead of sleeping out a busy timeout', async () => {
+      // busy_timeout does not re-acquire in Turso: a writer given 300ms against
+      // a 200ms hold still fails, just 300ms later. Defaulting it to a
+      // SQLite-typical 5000 turns every conflict into a five-second stall, so
+      // this pins the default at 0 and leaves waiting to the retry loop.
+      const blocker = new TursoConnection({ path: join(dir, 'test.db') });
+      try {
+        let release!: () => void;
+        const held = new Promise<void>(resolve => (release = resolve));
+        const blocking = blocker.transaction(async tx => {
+          await tx.execute(`INSERT INTO t VALUES ('held', 1)`);
+          await held;
+        });
+        await new Promise(resolve => setTimeout(resolve, 20));
+
+        const started = Date.now();
+        await expect(conn.transaction(async tx => tx.execute(`INSERT INTO t VALUES ('x', 1)`))).rejects.toMatchObject({
+          code: 'SQLITE_BUSY',
+        });
+        expect(Date.now() - started).toBeLessThan(500);
+
+        release();
+        await blocking;
+      } finally {
+        await blocker.close();
+      }
+    });
+
     it('does not retry a deterministic failure', async () => {
       let attempts = 0;
 
@@ -288,7 +316,7 @@ describe('TursoConnection', () => {
           await tx.execute(`INSERT INTO t VALUES ('dup', 1)`);
           await tx.execute(`INSERT INTO t VALUES ('dup', 2)`);
         }),
-      ).rejects.toMatchObject({ code: 'SQLITE_CONSTRAINT_PRIMARYKEY' });
+      ).rejects.toMatchObject({ code: 'SQLITE_CONSTRAINT', extendedCode: 'SQLITE_CONSTRAINT_UNIQUE' });
 
       expect(attempts).toBe(1);
     });
@@ -310,7 +338,7 @@ describe('TursoConnection', () => {
             maxRetries: 2,
             initialBackoffMs: 1,
           }),
-        ).rejects.toBeInstanceOf(TursoError);
+        ).rejects.toMatchObject({ code: 'SQLITE_BUSY' });
 
         release();
         await blocking;

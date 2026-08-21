@@ -22,11 +22,11 @@
  *    transaction is open would be swept into it and committed or rolled back
  *    with it. All access is therefore serialized through a queue.
  *
- * 4. `PRAGMA busy_timeout` is accepted and read back, but not honoured:
- *    contended writers fail immediately with "database is locked" instead of
- *    waiting. The queue only serializes work on *this* connection, so writers
- *    on separate connections still collide and `transactionWithRetry` is what
- *    makes them converge.
+ * 4. `PRAGMA busy_timeout` delays failure without preventing it. A writer
+ *    contending for a lock held 200ms fails after a 300ms timeout even though
+ *    the lock frees at 200ms: it sleeps, then reports "database is locked"
+ *    rather than acquiring. Waiting therefore buys nothing, and only
+ *    `transactionWithRetry` makes concurrent writers converge.
  */
 
 import { connect } from '@tursodatabase/database';
@@ -59,11 +59,30 @@ export type TursoTransactionMode = 'deferred' | 'immediate' | 'exclusive';
 export type TursoConnectionOptions = {
   /** Filesystem path to the database, or `:memory:`. */
   path: string;
-  /** Milliseconds to wait on a locked database before failing. @default 5000 */
+  /**
+   * Milliseconds the engine sleeps on a locked database before failing.
+   *
+   * Defaults to 0 because in Turso this wait is pure latency: the sleeping
+   * connection does not acquire the lock when it frees up, it just fails later.
+   * See {@link DEFAULT_BUSY_TIMEOUT_MS}.
+   */
   busyTimeoutMs?: number;
 };
 
-export const DEFAULT_BUSY_TIMEOUT_MS = 5000;
+/**
+ * Disabled by default: `busy_timeout` does not do what SQLite users expect here.
+ *
+ * Measured against `@tursodatabase/database@0.7.2` — with `busy_timeout=300`
+ * against a lock held for 200ms, the contended writer still failed with
+ * "database is locked" after 301ms, despite the lock being free from 200ms.
+ * The timeout only delays the failure; it never retries the acquisition. Left
+ * at a SQLite-typical 5000 it turns each conflict into a five-second stall that
+ * looks like a hang.
+ *
+ * Waiting is therefore left to `transactionWithRetry`, which actually re-runs
+ * the work.
+ */
+export const DEFAULT_BUSY_TIMEOUT_MS = 0;
 
 type Database = Awaited<ReturnType<typeof connect>>;
 
@@ -72,8 +91,15 @@ const normalizeStatement = (statement: TursoStatement | string): TursoStatement 
 
 /** Leading keywords of statements that yield rows. */
 /** Retry budget for transactions that lose a write race. */
-const DEFAULT_MAX_RETRIES = 5;
-const DEFAULT_INITIAL_BACKOFF_MS = 10;
+const DEFAULT_MAX_RETRIES = 10;
+const DEFAULT_INITIAL_BACKOFF_MS = 5;
+
+/**
+ * Ceiling on a single backoff. Doubling without a cap turns a generous retry
+ * budget into minute-long sleeps, which reads as a hang rather than as
+ * contention, so growth stops here and the remaining budget is spent retrying.
+ */
+const MAX_BACKOFF_MS = 100;
 
 const ROW_RETURNING_PREFIX = /^\s*(?:SELECT|WITH|PRAGMA|EXPLAIN)\b/i;
 /** `RETURNING` turns an INSERT/UPDATE/DELETE into a row-producing statement. */
@@ -136,7 +162,7 @@ export class TursoConnection {
       try {
         const db = await connect(this.#path);
         db.defaultSafeIntegers(true);
-        await db.exec(`PRAGMA busy_timeout = ${this.#busyTimeoutMs}`);
+        if (this.#busyTimeoutMs > 0) await db.exec(`PRAGMA busy_timeout = ${this.#busyTimeoutMs}`);
         this.#db = db;
         return db;
       } catch (error) {
@@ -288,7 +314,7 @@ export class TursoConnection {
 
         // Full jitter: contended writers that back off in lockstep would just
         // collide again on the next attempt.
-        const ceiling = initialBackoffMs * 2 ** attempt;
+        const ceiling = Math.min(initialBackoffMs * 2 ** attempt, MAX_BACKOFF_MS);
         await new Promise(resolve => setTimeout(resolve, Math.random() * ceiling));
         attempt++;
       }
