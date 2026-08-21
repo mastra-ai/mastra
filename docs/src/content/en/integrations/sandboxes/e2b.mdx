@@ -58,9 +58,9 @@ const agent = new Agent({
   },
   {
     name: 'template',
-    type: 'string | TemplateBuilder | function',
+    type: 'string | TemplateBuilder | function | NamedTemplateSpec',
     description:
-      'Sandbox template specification. Can be a template ID string, a TemplateBuilder, or a function that customizes the default template.',
+      'Sandbox template specification. Can be a template ID string, a TemplateBuilder, a function that customizes the default template, or a named spec such as the one returned by createRepoTemplate.',
     isOptional: true,
   },
   {
@@ -302,6 +302,57 @@ const workspace = new Workspace({
 ```
 
 This is optional: `gcsfuse` is installed automatically at mount time if not present.
+
+### Repository templates
+
+`createRepoTemplate` produces a template spec that clones a repository and
+runs its setup command at build time, so sandboxes start with a warm checkout
+and installed dependencies instead of paying for a cold clone on every
+session:
+
+```typescript
+import { E2BSandbox, createRepoTemplate } from '@mastra/e2b'
+
+const sandbox = new E2BSandbox({
+  id: sessionId,
+  template: createRepoTemplate({
+    repoFullName: 'octocat/hello-world',
+    sha: latestMainSha, // optional: omit for a sha-less alias
+    setupCommand: 'pnpm install',
+  }),
+})
+```
+
+The spec carries a deterministic alias derived from the repository, sha, and
+setup command, so the same inputs resolve to the same template. Resolution is
+lazy: the first sandbox to reference an alias checks whether it exists on E2B
+and builds it once when it doesn't; later sandboxes reuse it without
+rebuilding. A changed sha or setup command hashes to a new alias.
+
+The template layers on top of the default mountable base (E2B's `base` image,
+so git and common tooling are present, plus `s3fs`/FUSE for mount support).
+Because build steps run as the sandbox's non-root `user`, the spec preps the
+workspace root as root first (`mkdir` + `chown` to `user`) and then clones and
+runs setup as `user`, keeping runtime file ownership correct.
+
+Failure handling is designed so a broken template never wedges a session:
+
+- A failed build falls back to a named workspace-base template (the default
+  mountable base with a user-writable `/workspace`), so a runtime cold clone
+  still works.
+- E2B keeps a failed build's alias visible to `Template.exists`, so a broken
+  alias could otherwise be reused forever. When creating a sandbox from a
+  named alias fails, the cached resolution is dropped and creation retries
+  once on the fallback.
+
+Template builds receive no credentials: the clone is tokenless, so only
+public repositories can be baked into templates today. A private repository's
+build fails and degrades to the fallback, where the session's own runtime
+setup (with runtime-injected auth) does the clone. Private-repo template
+builds are a follow-up pending E2B build secrets.
+
+`repoTemplateAlias` computes the alias for a spec without building anything —
+useful for pruning old templates with `e2b template delete`.
 
 ## Using with Code Mode
 
