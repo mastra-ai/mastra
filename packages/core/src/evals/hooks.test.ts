@@ -1,0 +1,215 @@
+import { randomUUID } from 'node:crypto';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { AvailableHooks } from '../hooks';
+import type { ObservabilityContext } from '../observability';
+import type { MastraScorerEntry } from './base';
+import { hashToUnitInterval, runScorer } from './hooks';
+
+vi.mock('../hooks', async importOriginal => {
+  const actual = await importOriginal<typeof import('../hooks')>();
+  return { ...actual, executeHook: vi.fn() };
+});
+
+const { executeHook } = await import('../hooks');
+const executeHookMock = vi.mocked(executeHook);
+
+function makeScorer(sampling?: MastraScorerEntry['sampling']): MastraScorerEntry {
+  return {
+    scorer: { id: 'scorer-1', name: 'scorer-1', description: 'test scorer' },
+    sampling,
+  } as unknown as MastraScorerEntry;
+}
+
+/**
+ * Minimal stand-in for a span. Only `isValid` and `traceId` are read by the sampling path.
+ * `isValid: false` models a NoOpSpan (tracer declined); omitting the span entirely models
+ * observability not being configured.
+ */
+function makeObservabilityContext(span?: { isValid: boolean; traceId: string }): ObservabilityContext {
+  return { tracing: { currentSpan: span } } as unknown as ObservabilityContext;
+}
+
+function invoke({
+  sampling,
+  span,
+  runId = 'run-1',
+}: {
+  sampling?: MastraScorerEntry['sampling'];
+  span?: { isValid: boolean; traceId: string };
+  runId?: string;
+}) {
+  runScorer({
+    runId,
+    scorerId: 'scorer-1',
+    scorerObject: makeScorer(sampling),
+    input: {},
+    output: {},
+    requestContext: {},
+    entity: {},
+    structuredOutput: false,
+    source: 'LIVE',
+    entityType: 'AGENT',
+    ...makeObservabilityContext(span),
+  } as Parameters<typeof runScorer>[0]);
+}
+
+function didScore(args: Parameters<typeof invoke>[0]): boolean {
+  executeHookMock.mockClear();
+  invoke(args);
+  return executeHookMock.mock.calls.some(call => call[0] === AvailableHooks.ON_SCORER_RUN);
+}
+
+/** OTel trace IDs are 32 hex chars. Sequential synthetic IDs would mask a biased hash. */
+function makeTraceIds(count: number): string[] {
+  return Array.from({ length: count }, () => randomUUID().replace(/-/g, ''));
+}
+
+function validSpan(traceId: string) {
+  return { isValid: true, traceId };
+}
+
+beforeEach(() => {
+  executeHookMock.mockClear();
+});
+
+describe('runScorer sampling', () => {
+  describe('sampling config passthrough', () => {
+    it('always executes when sampling is absent', () => {
+      expect(didScore({ span: validSpan(makeTraceIds(1)[0]!) })).toBe(true);
+    });
+
+    it("always executes when sampling type is 'none'", () => {
+      expect(didScore({ sampling: { type: 'none' }, span: validSpan(makeTraceIds(1)[0]!) })).toBe(true);
+    });
+  });
+
+  describe('C2: trace sampling lineage', () => {
+    it('does not score when the tracer declined the trace, even at rate 1', () => {
+      expect(
+        didScore({
+          sampling: { type: 'ratio', rate: 1 },
+          span: { isValid: false, traceId: 'no-op-trace' },
+        }),
+      ).toBe(false);
+    });
+
+    it('does not score a declined trace even when sampling is absent', () => {
+      expect(didScore({ span: { isValid: false, traceId: 'no-op-trace' } })).toBe(false);
+    });
+
+    it('scores normally when observability is not configured (no span present)', () => {
+      // Largest population of users: an absent span is not a decline. If this ever fails,
+      // scoring has been silently disabled for everyone without observability configured.
+      expect(didScore({ sampling: { type: 'ratio', rate: 1 } })).toBe(true);
+    });
+
+    it('declined traces never reach the hash, so they do not sample all-or-nothing', () => {
+      // Every NoOpSpan shares the constant traceId 'no-op-trace'. If the validity check were
+      // reordered after the hash, that single key would decide for the entire declined
+      // population at once — every declined trace scored, or none, depending on the rate.
+      const scoredAtHalf = didScore({
+        sampling: { type: 'ratio', rate: 0.5 },
+        span: { isValid: false, traceId: 'no-op-trace' },
+      });
+      const scoredAtNearOne = didScore({
+        sampling: { type: 'ratio', rate: 0.999 },
+        span: { isValid: false, traceId: 'no-op-trace' },
+      });
+      expect(scoredAtHalf).toBe(false);
+      expect(scoredAtNearOne).toBe(false);
+    });
+  });
+
+  describe('C1: deterministic sampling', () => {
+    it('returns the same decision for the same trace across repeated invocations', () => {
+      const traceId = makeTraceIds(1)[0]!;
+      const decisions = new Set(
+        Array.from({ length: 50 }, () =>
+          didScore({ sampling: { type: 'ratio', rate: 0.5 }, span: validSpan(traceId) }),
+        ),
+      );
+      expect(decisions.size).toBe(1);
+    });
+
+    it('is deterministic on runId when observability is not configured', () => {
+      const decisions = new Set(
+        Array.from({ length: 50 }, () => didScore({ sampling: { type: 'ratio', rate: 0.5 }, runId: 'stable-run' })),
+      );
+      expect(decisions.size).toBe(1);
+    });
+
+    it.each([0.01, 0.1, 0.5, 0.9])('samples approximately rate %s of traces', rate => {
+      // The core risk of this change: a biased hash silently shifts the effective sampling
+      // rate with nothing downstream to surface it.
+      const traceIds = makeTraceIds(4000);
+      const sampled = traceIds.filter(traceId =>
+        didScore({ sampling: { type: 'ratio', rate }, span: validSpan(traceId) }),
+      ).length;
+      expect(sampled / traceIds.length).toBeCloseTo(rate, 1);
+    });
+
+    it('distributes untraced runIds at approximately the configured rate', () => {
+      const runIds = Array.from({ length: 2000 }, () => randomUUID());
+      const sampled = runIds.filter(runId => didScore({ sampling: { type: 'ratio', rate: 0.3 }, runId })).length;
+      expect(sampled / runIds.length).toBeCloseTo(0.3, 1);
+    });
+
+    it('co-samples: two scorers at the same rate select the same traces', () => {
+      const traceIds = makeTraceIds(500);
+      const sampledBy = (scorerRate: number) =>
+        traceIds.filter(traceId =>
+          didScore({ sampling: { type: 'ratio', rate: scorerRate }, span: validSpan(traceId) }),
+        );
+
+      const first = sampledBy(0.1);
+      const second = sampledBy(0.1);
+      expect(first.length).toBeGreaterThan(0);
+      expect(second).toEqual(first);
+    });
+
+    it('nests: a lower-rate scorer selects a subset of a higher-rate scorer', () => {
+      const traceIds = makeTraceIds(500);
+      const wide = new Set(
+        traceIds.filter(traceId => didScore({ sampling: { type: 'ratio', rate: 0.2 }, span: validSpan(traceId) })),
+      );
+      const narrow = traceIds.filter(traceId =>
+        didScore({ sampling: { type: 'ratio', rate: 0.05 }, span: validSpan(traceId) }),
+      );
+
+      expect(narrow.length).toBeGreaterThan(0);
+      expect(narrow.length).toBeLessThan(wide.size);
+      expect(narrow.every(traceId => wide.has(traceId))).toBe(true);
+    });
+
+    it('never samples at rate 0 and always samples at rate 1', () => {
+      const traceIds = makeTraceIds(200);
+      expect(
+        traceIds.some(traceId => didScore({ sampling: { type: 'ratio', rate: 0 }, span: validSpan(traceId) })),
+      ).toBe(false);
+      expect(
+        traceIds.every(traceId => didScore({ sampling: { type: 'ratio', rate: 1 }, span: validSpan(traceId) })),
+      ).toBe(true);
+    });
+  });
+});
+
+describe('hashToUnitInterval', () => {
+  it('returns a stable value in [0, 1)', () => {
+    for (const key of makeTraceIds(200)) {
+      const value = hashToUnitInterval(key);
+      expect(value).toBeGreaterThanOrEqual(0);
+      expect(value).toBeLessThan(1);
+      expect(hashToUnitInterval(key)).toBe(value);
+    }
+  });
+
+  it('spreads keys across the interval rather than clustering', () => {
+    const buckets = new Array(10).fill(0);
+    for (const key of makeTraceIds(5000)) {
+      buckets[Math.floor(hashToUnitInterval(key) * 10)]! += 1;
+    }
+    for (const count of buckets) {
+      expect(count).toBeGreaterThan(350);
+    }
+  });
+});
