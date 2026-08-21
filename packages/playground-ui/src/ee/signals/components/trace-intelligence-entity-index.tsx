@@ -195,7 +195,9 @@ export function TraceIntelligenceEntityIndex({
         />
       </PageLayout.TopArea>
       <div
-        className={settingsOpen ? 'grid min-h-0 gap-6 lg:grid-cols-[minmax(0,1fr)_24rem]' : 'grid min-h-0 grid-cols-1'}
+        className={
+          settingsOpen ? 'grid max-h-full min-h-0 grid-cols-[1fr_1fr] items-start gap-4' : 'grid min-h-0 grid-cols-1'
+        }
       >
         <div className="min-h-0 min-w-0">{body}</div>
         {settingsOpen ? <TraceSignalSettingsPanel onClose={() => setSettingsOpen(false)} /> : null}
