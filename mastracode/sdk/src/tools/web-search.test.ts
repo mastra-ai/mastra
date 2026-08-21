@@ -21,7 +21,7 @@ import {
   hasParallelKey,
   createParallelWebSearchTool,
   createParallelWebExtractTool,
-} from '../web-search.js';
+} from './web-search.js';
 
 describe('web-search tools', () => {
   const originalEnv = process.env;

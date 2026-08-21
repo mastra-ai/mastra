@@ -10,3 +10,13 @@ When `PARALLEL_API_KEY` is configured in your environment, Mastra Code enables P
 1. Tavily (`TAVILY_API_KEY`)
 2. Parallel (`PARALLEL_API_KEY`)
 3. Anthropic / OpenAI native model search (when supported by the active model)
+
+**Example tool call input:**
+
+```json
+{
+  "search_queries": ["mastra agents documentation", "mastra dynamic workflows"],
+  "objective": "Find documentation and examples for configuring agents and workflows in Mastra"
+}
+```
+
