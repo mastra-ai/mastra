@@ -1,4 +1,4 @@
-import type { SandboxLifecycleHook, WorkspaceSandbox } from '@mastra/core/workspace';
+import type { SandboxStartHook, WorkspaceSandbox } from '@mastra/core/workspace';
 import { deriveSandboxWorkdir } from './workdir.js';
 
 /**
@@ -26,7 +26,7 @@ export interface FactorySandboxContext {
    * fails the start loudly. Factory also runs a marker-guarded fallback
    * after `start()` for callbacks that do not forward it.
    */
-  onStart?: SandboxLifecycleHook;
+  onStart?: SandboxStartHook;
   /** Opaque acting-user subject for provider attribution. */
   actingUserId?: string;
 }
@@ -183,7 +183,7 @@ async function runGuardedSetup(
  * crash-interrupted attempt. Throwing fails `start()` loudly — core treats
  * onStart errors as fatal.
  */
-export function createSessionSetupHook(run: SessionSetupRun, repoFullName: string): SandboxLifecycleHook {
+export function createSessionSetupHook(run: SessionSetupRun, repoFullName: string): SandboxStartHook {
   return async ({ sandbox, outcome }) => {
     await runGuardedSetup(sandbox, run, { skipMarkerProbe: outcome === 'created', repoFullName });
   };
