@@ -22,11 +22,11 @@ export interface MastraCodeState {
   factoryOrgId?: string;
   /** Linked repository used by this session when source-control execution is required. */
   projectRepositoryId?: string;
-  /** Persisted sandbox id for reattaching the project's cloud workspace. */
+  /** Observability only: sandbox id last reported by the server. Nothing resolves workspaces from it. */
   sandboxId?: string;
-  /** Path inside the sandbox the repo is cloned into. */
+  /** Observability only: path inside the sandbox the repo is cloned into. */
   sandboxWorkdir?: string;
-  /** Active git worktree path inside the sandbox for the current unit of work. */
+  /** Legacy, unread: git worktree paths predate one-sandbox-per-session. */
   worktreePath?: string;
   /** Active feature branch checked out in the worktree. */
   branch?: string;

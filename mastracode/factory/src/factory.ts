@@ -59,7 +59,6 @@ import { createFactoryTransitionTools } from './rules/tools.js';
 import { FactoryTransitionService } from './rules/transition-service.js';
 import type { FactoryRules } from './rules/types.js';
 import { assertFactoryRules } from './rules/validation.js';
-import { registerSandboxReattach } from './sandbox/reattach.js';
 import { SessionRetirementCoordinator } from './sandbox/session-retirement.js';
 import type { MastraFactorySandboxConfig } from './sandbox/session-sandbox.js';
 import { handleServerError } from './server-error.js';
@@ -388,9 +387,6 @@ export class MastraFactory {
       );
     }
 
-    // Core's `getDynamicWorkspace` reattaches project sandboxes through the
-    // SDK seam; resolve through the per-process session sandbox memo.
-    registerSandboxReattach();
     const workspaceRegistry = new FactoryWorkspaceRegistry();
 
     // One shared OAuth state signer per boot. The deploy entry supplies a
