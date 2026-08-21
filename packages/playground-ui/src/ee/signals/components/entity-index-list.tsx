@@ -39,26 +39,25 @@ export function EntityIndexList({ entities, hasSearch, getEntityHref, LinkCompon
         {entities.map(entity => {
           const metadata = entityIndexMetadata(entity);
           return (
-            <DataList.RowWrapper
+            <DataList.RowLink
               key={`${entity.entityType}:${entity.entityId}`}
-              data-entity-row
-              data-entity-id={entity.entityId}
+              to={getEntityHref(entity)}
+              LinkComponent={LinkComponent}
+              className="min-w-0"
             >
-              <DataList.RowLink colEnd={2} to={getEntityHref(entity)} LinkComponent={LinkComponent} className="min-w-0">
-                <DataList.Cell className="min-w-0 overflow-visible text-left">
-                  <span className="sr-only">Open entity {entity.entityId}</span>
-                  <span aria-hidden="true" className="block overflow-clip text-ellipsis whitespace-nowrap">
-                    {entity.entityId}
-                  </span>
-                </DataList.Cell>
-              </DataList.RowLink>
+              <DataList.Cell className="min-w-0 overflow-visible text-left">
+                <span className="sr-only">Open entity {entity.entityId}</span>
+                <span aria-hidden="true" className="block overflow-clip text-ellipsis whitespace-nowrap">
+                  {entity.entityId}
+                </span>
+              </DataList.Cell>
               <DataList.NumberCell>{metadata.traceCount}</DataList.NumberCell>
               <DataList.Cell>{metadata.signalsSet}</DataList.Cell>
               <DataList.Cell>
                 <Status entity={entity} />
               </DataList.Cell>
               <DataList.Cell title={entity.updatedAt}>{metadata.updatedAt}</DataList.Cell>
-            </DataList.RowWrapper>
+            </DataList.RowLink>
           );
         })}
       </DataList>

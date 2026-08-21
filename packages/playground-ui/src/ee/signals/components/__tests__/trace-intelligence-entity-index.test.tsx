@@ -73,6 +73,12 @@ function closestElement(text: string, selector: string): HTMLElement {
   return element;
 }
 
+function closestEntityRow(text: string): HTMLAnchorElement {
+  const element = screen.getByText(text).closest('a');
+  if (!(element instanceof HTMLAnchorElement)) throw new Error(`${text} does not have a linked entity row ancestor`);
+  return element;
+}
+
 describe('TraceIntelligenceEntityIndex', () => {
   describe('when the entity response is loading', () => {
     it('renders a loading state', async () => {
@@ -124,14 +130,12 @@ describe('TraceIntelligenceEntityIndex', () => {
       useEntityFixture();
       renderIndex();
 
-      const table = await screen.findByRole('region', { name: 'Trace Intelligence entities' });
-      const row = closestElement('support-agent', '[data-entity-row]');
+      await screen.findByRole('region', { name: 'Trace Intelligence entities' });
+      const row = closestEntityRow('support-agent');
       expect(within(row).getByText('12,480')).toBeTruthy();
       expect(within(row).getByText('5 of 5')).toBeTruthy();
       expect(within(row).getByText('Ready')).toBeTruthy();
-      expect(within(table).getByRole('link', { name: 'Open entity support-agent' }).getAttribute('href')).toBe(
-        '/intelligence/entities/agent/support-agent',
-      );
+      expect(row.getAttribute('href')).toBe('/intelligence/entities/agent/support-agent');
     });
 
     it('keeps collecting entities visible', async () => {
@@ -139,7 +143,7 @@ describe('TraceIntelligenceEntityIndex', () => {
       renderIndex();
 
       await screen.findByText('billing-agent');
-      const collectingRow = closestElement('billing-agent', '[data-entity-row]');
+      const collectingRow = closestEntityRow('billing-agent');
       expect(within(collectingRow).getByText('Collecting')).toBeTruthy();
     });
 
@@ -152,6 +156,9 @@ describe('TraceIntelligenceEntityIndex', () => {
 
       await waitFor(() => expect(screen.queryByText('support-agent')).not.toBeTruthy());
       expect(screen.getByText('billing-agent')).toBeTruthy();
+
+      fireEvent.change(screen.getByRole('textbox', { name: 'Filter entities' }), { target: { value: 'missing' } });
+      expect(await screen.findByText('No entities match your search')).toBeTruthy();
     });
 
     it('sorts entities from Z to A', async () => {
@@ -165,9 +172,9 @@ describe('TraceIntelligenceEntityIndex', () => {
       fireEvent.click(descendingOption, { detail: 1 });
 
       await waitFor(() => {
-        const entityIds = Array.from(document.querySelectorAll<HTMLElement>('[data-entity-id]')).map(
-          row => row.dataset.entityId,
-        );
+        const entityIds = Array.from(
+          document.querySelectorAll<HTMLAnchorElement>('a[href^="/intelligence/entities/agent/"]'),
+        ).map(row => row.getAttribute('href')?.split('/').at(-1));
         expect(entityIds).toEqual(['support-agent', 'research-agent', 'billing-agent']);
       });
     });
@@ -220,7 +227,7 @@ describe('TraceIntelligenceEntityIndex', () => {
       renderIndex();
 
       await screen.findByText('legacy-agent');
-      const row = closestElement('legacy-agent', '[data-entity-row]');
+      const row = closestEntityRow('legacy-agent');
       expect(within(row).getAllByText('—')).toHaveLength(2);
       expect(within(row).getByText('1 of 2')).toBeTruthy();
       expect(within(row).getByText('Unavailable')).toBeTruthy();
