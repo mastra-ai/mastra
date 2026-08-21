@@ -16,6 +16,7 @@
 import { createSandboxLifecycleTests, createMountOperationsTests } from '@internal/workspace-test-utils';
 import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
 
+import { createRepoTemplate } from '../utils/repo-template';
 import { E2BSandbox } from './index';
 
 // Use vi.hoisted to define the mock before vi.mock is hoisted
@@ -186,13 +187,83 @@ describe('E2BSandbox', () => {
       expect(sandbox.name).toBe('E2BSandbox');
     });
 
-    it('starts template preparation in background', () => {
-      // Template preparation starts in constructor
+    it('performs no template I/O at construction; preparation kicks off on start', async () => {
+      const { Template } = await import('e2b');
       const sandbox = new E2BSandbox();
 
-      // _templatePreparePromise should be set immediately
+      // Construction is pure: no resolution promise, no network calls.
+      expect((sandbox as any)._templatePreparePromise).toBeUndefined();
+      expect(Template.exists).not.toHaveBeenCalled();
+      expect(Template.build).not.toHaveBeenCalled();
+
+      await sandbox.start();
       expect((sandbox as any)._templatePreparePromise).toBeDefined();
-      expect((sandbox as any)._templatePreparePromise).toBeInstanceOf(Promise);
+    });
+  });
+
+  describe('Named template fallback ladder', () => {
+    const namedSpec = () => createRepoTemplate({ repoFullName: 'octocat/hello', setupCommand: 'pnpm install' });
+
+    it('falls back to the named workspace-base template when the aliased build fails', async () => {
+      const { Sandbox, Template } = await import('e2b');
+      (Template.exists as any).mockResolvedValue(false);
+      (Template.build as any)
+        .mockRejectedValueOnce(new Error('BuildError: clone failed'))
+        .mockResolvedValueOnce({ templateId: 'fallback-template-id' });
+
+      const sandbox = new E2BSandbox({ id: 'ladder-1', template: namedSpec() });
+      const result = await sandbox.start();
+
+      expect(result?.outcome).toBe('created');
+      expect((Sandbox.create as any).mock.calls[0]![0]).toBe('fallback-template-id');
+    });
+
+    it('retries on the fallback when creating from a registered-but-broken alias 404s', async () => {
+      const { Sandbox, Template } = await import('e2b');
+      const spec = namedSpec();
+      // E2B keeps a FAILED build's alias visible to Template.exists.
+      (Template.exists as any).mockResolvedValue(true);
+      (Sandbox.create as any)
+        .mockRejectedValueOnce(new Error("404: tag 'default' does not exist for template"))
+        .mockResolvedValueOnce(mockSandbox);
+      (Template.build as any).mockResolvedValue({ templateId: 'fallback-template-id' });
+
+      const sandbox = new E2BSandbox({ id: 'ladder-2', template: spec });
+      const result = await sandbox.start();
+
+      expect(result?.outcome).toBe('created');
+      expect((Sandbox.create as any).mock.calls[0]![0]).toBe(spec.alias);
+      // exists(true) for the fallback alias too -> retried on the alias itself
+      expect((Sandbox.create as any).mock.calls[1]![0]).not.toBe(spec.alias);
+      expect((sandbox as any)._resolvedTemplateId).not.toBe(spec.alias);
+    });
+
+    it('lands on the default mountable template when the fallback alias is broken too', async () => {
+      const { Sandbox, Template } = await import('e2b');
+      const spec = namedSpec();
+      (Template.exists as any).mockResolvedValue(true);
+      (Sandbox.create as any)
+        .mockRejectedValueOnce(new Error('404: template not found'))
+        .mockRejectedValueOnce(new Error('404: template not found'))
+        .mockResolvedValueOnce(mockSandbox);
+      (Template.build as any).mockResolvedValue({ templateId: 'default-template-id' });
+
+      const sandbox = new E2BSandbox({ id: 'ladder-3', template: spec });
+      const result = await sandbox.start();
+
+      expect(result?.outcome).toBe('created');
+      expect(Sandbox.create as any).toHaveBeenCalledTimes(3);
+    });
+
+    it('propagates non-404 create errors without retrying on another template', async () => {
+      const { Sandbox, Template } = await import('e2b');
+      (Template.exists as any).mockResolvedValue(true);
+      (Sandbox.create as any).mockRejectedValue(new Error('401: unauthorized'));
+
+      const sandbox = new E2BSandbox({ id: 'ladder-4', template: namedSpec() });
+
+      await expect(sandbox.start()).rejects.toThrow(/unauthorized/);
+      expect(Sandbox.create as any).toHaveBeenCalledTimes(1);
     });
   });
 

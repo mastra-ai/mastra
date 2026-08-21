@@ -261,6 +261,7 @@ function fakeGithubIntegration() {
                 sandboxWorkdir: project.sandboxWorkdir,
                 setupCommand: project.setupCommand,
                 teardownCommand: project.teardownCommand,
+                baseCheckpoint: project.baseCheckpoint ?? null,
               }
             : null;
         }),
@@ -1036,6 +1037,27 @@ describe('GitHub session workspace preparation', () => {
     expect(mocks.materializeRepo).toHaveBeenCalledWith(
       expect.objectContaining({ row: expect.objectContaining({ sandboxWorkdir: '/workspace/octocat/hello' }) }),
     );
+  });
+
+  it('threads the persisted baseCheckpoint sha into the sandbox callback as repoSha', async () => {
+    const workspace = createRemoteFactory();
+    addProject({ sandboxProvider: 'railway', baseCheckpoint: { name: 'warm', sha: 'abc1234def' } });
+    addSession({ id: 'session-a' });
+
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    expect(mocks.createSandbox).toHaveBeenCalledWith(expect.objectContaining({ repoSha: 'abc1234def' }));
+  });
+
+  it('omits repoSha when no baseCheckpoint sha is persisted', async () => {
+    const workspace = createRemoteFactory();
+    addProject({ sandboxProvider: 'railway' });
+    addSession({ id: 'session-a' });
+
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    const ctx = mocks.createSandbox.mock.calls[0]![0] as Record<string, unknown>;
+    expect('repoSha' in ctx).toBe(false);
   });
 
   it('uses repository-scoped access when materializing a Factory session', async () => {

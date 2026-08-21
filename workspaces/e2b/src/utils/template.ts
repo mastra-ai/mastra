@@ -63,9 +63,10 @@ export interface NamedTemplateSpec {
   /** Builder used when no template exists under the alias yet. */
   template: TemplateBuilder;
   /**
-   * Template used when the aliased build fails. May itself be a named spec
-   * (resolved exists-then-build under its own alias, with the default
-   * mountable template as its last resort). Defaults to the default
+   * Template used when the aliased build fails. May itself be a named spec,
+   * resolved exists-then-build under its own alias — one rung only: a named
+   * fallback's own `fallbackTemplate` is ignored, and anything failing past
+   * it lands on the default mountable template. Defaults to the default
    * mountable template.
    */
   fallbackTemplate?: string | TemplateBuilder | NamedTemplateSpec;

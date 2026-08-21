@@ -13,7 +13,10 @@ export interface FactorySandboxContext {
   repoFullName?: string;
   /**
    * Default-branch head sha, when factory knows it — for provider template
-   * keying (e.g. E2B sha-aliased templates).
+   * keying (e.g. E2B sha-aliased templates). Sourced from the persisted
+   * `projectRepository.baseCheckpoint.sha` column (a surviving storage read,
+   * not revived base-checkpoint machinery); absent when unknown, which keys
+   * a sha-less template alias.
    */
   repoSha?: string;
   /** Configured repo setup command, when present — for template keying. */

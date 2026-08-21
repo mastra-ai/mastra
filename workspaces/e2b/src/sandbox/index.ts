@@ -226,12 +226,18 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
 
     this._instructionsOverride = options.instructions;
     this._constructorOptions = { ...options };
+  }
 
-    // Start template preparation immediately in background
-    // This way template build (if needed) begins before start() is called
-    this._templatePreparePromise = this.resolveTemplate().catch(err => {
-      this.logger.debug(`${LOG_PREFIX} Template preparation error (will retry on start):`, err);
-      return ''; // Return empty string, will be retried in start()
+  /**
+   * Kick off template resolution in the background without awaiting it.
+   * Called when `start()` begins (from `find()`), so the template build can
+   * overlap the existing-sandbox lookup — but never at construction:
+   * constructing a sandbox performs no network I/O and triggers no builds.
+   */
+  private kickTemplatePreparation(): void {
+    this._templatePreparePromise ??= this.resolveTemplate().catch(err => {
+      this.logger.debug(`${LOG_PREFIX} Template preparation error (will retry on create):`, err);
+      return ''; // Return empty string, retried in create()
     });
   }
 
@@ -302,6 +308,8 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
    * policy, so it lives here rather than in `connect`.
    */
   protected override async find(): Promise<Sandbox | undefined> {
+    // Overlap template resolution with the lookup; create() awaits it.
+    this.kickTemplatePreparation();
     // Already have a sandbox instance
     if (this._sandbox) {
       return this._sandbox;
@@ -337,8 +345,8 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
     // lifecycle.onTimeout: 'pause' makes the sandbox pause on timeout instead of being destroyed.
     this.logger.debug(`${LOG_PREFIX} Creating new sandbox for: ${this.id} with template: ${resolvedTemplateId}`);
 
-    try {
-      this._sandbox = await Sandbox.create(resolvedTemplateId, {
+    const createFromTemplate = (templateId: string) =>
+      Sandbox.create(templateId, {
         ...this.connectionOpts,
         lifecycle: { onTimeout: 'pause' },
         metadata: {
@@ -348,52 +356,51 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
         ...(this.network && { network: this.network }),
         timeoutMs: this.timeout,
       });
+    // A 404 from Sandbox.create means the template id cannot produce a
+    // sandbox: deleted between resolve and create, or the alias was
+    // registered by a FAILED build — E2B keeps a failed build's alias
+    // visible to `Template.exists`, so a broken alias would otherwise be
+    // reused forever. Only 404s trigger a fallback retry; auth, quota, and
+    // network errors propagate (an ambiguous timeout must not create a
+    // duplicate VM).
+    const isTemplateUnusable = (error: unknown) => String(error).includes('404');
+
+    try {
+      this._sandbox = await createFromTemplate(resolvedTemplateId);
     } catch (createError) {
-      // If template not found (404), rebuild it and retry
-      const errorStr = String(createError);
-      if (
-        this.templateSpec &&
-        isNamedTemplateSpec(this.templateSpec) &&
-        resolvedTemplateId === this.templateSpec.alias
-      ) {
-        // The aliased template failed to produce a sandbox: deleted between
-        // resolve and create, or the alias was registered by a FAILED build —
-        // E2B keeps a failed build's alias visible to `Template.exists`, so a
-        // broken alias would otherwise be reused forever. Drop the cached
-        // resolution and retry once on the fallback so the session never
-        // wedges on a broken alias.
+      if (!isTemplateUnusable(createError)) throw createError;
+
+      if (this.templateSpec && isNamedTemplateSpec(this.templateSpec)) {
+        // Bounded ladder: broken alias → named fallback → default mountable
+        // template. Every rung only advances on a template-unusable error, so
+        // a broken build never wedges the session on a dead alias.
         this.logger.warn(
           `${LOG_PREFIX} Creating from '${resolvedTemplateId}' failed, retrying on fallback: ${createError}`,
         );
         this._resolvedTemplateId = undefined;
-        const fallbackId = await this.resolveFallbackTemplate(this.templateSpec.fallbackTemplate);
-        this._sandbox = await Sandbox.create(fallbackId, {
-          ...this.connectionOpts,
-          lifecycle: { onTimeout: 'pause' },
-          metadata: {
-            ...this.metadata,
-            'mastra-sandbox-id': this.id,
-          },
-          ...(this.network && { network: this.network }),
-          timeoutMs: this.timeout,
-        });
-        this.logger.debug(`${LOG_PREFIX} Created sandbox ${this._sandbox.sandboxId} from fallback ${fallbackId}`);
-      } else if (errorStr.includes('404') && errorStr.includes('not found') && !this.templateSpec) {
+        const spec = this.templateSpec;
+        const fallbackId =
+          resolvedTemplateId === spec.alias
+            ? await this.resolveFallbackTemplate(spec.fallbackTemplate)
+            : await this.buildOrReuseDefaultTemplate();
+        try {
+          this._sandbox = await createFromTemplate(fallbackId);
+        } catch (fallbackError) {
+          if (!isTemplateUnusable(fallbackError)) throw fallbackError;
+          const defaultId = await this.buildOrReuseDefaultTemplate();
+          if (defaultId === fallbackId) throw fallbackError;
+          this._resolvedTemplateId = undefined;
+          this.logger.warn(`${LOG_PREFIX} Fallback '${fallbackId}' failed too, using default: ${fallbackError}`);
+          this._sandbox = await createFromTemplate(defaultId);
+        }
+        this.logger.debug(`${LOG_PREFIX} Created sandbox ${this._sandbox.sandboxId} from fallback for: ${this.id}`);
+      } else if (!this.templateSpec) {
         this.logger.debug(`${LOG_PREFIX} Template not found, rebuilding: ${resolvedTemplateId}`);
         this._resolvedTemplateId = undefined; // Clear cached ID to force rebuild
         const rebuiltTemplateId = await this.buildDefaultTemplate();
 
         this.logger.debug(`${LOG_PREFIX} Retrying sandbox creation with rebuilt template: ${rebuiltTemplateId}`);
-        this._sandbox = await Sandbox.create(rebuiltTemplateId, {
-          ...this.connectionOpts,
-          lifecycle: { onTimeout: 'pause' },
-          metadata: {
-            ...this.metadata,
-            'mastra-sandbox-id': this.id,
-          },
-          ...(this.network && { network: this.network }),
-          timeoutMs: this.timeout,
-        });
+        this._sandbox = await createFromTemplate(rebuiltTemplateId);
       } else {
         throw createError;
       }

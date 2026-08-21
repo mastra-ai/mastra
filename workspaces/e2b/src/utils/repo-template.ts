@@ -31,7 +31,11 @@ const ALIAS_VERSION = 'v1';
 
 const REPO_FULL_NAME_PATTERN = /^[\w.-]+\/[\w.-]+$/;
 const SHA_PATTERN = /^[0-9a-f]{7,40}$/i;
-const WORKDIR_PATTERN = /^\/[\w./-]+$/;
+// Workdirs are constrained beneath /workspace so the build's root prep step
+// only ever creates and chowns the /workspace tree — never an arbitrary
+// top-level directory (a workdir of `/` or `/home` would otherwise derive a
+// recursive chown over it).
+const WORKDIR_PATTERN = /^\/workspace\/[\w./-]+$/;
 
 export interface RepoTemplateOptions {
   /** GitHub `owner/repo` slug. Cloned over tokenless HTTPS. */
@@ -50,9 +54,10 @@ export interface RepoTemplateOptions {
    */
   setupCommand?: string;
   /**
-   * Absolute path the repo is cloned to inside the image. Defaults to
-   * `/workspace/<owner>/<repo>`, matching factory's deterministic remote
-   * workdir.
+   * Absolute path the repo is cloned to inside the image. Must sit under
+   * `/workspace` (the build preps and chowns that root for the sandbox
+   * user). Defaults to `/workspace/<owner>/<repo>`, matching factory's
+   * deterministic remote workdir.
    */
   workdir?: string;
 }
@@ -135,8 +140,9 @@ function defaultWorkdir(repoFullName: string): string {
 }
 
 function workspaceRootPrepCommand(workdir: string): string {
-  const root = workdir.split('/').slice(0, 2).join('/') || '/workspace';
-  return `mkdir -p ${workdir} && chown -R user:user ${root}`;
+  // WORKDIR_PATTERN guarantees the workdir sits under /workspace; prep and
+  // chown that fixed root only.
+  return `mkdir -p ${workdir} && chown -R user:user /workspace`;
 }
 
 export const WORKSPACE_BASE_TEMPLATE_VERSION = 'v1';
