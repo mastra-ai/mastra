@@ -125,7 +125,9 @@ function addStringMapFilters(
 
 /**
  * Adds key/value filters against a JSON-encoded string column (e.g. scores.metadata).
- * Mirrors addStringMapFilters semantics: only string values are matched.
+ * Emits one predicate per requested key with exact-value equality for any JSON value.
+ * The column is written via JSON.stringify, so comparing the raw extracted JSON text
+ * against JSON.stringify(value) yields exact per-key equality (matching in-memory semantics).
  */
 function addJsonStringFilters(
   column: string,
@@ -137,12 +139,11 @@ function addJsonStringFilters(
   if (values == null || typeof values !== 'object') return;
   let i = 0;
   for (const [key, value] of Object.entries(values)) {
-    if (typeof value !== 'string') continue;
     const keyParam = `${keyPrefix}_${i}`;
     const valParam = `${valuePrefix}_${i}`;
-    out.conditions.push(`JSONExtractString(ifNull(${column}, '{}'), {${keyParam}:String}) = {${valParam}:String}`);
+    out.conditions.push(`JSONExtractRaw(ifNull(${column}, '{}'), {${keyParam}:String}) = {${valParam}:String}`);
     out.params[keyParam] = key;
-    out.params[valParam] = value;
+    out.params[valParam] = JSON.stringify(value ?? null);
     i++;
   }
 }

@@ -1927,13 +1927,12 @@ export class ObservabilityInMemory extends ObservabilityStorage {
         if (!score.tags.includes(tag)) return false;
       }
     }
-    // Metadata filter (partial match - all provided keys must match)
-    if (filters.metadata != null && score.metadata != null) {
+    // Metadata filter (partial match - all provided keys must match; empty filter is a no-op)
+    if (filters.metadata != null && Object.keys(filters.metadata).length > 0) {
+      if (score.metadata == null) return false;
       for (const [key, value] of Object.entries(filters.metadata)) {
         if (!jsonValueEquals(score.metadata[key], value)) return false;
       }
-    } else if (filters.metadata != null && score.metadata == null) {
-      return false;
     }
 
     return true;

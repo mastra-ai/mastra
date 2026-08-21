@@ -61,8 +61,11 @@ function applyScoreFilters(
     acc.params.push(filters.scoreSource ?? filters.source);
   }
   if (filters?.metadata && Object.keys(filters.metadata).length > 0) {
-    acc.conditions.push(`"metadata" @> $${acc.next++}::jsonb`);
-    acc.params.push(JSON.stringify(filters.metadata));
+    // Per-top-level-key exact equality (jsonb `=` normalizes formatting), matching in-memory semantics
+    for (const [key, value] of Object.entries(filters.metadata)) {
+      acc.conditions.push(`"metadata"->($${acc.next++}::text) = $${acc.next++}::jsonb`);
+      acc.params.push(key, JSON.stringify(value ?? null));
+    }
   }
 }
 

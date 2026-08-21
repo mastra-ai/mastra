@@ -45,4 +45,32 @@ describe('ObservabilityInMemory score metadata filtering', () => {
 
     expect(result.scores.map(score => score.scoreId)).toEqual(['score-b']);
   });
+
+  it('matches non-string metadata values with exact equality', async () => {
+    const observability = new InMemoryStore().stores.observability;
+    assert(observability);
+    await observability.batchCreateScores({
+      scores: [makeScore('score-a', { attempt: 2, flagged: true }), makeScore('score-b', { attempt: '2' })],
+    });
+
+    const result = await observability.listScores({
+      filters: { metadata: { attempt: 2 } },
+    });
+
+    expect(result.scores.map(score => score.scoreId)).toEqual(['score-a']);
+  });
+
+  it('treats an empty metadata filter as a no-op', async () => {
+    const observability = new InMemoryStore().stores.observability;
+    assert(observability);
+    await observability.batchCreateScores({
+      scores: [makeScore('score-a', { env: 'prod' }), makeScore('score-b')],
+    });
+
+    const result = await observability.listScores({
+      filters: { metadata: {} },
+    });
+
+    expect(result.scores.map(score => score.scoreId).sort()).toEqual(['score-a', 'score-b']);
+  });
 });
