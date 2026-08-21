@@ -10,7 +10,7 @@ import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import { LocalSandbox, LocalSkillSource, Workspace } from '@mastra/core/workspace';
 import type { SkillSource, SkillSourceEntry, SkillSourceStat } from '@mastra/core/workspace';
-import { getFactoryAuthUserFromContext, getFactoryAuthUserId } from './auth.js';
+import { getFactoryAuthOrgId, getFactoryAuthUserFromContext, getFactoryAuthUserId } from './auth.js';
 import type { MastraFactorySandboxConfig } from './factory.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
 import { getGithubPat } from './integrations/github/pat.js';
@@ -29,6 +29,7 @@ import { registerGithubPatKind, registerGithubTokenInjector } from './integratio
 import { getFactorySessionAddress } from './rules/binding-context.js';
 import { baseCheckpointIsStale } from './sandbox/base-checkpoint-triggers.js';
 import type { SandboxBindingStore, SandboxFleet } from './sandbox/fleet.js';
+import type { SkillOverridesStorage } from './storage/domains/skill-overrides/base.js';
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
 
 const WORKSPACE_ID_PREFIX = 'mfw';
@@ -92,7 +93,7 @@ export const FACTORY_SKILLS_SOURCE_PATH =
     // Consumer repo running from its package root before a build.
     join(process.cwd(), 'src', 'mastra', 'public', 'factory-skills'),
   ].find(existsSync) ?? bundledFactorySkillsPath;
-const FACTORY_SKILLS_MOUNT = path.resolve(path.parse(process.cwd()).root, '__mastracode_factory_skills__');
+export const FACTORY_SKILLS_MOUNT = path.resolve(path.parse(process.cwd()).root, '__mastracode_factory_skills__');
 export const FACTORY_SKILL_NAMES = new Set([
   'configure-factory-rules',
   'factory-complete-issue',
@@ -102,15 +103,38 @@ export const FACTORY_SKILL_NAMES = new Set([
   'factory-triage',
 ]);
 
+/** A stored user customization of one bundled factory skill. */
+export interface FactorySkillOverride {
+  name: string;
+  description: string;
+  /** Markdown body (frontmatter-free). */
+  content: string;
+  updatedAt: Date;
+}
+
+/** Resolve the stored override for a bundled skill, if any. */
+export type FactorySkillOverrideResolver = (skillName: string) => Promise<FactorySkillOverride | null>;
+
+/** Reassemble a SKILL.md document from an override's parts. */
+export function renderSkillMarkdown(override: Pick<FactorySkillOverride, 'name' | 'description' | 'content'>): string {
+  // Serialize the description as a quoted YAML scalar: user-provided text like
+  // "Review: strict mode" or "#1 priority reviews" would otherwise break or
+  // corrupt frontmatter parsing. JSON strings are valid YAML double-quoted scalars.
+  return `---\nname: ${override.name}\ndescription: ${JSON.stringify(override.description)}\n---\n\n${override.content}\n`;
+}
+
 class FactorySkillSource implements SkillSource {
   readonly #factorySource = new LocalSkillSource({ basePath: FACTORY_SKILLS_SOURCE_PATH });
   readonly #fallbackSkillRoots: Set<string>;
+  readonly #resolveOverride?: FactorySkillOverrideResolver;
 
   constructor(
     readonly fallback: SkillSource,
     fallbackSkillRoots: string[],
+    resolveOverride?: FactorySkillOverrideResolver,
   ) {
     this.#fallbackSkillRoots = new Set(fallbackSkillRoots.map(skillPath => path.normalize(skillPath)));
+    this.#resolveOverride = resolveOverride;
   }
 
   #isFactoryPath(skillPath: string): boolean {
@@ -122,22 +146,59 @@ class FactorySkillSource implements SkillSource {
     return path.relative(FACTORY_SKILLS_MOUNT, path.normalize(skillPath));
   }
 
+  /** The skill whose SKILL.md this factory-relative path addresses, if any. */
+  #overridableSkillName(factoryPath: string): string | undefined {
+    const segments = factoryPath.split(path.sep);
+    if (segments.length !== 2 || segments[1] !== 'SKILL.md') return undefined;
+    const name = segments[0]!;
+    return FACTORY_SKILL_NAMES.has(name) ? name : undefined;
+  }
+
+  /**
+   * Short-lived cache: the skill loader calls `stat` then `readFile` for each
+   * factory skill in one burst, and one storage read per skill per burst is
+   * enough. The TTL stays short because workspaces (and this source) are
+   * reused across requests, and user edits must show up on the next read.
+   */
+  readonly #overrideCache = new Map<string, { at: number; value: Promise<FactorySkillOverride | null> }>();
+  static readonly #OVERRIDE_CACHE_TTL_MS = 2_000;
+
+  #override(factoryPath: string): Promise<FactorySkillOverride | null> {
+    if (!this.#resolveOverride) return Promise.resolve(null);
+    const name = this.#overridableSkillName(factoryPath);
+    if (!name) return Promise.resolve(null);
+    const cached = this.#overrideCache.get(name);
+    if (cached && Date.now() - cached.at < FactorySkillSource.#OVERRIDE_CACHE_TTL_MS) return cached.value;
+    // Storage hiccups fall back to the bundled default instead of breaking
+    // skill activation.
+    const value = this.#resolveOverride(name).catch(() => null);
+    this.#overrideCache.set(name, { at: Date.now(), value });
+    return value;
+  }
+
   exists(skillPath: string): Promise<boolean> {
     return this.#isFactoryPath(skillPath)
       ? this.#factorySource.exists(this.#factoryPath(skillPath))
       : this.fallback.exists(skillPath);
   }
 
-  stat(skillPath: string): Promise<SkillSourceStat> {
-    return this.#isFactoryPath(skillPath)
-      ? this.#factorySource.stat(this.#factoryPath(skillPath))
-      : this.fallback.stat(skillPath);
+  async stat(skillPath: string): Promise<SkillSourceStat> {
+    if (!this.#isFactoryPath(skillPath)) return this.fallback.stat(skillPath);
+    const factoryPath = this.#factoryPath(skillPath);
+    const stat = await this.#factorySource.stat(factoryPath);
+    const override = await this.#override(factoryPath);
+    if (!override) return stat;
+    // Report the override's size/mtime so skill caches refresh on user edits.
+    const rendered = renderSkillMarkdown(override);
+    return { ...stat, size: Buffer.byteLength(rendered), modifiedAt: override.updatedAt };
   }
 
-  readFile(skillPath: string): Promise<string | Buffer> {
-    return this.#isFactoryPath(skillPath)
-      ? this.#factorySource.readFile(this.#factoryPath(skillPath))
-      : this.fallback.readFile(skillPath);
+  async readFile(skillPath: string): Promise<string | Buffer> {
+    if (!this.#isFactoryPath(skillPath)) return this.fallback.readFile(skillPath);
+    const factoryPath = this.#factoryPath(skillPath);
+    const override = await this.#override(factoryPath);
+    if (override) return renderSkillMarkdown(override);
+    return this.#factorySource.readFile(factoryPath);
   }
 
   async readdir(skillPath: string): Promise<SkillSourceEntry[]> {
@@ -203,11 +264,16 @@ class UnmaterializedAwareSkillSource implements SkillSource {
   }
 }
 
-const factorySkillExtension: WorkspaceSkillExtension = {
-  id: 'web-factory',
-  paths: [FACTORY_SKILLS_MOUNT],
-  createSource: (fallback, fallbackSkillRoots) => new FactorySkillSource(fallback, fallbackSkillRoots),
-};
+export function createFactorySkillExtension(resolveOverride?: FactorySkillOverrideResolver): WorkspaceSkillExtension {
+  return {
+    id: 'web-factory',
+    paths: [FACTORY_SKILLS_MOUNT],
+    createSource: (fallback, fallbackSkillRoots) =>
+      new FactorySkillSource(fallback, fallbackSkillRoots, resolveOverride),
+  };
+}
+
+const factorySkillExtension = createFactorySkillExtension();
 
 type DynamicWorkspaceContext = Parameters<typeof getDynamicWorkspace>[0];
 
@@ -224,6 +290,9 @@ export interface CreateWorkspaceFactoryOptions {
   workItems?: Pick<WorkItemsStorage, 'findRunBindingBySession'>;
   /** Runtime workspace/token registrations invalidated when a session retires. */
   workspaceRegistry?: FactoryWorkspaceRegistry;
+  /** Storage of user-customized factory skills. When provided, sessions read
+   * the org's stored override of each bundled skill instead of the default. */
+  skillOverrides?: Pick<SkillOverridesStorage, 'get'>;
 }
 
 type WorkspaceUnregister = () => Promise<void> | void;
@@ -265,7 +334,7 @@ export class FactoryWorkspaceRegistry {
 }
 
 export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = {}) {
-  const { sandbox: sandboxConfig, github, fleet, workItems } = options;
+  const { sandbox: sandboxConfig, github, fleet, workItems, skillOverrides } = options;
   const workspaceRegistry = options.workspaceRegistry ?? new FactoryWorkspaceRegistry();
   const isLocalSandbox = sandboxConfig?.machine instanceof LocalSandbox;
   type GithubTokenRegistration = {
@@ -292,10 +361,22 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
   const constructedWorkspaces = new Map<string, Workspace>();
 
   return async ({ requestContext, mastra, skillExtension }: DynamicWorkspaceContext) => {
-    const effectiveSkillExtension = skillExtension ?? factorySkillExtension;
     const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
     const session =
       ctx?.resourceId && github ? await github.sourceControlStorage.sessions.getBySessionId(ctx.resourceId) : null;
+
+    // Skill reads resolve the org's stored customizations; the sentinel
+    // `local` org matches how no-auth deployments key org-scoped settings.
+    // Chat-only sessions have no source-control session record, so fall back
+    // to the authenticated user's org — the same key the skills routes write
+    // overrides under — before the local sentinel.
+    const skillOverrideOrgId =
+      session?.orgId ?? getFactoryAuthOrgId(getFactoryAuthUserFromContext(requestContext)) ?? 'local';
+    const effectiveSkillExtension =
+      skillExtension ??
+      (skillOverrides
+        ? createFactorySkillExtension(name => skillOverrides.get({ orgId: skillOverrideOrgId, name }))
+        : factorySkillExtension);
 
     if (!session) {
       if (sandboxConfig && !isLocalSandbox) {

@@ -29,6 +29,7 @@ import type { MemorySettingsStorage } from '../storage/domains/memory-settings/b
 import type { ModelPacksStorage } from '../storage/domains/model-packs/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { QueueHealthStorage } from '../storage/domains/queue-health/base.js';
+import type { SkillOverridesStorage } from '../storage/domains/skill-overrides/base.js';
 import type { SourceControlStorage } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { ConfigRoutes } from './config.js';
@@ -78,6 +79,7 @@ export interface FactoryApiRoutesDeps {
     queueHealth: QueueHealthStorage;
     workItems: WorkItemsStorage;
     channelIdentity: ChannelIdentityStorage;
+    skillOverrides: SkillOverridesStorage;
   };
   integrations?: IntegrationRegistration[];
   intakeReady: boolean;
@@ -442,6 +444,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       controller: deps.controller,
       sourceControlStorage: githubStorage,
       ensureSourceControlReady: githubRegistration?.ensureReady,
+      skillOverrides: deps.domains.skillOverrides,
     }).routes(),
     ...integrationRoutes,
     ...absentStubs,

@@ -1,13 +1,13 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import type { FactorySkillsResponse } from '../api/types';
+import type { FactorySkillResponse, FactorySkillsResponse, UpdateFactorySkillBody } from '../api/types';
 
 /**
- * The read-only catalog of Factory skills bundled with the server — the
- * stage playbooks (triage, plan, review, …) automated Factory runs follow.
- * Mirrors `GET /web/factory/skills`.
+ * The catalog of Factory skills — the stage playbooks (triage, plan,
+ * review, …) automated Factory runs follow, with any stored user
+ * customizations applied. Mirrors `GET /web/factory/skills`.
  */
 export function useFactorySkillsQuery() {
   const { client } = useApiConfig();
@@ -15,5 +15,26 @@ export function useFactorySkillsQuery() {
     queryKey: queryKeys.factorySkills(),
     queryFn: () => client.get<FactorySkillsResponse>('/web/factory/skills'),
     select: data => data.skills,
+  });
+}
+
+/** Save a customized description/body for a bundled skill. */
+export function useUpdateFactorySkillMutation() {
+  const { client } = useApiConfig();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ name, ...body }: UpdateFactorySkillBody & { name: string }) =>
+      client.put<FactorySkillResponse>(`/web/factory/skills/${name}`, body),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.factorySkills() }),
+  });
+}
+
+/** Delete the stored customization, restoring the bundled default. */
+export function useResetFactorySkillMutation() {
+  const { client } = useApiConfig();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ name }: { name: string }) => client.del<FactorySkillResponse>(`/web/factory/skills/${name}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.factorySkills() }),
   });
 }

@@ -49,7 +49,20 @@ const mocks = vi.hoisted(() => ({
   findRunBindingBySession: vi.fn(async () =>
     mocks.runBindingRole ? { role: mocks.runBindingRole, status: mocks.runBindingStatus, orgId: 'org-1' } : null,
   ),
+  /** Args of every getDynamicWorkspace call, so tests can inspect the skill extension. */
+  dynamicWorkspaceCalls: [] as any[],
 }));
+
+vi.mock('@mastra/code-sdk/agents/workspace', async importOriginal => {
+  const actual = await importOriginal<typeof import('@mastra/code-sdk/agents/workspace')>();
+  return {
+    ...actual,
+    getDynamicWorkspace: (args: any) => {
+      mocks.dynamicWorkspaceCalls.push(args);
+      return actual.getDynamicWorkspace(args);
+    },
+  };
+});
 
 vi.mock('./integrations/github/sandbox', async importOriginal => ({
   // Keep the real lifecycle constants and MaterializeError so workspace.ts uses production behavior.
@@ -69,6 +82,7 @@ import { SandboxFleet } from './sandbox/fleet.js';
 import {
   checkpointNameForSession,
   createWorkspaceFactory,
+  FACTORY_SKILLS_MOUNT,
   FactoryWorkspaceRegistry,
   getFactoryWorkspace,
 } from './workspace.js';
@@ -582,6 +596,7 @@ describe('GitHub session workspace preparation', () => {
   async function createLocalFactory(
     rootPrefix = 'mastracode-web-local-sessions-',
     workspaceRegistry?: FactoryWorkspaceRegistry,
+    skillOverrides?: { get: (args: { orgId: string; name: string }) => Promise<any> },
   ) {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), rootPrefix));
     tempDirs.push(root);
@@ -594,6 +609,7 @@ describe('GitHub session workspace preparation', () => {
       fleet,
       workItems: { findRunBindingBySession: mocks.findRunBindingBySession } as any,
       ...(workspaceRegistry ? { workspaceRegistry } : {}),
+      ...(skillOverrides ? { skillOverrides: skillOverrides as any } : {}),
     });
     return {
       root,
@@ -672,6 +688,37 @@ describe('GitHub session workspace preparation', () => {
     // The repo checkout never happened, so project skill roots were guarded
     // (reported empty) instead of forcing the sandbox to exist.
     expect(mocks.materializeRepo).not.toHaveBeenCalled();
+  });
+
+  // Chat-only sessions (no source-control session row) on an auth-enabled
+  // local-sandbox deploy must read skill overrides under the authenticated
+  // user's org — the same key the skills routes write under — not `local`.
+  it('keys chat-only skill override reads by the authenticated org', async () => {
+    const overrideGet = vi.fn(async () => null);
+    const { root, resolver } = await createLocalFactory('mastracode-web-chat-only-overrides-', undefined, {
+      get: overrideGet,
+    });
+    addProject();
+    // No addSession: the chat-only resourceId misses `sessions.getBySessionId`.
+
+    mocks.dynamicWorkspaceCalls.length = 0;
+    await resolver({ requestContext: createUnscopedGithubRequestContext('project-1', root) });
+
+    const { skillExtension } = mocks.dynamicWorkspaceCalls.at(-1)!;
+    const fallbackSource = {
+      exists: async () => false,
+      stat: async () => {
+        throw new Error('not found');
+      },
+      readFile: async () => {
+        throw new Error('not found');
+      },
+      readdir: async () => [],
+    };
+    const source = skillExtension.createSource(fallbackSource, []);
+    await source.readFile(path.join(FACTORY_SKILLS_MOUNT, 'factory-triage', 'SKILL.md'));
+
+    expect(overrideGet).toHaveBeenCalledWith({ orgId: 'org-1', name: 'factory-triage' });
   });
 
   it('delegates project skill roots to the sandbox once it is materialized', async () => {

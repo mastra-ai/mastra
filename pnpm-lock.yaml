@@ -2352,6 +2352,9 @@ importers:
       eslint:
         specifier: ^10.7.0
         version: 10.7.0(jiti@2.7.0)(supports-color@10.2.2)
+      gray-matter:
+        specifier: ^4.0.3
+        version: 4.0.3(patch_hash=058d8be9f17b95a6f86e58debce82671ee3f258e44883a9da932cf16a717ebb8)
       tsdown:
         specifier: 0.22.9
         version: 0.22.9(@volar/typescript@2.4.23(typescript@6.0.3))(oxc-resolver@11.20.0)(tsx@4.23.1)(typescript@6.0.3)

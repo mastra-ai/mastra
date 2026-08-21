@@ -85,10 +85,23 @@ export interface FactorySkillInfo {
   description: string;
   /** SKILL.md body with the frontmatter removed. */
   content: string;
+  /** Whether a stored user customization replaces the bundled default. */
+  isCustomized: boolean;
 }
 
 export interface FactorySkillsResponse {
   skills: FactorySkillInfo[];
+}
+
+/** `PUT /web/factory/skills/:name` body. */
+export interface UpdateFactorySkillBody {
+  description: string;
+  content: string;
+}
+
+/** `PUT`/`DELETE /web/factory/skills/:name` response. */
+export interface FactorySkillResponse {
+  skill: FactorySkillInfo;
 }
 
 // ── Mutation request bodies ────────────────────────────────────────────────
