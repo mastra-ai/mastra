@@ -2308,10 +2308,18 @@ describe('FactoryDecisionDispatcher', () => {
       idempotencyKey: 'message-transport-failure',
     });
     const { controller, sendNotificationSignal } = createSession();
+    let resolvePersistence = () => {};
+    const persistence = new Promise<void>(resolve => {
+      resolvePersistence = resolve;
+    });
     sendNotificationSignal
       .mockImplementationOnce(() => {
         throw new Error('socket closed synchronously');
       })
+      .mockImplementationOnce(async () => ({
+        persisted: persistence,
+        accepted: Promise.reject(new Error('acceptance failed before persistence')),
+      }))
       .mockRejectedValue(new Error('ECONNRESET'));
     await storage.prepareRunStart({
       orgId: 'org-1',
@@ -2348,7 +2356,16 @@ describe('FactoryDecisionDispatcher', () => {
       attempts: 1,
       failureCode: 'notification_delivery_failed',
     });
-    for (let attempt = 1; attempt < 5; attempt += 1) {
+    const secondAttempt = dispatcher.runOnce(new Date(start.getTime() + 120_000));
+    await new Promise<void>(resolve => setImmediate(resolve));
+    resolvePersistence();
+    await secondAttempt;
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+      status: 'retry',
+      attempts: 2,
+      failureCode: 'notification_delivery_failed',
+    });
+    for (let attempt = 2; attempt < 5; attempt += 1) {
       await dispatcher.runOnce(new Date(start.getTime() + attempt * 120_000));
     }
 

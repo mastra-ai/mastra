@@ -165,8 +165,8 @@ async function awaitNotification(
 ): Promise<void> {
   try {
     const notification = await send();
-    await notification.persisted;
-    if (!notification.accepted) {
+    const [, accepted] = await Promise.all([notification.persisted, notification.accepted]);
+    if (!accepted) {
       if (requireDelivery) {
         throw new FactoryDispatchError(
           'notification_delivery_failed',
@@ -175,7 +175,6 @@ async function awaitNotification(
       }
       return;
     }
-    const accepted = await notification.accepted;
     if (!requireDelivery) return;
     if (accepted.action === 'wake') {
       if (!accepted.output) {
