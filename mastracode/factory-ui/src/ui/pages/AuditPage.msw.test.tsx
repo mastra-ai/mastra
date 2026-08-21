@@ -1,11 +1,11 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import type { AuditEvent } from '../domains/factory/services/audit';
 import { createAppRoutes } from '../router';
 
@@ -60,9 +60,27 @@ function event(id: string, overrides: Partial<AuditEvent>): AuditEvent {
   };
 }
 
+function baseHandlers() {
+  return [
+    http.get(`${TEST_BASE_URL}/auth/me`, () =>
+      HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+      HttpResponse.json({ workItems: [] }),
+    ),
+    http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/${FACTORY_ID}/permissions`, () =>
+      HttpResponse.json({ categories: {}, tools: {} }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/audit/portal-link`, () => new HttpResponse(null, { status: 404 })),
+  ];
+}
+
 function renderAudit() {
   const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}/audit`] });
-  renderWithProviders(<RouterProvider router={router} />);
+  return renderWithProviders(<RouterProvider router={router} />);
 }
 
 afterEach(() => vi.unstubAllGlobals());
@@ -72,7 +90,11 @@ describe('Audit log', () => {
     vi.stubGlobal('IntersectionObserver', ImmediateIntersectionObserver);
     const requestedCursors: Array<string | null> = [];
     const recent = event('event-recent', {
-      metadata: { from: 'planning', to: 'execute', decisionId: 'decision-9' },
+      metadata: {
+        to: 'review',
+        decisionId: 'decision-9',
+        __actorProfile: { name: 'Stored profile' },
+      },
     });
     const older = event('event-older', {
       actorId: 'agent:thread-9',
@@ -83,20 +105,11 @@ describe('Audit log', () => {
     });
 
     server.use(
-      http.get(`${TEST_BASE_URL}/auth/me`, () =>
-        HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-        HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
-      ),
-      http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/${FACTORY_ID}/permissions`, () =>
-        HttpResponse.json({ categories: {}, tools: {} }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/audit/portal-link`, () => new HttpResponse(null, { status: 404 })),
+      ...baseHandlers(),
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/audit`, ({ request }) => {
         const cursor = new URL(request.url).searchParams.get('before');
         requestedCursors.push(cursor);
-        const actors = { 'user-1': { id: 'user-1', name: 'Damien Schneider' } };
+        const actors = { 'user-1': { id: 'canonical-user-1', name: 'Damien Schneider' } };
         return cursor
           ? HttpResponse.json({ events: [older], actors })
           : HttpResponse.json({ events: [recent], actors, nextCursor: 'page-2' });
@@ -104,20 +117,22 @@ describe('Audit log', () => {
     );
 
     const user = userEvent.setup();
-    renderAudit();
+    const { client } = renderAudit();
 
     expect(await screen.findByRole('slider', { name: 'Audit time range' })).toBeInTheDocument();
-    expect(await screen.findByText('Planning → Building')).toBeInTheDocument();
+    expect(await screen.findByText('→ Review')).toBeInTheDocument();
     expect(screen.getByText('Damien Schneider')).toBeInTheDocument();
 
-    await waitFor(() => expect(requestedCursors).toEqual([null, 'page-2']));
-    expect(await screen.findByText('Run started')).toBeInTheDocument();
+    await waitForMutationsIdle(client);
+    expect(requestedCursors).toEqual([null, 'page-2']);
+    expect(screen.getByText('Run started')).toBeInTheDocument();
     expect(screen.getByText('Build agent')).toBeInTheDocument();
 
     const recentRow = screen.getByRole('button', { expanded: false, name: /Stage moved/ });
     await user.click(recentRow);
     expect(recentRow).toHaveAttribute('aria-expanded', 'true');
     expect(within(recentRow.parentElement ?? recentRow).getByText(/decision-9/)).toBeInTheDocument();
+    expect(within(recentRow.parentElement ?? recentRow).queryByText(/__actorProfile/)).not.toBeInTheDocument();
 
     const olderRow = screen.getByRole('button', { expanded: false, name: /Run started/ });
     await user.click(olderRow);
@@ -125,6 +140,10 @@ describe('Audit log', () => {
     expect(recentRow).toHaveAttribute('aria-expanded', 'true');
 
     const timeline = screen.getByRole('slider', { name: 'Audit time range' });
+
+    fireEvent.pointerDown(timeline, { pointerType: 'mouse', button: 2 });
+    fireEvent.pointerUp(timeline, { pointerType: 'mouse', button: 2 });
+    expect(screen.queryByRole('button', { name: 'Reset' })).not.toBeInTheDocument();
     await user.click(timeline);
     expect(timeline).toHaveFocus();
     await user.keyboard('{ArrowUp}');
@@ -153,16 +172,7 @@ describe('Audit log', () => {
 
   it('keeps category toggles available when the log is empty', async () => {
     server.use(
-      http.get(`${TEST_BASE_URL}/auth/me`, () =>
-        HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-        HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
-      ),
-      http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/${FACTORY_ID}/permissions`, () =>
-        HttpResponse.json({ categories: {}, tools: {} }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/audit/portal-link`, () => new HttpResponse(null, { status: 404 })),
+      ...baseHandlers(),
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/audit`, () =>
         HttpResponse.json({ events: [], actors: {} }),
       ),

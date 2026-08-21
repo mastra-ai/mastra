@@ -2,9 +2,16 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { useId, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 
-import { AUDIT_CATEGORIES, auditCategory, type AuditNamespace, type AuditTimeRange } from '../../auditPresentation';
+import {
+  AUDIT_CATEGORIES,
+  auditCategory,
+  auditEventTime,
+  auditRangeAround,
+  auditRangeBetween,
+  clamp,
+  type AuditTimeRange,
+} from '../../auditPresentation';
 import type { AuditEvent } from '../../services/audit';
-import { AuditCategoryFilter } from './AuditCategoryFilter';
 import { AuditMobileDateRange } from './AuditMobileDateRange';
 
 type AuditCategory = (typeof AUDIT_CATEGORIES)[number];
@@ -29,16 +36,7 @@ const BOTTOM = 38;
 const MINUTE = 60_000;
 const DAY = 86_400_000;
 const AUDIT_WINDOW = 7 * DAY;
-
-function auditEventTime(event: AuditEvent): number | undefined {
-  const at = Date.parse(event.occurredAt);
-  return Number.isFinite(at) ? at : undefined;
-}
-
-export function eventInAuditRange(event: AuditEvent, range: AuditTimeRange): boolean {
-  const at = auditEventTime(event);
-  return at !== undefined && at >= range.from && at <= range.to;
-}
+const RANGE_KEYS = new Set(['Escape', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End']);
 
 function eventBounds(events: AuditEvent[]): AuditTimeRange | undefined {
   let from = Number.POSITIVE_INFINITY;
@@ -56,23 +54,6 @@ function eventBounds(events: AuditEvent[]): AuditTimeRange | undefined {
   return { from, to };
 }
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), max);
-}
-
-function rangeAround(center: number, span: number, bounds: AuditTimeRange): AuditTimeRange {
-  const boundedSpan = Math.min(span, bounds.to - bounds.from);
-  const from = clamp(center - boundedSpan / 2, bounds.from, bounds.to - boundedSpan);
-  return { from, to: from + boundedSpan };
-}
-
-function rangeBetween(anchor: number, current: number, bounds: AuditTimeRange): AuditTimeRange {
-  const from = clamp(Math.min(anchor, current), bounds.from, bounds.to);
-  const to = clamp(Math.max(anchor, current), bounds.from, bounds.to);
-  const minimumSpan = Math.min(Math.max((bounds.to - bounds.from) * 0.03, 5 * MINUTE), bounds.to - bounds.from);
-  return to - from >= minimumSpan ? { from, to } : rangeAround((from + to) / 2, minimumSpan, bounds);
-}
-
 function shiftRange(range: AuditTimeRange, delta: number, bounds: AuditTimeRange): AuditTimeRange {
   const span = range.to - range.from;
   const from = clamp(range.from + delta, bounds.from, bounds.to - span);
@@ -83,11 +64,11 @@ function keyboardRange(
   key: string,
   current: AuditTimeRange | undefined,
   bounds: AuditTimeRange,
-): AuditTimeRange | undefined | null {
+): AuditTimeRange | undefined {
   if (key === 'Escape') return undefined;
 
   const total = bounds.to - bounds.from;
-  const range = current ?? rangeAround((bounds.from + bounds.to) / 2, total / 3, bounds);
+  const range = current ?? auditRangeAround((bounds.from + bounds.to) / 2, total / 3, bounds);
   const span = range.to - range.from;
 
   switch (key) {
@@ -96,15 +77,15 @@ function keyboardRange(
     case 'ArrowRight':
       return shiftRange(range, Math.max(span * 0.1, total * 0.02), bounds);
     case 'ArrowUp':
-      return rangeAround((range.from + range.to) / 2, span * 0.8, bounds);
+      return auditRangeAround((range.from + range.to) / 2, span * 0.8, bounds);
     case 'ArrowDown':
-      return rangeAround((range.from + range.to) / 2, span * 1.25, bounds);
+      return auditRangeAround((range.from + range.to) / 2, span * 1.25, bounds);
     case 'Home':
       return { from: bounds.from, to: bounds.from + span };
     case 'End':
       return { from: bounds.to - span, to: bounds.to };
     default:
-      return null;
+      return current;
   }
 }
 
@@ -151,37 +132,31 @@ function boundaryLabel(at: number): string {
 export function AuditTimeline({
   events,
   range,
-  selectedCategories,
   onRangeChange,
-  onToggleCategory,
-  onClearCategories,
 }: {
   events: AuditEvent[];
   range: AuditTimeRange | undefined;
-  selectedCategories: ReadonlySet<AuditNamespace>;
   onRangeChange: (range: AuditTimeRange | undefined) => void;
-  onToggleCategory: (category: AuditNamespace) => void;
-  onClearCategories: () => void;
 }) {
-  const anchor = useRef<number | null>(null);
+  const anchor = useRef<number | undefined>(undefined);
   const [dragRange, setDragRange] = useState<AuditTimeRange>();
   const selectionGradientId = useId().replace(/:/g, '');
   const selectionShadowId = useId().replace(/:/g, '');
+  const instructionsId = useId().replace(/:/g, '');
   const now = Date.now();
   const bounds = eventBounds(events) ?? { from: now - AUDIT_WINDOW, to: now };
 
   const lanes: AuditLane[] = AUDIT_CATEGORIES.map(category => ({ category, marks: [] }));
+  const lanesByNamespace = new Map(lanes.map(lane => [lane.category.namespace, lane]));
   for (const event of events) {
     const at = auditEventTime(event);
     const category = auditCategory(event.action);
     if (at === undefined || !category) continue;
-    lanes
-      .find(lane => lane.category.namespace === category.namespace)
-      ?.marks.push({
-        id: event.id,
-        at,
-        actorType: event.actorType,
-      });
+    lanesByNamespace.get(category.namespace)?.marks.push({
+      id: event.id,
+      at,
+      actorType: event.actorType,
+    });
   }
   const height = TOP + lanes.length * LANE_HEIGHT + BOTTOM;
   const plotWidth = TRACK_END - TRACK_START;
@@ -197,10 +172,6 @@ export function AuditTimeline({
   const labelsAreTight = selectionToX - selectionFromX < 190;
   const resetButtonCenterX = clamp((selectionFromX + selectionToX) / 2, TRACK_START + 32, TRACK_END - 32);
   const selectionLabel = rangeLabel(selection);
-  let selectedCount = 0;
-  for (const event of events) {
-    if (eventInAuditRange(event, selection)) selectedCount += 1;
-  }
 
   const pointerTime = (event: ReactPointerEvent<SVGSVGElement>) => {
     const box = event.currentTarget.getBoundingClientRect();
@@ -211,9 +182,9 @@ export function AuditTimeline({
 
   const settlePointer = (event: ReactPointerEvent<SVGSVGElement>) => {
     const start = anchor.current;
-    if (start === null) return;
-    const next = rangeBetween(start, pointerTime(event), bounds);
-    anchor.current = null;
+    if (start === undefined) return;
+    const next = auditRangeBetween(start, pointerTime(event), bounds);
+    anchor.current = undefined;
     setDragRange(undefined);
     onRangeChange(next);
   };
@@ -227,39 +198,41 @@ export function AuditTimeline({
             viewBox={`0 0 ${WIDTH} ${height}`}
             role="slider"
             aria-label="Audit time range"
+            aria-describedby={instructionsId}
             aria-orientation="horizontal"
             aria-valuemin={bounds.from}
             aria-valuemax={bounds.to}
             aria-valuenow={(selection.from + selection.to) / 2}
             aria-valuetext={selectionLabel}
             tabIndex={0}
-            className="group/timeline block h-auto w-full cursor-default touch-pan-y overflow-visible rounded-md outline-none select-none lg:cursor-crosshair lg:touch-none"
+            className="group/timeline block h-auto w-full cursor-default touch-pan-y overflow-visible rounded-md outline-none select-none lg:cursor-crosshair"
             onKeyDown={event => {
+              if (!RANGE_KEYS.has(event.key)) return;
               const next = keyboardRange(event.key, range, bounds);
-              if (next === null) return;
+              if (next === undefined && event.key !== 'Escape') return;
               event.preventDefault();
               onRangeChange(next);
             }}
             onPointerDown={event => {
-              if (event.pointerType === 'touch') return;
+              if (event.pointerType === 'touch' || event.button !== 0) return;
               event.preventDefault();
               event.currentTarget.focus();
               const at = pointerTime(event);
               anchor.current = at;
-              setDragRange(rangeBetween(at, at, bounds));
+              setDragRange(auditRangeBetween(at, at, bounds));
               event.currentTarget.setPointerCapture(event.pointerId);
             }}
             onPointerMove={event => {
               const start = anchor.current;
-              if (start !== null) setDragRange(rangeBetween(start, pointerTime(event), bounds));
+              if (start !== undefined) setDragRange(auditRangeBetween(start, pointerTime(event), bounds));
             }}
             onPointerUp={settlePointer}
             onPointerCancel={() => {
-              anchor.current = null;
+              anchor.current = undefined;
               setDragRange(undefined);
             }}
           >
-            <title>
+            <title id={instructionsId}>
               Drag to select a time range. Arrow keys move it; up and down change its width; Escape resets it.
             </title>
             <defs>
@@ -386,13 +359,6 @@ export function AuditTimeline({
           ) : null}
         </div>
       </div>
-
-      <AuditCategoryFilter
-        selectedCategories={selectedCategories}
-        countLabel={hasActiveSelection ? `${selectedCount} of ${events.length} loaded` : `${events.length} loaded`}
-        onToggleCategory={onToggleCategory}
-        onClearCategories={onClearCategories}
-      />
     </>
   );
 }

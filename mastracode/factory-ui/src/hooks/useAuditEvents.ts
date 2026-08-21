@@ -5,6 +5,8 @@ import { queryKeys } from '../api/keys';
 import { fetchAuditEvents, fetchAuditPortalLink } from '../ui/domains/factory/services/audit';
 import type { AuditEventPage } from '../ui/domains/factory/services/audit';
 
+const MAX_COMPLETE_AUDIT_PAGES = 25;
+
 export function useAuditEvents(
   factoryProjectId: string | undefined,
   group: string,
@@ -41,12 +43,25 @@ export function useCompleteAuditEvents(
         const events: AuditEventPage['events'] = [];
         const actors: AuditEventPage['actors'] = {};
         let before: string | undefined;
+        const seenCursors = new Set<string>();
+        let pageCount = 0;
 
         do {
+          signal.throwIfAborted();
+          if (pageCount >= MAX_COMPLETE_AUDIT_PAGES) {
+            throw new Error(`Audit history exceeded ${MAX_COMPLETE_AUDIT_PAGES} pages`);
+          }
           const page = await fetchAuditEvents(baseUrl, factoryProjectId, { actorIds, before, limit, signal });
+          pageCount += 1;
           events.push(...page.events);
           for (const [actorId, actor] of Object.entries(page.actors)) actors[actorId] ??= actor;
-          before = page.nextCursor;
+
+          const nextCursor = page.nextCursor;
+          if (nextCursor && (nextCursor === before || seenCursors.has(nextCursor))) {
+            throw new Error('Audit pagination cursor did not advance');
+          }
+          if (nextCursor) seenCursors.add(nextCursor);
+          before = nextCursor;
         } while (before);
 
         return { events, actors };

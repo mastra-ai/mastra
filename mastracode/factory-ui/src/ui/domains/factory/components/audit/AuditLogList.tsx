@@ -7,7 +7,13 @@ import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
 import { relativeTime } from '../../../../../lib/date/relativeTime';
-import { auditActionLabel, auditActorLabel, auditCategory, auditMetadataPreview } from '../../auditPresentation';
+import {
+  auditActionLabel,
+  auditActorLabel,
+  auditCategory,
+  auditMetadataPreview,
+  auditVisibleMetadata,
+} from '../../auditPresentation';
 import type { AuditEvent } from '../../services/audit';
 
 const AUDIT_GRID_CLASS =
@@ -36,7 +42,8 @@ function AuditEventRow({
 }) {
   const category = auditCategory(event.action);
   const target = event.targets[0];
-  const hasMetadata = Object.keys(event.metadata).length > 0;
+  const visibleMetadata = auditVisibleMetadata(event);
+  const hasMetadata = Object.keys(visibleMetadata).length > 0;
   const actor = auditActorLabel(event, actorName);
   const targetLabel = target?.name ?? target?.id;
   const detail = auditMetadataPreview(event);
@@ -106,7 +113,7 @@ function AuditEventRow({
 
       {expanded ? (
         <Code
-          code={JSON.stringify(event.metadata, null, 2)}
+          code={JSON.stringify(visibleMetadata, null, 2)}
           lang="json"
           className="text-ui-xs text-neutral4 m-0 mx-3 mb-3 px-2 py-1 font-sans break-all whitespace-pre-wrap"
         />
@@ -117,10 +124,12 @@ function AuditEventRow({
 
 function InfiniteScrollTrigger({
   hasNextPage,
+  autoLoad,
   isFetchingNextPage,
   onLoadMore,
 }: {
   hasNextPage: boolean;
+  autoLoad: boolean;
   isFetchingNextPage: boolean;
   onLoadMore: () => void;
 }) {
@@ -128,7 +137,7 @@ function InfiniteScrollTrigger({
 
   useEffect(() => {
     const node = trigger.current;
-    if (!node || !hasNextPage || isFetchingNextPage || typeof IntersectionObserver === 'undefined') return;
+    if (!node || !hasNextPage || !autoLoad || isFetchingNextPage || typeof IntersectionObserver === 'undefined') return;
 
     const observer = new IntersectionObserver(
       entries => {
@@ -140,7 +149,7 @@ function InfiniteScrollTrigger({
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [hasNextPage, isFetchingNextPage, onLoadMore]);
+  }, [autoLoad, hasNextPage, isFetchingNextPage, onLoadMore]);
 
   if (!hasNextPage) return null;
 
@@ -161,12 +170,14 @@ export function AuditLogList({
   events,
   actorNames,
   hasNextPage,
+  autoLoad,
   isFetchingNextPage,
   onLoadMore,
 }: {
   events: AuditEvent[];
   actorNames: ReadonlyMap<string, string>;
   hasNextPage: boolean;
+  autoLoad: boolean;
   isFetchingNextPage: boolean;
   onLoadMore: () => void;
 }) {
@@ -207,6 +218,7 @@ export function AuditLogList({
       </ul>
       <InfiniteScrollTrigger
         hasNextPage={hasNextPage}
+        autoLoad={autoLoad}
         isFetchingNextPage={isFetchingNextPage}
         onLoadMore={onLoadMore}
       />

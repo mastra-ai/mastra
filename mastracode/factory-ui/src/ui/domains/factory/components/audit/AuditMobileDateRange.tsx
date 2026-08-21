@@ -1,14 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DateTimePicker } from '@mastra/playground-ui/components/DateTimePicker';
 
-interface TimeRange {
-  from: number;
-  to: number;
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), max);
-}
+import { auditDayEnd, auditDayStart, auditRangeBetween, clamp, type AuditTimeRange } from '../../auditPresentation';
 
 function dateLabel(at: number): string {
   return new Date(at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
@@ -19,24 +12,24 @@ export function AuditMobileDateRange({
   range,
   onRangeChange,
 }: {
-  bounds: TimeRange;
-  range: TimeRange | undefined;
-  onRangeChange: (range: TimeRange | undefined) => void;
+  bounds: AuditTimeRange;
+  range: AuditTimeRange | undefined;
+  onRangeChange: (range: AuditTimeRange | undefined) => void;
 }) {
   const value = range ?? bounds;
-  const minValue = new Date(bounds.from);
-  const maxValue = new Date(bounds.to);
+  const minValue = new Date(auditDayStart(new Date(bounds.from)));
+  const maxValue = new Date(auditDayEnd(new Date(bounds.to)));
 
   return (
-    <div className="mb-1 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 lg:hidden">
+    <div className="mb-1 hidden grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 [@media(any-pointer:coarse)]:grid">
       <DateTimePicker
         value={new Date(value.from)}
         minValue={minValue}
         maxValue={maxValue}
         onValueChange={date => {
-          if (!date) return;
-          const from = clamp(date.getTime(), bounds.from, bounds.to);
-          onRangeChange({ from, to: Math.max(from, value.to) });
+          if (!date) return onRangeChange(undefined);
+          const from = clamp(auditDayStart(date), bounds.from, bounds.to);
+          onRangeChange(auditRangeBetween(value.to, from, bounds));
         }}
       >
         <Button
@@ -55,9 +48,9 @@ export function AuditMobileDateRange({
         minValue={minValue}
         maxValue={maxValue}
         onValueChange={date => {
-          if (!date) return;
-          const to = clamp(date.getTime(), bounds.from, bounds.to);
-          onRangeChange({ from: Math.min(value.from, to), to });
+          if (!date) return onRangeChange(undefined);
+          const to = clamp(auditDayEnd(date), bounds.from, bounds.to);
+          onRangeChange(auditRangeBetween(value.from, to, bounds));
         }}
       >
         <Button

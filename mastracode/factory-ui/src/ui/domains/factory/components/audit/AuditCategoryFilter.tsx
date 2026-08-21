@@ -20,7 +20,7 @@ function CategoryToggle({
       aria-pressed={pressed}
       onClick={onClick}
       className={cn(
-        'flex cursor-pointer items-center gap-1.5 rounded-full px-2.5 py-1 text-ui-xs font-semibold outline-none transition-colors',
+        'flex cursor-pointer items-center gap-1.5 rounded-full px-2.5 py-1 text-ui-xs font-semibold outline-none transition-colors focus-visible:ring-1 focus-visible:ring-accent1',
         pressed
           ? 'bg-neutral6/10 text-neutral6'
           : 'text-neutral3 hover:bg-neutral6/5 hover:text-neutral5 focus-visible:bg-neutral6/5 focus-visible:text-neutral5',

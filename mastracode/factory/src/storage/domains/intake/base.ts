@@ -72,6 +72,13 @@ type IntakeSourceBindingRow = {
   source_id: string;
   factory_project_id: string;
 };
+function toIntakeSourceBinding(row: IntakeSourceBindingRow): IntakeSourceBinding {
+  return {
+    integrationId: row.integration_id,
+    sourceId: row.source_id,
+    factoryProjectId: row.factory_project_id,
+  };
+}
 
 export class IntakeStorage extends FactoryStorageDomain {
   constructor() {
@@ -140,11 +147,24 @@ export class IntakeStorage extends FactoryStorageDomain {
       org_id: orgId,
       ...(integrationId ? { integration_id: integrationId } : {}),
     });
-    return rows.map(row => ({
-      integrationId: row.integration_id,
-      sourceId: row.source_id,
-      factoryProjectId: row.factory_project_id,
-    }));
+    return rows.map(toIntakeSourceBinding);
+  }
+
+  async getBinding({
+    orgId,
+    integrationId,
+    sourceId,
+  }: {
+    orgId: string;
+    integrationId: string;
+    sourceId: string;
+  }): Promise<IntakeSourceBinding | null> {
+    const row = await this.#db.findOne<IntakeSourceBindingRow>('intake_source_bindings', {
+      org_id: orgId,
+      integration_id: integrationId,
+      source_id: sourceId,
+    });
+    return row ? toIntakeSourceBinding(row) : null;
   }
 
   /** Source ids bound to one Factory project. Empty means "nothing bound". */
