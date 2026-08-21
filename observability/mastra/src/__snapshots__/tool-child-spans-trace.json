@@ -301,6 +301,7 @@
                     "entityId": "childSpanTool",
                     "attributes": {
                       "toolDescription": "A tool that creates child spans",
+                      "inputSchema": "{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"input\":{\"type\":\"string\"}},\"required\":[\"input\"],\"additionalProperties\":false}",
                       "toolType": "tool",
                       "toolCallId": "call-child-span-1",
                       "success": true

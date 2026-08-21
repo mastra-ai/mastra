@@ -300,6 +300,7 @@
                     "entityId": "metadataTool",
                     "attributes": {
                       "toolDescription": "A tool that adds custom metadata",
+                      "inputSchema": "{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"input\":{\"type\":\"string\"}},\"required\":[\"input\"],\"additionalProperties\":false}",
                       "toolType": "tool",
                       "toolCallId": "call-metadata-1",
                       "success": true
