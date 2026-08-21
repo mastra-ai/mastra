@@ -973,6 +973,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
               pluginRenderConfig.modelId,
               {
                 collapseOnComplete: false,
+                durationMode: 'unknown',
                 expandOnComplete: state.quietMode,
                 forked: pluginRenderConfig.forked,
                 label: pluginRenderConfig.label,
@@ -982,7 +983,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
                 icons: pluginRenderConfig.icons,
               },
             );
-            subComponent.finish(isErr ?? false, 0, rawResult);
+            subComponent.finish(isErr ?? false, undefined, rawResult);
             insertChatComponentWithBoundarySpacing(state.chatContainer, subComponent);
             state.allToolComponents.push(subComponent as any);
             continue;
