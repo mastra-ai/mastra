@@ -11,7 +11,7 @@
 import { createHash } from 'node:crypto';
 
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
-import type { CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
+import type { CollectionSchema, CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
 import { isTerminalFactoryRuleStage } from '../../../rules/types.js';
 
 export type WorkItemStage = string;
@@ -976,6 +976,12 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return this.ops;
   }
 
+  async #countRows(collection: string, where: CollectionWhere): Promise<number> {
+    const count = this.#db.count;
+    if (!count) throw new Error('[WorkItemsStorage] storage backend does not support collection counts.');
+    return count.call(this.#db, collection, where);
+  }
+
   async #withProjectRelationTransaction<T>(
     orgId: string,
     factoryProjectId: string,
@@ -1532,7 +1538,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     factoryProjectId: string;
     statuses: FactoryDispatchStatus[];
   }): Promise<number> {
-    return this.#db.count('factory_deferred_decisions', {
+    return this.#countRows('factory_deferred_decisions', {
       org_id: orgId,
       factory_project_id: factoryProjectId,
       status: { in: statuses },
@@ -1621,7 +1627,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     userId: string;
     state?: FactoryAttentionReceiptState;
   }): Promise<number> {
-    return this.#db.count('factory_attention_receipts', {
+    return this.#countRows('factory_attention_receipts', {
       org_id: orgId,
       factory_project_id: factoryProjectId,
       user_id: userId,

@@ -13,5 +13,5 @@ const total = (await storage.ops.findMany('jobs', { status: 'failed' })).length;
 **After**
 
 ```ts
-const total = await storage.ops.count('jobs', { status: 'failed' });
+const total = await storage.ops.count?.('jobs', { status: 'failed' });
 ```
