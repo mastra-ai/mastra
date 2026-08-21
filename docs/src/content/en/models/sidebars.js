@@ -331,6 +331,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/llmgateway',
+          label: 'DevPass (LLM Gateway)',
+        },
+        {
+          type: 'doc',
           id: 'providers/digitalocean',
           label: 'DigitalOcean',
         },
@@ -511,7 +516,7 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/llmgateway',
+          id: 'providers/llmgateway-providers',
           label: 'LLM Gateway',
         },
         {
