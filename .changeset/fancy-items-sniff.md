@@ -1,5 +1,5 @@
 ---
-'@mastra/core': major
+'@mastra/core': minor
 ---
 
 Added required collection row counts for application storage, so totals no longer require loading every matching row.
