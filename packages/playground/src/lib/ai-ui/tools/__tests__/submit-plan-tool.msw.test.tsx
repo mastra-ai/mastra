@@ -154,6 +154,7 @@ describe('SubmitPlanTool', () => {
     });
 
     it('keeps three control cells when a long plan does not overflow', async () => {
+      stubContentHeight(220);
       server.use(
         http.get(`${BASE_URL}/api/agents/:agentId/plans/file`, () =>
           HttpResponse.json({
