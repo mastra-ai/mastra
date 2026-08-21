@@ -44,7 +44,7 @@ import {
   isValidGitRef as isValidGitRefSandbox,
   MaterializeError,
   pushBranch,
-  WorktreeError,
+  SetupCommandError,
 } from './sandbox.js';
 import type { GitIdentity } from './sandbox.js';
 
@@ -1053,10 +1053,10 @@ function ensureErrorPayload(err: unknown): {
   };
 }
 
-/** Map a sandbox/worktree error to an actionable HTTP response. */
+/** Map a sandbox/setup-command error to an actionable HTTP response. */
 function gitErrorResponse(c: Context, err: unknown) {
-  if (err instanceof WorktreeError) {
-    return c.json({ error: err.code, message: err.message }, err.code === 'invalid-branch' ? 400 : 502);
+  if (err instanceof SetupCommandError) {
+    return c.json({ error: err.code, message: err.message }, 502);
   }
   if (err instanceof MaterializeError) {
     return c.json({ error: err.code, message: err.message }, 502);

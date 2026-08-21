@@ -176,7 +176,7 @@ describe('SessionRetirementCoordinator', () => {
     });
 
     expect(warn).toHaveBeenCalledWith(
-      'Factory worktree teardown failed',
+      'Factory teardown command failed',
       expect.objectContaining({
         sessionId: session.sessionId,
         projectRepositoryId: 'repo-link-1',

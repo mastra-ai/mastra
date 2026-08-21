@@ -67,8 +67,8 @@ const mocks = vi.hoisted(() => ({
   ),
   materializeRepo: vi.fn(async (_input: unknown) => {}),
   checkoutSessionBranch: vi.fn(async () => {}),
-  runWorktreeSetup: vi.fn(async () => {}),
-  runWorktreeTeardown: vi.fn(async () => {}),
+  runSetupCommand: vi.fn(async () => {}),
+  runTeardownCommand: vi.fn(async () => {}),
   /** Released sandboxes claimable by new sessions; claim() consumes matches. */
   getRepositoryAccess: vi.fn(async ({ repositoryId }: { repositoryId: string }) => ({
     cloneUrl: 'https://github.com/octocat/hello.git',
@@ -94,8 +94,8 @@ vi.mock('./integrations/github/sandbox', async importOriginal => ({
   MaterializeError: (await importOriginal<typeof import('./integrations/github/sandbox.js')>()).MaterializeError,
   materializeRepo: (...args: unknown[]) => (mocks.materializeRepo as any)(...args),
   checkoutSessionBranch: (...args: unknown[]) => (mocks.checkoutSessionBranch as any)(...args),
-  runWorktreeSetup: (...args: unknown[]) => (mocks.runWorktreeSetup as any)(...args),
-  runWorktreeTeardown: (...args: unknown[]) => (mocks.runWorktreeTeardown as any)(...args),
+  runSetupCommand: (...args: unknown[]) => (mocks.runSetupCommand as any)(...args),
+  runTeardownCommand: (...args: unknown[]) => (mocks.runTeardownCommand as any)(...args),
 }));
 
 import { MaterializeError } from './integrations/github/sandbox.js';
@@ -115,8 +115,8 @@ afterEach(async () => {
   __clearSessionSandboxesForTests();
   mocks.materializeRepo.mockClear();
   mocks.checkoutSessionBranch.mockClear();
-  mocks.runWorktreeSetup.mockClear();
-  mocks.runWorktreeTeardown.mockClear();
+  mocks.runSetupCommand.mockClear();
+  mocks.runTeardownCommand.mockClear();
   mocks.getRepositoryAccess.mockClear();
   mocks.mintInstallationToken.mockClear();
   mocks.setEnvironmentVariable.mockClear();
@@ -263,7 +263,6 @@ function fakeGithubIntegration() {
                 sandboxWorkdir: project.sandboxWorkdir,
                 setupCommand: project.setupCommand,
                 teardownCommand: project.teardownCommand,
-                baseCheckpoint: project.baseCheckpoint ?? null,
               }
             : null;
         }),
@@ -620,7 +619,7 @@ describe('GitHub session workspace preparation', () => {
       workdirB,
       expect.objectContaining({ branch: 'feature-b', baseBranch: 'main' }),
     );
-    expect(mocks.runWorktreeSetup).toHaveBeenCalledTimes(2);
+    expect(mocks.runSetupCommand).toHaveBeenCalledTimes(2);
     expect(mocks.sessions.find(session => session.id === 'session-a')?.sandboxWorkdir).toBe(workdirA);
     expect(mocks.sessions.find(session => session.id === 'session-b')?.sandboxWorkdir).toBe(workdirB);
   });
@@ -743,13 +742,13 @@ describe('GitHub session workspace preparation', () => {
     addProject({ setupCommand: 'pnpm install', teardownCommand: 'pnpm local teardown' });
     addSession({ id: 'session-a' });
     const setupError = new Error('setup failed');
-    mocks.runWorktreeSetup.mockRejectedValueOnce(setupError);
+    mocks.runSetupCommand.mockRejectedValueOnce(setupError);
 
     await expect(workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') })).rejects.toBe(
       setupError,
     );
 
-    expect(mocks.runWorktreeTeardown).toHaveBeenCalledWith(
+    expect(mocks.runTeardownCommand).toHaveBeenCalledWith(
       expect.any(Object),
       expect.stringContaining('session-a'),
       'pnpm local teardown',
@@ -762,8 +761,8 @@ describe('GitHub session workspace preparation', () => {
     addProject({ setupCommand: 'pnpm install', teardownCommand: 'pnpm local teardown' });
     addSession({ id: 'session-a' });
     const setupError = new Error('primary setup failure');
-    mocks.runWorktreeSetup.mockRejectedValueOnce(setupError);
-    mocks.runWorktreeTeardown.mockRejectedValueOnce(new Error('secondary teardown failure'));
+    mocks.runSetupCommand.mockRejectedValueOnce(setupError);
+    mocks.runTeardownCommand.mockRejectedValueOnce(new Error('secondary teardown failure'));
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
       await expect(workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') })).rejects.toBe(
@@ -1042,9 +1041,9 @@ describe('GitHub session workspace preparation', () => {
     );
   });
 
-  it('never threads persisted baseCheckpoint metadata into the sandbox callback', async () => {
+  it('never threads a persisted sha into the sandbox callback', async () => {
     const workspace = createRemoteFactory();
-    addProject({ sandboxProvider: 'railway', baseCheckpoint: { name: 'warm', sha: 'abc1234def' } });
+    addProject({ sandboxProvider: 'railway' });
     addSession({ id: 'session-a' });
 
     await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
@@ -1647,7 +1646,7 @@ describe('GitHub session workspace preparation', () => {
 
       expect(mastra.removeWorkspace).toHaveBeenCalledWith('mfw-project-1-session-a-web-factory');
       expect(mocks.createSandbox).toHaveBeenCalledTimes(2);
-      expect(mocks.runWorktreeSetup).toHaveBeenCalledTimes(2);
+      expect(mocks.runSetupCommand).toHaveBeenCalledTimes(2);
     });
 
     it('registers exactly one workspace under inflight materialization coalescing', async () => {

@@ -238,26 +238,7 @@ describe('SourceControlStorage', () => {
     expect(firstLink.id).not.toBe(secondLink.id);
   });
 
-  it('stores, reads, and clears base-checkpoint metadata', async () => {
-    const project = await createProject();
-    const link = await linkRepository({ factoryProjectId: project.id });
-    expect(link.baseCheckpoint).toBeNull();
-
-    const builtAt = new Date();
-    await github.projectRepositories.setBaseCheckpoint({
-      id: link.id,
-      checkpoint: { name: `repo-${link.id}`, sha: 'abc123', builtAt, setupCommandHash: 'hash-1' },
-      expectedSetupCommand: null,
-    });
-    let fresh = await github.projectRepositories.get({ orgId: 'org-1', id: link.id });
-    expect(fresh?.baseCheckpoint).toMatchObject({ name: `repo-${link.id}`, sha: 'abc123', setupCommandHash: 'hash-1' });
-
-    await github.projectRepositories.setBaseCheckpoint({ id: link.id, checkpoint: null });
-    fresh = await github.projectRepositories.get({ orgId: 'org-1', id: link.id });
-    expect(fresh?.baseCheckpoint).toBeNull();
-  });
-
-  it('preserves base-checkpoint metadata when link() is retried for the same connection', async () => {
+  it('returns the existing row unchanged when link() is retried for the same connection', async () => {
     const project = await createProject();
     const installation = await createInstallation(github);
     const repository = await github.repositories.upsert({
@@ -276,12 +257,6 @@ describe('SourceControlStorage', () => {
       repositoryId: repository.id,
       ...projectRepositoryInput,
     });
-    await github.projectRepositories.setBaseCheckpoint({
-      id: firstLink.id,
-      checkpoint: { name: `repo-${firstLink.id}`, sha: 'abc123', builtAt: new Date(), setupCommandHash: 'hash-1' },
-      expectedSetupCommand: null,
-    });
-
     const retried = await github.projectRepositories.link({
       orgId: 'org-1',
       connectionId: connection.id,
@@ -293,68 +268,7 @@ describe('SourceControlStorage', () => {
 
     expect(retried.id).toBe(firstLink.id);
     expect(retried.branch).toBeNull();
-    expect(retried.baseCheckpoint).toMatchObject({
-      name: `repo-${firstLink.id}`,
-      sha: 'abc123',
-      setupCommandHash: 'hash-1',
-    });
-    expect(fresh?.baseCheckpoint).toMatchObject({
-      name: `repo-${firstLink.id}`,
-      sha: 'abc123',
-      setupCommandHash: 'hash-1',
-    });
-  });
-
-  it('round-trips a null setupCommandHash so no-setup-command checkpoints stay fresh', async () => {
-    const project = await createProject();
-    const link = await linkRepository({ factoryProjectId: project.id });
-    await github.projectRepositories.setBaseCheckpoint({
-      id: link.id,
-      checkpoint: { name: `repo-${link.id}`, sha: 'abc123', builtAt: new Date(), setupCommandHash: null },
-      expectedSetupCommand: null,
-    });
-    const fresh = await github.projectRepositories.get({ orgId: 'org-1', id: link.id });
-    // Must stay null (not ''): consumers compare the stored hash against a
-    // hash-of-null sentinel, and '' would read as a real (mismatched) hash.
-    expect(fresh?.baseCheckpoint?.setupCommandHash).toBeNull();
-  });
-
-  it('invalidates base-checkpoint metadata when the setup command changes', async () => {
-    const project = await createProject();
-    const link = await linkRepository({ factoryProjectId: project.id });
-    await github.projectRepositories.setBaseCheckpoint({
-      id: link.id,
-      checkpoint: { name: `repo-${link.id}`, sha: 'abc123', builtAt: new Date(), setupCommandHash: 'hash-1' },
-      expectedSetupCommand: null,
-    });
-
-    // Unrelated update keeps the checkpoint.
-    await github.projectRepositories.update({ orgId: 'org-1', id: link.id, input: { branch: 'develop' } });
-    let fresh = await github.projectRepositories.get({ orgId: 'org-1', id: link.id });
-    expect(fresh?.baseCheckpoint).not.toBeNull();
-
-    // Setup-command change invalidates it.
-    await github.projectRepositories.update({ orgId: 'org-1', id: link.id, input: { setupCommand: 'pnpm i' } });
-    fresh = await github.projectRepositories.get({ orgId: 'org-1', id: link.id });
-    expect(fresh?.baseCheckpoint).toBeNull();
-  });
-
-  it('ignores a base-checkpoint build that finishes after the setup command changes', async () => {
-    const project = await createProject();
-    const link = await linkRepository({ factoryProjectId: project.id });
-
-    await github.projectRepositories.update({
-      orgId: 'org-1',
-      id: link.id,
-      input: { setupCommand: 'pnpm install' },
-    });
-    await github.projectRepositories.setBaseCheckpoint({
-      id: link.id,
-      checkpoint: { name: `repo-${link.id}`, sha: 'stale', builtAt: new Date(), setupCommandHash: null },
-      expectedSetupCommand: null,
-    });
-
-    expect((await github.projectRepositories.get({ orgId: 'org-1', id: link.id }))?.baseCheckpoint).toBeNull();
+    expect(fresh?.id).toBe(firstLink.id);
   });
 
   it('rejects cross-org, cross-provider, and cross-installation links', async () => {

@@ -18,8 +18,8 @@ import {
   checkoutSessionBranch,
   DEFAULT_COMMAND_TIMEOUT_MS,
   materializeRepo,
-  runWorktreeSetup,
-  runWorktreeTeardown,
+  runSetupCommand,
+  runTeardownCommand,
 } from './integrations/github/sandbox.js';
 import { registerGithubPatKind, registerGithubTokenInjector } from './integrations/github/token-refresh.js';
 import { getFactorySessionAddress } from './rules/binding-context.js';
@@ -549,11 +549,11 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       });
       if (projectRepository.setupCommand) {
         try {
-          await runWorktreeSetup(target, workdir, projectRepository.setupCommand);
+          await runSetupCommand(target, workdir, projectRepository.setupCommand);
         } catch (setupError) {
           if (projectRepository.teardownCommand) {
             try {
-              await runWorktreeTeardown(target, workdir, projectRepository.teardownCommand, {
+              await runTeardownCommand(target, workdir, projectRepository.teardownCommand, {
                 timeoutMs: DEFAULT_COMMAND_TIMEOUT_MS,
               });
             } catch (teardownError) {

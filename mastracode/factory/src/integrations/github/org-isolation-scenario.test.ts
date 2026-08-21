@@ -236,7 +236,7 @@ vi.mock('./sandbox', () => {
       this.code = code;
     }
   }
-  class WorktreeError extends Error {
+  class SetupCommandError extends Error {
     code: string;
     constructor(m: string, code: string) {
       super(m);
@@ -252,7 +252,7 @@ vi.mock('./sandbox', () => {
     isValidGitRef: (v: unknown): v is string =>
       typeof v === 'string' && v.length > 0 && v.length <= 255 && /^[A-Za-z0-9_./-]+$/.test(v),
     MaterializeError,
-    WorktreeError,
+    SetupCommandError,
   };
 });
 

@@ -22,13 +22,7 @@ export interface MastraCodeState {
   factoryOrgId?: string;
   /** Linked repository used by this session when source-control execution is required. */
   projectRepositoryId?: string;
-  /** Observability only: sandbox id last reported by the server. Nothing resolves workspaces from it. */
-  sandboxId?: string;
-  /** Observability only: path inside the sandbox the repo is cloned into. */
-  sandboxWorkdir?: string;
-  /** Legacy, unread: git worktree paths predate one-sandbox-per-session. */
-  worktreePath?: string;
-  /** Active feature branch checked out in the worktree. */
+  /** Active feature branch checked out in the session workdir. */
   branch?: string;
   /**
    * The session's checkout contains third-party content (e.g. a PR branch
@@ -115,9 +109,6 @@ export const stateSchema = z.object({
   factoryProjectId: z.string().optional(),
   factoryOrgId: z.string().optional(),
   projectRepositoryId: z.string().optional(),
-  sandboxId: z.string().optional(),
-  sandboxWorkdir: z.string().optional(),
-  worktreePath: z.string().optional(),
   branch: z.string().optional(),
   // Session operates on an untrusted checkout — suppress AGENTS.md ingestion.
   untrustedCheckout: z.boolean().optional(),

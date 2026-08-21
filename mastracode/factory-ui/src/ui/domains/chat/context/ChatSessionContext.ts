@@ -5,8 +5,6 @@ import type { PrepareProgress } from '../../workspaces/services/github';
 export interface FactorySessionState {
   factoryProjectId: string;
   projectRepositoryId?: string;
-  sandboxId?: string;
-  sandboxWorkdir?: string;
 }
 
 export interface ChatSessionContextApi {

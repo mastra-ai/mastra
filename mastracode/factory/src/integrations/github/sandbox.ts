@@ -9,7 +9,7 @@
  *   (re-open) inside the sandbox, using a short-lived installation token that is
  *   scrubbed from the git remote afterwards so it never persists in the VM.
  *
- * This module owns everything git/GitHub: clone/pull, commit/push, worktrees,
+ * This module owns everything git/GitHub: clone/pull, commit/push, setup/teardown commands,
  * and `gh pr create`. Workdir layout lives in `../sandbox/workdir`.
  */
 
@@ -778,7 +778,7 @@ export interface CommitResult {
  * error, so callers can safely commit-then-push without first diffing.
  *
  * @param sandbox  the live sandbox containing the checkout
- * @param workdir  the worktree (or repo) path to commit in
+ * @param workdir  the session workdir to commit in
  * @param message  the commit message (quoted; arbitrary text is safe)
  * @param identity authorship identity for the commit
  */
@@ -811,29 +811,30 @@ export async function commitAll(
 }
 
 // ---------------------------------------------------------------------------
-// Phase 2 — worktree / branch lifecycle
+// Phase 2 — setup / teardown lifecycle commands
 //
-// Each unit of work gets its own branch + working tree inside the same sandbox
-// as the base checkout. The worktree path is always computed server-side from a
-// sanitized branch name; client input never reaches a filesystem path.
+// The org-configured setup and teardown shell commands run in the session's
+// materialized workdir. The workdir is always resolved server-side from the
+// live sandbox; client input never reaches a filesystem path.
 // ---------------------------------------------------------------------------
 
-/** Error raised when a worktree cannot be created/reused inside the sandbox. */
-export class WorktreeError extends Error {
+/** Error raised when the org's setup or teardown command fails in the sandbox. */
+export class SetupCommandError extends Error {
   constructor(
     message: string,
-    readonly code: 'invalid-branch' | 'worktree-failed' | 'setup-failed' | 'teardown-failed',
+    readonly code: 'setup-failed' | 'teardown-failed',
   ) {
     super(message);
-    this.name = 'WorktreeError';
+    this.name = 'SetupCommandError';
   }
 }
 
 /**
- * Run the project's setup command (e.g. `pnpm i && pnpm build`) inside a
- * freshly created worktree. Called before the worktree is handed to any agent
- * run so the checkout is ready to build/test. A non-zero exit is a hard error —
- * starting agent work in a half-set-up tree is worse than failing the request.
+ * Run the project's setup command (e.g. `pnpm i && pnpm build`) inside the
+ * freshly materialized session workdir. Called before the checkout is handed
+ * to any agent run so it is ready to build/test. A non-zero exit is a hard
+ * error — starting agent work in a half-set-up tree is worse than failing the
+ * request.
  *
  * Security model: the command is intentionally arbitrary shell — that is the
  * feature (install deps, build, seed fixtures). It is only configurable by
@@ -845,36 +846,36 @@ export class WorktreeError extends Error {
  * server host, so it grants no privilege beyond what sandbox access already
  * provides.
  *
- * @param sandbox       live sandbox containing the worktree
- * @param worktreePath  the server-computed worktree path the command runs in
- * @param command       the org-configured setup shell command
+ * @param sandbox  live sandbox containing the checkout
+ * @param workdir  the server-resolved session workdir the command runs in
+ * @param command  the org-configured setup shell command
  */
-async function runWorktreeLifecycleCommand(
+async function runLifecycleCommand(
   sandbox: MaterializationSandbox,
-  worktreePath: string,
+  workdir: string,
   command: string,
   options: { phase: 'setup' | 'teardown'; timeoutMs?: number },
 ): Promise<void> {
-  const result = await sh(sandbox, `cd ${shellQuote(worktreePath)} && { ${command}\n}`, {
-    phase: `worktree ${options.phase}`,
+  const result = await sh(sandbox, `cd ${shellQuote(workdir)} && { ${command}\n}`, {
+    phase: `${options.phase} command`,
     ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
   });
   if (result.exitCode !== 0) {
     const detail = (result.stderr.trim() || result.stdout.trim()).slice(-1800);
     const label = options.phase === 'setup' ? 'Setup' : 'Teardown';
-    throw new WorktreeError(
+    throw new SetupCommandError(
       `${label} command failed (exit ${result.exitCode}): ${detail}`,
       options.phase === 'setup' ? 'setup-failed' : 'teardown-failed',
     );
   }
 }
 
-export async function runWorktreeSetup(
+export async function runSetupCommand(
   sandbox: MaterializationSandbox,
-  worktreePath: string,
+  workdir: string,
   command: string,
 ): Promise<void> {
-  return runWorktreeLifecycleCommand(sandbox, worktreePath, command, { phase: 'setup' });
+  return runLifecycleCommand(sandbox, workdir, command, { phase: 'setup' });
 }
 
 /**
@@ -883,13 +884,13 @@ export async function runWorktreeSetup(
  * so the retirement coordinator can log them while still continuing with
  * scrub, pooling/destruction, cache invalidation, and row deletion.
  */
-export async function runWorktreeTeardown(
+export async function runTeardownCommand(
   sandbox: MaterializationSandbox,
-  worktreePath: string,
+  workdir: string,
   command: string,
   options: { timeoutMs?: number } = {},
 ): Promise<void> {
-  return runWorktreeLifecycleCommand(sandbox, worktreePath, command, {
+  return runLifecycleCommand(sandbox, workdir, command, {
     phase: 'teardown',
     ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
   });

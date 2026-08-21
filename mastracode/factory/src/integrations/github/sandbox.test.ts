@@ -18,11 +18,11 @@ import {
   MaterializeError,
   pushBranch,
   resolveGitIdentity,
-  runWorktreeSetup,
-  runWorktreeTeardown,
+  runSetupCommand,
+  runTeardownCommand,
   shellQuote,
   withInstallToken,
-  WorktreeError,
+  SetupCommandError,
 } from './sandbox.js';
 import type { RepoMaterializeInfo } from './sandbox.js';
 
@@ -877,16 +877,16 @@ describe('withInstallToken', () => {
         ? { exitCode: 255, stdout: '', stderr: 'error: could not lock config file .git/config' }
         : OK,
     );
-    const primary = new WorktreeError('git worktree add failed', 'worktree-failed');
+    const primary = new SetupCommandError('setup command failed', 'setup-failed');
 
     const err = await withInstallToken(sandbox, '/workspace/hello', 'octocat/hello', 'tok-secret', async () => {
       throw primary;
     }).catch(e => e);
 
-    // Routes map WorktreeError and MaterializeError to different responses.
+    // Routes map SetupCommandError and MaterializeError to different responses.
     expect(err).toBe(primary);
-    expect(err.code).toBe('worktree-failed');
-    expect(err.message).toMatch(/git worktree add failed.*Failed to scrub installation token/s);
+    expect(err.code).toBe('setup-failed');
+    expect(err.message).toMatch(/setup command failed.*Failed to scrub installation token/s);
   });
 
   it('rejects a malformed repo full name before touching the remote', async () => {
@@ -964,21 +964,21 @@ describe('pushBranch', () => {
   });
 });
 
-describe('runWorktreeSetup', () => {
+describe('runSetupCommand', () => {
   it('runs the command inside the worktree directory', async () => {
     const sandbox = new FakeSandbox();
-    await runWorktreeSetup(sandbox, '/workspace/worktrees/feat-x', 'pnpm i && pnpm build');
+    await runSetupCommand(sandbox, '/workspace/worktrees/feat-x', 'pnpm i && pnpm build');
 
     expect(sandbox.calls).toHaveLength(1);
     expect(sandbox.calls[0]).toContain("cd '/workspace/worktrees/feat-x'");
     expect(sandbox.calls[0]).toContain('pnpm i && pnpm build');
   });
 
-  it('throws a setup-failed WorktreeError with the command output on a non-zero exit', async () => {
+  it('throws a setup-failed SetupCommandError with the command output on a non-zero exit', async () => {
     const sandbox = new FakeSandbox(() => ({ exitCode: 1, stdout: '', stderr: 'ERR_PNPM_NO_LOCKFILE' }));
-    const err = await runWorktreeSetup(sandbox, '/workspace/worktrees/feat-x', 'pnpm i').catch(e => e);
+    const err = await runSetupCommand(sandbox, '/workspace/worktrees/feat-x', 'pnpm i').catch(e => e);
 
-    expect(err).toBeInstanceOf(WorktreeError);
+    expect(err).toBeInstanceOf(SetupCommandError);
     expect(err.code).toBe('setup-failed');
     expect(err.message).toContain('exit 1');
     expect(err.message).toContain('ERR_PNPM_NO_LOCKFILE');
@@ -990,13 +990,13 @@ describe('runWorktreeSetup', () => {
       const sandbox = new FakeSandbox();
       // A sandbox whose shell never returns must not hang the request forever.
       sandbox.executeCommand = () => new Promise<never>(() => {});
-      const pending = runWorktreeSetup(sandbox, '/workspace/worktrees/feat-x', 'pnpm i');
+      const pending = runSetupCommand(sandbox, '/workspace/worktrees/feat-x', 'pnpm i');
       const outcome = pending.catch(e => e);
       await vi.advanceTimersByTimeAsync(15 * 60_000 + 1_000);
       const err = await outcome;
       expect(err).toBeInstanceOf(Error);
       expect(err.message).toContain('timed out');
-      expect(err.message).toContain('worktree setup');
+      expect(err.message).toContain('setup command');
     } finally {
       vi.useRealTimers();
     }
@@ -1006,23 +1006,23 @@ describe('runWorktreeSetup', () => {
     const sandbox = new FakeSandbox();
     const spy = vi.spyOn(sandbox, 'executeCommand');
 
-    await runWorktreeSetup(sandbox, '/workspace/worktrees/feat-x', 'pnpm i');
+    await runSetupCommand(sandbox, '/workspace/worktrees/feat-x', 'pnpm i');
 
     expect(spy).toHaveBeenCalledWith('sh', ['-c', expect.any(String)], { timeout: 15 * 60_000 });
   });
 });
 
-describe('runWorktreeTeardown', () => {
+describe('runTeardownCommand', () => {
   it('uses the same quoted workdir shell and reports bounded command output', async () => {
     const sandbox = new FakeSandbox(() => ({ exitCode: 9, stdout: '', stderr: `prefix-${'x'.repeat(3000)}` }));
-    const err = await runWorktreeTeardown(
+    const err = await runTeardownCommand(
       sandbox,
       "/workspace/worktrees/feature's-branch",
       'pnpm local worktree teardown',
     ).catch(e => e);
 
     expect(sandbox.calls[0]).toContain("cd '/workspace/worktrees/feature'\\''s-branch'");
-    expect(err).toBeInstanceOf(WorktreeError);
+    expect(err).toBeInstanceOf(SetupCommandError);
     expect(err.code).toBe('teardown-failed');
     expect(err.message).toContain('exit 9');
     expect(err.message.length).toBeLessThan(2100);
@@ -1034,13 +1034,13 @@ describe('runWorktreeTeardown', () => {
       const sandbox = new FakeSandbox();
       const execute = vi.fn(() => new Promise<never>(() => {}));
       sandbox.executeCommand = execute;
-      const outcome = runWorktreeTeardown(sandbox, '/workspace/worktrees/feat-x', 'pnpm local teardown', {
+      const outcome = runTeardownCommand(sandbox, '/workspace/worktrees/feat-x', 'pnpm local teardown', {
         timeoutMs: 20,
       }).catch(e => e);
       await vi.advanceTimersByTimeAsync(21);
 
       const err = await outcome;
-      expect(err.message).toContain('worktree teardown');
+      expect(err.message).toContain('teardown command');
       expect(execute).toHaveBeenCalledWith('sh', ['-c', expect.any(String)], { timeout: 20 });
     } finally {
       vi.useRealTimers();
@@ -1061,7 +1061,7 @@ describe('sh transport retry', () => {
         return OK;
       });
 
-      const pending = runWorktreeSetup(sandbox, '/workspace/worktrees/feat-x', 'pnpm i');
+      const pending = runSetupCommand(sandbox, '/workspace/worktrees/feat-x', 'pnpm i');
       await vi.advanceTimersByTimeAsync(2000);
       await pending;
 
@@ -1078,7 +1078,7 @@ describe('sh transport retry', () => {
         throw Object.assign(new Error('Platform proxy request failed with 500'), { status: 500 });
       });
 
-      const pending = runWorktreeSetup(sandbox, '/workspace/worktrees/feat-x', 'pnpm i').catch(e => e);
+      const pending = runSetupCommand(sandbox, '/workspace/worktrees/feat-x', 'pnpm i').catch(e => e);
       await vi.advanceTimersByTimeAsync(10_000);
       const err = await pending;
 
@@ -1094,7 +1094,7 @@ describe('sh transport retry', () => {
       throw Object.assign(new Error('Sandbox not found'), { status: 404 });
     });
 
-    const err = await runWorktreeSetup(sandbox, '/workspace/worktrees/feat-x', 'pnpm i').catch(e => e);
+    const err = await runSetupCommand(sandbox, '/workspace/worktrees/feat-x', 'pnpm i').catch(e => e);
 
     expect(err.status).toBe(404);
     expect(sandbox.calls).toHaveLength(1);

@@ -108,7 +108,6 @@ function projectRepositoryRow(row: Record<string, any>) {
     sandboxProvider: row.sandboxProvider ?? 'railway',
     sandboxWorkdir: row.sandboxWorkdir,
     setupCommand: row.setupCommand ?? null,
-    baseCheckpoint: row.baseCheckpoint ?? null,
     teardownCommand: row.teardownCommand ?? null,
     createdAt: now,
     updatedAt: now,
@@ -422,8 +421,8 @@ const materializeRepo = vi.fn(
   },
 );
 const reattachSandbox = vi.fn(async (_id: string, _options?: { actingUserId?: string }) => ({ id: 'sb' }));
-const runWorktreeSetup = vi.fn(async (_sb: any, _worktreePath: string, _command: string) => {});
-const runWorktreeTeardown = vi.fn(async (_sb: any, _worktreePath: string, _command: string) => {});
+const runSetupCommand = vi.fn(async (_sb: any, _worktreePath: string, _command: string) => {});
+const runTeardownCommand = vi.fn(async (_sb: any, _worktreePath: string, _command: string) => {});
 const commitAll = vi.fn(async () => ({ committed: true }));
 const pushBranch = vi.fn(async () => {});
 const teardownProjectSandbox = vi.fn(async (_opts: { row: { id: string } }) => {});
@@ -441,7 +440,7 @@ vi.mock('./sandbox', () => {
       this.code = code;
     }
   }
-  class WorktreeError extends Error {
+  class SetupCommandError extends Error {
     code: string;
     constructor(m: string, code: string) {
       super(m);
@@ -452,9 +451,9 @@ vi.mock('./sandbox', () => {
     DEFAULT_COMMAND_TIMEOUT_MS: 15 * 60_000,
     ensureProjectSandbox: (opts: any) => ensureProjectSandbox(opts),
     materializeRepo: (opts: any) => materializeRepo(opts),
-    runWorktreeSetup: (sb: any, worktreePath: string, command: string) => runWorktreeSetup(sb, worktreePath, command),
-    runWorktreeTeardown: (sb: any, worktreePath: string, command: string, options?: { timeoutMs?: number }) =>
-      runWorktreeTeardown(sb, worktreePath, command, options),
+    runSetupCommand: (sb: any, worktreePath: string, command: string) => runSetupCommand(sb, worktreePath, command),
+    runTeardownCommand: (sb: any, worktreePath: string, command: string, options?: { timeoutMs?: number }) =>
+      runTeardownCommand(sb, worktreePath, command, options),
     commitAll: (...args: any[]) => commitAll(...(args as [])),
     pushBranch: (...args: any[]) => pushBranch(...(args as [])),
     teardownProjectSandbox: (opts: any) => teardownProjectSandbox(opts),
@@ -464,7 +463,7 @@ vi.mock('./sandbox', () => {
     isValidGitRef: (v: unknown): v is string =>
       typeof v === 'string' && v.length > 0 && v.length <= 255 && /^[A-Za-z0-9_./-]+$/.test(v),
     MaterializeError,
-    WorktreeError,
+    SetupCommandError,
   };
 });
 
@@ -672,8 +671,8 @@ beforeEach(() => {
   ensureProjectSandbox.mockClear();
   materializeRepo.mockClear();
   reattachSandbox.mockClear();
-  runWorktreeSetup.mockClear();
-  runWorktreeTeardown.mockClear();
+  runSetupCommand.mockClear();
+  runTeardownCommand.mockClear();
   commitAll.mockClear();
   pushBranch.mockClear();
   teardownProjectSandbox.mockClear();
@@ -1307,7 +1306,7 @@ describe('ensure (materialize)', () => {
     expect(tables.sandboxes).toHaveLength(0);
   });
 
-  it('never provisions even when the row carries checkpoint or stale workdir state', async () => {
+  it('never provisions even when the row carries stale workdir state', async () => {
     tables.projectRepositories.push(
       projectRepositoryRow({
         id: 'p1',
@@ -1317,7 +1316,6 @@ describe('ensure (materialize)', () => {
         repoFullName: 'octo/hello',
         defaultBranch: 'main',
         sandboxWorkdir: '/stale/should-not-be-read',
-        baseCheckpoint: { name: 'repo-p1', sha: 'abc123', builtAt: new Date(), setupCommandHash: null },
       }),
     );
     const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/ensure', { method: 'POST' });
@@ -1982,7 +1980,7 @@ describe('Factory session routes', () => {
       executeCommand: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
     };
     seedLiveSandbox(row.id, '/workspace/hello', live);
-    runWorktreeTeardown.mockImplementationOnce(async () => {
+    runTeardownCommand.mockImplementationOnce(async () => {
       order.push('teardown');
     });
 
@@ -1990,7 +1988,7 @@ describe('Factory session routes', () => {
 
     expect(deleted.status).toBe(200);
     expect(controller.deleteSession).toHaveBeenCalledWith({ resourceId: sessionId });
-    expect(runWorktreeTeardown).toHaveBeenCalledWith(
+    expect(runTeardownCommand).toHaveBeenCalledWith(
       live,
       '/workspace/hello',
       'docker compose down --remove-orphans',
