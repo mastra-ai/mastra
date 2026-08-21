@@ -12,7 +12,7 @@ export const computerPressKeyTool = createTool({
     'Press a key or key combination on the sandbox desktop keyboard. Pass a single key (e.g. "Enter", "Tab", "Escape") or an array for a hotkey chord (e.g. ["ctrl", "s"]).',
   inputSchema: z.object({
     key: z
-      .union([z.string(), z.array(z.string()).min(1)])
+      .union([z.string().min(1), z.array(z.string().min(1)).min(1)])
       .describe('A single key (e.g. "Enter") or an array of keys pressed together as a hotkey (e.g. ["ctrl", "c"])'),
   }),
   execute: async ({ key }, context) => {
