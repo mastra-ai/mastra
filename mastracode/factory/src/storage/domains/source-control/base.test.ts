@@ -357,50 +357,6 @@ describe('SourceControlStorage', () => {
     expect((await github.projectRepositories.get({ orgId: 'org-1', id: link.id }))?.baseCheckpoint).toBeNull();
   });
 
-  it('scopes sandboxes and worktrees to the project-repository link', async () => {
-    const project = await createProject();
-    const firstLink = await linkRepository({ factoryProjectId: project.id });
-    const secondLink = await linkRepository({
-      factoryProjectId: project.id,
-      repositoryExternalId: 'repository-35',
-      repositorySlug: 'mastra-ai/docs',
-    });
-    const [firstSandbox, duplicateSandbox, secondSandbox] = await Promise.all([
-      github.sandboxes.getOrCreate({ projectRepository: firstLink, userId: 'user-1' }),
-      github.sandboxes.getOrCreate({ projectRepository: firstLink, userId: 'user-1' }),
-      github.sandboxes.getOrCreate({ projectRepository: secondLink, userId: 'user-1' }),
-    ]);
-    expect(duplicateSandbox.id).toBe(firstSandbox.id);
-    expect(secondSandbox.id).not.toBe(firstSandbox.id);
-    expect(await gitlab.sandboxes.getById({ id: firstSandbox.id })).toBeNull();
-
-    await github.worktrees.upsert({
-      projectRepositoryId: firstLink.id,
-      userId: 'user-1',
-      branch: 'feature/a',
-      baseBranch: 'main',
-      worktreePath: '/workspace/worktrees/a',
-    });
-    expect(
-      await github.worktrees.get({ projectRepositoryId: firstLink.id, userId: 'user-1', branch: 'feature/a' }),
-    ).not.toBeNull();
-    expect(
-      await github.worktrees.get({ projectRepositoryId: secondLink.id, userId: 'user-1', branch: 'feature/a' }),
-    ).toBeNull();
-  });
-
-  it('re-points a sandbox binding workdir and clears its materialization', async () => {
-    const project = await createProject();
-    const link = await linkRepository({ factoryProjectId: project.id });
-    const binding = await github.sandboxes.getOrCreate({ projectRepository: link, userId: 'user-1' });
-    await github.sandboxes.markMaterialized({ id: binding.id });
-
-    await github.sandboxes.setWorkdir({ id: binding.id, sandboxWorkdir: '/local/mastra-ai/mastra' });
-
-    const updated = await github.sandboxes.getById({ id: binding.id });
-    expect(updated).toMatchObject({ sandboxWorkdir: '/local/mastra-ai/mastra', materializedAt: null });
-  });
-
   it('rejects cross-org, cross-provider, and cross-installation links', async () => {
     const project = await createProject();
     const otherProject = await createProject({ orgId: 'org-2', name: 'Other org' });
@@ -645,14 +601,6 @@ describe('SourceControlStorage', () => {
   it('clears every owned source-control collection', async () => {
     const project = await createProject();
     const link = await linkRepository({ factoryProjectId: project.id });
-    await github.sandboxes.getOrCreate({ projectRepository: link, userId: 'user-1' });
-    await github.worktrees.upsert({
-      projectRepositoryId: link.id,
-      userId: 'user-1',
-      branch: 'feature/a',
-      baseBranch: 'main',
-      worktreePath: '/workspace/worktrees/a',
-    });
 
     await domain.dangerouslyClearAll();
 

@@ -2,6 +2,7 @@ import type { Skill } from '@mastra/core/workspace';
 import { Hono } from 'hono';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { __clearSessionSandboxesForTests, getSessionSandbox } from '../sandbox/session-sandbox.js';
 import { SourceControlStorageInMemory } from '../storage/domains/source-control/inmemory.js';
 import { SkillRoutes } from './skills.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
@@ -112,6 +113,7 @@ function prepare(app: Hono, body: Record<string, unknown>, controllerId = 'code'
 describe('workspace skill invocation route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    __clearSessionSandboxesForTests();
   });
 
   it('formats and dispatches a workspace skill once with escaped arguments', async () => {
@@ -281,7 +283,7 @@ describe('workspace skill invocation route', () => {
     expect(harness.sendA).not.toHaveBeenCalled();
   });
 
-  it('enforces authenticated tenant worktree ownership before session lookup', async () => {
+  it('enforces a viewer-visible session with a live workdir at the scope before session lookup', async () => {
     const sourceControlStorage = new SourceControlStorageInMemory();
     const sendMessage = vi.fn(async () => {});
     const getSessionByResource = vi.fn(async () => ({
@@ -318,7 +320,6 @@ describe('workspace skill invocation route', () => {
       error: 'invalid_request',
       message: 'Invalid skill invocation request.',
     });
-    expect(sourceControlStorage.worktreesRows).toHaveLength(0);
 
     const factoryProjectId = '00000000-0000-4000-8000-000000000001';
     const missingProjectRepositoryId = '00000000-0000-4000-8000-000000000002';
@@ -363,13 +364,29 @@ describe('workspace skill invocation route', () => {
       sandboxProvider: 'local',
       sandboxWorkdir: '/workspace/repository',
     });
-    await sourceControlStorage.worktrees.upsert({
+    const sessionRow = await sourceControlStorage.sessions.create({
+      sessionId: '00000000-0000-4000-8000-00000000abcd',
       projectRepositoryId: projectRepository.id,
+      orgId: 'org-1',
       userId: 'user-1',
-      branch: 'review-42',
+      branch: 'user/session-00000000-0000-4000-8000-00000000abcd',
       baseBranch: 'main',
-      worktreePath: '/worktrees/review-42',
     });
+
+    // A session row alone is not enough: the scope must match a LIVE memoized
+    // sandbox workdir (fail closed when no VM has resolved one).
+    const noLiveWorkdir = await invoke(app, {
+      resourceId: factoryProjectId,
+      projectRepositoryId: projectRepository.id,
+      scope: '/worktrees/review-42',
+      name: 'understand-pr',
+    });
+    expect(noLiveWorkdir.status).toBe(403);
+    expect(getSessionByResource).not.toHaveBeenCalled();
+
+    const entry = getSessionSandbox(sessionRow.id, 'acme/repository', () => ({ provider: 'fake' }) as never);
+    entry.workdir = '/worktrees/review-42';
+
     const allowed = await invoke(app, {
       resourceId: factoryProjectId,
       projectRepositoryId: projectRepository.id,
