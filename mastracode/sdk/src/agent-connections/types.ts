@@ -4,6 +4,7 @@ export const AGENT_CONNECTIONS_STATE_TYPE = 'agent_connection';
 export type AgentConnectionStatus = 'available' | 'offline';
 export type AgentConnectionOperation = 'connect' | 'disconnect';
 export type AgentSignalPriority = 'low' | 'medium' | 'high' | 'urgent';
+export type AgentSignalRoutingAction = 'wake' | 'deliver' | 'persist' | 'discard' | 'blocked';
 
 export interface AgentPeerIdentity {
   /** Stable model-facing id used by tools. Derived from routing fields when omitted by discovery. */
@@ -70,6 +71,8 @@ export interface AgentSignalSendResult {
   priority?: AgentSignalPriority;
   expectsReply?: boolean;
   returnPeerId?: string;
+  routingAction?: AgentSignalRoutingAction;
+  runId?: string;
   notification?: unknown;
   isError?: boolean;
 }

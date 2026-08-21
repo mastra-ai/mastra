@@ -1,3 +1,4 @@
+import type { SendAgentNotificationSignalResult, SendAgentSignalAccepted } from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -57,6 +58,8 @@ const signalResultSchema = z.object({
   priority: prioritySchema.optional(),
   expectsReply: z.boolean().optional(),
   returnPeerId: z.string().optional(),
+  routingAction: z.enum(['wake', 'deliver', 'persist', 'discard', 'blocked']).optional(),
+  runId: z.string().optional(),
   notification: z.unknown().optional(),
   isError: z.boolean().optional(),
 });
@@ -228,7 +231,7 @@ The target must already be connected and currently available. Use expectsReply t
           from: { resourceId: currentAgent.resourceId, threadId: currentAgent.threadId },
           targetId,
         };
-        const notification = await agent.sendNotificationSignal(
+        const notification = (await agent.sendNotificationSignal(
           {
             source: 'agent-connection',
             kind: 'peer-signal',
@@ -246,13 +249,23 @@ The target must already be connected and currently available. Use expectsReply t
             threadId: target.threadId,
             ifIdle: priority === 'low' ? { behavior: 'persist' } : { behavior: 'wake' },
           },
-        );
+        )) as SendAgentNotificationSignalResult;
+        const accepted = notification.accepted ? await notification.accepted : undefined;
+        if (accepted?.action === 'persist') await notification.persisted;
         return {
-          content: `Sent ${priority} signal to ${target.label ?? target.title ?? target.id}: ${summary}`,
+          content: formatSignalResult({
+            target,
+            summary,
+            priority: priority as AgentSignalPriority,
+            accepted,
+            notification,
+          }),
           target,
           priority: priority as AgentSignalPriority,
           expectsReply,
           returnPeerId,
+          routingAction: accepted?.action,
+          runId: accepted && 'runId' in accepted ? accepted.runId : undefined,
           notification,
           isError: false,
         };
@@ -306,6 +319,36 @@ function formatConnectResult(
   const verb = action === 'connect' ? 'Connected' : 'Disconnected';
   if (changed.length === 0) return `${verb} 0 agents. Connected agents: ${connected.length}`;
   return `${verb} ${changed.length} agent${changed.length === 1 ? '' : 's'}: ${changed.map(change => change.id).join(', ')}. Connected agents: ${connected.length}`;
+}
+
+function formatSignalResult({
+  target,
+  summary,
+  priority,
+  accepted,
+  notification,
+}: {
+  target: ConnectedAgentPeer;
+  summary: string;
+  priority: AgentSignalPriority;
+  accepted?: SendAgentSignalAccepted;
+  notification: SendAgentNotificationSignalResult;
+}): string {
+  const label = target.label ?? target.title ?? target.id;
+  switch (accepted?.action) {
+    case 'wake':
+      return `Woke ${label} with a ${priority} signal in run ${accepted.runId}: ${summary}`;
+    case 'deliver':
+      return `Delivered ${priority} signal to ${label} in run ${accepted.runId}: ${summary}`;
+    case 'persist':
+      return `Persisted ${priority} signal for ${label} to process later: ${summary}`;
+    case 'discard':
+      return `The ${priority} signal to ${label} was discarded: ${summary}`;
+    case 'blocked':
+      return `The ${priority} signal to ${label} was blocked because thread ${target.threadId} is suspended: ${summary}`;
+    default:
+      return `Notification policy chose ${notification.decision.action} for ${label}; no signal routing outcome was produced: ${summary}`;
+  }
 }
 
 function errorMessage(error: unknown): string {

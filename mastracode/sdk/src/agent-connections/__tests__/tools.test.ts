@@ -90,7 +90,8 @@ describe('agent connection tools', () => {
   it('sends notification signals only to connected available peers', async () => {
     const sendNotificationSignal = vi.fn(async () => ({
       record: { id: 'notification-1' },
-      decision: { action: 'deliver' },
+      decision: { action: 'deliver' as const },
+      accepted: Promise.resolve({ action: 'deliver' as const, runId: 'run-1' }),
     }));
     const tools = createAgentConnectionTools({
       registry: createRegistry(),
@@ -119,6 +120,9 @@ describe('agent connection tools', () => {
       target: { id: 'peer-1' },
       expectsReply: true,
       returnPeerId: 'code-agent:resource-1:thread-1',
+      routingAction: 'deliver',
+      runId: 'run-1',
+      content: 'Delivered high signal to Peer One in run run-1: Please review this',
     });
     expect(sendNotificationSignal).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -137,6 +141,52 @@ describe('agent connection tools', () => {
       }),
       expect.objectContaining({ resourceId: 'resource-2', threadId: 'thread-2', ifIdle: { behavior: 'wake' } }),
     );
+  });
+
+  it('awaits persisted signals and reports the routing outcome', async () => {
+    let finishPersist!: () => void;
+    const persisted = new Promise<void>(resolve => {
+      finishPersist = resolve;
+    });
+    const sendNotificationSignal = vi.fn(async () => ({
+      record: { id: 'notification-1' },
+      decision: { action: 'deliver' as const },
+      accepted: Promise.resolve({ action: 'persist' as const }),
+      persisted,
+    }));
+    const tools = createAgentConnectionTools({
+      registry: createRegistry(),
+      getAgent: () => ({ sendNotificationSignal }),
+    });
+    const { context } = createContext([
+      {
+        id: 'peer-1',
+        resourceId: 'resource-2',
+        threadId: 'thread-2',
+        label: 'Peer One',
+        status: 'available',
+        connectedAt: 100,
+        lastSeenAt: 1_000,
+      },
+    ]);
+
+    const resultPromise = (tools.agent_signal_send as any).execute(
+      { targetId: 'peer-1', summary: 'Read this later', priority: 'low', expectsReply: false },
+      context,
+    );
+    let settled = false;
+    void resultPromise.then(() => {
+      settled = true;
+    });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(settled).toBe(false);
+
+    finishPersist();
+    await expect(resultPromise).resolves.toMatchObject({
+      isError: false,
+      routingAction: 'persist',
+      content: 'Persisted low signal for Peer One to process later: Read this later',
+    });
   });
 
   it('rejects sends to disconnected peers', async () => {
