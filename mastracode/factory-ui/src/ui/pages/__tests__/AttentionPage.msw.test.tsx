@@ -5,7 +5,7 @@ import { MemoryRouter } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/ui/render';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
 import type { FactoryAttentionItem, FactoryAttentionView } from '../../domains/factory/services/attention';
 import { AttentionContent } from '../AttentionPage';
 
@@ -74,7 +74,7 @@ describe('AttentionPage', () => {
       ),
     );
     const user = userEvent.setup();
-    renderWithProviders(
+    const { client } = renderWithProviders(
       <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/attention`]}>
         <AttentionContent factoryId={FACTORY_ID} />
       </MemoryRouter>,
@@ -87,16 +87,19 @@ describe('AttentionPage', () => {
     expect(goTo).toHaveAttribute('href', `/factories/${FACTORY_ID}/work?item=item-decision-1`);
     await user.click(screen.getByRole('button', { name: 'Mark all open as read' }));
     await waitFor(() => expect(markAllRequests).toBe(1));
+    await waitForMutationsIdle(client);
     await waitFor(() =>
       expect(screen.queryByRole('button', { name: 'Mark all open as read' })).not.toBeInTheDocument(),
     );
 
     await user.click(screen.getByRole('button', { name: 'Archive Fix the loader' }));
+    await waitForMutationsIdle(client);
     await waitFor(() => expect(screen.queryByText('Fix the loader')).not.toBeInTheDocument());
 
     await user.click(screen.getByRole('button', { name: 'Archived' }));
     expect(await screen.findByText('Fix the loader')).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Restore Fix the loader' }));
+    await waitForMutationsIdle(client);
     expect(await screen.findByText('No archived attention items.')).toBeVisible();
   });
 

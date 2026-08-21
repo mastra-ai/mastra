@@ -10,7 +10,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import { createAppRoutes } from '../router';
 
 const FACTORY_ID = 'fp-1';
@@ -215,7 +215,7 @@ function stubBoardEndpoints({
 
 function renderBoard(board: 'work' | 'review' = 'work', initialEntry = `/factories/${FACTORY_ID}/${board}`) {
   const router = createMemoryRouter(createAppRoutes(), { initialEntries: [initialEntry] });
-  renderWithProviders(<RouterProvider router={router} />);
+  return renderWithProviders(<RouterProvider router={router} />);
 }
 
 function renderWorkBoard() {
@@ -225,9 +225,10 @@ function renderWorkBoard() {
 describe('Board card with a proposed run', () => {
   it('highlights and focuses a work item opened from attention', async () => {
     stubBoardEndpoints();
-    renderBoard('work', `/factories/${FACTORY_ID}/work?item=${ITEM_ID}`);
+    const { client } = renderBoard('work', `/factories/${FACTORY_ID}/work?item=${ITEM_ID}`);
 
     const card = await screen.findByRole('article', { name: 'Fix login bug' });
+    await waitForMutationsIdle(client);
     expect(card).toHaveAttribute('data-highlighted', 'true');
     await waitFor(() => expect(within(card).getByRole('button', { name: 'Investigate Fix login bug' })).toHaveFocus());
   });
@@ -265,10 +266,11 @@ describe('Board card with a proposed run', () => {
       ),
       http.get(`${TEST_BASE_URL}/web/linear/issues`, () => HttpResponse.json({ issues: [], nextCursor: null })),
     );
-    renderBoard('work', `/factories/${FACTORY_ID}/work?item=${ITEM_ID}`);
+    const { client } = renderBoard('work', `/factories/${FACTORY_ID}/work?item=${ITEM_ID}`);
 
     expect(await screen.findByRole('button', { name: 'Issues' })).toHaveAttribute('aria-pressed', 'true');
     const card = await screen.findByRole('article', { name: 'Fix login bug' });
+    await waitForMutationsIdle(client);
     expect(card).toHaveAttribute('data-highlighted', 'true');
     await waitFor(() => expect(within(card).getByRole('button', { name: 'Investigate Fix login bug' })).toHaveFocus());
   });

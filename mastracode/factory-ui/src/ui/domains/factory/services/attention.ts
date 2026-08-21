@@ -82,7 +82,10 @@ export function updateFactoryAttentionReceipt(
   );
 }
 
-export function markAllFactoryAttentionRead(baseUrl: string, factoryProjectId: string): Promise<{ ok: true }> {
+export function markAllFactoryAttentionRead(
+  baseUrl: string,
+  factoryProjectId: string,
+): Promise<{ ok: true; hasMore: boolean }> {
   return requestJson(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/attention/read-all`, {
     method: 'POST',
   });

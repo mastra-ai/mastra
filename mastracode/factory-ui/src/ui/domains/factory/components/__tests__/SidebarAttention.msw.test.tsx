@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { queryKeys } from '../../../../../api/keys';
 import { server } from '../../../../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import type { FactoryAttentionItem, FactoryAttentionView } from '../../services/attention';
 import { playAttentionSoundOnce } from '../../services/attentionSound';
 import { SidebarAttention } from '../SidebarAttention';
@@ -160,7 +160,7 @@ describe('Sidebar attention', () => {
   it('shows failed automation, links to the full page, and removes it after retry', async () => {
     const api = stubAttention([attentionItem()]);
     const user = userEvent.setup();
-    renderAttention();
+    const { client } = renderAttention();
 
     const trigger = await screen.findByRole('button', { name: 'Needs attention, 1 unread, 1 open' });
     await user.click(trigger);
@@ -178,21 +178,24 @@ describe('Sidebar attention', () => {
     await user.click(screen.getByRole('button', { name: 'Retry Fix the loader' }));
 
     await waitFor(() => expect(api.retried).toEqual([DECISION_ID]));
+    await waitForMutationsIdle(client);
     expect(await screen.findByText('Nothing needs attention.')).toBeVisible();
   });
 
   it('keeps read failures open and hides archived failures', async () => {
     stubAttention([attentionItem()]);
     const user = userEvent.setup();
-    renderAttention();
+    const { client } = renderAttention();
 
     await user.click(await screen.findByRole('button', { name: 'Needs attention, 1 unread, 1 open' }));
     await user.click(screen.getByRole('button', { name: 'Mark Fix the loader as read' }));
+    await waitForMutationsIdle(client);
 
     await screen.findByRole('button', { name: 'Needs attention, 1 open' });
     const archive = screen.getByRole('button', { name: 'Archive Fix the loader' });
     await waitFor(() => expect(archive).toBeEnabled());
     await user.click(archive);
+    await waitForMutationsIdle(client);
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Needs attention' })).toBeInTheDocument());
   });
@@ -236,6 +239,7 @@ describe('Sidebar attention', () => {
     const next = attentionItem(2);
     api.setItems([next]);
     await client.invalidateQueries({ queryKey: queryKeys.factoryAttentionRoot(FACTORY_ID) });
+    await waitForMutationsIdle(client);
 
     await screen.findByRole('button', { name: 'Needs attention, 1 unread, 1 open' });
     await waitFor(() => expect(localStorage.getItem(SOUND_STORAGE_KEY)).toContain(next.key));
@@ -257,6 +261,7 @@ describe('Sidebar attention', () => {
     };
     api.setItems([next]);
     await client.invalidateQueries({ queryKey: queryKeys.factoryAttentionRoot(FACTORY_ID) });
+    await waitForMutationsIdle(client);
 
     await waitFor(() => expect(localStorage.getItem(SOUND_STORAGE_KEY)).toContain(next.key));
     expect(oscillatorStart).toHaveBeenCalled();
@@ -288,9 +293,11 @@ describe('Sidebar attention', () => {
   });
   it('deduplicates persisted sound claims by scope and occurrence', async () => {
     await playAttentionSoundOnce('user-1:factory-1', 'failure-1');
+    const notesPerPlayback = oscillatorStart.mock.calls.length;
+    expect(notesPerPlayback).toBeGreaterThan(0);
     await playAttentionSoundOnce('user-1:factory-1', 'failure-1');
 
     expect(localStorage.getItem(SOUND_STORAGE_KEY)).toContain('failure-1');
-    expect(oscillatorStart).toHaveBeenCalledTimes(2);
+    expect(oscillatorStart).toHaveBeenCalledTimes(notesPerPlayback);
   });
 });

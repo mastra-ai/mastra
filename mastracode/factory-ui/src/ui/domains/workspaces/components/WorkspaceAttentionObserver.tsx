@@ -28,16 +28,15 @@ export function WorkspaceAttentionObserver({ projectRepositoryId }: { projectRep
     projectRepositoryId,
     sessionKind: 'factory',
     runningByPath: factoryRunning,
-    ready: sessions.isFetched,
+    ready: sessions.isSuccess,
     onRunsFinished: refreshSessions,
   });
   useWorkspaceAttention({
     projectRepositoryId,
     sessionKind: 'user',
     runningByPath: userRunning,
-    ready: sessions.isFetched,
+    ready: sessions.isSuccess,
     onRunsFinished: refreshSessions,
   });
-
   return null;
 }
