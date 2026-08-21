@@ -20,6 +20,12 @@ export interface MastraCodeState {
   factoryProjectId?: string;
   /** Authoritative organization id seeded by factory at session construction. */
   factoryOrgId?: string;
+  /**
+   * Factory owns this session but could not resolve its organization. Knowledge
+   * capture refuses rather than filing under a substituted identity; without the
+   * marker a projectless factory session is indistinguishable from a local one.
+   */
+  factoryOrgUnresolved?: boolean;
   /** Linked repository used by this session when source-control execution is required. */
   projectRepositoryId?: string;
   /** Persisted sandbox id for reattaching the project's cloud workspace. */
@@ -114,6 +120,7 @@ export const stateSchema = z.object({
   projectName: z.string().optional(),
   factoryProjectId: z.string().optional(),
   factoryOrgId: z.string().optional(),
+  factoryOrgUnresolved: z.boolean().optional(),
   projectRepositoryId: z.string().optional(),
   sandboxId: z.string().optional(),
   sandboxWorkdir: z.string().optional(),
