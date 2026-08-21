@@ -2,4 +2,4 @@
 '@mastra/playground-ui': patch
 ---
 
-Fixed code blocks stretching the page. A fenced code block inside markdown reported its longest line as a width requirement, so a long command pushed the whole layout wider than the window instead of scrolling inside the block. Code blocks now stay within the width they are given and scroll horizontally on their own.
+Fixed code blocks stretching the page. A long line inside a fenced markdown block used to widen everything around it, pushing the layout past the window. A code block now keeps to the width it is given, and scrolls horizontally inside itself when set to `overflow="scroll"`.
