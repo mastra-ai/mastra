@@ -38,13 +38,16 @@ import { shellQuote } from './utils';
 /**
  * Lifecycle hook that fires during sandbox state transitions.
  * Receives the sandbox instance so users can call `executeCommand`, read files, etc.
- *
- * For `onStart`, `outcome` carries the provider's {@link SandboxStartResult}:
- * `'created'` = this start provisioned a fresh VM, `'connected'` =
- * reconnected/resumed an existing one, `undefined` = the provider doesn't
- * report (not yet migrated).
  */
-export type SandboxLifecycleHook = (args: {
+export type SandboxLifecycleHook = (args: { sandbox: WorkspaceSandbox }) => void | Promise<void>;
+
+/**
+ * Start hook: a {@link SandboxLifecycleHook} that additionally receives the
+ * provider's {@link SandboxStartResult} `outcome`: `'created'` = this start
+ * provisioned a fresh VM, `'connected'` = reconnected/resumed an existing
+ * one, `undefined` = the provider doesn't report (not yet migrated).
+ */
+export type SandboxStartHook = (args: {
   sandbox: WorkspaceSandbox;
   outcome?: SandboxStartOutcome;
 }) => void | Promise<void>;
@@ -67,7 +70,7 @@ export interface MastraSandboxOptions {
    * failed. The next start retries the hook. (`onStop`/`onDestroy` remain
    * non-fatal observers — teardown proceeds best-effort.)
    */
-  onStart?: SandboxLifecycleHook;
+  onStart?: SandboxStartHook;
   /** Called before the sandbox stops */
   onStop?: SandboxLifecycleHook;
   /** Called before the sandbox is destroyed */
@@ -226,7 +229,7 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
   protected _destroyPromise?: Promise<void>;
 
   /** Lifecycle callbacks */
-  private readonly _onStart?: SandboxLifecycleHook;
+  private readonly _onStart?: SandboxStartHook;
   private readonly _onStop?: SandboxLifecycleHook;
   private readonly _onDestroy?: SandboxLifecycleHook;
 

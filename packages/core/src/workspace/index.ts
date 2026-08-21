@@ -97,6 +97,7 @@ export type {
   ExecuteCommandOptions,
   SandboxInfo,
   SandboxLifecycleHook,
+  SandboxStartHook,
   MastraSandboxOptions,
   // Process management types
   ProcessInfo,
