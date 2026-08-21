@@ -43,7 +43,8 @@
     "lint": "oxlint . && eslint .",
     "lint:fix": "oxlint --fix . && eslint --fix .",
     "analyze:om-repro": "node ./scripts/analyze-om-repro.mjs",
-    "sanitize:om-repro": "node ./scripts/sanitize-om-repro.mjs"
+    "sanitize:om-repro": "node ./scripts/sanitize-om-repro.mjs",
+    "simulate:extract": "tsx ./scripts/simulate/extract.ts"
   },
   "keywords": [],
   "author": "",
