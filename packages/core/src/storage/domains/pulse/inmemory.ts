@@ -201,8 +201,10 @@ export class InMemoryPulseStorage extends PulseStorage {
       .map(([spanId, spanPulses]) => {
         const ordered = [...spanPulses].sort((a, b) => a.seq - b.seq);
         const start = ordered[0]!;
-        const end = ordered.find(p => p.action.endsWith('_completed') || p.action.endsWith('_failed'));
-        const base = start.action.replace(/_(started|completed|failed)$/, '');
+        const end = ordered.find(
+          p => p.action.endsWith('_completed') || p.action.endsWith('_failed') || p.action.endsWith('_aborted'),
+        );
+        const base = start.action.replace(/_(started|completed|failed|aborted)$/, '');
         return {
           spanId,
           parentSpanId: start.parentSpanId || undefined,

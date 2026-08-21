@@ -342,7 +342,9 @@ export class MastraLLMVNext extends MastraBase {
               runId,
               surface: 'model',
               base: 'generate',
-              output: true,
+              // An abort ends the generation too — say so, don't say completed.
+              status: props?.finishReason === 'aborted' ? 'aborted' : undefined,
+              output: props?.finishReason !== 'aborted',
               usage: usageTokenData(props?.totalUsage),
               attributes: { model: firstModel.modelId, provider: firstModel.provider },
             });
