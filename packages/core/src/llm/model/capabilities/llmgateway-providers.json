@@ -328,7 +328,6 @@
     "google-vertex/gemini-3.5-flash-lite",
     "google-vertex/gemini-3.6-flash",
     "google-vertex/gemini-3.7-flash",
-    "granite/qwen3.7-max",
     "groq/gpt-oss-120b",
     "groq/gpt-oss-20b",
     "iceberg/gemini-3-flash-preview",

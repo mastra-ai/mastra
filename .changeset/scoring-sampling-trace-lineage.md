@@ -14,12 +14,31 @@ Scorers also now respect the tracing sampler. If the tracer declined a trace, sc
 longer run against it — those scores referenced a trace that was never stored and could not be
 drilled into.
 
-Two changes in behavior to be aware of when upgrading:
+Two behavior changes when upgrading:
 
 - **Score volume drops if your trace sampling rate is lower than your scorer sampling rate.**
-  The scores you lose are ones whose traces were never recorded. If you rely on scores for
-  traffic you deliberately do not trace, lower your trace sampling deliberately or raise it to
-  cover the traffic you score.
+  The scores you lose are ones whose traces were never recorded. To keep the same score
+  volume, raise your trace sampling to cover the traffic you score (or lower your scorer
+  sampling to match — the effective rate is now bounded by the trace rate):
+
+  ```ts
+  // Before: scorer sampled 50% of invocations, but only 10% had a stored trace,
+  // so up to 40% of scores referenced traces that were never recorded.
+  new Observability({
+    configs: { default: { sampling: { type: 'ratio', probability: 0.1 }, exporters } },
+  });
+  new Agent({
+    scorers: { myScorer: { scorer: myScorer, sampling: { type: 'ratio', rate: 0.5 } } },
+  });
+
+  // After: raise trace sampling so every sampled score has a stored trace.
+  new Observability({
+    configs: { default: { sampling: { type: 'ratio', probability: 0.5 }, exporters } },
+  });
+  new Agent({
+    scorers: { myScorer: { scorer: myScorer, sampling: { type: 'ratio', rate: 0.5 } } },
+  });
+  ```
 - **Which traces get scored changes, even at an unchanged rate.** Score counts before and
   after the upgrade are drawn from a different set of traces, not just a different number.
 

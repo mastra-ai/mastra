@@ -146,6 +146,36 @@ Eligibility filters decide _whether a scorer runs_; to filter _which messages a 
 
 **Automatic storage**: All scoring results are automatically stored in the `mastra_scorers` table in your configured database, allowing you to analyze performance trends over time.
 
+## Score persistence
+
+Scores are persisted when the Mastra instance has `storage` configured, and when the scorer is registered on that instance. Registration is what lets Mastra resolve the scorer's metadata (name, description, type) through [`getScorerById()`](/reference/core/getScorerById) before writing the score.
+
+Scorers you attach to an agent or a workflow step register themselves. Scorers you pass directly to [`runEvals()`](/reference/evals/run-evals), including [Quick Checks](/docs/evals/quick-checks), need the `scorers` option on the [`Mastra` class](/reference/core/mastra-class):
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { LibSQLStore } from '@mastra/libsql'
+import { checks } from '@mastra/evals/checks'
+import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/prebuilt'
+import { myAgent } from './agents/my-agent'
+
+export const mastra = new Mastra({
+  agents: { myAgent },
+  storage: new LibSQLStore({ url: 'file:./mastra.db' }),
+  scorers: {
+    calledTool: checks.calledTool('get_weather'),
+    includes: checks.includes('Brooklyn'),
+    relevancy: createAnswerRelevancyScorer({ model: '__GATEWAY_OPENAI_MODEL_MINI__' }),
+  },
+})
+```
+
+The lookup only compares scorer IDs, so a registered instance can be configured differently from the one you evaluate with. Every `checks.calledTool()` instance has the id `check-called-tool`, so registering one covers all of them, whatever tool name you evaluate with.
+
+The arguments still shape the `description` stored alongside each score, which comes from the registered instance, not the one you evaluate with. `checks.calledTool('')` is accepted and persists scores fine, but stores `Checks that "" was called`, so pass a representative value.
+
+Skipping registration doesn't change scoring results, but each save fails with a `Scorer with id <id> not found` warning and the scores never reach the store.
+
 ## Trace evaluations
 
 In addition to live evaluations, you can use scorers to evaluate historical traces from your agent interactions and workflows.

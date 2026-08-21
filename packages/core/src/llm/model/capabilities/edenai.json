@@ -453,6 +453,7 @@
     "openai/o4-mini",
     "ovhcloud/gpt-oss-120b",
     "ovhcloud/gpt-oss-20b",
+    "qwen/deepseek-v4-flash-0731",
     "qwen/deepseek-v4-pro-0813",
     "qwen/qwen-max",
     "qwen/qwen-vl-max",
