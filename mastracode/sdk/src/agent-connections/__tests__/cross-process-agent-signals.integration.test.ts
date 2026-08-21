@@ -15,8 +15,8 @@ type ChildEvent = {
   [key: string]: unknown;
 };
 
-function startChild(role: 'owner' | 'sender', resourceId: string) {
-  const child = spawn(tsxBin, [childScript, role, resourceId], { stdio: ['pipe', 'pipe', 'pipe'] });
+function startChild(role: 'owner' | 'sender', resourceId: string, scenario = 'request-reply') {
+  const child = spawn(tsxBin, [childScript, role, resourceId, scenario], { stdio: ['pipe', 'pipe', 'pipe'] });
   const events: ChildEvent[] = [];
   const waiters = new Map<string, Array<(event: ChildEvent) => void>>();
   let stdout = '';
@@ -102,6 +102,46 @@ describe.skipIf(process.platform === 'win32')('cross-agent signals over Unix soc
     expect(senderReply.text).toBe('sender-response');
     expect(senderSend.action).toBe('deliver');
     expect(ownerSend.action).toBe('deliver');
+    expect(owner.stderr).toBe('');
+    expect(sender.stderr).toBe('');
+    expect(ownerCode).toBe(0);
+    expect(senderCode).toBe(0);
+
+    let leftoverSockets: string[] = [];
+    try {
+      leftoverSockets = readdirSync(socketDir).filter(name => name.endsWith('.sock'));
+    } catch {}
+    expect(leftoverSockets).toEqual([]);
+  }, 30_000);
+
+  it('releases old ownership while delayed replies keep their captured thread destination', async () => {
+    const owner = startChild('owner', resourceId, 'thread-transition');
+    await owner.waitFor('thread-owned');
+
+    const sender = startChild('sender', resourceId, 'thread-transition');
+    await sender.waitFor('thread-owned');
+    await sender.waitFor('request-send');
+    const capturedRoute = await owner.waitFor('captured-route');
+
+    sender.child.stdin.write('transition\n');
+    const transitioned = await sender.waitFor('transitioned');
+    owner.child.stdin.write('reply\n');
+
+    const transitionDiscovery = await owner.waitFor('transition-discovery');
+    const delayedSend = await owner.waitFor('delayed-send');
+    const delayedReply = await sender.waitFor('delayed-reply');
+
+    owner.child.stdin.write('close\n');
+    sender.child.stdin.write('close\n');
+    owner.child.stdin.end();
+    sender.child.stdin.end();
+    const [ownerCode, senderCode] = await Promise.all([owner.result, sender.result]);
+
+    expect(capturedRoute.threadId).toBe('sender-thread');
+    expect(transitioned).toMatchObject({ fromThreadId: 'sender-thread', threadId: 'sender-thread-2' });
+    expect(transitionDiscovery).toMatchObject({ hasOldThread: false, hasNewThread: true });
+    expect(delayedSend.targetThreadId).toBe('sender-thread');
+    expect(delayedReply).toMatchObject({ threadId: 'sender-thread', text: 'owner-response' });
     expect(owner.stderr).toBe('');
     expect(sender.stderr).toBe('');
     expect(ownerCode).toBe(0);

@@ -6,9 +6,14 @@ import {
   findUnansweredExpectedReplies,
 } from '../messaging-processor.js';
 
-function notificationMessage(options: { returnPeerId: string; expectsReply?: boolean; summary?: string }) {
+function notificationMessage(options: {
+  messageId: string;
+  returnPeerId: string;
+  expectsReply?: boolean;
+  summary?: string;
+}) {
   return {
-    id: `signal-${options.returnPeerId}`,
+    id: `signal-${options.messageId}`,
     role: 'signal',
     createdAt: new Date(),
     type: 'notification',
@@ -17,16 +22,19 @@ function notificationMessage(options: { returnPeerId: string; expectsReply?: boo
       parts: [{ type: 'text', text: options.summary ?? 'Please reply' }],
       metadata: {
         signal: {
+          id: `created-signal-${options.messageId}`,
           type: 'notification',
           tagName: 'notification',
           attributes: {
             expectsReply: options.expectsReply ?? true,
+            messageId: options.messageId,
             returnPeerId: options.returnPeerId,
           },
           metadata: {
             notification: { source: 'agent-connection', kind: 'peer-signal' },
             crossAgentMessaging: {
               expectsReply: options.expectsReply ?? true,
+              messageId: options.messageId,
               returnPeerId: options.returnPeerId,
             },
           },
@@ -36,9 +44,14 @@ function notificationMessage(options: { returnPeerId: string; expectsReply?: boo
   } as any;
 }
 
-function outboundSignalMessage(targetId: string, isError = false) {
+function outboundSignalMessage(options: {
+  targetId: string;
+  replyTo?: string;
+  routingAction?: 'wake' | 'deliver' | 'persist' | 'discard' | 'blocked';
+  isError?: boolean;
+}) {
   return {
-    id: `assistant-${targetId}`,
+    id: `assistant-${options.targetId}-${options.replyTo ?? 'uncorrelated'}`,
     role: 'assistant',
     createdAt: new Date(),
     content: {
@@ -49,8 +62,18 @@ function outboundSignalMessage(targetId: string, isError = false) {
           toolInvocation: {
             toolName: 'agent_signal_send',
             state: 'result',
-            rawInput: { targetId, summary: 'Reply', expectsReply: false },
-            result: { isError, target: { id: targetId } },
+            rawInput: {
+              targetId: options.targetId,
+              summary: 'Reply',
+              expectsReply: false,
+              replyTo: options.replyTo,
+            },
+            result: {
+              isError: options.isError ?? false,
+              target: { id: options.targetId },
+              replyTo: options.replyTo,
+              routingAction: options.routingAction ?? 'deliver',
+            },
           },
         },
       ],
@@ -62,23 +85,46 @@ function messageList(messages: any[]) {
   return { get: { all: { db: () => messages } } };
 }
 
-describe('CrossAgentMessagingExpectedReplyProcessor', () => {
-  it('finds unanswered expected-reply notifications', () => {
-    const unanswered = findUnansweredExpectedReplies([notificationMessage({ returnPeerId: 'code-agent:r:t' })]);
+const REQUEST = { messageId: 'request-1', returnPeerId: 'code-agent:r:t' };
 
-    expect(unanswered).toEqual([{ peerId: 'code-agent:r:t', summary: 'Please reply' }]);
+describe('CrossAgentMessagingExpectedReplyProcessor', () => {
+  it('finds unanswered expected-reply notifications by message id', () => {
+    const unanswered = findUnansweredExpectedReplies([notificationMessage(REQUEST)]);
+
+    expect(unanswered).toEqual([{ messageId: 'request-1', peerId: 'code-agent:r:t', summary: 'Please reply' }]);
   });
 
-  it('treats one later outbound signal to the return peer as the reply', () => {
+  it('requires a correlated successfully routed reply to the expected peer', () => {
+    expect(
+      findUnansweredExpectedReplies([
+        notificationMessage(REQUEST),
+        outboundSignalMessage({ targetId: 'code-agent:r:t', replyTo: 'request-1', routingAction: 'deliver' }),
+      ]),
+    ).toEqual([]);
+
+    for (const outbound of [
+      outboundSignalMessage({ targetId: 'code-agent:r:t' }),
+      outboundSignalMessage({ targetId: 'code-agent:r:t', replyTo: 'other-request' }),
+      outboundSignalMessage({ targetId: 'other-peer', replyTo: 'request-1' }),
+      outboundSignalMessage({ targetId: 'code-agent:r:t', replyTo: 'request-1', routingAction: 'discard' }),
+      outboundSignalMessage({ targetId: 'code-agent:r:t', replyTo: 'request-1', routingAction: 'blocked' }),
+      outboundSignalMessage({ targetId: 'code-agent:r:t', replyTo: 'request-1', isError: true }),
+    ]) {
+      expect(findUnansweredExpectedReplies([notificationMessage(REQUEST), outbound])).toHaveLength(1);
+    }
+  });
+
+  it('tracks concurrent requests to the same peer independently', () => {
     const unanswered = findUnansweredExpectedReplies([
-      notificationMessage({ returnPeerId: 'code-agent:r:t' }),
-      outboundSignalMessage('code-agent:r:t'),
+      notificationMessage({ messageId: 'request-1', returnPeerId: 'code-agent:r:t', summary: 'First' }),
+      notificationMessage({ messageId: 'request-2', returnPeerId: 'code-agent:r:t', summary: 'Second' }),
+      outboundSignalMessage({ targetId: 'code-agent:r:t', replyTo: 'request-1', routingAction: 'persist' }),
     ]);
 
-    expect(unanswered).toEqual([]);
+    expect(unanswered).toEqual([{ messageId: 'request-2', peerId: 'code-agent:r:t', summary: 'Second' }]);
   });
 
-  it('injects a reactive reminder and retries when an expected reply is missing at idle', async () => {
+  it('injects a correlated reactive reminder and retries when an expected reply is missing at idle', async () => {
     const processor = new CrossAgentMessagingExpectedReplyProcessor();
     const sendSignal = vi.fn();
     const abort = vi.fn((reason: string, options: unknown) => {
@@ -89,19 +135,23 @@ describe('CrossAgentMessagingExpectedReplyProcessor', () => {
       processor.processOutputStep({
         finishReason: 'stop',
         toolCalls: [],
-        messageList: messageList([notificationMessage({ returnPeerId: 'code-agent:r:t' })]),
+        messageList: messageList([notificationMessage(REQUEST)]),
         retryCount: 0,
         sendSignal,
         abort,
       } as any),
-    ).rejects.toThrow('A connected peer expected a reply');
+    ).rejects.toThrow('A connected peer expected a correlated reply');
 
     expect(sendSignal).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'reactive', tagName: 'expected-reply-reminder' }),
+      expect.objectContaining({
+        type: 'reactive',
+        tagName: 'expected-reply-reminder',
+        attributes: expect.objectContaining({ messageIds: 'request-1' }),
+      }),
     );
-    expect(abort).toHaveBeenCalledWith(expect.stringContaining('code-agent:r:t'), {
+    expect(abort).toHaveBeenCalledWith(expect.stringContaining('replyTo=request-1'), {
       retry: true,
-      metadata: { peerIds: ['code-agent:r:t'] },
+      metadata: { peerIds: ['code-agent:r:t'], messageIds: ['request-1'] },
     });
   });
 
@@ -112,7 +162,7 @@ describe('CrossAgentMessagingExpectedReplyProcessor', () => {
     await processor.processOutputStep({
       finishReason: 'tool-calls',
       toolCalls: [{ toolName: 'agent_signal_send' }],
-      messageList: messageList([notificationMessage({ returnPeerId: 'code-agent:r:t' })]),
+      messageList: messageList([notificationMessage(REQUEST)]),
       retryCount: 0,
       abort,
     } as any);
@@ -121,8 +171,8 @@ describe('CrossAgentMessagingExpectedReplyProcessor', () => {
       finishReason: 'stop',
       toolCalls: [],
       messageList: messageList([
-        notificationMessage({ returnPeerId: 'code-agent:r:t' }),
-        outboundSignalMessage('code-agent:r:t'),
+        notificationMessage(REQUEST),
+        outboundSignalMessage({ targetId: 'code-agent:r:t', replyTo: 'request-1', routingAction: 'wake' }),
       ]),
       retryCount: 0,
       abort,
@@ -131,12 +181,20 @@ describe('CrossAgentMessagingExpectedReplyProcessor', () => {
     expect(abort).not.toHaveBeenCalled();
   });
 
-  it('builds reminder signal metadata for expected replies', () => {
-    expect(createExpectedReplyReminderSignal([{ peerId: 'peer-1', summary: 'Question' }])).toMatchObject({
+  it('builds reminder signal metadata for correlated expected replies', () => {
+    expect(
+      createExpectedReplyReminderSignal([{ messageId: 'request-1', peerId: 'peer-1', summary: 'Question' }]),
+    ).toMatchObject({
       type: 'reactive',
       tagName: 'expected-reply-reminder',
-      attributes: { count: 1, peers: 'peer-1' },
-      metadata: { crossAgentMessaging: { reason: 'expected-reply-unanswered', peerIds: ['peer-1'] } },
+      attributes: { count: 1, peers: 'peer-1', messageIds: 'request-1' },
+      metadata: {
+        crossAgentMessaging: {
+          reason: 'expected-reply-unanswered',
+          peerIds: ['peer-1'],
+          messageIds: ['request-1'],
+        },
+      },
     });
   });
 });

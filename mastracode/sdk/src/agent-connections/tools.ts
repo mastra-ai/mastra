@@ -1,3 +1,5 @@
+import { createHash, randomUUID } from 'node:crypto';
+
 import type { SendAgentNotificationSignalResult, SendAgentSignalAccepted } from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
@@ -6,7 +8,9 @@ import { AgentConnectionRegistry, stablePeerId } from './registry.js';
 import {
   isMemoryBacked,
   readAgentConnections,
+  readSentAgentSignals,
   writeAgentConnections,
+  writeSentAgentSignals,
   type AgentConnectionContext,
 } from './thread-state.js';
 import type {
@@ -57,10 +61,13 @@ const signalResultSchema = z.object({
   target: peerSchema.optional(),
   priority: prioritySchema.optional(),
   expectsReply: z.boolean().optional(),
+  messageId: z.string().optional(),
+  replyTo: z.string().optional(),
   returnPeerId: z.string().optional(),
   routingAction: z.enum(['wake', 'deliver', 'persist', 'discard', 'blocked']).optional(),
   runId: z.string().optional(),
   notification: z.unknown().optional(),
+  duplicate: z.boolean().optional(),
   isError: z.boolean().optional(),
 });
 
@@ -187,17 +194,23 @@ Use agent_connections_list first, then pass peer ids from that result. Connected
     id: 'agent_signal_send',
     description: `Send a prioritized notification signal to a connected peer agent.
 
-The target must already be connected and currently available. Use expectsReply to declare whether the peer should send one signal back to this thread. Use priority to indicate urgency: low, medium, high, or urgent.`,
+The target must already be connected and currently available. Use expectsReply to declare whether the peer should send one signal back to this thread. Reuse messageId when retrying the same logical send, and set replyTo to the request messageId when replying. Use priority to indicate urgency: low, medium, high, or urgent.`,
     inputSchema: z.object({
       targetId: z.string().min(1).describe('Connected peer id.'),
       summary: z.string().min(1).describe('Short summary to deliver to the peer.'),
       priority: prioritySchema.default('medium'),
       expectsReply: z.boolean().describe('Whether the peer is expected to send one signal back to this thread.'),
+      messageId: z
+        .string()
+        .min(1)
+        .optional()
+        .describe('Stable logical message id. Reuse the same id when retrying the same send.'),
+      replyTo: z.string().min(1).optional().describe('Message id of the peer request this signal replies to.'),
       payload: z.unknown().optional().describe('Optional structured payload for the peer.'),
     }),
     outputSchema: signalResultSchema,
     execute: async (
-      { targetId, summary, priority = 'medium', expectsReply, payload },
+      { targetId, summary, priority = 'medium', expectsReply, messageId: inputMessageId, replyTo, payload },
       context,
     ): Promise<AgentSignalSendResult> => {
       const agentContext = context as AgentConnectionContext;
@@ -225,8 +238,41 @@ The target must already be connected and currently available. Use expectsReply t
           resourceId: currentAgent.resourceId,
           threadId: currentAgent.threadId,
         });
+        const messageId = inputMessageId ?? randomUUID();
+        const fingerprint = fingerprintAgentSignal({ targetId, summary, priority, expectsReply, replyTo, payload });
+        const sentSignals = await readSentAgentSignals(agentContext);
+        const previousSend = sentSignals.find(signal => signal.messageId === messageId);
+        if (previousSend) {
+          if (previousSend.fingerprint !== fingerprint) {
+            return {
+              content: `Message id ${messageId} was already used for a different cross-agent signal.`,
+              target,
+              priority: priority as AgentSignalPriority,
+              expectsReply,
+              messageId,
+              replyTo,
+              returnPeerId,
+              isError: true,
+            };
+          }
+          return {
+            content: `Cross-agent signal ${messageId} was already routed to ${target.label ?? target.title ?? target.id}.`,
+            target,
+            priority: previousSend.priority,
+            expectsReply: previousSend.expectsReply,
+            messageId,
+            replyTo: previousSend.replyTo,
+            returnPeerId: previousSend.returnPeerId,
+            routingAction: previousSend.routingAction,
+            runId: previousSend.runId,
+            duplicate: true,
+            isError: false,
+          };
+        }
         const crossAgentMessaging = {
           expectsReply,
+          messageId,
+          ...(replyTo ? { replyTo } : {}),
           returnPeerId,
           from: { resourceId: currentAgent.resourceId, threadId: currentAgent.threadId },
           targetId,
@@ -234,10 +280,17 @@ The target must already be connected and currently available. Use expectsReply t
         const notification = (await agent.sendNotificationSignal(
           {
             source: 'agent-connection',
+            sourceId: returnPeerId,
             kind: 'peer-signal',
             priority: priority as AgentSignalPriority,
             summary,
-            attributes: expectsReply ? { expectsReply, returnPeerId } : { expectsReply },
+            dedupeKey: `agent-signal:${returnPeerId}:${messageId}`,
+            attributes: {
+              expectsReply,
+              messageId,
+              ...(replyTo ? { replyTo } : {}),
+              ...(expectsReply ? { returnPeerId } : {}),
+            },
             metadata: { crossAgentMessaging },
             payload: {
               ...(payload === undefined ? {} : { payload }),
@@ -252,6 +305,23 @@ The target must already be connected and currently available. Use expectsReply t
         )) as SendAgentNotificationSignalResult;
         const accepted = notification.accepted ? await notification.accepted : undefined;
         if (accepted?.action === 'persist') await notification.persisted;
+        const routingAction = accepted?.action;
+        const runId = accepted && 'runId' in accepted ? accepted.runId : undefined;
+        await writeSentAgentSignals(agentContext, [
+          ...sentSignals,
+          {
+            messageId,
+            fingerprint,
+            targetId,
+            priority: priority as AgentSignalPriority,
+            expectsReply,
+            replyTo,
+            returnPeerId,
+            routingAction,
+            runId,
+            sentAt: Date.now(),
+          },
+        ]);
         return {
           content: formatSignalResult({
             target,
@@ -263,9 +333,11 @@ The target must already be connected and currently available. Use expectsReply t
           target,
           priority: priority as AgentSignalPriority,
           expectsReply,
+          messageId,
+          replyTo,
           returnPeerId,
-          routingAction: accepted?.action,
-          runId: accepted && 'runId' in accepted ? accepted.runId : undefined,
+          routingAction,
+          runId,
           notification,
           isError: false,
         };
@@ -349,6 +421,29 @@ function formatSignalResult({
     default:
       return `Notification policy chose ${notification.decision.action} for ${label}; no signal routing outcome was produced: ${summary}`;
   }
+}
+
+function fingerprintAgentSignal(value: {
+  targetId: string;
+  summary: string;
+  priority: string;
+  expectsReply: boolean;
+  replyTo?: string;
+  payload?: unknown;
+}): string {
+  return createHash('sha256')
+    .update(JSON.stringify(sortJsonValue(value)))
+    .digest('hex');
+}
+
+function sortJsonValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortJsonValue);
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(
+    Object.entries(value)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, nestedValue]) => [key, sortJsonValue(nestedValue)]),
+  );
 }
 
 function errorMessage(error: unknown): string {

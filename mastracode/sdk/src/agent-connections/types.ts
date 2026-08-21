@@ -40,8 +40,22 @@ export interface ConnectedAgentPeer extends AgentPeerIdentity {
   offlineAt?: number;
 }
 
+export interface SentAgentSignal {
+  messageId: string;
+  fingerprint: string;
+  targetId: string;
+  priority: AgentSignalPriority;
+  expectsReply: boolean;
+  replyTo?: string;
+  returnPeerId: string;
+  routingAction?: AgentSignalRoutingAction;
+  runId?: string;
+  sentAt: number;
+}
+
 export interface AgentConnectionsState {
   peers: ConnectedAgentPeer[];
+  sentSignals?: SentAgentSignal[];
 }
 
 export interface AgentConnectionDeltaOp {
@@ -70,9 +84,12 @@ export interface AgentSignalSendResult {
   target?: ConnectedAgentPeer;
   priority?: AgentSignalPriority;
   expectsReply?: boolean;
+  messageId?: string;
+  replyTo?: string;
   returnPeerId?: string;
   routingAction?: AgentSignalRoutingAction;
   runId?: string;
   notification?: unknown;
+  duplicate?: boolean;
   isError?: boolean;
 }

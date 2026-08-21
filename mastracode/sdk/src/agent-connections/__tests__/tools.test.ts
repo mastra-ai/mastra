@@ -110,7 +110,13 @@ describe('agent connection tools', () => {
     ]);
 
     const result = await (tools.agent_signal_send as any).execute(
-      { targetId: 'peer-1', summary: 'Please review this', priority: 'high', expectsReply: true },
+      {
+        targetId: 'peer-1',
+        summary: 'Please review this',
+        priority: 'high',
+        expectsReply: true,
+        messageId: 'request-1',
+      },
       context,
     );
 
@@ -119,6 +125,7 @@ describe('agent connection tools', () => {
       priority: 'high',
       target: { id: 'peer-1' },
       expectsReply: true,
+      messageId: 'request-1',
       returnPeerId: 'code-agent:resource-1:thread-1',
       routingAction: 'deliver',
       runId: 'run-1',
@@ -128,12 +135,19 @@ describe('agent connection tools', () => {
       expect.objectContaining({
         source: 'agent-connection',
         kind: 'peer-signal',
+        sourceId: 'code-agent:resource-1:thread-1',
         priority: 'high',
         summary: 'Please review this',
-        attributes: { expectsReply: true, returnPeerId: 'code-agent:resource-1:thread-1' },
+        dedupeKey: 'agent-signal:code-agent:resource-1:thread-1:request-1',
+        attributes: {
+          expectsReply: true,
+          messageId: 'request-1',
+          returnPeerId: 'code-agent:resource-1:thread-1',
+        },
         metadata: {
           crossAgentMessaging: expect.objectContaining({
             expectsReply: true,
+            messageId: 'request-1',
             returnPeerId: 'code-agent:resource-1:thread-1',
             targetId: 'peer-1',
           }),
@@ -171,7 +185,14 @@ describe('agent connection tools', () => {
     ]);
 
     const resultPromise = (tools.agent_signal_send as any).execute(
-      { targetId: 'peer-1', summary: 'Read this later', priority: 'low', expectsReply: false },
+      {
+        targetId: 'peer-1',
+        summary: 'Read this later',
+        priority: 'low',
+        expectsReply: false,
+        messageId: 'reply-1',
+        replyTo: 'request-1',
+      },
       context,
     );
     let settled = false;
@@ -184,9 +205,71 @@ describe('agent connection tools', () => {
     finishPersist();
     await expect(resultPromise).resolves.toMatchObject({
       isError: false,
+      messageId: 'reply-1',
+      replyTo: 'request-1',
       routingAction: 'persist',
       content: 'Persisted low signal for Peer One to process later: Read this later',
     });
+    expect(sendNotificationSignal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        dedupeKey: 'agent-signal:code-agent:resource-1:thread-1:reply-1',
+        attributes: { expectsReply: false, messageId: 'reply-1', replyTo: 'request-1' },
+      }),
+      expect.anything(),
+    );
+  });
+
+  it('deduplicates retries by message id and rejects conflicting reuse', async () => {
+    const sendNotificationSignal = vi.fn(async () => ({
+      record: { id: 'notification-1' },
+      decision: { action: 'deliver' as const },
+      accepted: Promise.resolve({ action: 'deliver' as const, runId: 'run-1' }),
+    }));
+    const tools = createAgentConnectionTools({
+      registry: createRegistry(),
+      getAgent: () => ({ sendNotificationSignal }),
+    });
+    const { context } = createContext([
+      {
+        id: 'peer-1',
+        resourceId: 'resource-2',
+        threadId: 'thread-2',
+        label: 'Peer One',
+        status: 'available',
+        connectedAt: 100,
+        lastSeenAt: 1_000,
+      },
+    ]);
+    const input = {
+      targetId: 'peer-1',
+      summary: 'Review once',
+      priority: 'medium',
+      expectsReply: true,
+      messageId: 'stable-message',
+      payload: { first: 1, second: 2 },
+    };
+
+    await expect((tools.agent_signal_send as any).execute(input, context)).resolves.toMatchObject({
+      isError: false,
+      messageId: 'stable-message',
+      routingAction: 'deliver',
+    });
+    await expect(
+      (tools.agent_signal_send as any).execute({ ...input, payload: { second: 2, first: 1 } }, context),
+    ).resolves.toMatchObject({
+      isError: false,
+      duplicate: true,
+      messageId: 'stable-message',
+      routingAction: 'deliver',
+    });
+    await expect(
+      (tools.agent_signal_send as any).execute({ ...input, summary: 'Different payload' }, context),
+    ).resolves.toMatchObject({
+      isError: true,
+      messageId: 'stable-message',
+      content: 'Message id stable-message was already used for a different cross-agent signal.',
+    });
+    expect(sendNotificationSignal).toHaveBeenCalledTimes(1);
   });
 
   it('rejects sends to disconnected peers', async () => {

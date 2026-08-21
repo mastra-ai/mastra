@@ -46,6 +46,7 @@ import {
 } from '@mastra/observability';
 import { PostgresStore } from '@mastra/pg';
 
+import { createThreadOwnershipManager } from './agent-connections/ownership.js';
 import { AgentConnectionsSignalProvider } from './agent-connections/signal-provider.js';
 import type { AgentConnectionsSignalProviderOptions } from './agent-connections/signal-provider.js';
 import { hasCredentialStoreProvider } from './agents/credential-resolver.js';
@@ -1163,11 +1164,8 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   const sessionPeerCleanup = new WeakMap<Session<MastraCodeState>, () => void>();
   controller.onSessionCreated(
     async session => {
-      let claimedOwnership: { unsubscribe: () => void } | undefined;
-      const claimCurrentThread = async (threadId?: string | null) => {
-        if (!threadId) return;
-        claimedOwnership?.unsubscribe();
-        claimedOwnership = await controller.getCurrentAgent(session).claimThreadOwnership({
+      const threadOwnership = createThreadOwnershipManager(threadId =>
+        controller.getCurrentAgent(session).claimThreadOwnership({
           threadId,
           resourceId: session.identity.getResourceId(),
           streamOptions: () => session.machinery.buildStreamOptions({}),
@@ -1180,18 +1178,18 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
               gitBranch: project.gitBranch,
             },
           },
-        });
-      };
+        }),
+      );
 
       const unsubscribeSession = session.subscribe(event => {
-        if (event.type === 'thread_changed') void claimCurrentThread(event.threadId);
-        else if (event.type === 'thread_created') void claimCurrentThread(event.thread.id);
+        if (event.type === 'thread_changed') void threadOwnership.claim(event.threadId);
+        else if (event.type === 'thread_created') void threadOwnership.claim(event.thread.id);
       });
       sessionPeerCleanup.set(session, () => {
         unsubscribeSession();
-        claimedOwnership?.unsubscribe();
+        threadOwnership.close();
       });
-      await claimCurrentThread(session.thread.getId());
+      await threadOwnership.claim(session.thread.getId());
     },
     { blocking: true },
   );

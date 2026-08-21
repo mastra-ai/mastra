@@ -1,14 +1,24 @@
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent/message-list';
 import type { ProcessOutputStepArgs } from '@mastra/core/processors';
 
+import type { AgentSignalRoutingAction } from './types.js';
+
 type AgentSignalInput = Parameters<NonNullable<ProcessOutputStepArgs['sendSignal']>>[0];
 
 const TOOL_NAME = 'agent_signal_send';
 const REMINDER_TAG = 'expected-reply-reminder';
+const SUCCESSFUL_REPLY_ACTIONS = new Set<AgentSignalRoutingAction>(['wake', 'deliver', 'persist']);
 
-type ExpectedReplyObligation = {
+export type ExpectedReplyObligation = {
+  messageId: string;
   peerId: string;
   summary?: string;
+};
+
+type OutboundReply = {
+  targetId: string;
+  replyTo?: string;
+  routingAction?: AgentSignalRoutingAction;
 };
 
 export class CrossAgentMessagingExpectedReplyProcessor {
@@ -24,16 +34,22 @@ export class CrossAgentMessagingExpectedReplyProcessor {
     const unanswered = findUnansweredExpectedReplies(messageList.get.all.db());
     if (!unanswered.length) return messageList.get.all.db();
 
-    const peerIds = unanswered.map(item => item.peerId);
+    const peerIds = [...new Set(unanswered.map(item => item.peerId))];
+    const messageIds = unanswered.map(item => item.messageId);
     if (sendSignal) {
       await sendSignal(createExpectedReplyReminderSignal(unanswered));
     }
 
     if (retryCount === 0) {
-      abort(`A connected peer expected a reply. Send one outbound ${TOOL_NAME} call to: ${peerIds.join(', ')}`, {
-        retry: true,
-        metadata: { peerIds },
-      });
+      abort(
+        `A connected peer expected a correlated reply. Send one outbound ${TOOL_NAME} call for each request: ${unanswered
+          .map(item => `${item.peerId} replyTo=${item.messageId}`)
+          .join(', ')}`,
+        {
+          retry: true,
+          metadata: { peerIds, messageIds },
+        },
+      );
     }
 
     return messageList.get.all.db();
@@ -41,18 +57,26 @@ export class CrossAgentMessagingExpectedReplyProcessor {
 }
 
 export function createExpectedReplyReminderSignal(obligations: ExpectedReplyObligation[]): AgentSignalInput {
-  const peerIds = obligations.map(item => item.peerId);
+  const peerIds = [...new Set(obligations.map(item => item.peerId))];
+  const messageIds = obligations.map(item => item.messageId);
   const summaries = obligations.map(item => item.summary).filter((summary): summary is string => Boolean(summary));
 
   return {
     type: 'reactive',
     tagName: REMINDER_TAG,
-    contents: `A connected peer expected a reply, but no outbound ${TOOL_NAME} call was sent after their notification. Send one signal to: ${peerIds.join(', ')}.`,
-    attributes: { count: obligations.length, peers: peerIds.join(',') },
+    contents: `A connected peer expected a reply, but no successfully routed correlated ${TOOL_NAME} call was sent after their notification. Reply to: ${obligations
+      .map(item => `${item.peerId} with replyTo=${item.messageId}`)
+      .join(', ')}.`,
+    attributes: {
+      count: obligations.length,
+      peers: peerIds.join(','),
+      messageIds: messageIds.join(','),
+    },
     metadata: {
       crossAgentMessaging: {
         reason: 'expected-reply-unanswered',
         peerIds,
+        messageIds,
         summaries,
       },
     },
@@ -65,13 +89,16 @@ export function findUnansweredExpectedReplies(messages: MastraDBMessage[]): Expe
   for (const message of messages) {
     const expectedReply = readExpectedReplyObligation(message);
     if (expectedReply) {
-      obligations.set(expectedReply.peerId, expectedReply);
+      obligations.set(expectedReply.messageId, expectedReply);
       continue;
     }
 
-    const outboundPeerId = readOutboundPeerId(message);
-    if (outboundPeerId) {
-      obligations.delete(outboundPeerId);
+    for (const outboundReply of readOutboundReplies(message)) {
+      if (!outboundReply.replyTo || !isSuccessfullyRouted(outboundReply.routingAction)) continue;
+      const obligation = obligations.get(outboundReply.replyTo);
+      if (obligation?.peerId === outboundReply.targetId) {
+        obligations.delete(outboundReply.replyTo);
+      }
     }
   }
 
@@ -95,32 +122,49 @@ function readExpectedReplyObligation(message: MastraDBMessage): ExpectedReplyObl
   const attributes = readRecord(signalRecord.attributes);
   const expectsReply = crossAgentMessaging?.expectsReply === true || attributes?.expectsReply === true;
   const returnPeerId = readString(crossAgentMessaging?.returnPeerId) ?? readString(attributes?.returnPeerId);
+  const messageId =
+    readString(crossAgentMessaging?.messageId) ??
+    readString(attributes?.messageId) ??
+    readString(signalRecord.id) ??
+    readString(message.id);
 
-  if (!expectsReply || !returnPeerId) return;
+  if (!expectsReply || !returnPeerId || !messageId) return;
 
-  return { peerId: returnPeerId, summary: readText(message) };
+  return { messageId, peerId: returnPeerId, summary: readText(message) };
 }
 
-function readOutboundPeerId(message: MastraDBMessage): string | undefined {
+function readOutboundReplies(message: MastraDBMessage): OutboundReply[] {
+  const replies: OutboundReply[] = [];
   for (const part of message.content.parts ?? []) {
     const toolInvocation = part.type === 'tool-invocation' ? (part as any).toolInvocation : undefined;
     if (!toolInvocation || toolInvocation.toolName !== TOOL_NAME) continue;
 
-    const isErrored = readToolResultError(toolInvocation.result);
-    if (isErrored) continue;
+    const result = readRecord(toolInvocation.result);
+    if (result?.isError === true) continue;
 
     const input =
       readRecord(toolInvocation.rawInput) ?? readRecord(toolInvocation.args) ?? readRecord(toolInvocation.input);
-    const result = readRecord(toolInvocation.result);
     const target = readRecord(result?.target);
     const targetId = readString(input?.targetId) ?? readString(target?.id);
-    if (targetId) return targetId;
+    if (!targetId) continue;
+
+    replies.push({
+      targetId,
+      replyTo: readString(result?.replyTo) ?? readString(input?.replyTo),
+      routingAction: readRoutingAction(result?.routingAction),
+    });
   }
+  return replies;
 }
 
-function readToolResultError(result: unknown): boolean {
-  const resultRecord = readRecord(result);
-  return resultRecord?.isError === true;
+function isSuccessfullyRouted(action: AgentSignalRoutingAction | undefined): boolean {
+  return action !== undefined && SUCCESSFUL_REPLY_ACTIONS.has(action);
+}
+
+function readRoutingAction(value: unknown): AgentSignalRoutingAction | undefined {
+  return value === 'wake' || value === 'deliver' || value === 'persist' || value === 'discard' || value === 'blocked'
+    ? value
+    : undefined;
 }
 
 function readText(message: MastraDBMessage): string | undefined {

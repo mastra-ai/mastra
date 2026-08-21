@@ -1,6 +1,11 @@
 import type { RequestContext } from '@mastra/core/request-context';
 
-import { AGENT_CONNECTIONS_STATE_TYPE, type AgentConnectionsState, type ConnectedAgentPeer } from './types.js';
+import {
+  AGENT_CONNECTIONS_STATE_TYPE,
+  type AgentConnectionsState,
+  type ConnectedAgentPeer,
+  type SentAgentSignal,
+} from './types.js';
 
 export const AGENT_CONNECTIONS_REQUEST_CONTEXT_KEY = 'mastracode.agentConnections';
 
@@ -37,8 +42,11 @@ export async function resolveAgentConnectionStore(
 
 export function normalizeAgentConnectionsState(value: unknown): AgentConnectionsState {
   if (!value || typeof value !== 'object') return { peers: [] };
-  const peers = (value as { peers?: unknown }).peers;
-  return { peers: Array.isArray(peers) ? normalizeConnectedPeers(peers) : [] };
+  const state = value as { peers?: unknown; sentSignals?: unknown };
+  return {
+    peers: Array.isArray(state.peers) ? normalizeConnectedPeers(state.peers) : [],
+    sentSignals: Array.isArray(state.sentSignals) ? normalizeSentAgentSignals(state.sentSignals) : [],
+  };
 }
 
 export function normalizeConnectedPeers(peers: unknown[]): ConnectedAgentPeer[] {
@@ -72,12 +80,35 @@ export function sortConnectedPeers(peers: ConnectedAgentPeer[]): ConnectedAgentP
   return [...peers].sort((a, b) => a.id.localeCompare(b.id));
 }
 
-export async function readAgentConnections(context: AgentConnectionContext): Promise<ConnectedAgentPeer[]> {
+export function normalizeSentAgentSignals(signals: unknown[]): SentAgentSignal[] {
+  return signals.flatMap(signal => {
+    if (!signal || typeof signal !== 'object') return [];
+    const candidate = signal as Partial<SentAgentSignal>;
+    if (
+      !candidate.messageId ||
+      !candidate.fingerprint ||
+      !candidate.targetId ||
+      !candidate.priority ||
+      typeof candidate.expectsReply !== 'boolean' ||
+      !candidate.returnPeerId ||
+      typeof candidate.sentAt !== 'number'
+    ) {
+      return [];
+    }
+    return [candidate as SentAgentSignal];
+  });
+}
+
+async function readAgentConnectionsState(context: AgentConnectionContext): Promise<AgentConnectionsState> {
   const store = await resolveAgentConnectionStore(context);
   const threadId = context.agent?.threadId;
-  if (!store || !threadId) return [];
+  if (!store || !threadId) return { peers: [] };
   const state = await store.getState<AgentConnectionsState>({ threadId, type: AGENT_CONNECTIONS_STATE_TYPE });
-  return normalizeAgentConnectionsState(state).peers;
+  return normalizeAgentConnectionsState(state);
+}
+
+export async function readAgentConnections(context: AgentConnectionContext): Promise<ConnectedAgentPeer[]> {
+  return (await readAgentConnectionsState(context)).peers;
 }
 
 export async function writeAgentConnections(
@@ -87,9 +118,29 @@ export async function writeAgentConnections(
   const store = await resolveAgentConnectionStore(context);
   const threadId = context.agent?.threadId;
   if (!store || !threadId) return;
-  const state = { peers: sortConnectedPeers(peers) };
+  const current = await readAgentConnectionsState(context);
+  const state = { ...current, peers: sortConnectedPeers(peers) };
   await store.setState({ threadId, type: AGENT_CONNECTIONS_STATE_TYPE, value: state });
   context.requestContext?.set(AGENT_CONNECTIONS_REQUEST_CONTEXT_KEY, state.peers);
+}
+
+export async function readSentAgentSignals(context: AgentConnectionContext): Promise<SentAgentSignal[]> {
+  return (await readAgentConnectionsState(context)).sentSignals ?? [];
+}
+
+export async function writeSentAgentSignals(
+  context: AgentConnectionContext,
+  sentSignals: SentAgentSignal[],
+): Promise<void> {
+  const store = await resolveAgentConnectionStore(context);
+  const threadId = context.agent?.threadId;
+  if (!store || !threadId) return;
+  const current = await readAgentConnectionsState(context);
+  await store.setState({
+    threadId,
+    type: AGENT_CONNECTIONS_STATE_TYPE,
+    value: { ...current, sentSignals: sentSignals.slice(-100) },
+  });
 }
 
 export function getCarriedAgentConnections(

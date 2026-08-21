@@ -87,6 +87,8 @@
               "summary": "Expected reply watchdog e2e acknowledgement",
               "priority": "high",
               "expectsReply": false,
+              "messageId": "expected-reply-response",
+              "replyTo": "expected-reply-request",
               "payload": {
                 "scenario": "agent-connections-expected-reply-watchdog"
               }

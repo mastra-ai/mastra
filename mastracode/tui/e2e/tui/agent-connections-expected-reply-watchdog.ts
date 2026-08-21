@@ -2,6 +2,7 @@ import { expect } from './expect.js';
 import type { McE2eInProcessApp, McE2eScenario } from './types.js';
 
 const peerId = 'expected-reply-peer';
+const messageId = 'expected-reply-request';
 const peerSummary = 'Expected reply watchdog e2e: choose whether to acknowledge this peer update';
 function getRequestBodies(requests: unknown[]): unknown[] {
   return requests.map(request =>
@@ -55,10 +56,11 @@ export const agentConnectionsExpectedReplyWatchdogScenario = {
               priority: 'urgent',
               summary: peerSummary,
               dedupeKey: 'mc-e2e-agent-connections-expected-reply-watchdog',
-              attributes: { expectsReply: true, returnPeerId: peerId },
+              attributes: { expectsReply: true, messageId, returnPeerId: peerId },
               metadata: {
                 crossAgentMessaging: {
                   expectsReply: true,
+                  messageId,
                   returnPeerId: peerId,
                   from: {
                     resourceId: 'mc-e2e-expected-reply-peer-resource',
