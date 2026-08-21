@@ -446,11 +446,12 @@ describe('S1: full write-back journey through the real route handlers', () => {
       materializedAt: null,
     });
 
-    // 2. Ensure → provisions the sandbox + materialises the repo.
+    // 2. Ensure → metadata handshake only; thread-open never provisions a
+    // VM (session sandboxes boot lazily at the first real command).
     const ensureRes = await postJson(app, `/web/github/projects/${projectId}/ensure`, {});
     expect(ensureRes.status).toBe(200);
-    expect(ensureProjectSandbox).toHaveBeenCalledOnce();
-    expect(materializeRepo).toHaveBeenCalledOnce();
+    expect(ensureProjectSandbox).not.toHaveBeenCalled();
+    expect(materializeRepo).not.toHaveBeenCalled();
 
     // 3. Session creation persists identity only; AgentController's workspace
     // factory materializes the isolated checkout when that session starts.

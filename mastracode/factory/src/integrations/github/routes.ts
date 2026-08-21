@@ -42,14 +42,13 @@ import type { GithubPatKind } from './pat.js';
 import { reclaimDeletedSessionSandbox } from './sandbox-release.js';
 import {
   commitAll,
-  ensureProjectSandbox,
   isValidGitRef as isValidGitRefSandbox,
-  materializeRepo,
   MaterializeError,
   pushBranch,
   teardownProjectSandbox,
   WorktreeError,
- projectSandboxKey,} from './sandbox.js';
+  projectSandboxKey,
+} from './sandbox.js';
 import type { GitIdentity } from './sandbox.js';
 
 const sessionOperationLocks = new Map<string, Promise<unknown>>();
@@ -1036,57 +1035,21 @@ async function prepareProject(options: {
   userId: string;
   onProgress?: ProgressFn;
 }): Promise<EnsureResult> {
-  const { github, sandbox: runtime, project, userId, onProgress } = options;
-  const sandboxRow = await loadOrCreateSandboxRow(github, project, userId);
-  const access = await github.versionControl.getRepositoryAccess({
-    orgId: project.installation.orgId,
-    repositoryId: project.repository.id,
-  });
-  if (!access.authorization) {
-    throw new MaterializeError('Repository access did not include a bearer token.', 'clone-failed');
-  }
-  // The sandbox env token feeds the `gh` CLI — a configured org PAT wins
-  // there. Git clone/pull below keep the minted installation token.
-  const ghCliToken =
-    (await getGithubPat(() => github.integrationStorage, project.installation.orgId)) ?? access.authorization.token;
-  // The workdir is derived from the constructed sandbox — never read from
-  // the project or binding rows, so a provider switch or stale snapshot
-  // cannot point the clone at another provider's filesystem (the
-  // stale-workdir incident class).
-  const { sandbox, workdir } = await ensureProjectSandbox({
-    sandbox: runtime,
-    row: sandboxRow,
-    repoFullName: project.repository.slug,
-    storage: github.sourceControlStorage.sandboxes,
-    token: ghCliToken,
-    ...(project.setupCommand ? { setupCommand: project.setupCommand } : {}),
-    // Fresh mint per call so a later template rebuild never reuses this
-    // request's (expiring) token.
-    getGithubToken: async () => {
-      const fresh = await github.versionControl.getRepositoryAccess({
-        orgId: project.installation.orgId,
-        repositoryId: project.repository.id,
-      });
-      const minted = fresh.authorization?.token;
-      if (!minted) throw new MaterializeError('Repository access did not include a bearer token.', 'clone-failed');
-      return minted;
-    },
-    onProgress,
-  });
-  await materializeRepo({
-    row: { ...sandboxRow, sandboxWorkdir: workdir },
-    repoInfo: { repoFullName: project.repository.slug, defaultBranch: project.defaultBranch },
-    sandbox,
-    token: access.authorization.token,
-    storage: github.sourceControlStorage.sandboxes,
-    onProgress,
-  });
+  const { github, project, userId, onProgress } = options;
+  // /ensure is a metadata handshake, not a provisioner: opening a thread in
+  // the UI must never start a VM. Session sandboxes boot lazily at the first
+  // real command; the project-level sandbox (workspaces panel) is only ever
+  // observed passively — when nothing is running, the panel shows nothing.
+  // The binding row is still created so panel/git routes have their anchor.
+  await loadOrCreateSandboxRow(github, project, userId);
   const result: EnsureResult = {
     resourceId: project.factoryProjectId,
     factoryProjectId: project.factoryProjectId,
     projectRepositoryId: project.id,
-    sandboxId: sandbox.id,
-    sandboxWorkdir: workdir,
+    // Observability-only fields kept for client compat; nothing was
+    // provisioned, so they are honestly blank.
+    sandboxId: '',
+    sandboxWorkdir: '',
   };
   const done: PrepareProgress = { phase: 'done', message: 'Workspace ready.' };
   onProgress?.(done);

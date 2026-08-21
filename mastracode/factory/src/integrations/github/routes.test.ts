@@ -1275,7 +1275,10 @@ describe('ensure (materialize)', () => {
     expect((await res.json()).error).toBe('sandbox_not_configured');
   });
 
-  it('provisions + materializes and returns a resourceId', async () => {
+  it('creates the binding row and returns metadata WITHOUT provisioning anything', async () => {
+    // /ensure is a metadata handshake: opening a thread in the UI must never
+    // start a VM. No sandbox construction, no repo materialization, no token
+    // mint — the session sandbox boots lazily at the first real command.
     tables.projectRepositories.push(
       projectRepositoryRow({
         id: 'p1',
@@ -1293,30 +1296,19 @@ describe('ensure (materialize)', () => {
       resourceId: 'factory-p1',
       factoryProjectId: 'factory-p1',
       projectRepositoryId: 'p1',
+      sandboxId: '',
+      sandboxWorkdir: '',
     });
-    expect(ensureProjectSandbox).toHaveBeenCalledOnce();
-    expect(ensureProjectSandbox).toHaveBeenCalledWith(
-      expect.objectContaining({ token: 'repo-token-repository-octo/hello' }),
-    );
-    expect(githubStub.versionControl.getRepositoryAccess).toHaveBeenCalledWith({
-      orgId: 'org1',
-      repositoryId: 'repository-octo/hello',
-    });
+    expect(ensureProjectSandbox).not.toHaveBeenCalled();
+    expect(materializeRepo).not.toHaveBeenCalled();
+    expect(githubStub.versionControl.getRepositoryAccess).not.toHaveBeenCalled();
     expect(githubStub.mintInstallationToken).not.toHaveBeenCalled();
-    expect(materializeRepo).toHaveBeenCalledOnce();
-    expect(materializeRepo).toHaveBeenCalledWith(
-      expect.objectContaining({ token: 'repo-token-repository-octo/hello' }),
-    );
     // A per-user sandbox binding row was created for the caller.
     expect(tables.sandboxes).toHaveLength(1);
     expect(tables.sandboxes[0]).toMatchObject({ projectRepositoryId: 'p1', userId: 'u1' });
-    // No base checkpoint on this repo → no seed name is passed.
-    expect(ensureProjectSandbox.mock.calls[0]![0].seedCheckpointName).toBeUndefined();
   });
 
-  it('ensures with the deterministic workdir and repo, with no checkpoint seeding', async () => {
-    // Base-checkpoint seeding died with the fleet: the provider template (or
-    // a plain clone) is the warm path now.
+  it('never provisions even when the row carries checkpoint or stale workdir state', async () => {
     tables.projectRepositories.push(
       projectRepositoryRow({
         id: 'p1',
@@ -1331,13 +1323,10 @@ describe('ensure (materialize)', () => {
     );
     const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/ensure', { method: 'POST' });
     expect(res.status).toBe(200);
-    expect(ensureProjectSandbox).toHaveBeenCalledOnce();
-    expect(ensureProjectSandbox).toHaveBeenCalledWith(expect.objectContaining({ repoFullName: 'octo/hello' }));
-    expect(ensureProjectSandbox.mock.calls[0]![0].seedCheckpointName).toBeUndefined();
-    // The stale persisted workdir was never read for decisions.
-    expect(materializeRepo).toHaveBeenCalledWith(
-      expect.objectContaining({ row: expect.objectContaining({ sandboxWorkdir: '/workspace/octo/hello' }) }),
-    );
+    expect(ensureProjectSandbox).not.toHaveBeenCalled();
+    expect(materializeRepo).not.toHaveBeenCalled();
+    // The stale persisted workdir is never echoed back as truth.
+    expect(await res.json()).toMatchObject({ projectRepositoryId: 'p1', sandboxWorkdir: '' });
   });
 
   it('404s for a project the user does not own', async () => {
@@ -1347,11 +1336,7 @@ describe('ensure (materialize)', () => {
     expect(res.status).toBe(404);
   });
 
-  it('ignores stale persisted provider workdirs and uses the deterministic one', async () => {
-    // The row was linked while a different provider was active — its
-    // persisted workdir points into that provider's filesystem. Deterministic
-    // computation makes the stale value irrelevant (the incident class that
-    // motivated removing persisted workdirs as a source of truth).
+  it('reuses an existing binding row without touching provider state', async () => {
     tables.projectRepositories.push(
       projectRepositoryRow({
         id: 'p1',
@@ -1376,11 +1361,11 @@ describe('ensure (materialize)', () => {
     );
     const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/ensure', { method: 'POST' });
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ projectRepositoryId: 'p1', sandboxWorkdir: '/workspace/octo/hello' });
-    expect(materializeRepo).toHaveBeenCalledOnce();
-    expect(materializeRepo).toHaveBeenCalledWith(
-      expect.objectContaining({ row: expect.objectContaining({ sandboxWorkdir: '/workspace/octo/hello' }) }),
-    );
+    expect(await res.json()).toMatchObject({ projectRepositoryId: 'p1', sandboxWorkdir: '' });
+    expect(ensureProjectSandbox).not.toHaveBeenCalled();
+    expect(materializeRepo).not.toHaveBeenCalled();
+    // No duplicate binding row was created.
+    expect(tables.sandboxes).toHaveLength(1);
   });
 
   it('streams server-side progress events when the client accepts an event stream', async () => {
@@ -1402,10 +1387,12 @@ describe('ensure (materialize)', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toContain('text/event-stream');
     const body = await res.text();
-    // Progress events surface each server step, then a terminal `done` carries the result.
+    // With no provisioning, the stream is just the terminal handshake: a
+    // single `done`-phase progress event, then `done` carries the result.
     expect(body).toContain('event: progress');
-    expect(body).toContain('Provisioning a new sandbox…');
-    expect(body).toContain('Cloning octo/hello…');
+    expect(body).toContain('Workspace ready.');
+    expect(body).not.toContain('Provisioning a new sandbox…');
+    expect(body).not.toContain('Cloning octo/hello…');
     expect(body).toContain('event: done');
     expect(body).toContain('"resourceId":"factory-p1"');
     expect(body).toContain('"projectRepositoryId":"p1"');
