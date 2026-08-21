@@ -11,12 +11,14 @@ import type { EqualityFilter } from '../storage/types';
 
 export const TABLE_INDEX_MAP: Record<string, Array<{ name: string; fields: string[] }>> = {
   mastra_messages: [
+    { name: 'by_resource_thread', fields: ['resourceId', 'thread_id'] },
     { name: 'by_thread_created', fields: ['thread_id', 'createdAt'] },
     { name: 'by_thread', fields: ['thread_id'] },
     { name: 'by_resource', fields: ['resourceId'] },
     { name: 'by_record_id', fields: ['id'] },
   ],
   mastra_threads: [
+    { name: 'by_resource_id', fields: ['resourceId', 'id'] },
     { name: 'by_resource', fields: ['resourceId'] },
     { name: 'by_created', fields: ['createdAt'] },
     { name: 'by_updated', fields: ['updatedAt'] },

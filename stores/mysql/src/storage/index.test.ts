@@ -1,4 +1,5 @@
 import { createTestSuite } from '@internal/storage-test-utils';
+import { createPool } from 'mysql2/promise';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 
 import { MySQLStore } from './index';
@@ -27,9 +28,41 @@ describe('MySQLStore configuration validation', () => {
 });
 
 const store = new MySQLStore(TEST_CONFIG);
+const catalogPool = createPool({
+  host: TEST_CONFIG.host,
+  port: TEST_CONFIG.port,
+  user: TEST_CONFIG.user,
+  password: TEST_CONFIG.password,
+  database: TEST_CONFIG.database,
+  connectionLimit: 1,
+});
 // MySQL does not persist tool mocks / tool mock reports — it rejects them.
 createTestSuite(store, { toolMocks: false });
 
+describe('MySQL memory default indexes', () => {
+  it('creates resource-scoped threads and messages composite indexes', async () => {
+    await store.init();
+
+    await expectIndexColumns('mastra_threads', 'mastra_threads_resourceid_id_idx', ['resourceId', 'id']);
+    await expectIndexColumns('mastra_messages', 'mastra_messages_resourceid_thread_id_idx', [
+      'resourceId',
+      'thread_id',
+    ]);
+  });
+});
+
+async function expectIndexColumns(tableName: string, indexName: string, columns: string[]): Promise<void> {
+  const [rows] = await catalogPool.query(
+    `SELECT COLUMN_NAME AS columnName
+     FROM information_schema.statistics
+     WHERE table_schema = ? AND table_name = ? AND index_name = ?
+     ORDER BY SEQ_IN_INDEX`,
+    [TEST_CONFIG.database, tableName, indexName],
+  );
+
+  expect((rows as Array<{ columnName: string }>).map(row => row.columnName)).toEqual(columns);
+}
+
 afterAll(async () => {
-  await store.close();
+  await Promise.all([store.close(), catalogPool.end()]);
 });

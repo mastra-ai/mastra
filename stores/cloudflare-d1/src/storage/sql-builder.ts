@@ -201,11 +201,43 @@ export class SqlBuilder {
    * @param indexType Optional index type (e.g., 'UNIQUE')
    * @returns The builder instance
    */
-  createIndex(indexName: string, tableName: string, columnName: string, indexType: string = ''): SqlBuilder {
+  createIndex(
+    indexName: string,
+    tableName: string,
+    columns: string | string[],
+    indexType: string = '',
+    partialCondition?: string,
+  ): SqlBuilder {
     const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
     const parsedTableName = parseSqlIdentifier(tableName, 'table name');
-    const parsedColumnName = parseSqlIdentifier(columnName, 'column name');
-    this.sql = `CREATE ${indexType ? indexType + ' ' : ''}INDEX IF NOT EXISTS ${parsedIndexName} ON ${parsedTableName}(${parsedColumnName})`;
+    const indexColumns = (Array.isArray(columns) ? columns : [columns]).map(column => {
+      const [name, direction] = column.trim().split(/\s+/, 2);
+      if (!name || (direction && !['ASC', 'DESC'].includes(direction.toUpperCase()))) {
+        throw new Error(`Invalid index column: ${column}`);
+      }
+
+      const parsedColumnName = parseSqlIdentifier(name, 'column name');
+      return direction ? `${parsedColumnName} ${direction.toUpperCase()}` : parsedColumnName;
+    });
+
+    if (indexColumns.length === 0) {
+      throw new Error('At least one index column is required');
+    }
+
+    if (partialCondition && /;|--|\/\*/.test(partialCondition)) {
+      throw new Error('Invalid partial index condition');
+    }
+
+    this.sql = `CREATE ${indexType ? indexType + ' ' : ''}INDEX IF NOT EXISTS ${parsedIndexName} ON ${parsedTableName}(${indexColumns.join(', ')})`;
+    if (partialCondition) {
+      this.sql += ` WHERE ${partialCondition}`;
+    }
+    return this;
+  }
+
+  dropIndex(indexName: string): SqlBuilder {
+    const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
+    this.sql = `DROP INDEX IF EXISTS ${parsedIndexName}`;
     return this;
   }
 

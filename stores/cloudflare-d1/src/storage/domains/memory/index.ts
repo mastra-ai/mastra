@@ -25,7 +25,7 @@ import type {
   StorageListThreadsOutput,
 } from '@mastra/core/storage';
 import { D1DB, resolveD1Config } from '../../db';
-import type { D1DomainConfig } from '../../db';
+import type { D1DomainConfig, IndexCreatePayload } from '../../db';
 import { createSqlBuilder } from '../../sql-builder';
 import { deserializeValue, isArrayOfRecords } from '../utils';
 
@@ -81,10 +81,12 @@ function addSqliteMetadataValuePredicate(
 export class MemoryStorageD1 extends MemoryStorage {
   override readonly supportsPartialThreadUpdate = true;
   #db: D1DB;
+  #skipDefaultIndexes?: boolean;
 
   constructor(config: D1DomainConfig) {
     super();
     this.#db = new D1DB(resolveD1Config(config));
+    this.#skipDefaultIndexes = config.skipDefaultIndexes;
   }
 
   async init(): Promise<void> {
@@ -97,6 +99,47 @@ export class MemoryStorageD1 extends MemoryStorage {
       schema: TABLE_SCHEMAS[TABLE_MESSAGES],
       ifNotExists: ['resourceId'],
     });
+
+    await this.createDefaultIndexes();
+  }
+
+  getDefaultIndices(): IndexCreatePayload[] {
+    return [
+      {
+        name: 'mastra_threads_resourceid_createdat_idx',
+        tableName: TABLE_THREADS,
+        columns: ['resourceId', 'createdAt DESC'],
+      },
+      {
+        name: 'mastra_threads_resourceid_id_idx',
+        tableName: TABLE_THREADS,
+        columns: ['resourceId', 'id'],
+      },
+      {
+        name: 'mastra_messages_thread_id_createdat_idx',
+        tableName: TABLE_MESSAGES,
+        columns: ['thread_id', 'createdAt DESC'],
+      },
+      {
+        name: 'mastra_messages_resourceid_thread_id_idx',
+        tableName: TABLE_MESSAGES,
+        columns: ['resourceId', 'thread_id'],
+      },
+    ];
+  }
+
+  async createDefaultIndexes(): Promise<void> {
+    if (this.#skipDefaultIndexes) return;
+
+    for (const indexDef of this.getDefaultIndices()) {
+      try {
+        await this.#db.createIndex(indexDef);
+      } catch (error) {
+        // Indexes are performance optimizations. Initialization remains usable
+        // when D1 cannot create one, for example during a concurrent migration.
+        this.logger?.warn?.(`Failed to create index ${indexDef.name}:`, error);
+      }
+    }
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -257,10 +300,10 @@ export class MemoryStorageD1 extends MemoryStorage {
   }): Promise<StorageThreadType | null> {
     const thread = await this.#db.load<StorageThreadType>({
       tableName: TABLE_THREADS,
-      keys: { id: threadId },
+      keys: { id: threadId , ...(resourceId !== undefined ? { resourceId } : {})},
     });
 
-    if (!thread || (resourceId !== undefined && thread.resourceId !== resourceId)) return null;
+    if (!thread) return null;
 
     try {
       return {

@@ -264,10 +264,10 @@ export class MemoryStorageDO extends MemoryStorage {
   }): Promise<StorageThreadType | null> {
     const thread = await this.#db.load<StorageThreadType>({
       tableName: TABLE_THREADS,
-      keys: { id: threadId },
+      keys: { id: threadId, ...(resourceId !== undefined ? { resourceId } : {}) },
     });
 
-    if (!thread || (resourceId !== undefined && thread.resourceId !== resourceId)) return null;
+    if (!thread) return null;
 
     try {
       return {

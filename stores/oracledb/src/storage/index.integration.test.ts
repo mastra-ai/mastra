@@ -7,6 +7,23 @@ const runIntegration = process.env.RUN_ORACLE_STORAGE_INTEGRATION === 'true';
 const describeIntegration = runIntegration ? describe : describe.skip;
 
 describeIntegration('OracleStore configurable schema integration', () => {
+  it('creates resource-scoped threads and messages composite default indexes', async () => {
+    const store = new OracleStore({
+      id: 'oracle-default-memory-index-integration',
+      user: process.env.ORACLE_DATABASE_USER,
+      password: process.env.ORACLE_DATABASE_PASSWORD,
+      connectString: process.env.ORACLE_DATABASE_CONNECT_STRING,
+    });
+
+    try {
+      await store.init();
+      await expectIndexColumns(store, 'MASTRA_THREADS_RESOURCE_ID_IDX_IDX', ['resourceId', 'ID']);
+      await expectIndexColumns(store, 'MASTRA_MESSAGES_RESOURCE_THREAD_IDX_IDX', ['resourceId', 'THREAD_ID']);
+    } finally {
+      await store.disconnect();
+    }
+  });
+
   it('creates custom memory and workflow indexes from OracleStore config', async () => {
     const suffix = Date.now();
     const threadIndexName = `IDX_ORACLE_THREADS_${suffix}`;
@@ -43,6 +60,17 @@ describeIntegration('OracleStore configurable schema integration', () => {
     }
   });
 });
+
+async function expectIndexColumns(store: OracleStore, indexName: string, columns: string[]): Promise<void> {
+  const rows = await store.db.manyOrNone<{ columnName: string }>(
+    `SELECT column_name AS "columnName"
+     FROM user_ind_columns
+     WHERE index_name = :indexName
+     ORDER BY column_position`,
+    { indexName },
+  );
+  expect(rows.map(row => String(row.columnName))).toEqual(columns);
+}
 
 async function listUserIndexes(store: OracleStore, indexNames: string[]): Promise<string[]> {
   const rows = await store.db.manyOrNone<{ indexName: string }>(

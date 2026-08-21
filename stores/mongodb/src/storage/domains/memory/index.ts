@@ -124,12 +124,15 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       { collection: TABLE_THREADS, keys: { id: 1 }, options: { unique: true } },
       { collection: TABLE_THREADS, keys: { resourceId: 1, createdAt: -1 } },
       { collection: TABLE_THREADS, keys: { resourceId: 1, updatedAt: -1 } },
+      { collection: TABLE_THREADS, keys: { resourceId: 1, id: 1 } },
       // Messages: point lookups (id) + per-thread retrieval (listMessages) and per-resource
       // retrieval (listMessagesByResourceId), both sorted by createdAt. The compound prefixes
-      // cover thread_id-only and resourceId-only filters.
+      // cover thread_id-only and resourceId-only filters. Resource-scoped thread operations
+      // use resourceId first, then thread_id, to match the tenancy predicate order.
       { collection: TABLE_MESSAGES, keys: { id: 1 }, options: { unique: true } },
       { collection: TABLE_MESSAGES, keys: { thread_id: 1, createdAt: 1 } },
       { collection: TABLE_MESSAGES, keys: { resourceId: 1, createdAt: 1 } },
+      { collection: TABLE_MESSAGES, keys: { resourceId: 1, thread_id: 1 } },
       // Resources: only ever fetched by id.
       { collection: TABLE_RESOURCES, keys: { id: 1 }, options: { unique: true } },
       // Observational Memory: point lookups (id) + latest-generation-per-lookupKey. The compound
@@ -152,32 +155,9 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         const collection = await this.getCollection(indexDef.collection);
         await collection.createIndex(indexDef.keys, indexDef.options);
       } catch (error) {
-        // Fail loud: a silently missing index degrades query performance at scale.
-        // Users who manage their own indexes can set skipDefaultIndexes.
-        const mongoCode = (error as any)?.code;
-        const isUniqueConflict = mongoCode === 85 && indexDef.options?.unique === true;
-        const field = Object.keys(indexDef.keys)[0] ?? 'id';
-        const indexName = Object.entries(indexDef.keys)
-          .map(([k, v]) => `${k}_${v}`)
-          .join('_');
-        const text = isUniqueConflict
-          ? `Index conflict on collection "${indexDef.collection}": an existing non-unique index on { ${field}: 1 } conflicts with Mastra's required unique index.\n\n` +
-            `To migrate:\n` +
-            `  1. Check for duplicates:  db.${indexDef.collection}.aggregate([{ $group: { _id: "$${field}", n: { $sum: 1 } } }, { $match: { n: { $gt: 1 } } }])\n` +
-            `  2. Drop the old index:    db.${indexDef.collection}.dropIndex("${indexName}")\n` +
-            `  3. Recreate as unique:    db.${indexDef.collection}.createIndex({ ${field}: 1 }, { unique: true })\n\n` +
-            `Alternatively, set skipDefaultIndexes: true to manage indexes yourself.`
-          : `Failed to create default index on collection "${indexDef.collection}". Set skipDefaultIndexes to manage indexes yourself.`;
-        throw new MastraError(
-          {
-            id: createStorageErrorId('MONGODB', 'CREATE_DEFAULT_INDEXES', 'FAILED'),
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.THIRD_PARTY,
-            text,
-            details: { collection: indexDef.collection },
-          },
-          error,
-        );
+        // Indexes are performance optimizations. Log the failure and continue
+        // creating the remaining definitions, matching the SQL memory adapters.
+        this.logger?.warn?.(`Failed to create default index on ${indexDef.collection}:`, error);
       }
     }
   }
@@ -1002,7 +982,10 @@ export class MemoryStorageMongoDB extends MemoryStorage {
   }): Promise<StorageThreadType | null> {
     try {
       const collection = await this.getCollection(TABLE_THREADS);
-      const result = await collection.findOne<any>({ id: threadId });
+      const result = await collection.findOne<any>({
+        id: threadId,
+        ...(resourceId !== undefined ? { resourceId } : {}),
+      });
       if (!result || (resourceId !== undefined && result.resourceId !== resourceId)) {
         return null;
       }

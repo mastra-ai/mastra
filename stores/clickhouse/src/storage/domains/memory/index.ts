@@ -790,8 +790,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     resourceId?: string;
   }): Promise<StorageThreadType | null> {
     try {
-      const result = await this.client.query({
-        query: `SELECT 
+      let query = `SELECT 
           id,
           "resourceId",
           title,
@@ -799,10 +798,12 @@ export class MemoryStorageClickhouse extends MemoryStorage {
           toDateTime64(createdAt, 3) as createdAt,
           toDateTime64(updatedAt, 3) as updatedAt
         FROM "${TABLE_THREADS}"
-        WHERE id = {var_id:String}
+        WHERE id = {var_id:String} ${resourceId != undefined ? ` AND resourceId = {resourceId:String}` : ''}
         ORDER BY updatedAt DESC
-        LIMIT 1`,
-        query_params: { var_id: threadId },
+        LIMIT 1`
+      const result = await this.client.query({
+        query: query,
+        query_params: { var_id: threadId , ...(resourceId !== undefined ? { resourceId} : {})},
         clickhouse_settings: {
           // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
           date_time_input_format: 'best_effort',
@@ -815,7 +816,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       const rows = await result.json();
       const thread = transformRow(rows.data[0]) as StorageThreadType;
 
-      if (!thread || (resourceId !== undefined && thread.resourceId !== resourceId)) {
+      if (!thread) {
         return null;
       }
 

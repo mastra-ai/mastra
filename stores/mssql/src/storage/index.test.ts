@@ -331,7 +331,7 @@ if (process.env.ENABLE_TESTS === 'true') {
         })),
       }),
     indexExists: (store, pattern) => mssqlIndexExists(store as MSSQLStore, pattern),
-    defaultIndexPattern: 'threads_resourceid',
+    defaultIndexPattern: 'messages_resourceid_thread_id',
     customIndexName: 'custom_mssql_test_idx',
     customIndexDef: {
       name: 'custom_mssql_test_idx',
@@ -411,7 +411,7 @@ if (process.env.ENABLE_TESTS === 'true') {
         await pool.close();
       }
     },
-    defaultIndexPattern: 'threads_resourceid',
+    defaultIndexPattern: 'messages_resourceid_thread_id',
     customIndexName: 'custom_memory_mssql_idx',
     customIndexDef: {
       name: 'custom_memory_mssql_idx',

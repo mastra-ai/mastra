@@ -34,6 +34,7 @@ export type D1DomainConfig = D1DomainClientConfig | D1DomainBindingConfig | D1Do
 export interface D1DomainClientConfig {
   client: D1Client;
   tablePrefix?: string;
+  skipDefaultIndexes?: boolean;
 }
 
 /**
@@ -42,6 +43,7 @@ export interface D1DomainClientConfig {
 export interface D1DomainBindingConfig {
   binding: D1Database;
   tablePrefix?: string;
+  skipDefaultIndexes?: boolean;
 }
 
 /**
@@ -52,6 +54,7 @@ export interface D1DomainRestConfig {
   apiToken: string;
   databaseId: string;
   tablePrefix?: string;
+  skipDefaultIndexes?: boolean;
 }
 
 /**
@@ -90,6 +93,13 @@ export function resolveD1Config(config: D1DomainConfig): D1DBConfig {
     tablePrefix: config.tablePrefix,
   };
 }
+
+export type IndexCreatePayload = {
+  tableName: string;
+  name: string;
+  columns: string[];
+  partialCondition?: string;
+};
 
 export class D1DB extends MastraBase {
   private client?: D1Client;
@@ -611,6 +621,56 @@ export class D1DB extends MastraBase {
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to batch upsert into ${tableName}: ${error instanceof Error ? error.message : String(error)}`,
           details: { tableName },
+        },
+        error,
+      );
+    }
+  }
+
+  async createIndex({ tableName, name, columns, partialCondition }: IndexCreatePayload): Promise<void> {
+    try {
+      const fullTableName = tableName.startsWith(this.tablePrefix) ? tableName : `${this.tablePrefix}${tableName}`;
+      const fullIndexName = name.startsWith(this.tablePrefix) ? name : `${this.tablePrefix}${name}`;
+      const { sql, params } = createSqlBuilder()
+        .createIndex(fullIndexName, fullTableName, columns, '', partialCondition)
+        .build();
+
+      await this.executeQuery({ sql, params });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLOUDFLARE_D1', 'CREATE_INDEX', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { tableName, name },
+        },
+        error,
+      );
+    }
+  }
+
+  async dropAllIndices(): Promise<void> {
+    try {
+      const indexes = await this.executeQuery({
+        sql: "SELECT name FROM sqlite_master WHERE type = 'index' AND name NOT LIKE 'sqlite_autoindex%'",
+        params: [],
+      });
+
+      if (!Array.isArray(indexes)) return;
+
+      for (const index of indexes) {
+        const name = index.name;
+        if (typeof name !== 'string') continue;
+
+        const { sql, params } = createSqlBuilder().dropIndex(name).build();
+        await this.executeQuery({ sql, params });
+      }
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLOUDFLARE_D1', 'DROP_ALL_INDICES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
         },
         error,
       );

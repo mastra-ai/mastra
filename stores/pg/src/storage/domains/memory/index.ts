@@ -279,10 +279,16 @@ export class MemoryPG extends MemoryStorage {
         table: TABLE_THREADS,
         columns: ['resourceId', 'createdAt DESC'],
       },
+      { name: `${schemaPrefix}mastra_threads_resourceid_id_idx`, table: TABLE_THREADS, columns: ['resourceId', 'id'] },
       {
         name: `${schemaPrefix}mastra_messages_thread_id_createdat_idx`,
         table: TABLE_MESSAGES,
         columns: ['thread_id', 'createdAt DESC'],
+      },
+      {
+        name: `${schemaPrefix}mastra_messages_resourceid_thread_id_idx`,
+        table: TABLE_MESSAGES,
+        columns: ['resourceId', 'thread_id'],
       },
     ];
   }

@@ -1,6 +1,5 @@
-import { MastraError } from '@mastra/core/error';
 import { MongoClient } from 'mongodb';
-import { afterAll, beforeAll, describe, expect, test } from 'vitest';
+import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest';
 import { MongoDBStore } from '../../index';
 import { MemoryStorageMongoDB } from './index';
 
@@ -42,10 +41,12 @@ describe('MemoryStorageMongoDB — index definitions and metadata storage', () =
       expect(threads).not.toContain(JSON.stringify({ createdAt: -1 }));
       expect(threads).not.toContain(JSON.stringify({ updatedAt: -1 }));
 
-      // Messages: id + per-thread and per-resource compounds; standalone thread_id/createdAt dropped.
+      // Messages: id + per-thread, per-resource, and resource/thread compounds;
+      // standalone thread_id/createdAt indexes are unnecessary.
       const messages = await keysFor('mastra_messages');
       expect(messages).toContain(JSON.stringify({ thread_id: 1, createdAt: 1 }));
       expect(messages).toContain(JSON.stringify({ resourceId: 1, createdAt: 1 }));
+      expect(messages).toContain(JSON.stringify({ resourceId: 1, thread_id: 1 }));
       expect(messages).not.toContain(JSON.stringify({ thread_id: 1 }));
       expect(messages).not.toContain(JSON.stringify({ createdAt: -1 }));
 
@@ -124,64 +125,24 @@ describe('MemoryStorageMongoDB — index definitions and metadata storage', () =
     }
   });
 
-  test('createDefaultIndexes throws a MastraError when index creation fails', async () => {
+  test('createDefaultIndexes logs failures and continues to remaining indexes', async () => {
+    const error = new Error('index build failed (simulated)');
+    const createIndex = vi.fn().mockRejectedValue(error);
     const throwingMemory = new MemoryStorageMongoDB({
       connectorHandler: {
         getCollection: async () =>
           ({
-            createIndex: async () => {
-              throw new Error('index build failed (simulated)');
-            },
+            createIndex,
           }) as any,
         close: async () => {},
       },
     });
+    const warn = vi.spyOn((throwingMemory as any).logger, 'warn').mockImplementation(() => {});
 
-    const err = await throwingMemory.createDefaultIndexes().catch(e => e);
-    expect(err).toBeInstanceOf(MastraError);
-    expect(String(err.id)).toContain('CREATE_DEFAULT_INDEXES');
-  });
-
-  test('createDefaultIndexes emits migration steps on IndexOptionsConflict (code 85)', async () => {
-    const conflict = Object.assign(new Error('index conflict'), { code: 85 });
-    const throwingMemory = new MemoryStorageMongoDB({
-      connectorHandler: {
-        getCollection: async () =>
-          ({
-            createIndex: async () => {
-              throw conflict;
-            },
-          }) as any,
-        close: async () => {},
-      },
-    });
-
-    const err = await throwingMemory.createDefaultIndexes().catch(e => e);
-    expect(err).toBeInstanceOf(MastraError);
-    expect(err.message).toContain('non-unique');
-    expect(err.message).toContain('dropIndex');
-    expect(err.message).toContain('createIndex');
-    expect(err.message).toContain('skipDefaultIndexes');
-  });
-
-  test('createDefaultIndexes emits generic message for non-conflict errors', async () => {
-    const otherError = Object.assign(new Error('disk full'), { code: 28 });
-    const throwingMemory = new MemoryStorageMongoDB({
-      connectorHandler: {
-        getCollection: async () =>
-          ({
-            createIndex: async () => {
-              throw otherError;
-            },
-          }) as any,
-        close: async () => {},
-      },
-    });
-
-    const err = await throwingMemory.createDefaultIndexes().catch(e => e);
-    expect(err).toBeInstanceOf(MastraError);
-    expect(err.message).not.toContain('non-unique');
-    expect(err.message).toContain('skipDefaultIndexes');
+    await expect(throwingMemory.createDefaultIndexes()).resolves.toBeUndefined();
+    expect(createIndex).toHaveBeenCalledTimes(throwingMemory.getDefaultIndexDefinitions().length);
+    expect(warn).toHaveBeenCalledTimes(throwingMemory.getDefaultIndexDefinitions().length);
+    expect(warn).toHaveBeenCalledWith('Failed to create default index on mastra_threads:', error);
   });
 
   test('createDefaultIndexes resolves when index creation succeeds', async () => {

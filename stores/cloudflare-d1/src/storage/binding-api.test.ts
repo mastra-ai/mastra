@@ -7,7 +7,7 @@ import {
 } from '@internal/storage-test-utils';
 import dotenv from 'dotenv';
 import { Miniflare } from 'miniflare';
-import { vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { MemoryStorageD1 } from './domains/memory';
 import { ScoresStorageD1 } from './domains/scores';
@@ -40,6 +40,47 @@ const createD1Client = (binding: D1Database): D1Client => ({
 });
 
 const testClient = createD1Client(d1Database);
+
+describe('MemoryStorageD1 indexes', () => {
+  it('creates the default memory indexes', async () => {
+    const tablePrefix = `idx_${Date.now()}_`;
+    const memory = new MemoryStorageD1({ binding: d1Database, tablePrefix });
+
+    await memory.init();
+
+    const result = await d1Database
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name LIKE ? ORDER BY name")
+      .bind(`${tablePrefix}%`)
+      .all<{ name: string }>();
+
+    expect(result.results.map(index => index.name)).toEqual([
+      `${tablePrefix}mastra_messages_resourceid_thread_id_idx`,
+      `${tablePrefix}mastra_messages_thread_id_createdat_idx`,
+      `${tablePrefix}mastra_threads_resourceid_createdat_idx`,
+      `${tablePrefix}mastra_threads_resourceid_id_idx`,
+    ]);
+
+    const compositeIndex = await d1Database
+      .prepare(`PRAGMA index_info(${tablePrefix}mastra_messages_resourceid_thread_id_idx)`)
+      .all<{ name: string }>();
+
+    expect(compositeIndex.results.map(column => column.name)).toEqual(['resourceId', 'thread_id']);
+  });
+
+  it('does not create default indexes when skipped', async () => {
+    const tablePrefix = `skip_idx_${Date.now()}_`;
+    const memory = new MemoryStorageD1({ binding: d1Database, tablePrefix, skipDefaultIndexes: true });
+
+    await memory.init();
+
+    const result = await d1Database
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name LIKE ?")
+      .bind(`${tablePrefix}%`)
+      .all<{ name: string }>();
+
+    expect(result.results).toEqual([]);
+  });
+});
 
 createTestSuite(
   new D1Store({

@@ -115,6 +115,7 @@ export class PostgresPerformanceTest {
       `${schemaPrefix}mastra_threads_resourceid_createdat_idx`,
       `${schemaPrefix}mastra_messages_thread_id_idx`,
       `${schemaPrefix}mastra_messages_thread_id_createdat_idx`,
+      `${schemaPrefix}mastra_messages_resourceid_thread_id_idx`,
       `${schemaPrefix}mastra_traces_name_idx`,
       `${schemaPrefix}mastra_traces_name_pattern_idx`,
       `${schemaPrefix}mastra_evals_agent_name_idx`,

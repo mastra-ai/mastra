@@ -245,7 +245,7 @@ createStoreIndexTests({
       indexes: indexes as any,
     }),
   indexExists: (store, pattern) => pgIndexExists(store as PostgresStore, pattern),
-  defaultIndexPattern: 'threads_resourceid_createdat',
+  defaultIndexPattern: 'messages_resourceid_thread_id',
   customIndexName: 'custom_pg_test_idx',
   customIndexDef: {
     name: 'custom_pg_test_idx',
@@ -299,7 +299,7 @@ createDomainIndexTests({
       await pool.end();
     }
   },
-  defaultIndexPattern: 'threads_resourceid_createdat',
+  defaultIndexPattern: 'messages_resourceid_thread_id',
   customIndexName: 'custom_memory_test_idx',
   customIndexDef: {
     name: 'custom_memory_test_idx',

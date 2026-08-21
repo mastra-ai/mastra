@@ -35,6 +35,21 @@ const mastra = new Mastra({
 
 createTestSuite(mastra.getStorage()!);
 
+describe('LibSQL memory indexes', () => {
+  it('creates the resource-scoped threads composite index', async () => {
+    const client = createClient({ url: ':memory:' });
+    try {
+      const memory = new MemoryLibSQL({ client });
+      await memory.init();
+
+      const columns = await client.execute(`PRAGMA index_info(idx_threads_resource_id)`);
+      expect(columns.rows.map(row => row.name)).toEqual(['resourceId', 'id']);
+    } finally {
+      client.close();
+    }
+  });
+});
+
 // Configuration validation tests
 createConfigValidationTests({
   storeName: 'LibSQLStore',

@@ -629,11 +629,16 @@ export async function handleTypedOperation(
     case 'load': {
       const keys = request.keys;
       if (keys.id) {
-        // Find by id field using index
-        const doc = await ctx.db
-          .query(convexTable)
-          .withIndex('by_record_id', (q: any) => q.eq('id', keys.id))
-          .unique();
+        const doc =
+          convexTable === TABLE_THREADS && typeof keys.resourceId === 'string'
+            ? await ctx.db
+                .query(convexTable)
+                .withIndex('by_resource_id', (q: any) => q.eq('resourceId', keys.resourceId).eq('id', keys.id))
+                .unique()
+            : await ctx.db
+                .query(convexTable)
+                .withIndex('by_record_id', (q: any) => q.eq('id', keys.id))
+                .unique();
         if (!doc && isBackgroundTasksTable(convexTable, request)) {
           const legacy = await findGenericDocumentById(ctx, request.tableName, String(keys.id));
           return { ok: true, result: legacy?.record ?? null };

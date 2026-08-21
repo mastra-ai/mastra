@@ -2,6 +2,21 @@ import { describe, expect, it, vi } from 'vitest';
 import { MemoryMSSQL } from '.';
 
 describe('MemoryMSSQL.listMessages', () => {
+  it('defines a resource-first composite message index', () => {
+    const storage = new MemoryMSSQL({ pool: { request: vi.fn() } as any });
+
+    expect(storage.getDefaultIndexDefinitions()).toContainEqual({
+      name: 'mastra_messages_resourceid_thread_id_idx',
+      table: 'mastra_messages',
+      columns: ['resourceId', 'thread_id'],
+    });
+    expect(storage.getDefaultIndexDefinitions()).toContainEqual({
+      name: 'mastra_threads_resourceid_id_idx',
+      table: 'mastra_threads',
+      columns: ['resourceId', 'id'],
+    });
+  });
+
   it('keeps the WHERE prefix returned by prepareWhereClause', async () => {
     const queries: string[] = [];
     const request = () => ({
