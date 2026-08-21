@@ -1,5 +1,4 @@
 import type { SanctionsScreener } from '../ports.ts';
-import { makeConnectorProvider } from './connector-provider.ts';
 import { fixtureProvider } from './fixture-provider.ts';
 import { makeQuickBooksProvider } from './quickbooks-provider.ts';
 import { makeQuickBooksMcpProvider } from './quickbooks-mcp-provider.ts';
@@ -32,8 +31,7 @@ export class ProviderRegistry {
 export const providerRegistry = new ProviderRegistry()
   .register('fixture', () => fixtureProvider)
   .register('quickbooks', () => makeQuickBooksProvider())
-  .register('quickbooks-mcp', () => makeQuickBooksMcpProvider())
-  .register('connector', () => makeConnectorProvider({ connectorType: 'mcp' }));
+  .register('quickbooks-mcp', () => makeQuickBooksMcpProvider());
 
 export function validateProviderSelection(
   provider: AccountingProvider,

@@ -62,7 +62,6 @@ export const fixtureConformanceCases = {
       ],
       confidence: [],
       overallConfidence: 1,
-      fixtureHints: { vendorId: null, poId: null },
     },
     vendor: {
       id: 'vendor_acme',

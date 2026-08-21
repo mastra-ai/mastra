@@ -1,11 +1,13 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { isLocalFixtureDemo } from '../auth.ts';
 
 const signingKey = () => {
-  const key = process.env.AP_ASSESSMENT_SIGNING_KEY?.trim();
+  const key = process.env.AP_ASSESSMENT_SIGNING_KEY?.trim(),
+    authToken = process.env.MASTRA_AUTH_TOKEN?.trim();
   const knownValues = new Set(['replace-with-a-long-random-secret', 'local-development-assessment-key']);
-  if (key && !knownValues.has(key) && key.length >= 32) return key;
-  if (process.env.NODE_ENV === 'production' || process.env.QBO_MCP_ENABLE_POSTING?.trim().toLowerCase() === 'true')
-    throw new Error('A server-only AP_ASSESSMENT_SIGNING_KEY is required for production or QuickBooks posting');
+  if (key && key !== authToken && !knownValues.has(key) && key.length >= 32) return key;
+  if (!isLocalFixtureDemo())
+    throw new Error('A server-only AP_ASSESSMENT_SIGNING_KEY is required outside the local fixture demo');
   return 'local-development-assessment-key';
 };
 

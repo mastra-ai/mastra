@@ -4,8 +4,9 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { apDecisionWorkflow } from '../phase2/workflow.ts';
-import { apExecutionWorkflow } from '../phase3/workflow.ts';
-import { InvoiceDraftSchema, type ReviewerContext } from '../schemas/invoice.ts';
+import { Phase3ResultSchema } from '../phase2/schemas.ts';
+import { ApprovalRequestSchema, apExecutionWorkflow } from '../phase3/workflow.ts';
+import { InvoiceDraftSchema, type DocumentRef, type ReviewerContext } from '../schemas/invoice.ts';
 import { validateExtraction } from '../validation/extraction-checks.ts';
 import { recordApKpi } from '../monitoring/ap-kpis.ts';
 
@@ -31,6 +32,13 @@ const toolResult = z.object({
   error: z.string().nullable(),
 });
 type ToolResult = z.infer<typeof toolResult>;
+type WorkflowResult = {
+  status: string;
+  result?: unknown;
+  suspendPayload?: unknown;
+};
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
 export const buildExtractionReviewResult = (issues: string[]): ToolResult =>
   toolResult.parse({
@@ -47,26 +55,27 @@ export const buildExtractionReviewResult = (issues: string[]): ToolResult =>
     error: null,
   });
 
-export const buildSuspendedApprovalResult = (result: any, runId: string): ToolResult => {
-  const payload = Object.values(result.suspendPayload ?? {}).find(
-    (value: any) => value?.disposition === 'approval_required',
-  ) as any;
+export const buildSuspendedApprovalResult = (result: WorkflowResult, runId: string): ToolResult => {
+  const payload = (isRecord(result.suspendPayload) ? Object.values(result.suspendPayload) : [])
+    .map(value => ApprovalRequestSchema.safeParse(value))
+    .find(candidate => candidate.success)?.data;
+  if (!payload) throw new Error('Approval workflow suspended without a valid approval request');
   return toolResult.parse({
     status: 'processed',
     runId,
     executionStatus: 'approval_required',
     disposition: 'approval_required',
     approvalPending: true,
-    reasons: payload?.reasons ?? [],
-    reasonDetails: payload?.reasonDetails ?? [],
-    reviewTypes: payload?.reviewTypes ?? [],
-    signals: payload?.signals ?? [],
-    adaptations: payload?.adaptations ?? [],
+    reasons: payload.reasons,
+    reasonDetails: payload.reasonDetails,
+    reviewTypes: payload.reviewTypes,
+    signals: payload.signals,
+    adaptations: payload.adaptations,
     error: null,
   });
 };
 
-const summarize = async (result: any, runId: string, approvalAttempt = false) => {
+const summarize = async (result: WorkflowResult, runId: string, approvalAttempt = false) => {
   if (result.status === 'suspended') {
     const output = buildSuspendedApprovalResult(result, runId);
     await recordApKpi({
@@ -100,39 +109,34 @@ const summarize = async (result: any, runId: string, approvalAttempt = false) =>
     });
     return output;
   }
-  const decisions = result.result.decisions as Array<{
-    reasons: Array<{ code: string; message: string; evidence?: Record<string, unknown> }>;
-    reviewType?: string | null;
-    signals?: string[];
-    adaptations?: Array<{ code: string }>;
-  }>;
-  const reasonDetails = decisions.flatMap(decision => decision.reasons);
+  const workflowResult = Phase3ResultSchema.parse(result.result);
+  const reasonDetails = workflowResult.decisions.flatMap(decision => decision.reasons);
   const output = toolResult.parse({
     status: 'processed',
     runId,
-    executionStatus: result.result.executionStatus,
-    disposition: result.result.disposition,
+    executionStatus: workflowResult.executionStatus,
+    disposition: workflowResult.disposition,
     approvalPending: false,
     reasons: reasonDetails.map(reason => reason.code),
     reasonDetails,
-    reviewTypes: decisions.flatMap(decision => (decision.reviewType ? [decision.reviewType] : [])),
-    signals: decisions.flatMap(decision => decision.signals ?? []),
-    adaptations: decisions.flatMap(decision => decision.adaptations?.map(adaptation => adaptation.code) ?? []),
-    error: result.result.postingError,
+    reviewTypes: workflowResult.decisions.flatMap(decision => (decision.reviewType ? [decision.reviewType] : [])),
+    signals: workflowResult.decisions.flatMap(decision => decision.signals),
+    adaptations: workflowResult.decisions.flatMap(decision => decision.adaptations.map(adaptation => adaptation.code)),
+    error: workflowResult.postingError,
   });
   const approvalState =
-    result.result.approval?.status === 'approved'
+    workflowResult.approval.status === 'approved'
       ? 'approved'
-      : result.result.approval?.status === 'rejected'
+      : workflowResult.approval.status === 'rejected'
         ? 'rejected'
         : 'not_applicable';
   await recordApKpi({
     ...output,
     recordedAt: new Date().toISOString(),
-    disposition: result.result.disposition,
-    postingStatus: result.result.posting?.status ?? null,
+    disposition: workflowResult.disposition,
+    postingStatus: workflowResult.posting?.status ?? null,
     integrationFailure:
-      Boolean(result.result.postingError) ||
+      Boolean(workflowResult.postingError) ||
       output.executionStatus === 'posting_failed' ||
       output.executionStatus === 'posting_unavailable',
     approvalState,
@@ -166,7 +170,7 @@ const submitInvoice = createTool({
       });
       return output;
     }
-    const document = {
+    const document: DocumentRef = {
       id: documentId,
       mimeType: source === 'PDF' ? 'application/pdf' : 'image/jpeg',
       source,
@@ -177,8 +181,6 @@ const submitInvoice = createTool({
       extractedResult: checked.extracted,
       checks: { passed: true, issues: [] },
       reviewerId: null,
-      vendorId: null,
-      poId: null,
       snapshot: { rawDocumentRef: document, extractedResult: checked.extracted },
     };
     const decisionRun = await apDecisionWorkflow.createRun();

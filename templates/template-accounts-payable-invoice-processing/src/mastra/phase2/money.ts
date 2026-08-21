@@ -35,6 +35,5 @@ export function normalizePhase1Output(output: Phase1WorkflowOutput): Phase2Invoi
     })),
     confidence: x.confidence,
     overallConfidence: x.overallConfidence,
-    fixtureHints: { vendorId: output.vendorId, poId: output.poId },
   });
 }

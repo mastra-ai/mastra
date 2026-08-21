@@ -1,6 +1,7 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { SimpleAuth } from '@mastra/core/server';
 import { isIP } from 'node:net';
+import type { ReviewerContext } from './schemas/invoice.ts';
 
 export type ApUser = { id: string; name: string; role: 'ap_approver' | 'viewer' };
 const configuredToken = process.env.MASTRA_AUTH_TOKEN?.trim(),
@@ -24,15 +25,16 @@ export const authConfigurationError =
     : undefined;
 
 export function isLocalFixtureDemo() {
-  const isDevelopment =
-    process.env.MASTRA_DEV === 'true' ||
-    process.env.MASTRA_DEV === '1' ||
-    (process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'prod');
+  const authToken = process.env.MASTRA_AUTH_TOKEN?.trim(),
+    authUserId = process.env.MASTRA_AUTH_USER_ID?.trim(),
+    host = process.env.MASTRA_HOST?.trim() || '127.0.0.1',
+    nodeEnvironment = process.env.NODE_ENV?.trim().toLowerCase(),
+    isDevelopment = nodeEnvironment !== 'production' && nodeEnvironment !== 'prod';
   return (
-    !configuredToken &&
-    !configuredUserId &&
+    !authToken &&
+    !authUserId &&
     isDevelopment &&
-    isLoopbackHost(serverHost) &&
+    isLoopbackHost(host) &&
     (process.env.ACCOUNTING_PROVIDER?.trim() || 'fixture') === 'fixture'
   );
 }
@@ -62,7 +64,7 @@ export async function getCurrentApUser(request: Request): Promise<ApUser | null>
   return null;
 }
 
-export function setAuthenticatedReviewer(requestContext: RequestContext<any>, user: ApUser | null) {
+export function setAuthenticatedReviewer(requestContext: RequestContext<ReviewerContext>, user: ApUser | null) {
   requestContext.delete('reviewerId');
   if (user?.role === 'ap_approver') requestContext.set('reviewerId', user.id);
 }

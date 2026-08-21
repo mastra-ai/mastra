@@ -6,7 +6,7 @@ A Mastra template that keeps document reading probabilistic and financial decisi
 
 The complete workflow is:
 
-`read invoice → normalize money/references → validate vendor → match PO/receipts → detect duplicates → apply policy → approve when required → post`
+`read invoice → normalize money → validate vendor → match PO/receipts → detect duplicates → apply policy → approve when required → post`
 
 The model reads the document; deterministic workflow steps own every financial control, approval gate, and write. Only `auto_post` or an authenticated human approval can reach the posting adapter.
 
@@ -23,7 +23,7 @@ npm run build
 npm run phase2:run
 ```
 
-`INVOICE_READER` is required explicitly. The supplied `.env.example` selects `fixture`, which runs two canned local cases: one straight-through result and one suspended run that resumes with a fixture review. It needs no model API key. `fixtures:score` scores the raw canned extraction before any human correction, then reports field-level fidelity, a mean, and failing case IDs.
+`INVOICE_READER` defaults to `fixture`, which runs two canned local cases: one straight-through result and one suspended run that resumes with a fixture review. It needs no model API key. `fixtures:score` scores the raw canned extraction before any human correction, then reports field-level fidelity, a mean, and failing case IDs.
 
 The workflow snapshot is persisted through Mastra's configured LibSQL storage at `MASTRA_DB_URL`. Without that variable, the template uses `<project>/data/mastra.db` regardless of the launch directory and creates the directory/database with owner-only permissions. The final workflow output includes `snapshot.rawDocumentRef` and `snapshot.extractedResult`; full workflow state is retained by Mastra for both completed and suspended runs.
 
@@ -38,7 +38,7 @@ Open the URL printed by `mastra dev`, select `apInvoiceWorkflow`, and start it w
 }
 ```
 
-The workflow uses local fixtures by default, so this path needs no model or accounting-system credentials. Select `invoiceReaderWorkflow` to inspect Phase 1 alone. The intermediate decision workflow is internal; it is not registered as a directly startable Studio/API workflow. The execution workflow is registered only so approval snapshots can be resumed, and it accepts assessments signed by the deterministic decision workflow. Use the chat intake agent or `apInvoiceWorkflow` for the complete trusted-document path. Set a random, server-only `AP_ASSESSMENT_SIGNING_KEY` of at least 32 characters in every non-local deployment (for example, generate one with `openssl rand -hex 32`). It must be independent of `MASTRA_AUTH_TOKEN`, which Studio/API users may know; assessment signing refuses to run in production or with QuickBooks posting enabled when the dedicated key is absent, too short, or the documented placeholder.
+The workflow uses local fixtures by default, so this path needs no model or accounting-system credentials. Select `invoiceReaderWorkflow` to inspect Phase 1 alone. The intermediate decision workflow is internal; it is not registered as a directly startable Studio/API workflow. The execution workflow is registered only so approval snapshots can be resumed, and it accepts assessments signed by the deterministic decision workflow. Use the chat intake agent or `apInvoiceWorkflow` for the complete trusted-document path. Set a random, server-only `AP_ASSESSMENT_SIGNING_KEY` of at least 32 characters whenever the server is authenticated, remotely bound, deployed, or connected to a non-fixture provider (for example, generate one with `openssl rand -hex 32`). It must be independent of `MASTRA_AUTH_TOKEN`, which Studio/API users may know. Only the credential-free, non-production fixture demo bound to loopback may use the built-in development signing key.
 
 The non-production fixture demo opens Studio without a login and assigns a fixed local reviewer so the approval flow works immediately. `MASTRA_HOST=127.0.0.1` binds that demo to loopback, and the credential-free reviewer is disabled for any non-loopback bind address. Set both `MASTRA_AUTH_TOKEN` and `MASTRA_AUTH_USER_ID` to enable `SimpleAuth`; production, non-fixture providers, and remotely bound servers deny API requests without them. Before exposing the server with `MASTRA_HOST=0.0.0.0`, configure authentication. A deployed template should replace `SimpleAuth` with its JWT/SSO provider.
 
@@ -57,6 +57,7 @@ npm run invoice:run -- path/to/invoice.pdf
 The vision reader accepts PDF, PNG, and JPEG files inside `INVOICE_ROOT`, checks file size before reading, verifies magic bytes and checksum, then sends those exact bytes as a multimodal file part. Use a provider/model that supports the document MIME type. The reader never returns ERP IDs, and document source metadata comes from the trusted input rather than the model.
 
 Phase 1 checks dates, currencies, required fields, and printed-amount arithmetic. Model confidence is retained for monitoring and extraction-error routing, but never decides whether financial data is valid.
+
 The reader workflow suspends when deterministic integrity checks fail: canonical date, ISO-4217 currency, required values, currency-aware printed-amount arithmetic, or subtotal/line reconciliation. Extended line totals and invoice totals must use the currency's minor-unit precision; unit prices may retain legitimate sub-minor precision and are checked through rounded line reconciliation. The AP decision workflow also routes to `verify_extraction` when overall confidence is low, a required field confidence is low, or a required confidence entry is missing. Line confidence may be reported as an aggregate `lines` entry or as indexed paths such as `lines[0].qty`; single-line legacy inputs with flat line-field names are also accepted. Confidence can request human verification, but it can never make an invoice postable.
 
 ### Review and resume
@@ -74,11 +75,11 @@ For the standalone `invoiceReaderWorkflow`, `step: 'verify-invoice'` is also val
 
 The server middleware deletes any caller-provided `reviewerId` and replaces it from the trusted reviewer identity. Outside the explicitly local fixture demo, a viewer or unauthenticated caller cannot authorize a resume. Direct, in-process workflow calls must similarly construct request context only from their trusted authentication layer.
 
-Reference resolution happens after review, so corrected vendor names and PO numbers map to fresh `vendorId` and `poId` values. The resolver is deliberately mocked and does not make a vendor-validity decision.
+Provider lookups happen after review, so corrected vendor names and PO numbers are always matched against the selected accounting system.
 
 ## Phase 2: deterministic controls
 
-The Phase 1/2 boundary converts every amount to currency-aware integer minor units (`USD 10.50 → 1050`, `JPY 10 → 10`, `BHD 10.500 → 10500`). Printed `vendorName` and `poNumber` are preserved. Phase 1's fixture `vendorId`/`poId` values become non-authoritative hints and are never sent to QuickBooks or another real provider.
+The Phase 1/2 boundary converts every amount to currency-aware integer minor units (`USD 10.50 → 1050`, `JPY 10 → 10`, `BHD 10.500 → 10500`). Printed `vendorName` and `poNumber` are preserved and resolved only through the selected provider.
 
 Currency validation uses the pinned `currency-codes` table plus reviewed current-code overrides from ISO 4217 amendments. Withdrawn codes remain accepted so historical invoices can still be processed; new or changed codes must be added with their official SIX amendment and a regression test when the pinned table is updated.
 
@@ -92,27 +93,29 @@ Select one globally at Mastra startup:
 ACCOUNTING_PROVIDER=fixture
 ```
 
-| Provider         | Vendors | POs  | Receipts | Bill seed | Posting | Bank details | Status | Sanctions |
-| ---------------- | ------- | ---- | -------- | --------- | ------- | ------------ | ------ | --------- |
-| `fixture`        | yes     | yes  | yes      | yes       | yes     | yes          | full   | yes       |
-| `quickbooks`     | yes     | yes  | no       | yes       | no      | no           | binary | no        |
-| `quickbooks-mcp` | yes     | yes* | no       | yes       | opt-in  | no           | binary | no        |
-| `connector`      | stub    | stub | stub     | stub      | stub    | stub         | stub   | stub      |
+| Provider         | Vendors | POs | Receipts | Bill seed | Posting | Bank details | Status | Sanctions |
+| ---------------- | ------- | --- | -------- | --------- | ------- | ------------ | ------ | --------- |
+| `fixture`        | yes     | yes | yes      | yes       | yes     | yes          | full   | yes       |
+| `quickbooks`     | yes     | yes | no       | yes       | no      | no           | binary | no        |
+| `quickbooks-mcp` | yes     | yes | no       | yes       | opt-in  | no           | binary | no        |
 
 Invalid providers and missing required capabilities fail during startup. A disabled capability means its port is absent—it never silently returns an empty result.
 
 ### QuickBooks sandbox
 
 ```bash
-ACCOUNTING_PROVIDER=quickbooks
-QBO_REALM_ID=your-sandbox-company-id
-QBO_ACCESS_TOKEN=your-oauth-access-token
-QBO_BASE_URL=https://sandbox-quickbooks.api.intuit.com
-SANCTIONS_SCREENING=fixture
+export MASTRA_AUTH_TOKEN="$(openssl rand -hex 32)"
+export MASTRA_AUTH_USER_ID=quickbooks-reviewer
+export AP_ASSESSMENT_SIGNING_KEY="$(openssl rand -hex 32)"
+export ACCOUNTING_PROVIDER=quickbooks
+export QBO_REALM_ID=your-sandbox-company-id
+export QBO_ACCESS_TOKEN=your-oauth-access-token
+export QBO_BASE_URL=https://sandbox-quickbooks.api.intuit.com
+export SANCTIONS_SCREENING=fixture
 npm run dev
 ```
 
-`SANCTIONS_SCREENING=fixture` is an explicit demo-only fallback. Replace it with a real standalone `SanctionsScreener` in production. Without a provider sanctions port or an explicitly configured fallback, startup fails.
+Keep `MASTRA_AUTH_TOKEN` available for Studio or API authentication. `SANCTIONS_SCREENING=fixture` is an explicit demo-only fallback. Replace it with a real standalone `SanctionsScreener` in production. Without a provider sanctions port or an explicitly configured fallback, startup fails.
 
 QuickBooks has no goods-receipt port here, so matching visibly degrades to two-way and emits `GOODS_RECEIPTS_UNAVAILABLE`. It also emits `VENDOR_BANK_DETAILS_UNAVAILABLE`, `VENDOR_STATUS_BINARY`, and the `payment_details_unverifiable` signal where applicable.
 
@@ -132,10 +135,13 @@ npm run auth
 Then configure this template with absolute paths:
 
 ```bash
-ACCOUNTING_PROVIDER=quickbooks-mcp
-QBO_MCP_SERVER_PATH=/absolute/path/quickbooks-online-mcp-server/dist/index.js
-QBO_MCP_TOKEN_STORE_PATH=/absolute/path/quickbooks-online-mcp-server/.env
-SANCTIONS_SCREENING=fixture
+export MASTRA_AUTH_TOKEN="$(openssl rand -hex 32)"
+export MASTRA_AUTH_USER_ID=quickbooks-reviewer
+export AP_ASSESSMENT_SIGNING_KEY="$(openssl rand -hex 32)"
+export ACCOUNTING_PROVIDER=quickbooks-mcp
+export QBO_MCP_SERVER_PATH=/absolute/path/quickbooks-online-mcp-server/dist/index.js
+export QBO_MCP_TOKEN_STORE_PATH=/absolute/path/quickbooks-online-mcp-server/.env
+export SANCTIONS_SCREENING=fixture
 npm run qbo-mcp:verify
 npm run dev
 ```
@@ -145,11 +151,11 @@ The adapter converts MCP text/JSON into canonical Zod-validated records. Intuit'
 Posting is disabled unless it is explicitly enabled with QuickBooks internal account IDs:
 
 ```bash
-QBO_MCP_ENABLE_POSTING=true
-QBO_MCP_SINGLE_WRITER=true
-QBO_MCP_EXPENSE_ACCOUNT_ID=your-expense-account-id
-QBO_MCP_TAX_ACCOUNT_ID=your-tax-account-id # required for invoices containing tax
-QBO_MCP_AP_ACCOUNT_ID=your-ap-account-id    # optional
+export QBO_MCP_ENABLE_POSTING=true
+export QBO_MCP_SINGLE_WRITER=true
+export QBO_MCP_EXPENSE_ACCOUNT_ID=your-expense-account-id
+export QBO_MCP_TAX_ACCOUNT_ID=your-tax-account-id # required for invoices containing tax
+export QBO_MCP_AP_ACCOUNT_ID=your-ap-account-id    # optional
 npm run qbo-mcp:verify
 ```
 
@@ -197,12 +203,6 @@ const provider = makeCompositeProvider({
 });
 ```
 
-### MCP and connector-based accounting software
-
-The registered `connector` provider is deliberately a guarded stub. It defines the seam for accounting products exposed through MCP servers or standard connectors, but selecting it currently fails with `connector provider not yet implemented`.
-
-Later, `makeConnectorProvider` can discover connector tools and map their results behind the same canonical repository ports. The MCP/connector remains a data-access adapter; the deterministic Mastra workflow continues to own validation, matching, retry behavior, evidence, and policy decisions.
-
 ## Provider conformance
 
 ```bash
@@ -242,5 +242,3 @@ npm run providers:conformance
 npm run phase2:run
 npm test
 ```
-
-Mastra API shapes are verified against the official Mastra Docs MCP before implementation; the pinned package version and lockfile determine the build.

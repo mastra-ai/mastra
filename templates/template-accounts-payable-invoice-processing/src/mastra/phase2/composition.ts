@@ -37,6 +37,8 @@ export function createPhase2Runtime(
     options.sanctionsFallback ??
     (process.env.SANCTIONS_SCREENING === 'fixture' ? new FixtureSanctionsScreener() : undefined);
   validateProviderSelection(provider, { sanctionsFallback: fallback });
+  const sanctions = provider.sanctions ?? fallback;
+  if (!sanctions) throw new Error(`Accounting provider ${provider.id} requires a sanctions screener`);
   const history = options.history ?? new InMemoryInvoiceHistoryRepository(),
     policy = options.policy ?? new FixturePolicyProvider();
   let syncing: Promise<void> | undefined;
@@ -44,7 +46,7 @@ export function createPhase2Runtime(
     provider,
     history,
     policy,
-    sanctions: provider.sanctions ?? fallback!,
+    sanctions,
     sanctionsIsFallback: !provider.sanctions,
     statusRestrictions: options.statusRestrictions,
     seedHistory: () => {

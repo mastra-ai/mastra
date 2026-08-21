@@ -102,8 +102,7 @@ class VisionInvoiceReader implements InvoiceReader {
     return InvoiceDraftSchema.parse(response.object);
   }
 }
-const readerType = process.env.INVOICE_READER;
-if (!readerType) throw new Error('INVOICE_READER must be explicitly set to fixture or vision');
+const readerType = process.env.INVOICE_READER?.trim() || 'fixture';
 if (readerType !== 'fixture' && readerType !== 'vision') throw new Error(`Unknown INVOICE_READER: ${readerType}`);
 export const invoiceReader: InvoiceReader =
   readerType === 'vision' ? new VisionInvoiceReader() : new FixtureInvoiceReader();

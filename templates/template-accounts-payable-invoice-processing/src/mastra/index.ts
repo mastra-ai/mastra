@@ -7,7 +7,6 @@ import { MastraCompositeStore } from '@mastra/core/storage';
 import { DuckDBStore } from '@mastra/duckdb';
 import { LibSQLStore } from '@mastra/libsql';
 import { MastraStorageExporter, Observability } from '@mastra/observability';
-import { invoiceExtractionAgent } from './agents/invoice-extraction.ts';
 import { invoiceChatIntakeAgent } from './agents/invoice-chat-intake.ts';
 import {
   apAuth,

@@ -47,7 +47,6 @@ export const Phase2InvoiceSchema = z.object({
   lines: z.array(Phase2LineSchema),
   confidence: z.array(FieldConfidenceSchema),
   overallConfidence: z.number().min(0).max(1),
-  fixtureHints: z.object({ vendorId: z.string().nullable(), poId: z.string().nullable() }),
 });
 export type Phase2Invoice = z.infer<typeof Phase2InvoiceSchema>;
 
@@ -109,8 +108,6 @@ export const Phase1WorkflowOutputSchema = z
   .object({
     rawDocumentRef: DocumentRefSchema,
     extractedResult: ExtractedInvoiceSchema,
-    vendorId: z.string().nullable(),
-    poId: z.string().nullable(),
   })
   .passthrough();
 export type Phase1WorkflowOutput = z.infer<typeof Phase1WorkflowOutputSchema>;

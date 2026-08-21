@@ -18,6 +18,19 @@ const approvalResumeSchema = z.object({
   approved: z.boolean(),
   comment: z.string().trim().max(1000).optional(),
 });
+export const ApprovalRequestSchema = z.object({
+  invoiceNumber: z.string(),
+  vendorName: z.string(),
+  currency: z.string(),
+  totalMinor: z.number().int().safe(),
+  disposition: z.literal('approval_required'),
+  reasons: z.array(z.string()),
+  reasonDetails: z.array(DecisionReasonSchema),
+  reviewTypes: z.array(z.string()),
+  signals: z.array(z.string()),
+  adaptations: z.array(z.string()),
+  invoiceDigest: z.string().regex(/^[a-f0-9]{64}$/),
+});
 const digest = (assessment: FinalAssessment) =>
   createHash('sha256')
     .update(
@@ -53,19 +66,7 @@ const approve = createStep({
   id: 'approve-invoice',
   inputSchema: FinalAssessmentSchema,
   outputSchema: Phase3ResultSchema,
-  suspendSchema: z.object({
-    invoiceNumber: z.string(),
-    vendorName: z.string(),
-    currency: z.string(),
-    totalMinor: z.number(),
-    disposition: z.literal('approval_required'),
-    reasons: z.array(z.string()),
-    reasonDetails: z.array(DecisionReasonSchema),
-    reviewTypes: z.array(z.string()),
-    signals: z.array(z.string()),
-    adaptations: z.array(z.string()),
-    invoiceDigest: z.string(),
-  }),
+  suspendSchema: ApprovalRequestSchema,
   resumeSchema: approvalResumeSchema,
   requestContextSchema: ReviewerContextSchema,
   execute: async ({ inputData, resumeData, requestContext, suspend }) => {

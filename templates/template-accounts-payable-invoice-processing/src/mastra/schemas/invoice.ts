@@ -24,7 +24,7 @@ export const ExtractedInvoiceSchema = z.object({
   lines: z.array(LineItemSchema),
   confidence: z.array(FieldConfidenceSchema),
   overallConfidence: z.number().min(0).max(1),
-  source: z.enum(['PDF', 'image', 'EDI']).default('PDF'),
+  source: z.enum(['PDF', 'image']).default('PDF'),
 });
 export type ExtractedInvoice = z.infer<typeof ExtractedInvoiceSchema>;
 
@@ -48,14 +48,14 @@ export const InvoiceDraftSchema = z.object({
   lines: z.array(DraftLineItemSchema).optional(),
   confidence: z.array(FieldConfidenceSchema).default([]),
   overallConfidence: z.number().min(0).max(1).nullable().optional(),
-  source: z.enum(['PDF', 'image', 'EDI']).optional(),
+  source: z.enum(['PDF', 'image']).optional(),
 });
 export type InvoiceDraft = z.infer<typeof InvoiceDraftSchema>;
 
 export const DocumentRefSchema = z.object({
   id: z.string(),
-  mimeType: z.string(),
-  source: z.enum(['PDF', 'image', 'EDI']).default('PDF'),
+  mimeType: z.enum(['application/pdf', 'image/png', 'image/jpeg']),
+  source: z.enum(['PDF', 'image']).default('PDF'),
   localPath: z.string().optional(),
   sha256: z.string().optional(),
 });

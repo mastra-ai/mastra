@@ -10,9 +10,10 @@ export function buildApKpiReport(rows: ApKpiEvent[]) {
   const ordered = lifecycle.map(events =>
     [...events].sort((a, b) => Date.parse(a.recordedAt) - Date.parse(b.recordedAt)),
   );
-  const latest = ordered.map(
-    events => [...events].reverse().find(row => row.approvalState !== 'resume_failed') ?? events.at(-1)!,
-  );
+  const latest = ordered.flatMap(events => {
+    const row = [...events].reverse().find(event => event.approvalState !== 'resume_failed') ?? events.at(-1);
+    return row ? [row] : [];
+  });
   const isPending = (row: ApKpiEvent) =>
     row.approvalState === 'pending' || (row.approvalState === undefined && row.approvalPending);
   const completed = latest.filter(row => !isPending(row) && row.approvalState !== 'resume_failed');

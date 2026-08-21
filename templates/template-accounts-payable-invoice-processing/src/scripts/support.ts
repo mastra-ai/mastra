@@ -35,7 +35,8 @@ export async function localDocument(path: string): Promise<DocumentRef> {
         ? 'image/png'
         : extension === '.jpg' || extension === '.jpeg'
           ? 'image/jpeg'
-          : 'application/octet-stream';
+          : null;
+  if (!mimeType) throw new Error('Invoice must be a PDF, PNG, or JPEG file');
   return {
     id: basename(absolutePath),
     localPath: absolutePath,

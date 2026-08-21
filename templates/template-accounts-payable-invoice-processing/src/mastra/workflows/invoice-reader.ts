@@ -9,7 +9,6 @@ import {
   InvoiceDraftSchema,
   ReviewerContextSchema,
 } from '../schemas/invoice.ts';
-import { resolveReferences } from '../tools/resolve-references.ts';
 import { validateExtraction } from '../validation/extraction-checks.ts';
 
 const extractedSchema = z.object({ rawDocumentRef: DocumentRefSchema, draft: InvoiceDraftSchema });
@@ -19,11 +18,7 @@ const verifiedSchema = z.object({
   checks: ExtractionChecksSchema,
   reviewerId: z.string().nullable(),
 });
-const resolvedSchema = verifiedSchema.extend({
-  vendorId: z.string().nullable(),
-  poId: z.string().nullable(),
-});
-const outputSchema = resolvedSchema.extend({
+const outputSchema = verifiedSchema.extend({
   snapshot: z.object({
     rawDocumentRef: DocumentRefSchema,
     extractedResult: ExtractedInvoiceSchema,
@@ -70,18 +65,9 @@ const verifyInvoice = createStep({
     };
   },
 });
-const resolveInvoiceReferences = createStep({
-  id: 'resolve-references',
-  inputSchema: verifiedSchema,
-  outputSchema: resolvedSchema,
-  execute: async ({ inputData }) => ({
-    ...inputData,
-    ...resolveReferences(inputData.extractedResult),
-  }),
-});
 const snapshotTrustedExtraction = createStep({
   id: 'snapshot-trusted-extraction',
-  inputSchema: resolvedSchema,
+  inputSchema: verifiedSchema,
   outputSchema,
   execute: async ({ inputData }) => ({
     ...inputData,
@@ -102,6 +88,5 @@ export const invoiceReaderWorkflow = createWorkflow({
   .then(loadDocument)
   .then(extractInvoice)
   .then(verifyInvoice)
-  .then(resolveInvoiceReferences)
   .then(snapshotTrustedExtraction)
   .commit();

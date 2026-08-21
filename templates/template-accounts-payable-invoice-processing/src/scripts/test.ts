@@ -7,7 +7,6 @@ import { isLoopbackHost, setAuthenticatedReviewer } from '../mastra/auth.ts';
 import { detectMediaType, invoiceReader, prepareDocument } from '../mastra/readers/invoice-reader.ts';
 import { extractionFidelityScorer, scoreExtraction } from '../mastra/scorers/extraction-fidelity.ts';
 import type { ExtractedInvoice } from '../mastra/schemas/invoice.ts';
-import { resolveReferences } from '../mastra/tools/resolve-references.ts';
 import { validateExtraction } from '../mastra/validation/extraction-checks.ts';
 import { runProviderConformance } from '../mastra/phase2/conformance.ts';
 import { fixtureConformanceCases } from '../mastra/phase2/conformance-fixtures.ts';
@@ -22,7 +21,6 @@ import { QuickBooksAdapter, type QboClient } from '../mastra/phase2/adapters/qui
 import { QuickBooksMcpAdapter } from '../mastra/phase2/adapters/quickbooks-mcp-adapter.ts';
 import type { McpToolClient } from '../mastra/phase2/adapters/mcp-tool-client.ts';
 import { makeCompositeProvider } from '../mastra/phase2/providers/composite-provider.ts';
-import { NotImplementedError } from '../mastra/phase2/providers/connector-provider.ts';
 import { fixtureProvider } from '../mastra/phase2/providers/fixture-provider.ts';
 import { makeQuickBooksProvider } from '../mastra/phase2/providers/quickbooks-provider.ts';
 import { makeQuickBooksMcpProvider } from '../mastra/phase2/providers/quickbooks-mcp-provider.ts';
@@ -134,7 +132,6 @@ assert.equal(
   0,
 );
 assert.ok(scoreExtraction(invoiceFixtures[1]!.draft, invoiceFixtures[1]!.groundTruth).overall < 1);
-assert.equal(resolveReferences({ ...cleanExtraction, poNumber: 'po-1001' }).poId, 'po_1001');
 
 assert.equal(detectMediaType(Buffer.from('%PDF-1.7')), 'application/pdf');
 assert.equal(detectMediaType(Buffer.from([0xff, 0xd8, 0xff, 0xdb])), 'image/jpeg');
@@ -268,14 +265,11 @@ const clean = invoiceFixtures[0]!,
   normalized = normalizePhase1Output({
     rawDocumentRef: clean.document,
     extractedResult: clean.groundTruth,
-    vendorId: 'vendor_acme',
-    poId: 'po_1001',
   });
-assert.deepEqual(normalized.fixtureHints, { vendorId: 'vendor_acme', poId: 'po_1001' });
 assert.equal(normalized.totalMinor, 10_800);
 
 await runProviderConformance(fixtureProvider, fixtureConformanceCases);
-assert.throws(() => providerRegistry.create('connector'), NotImplementedError);
+assert.throws(() => providerRegistry.create('missing'), /Unknown accounting provider/);
 
 const qboRows: Record<string, unknown[]> = {
   Vendor: [
@@ -462,6 +456,8 @@ const priorPostingFlag = process.env.QBO_MCP_ENABLE_POSTING,
   priorExpenseAccount = process.env.QBO_MCP_EXPENSE_ACCOUNT_ID,
   priorSingleWriter = process.env.QBO_MCP_SINGLE_WRITER;
 try {
+  process.env.QBO_MCP_ENABLE_POSTING = 'enabled';
+  assert.throws(() => makeQuickBooksMcpProvider(postingMcp), /QBO_MCP_ENABLE_POSTING must be true or false/);
   process.env.QBO_MCP_ENABLE_POSTING = 'true';
   delete process.env.QBO_MCP_EXPENSE_ACCOUNT_ID;
   delete process.env.QBO_MCP_SINGLE_WRITER;
@@ -1005,25 +1001,66 @@ const forgedResult = await forgedExecution
     console.error = originalConsoleError;
   });
 assert.equal(forgedResult.status, 'failed');
-const priorAssessmentKey = process.env.AP_ASSESSMENT_SIGNING_KEY,
-  priorAuthToken = process.env.MASTRA_AUTH_TOKEN,
-  priorSigningPosting = process.env.QBO_MCP_ENABLE_POSTING;
+const signingEnvironmentKeys = [
+    'AP_ASSESSMENT_SIGNING_KEY',
+    'MASTRA_AUTH_TOKEN',
+    'MASTRA_AUTH_USER_ID',
+    'MASTRA_HOST',
+    'MASTRA_DEV',
+    'NODE_ENV',
+    'ACCOUNTING_PROVIDER',
+  ] as const,
+  priorSigningEnvironment = Object.fromEntries(signingEnvironmentKeys.map(key => [key, process.env[key]])) as Record<
+    (typeof signingEnvironmentKeys)[number],
+    string | undefined
+  >;
 try {
   delete process.env.AP_ASSESSMENT_SIGNING_KEY;
-  process.env.MASTRA_AUTH_TOKEN = 'known-studio-token';
-  process.env.QBO_MCP_ENABLE_POSTING = 'true';
+  delete process.env.MASTRA_AUTH_TOKEN;
+  delete process.env.MASTRA_AUTH_USER_ID;
+  process.env.MASTRA_HOST = '127.0.0.1';
+  process.env.MASTRA_DEV = 'true';
+  process.env.NODE_ENV = 'development';
+  process.env.ACCOUNTING_PROVIDER = 'fixture';
+  assert.doesNotThrow(() => signAssessment({ disposition: 'auto_post' }));
+
+  process.env.MASTRA_HOST = '0.0.0.0';
   assert.throws(() => signAssessment({ disposition: 'auto_post' }), /server-only AP_ASSESSMENT_SIGNING_KEY/);
+
+  process.env.MASTRA_HOST = '127.0.0.1';
+  process.env.MASTRA_AUTH_TOKEN = 'known-studio-token-with-at-least-32-characters';
+  process.env.MASTRA_AUTH_USER_ID = 'known-studio-user';
+  assert.throws(() => signAssessment({ disposition: 'auto_post' }), /server-only AP_ASSESSMENT_SIGNING_KEY/);
+
+  delete process.env.MASTRA_AUTH_TOKEN;
+  delete process.env.MASTRA_AUTH_USER_ID;
+  process.env.NODE_ENV = 'production';
+  process.env.MASTRA_DEV = 'true';
+  assert.throws(() => signAssessment({ disposition: 'auto_post' }), /server-only AP_ASSESSMENT_SIGNING_KEY/);
+
+  process.env.NODE_ENV = 'development';
+  for (const provider of ['quickbooks', 'quickbooks-mcp', 'custom-provider']) {
+    process.env.ACCOUNTING_PROVIDER = provider;
+    assert.throws(() => signAssessment({ disposition: 'auto_post' }), /server-only AP_ASSESSMENT_SIGNING_KEY/);
+  }
+
+  process.env.ACCOUNTING_PROVIDER = 'fixture';
+  process.env.MASTRA_AUTH_TOKEN = 'known-studio-token-with-at-least-32-characters';
+  process.env.MASTRA_AUTH_USER_ID = 'known-studio-user';
   process.env.AP_ASSESSMENT_SIGNING_KEY = 'replace-with-a-long-random-secret';
   assert.throws(() => signAssessment({ disposition: 'auto_post' }), /server-only AP_ASSESSMENT_SIGNING_KEY/);
   process.env.AP_ASSESSMENT_SIGNING_KEY = 'local-development-assessment-key';
   assert.throws(() => signAssessment({ disposition: 'auto_post' }), /server-only AP_ASSESSMENT_SIGNING_KEY/);
+  process.env.AP_ASSESSMENT_SIGNING_KEY = process.env.MASTRA_AUTH_TOKEN;
+  assert.throws(() => signAssessment({ disposition: 'auto_post' }), /server-only AP_ASSESSMENT_SIGNING_KEY/);
+  process.env.AP_ASSESSMENT_SIGNING_KEY = 'a-real-server-only-signing-key-with-32-characters';
+  assert.doesNotThrow(() => signAssessment({ disposition: 'auto_post' }));
 } finally {
-  if (priorAssessmentKey === undefined) delete process.env.AP_ASSESSMENT_SIGNING_KEY;
-  else process.env.AP_ASSESSMENT_SIGNING_KEY = priorAssessmentKey;
-  if (priorAuthToken === undefined) delete process.env.MASTRA_AUTH_TOKEN;
-  else process.env.MASTRA_AUTH_TOKEN = priorAuthToken;
-  if (priorSigningPosting === undefined) delete process.env.QBO_MCP_ENABLE_POSTING;
-  else process.env.QBO_MCP_ENABLE_POSTING = priorSigningPosting;
+  for (const key of signingEnvironmentKeys) {
+    const value = priorSigningEnvironment[key];
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
 }
 
 const kpiBase: ApKpiEvent = {

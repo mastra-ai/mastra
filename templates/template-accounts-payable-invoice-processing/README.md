@@ -1,70 +1,45 @@
 # Accounts Payable Invoice Processing
 
-Drop an invoice into Mastra Studio and let the agent do the AP work: extract the fields, validate the vendor, match the purchase order and receipt, detect duplicates, apply policy, request approval when needed, and post the bill.
+Turn an invoice into an accounts payable decision from one Mastra Studio prompt. Attach a PDF or image and the agent extracts the fields, validates the vendor, matches the purchase order and receipt, checks for duplicates, applies policy, and either posts the bill or asks for approval.
 
-The default demo uses local accounting fixtures, so you can experience the complete workflow without connecting an ERP. QuickBooks is an optional integration when you are ready to work with a sandbox or real accounting data.
+The template includes a sample invoice and local vendor, PO, receipt, and invoice-history fixtures, so the complete flow works without an ERP. QuickBooks is optional.
 
-## Why it is useful
+## Prerequisites
 
-Invoice extraction benefits from a multimodal model, but financial decisions should not depend on model judgment alone. This template combines a conversational Studio agent with deterministic workflow steps, durable approval pauses, provider adapters, and observability.
+- Node.js >= 22.13.0
+- An [OpenAI API key](https://platform.openai.com/api-keys)
 
-## Demo
+## Setup
 
-Give the agent one job:
+```bash
+npm install
+cp .env.example .env
+# add OPENAI_API_KEY to .env
+npm run dev
+```
+
+Open the exact URL printed by Mastra (normally [127.0.0.1:4111](http://127.0.0.1:4111)), select **Accounts Payable Agent**, attach [`assets/sample-invoice.png`](./assets/sample-invoice.png), and say:
 
 > Process the attached invoice.
 
-It will:
+The included invoice matches the fixture data and completes without QuickBooks. If a run requires approval, the agent returns a run ID. Reply once with:
+
+```text
+Approve invoice run <RUN_ID>. Comment: Reviewed in Studio.
+```
+
+## How the agent works
 
 1. Read the invoice and validate its printed totals.
 2. Check the vendor, PO, goods receipt, sanctions result, and prior invoices.
 3. Auto-post clean invoices or pause for explicit approval when policy requires it.
 4. Record the decision evidence, posting result, and trace in Studio.
 
-## Features
+Invoice extraction uses a multimodal model. Vendor matching, three-way matching, duplicate detection, approval thresholds, and posting eligibility are deterministic workflow steps.
 
-- PDF, PNG, and JPEG invoice intake in Studio
-- Deterministic vendor, PO, receipt, duplicate, and policy controls
-- Human approval with persisted suspend-and-resume state
-- A credential-free local accounting demo, with optional QuickBooks adapters
-- Extraction scoring and Studio observability
+## Connecting accounting data
 
-## Quickstart 🚀
-
-1. Create the project:
-
-   ```bash
-   npx create-mastra@latest --template accounts-payable-invoice-processing
-   cd accounts-payable-invoice-processing
-   ```
-
-2. Add your [OpenAI API key](https://platform.openai.com/api-keys):
-
-   ```bash
-   cp .env.example .env
-   ```
-
-   Add `OPENAI_API_KEY` to `.env`. The fixture accounting provider is already selected.
-
-3. Start Studio:
-
-   ```bash
-   npm run dev
-   ```
-
-4. Open the exact URL printed by Mastra (normally [127.0.0.1:4111](http://127.0.0.1:4111)), select **Accounts Payable Agent**, attach [`assets/sample-invoice.png`](./assets/sample-invoice.png), and say:
-
-   ```text
-   Process the attached invoice.
-   ```
-
-The sample matches the included vendor, PO, and receipt fixtures and completes without QuickBooks. If a run requires approval, reply with its run ID:
-
-```text
-Approve invoice run <RUN_ID>. Comment: Reviewed in Studio.
-```
-
-QuickBooks is optional. To connect a sandbox later, see the [advanced guide](./docs/advanced.md#quickbooks-sandbox) and [live-testing checklist](./docs/quickbooks-testing.md). Posting stays off until you explicitly configure its safeguards.
+Optional QuickBooks connectors are included; see the [setup guide](./docs/advanced.md#quickbooks-sandbox) when you want one. You can also implement the `AccountingProvider` interface to connect your own accounting system.
 
 ## Making it yours
 
