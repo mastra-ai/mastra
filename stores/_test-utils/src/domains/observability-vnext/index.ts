@@ -3087,6 +3087,15 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
           expect(partial.scores).toHaveLength(0);
         });
 
+        it('matches nested metadata values structurally regardless of key order', async () => {
+          await seedMetadataScores();
+
+          const reordered = await storage.listScores({
+            filters: { metadata: { config: { mode: 'fast', retries: 2 } } },
+          });
+          expect(reordered.scores.map(s => s.scoreId)).toEqual(['score-meta-nested']);
+        });
+
         it('treats an empty metadata filter as a no-op', async () => {
           await seedMetadataScores();
 

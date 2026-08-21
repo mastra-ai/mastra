@@ -17,6 +17,47 @@ function normalizeJsonFilterValue(value: unknown): string | null {
   return json ?? null;
 }
 
+/**
+ * Add structural equality conditions for a JSON value at `path` inside `column`.
+ *
+ * Scalars compare against their raw JSON text (preserving types: 5 !== '5',
+ * null matches JSON null). Objects and arrays are decomposed recursively into
+ * per-leaf comparisons plus key/length-count checks, so nested objects match
+ * regardless of key serialization order while still requiring complete
+ * (exact, not partial) equality.
+ */
+function addStructuralJsonConditions(
+  column: string,
+  path: string,
+  value: unknown,
+  conditions: string[],
+  params: unknown[],
+): void {
+  if (value !== null && typeof value === 'object') {
+    if (Array.isArray(value)) {
+      conditions.push(`json_array_length(${column}, ?) = ?`);
+      params.push(path, value.length);
+      value.forEach((item, i) => {
+        addStructuralJsonConditions(column, `${path}[${i}]`, item, conditions, params);
+      });
+    } else {
+      const entries = Object.entries(value).filter(([, v]) => v !== undefined);
+      conditions.push(`json_array_length(json_keys(${column}, ?)) = ?`);
+      params.push(path, entries.length);
+      for (const [subKey, subValue] of entries) {
+        const escaped = subKey.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+        addStructuralJsonConditions(column, `${path}."${escaped}"`, subValue, conditions, params);
+      }
+    }
+    return;
+  }
+
+  const normalized = normalizeJsonFilterValue(value);
+  if (normalized === null) return;
+  conditions.push(`CAST(json_extract(${column}, ?) AS VARCHAR) = ?`);
+  params.push(path, normalized);
+}
+
 function sanitizeColumn(column: string): string {
   return parseFieldKey(column);
 }
@@ -93,11 +134,8 @@ export function buildWhereClause(
     if (key === 'metadata' || key === 'scope') {
       const jsonObj = value as Record<string, unknown>;
       for (const [jsonKey, jsonValue] of Object.entries(jsonObj)) {
-        const normalized = normalizeJsonFilterValue(jsonValue);
-        if (normalized === null) continue;
-        // Compare raw JSON text so value types are preserved (5 !== '5', null matches JSON null).
-        conditions.push(`CAST(json_extract(${column}, ?) AS VARCHAR) = ?`);
-        params.push(buildJsonPath(jsonKey), normalized);
+        if (jsonValue === undefined) continue;
+        addStructuralJsonConditions(column, buildJsonPath(jsonKey), jsonValue, conditions, params);
       }
       continue;
     }
