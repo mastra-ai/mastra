@@ -41,6 +41,7 @@ import type { MastraOnStepFinishCallback } from '../stream/types';
 import { selectFields } from '../utils';
 import { createWorkflow } from '../workflows/create';
 import { createStep } from '../workflows/workflow';
+import type { ScoringFilter } from './predicate';
 import type {
   ScoringSamplingConfig,
   ScorerRunInputForAgent,
@@ -1898,6 +1899,12 @@ export function createScorer(config: any): any {
 export type MastraScorerEntry = {
   scorer: MastraScorer<any, any, any, any>;
   sampling?: ScoringSamplingConfig;
+  /**
+   * Declarative eligibility filter, evaluated before sampling (filter →
+   * sample): the sampling rate applies to qualifying traffic only. JSON-safe,
+   * so it survives durable-agent serialization. See `evals/predicate.ts`.
+   */
+  filter?: ScoringFilter;
 };
 
 export type MastraScorers = Record<string, MastraScorerEntry>;

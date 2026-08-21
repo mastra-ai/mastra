@@ -23,6 +23,8 @@ import type {
   ScoringSamplingConfig,
 } from '../evals';
 import { runScorer } from '../evals/hooks';
+import { validateScoringPredicate } from '../evals/predicate';
+import type { ScoringFilter } from '../evals/predicate';
 
 import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
@@ -756,6 +758,15 @@ export class Agent<
     }
 
     this.#scorers = config.scorers || ({} as MastraScorers);
+
+    // Validate statically-configured scoring filters at definition time so a
+    // typo'd root fails loud at construction instead of silently skipping all
+    // scoring at runtime. Function-based scorers are validated when resolved.
+    if (typeof this.#scorers !== 'function') {
+      for (const entry of Object.values(this.#scorers)) {
+        if (entry?.filter) validateScoringPredicate(entry.filter);
+      }
+    }
 
     this.#agents = config.agents || ({} as Record<string, SubAgent<string, TRequestContext>>);
 
@@ -2462,6 +2473,12 @@ export class Agent<
         });
         this.logger.trackException(mastraError);
         throw mastraError;
+      }
+
+      // Statically-configured filters are validated in the constructor; the
+      // function form is only checkable once resolved.
+      for (const entry of Object.values(scorers)) {
+        if (entry?.filter) validateScoringPredicate(entry.filter);
       }
 
       return scorers;
@@ -6419,11 +6436,12 @@ export class Agent<
     structuredOutput?: boolean;
     overrideScorers?:
       | MastraScorers
-      | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
+      | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig; filter?: ScoringFilter }>;
     threadId?: string;
     resourceId?: string;
   } & ObservabilityContext) {
-    let scorers: Record<string, { scorer: MastraScorer; sampling?: ScoringSamplingConfig }> = {};
+    let scorers: Record<string, { scorer: MastraScorer; sampling?: ScoringSamplingConfig; filter?: ScoringFilter }> =
+      {};
     try {
       scorers = overrideScorers
         ? this.resolveOverrideScorerReferences(overrideScorers)
@@ -6472,9 +6490,12 @@ export class Agent<
    * @internal
    */
   private resolveOverrideScorerReferences(
-    overrideScorers: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>,
+    overrideScorers:
+      | MastraScorers
+      | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig; filter?: ScoringFilter }>,
   ) {
-    const result: Record<string, { scorer: MastraScorer; sampling?: ScoringSamplingConfig }> = {};
+    const result: Record<string, { scorer: MastraScorer; sampling?: ScoringSamplingConfig; filter?: ScoringFilter }> =
+      {};
     for (const [id, scorerObject] of Object.entries(overrideScorers)) {
       // If the scorer is a string (scorer name), we need to get the scorer from the mastra instance
       if (typeof scorerObject.scorer === 'string') {
@@ -6489,7 +6510,7 @@ export class Agent<
           }
 
           const scorer = this.#mastra.getScorerById(scorerObject.scorer);
-          result[id] = { scorer, sampling: scorerObject.sampling };
+          result[id] = { scorer, sampling: scorerObject.sampling, filter: scorerObject.filter };
         } catch (error) {
           this.logger.warn('Failed to get scorer', { agent: this.name, scorer: scorerObject.scorer, error });
         }

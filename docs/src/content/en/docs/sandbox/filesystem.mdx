@@ -14,7 +14,7 @@ A filesystem gives an agent tools for reading, writing, listing, and [searching]
 Configure files in two ways:
 
 - [Direct filesystem access](#direct-filesystem-access) uses `filesystem` with one filesystem provider or a [`CompositeFilesystem`](#manual-composition) that you create yourself.
-- [Mounts](#mounts) uses `mounts` to create a `CompositeFilesystem` from path-prefixed providers. When the workspace also has a static sandbox, Mastra attempts to mount each provider at its configured path inside the sandbox so commands can access the same files. Remote sandbox mounts typically use Filesystem in Userspace (FUSE).
+- [Mounts](#mounts) uses `mounts` to create a `CompositeFilesystem` from path-prefixed providers. When a static sandbox and filesystem provider support mounting, Mastra automatically mounts the provider at its configured path. Remote sandbox mounts typically use Filesystem in Userspace (FUSE).
 
 Configure either `filesystem` or `mounts`, not both. Configuring both throws a `WorkspaceError` with the code `INVALID_CONFIG`.
 
@@ -80,7 +80,7 @@ See [Search](/docs/sandbox/search) to index the files for keyword or semantic re
 
 ## Mounts
 
-Use `mounts` when programs inside a sandbox need to access persistent files by path. The agent still receives file tools, while command tools can run commands such as `ls`, `cat`, or `python` against the same files.
+Use `mounts` when programs inside a sandbox need to access persistent files by path. Mastra creates the mount automatically when the sandbox and filesystem provider support it. The agent still receives file tools, while command tools can run commands such as `ls`, `cat`, or `python` against the same files.
 
 For example, mount an S3 bucket at `/workspace` inside a Daytona sandbox:
 
@@ -193,7 +193,7 @@ Use manual composition when another part of your application needs the composite
 
 ## Mount availability
 
-File tools and composite routing work without FUSE. Remote sandboxes can use FUSE to make cloud storage visible to commands. `LocalSandbox` uses symlinks instead.
+File tools and composite routing work without a sandbox mount. When a remote sandbox and filesystem provider support mounting, `mounts` automatically uses FUSE to make the files visible to commands. `LocalSandbox` uses symlinks instead.
 
 Built-in sandbox mounting currently includes:
 
@@ -208,27 +208,27 @@ Remote mounts may require `s3fs`, `gcsfuse`, or `blobfuse2` inside the sandbox. 
 
 If a sandbox mount is unavailable or fails, the workspace remains usable. File tools continue to access the provider through its SDK, but commands can't see that path. Mastra describes these providers to the agent as available through file tools only.
 
-## Multi-tenant filesystems
+## Filesystems per user or thread
 
 The `filesystem` option accepts a resolver when storage should vary by request, user, role, or tenant:
 
 ```typescript
 const workspace = new Workspace({
   filesystem: ({ requestContext }) => {
-    const tenantId = requestContext.get('tenant-id') as string
+    const userId = requestContext.get('user-id') as string
 
     return new S3Filesystem({
       bucket: process.env.S3_BUCKET!,
       region: process.env.S3_REGION!,
-      prefix: `tenants/${tenantId}`,
+      prefix: `users/${userId}`,
     })
   },
 })
 ```
 
-Each tenant gets its own filesystem view, and file tools resolve the provider from the request context automatically.
+Each user gets a separate filesystem view, and file tools resolve the provider from the request context automatically.
 
-`mounts` doesn't accept a resolver and can't be combined with a sandbox resolver. When each user or thread needs separate storage inside a separate sandbox, create and mount the provider inside the sandbox resolver. See [Multi-tenant sandboxes](/docs/sandbox/overview#multi-tenant-sandboxes).
+`mounts` doesn't accept a resolver and can't be combined with a sandbox resolver. When each user or thread needs separate storage inside a separate sandbox, create and mount the provider inside the sandbox resolver. See [Sandboxes per user or thread](/docs/sandbox/overview#sandboxes-per-user-or-thread).
 
 ## Policies and containment
 
