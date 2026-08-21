@@ -2483,7 +2483,12 @@ describe('Observer Agent Helpers', () => {
 
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
-        observation: { messageTokens: 1000, bufferTokens: false, model: 'test-model' },
+        observation: {
+          messageTokens: 1000,
+          bufferTokens: false,
+          model: 'test-model',
+          observeAttachments: true,
+        },
         reflection: { observationTokens: 1000 },
       });
 
@@ -5522,7 +5527,7 @@ Ask about favorite vegetarian dishes
     observerSpy.mockRestore();
   });
 
-  it('should send attachment parts to the observer alongside placeholder text', async () => {
+  it('should only send commonly supported attachment parts to the observer by default', async () => {
     let capturedPrompt: any = null;
 
     const om = new ObservationalMemory({
@@ -5538,6 +5543,14 @@ Ask about favorite vegetarian dishes
     vi.spyOn(om.observer as any, 'createAgent').mockReturnValue({
       stream: async (prompt: any) => {
         capturedPrompt = prompt;
+        const hasUnsupportedHtml = prompt.some(
+          (message: any) =>
+            Array.isArray(message.content) &&
+            message.content.some((part: any) => part.type === 'file' && part.mimeType === 'text/html'),
+        );
+        if (hasUnsupportedHtml) {
+          throw new Error("'file part media type text/html' functionality not supported");
+        }
         return {
           getFullOutput: async () => ({
             text: `<observations>\n- User shared a reference image and floorplan\n</observations>`,
@@ -5553,6 +5566,12 @@ Ask about favorite vegetarian dishes
       parts: [
         { type: 'text', text: 'Please compare these attachments.' },
         { type: 'image', image: 'https://example.com/reference-board.png', mimeType: 'image/png' } as any,
+        {
+          type: 'file',
+          data: 'https://example.com/report.html',
+          mimeType: 'text/html',
+          filename: 'report.html',
+        } as any,
         {
           type: 'file',
           data: 'https://example.com/specs/floorplan.pdf',
@@ -5572,7 +5591,8 @@ Ask about favorite vegetarian dishes
     expect(historyMessage).toBeDefined();
     expect(historyMessage.content[0].text).toContain('New Message History');
     expect(historyMessage.content[1].text).toContain('[Image #1: reference-board.png]');
-    expect(historyMessage.content[1].text).toContain('[File #1: floorplan.pdf]');
+    expect(historyMessage.content[1].text).toContain('[File #1: report.html]');
+    expect(historyMessage.content[1].text).toContain('[File #2: floorplan.pdf]');
     expect(
       historyMessage.content.some(
         (part: any) => part.type === 'image' && part.image === 'https://example.com/reference-board.png',
@@ -5587,6 +5607,11 @@ Ask about favorite vegetarian dishes
           part.data === 'https://example.com/specs/floorplan.pdf',
       ),
     ).toBe(true);
+    expect(
+      historyMessage.content.some(
+        (part: any) => part.type === 'file' && part.mimeType === 'text/html' && part.filename === 'report.html',
+      ),
+    ).toBe(false);
   });
 
   it('should pass reflection instruction to reflector agent during synchronous reflection', async () => {
