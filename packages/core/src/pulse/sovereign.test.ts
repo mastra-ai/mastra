@@ -106,6 +106,22 @@ describe('sovereignty: observability OFF, pulse alone', () => {
       expect(step0End).toMatchObject({ surface: 'model', action: 'step_completed', traceId: runId });
       expect(step0End.data).toMatchObject({ total_input_tokens: 30, total_output_tokens: 12 });
 
+      // ── model_input moment facts are ANCHORED: parent key + join arrows ──
+      const finalized = c.facts.find(f => f.surface === 'model_input' && f.action === 'finalized');
+      const executed = c.facts.find(f => f.surface === 'model_input' && f.action === 'executed');
+      expect(finalized, 'finalized fact').toBeDefined();
+      expect(executed, 'executed fact').toBeDefined();
+      expect(finalized.parentSpanId, 'finalized parents to its step').toBe('model.step.0');
+      expect(executed.parentSpanId, 'executed parents to its step').toBe('model.step.0');
+      expect(
+        c.edges.some(e => e.type === 'parent_of' && e.from.id === factIds.step(runId, 0) && e.to.id === finalized.id),
+        'parent_of arrow step → finalized',
+      ).toBe(true);
+      expect(
+        c.edges.some(e => e.type === 'executes_request' && e.from.id === executed.id && e.to.id === finalized.id),
+        'executes_request arrow executed → finalized',
+      ).toBe(true);
+
       // ── Computed parentage: run → generation → step ──
       expect(
         c.edges.some(

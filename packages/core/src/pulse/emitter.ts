@@ -52,6 +52,7 @@ export interface PulseFactInput {
       | 'drained_signal'
       | 'introduced_content'
       | 'included_in_model_input'
+      | 'executes_request'
       | 'origin_of'
       | 'parent_of'
       | 'resume_of'

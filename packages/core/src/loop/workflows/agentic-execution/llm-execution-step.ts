@@ -34,7 +34,9 @@ import { isProcessorWorkflow } from '../../../processors/index';
 import { PrepareStepProcessor } from '../../../processors/processors/prepare-step';
 import { ProcessorRunner } from '../../../processors/runner';
 import type { ProcessorState } from '../../../processors/runner';
+import { spanPulseId } from '../../../pulse/bridge';
 import { emitPulseFact } from '../../../pulse/emitter';
+import { factIds, mintFactId } from '../../../pulse/identity';
 import { emitSpanFact, usageTokenData } from '../../../pulse/lifecycle';
 import { RequestContext } from '../../../request-context';
 import { execute } from '../../../stream/aisdk/v5/execute';
@@ -1663,8 +1665,22 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 });
               }
             }
+            // Anchor the moment fact: parent key + arrow to its step, and a
+            // deterministic id (keyed by the freeze nonce) so the executed
+            // fact can point back with an explicit join arrow.
+            const stepIndex = inputData.output?.steps?.length ?? 0;
+            const stepSpan = modelSpanTracker?.getTracingContext?.()?.currentSpan as
+              | { id?: string; traceId?: string }
+              | undefined;
+            const stepFactId = stepSpan?.id
+              ? spanPulseId(stepSpan.traceId ?? '', stepSpan.id, 'started')
+              : factIds.step(runId!, stepIndex);
+            const finalizedId = mintFactId(runId!, 'model_input', 'finalized', 'started', pulseFreezeId);
             emitPulseFact({
+              id: finalizedId,
               runId,
+              traceId: stepSpan?.traceId ?? runId,
+              parentSpanId: stepSpan?.id ?? `model.step.${stepIndex}`,
               surface: 'model_input',
               action: 'finalized',
               type: 'state',
@@ -1672,9 +1688,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 requestId: String(currentStep.messageId ?? ''),
                 freezeId: pulseFreezeId,
                 messageCount: inputMessages.length,
-                step: inputData.output?.steps?.length ?? 0,
+                step: stepIndex,
               },
-              edges: includedEdges,
+              edges: [
+                { type: 'parent_of', from: { kind: 'pulse', id: stepFactId }, to: { kind: 'pulse', id: finalizedId } },
+                ...includedEdges,
+              ],
             });
           }
 
@@ -1792,16 +1811,42 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               return () => {
                 if (emitted || !pulseFreezeId) return;
                 emitted = true;
+                const stepIndex = inputData.output?.steps?.length ?? 0;
+                const stepSpan = modelSpanTracker?.getTracingContext?.()?.currentSpan as
+                  | { id?: string; traceId?: string }
+                  | undefined;
+                const stepFactId = stepSpan?.id
+                  ? spanPulseId(stepSpan.traceId ?? '', stepSpan.id, 'started')
+                  : factIds.step(runId!, stepIndex);
+                const finalizedId = mintFactId(runId!, 'model_input', 'finalized', 'started', pulseFreezeId);
+                const executedId = mintFactId(runId!, 'model_input', 'executed', 'started', pulseFreezeId);
                 emitPulseFact({
+                  id: executedId,
                   runId,
+                  traceId: stepSpan?.traceId ?? runId,
+                  parentSpanId: stepSpan?.id ?? `model.step.${stepIndex}`,
                   surface: 'model_input',
                   action: 'executed',
                   type: 'state',
                   attributes: {
                     requestId: String(currentStep.messageId ?? ''),
                     freezeId: pulseFreezeId,
-                    step: inputData.output?.steps?.length ?? 0,
+                    step: stepIndex,
                   },
+                  edges: [
+                    {
+                      type: 'parent_of',
+                      from: { kind: 'pulse', id: stepFactId },
+                      to: { kind: 'pulse', id: executedId },
+                    },
+                    // The join arrow the graph needs: this response REALLY
+                    // answered that frozen request (nonce join, now explicit).
+                    {
+                      type: 'executes_request',
+                      from: { kind: 'pulse', id: executedId },
+                      to: { kind: 'pulse', id: finalizedId },
+                    },
+                  ],
                 });
               };
             })(),
