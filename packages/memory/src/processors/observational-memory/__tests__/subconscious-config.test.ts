@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import { Memory, Subconscious } from '../../../index';
 import type { Extractor } from '../extractor';
+import { __resetCurationCadenceWarning } from '../subconscious/index';
 import { usableObservationalMemoryModel } from '../subconscious/model';
 import type { ObservationalMemoryConfig } from '../types';
 
@@ -174,5 +175,45 @@ describe('Subconscious configuration', () => {
       options: { observationalMemory: { model, observation: { extract: [] } } },
     });
     expect(getExtractors(memory)).toEqual([]);
+  });
+});
+
+describe('curationCadence deprecation', () => {
+  it('warns once per process, not once per construction', () => {
+    __resetCurationCadenceWarning();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      new Subconscious({ curationCadence: 5 });
+      new Subconscious({ curationCadence: 9 });
+
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0]?.[0]).toContain('curationThreshold');
+      expect(warn.mock.calls[0]?.[0]).toContain('uncurated');
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('does not warn when only the new options are used', () => {
+    __resetCurationCadenceWarning();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      new Subconscious({ curationThreshold: 5, curationMaxAgeMs: 60_000 });
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('lets curationThreshold win when both are configured', () => {
+    __resetCurationCadenceWarning();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const subconscious = new Subconscious({ curationCadence: 5, curationThreshold: 20 });
+      expect(subconscious.resolved.curationThreshold).toBe(20);
+      expect(subconscious.resolved.curationCadence).toBe(5);
+    } finally {
+      warn.mockRestore();
+    }
   });
 });
