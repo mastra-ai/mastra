@@ -1,5 +1,107 @@
 # @mastra/core
 
+## 1.62.0-alpha.2
+
+### Minor Changes
+
+- Added metadata filtering to score queries. You can now filter scores by metadata key-value pairs when listing scores: ([#22047](https://github.com/mastra-ai/mastra/pull/22047))
+
+  ```typescript
+  const result = await storage.listScores({
+    filters: { metadata: { env: 'prod' } },
+  });
+  ```
+
+- `Mastra.shutdown()` no longer destroys registered workspaces' sandboxes. Remote sandboxes (E2B, Platform, and other providers) were being killed on every process restart; they are now stopped instead, so providers that support suspension pause the sandbox and resume it later with filesystem and memory intact. ([#22079](https://github.com/mastra-ai/mastra/pull/22079))
+
+  - New `Workspace.stop()`: shuts down language servers, closes the browser, and stops the sandbox without destroying anything. The workspace stays usable and the sandbox can start again later.
+  - `LocalSandbox.stop()` now kills background processes (previously only `destroy()` did), so the stop-on-shutdown behavior cannot leak child processes on local sandboxes. Files in the working directory are untouched.
+  - Full teardown remains explicit: `workspace.destroy()` or `mastra.removeWorkspace(id, { destroy: true })`.
+
+  ```typescript
+  // Suspend live resources; the workspace stays usable
+  await workspace.stop();
+
+  // Full teardown is explicit
+  await workspace.destroy();
+  ```
+
+### Patch Changes
+
+- Add declarative eligibility filters to scorer bindings, evaluated before sampling. ([#22010](https://github.com/mastra-ai/mastra/pull/22010))
+
+  A scorer binding can now declare `filter`, a JSON-safe predicate over the scoring context (`requestContext`, `entity`, `entityType`, `source`, `threadId`, `resourceId`, `projectId`) using the shared predicate DSL. Filters run before sampling, so the sampling rate applies to qualifying traffic only — e.g. score escalated conversations at 100% by filtering on `requestContext.escalated` in one binding, and sample the rest at 5% in another.
+
+  ```ts
+  scorers: {
+    groundedness: {
+      scorer: groundednessScorer,
+      filter: {
+        op: 'eq',
+        left: { path: 'requestContext.protocolVersion' },
+        right: { literal: 'v3' },
+      },
+      sampling: { type: 'ratio', rate: 0.05 },
+    },
+  }
+  ```
+
+  Details:
+
+  - Filters are validated at definition time: paths referencing unknown roots throw at agent construction (or when function-based scorer configs resolve), instead of silently skipping all scoring at runtime.
+  - Filters evaluate against the flattened `requestContext` view that is persisted on score rows, so a filter remains answerable against stored records.
+  - Filters are plain JSON and survive durable-agent serialization round-trips unchanged.
+  - Scoring filters use the same predicate format as workflow `conditional`/`loop` conditions; existing workflow predicate behavior is unchanged.
+  - Fixed: an unrecognized `sampling.type` previously fell through to scoring 100% of traffic; it now fails closed and skips scoring.
+
+## 1.61.1-alpha.1
+
+### Patch Changes
+
+- Make scorer sampling deterministic and tie it to the trace sampling decision ([#22008](https://github.com/mastra-ai/mastra/pull/22008))
+
+  Ratio-based scorer sampling previously called `Math.random()` on every scorer invocation. It
+  now hashes the trace ID (falling back to the run ID when observability is not configured), so
+  the decision is reproducible and every scorer at a given rate selects the same traces. Two
+  scorers sampling at 10% now cover the same 10% of traffic instead of overlapping on roughly 1%
+  by chance, which makes their scores comparable on the same population.
+
+  Scorers also now respect the tracing sampler. If the tracer declined a trace, scorers no
+  longer run against it — those scores referenced a trace that was never stored and could not be
+  drilled into.
+
+  Two behavior changes when upgrading:
+
+  - **Score volume drops if your trace sampling rate is lower than your scorer sampling rate.**
+    The scores you lose are ones whose traces were never recorded. To keep the same score
+    volume, raise your trace sampling to cover the traffic you score (or lower your scorer
+    sampling to match — the effective rate is now bounded by the trace rate):
+
+    ```ts
+    // Before: scorer sampled 50% of invocations, but only 10% had a stored trace,
+    // so up to 40% of scores referenced traces that were never recorded.
+    new Observability({
+      configs: { default: { sampling: { type: 'ratio', probability: 0.1 }, exporters } },
+    });
+    new Agent({
+      scorers: { myScorer: { scorer: myScorer, sampling: { type: 'ratio', rate: 0.5 } } },
+    });
+
+    // After: raise trace sampling so every sampled score has a stored trace.
+    new Observability({
+      configs: { default: { sampling: { type: 'ratio', probability: 0.5 }, exporters } },
+    });
+    new Agent({
+      scorers: { myScorer: { scorer: myScorer, sampling: { type: 'ratio', rate: 0.5 } } },
+    });
+    ```
+
+  - **Which traces get scored changes, even at an unchanged rate.** Score counts before and
+    after the upgrade are drawn from a different set of traces, not just a different number.
+
+  Scoring is unaffected when observability is not configured: with no tracing set up there is no
+  trace decision to inherit, so scorers run as before, now keyed deterministically on run ID.
+
 ## 1.61.1-alpha.0
 
 ### Patch Changes

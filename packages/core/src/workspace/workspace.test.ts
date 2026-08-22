@@ -524,6 +524,122 @@ Line 3 conclusion`;
       expect(await workspace.search('lazy')).toEqual([]);
     });
 
+    it('stop() stops the sandbox but keeps the workspace usable', async () => {
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const sandbox = new LocalSandbox({ workingDirectory: tempDir });
+      const workspace = new Workspace({ filesystem, sandbox, bm25: true });
+
+      await workspace.index('/doc1.txt', 'The quick brown fox jumps over the lazy dog');
+      await sandbox._start();
+      expect(sandbox.status).toBe('running');
+
+      await workspace.stop();
+
+      expect(sandbox.status).toBe('stopped');
+      // Not a teardown: the search index survives and the workspace stays usable.
+      expect((await workspace.search('quick')).length).toBeGreaterThan(0);
+    });
+
+    it('coalesces concurrent stop() calls onto one in-flight teardown', async () => {
+      let stops = 0;
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => {
+        release = resolve;
+      });
+      const sandbox = {
+        provider: 'fake',
+        stop: async () => {
+          stops += 1;
+          await gate;
+        },
+      } as any;
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+        sandbox,
+      });
+
+      const first = workspace.stop();
+      const second = workspace.stop();
+      release();
+      await Promise.all([first, second]);
+
+      expect(stops).toBe(1);
+    });
+
+    it('destroy() waits for an in-flight stop() and wins', async () => {
+      let stopStarted!: () => void;
+      const stopStartedGate = new Promise<void>(resolve => {
+        stopStarted = resolve;
+      });
+      let releaseStop!: () => void;
+      const stopGate = new Promise<void>(resolve => {
+        releaseStop = resolve;
+      });
+      const order: string[] = [];
+      const sandbox = {
+        provider: 'fake',
+        stop: async () => {
+          order.push('stop:start');
+          stopStarted();
+          await stopGate;
+          order.push('stop:end');
+        },
+        destroy: async () => {
+          order.push('destroy');
+        },
+      } as any;
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+        sandbox,
+      });
+
+      const stopping = workspace.stop();
+      await stopStartedGate;
+      const destroying = workspace.destroy();
+      releaseStop();
+      await Promise.all([stopping, destroying]);
+
+      // The destroy must not interleave with the stop's teardown.
+      expect(order).toEqual(['stop:start', 'stop:end', 'destroy']);
+      expect(workspace.status).toBe('destroyed');
+    });
+
+    it('concurrent destroy() calls during an in-flight stop() destroy once', async () => {
+      let stopStarted!: () => void;
+      const stopStartedGate = new Promise<void>(resolve => {
+        stopStarted = resolve;
+      });
+      let releaseStop!: () => void;
+      const stopGate = new Promise<void>(resolve => {
+        releaseStop = resolve;
+      });
+      let destroys = 0;
+      const sandbox = {
+        provider: 'fake',
+        stop: async () => {
+          stopStarted();
+          await stopGate;
+        },
+        destroy: async () => {
+          destroys += 1;
+        },
+      } as any;
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+        sandbox,
+      });
+
+      const stopping = workspace.stop();
+      await stopStartedGate;
+      const firstDestroy = workspace.destroy();
+      const secondDestroy = workspace.destroy();
+      releaseStop();
+      await Promise.all([stopping, firstDestroy, secondDestroy]);
+
+      expect(destroys).toBe(1);
+      expect(workspace.status).toBe('destroyed');
+    });
+
     it('should release the search index even when a resource fails to destroy', async () => {
       const filesystem = new LocalFilesystem({ basePath: tempDir });
       const workspace = new Workspace({
@@ -2816,6 +2932,19 @@ Line 3 conclusion`;
       const workspace = new Workspace({ sandbox, lsp: true });
 
       expect(workspace.lsp).toBeInstanceOf(LSPManager);
+    });
+
+    it('keeps the LSP manager usable after stop()', async () => {
+      const sandbox = new LocalSandbox({ workingDirectory: tempDir });
+      const workspace = new Workspace({ sandbox, lsp: true });
+      const before = workspace.lsp;
+      expect(before).toBeInstanceOf(LSPManager);
+
+      await workspace.stop();
+
+      // shutdownAll() drains and resets the manager, so the same instance
+      // spawns clients again on the next diagnostics request.
+      expect(workspace.lsp).toBe(before);
     });
 
     it('does not create LSPManager when lsp is not configured', async () => {

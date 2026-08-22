@@ -1,5 +1,25 @@
 # mastracode
 
+## 0.35.1-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`e737014`](https://github.com/mastra-ai/mastra/commit/e737014e0fc7035759762bb5b48baef1d6c0f6a7), [`e737014`](https://github.com/mastra-ai/mastra/commit/e737014e0fc7035759762bb5b48baef1d6c0f6a7), [`e737014`](https://github.com/mastra-ai/mastra/commit/e737014e0fc7035759762bb5b48baef1d6c0f6a7), [`d6ce34a`](https://github.com/mastra-ai/mastra/commit/d6ce34aeceb06ddf3d595a1eed5cc74f481a46a1), [`e6f8450`](https://github.com/mastra-ai/mastra/commit/e6f845074d478527026b18d85031b23353e1d0a4)]:
+  - @mastra/duckdb@1.6.3-alpha.0
+  - @mastra/core@1.62.0-alpha.2
+  - @mastra/pg@1.22.0-alpha.0
+  - @mastra/code-sdk@1.4.1-alpha.2
+
+## 0.35.1-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`f95f468`](https://github.com/mastra-ai/mastra/commit/f95f468cf1e7c2b924a13826494f98b8f2ccd581), [`cb0291c`](https://github.com/mastra-ai/mastra/commit/cb0291cca0f8a769495375ff213cbda2512bb542)]:
+  - @mastra/core@1.61.1-alpha.1
+  - @mastra/observability@1.17.2-alpha.0
+  - @mastra/code-sdk@1.4.1-alpha.1
+  - @mastra/mcp@1.17.1
+
 ## 0.35.1-alpha.0
 
 ### Patch Changes
