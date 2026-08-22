@@ -63,6 +63,7 @@ function createRecording() {
 
 function makeChannels(
   opts: {
+    platform?: string;
     streaming?: boolean | { updateIntervalMs?: number };
     textFormat?: 'markdown' | 'plain';
     toolDisplay?: 'cards' | 'text' | 'timeline' | 'grouped' | 'hidden' | ((event: any, ctx: any) => any);
@@ -78,6 +79,8 @@ function makeChannels(
   } = {},
 ) {
   const recording = createRecording();
+  const platform = opts.platform ?? 'test';
+  recording.adapter.name = platform;
   const adapterConfig: Record<string, unknown> = {
     adapter: recording.adapter,
     streaming: opts.streaming ?? false,
@@ -88,10 +91,10 @@ function makeChannels(
   if (opts.cards !== undefined) adapterConfig.cards = opts.cards;
   if (opts.formatToolCall !== undefined) adapterConfig.formatToolCall = opts.formatToolCall;
   const channels = new AgentChannels({
-    adapters: { test: adapterConfig as any },
+    adapters: { [platform]: adapterConfig as any },
   });
   if (opts.logger) (channels as any).__setLogger(opts.logger);
-  return { channels, ...recording };
+  return { channels, platform, ...recording };
 }
 
 async function drive(
@@ -99,8 +102,9 @@ async function drive(
   chunks: any[],
   chatThread: any,
   approvalContext?: { toolCallId: string; messageId: string },
+  platform = 'test',
 ) {
-  const render = (channels as any)._buildRenderContext(chatThread, 'test', approvalContext);
+  const render = (channels as any)._buildRenderContext(chatThread, platform, approvalContext);
   const processor = new ChatChannelOutputProcessor();
   const requestContext = new Map<string, unknown>();
   requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, render);
@@ -1098,6 +1102,65 @@ describe('ChatChannelOutputProcessor', () => {
   });
 
   describe('adaptive typing status', () => {
+    it('clears Slack typing status when a hidden-tool run ends without posting', async () => {
+      const { channels, calls, chatThread, platform } = makeChannels({
+        platform: 'slack',
+        streaming: true,
+        toolDisplay: 'hidden',
+      });
+
+      await drive(
+        channels,
+        [
+          { type: 'start', payload: {} },
+          { type: 'tool-call', payload: { toolCallId: 't1', toolName: 'wait', args: {} } },
+          { type: 'tool-result', payload: { toolCallId: 't1', toolName: 'wait', args: {}, result: 'done' } },
+          { type: 'finish', payload: {} },
+        ],
+        chatThread,
+        undefined,
+        platform,
+      );
+
+      expect(calls.filter(c => c.kind === 'post')).toEqual([]);
+      const typingStatuses = calls.filter(c => c.kind === 'startTyping').map(c => (c as any).status);
+      expect(typingStatuses).toEqual(['is working…', 'is calling wait…', '']);
+    });
+
+    it('waits for pending Slack typing updates before clearing the status', async () => {
+      const { channels, calls, chatThread, platform } = makeChannels({ platform: 'slack' });
+      let releaseTypingStatus: (() => void) | undefined;
+      chatThread.startTyping = vi.fn((status: string | undefined) => {
+        calls.push({ kind: 'startTyping', status });
+        if (!status) return Promise.resolve();
+        return new Promise<void>(resolve => {
+          releaseTypingStatus = resolve;
+        });
+      });
+
+      const run = drive(
+        channels,
+        [
+          { type: 'start', payload: {} },
+          { type: 'finish', payload: {} },
+        ],
+        chatThread,
+        undefined,
+        platform,
+      );
+
+      await vi.waitFor(() => expect(releaseTypingStatus).toBeTypeOf('function'));
+      expect(calls.filter(c => c.kind === 'startTyping')).toEqual([{ kind: 'startTyping', status: 'is working…' }]);
+
+      releaseTypingStatus?.();
+      await run;
+
+      expect(calls.filter(c => c.kind === 'startTyping')).toEqual([
+        { kind: 'startTyping', status: 'is working…' },
+        { kind: 'startTyping', status: '' },
+      ]);
+    });
+
     it('emits Thinking → Typing → Calling {tool} → Typing transitions', async () => {
       const { channels, calls, chatThread } = makeChannels({ streaming: false });
       await drive(
