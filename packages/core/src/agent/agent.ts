@@ -6711,6 +6711,98 @@ export class Agent<
     return undefined;
   }
 
+  #getSnapshotVersionOverrides(existingSnapshot: WorkflowRunState | null | undefined): VersionOverrides | undefined {
+    const snapshotVersions = existingSnapshot?.requestContext?.[MASTRA_VERSIONS_KEY];
+    if (!snapshotVersions || typeof snapshotVersions !== 'object' || Array.isArray(snapshotVersions)) {
+      return undefined;
+    }
+
+    return snapshotVersions as VersionOverrides;
+  }
+
+  async #resolveVersionedExecution({
+    requestContext = new RequestContext(),
+    versions,
+    snapshot,
+  }: {
+    requestContext?: RequestContext;
+    versions?: VersionOverrides;
+    snapshot?: WorkflowRunState | null;
+  }): Promise<{
+    agent: Agent<TAgentId, TTools, TOutput, TRequestContext>;
+    requestContext: RequestContext;
+    versions?: VersionOverrides;
+  }> {
+    const snapshotVersions = this.#getSnapshotVersionOverrides(snapshot);
+    const requestVersions = requestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
+    let mergedVersions = mergeVersionOverrides(this.#mastra?.getVersionOverrides(), snapshotVersions);
+    mergedVersions = mergeVersionOverrides(mergedVersions, requestVersions);
+    mergedVersions = mergeVersionOverrides(mergedVersions, versions);
+
+    // An exact root version persisted by the suspended run is authoritative
+    // over current defaults and call-site selectors for that continuation.
+    const snapshotSelfVersion = snapshotVersions?.agents?.[this.id];
+    if (snapshotSelfVersion && typeof snapshotSelfVersion === 'object' && 'versionId' in snapshotSelfVersion) {
+      mergedVersions = mergeVersionOverrides(mergedVersions, {
+        agents: { [this.id]: snapshotSelfVersion },
+      });
+    }
+
+    // Version selectors are execution metadata. Keep them on an execution-local
+    // context so an exact version restored from a snapshot cannot pin a later
+    // run that reuses the caller-owned context.
+    const executionRequestContext = mergedVersions ? new RequestContext(requestContext.entries()) : requestContext;
+    if (mergedVersions) {
+      executionRequestContext.set(MASTRA_VERSIONS_KEY, mergedVersions);
+    }
+
+    if (!mergedVersions || this.#storedVersionApplied || !this.#mastra) {
+      return { agent: this, requestContext: executionRequestContext, versions: mergedVersions };
+    }
+
+    const selfVersionSelector =
+      mergedVersions.agents?.[this.id] ??
+      (mergedVersions.defaultStatus ? { status: mergedVersions.defaultStatus } : undefined);
+    if (!selfVersionSelector) {
+      return { agent: this, requestContext: executionRequestContext, versions: mergedVersions };
+    }
+
+    try {
+      const resolved = await this.#mastra.resolveVersionedAgent(this as unknown as Agent, selfVersionSelector);
+      if (resolved === (this as unknown as Agent)) {
+        return { agent: this, requestContext: executionRequestContext, versions: mergedVersions };
+      }
+
+      const resolvedVersionId = resolved.toRawConfig()?.resolvedVersionId;
+      if (typeof resolvedVersionId !== 'string' || resolvedVersionId.length === 0) {
+        return {
+          agent: resolved as unknown as Agent<TAgentId, TTools, TOutput, TRequestContext>,
+          requestContext: executionRequestContext,
+          versions: mergedVersions,
+        };
+      }
+
+      const pinnedVersions = mergeVersionOverrides(mergedVersions, {
+        agents: { [this.id]: { versionId: resolvedVersionId } },
+      });
+      executionRequestContext.set(MASTRA_VERSIONS_KEY, pinnedVersions);
+
+      return {
+        agent: resolved as unknown as Agent<TAgentId, TTools, TOutput, TRequestContext>,
+        requestContext: executionRequestContext,
+        versions: pinnedVersions,
+      };
+    } catch (versionError) {
+      this.logger.warn('Failed to resolve versioned agent for execution, using code-defined default', {
+        agent: this.name,
+        agentId: this.id,
+        versionSelector: selfVersionSelector,
+        error: versionError,
+      });
+      return { agent: this, requestContext: executionRequestContext, versions: mergedVersions };
+    }
+  }
+
   #getSuspendedToolCalls(existingSnapshot: WorkflowRunState | null | undefined): AgentRunToolCall[] {
     const toolCalls: AgentRunToolCall[] = [];
 
@@ -7002,54 +7094,6 @@ export class Agent<
     const existingSnapshot = resumeContext?.snapshot;
     const snapshotMemoryInfo = this.#getSnapshotMemoryInfo(existingSnapshot);
     const requestContext = options.requestContext || new RequestContext();
-
-    // Build version overrides by merging: Mastra defaults < requestContext < call-site
-    const requestVersions = requestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
-    let mergedVersions = mergeVersionOverrides(this.#mastra?.getVersionOverrides(), requestVersions);
-
-    // Merge call-site version overrides on top (call-site wins over request + Mastra defaults)
-    if (options.versions) {
-      mergedVersions = mergeVersionOverrides(mergedVersions, options.versions);
-    }
-
-    if (mergedVersions) {
-      requestContext.set(MASTRA_VERSIONS_KEY, mergedVersions);
-    }
-
-    // Resolve a versioned variant of *this* agent when a version override
-    // selects it (by id or defaultStatus) and delegate execution to it. This
-    // keeps direct programmatic calls consistent with HTTP routes and
-    // sub-agent delegation, which already honor version overrides.
-    if (mergedVersions && !this.#storedVersionApplied && this.#mastra) {
-      const selfVersionSelector =
-        mergedVersions.agents?.[this.id] ??
-        (mergedVersions.defaultStatus ? { status: mergedVersions.defaultStatus } : undefined);
-      if (selfVersionSelector) {
-        try {
-          const resolved = await this.#mastra.resolveVersionedAgent(this as unknown as Agent, selfVersionSelector);
-          if (resolved !== (this as unknown as Agent)) {
-            // Cast: reassembled options are exactly this method's input. The
-            // `unknown` annotation breaks the circular return-type inference
-            // of the self-recursion (TS7023).
-            const delegated: unknown = (resolved as unknown as this).#execute<OUTPUT>({
-              methodType,
-              resumeContext,
-              _threadStreamPubSub,
-              ...options,
-              requestContext,
-            } as unknown as InnerAgentExecutionOptions<OUTPUT> & { _threadStreamPubSub?: PubSub });
-            return delegated as never;
-          }
-        } catch (versionError) {
-          this.logger.warn('Failed to resolve versioned agent for direct call, using code-defined default', {
-            agent: this.name,
-            agentId: this.id,
-            versionSelector: selfVersionSelector,
-            error: versionError,
-          });
-        }
-      }
-    }
 
     // Resolve workspace early so we can get browser from it if needed
     const earlyWorkspace = await this.getWorkspace({ requestContext });
@@ -7869,8 +7913,13 @@ export class Agent<
       actor,
     });
 
-    const llm = await this.getLLM({
+    const versionedExecution = await this.#resolveVersionedExecution({
       requestContext: mergedOptions.requestContext,
+      versions: mergedOptions.versions,
+    });
+
+    const llm = await versionedExecution.agent.getLLM({
+      requestContext: versionedExecution.requestContext,
       model: mergedOptions.model as DynamicArgument<MastraModelConfig, TRequestContext> | undefined,
     });
 
@@ -7901,6 +7950,8 @@ export class Agent<
     const executeOptions = {
       ...loopOptions,
       actor,
+      requestContext: versionedExecution.requestContext,
+      versions: versionedExecution.versions,
       structuredOutput: mergedOptions.structuredOutput
         ? {
             ...mergedOptions.structuredOutput,
@@ -7915,7 +7966,7 @@ export class Agent<
       maxProcessorRetries: mergedOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
     } as unknown as InnerAgentExecutionOptions<any> & { _threadStreamPubSub?: PubSub };
 
-    const result = await this.#execute(executeOptions);
+    const result = await versionedExecution.agent.#execute(executeOptions);
 
     if (result.status !== 'success') {
       if (result.status === 'failed') {
@@ -8510,8 +8561,18 @@ export class Agent<
       actor,
     });
 
-    const llm = await this.getLLM({
+    const versionedExecution = await this.#resolveVersionedExecution({
       requestContext: mergedOptions.requestContext,
+      versions: mergedOptions.versions,
+    });
+    const executionLoopOptions = {
+      ...loopOptions,
+      requestContext: versionedExecution.requestContext,
+      versions: versionedExecution.versions,
+    };
+
+    const llm = await versionedExecution.agent.getLLM({
+      requestContext: versionedExecution.requestContext,
       model: mergedOptions.model as DynamicArgument<MastraModelConfig, TRequestContext> | undefined,
     });
 
@@ -8542,7 +8603,7 @@ export class Agent<
     const threadStreamPubSub = this.getPubSub();
     await agentThreadStreamRuntime.waitForCrossAgentThreadRun(
       this as Agent<any, any, any, any>,
-      loopOptions as AgentExecutionOptions<OUTPUT>,
+      executionLoopOptions as AgentExecutionOptions<OUTPUT>,
       threadStreamPubSub,
     );
 
@@ -8553,7 +8614,7 @@ export class Agent<
         entityId: this.id,
       }) ?? randomUUID();
     const preparedOptions = agentThreadStreamRuntime.prepareRunOptions(
-      { ...loopOptions, runId: mergedOptions.runId, actor } as AgentExecutionOptions<OUTPUT>,
+      { ...executionLoopOptions, runId: mergedOptions.runId, actor } as AgentExecutionOptions<OUTPUT>,
       threadStreamPubSub,
     );
 
@@ -8575,7 +8636,7 @@ export class Agent<
       _threadStreamPubSub: threadStreamPubSub,
     } as unknown as InnerAgentExecutionOptions<OUTPUT> & { _threadStreamPubSub?: PubSub };
 
-    const result = await this.#execute(executeOptions);
+    const result = await versionedExecution.agent.#execute(executeOptions);
 
     if (result.status !== 'success') {
       if (result.status === 'failed') {
@@ -8870,8 +8931,19 @@ export class Agent<
       method: 'resumeStream',
     });
 
-    const llm = await this.getLLM({
+    const versionedExecution = await this.#resolveVersionedExecution({
       requestContext: mergedStreamOptions.requestContext,
+      versions: mergedStreamOptions.versions,
+      snapshot: resumeSnapshot,
+    });
+    const executionLoopStreamOptions = {
+      ...loopStreamOptions,
+      requestContext: versionedExecution.requestContext,
+      versions: versionedExecution.versions,
+    };
+
+    const llm = await versionedExecution.agent.getLLM({
+      requestContext: versionedExecution.requestContext,
       model: mergedStreamOptions.model as DynamicArgument<MastraModelConfig, TRequestContext> | undefined,
     });
 
@@ -8897,15 +8969,15 @@ export class Agent<
     const threadStreamPubSub = this.getPubSub();
     await agentThreadStreamRuntime.waitForCrossAgentThreadRun(
       this as Agent<any, any, any, any>,
-      loopStreamOptions as unknown as AgentExecutionOptions<OUTPUT>,
+      executionLoopStreamOptions as unknown as AgentExecutionOptions<OUTPUT>,
       threadStreamPubSub,
     );
     const preparedOptions = agentThreadStreamRuntime.prepareRunOptions(
-      { ...loopStreamOptions, actor } as unknown as AgentExecutionOptions<OUTPUT>,
+      { ...executionLoopStreamOptions, actor } as unknown as AgentExecutionOptions<OUTPUT>,
       threadStreamPubSub,
     );
 
-    const result = await this.#execute({
+    const result = await versionedExecution.agent.#execute({
       ...preparedOptions,
       actor,
       structuredOutput: mergedStreamOptions.structuredOutput
@@ -9035,8 +9107,14 @@ export class Agent<
       method: 'resumeGenerate',
     });
 
-    const llm = await this.getLLM({
+    const versionedExecution = await this.#resolveVersionedExecution({
       requestContext: mergedOptions.requestContext,
+      versions: mergedOptions.versions,
+      snapshot: resumeSnapshot,
+    });
+
+    const llm = await versionedExecution.agent.getLLM({
+      requestContext: versionedExecution.requestContext,
       model: mergedOptions.model as DynamicArgument<MastraModelConfig, TRequestContext> | undefined,
     });
 
@@ -9063,9 +9141,11 @@ export class Agent<
       });
     }
 
-    const result = await this.#execute({
+    const result = await versionedExecution.agent.#execute({
       ...loopOptions,
       actor,
+      requestContext: versionedExecution.requestContext,
+      versions: versionedExecution.versions,
       structuredOutput: mergedOptions.structuredOutput
         ? {
             ...mergedOptions.structuredOutput,

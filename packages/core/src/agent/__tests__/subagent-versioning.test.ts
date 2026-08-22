@@ -414,7 +414,9 @@ describe('Sub-agent version resolution', () => {
       versions,
     });
 
-    const resolveSpy = vi.spyOn(mastra, 'resolveVersionedAgent').mockResolvedValue(sub);
+    const resolveSpy = vi
+      .spyOn(mastra, 'resolveVersionedAgent')
+      .mockImplementation(async target => (target === supervisor ? supervisor : sub));
 
     await supervisor.generate('Do something', { maxSteps: 3 });
 
@@ -447,7 +449,9 @@ describe('Sub-agent version resolution', () => {
       versions,
     });
 
-    const resolveSpy = vi.spyOn(mastra, 'resolveVersionedAgent').mockResolvedValue(sub);
+    const resolveSpy = vi
+      .spyOn(mastra, 'resolveVersionedAgent')
+      .mockImplementation(async target => (target === supervisor ? supervisor : sub));
 
     await supervisor.generate('Do something', { maxSteps: 3 });
 
@@ -478,7 +482,9 @@ describe('Sub-agent version resolution', () => {
       agents: { supervisor, sub },
     });
 
-    const resolveSpy = vi.spyOn(mastra, 'resolveVersionedAgent').mockResolvedValue(sub);
+    const resolveSpy = vi
+      .spyOn(mastra, 'resolveVersionedAgent')
+      .mockImplementation(async target => (target === supervisor ? supervisor : sub));
 
     await supervisor.generate('Do something', { maxSteps: 3, requestContext: ctx });
 
