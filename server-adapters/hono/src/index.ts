@@ -9,6 +9,8 @@ import {
   MASTRA_FRAMEWORK_PUBLIC_KEY,
   MastraServer as MastraServerBase,
   applyMcpRequestAuth,
+  buildStreamDoneFrame,
+  buildStreamErrorFrame,
   checkRouteFGA,
   isZodError,
   normalizeQueryParams,
@@ -249,13 +251,21 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
             }
           }
 
-          if (streamFormat === 'sse') {
-            await stream.write('data: [DONE]\n\n');
+          const doneFrame = buildStreamDoneFrame(streamFormat);
+          if (doneFrame) {
+            await stream.write(doneFrame);
           }
         } catch (error) {
           this.mastra.getLogger()?.error('Error in stream processing', {
             error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
           });
+          try {
+            await stream.write(buildStreamErrorFrame(error, streamFormat));
+            const errorDoneFrame = buildStreamDoneFrame(streamFormat);
+            if (errorDoneFrame) {
+              await stream.write(errorDoneFrame);
+            }
+          } catch {}
         } finally {
           await stream.close();
         }
