@@ -1,5 +1,10 @@
+import stripAnsi from 'strip-ansi';
+import { showInfo } from '../../src/tui/display.js';
+import type { TUIState } from '../../src/tui/state.js';
 import { expect } from './expect.js';
 import type { McE2eScenario } from './types.js';
+
+let tuiState: TUIState | undefined;
 
 export const updateStartupPromptScenario: McE2eScenario = {
   name: 'update-startup-prompt',
@@ -11,6 +16,14 @@ export const updateStartupPromptScenario: McE2eScenario = {
       MASTRACODE_UPDATE_CHANGELOG: '  • Startup update prompt e2e fixture entry',
     };
   },
+  async inProcessApp({ startMastraCodeApp }) {
+    tuiState = undefined;
+    return startMastraCodeApp({
+      onTuiCreated(tui) {
+        tuiState = (tui as { state: TUIState }).state;
+      },
+    });
+  },
   async run({ terminal, runtime }) {
     runtime.startLiveOutput(terminal);
 
@@ -18,6 +31,26 @@ export const updateStartupPromptScenario: McE2eScenario = {
     await runtime.waitForScreenText(/A new version of Mastra Code is available: v99\.1\.0/i, terminal, 10_000);
     await runtime.waitForScreenText(/What's new/i, terminal);
     await runtime.waitForScreenText(/Startup update prompt e2e fixture entry/i, terminal);
+    await runtime.waitForScreenText(/Would you like to update now/i, terminal);
+    await runtime.waitForScreenText(/Yes/i, terminal);
+    await runtime.waitForScreenText(/No/i, terminal);
+
+    if (!tuiState) {
+      throw new Error('Expected the in-process TUI state to be available');
+    }
+
+    showInfo(tuiState, 'MCP: delayed background status');
+    await runtime.waitForScreenText(/MCP: delayed background status/i, terminal);
+
+    const view = stripAnsi(terminal.serialize().view);
+    const statusIndex = view.indexOf('MCP: delayed background status');
+    const promptIndex = view.indexOf('Would you like to update now');
+    if (statusIndex < 0 || promptIndex < 0 || statusIndex > promptIndex) {
+      throw new Error(
+        `Expected the active update prompt to remain below the asynchronous MCP status message:\n${view}`,
+      );
+    }
+
     await runtime.waitForScreenText(/Would you like to update now/i, terminal);
     await runtime.waitForScreenText(/Yes/i, terminal);
     await runtime.waitForScreenText(/No/i, terminal);
