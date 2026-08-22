@@ -1,6 +1,11 @@
-import { TABLE_WORKFLOW_DEFINITIONS, WorkflowDefinitionsStorage } from '@mastra/core/storage';
+import {
+  assertWorkflowDefinitionAuthor,
+  TABLE_WORKFLOW_DEFINITIONS,
+  WorkflowDefinitionsStorage,
+} from '@mastra/core/storage';
 import type {
   CreateWorkflowDefinitionInput,
+  DeleteWorkflowDefinitionOptions,
   ListWorkflowDefinitionsInput,
   ListWorkflowDefinitionsOutput,
   UpdateWorkflowDefinitionInput,
@@ -141,6 +146,9 @@ export class MongoDBWorkflowDefinitionsStore extends WorkflowDefinitionsStorage 
     now: Date,
   ): Promise<WorkflowDefinition> {
     const collection = await this.getCollection(TABLE_WORKFLOW_DEFINITIONS);
+    const existing = await collection.findOne<Record<string, any>>({ id: input.id });
+    if (!existing) throw new Error(`Failed to update workflow definition "${input.id}".`);
+    assertWorkflowDefinitionAuthor(docToDefinition(existing), input);
 
     const update: Record<string, any> = { updatedAt: now };
     if ('description' in input && input.description !== undefined) update.description = input.description;
@@ -152,12 +160,13 @@ export class MongoDBWorkflowDefinitionsStore extends WorkflowDefinitionsStorage 
       update.requestContextSchema = input.requestContextSchema;
     if ('graph' in input && input.graph !== undefined) update.graph = input.graph;
     if ('status' in input && input.status !== undefined) update.status = input.status;
-    if ('authorId' in input && input.authorId !== undefined) update.authorId = input.authorId;
-
-    await collection.updateOne({ id: input.id }, { $set: update });
+    const filter = { id: input.id, ...(input.authorId !== undefined ? { authorId: input.authorId } : {}) };
+    await collection.updateOne(filter, { $set: update });
     const updated = await collection.findOne<Record<string, any>>({ id: input.id });
     if (!updated) throw new Error(`Failed to update workflow definition "${input.id}".`);
-    return docToDefinition(updated);
+    const definition = docToDefinition(updated);
+    assertWorkflowDefinitionAuthor(definition, input);
+    return definition;
   }
 
   async get(id: string): Promise<WorkflowDefinition | null> {
@@ -176,8 +185,12 @@ export class MongoDBWorkflowDefinitionsStore extends WorkflowDefinitionsStorage 
     return { definitions, total: definitions.length };
   }
 
-  async delete(id: string): Promise<void> {
+  async delete(id: string, options?: DeleteWorkflowDefinitionOptions): Promise<boolean> {
     const collection = await this.getCollection(TABLE_WORKFLOW_DEFINITIONS);
-    await collection.deleteOne({ id });
+    const result = await collection.deleteOne({
+      id,
+      ...(options?.authorId !== undefined ? { authorId: options.authorId } : {}),
+    });
+    return result.deletedCount > 0;
   }
 }

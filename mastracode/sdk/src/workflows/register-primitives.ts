@@ -30,7 +30,7 @@ import { createNotificationInboxTool } from '@mastra/core/notifications';
 import { LocalFilesystem, LocalSandbox, Workspace, createWorkspaceTools } from '@mastra/core/workspace';
 import { MASTRACODE_WORKSPACE_TOOLS } from '../agents/tool-availability.js';
 import { LazyNotificationsStorage } from '../agents/tools.js';
-import { workflowBuilderAgent } from '../agents/workflow-builder-agent.js';
+import { workflowBuilderAgent as defaultWorkflowBuilderAgent } from '../agents/workflow-builder-agent.js';
 import type { McpManager } from '../mcp';
 import { MC_TOOLS } from '../tool-names.js';
 import { createWebExtractTool, createWebSearchTool, hasTavilyKey } from '../tools/web-search.js';
@@ -50,6 +50,8 @@ export interface RegisterWorkflowBuilderPrimitivesOptions {
    * (workspace/MCP/web/etc.) via its own `tools: createDynamicTools(...)`.
    */
   codeAgent: Agent;
+  /** Request-aware workflow builder instance created with the host access policy. */
+  workflowBuilderAgent?: Agent;
   /**
    * McpManager for snapshotting MCP tools at boot. Omit or pass undefined
    * if MCP is disabled — workflow-builder will just see fewer tools.
@@ -61,7 +63,13 @@ export async function registerWorkflowBuilderPrimitives(
   mastra: Mastra,
   options: RegisterWorkflowBuilderPrimitivesOptions,
 ): Promise<void> {
-  const { projectPath, allowedPaths = [], codeAgent, mcpManager } = options;
+  const {
+    projectPath,
+    allowedPaths = [],
+    codeAgent,
+    workflowBuilderAgent = defaultWorkflowBuilderAgent,
+    mcpManager,
+  } = options;
 
   // 1. Agents workflows can compose.
   mastra.addAgent(workflowBuilderAgent, 'workflow-builder');

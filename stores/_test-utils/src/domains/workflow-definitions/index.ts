@@ -1,3 +1,4 @@
+import { WorkflowDefinitionOwnershipConflictError } from '@mastra/core/storage';
 import type { MastraStorage, WorkflowDefinitionsStorage } from '@mastra/core/storage';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
@@ -68,12 +69,30 @@ export function createWorkflowDefinitionsTests({ storage }: WorkflowDefinitionsT
       expect(updated.updatedAt.getTime()).toBeGreaterThanOrEqual(created.updatedAt.getTime());
     });
 
-    it('updates authorId on existing rows', async () => {
+    it('rejects ownership transfer on existing rows', async () => {
       await store.upsert({ ...baseInput('wf-1'), authorId: 'author-1' });
-      const updated = await store.upsert({ id: 'wf-1', authorId: 'author-2' });
-      expect(updated.authorId).toBe('author-2');
+      await expect(store.upsert({ id: 'wf-1', authorId: 'author-2' })).rejects.toBeInstanceOf(
+        WorkflowDefinitionOwnershipConflictError,
+      );
       const fetched = await store.get('wf-1');
-      expect(fetched?.authorId).toBe('author-2');
+      expect(fetched?.authorId).toBe('author-1');
+    });
+
+    it('allows the existing owner to update an owned row', async () => {
+      await store.upsert({ ...baseInput('wf-1'), authorId: 'author-1' });
+      const updated = await store.upsert({ id: 'wf-1', authorId: 'author-1', description: 'renamed' });
+
+      expect(updated).toMatchObject({ authorId: 'author-1', description: 'renamed' });
+    });
+
+    it('does not let an author claim a legacy unowned row', async () => {
+      await store.upsert(baseInput('wf-1'));
+
+      await expect(store.upsert({ id: 'wf-1', authorId: 'author-1' })).rejects.toBeInstanceOf(
+        WorkflowDefinitionOwnershipConflictError,
+      );
+      const stored = await store.get('wf-1');
+      expect(stored?.authorId).toBeUndefined();
     });
 
     it('preserves unspecified columns across a partial upsert', async () => {
@@ -83,13 +102,25 @@ export function createWorkflowDefinitionsTests({ storage }: WorkflowDefinitionsT
         stateSchema: { type: 'object' },
         authorId: 'author-1',
       });
-      const updated = await store.upsert({ id: 'wf-1', description: 'renamed' });
+      const updated = await store.upsert({ id: 'wf-1', authorId: 'author-1', description: 'renamed' });
       expect(updated.description).toBe('renamed');
       expect(updated.metadata).toEqual({ owner: 'me' });
       expect(updated.stateSchema).toEqual({ type: 'object' });
       expect(updated.authorId).toBe('author-1');
       expect(updated.inputSchema).toEqual(baseInput('wf-1').inputSchema);
       expect(updated.graph).toEqual(baseGraph);
+    });
+
+    it('rejects an unscoped update to an owned row', async () => {
+      await store.upsert({ ...baseInput('wf-owned'), authorId: 'author-1' });
+
+      await expect(store.upsert({ id: 'wf-owned', description: 'unscoped takeover' })).rejects.toBeInstanceOf(
+        WorkflowDefinitionOwnershipConflictError,
+      );
+      await expect(store.get('wf-owned')).resolves.toMatchObject({
+        authorId: 'author-1',
+        description: 'workflow wf-owned',
+      });
     });
 
     it('handles concurrent upserts of the same id without failing', async () => {
@@ -105,6 +136,20 @@ export function createWorkflowDefinitionsTests({ storage }: WorkflowDefinitionsT
       }
       const all = await store.list();
       expect(all.total).toBe(1);
+    });
+
+    it('lets exactly one author win concurrent creation of the same id', async () => {
+      const results = await Promise.allSettled([
+        store.upsert({ ...baseInput('wf-owner-race'), authorId: 'author-1' }),
+        store.upsert({ ...baseInput('wf-owner-race'), authorId: 'author-2' }),
+      ]);
+
+      expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1);
+      const rejected = results.find(result => result.status === 'rejected');
+      expect(rejected).toMatchObject({ reason: expect.any(WorkflowDefinitionOwnershipConflictError) });
+
+      const stored = await store.get('wf-owner-race');
+      expect(['author-1', 'author-2']).toContain(stored?.authorId);
     });
 
     it('rejects creation when required fields are explicitly undefined', async () => {
@@ -130,8 +175,19 @@ export function createWorkflowDefinitionsTests({ storage }: WorkflowDefinitionsT
 
     it('deletes a workflow definition', async () => {
       await store.upsert(baseInput('wf-1'));
-      await store.delete('wf-1');
+      await expect(store.delete('wf-1')).resolves.toBe(true);
       expect(await store.get('wf-1')).toBeNull();
+      await expect(store.delete('wf-1')).resolves.toBe(false);
+    });
+
+    it('atomically deletes only the expected owner', async () => {
+      await store.upsert({ ...baseInput('wf-1'), authorId: 'author-1' });
+
+      await expect(store.delete('wf-1', { authorId: 'author-2' })).resolves.toBe(false);
+      await expect(store.get('wf-1')).resolves.toMatchObject({ authorId: 'author-1' });
+
+      await expect(store.delete('wf-1', { authorId: 'author-1' })).resolves.toBe(true);
+      await expect(store.get('wf-1')).resolves.toBeNull();
     });
 
     it('preserves optional metadata and schemas across round-trip', async () => {

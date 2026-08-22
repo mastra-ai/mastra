@@ -1,12 +1,13 @@
 import type { InMemoryDB } from '../inmemory-db';
 import type {
   CreateWorkflowDefinitionInput,
+  DeleteWorkflowDefinitionOptions,
   ListWorkflowDefinitionsInput,
   ListWorkflowDefinitionsOutput,
   UpdateWorkflowDefinitionInput,
   WorkflowDefinition,
 } from './base';
-import { WorkflowDefinitionsStorage } from './base';
+import { assertWorkflowDefinitionAuthor, WorkflowDefinitionsStorage } from './base';
 
 export class InMemoryWorkflowDefinitionsStorage extends WorkflowDefinitionsStorage {
   private db: InMemoryDB;
@@ -25,6 +26,7 @@ export class InMemoryWorkflowDefinitionsStorage extends WorkflowDefinitionsStora
     const existing = this.db.workflowDefinitions.get(input.id);
 
     if (existing) {
+      assertWorkflowDefinitionAuthor(existing, input);
       const merged: WorkflowDefinition = {
         ...existing,
         ...('description' in input && input.description !== undefined && { description: input.description }),
@@ -36,7 +38,6 @@ export class InMemoryWorkflowDefinitionsStorage extends WorkflowDefinitionsStora
           input.requestContextSchema !== undefined && { requestContextSchema: input.requestContextSchema }),
         ...('graph' in input && input.graph !== undefined && { graph: input.graph }),
         ...('status' in input && input.status !== undefined && { status: input.status }),
-        ...('authorId' in input && input.authorId !== undefined && { authorId: input.authorId }),
         updatedAt: now,
       };
       this.db.workflowDefinitions.set(input.id, merged);
@@ -90,8 +91,10 @@ export class InMemoryWorkflowDefinitionsStorage extends WorkflowDefinitionsStora
     return { definitions: cloned, total: cloned.length };
   }
 
-  async delete(id: string): Promise<void> {
-    this.db.workflowDefinitions.delete(id);
+  async delete(id: string, options?: DeleteWorkflowDefinitionOptions): Promise<boolean> {
+    const existing = this.db.workflowDefinitions.get(id);
+    if (!existing || (options?.authorId !== undefined && existing.authorId !== options.authorId)) return false;
+    return this.db.workflowDefinitions.delete(id);
   }
 
   private deepCopy(def: WorkflowDefinition): WorkflowDefinition {

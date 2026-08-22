@@ -17,10 +17,8 @@ import type { MastraCodeComposedState } from '../schema.js';
 import { MC_TOOLS } from '../tool-names.js';
 import { createWebSearchTool, createWebExtractTool, hasTavilyKey, requestSandboxAccessTool } from '../tools/index.js';
 import { createWorkflowTool } from '../tools/workflows/create-workflow.js';
-import { deleteWorkflowTool } from '../tools/workflows/delete-workflow.js';
-import { getWorkflowTool } from '../tools/workflows/get-workflow.js';
-import { listWorkflowsTool } from '../tools/workflows/list-workflows.js';
-import { runWorkflowTool } from '../tools/workflows/run-workflow.js';
+import { createWorkflowManagementTools } from '../tools/workflows/factory.js';
+import type { CreateWorkflowToolsetOptions } from '../tools/workflows/factory.js';
 import { WORKFLOW_MANAGEMENT_TOOL_IDS } from '../tools/workflows/tool-ids.js';
 
 /** Minimal shape for tools passed to createDynamicTools. */
@@ -118,7 +116,9 @@ export function createDynamicTools(
   disabledTools?: string[],
   storage?: MastraCompositeStore,
   pluginTools?: Record<string, ToolLike>,
+  workflowToolOptions?: CreateWorkflowToolsetOptions,
 ) {
+  const workflowManagementTools = createWorkflowManagementTools(workflowToolOptions);
   return function getDynamicTools({
     requestContext,
   }: {
@@ -140,10 +140,7 @@ export function createDynamicTools(
       // sub-agent; the other four are Dynamic Workflow management operations.
       // Permission categories live in permissions.ts (TOOL_CATEGORY_MAP).
       [WORKFLOW_MANAGEMENT_TOOL_IDS.createWorkflow]: createWorkflowTool,
-      [WORKFLOW_MANAGEMENT_TOOL_IDS.listWorkflows]: listWorkflowsTool,
-      [WORKFLOW_MANAGEMENT_TOOL_IDS.getWorkflow]: getWorkflowTool,
-      [WORKFLOW_MANAGEMENT_TOOL_IDS.runWorkflow]: runWorkflowTool,
-      [WORKFLOW_MANAGEMENT_TOOL_IDS.deleteWorkflow]: deleteWorkflowTool,
+      ...workflowManagementTools,
     };
 
     if (storage) {

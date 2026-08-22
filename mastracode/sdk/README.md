@@ -138,6 +138,31 @@ await deleteWorkflow(mastra, definition.id);
 
 Pass the session request context to `runWorkflow` when workflow agent steps need the session-selected model. You can also pass an event callback as the fifth argument to render workflow step progress.
 
+Multi-user hosts can scope Dynamic Workflow authoring and management to a trusted identity already installed in Mastra's `RequestContext`:
+
+```ts
+import { mountAgentControllerOnMastra } from '@mastra/code-sdk';
+import type { RequestContext } from '@mastra/core/request-context';
+import type { DynamicWorkflowAccessPolicy } from '@mastra/code-sdk/workflows/access-policy';
+import { createWorkflowService } from '@mastra/code-sdk/workflows/service';
+
+const workflowAccessPolicy: DynamicWorkflowAccessPolicy = {
+  resolveAuthorId: ({ requestContext }) => requestContext.get('verified-user-id') as string | undefined,
+};
+
+const { mastra } = await mountAgentControllerOnMastra({
+  cwd: process.cwd(),
+  workflowAccessPolicy,
+});
+
+const workflows = createWorkflowService({ accessPolicy: workflowAccessPolicy });
+async function listForRequest(requestContext: RequestContext) {
+  return workflows.listWorkflows(mastra, { requestContext });
+}
+```
+
+The host is responsible for authenticating the request and setting the trusted context value. When a policy is configured but does not resolve an author, Dynamic Workflow discovery and mutations fail closed. Code-defined workflows remain available. The same policy is used by the code agent's workflow tools and the Workflow Builder, so callers cannot select an author through tool input.
+
 Deep modules are available as subpath imports, e.g.:
 
 ```ts

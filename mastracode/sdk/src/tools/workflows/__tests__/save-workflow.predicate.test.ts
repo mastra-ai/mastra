@@ -8,8 +8,11 @@
  * 2. `execute` — must call `mastra.addDynamicWorkflow` with the normalized
  *    canonical shape, so the SDK and Core schemas agree end-to-end.
  */
+import { Mastra } from '@mastra/core/mastra';
+import { RequestContext } from '@mastra/core/request-context';
+import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, vi } from 'vitest';
-import { saveWorkflowTool } from '../save-workflow.js';
+import { createSaveWorkflowTool, saveWorkflowTool } from '../save-workflow.js';
 
 function invoke(input: unknown, mastra: unknown) {
   // Call the raw execute; callers of the tool are responsible for schema
@@ -50,6 +53,13 @@ const loopGraphWithPredicate = {
       predicate: { op: 'gte', left: { path: 'inputData.count' }, right: { literal: 3 } },
     },
   ],
+};
+
+const mappingGraph = {
+  id: 'wf-owned',
+  inputSchema: { type: 'object', properties: { value: { type: 'string' } }, required: ['value'] },
+  outputSchema: { type: 'object', properties: { value: { type: 'string' } }, required: ['value'] },
+  graph: [{ type: 'mapping', id: 'echo-value', mapConfig: { value: { initData: true, path: 'value' } } }],
 };
 
 describe('save-workflow — input schema', () => {
@@ -135,5 +145,118 @@ describe('save-workflow — execute', () => {
       const mastra = { addDynamicWorkflow } as unknown;
       await expect(invoke(loopGraphWithPredicate, mastra)).rejects.toThrow(/unresolved reference to tool "inc-tool"/);
     });
+  });
+
+  describe('when mastra.addDynamicWorkflow rejects (storage failure)', () => {
+    it('propagates the underlying error unchanged', async () => {
+      const addDynamicWorkflow = vi.fn().mockRejectedValue(new Error('workflow storage unavailable'));
+      const mastra = { addDynamicWorkflow } as unknown;
+      await expect(invoke(loopGraphWithPredicate, mastra)).rejects.toThrow(/workflow storage unavailable/);
+    });
+  });
+});
+
+describe('createSaveWorkflowTool — authorization', () => {
+  it('passes the native request context and a detached definition to the policy', async () => {
+    const requestContext = new RequestContext();
+    requestContext.set('tenantId', 'tenant-1');
+    const addDynamicWorkflow = vi.fn().mockResolvedValue(undefined);
+    let receivedRequestContext: RequestContext | undefined;
+    let receivedDefinition: unknown;
+    const authorize = vi.fn(({ definition, requestContext: context }) => {
+      receivedRequestContext = context;
+      receivedDefinition = structuredClone(definition);
+      (definition as { id: string }).id = 'attempted-rewrite';
+    });
+    const tool = createSaveWorkflowTool({ authorize });
+
+    const result = await (tool as any).execute(loopGraphWithPredicate, {
+      mastra: { addDynamicWorkflow },
+      requestContext,
+    });
+
+    expect(result).toEqual({ ok: true, id: 'wf-loop' });
+    expect(authorize).toHaveBeenCalledTimes(1);
+    expect(receivedRequestContext).toBe(requestContext);
+    expect(receivedDefinition).toStrictEqual(loopGraphWithPredicate);
+    expect(addDynamicWorkflow).toHaveBeenCalledWith(loopGraphWithPredicate);
+  });
+
+  it('does not call Mastra when the policy denies by throwing', async () => {
+    const addDynamicWorkflow = vi.fn().mockResolvedValue(undefined);
+    const tool = createSaveWorkflowTool({
+      authorize: async () => {
+        throw new Error('workflow save not authorized');
+      },
+    });
+
+    await expect(
+      (tool as any).execute(loopGraphWithPredicate, {
+        mastra: { addDynamicWorkflow },
+        requestContext: new RequestContext(),
+      }),
+    ).rejects.toThrow(/workflow save not authorized/);
+    expect(addDynamicWorkflow).not.toHaveBeenCalled();
+  });
+
+  it('stamps the trusted policy author through the native registration options', async () => {
+    const requestContext = new RequestContext();
+    requestContext.set('verifiedAuthorId', 'tenant-a');
+    const addDynamicWorkflow = vi.fn().mockResolvedValue(undefined);
+    const authorize = vi.fn();
+    const tool = createSaveWorkflowTool({
+      accessPolicy: {
+        resolveAuthorId: ({ requestContext }) => requestContext.get('verifiedAuthorId') as string,
+      },
+      authorize,
+    });
+
+    expect((tool as any).inputSchema.safeParse({ ...loopGraphWithPredicate, authorId: 'forged-author' }).success).toBe(
+      false,
+    );
+    await expect(
+      (tool as any).execute(loopGraphWithPredicate, { mastra: { addDynamicWorkflow }, requestContext }),
+    ).resolves.toEqual({ ok: true, id: 'wf-loop' });
+    expect(authorize).toHaveBeenCalledWith(expect.objectContaining({ authorId: 'tenant-a', requestContext }));
+    expect(addDynamicWorkflow).toHaveBeenCalledWith(loopGraphWithPredicate, { authorId: 'tenant-a' });
+  });
+
+  it('persists the trusted policy author through Mastra storage', async () => {
+    const requestContext = new RequestContext();
+    requestContext.set('verifiedAuthorId', 'tenant-a');
+    const mastra = new Mastra({
+      logger: false,
+      storage: new InMemoryStore({ id: 'save-workflow-owner' }),
+    });
+    const tool = createSaveWorkflowTool({
+      accessPolicy: {
+        resolveAuthorId: ({ requestContext }) => requestContext.get('verifiedAuthorId') as string,
+      },
+    });
+
+    await expect((tool as any).execute(mappingGraph, { mastra, requestContext })).resolves.toEqual({
+      ok: true,
+      id: 'wf-owned',
+    });
+
+    await expect(
+      mastra
+        .getStorage()
+        ?.getStore('workflowDefinitions')
+        .then(store => store?.get('wf-owned')),
+    ).resolves.toMatchObject({ id: 'wf-owned', authorId: 'tenant-a' });
+  });
+
+  it('does not mutate storage when the access policy cannot resolve a caller', async () => {
+    const addDynamicWorkflow = vi.fn().mockResolvedValue(undefined);
+    const tool = createSaveWorkflowTool({ accessPolicy: { resolveAuthorId: () => undefined } });
+
+    await expect(
+      (tool as any).execute(loopGraphWithPredicate, {
+        mastra: { addDynamicWorkflow },
+        requestContext: new RequestContext(),
+      }),
+    ).rejects.toThrow('Dynamic workflow not found.');
+    expect(addDynamicWorkflow).not.toHaveBeenCalled();
   });
 });

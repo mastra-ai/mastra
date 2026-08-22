@@ -1,7 +1,13 @@
-import { TABLE_SCHEMAS, TABLE_WORKFLOW_DEFINITIONS, WorkflowDefinitionsStorage } from '@mastra/core/storage';
+import {
+  assertWorkflowDefinitionAuthor,
+  TABLE_SCHEMAS,
+  TABLE_WORKFLOW_DEFINITIONS,
+  WorkflowDefinitionsStorage,
+} from '@mastra/core/storage';
 import type {
   CreateIndexOptions,
   CreateWorkflowDefinitionInput,
+  DeleteWorkflowDefinitionOptions,
   ListWorkflowDefinitionsInput,
   ListWorkflowDefinitionsOutput,
   UpdateWorkflowDefinitionInput,
@@ -165,6 +171,10 @@ export class WorkflowDefinitionsPG extends WorkflowDefinitionsStorage {
     input: CreateWorkflowDefinitionInput | UpdateWorkflowDefinitionInput,
     now: Date,
   ): Promise<WorkflowDefinition> {
+    const existing = await this.get(input.id);
+    if (!existing) throw new Error(`Failed to update workflow definition "${input.id}".`);
+    assertWorkflowDefinitionAuthor(existing, input);
+
     const data: Record<string, any> = { updatedAt: now };
     if ('description' in input && input.description !== undefined) data.description = input.description;
     if ('metadata' in input && input.metadata !== undefined) data.metadata = input.metadata;
@@ -175,11 +185,11 @@ export class WorkflowDefinitionsPG extends WorkflowDefinitionsStorage {
       data.requestContextSchema = input.requestContextSchema;
     if ('graph' in input && input.graph !== undefined) data.graph = input.graph;
     if ('status' in input && input.status !== undefined) data.status = input.status;
-    if ('authorId' in input && input.authorId !== undefined) data.authorId = input.authorId;
-
-    await this.#db.update({ tableName: TABLE_WORKFLOW_DEFINITIONS, keys: { id: input.id }, data });
+    const keys = { id: input.id, ...(input.authorId !== undefined ? { authorId: input.authorId } : {}) };
+    await this.#db.update({ tableName: TABLE_WORKFLOW_DEFINITIONS, keys, data });
     const updated = await this.get(input.id);
     if (!updated) throw new Error(`Failed to update workflow definition "${input.id}".`);
+    assertWorkflowDefinitionAuthor(updated, input);
     return updated;
   }
 
@@ -216,11 +226,16 @@ export class WorkflowDefinitionsPG extends WorkflowDefinitionsStorage {
     return { definitions, total: definitions.length };
   }
 
-  async delete(id: string): Promise<void> {
+  async delete(id: string, options?: DeleteWorkflowDefinitionOptions): Promise<boolean> {
     const tableName = getTableName({
       indexName: TABLE_WORKFLOW_DEFINITIONS,
       schemaName: getSchemaName(this.#schema),
     });
-    await this.#db.client.none(`DELETE FROM ${tableName} WHERE "id" = $1`, [id]);
+    const params = options?.authorId !== undefined ? [id, options.authorId] : [id];
+    const result = await this.#db.client.query(
+      `DELETE FROM ${tableName} WHERE "id" = $1${options?.authorId !== undefined ? ' AND "authorId" = $2' : ''}`,
+      params,
+    );
+    return (result.rowCount ?? 0) > 0;
   }
 }
