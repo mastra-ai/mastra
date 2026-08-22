@@ -384,8 +384,9 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       const inputFile = join(fixturePath, 'apps', 'custom');
 
       console.log('started proc', port);
-      proc = execa('npm', ['run', 'start'], {
+      proc = execa('mastra', ['start'], {
         cwd: inputFile,
+        preferLocal: true,
         cancelSignal,
         gracefulCancel: true,
         env: {
@@ -437,66 +438,43 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
     it(
       'drains an in-flight response before the generated server exits on SIGTERM',
       async () => {
-        // Run the built server directly and signal it directly. Going through
-        // `npm run start` (npm -> sh -> mastra CLI -> node) is not a reliable
-        // signal chain on CI runners: the SIGTERM sent to npm never reached
-        // the server, the stream never ended, and the test hung until its
-        // timeout. CLI signal forwarding is covered by unit tests in
-        // packages/cli/src/commands/start/start.test.ts; the behavior under
-        // test here is the generated server's graceful drain.
-        const drainPort = await getPort();
-        const outputDir = join(fixturePath, 'apps', 'custom', '.mastra', 'output');
-        const drainController = new AbortController();
-        const server = execaNode('index.mjs', {
-          cwd: outputDir,
-          cancelSignal: drainController.signal,
-          env: {
-            OPENAI_API_KEY: process.env.OPENAI_API_KEY,
-            MASTRA_PORT: drainPort.toString(),
-          },
-        });
-        activeProcesses.push({ controller: drainController, proc: server });
-
-        try {
-          // Poll the server until it's ready
-          const maxAttempts = 60;
-          for (let i = 0; i < maxAttempts; i++) {
-            try {
-              const res = await fetch(`http://localhost:${drainPort}/api/tools`);
-              if (res.ok) break;
-            } catch {
-              // Server not ready yet
-            }
-            if (i === maxAttempts - 1) {
-              throw new Error('Drain test server failed to start within timeout');
-            }
-            await new Promise(resolve => setTimeout(resolve, 1000));
+        const withDeadline = async <T>(label: string, promise: Promise<T>, ms: number): Promise<T> => {
+          let timer: NodeJS.Timeout | undefined;
+          const deadline = new Promise<never>((_, reject) => {
+            timer = setTimeout(() => reject(new Error(`${label} within ${ms}ms`)), ms);
+          });
+          try {
+            return await Promise.race([promise, deadline]);
+          } finally {
+            clearTimeout(timer);
           }
+        };
 
-          const response = await fetch(`http://localhost:${drainPort}/shutdown-drain`);
-          const reader = response.body!.getReader();
-          const decoder = new TextDecoder();
-          const firstChunk = await reader.read();
-          expect(decoder.decode(firstChunk.value)).toBe('started\n');
+        const response = await fetch(`http://localhost:${port}/shutdown-drain`);
+        const reader = response.body!.getReader();
+        const decoder = new TextDecoder();
+        const firstChunk = await reader.read();
+        expect(decoder.decode(firstChunk.value)).toBe('started\n');
 
-          server.kill('SIGTERM');
+        proc!.kill('SIGTERM');
 
-          let remaining = '';
-          while (true) {
-            const chunk = await reader.read();
-            if (chunk.done) break;
-            remaining += decoder.decode(chunk.value, { stream: true });
-          }
-
-          expect(remaining).toBe('finished\n');
-          await expect(server).resolves.toMatchObject({ exitCode: 0 });
-          // Full shutdown includes the drain window plus core teardown; the vitest
-          // default 5s timeout is tighter than the server's own worst-case bounds.
-        } finally {
-          // Never leave the drain server running if an assertion failed.
-          server.kill('SIGKILL');
-          await Promise.race([server.catch(() => {}), new Promise(resolve => setTimeout(resolve, 5_000))]);
+        let remaining = '';
+        while (true) {
+          const chunk = await withDeadline(
+            `stream did not finish after SIGTERM (received ${JSON.stringify(remaining)})`,
+            reader.read(),
+            60_000,
+          );
+          if (chunk.done) break;
+          remaining += decoder.decode(chunk.value, { stream: true });
         }
+
+        expect(remaining).toBe('finished\n');
+        await withDeadline(
+          'server did not exit after the drained response finished',
+          expect(proc).resolves.toMatchObject({ exitCode: 0 }),
+          60_000,
+        );
       },
       timeout,
     );
