@@ -44,6 +44,13 @@ export class StoreMemoryLance extends MemoryStorage {
     await this.#db.createTable({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS] });
     await this.#db.createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
     await this.#db.createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
+
+    // LanceDB scalar indexes are single-column only, so do not attempt to mirror
+    // the SQL/MongoDB compound indexes on (resourceId, id) or (resourceId,
+    // thread_id) with separate B-tree indexes. Separate indexes do not provide
+    // the same ordered compound-prefix behavior. See
+    // https://docs.lancedb.com/indexing/scalar-index#scalar-indexes
+
     // Add resourceId column for backwards compatibility
     await this.#db.alterTable({
       tableName: TABLE_MESSAGES,
@@ -125,9 +132,12 @@ export class StoreMemoryLance extends MemoryStorage {
     resourceId?: string;
   }): Promise<StorageThreadType | null> {
     try {
-      const thread = await this.#db.load({ tableName: TABLE_THREADS, keys: { id: threadId } });
+      const thread = await this.#db.load({
+        tableName: TABLE_THREADS,
+        keys: { id: threadId, ...(resourceId !== undefined ? { resourceId } : {}) },
+      });
 
-      if (!thread || (resourceId !== undefined && thread.resourceId !== resourceId)) {
+      if (!thread) {
         return null;
       }
 

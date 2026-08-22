@@ -213,6 +213,38 @@ describe('SQL Builder', () => {
       expect(sql).toBe('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email)');
       expect(params).toEqual([]);
     });
+
+    it('should build a composite partial index query', () => {
+      const builder = createSqlBuilder().createIndex(
+        'idx_messages_resource_thread',
+        'messages',
+        ['resourceId', 'thread_id DESC'],
+        '',
+        'resourceId IS NOT NULL',
+      );
+
+      const { sql, params } = builder.build();
+
+      expect(sql).toBe(
+        'CREATE INDEX IF NOT EXISTS idx_messages_resource_thread ON messages(resourceId, thread_id DESC) WHERE resourceId IS NOT NULL',
+      );
+      expect(params).toEqual([]);
+    });
+
+    it('should reject an index with no columns', () => {
+      expect(() => createSqlBuilder().createIndex('idx_users', 'users', [])).toThrow(
+        'At least one index column is required',
+      );
+    });
+
+    it('should build a DROP INDEX query', () => {
+      const builder = createSqlBuilder().dropIndex('idx_users_email');
+
+      const { sql, params } = builder.build();
+
+      expect(sql).toBe('DROP INDEX IF EXISTS idx_users_email');
+      expect(params).toEqual([]);
+    });
   });
 
   describe('Reset and Reuse', () => {

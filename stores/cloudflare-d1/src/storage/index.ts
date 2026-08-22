@@ -40,6 +40,8 @@ export interface D1BaseConfig {
    * // No auto-init, tables must already exist
    */
   disableInit?: boolean;
+  /** When true, default database indexes are not created during initialization. */
+  skipDefaultIndexes?: boolean;
 }
 
 /**
@@ -166,13 +168,21 @@ export class D1Store extends MastraCompositeStore {
     let backgroundTasks: BackgroundTasksStorageD1;
 
     if (this.binding) {
-      const domainConfig = { binding: this.binding, tablePrefix: this.tablePrefix };
+      const domainConfig = {
+        binding: this.binding,
+        tablePrefix: this.tablePrefix,
+        skipDefaultIndexes: config.skipDefaultIndexes,
+      };
       scores = new ScoresStorageD1(domainConfig);
       workflows = new WorkflowsStorageD1(domainConfig);
       memory = new MemoryStorageD1(domainConfig);
       backgroundTasks = new BackgroundTasksStorageD1(domainConfig);
     } else {
-      const domainConfig = { client: this.client!, tablePrefix: this.tablePrefix };
+      const domainConfig = {
+        client: this.client!,
+        tablePrefix: this.tablePrefix,
+        skipDefaultIndexes: config.skipDefaultIndexes,
+      };
       scores = new ScoresStorageD1(domainConfig);
       workflows = new WorkflowsStorageD1(domainConfig);
       memory = new MemoryStorageD1(domainConfig);

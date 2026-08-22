@@ -134,9 +134,19 @@ export class MemoryMSSQL extends MemoryStorage {
         columns: ['resourceId', 'seq_id DESC'],
       },
       {
+        name: `${schemaPrefix}mastra_threads_resourceid_id_idx`,
+        table: TABLE_THREADS,
+        columns: ['resourceId', 'id'],
+      },
+      {
         name: `${schemaPrefix}mastra_messages_thread_id_seqid_idx`,
         table: TABLE_MESSAGES,
         columns: ['thread_id', 'seq_id DESC'],
+      },
+      {
+        name: `${schemaPrefix}mastra_messages_resourceid_thread_id_idx`,
+        table: TABLE_MESSAGES,
+        columns: ['resourceId', 'thread_id'],
       },
     ];
   }
@@ -191,7 +201,7 @@ export class MemoryMSSQL extends MemoryStorage {
     resourceId?: string;
   }): Promise<StorageThreadType | null> {
     try {
-      const sql = `SELECT 
+      let sql = `SELECT 
         id,
         [resourceId],
         title,
@@ -200,11 +210,19 @@ export class MemoryMSSQL extends MemoryStorage {
         [updatedAt]
       FROM ${getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) })}
       WHERE id = @threadId`;
+
+      if (resourceId !== undefined) {
+        sql += ' AND [resourceId] = @resourceId'
+      }
+      
       const request = this.pool.request();
       request.input('threadId', threadId);
+      if (resourceId !== undefined) {
+        request.input('resourceId',resourceId)
+      }
       const resultSet = await request.query(sql);
       const thread = resultSet.recordset[0] || null;
-      if (!thread || (resourceId !== undefined && thread.resourceId !== resourceId)) {
+      if (!thread) {
         return null;
       }
       return {

@@ -78,6 +78,7 @@ function buildTableFromSchema(schema: Record<string, { type: string; nullable?: 
  */
 export const mastraThreadsTable = defineTable(buildTableFromSchema(TABLE_SCHEMAS[TABLE_THREADS]))
   .index('by_record_id', ['id'])
+  .index('by_resource_id', ['resourceId', 'id'])
   .index('by_resource', ['resourceId'])
   .index('by_created', ['createdAt'])
   .index('by_updated', ['updatedAt']);
@@ -90,6 +91,7 @@ export const mastraMessagesTable = defineTable(buildTableFromSchema(TABLE_SCHEMA
   .index('by_record_id', ['id'])
   .index('by_thread', ['thread_id'])
   .index('by_thread_created', ['thread_id', 'createdAt'])
+  .index('by_resource_thread', ['resourceId', 'thread_id'])
   .index('by_resource', ['resourceId']);
 
 /**

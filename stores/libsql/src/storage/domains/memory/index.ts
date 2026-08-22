@@ -193,6 +193,11 @@ export class MemoryLibSQL extends MemoryStorage {
           sql: `CREATE INDEX IF NOT EXISTS idx_messages_thread_resource_created_at ON ${TABLE_MESSAGES} (thread_id, "resourceId", "createdAt")`,
           args: [],
         },
+        {
+          sql: `CREATE INDEX IF NOT EXISTS idx_threads_resource_id ON ${TABLE_THREADS} ("resourceId", id)`,
+          args: [],
+        },
+        { sql: `CREATE INDEX IF NOT EXISTS idx_messages_resource_thread ON ${TABLE_MESSAGES} ("resourceId", thread_id)`, args: [] },
       ],
       'write',
     );

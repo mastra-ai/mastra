@@ -32,7 +32,7 @@ describe('PostgresStore Domain Performance Indexes', () => {
 
       const indexes = memory.getDefaultIndexDefinitions();
 
-      expect(indexes.length).toBe(2);
+      expect(indexes.length).toBe(3);
       expect(indexes).toContainEqual({
         name: 'test_schema_mastra_threads_resourceid_createdat_idx',
         table: 'mastra_threads',
@@ -42,6 +42,11 @@ describe('PostgresStore Domain Performance Indexes', () => {
         name: 'test_schema_mastra_messages_thread_id_createdat_idx',
         table: 'mastra_messages',
         columns: ['thread_id', 'createdAt DESC'],
+      });
+      expect(indexes).toContainEqual({
+        name: 'test_schema_mastra_messages_resourceid_thread_id_idx',
+        table: 'mastra_messages',
+        columns: ['resourceId', 'thread_id'],
       });
     });
 
@@ -175,7 +180,7 @@ describe('PostgresStore Domain Performance Indexes', () => {
   });
 
   describe('Total index count across tested domains', () => {
-    it('should define 13 indexes total (2 memory + 1 scores + 10 observability)', () => {
+    it('should define 14 indexes total (3 memory + 1 scores + 10 observability)', () => {
       const memory = new MemoryPG({ client: mockClient as any });
       const scores = new ScoresPG({ client: mockClient as any });
       const observability = new ObservabilityPG({ client: mockClient as any });
@@ -185,7 +190,7 @@ describe('PostgresStore Domain Performance Indexes', () => {
         scores.getDefaultIndexDefinitions().length +
         observability.getDefaultIndexDefinitions().length;
 
-      expect(totalIndexes).toBe(13);
+      expect(totalIndexes).toBe(14);
     });
   });
 });

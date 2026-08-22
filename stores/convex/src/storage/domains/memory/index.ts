@@ -225,10 +225,10 @@ export class MemoryConvex extends MemoryStorage {
   }): Promise<StorageThreadType | null> {
     const row = await this.#db.load<StoredThread | null>({
       tableName: TABLE_THREADS,
-      keys: { id: threadId },
+      keys: { id: threadId, ...(resourceId !== undefined ? { resourceId } : {}) },
     });
 
-    if (!row || (resourceId !== undefined && row.resourceId !== resourceId)) return null;
+    if (!row) return null;
 
     return parseStoredThread(row);
   }

@@ -1569,6 +1569,21 @@ if (ENABLE_TESTS) {
         await memory.dangerouslyClearAll();
       });
 
+      it('creates the resource-scoped threads composite index', async () => {
+        // listIndexes reads INFORMATION_SCHEMA from the live emulator, so this
+        // verifies both the DDL emitted by MemorySpanner.init() and column order.
+        const internalDb: SpannerDB = (memory as any).db;
+        const index = (await internalDb.listIndexes('mastra_threads')).find(
+          index => index.name === 'mastra_threads_resourceid_id_idx',
+        );
+
+        expect(index).toMatchObject({
+          name: 'mastra_threads_resourceid_id_idx',
+          table: 'mastra_threads',
+          columns: ['resourceId', 'id'],
+        });
+      });
+
       describe('saveThread', () => {
         it('creates a new thread', async () => {
           const thread = createSampleThread();

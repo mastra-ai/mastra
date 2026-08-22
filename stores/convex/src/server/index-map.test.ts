@@ -28,7 +28,21 @@ describe('findBestIndex', () => {
     it('should match by_resource for resourceId filter', () => {
       const result = findBestIndex('mastra_messages', [{ field: 'resourceId', value: 'res-1' }]);
       expect(result).not.toBeNull();
-      expect(result!.indexName).toBe('by_resource');
+      expect(['by_resource', 'by_resource_thread']).toContain(result!.indexName);
+    });
+
+    it('should prefer the resource/thread composite index when both filters are present', () => {
+      const result = findBestIndex('mastra_messages', [
+        { field: 'resourceId', value: 'res-1' },
+        { field: 'thread_id', value: 'thread-1' },
+      ]);
+
+      expect(result).not.toBeNull();
+      expect(result!.indexName).toBe('by_resource_thread');
+      expect(result!.indexedFilters).toEqual([
+        { field: 'resourceId', value: 'res-1' },
+        { field: 'thread_id', value: 'thread-1' },
+      ]);
     });
 
     it('should match by_record_id for id filter', () => {
@@ -52,7 +66,16 @@ describe('findBestIndex', () => {
     it('should match by_resource for resourceId filter', () => {
       const result = findBestIndex('mastra_threads', [{ field: 'resourceId', value: 'res-1' }]);
       expect(result).not.toBeNull();
-      expect(result!.indexName).toBe('by_resource');
+      expect(['by_resource', 'by_resource_id']).toContain(result!.indexName);
+    });
+
+    it('should prefer the resource/id composite index for resource-scoped thread lookups', () => {
+      const result = findBestIndex('mastra_threads', [
+        { field: 'resourceId', value: 'res-1' },
+        { field: 'id', value: 'thread-1' },
+      ]);
+      expect(result).not.toBeNull();
+      expect(result!.indexName).toBe('by_resource_id');
     });
 
     it('should match by_record_id for id filter', () => {
@@ -232,17 +255,24 @@ describe('findBestIndex', () => {
       expect(TABLE_INDEX_MAP).toHaveProperty('mastra_vector_indexes');
     });
 
-    it('mastra_messages indexes should include by_thread and by_thread_created', () => {
+    it('mastra_messages indexes should include the memory query indexes', () => {
       const names = TABLE_INDEX_MAP['mastra_messages']!.map(i => i.name);
       expect(names).toContain('by_thread');
       expect(names).toContain('by_thread_created');
       expect(names).toContain('by_resource');
+      expect(names).toContain('by_resource_thread');
       expect(names).toContain('by_record_id');
     });
 
     it('composite indexes should list fields in correct order', () => {
       const threadCreated = TABLE_INDEX_MAP['mastra_messages']!.find(i => i.name === 'by_thread_created');
       expect(threadCreated!.fields).toEqual(['thread_id', 'createdAt']);
+
+      const resourceThread = TABLE_INDEX_MAP['mastra_messages']!.find(i => i.name === 'by_resource_thread');
+      expect(resourceThread!.fields).toEqual(['resourceId', 'thread_id']);
+
+      const resourceId = TABLE_INDEX_MAP['mastra_threads']!.find(i => i.name === 'by_resource_id');
+      expect(resourceId!.fields).toEqual(['resourceId', 'id']);
 
       const workflowRun = TABLE_INDEX_MAP['mastra_workflow_snapshots']!.find(i => i.name === 'by_workflow_run');
       expect(workflowRun!.fields).toEqual(['workflow_name', 'run_id']);

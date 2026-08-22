@@ -272,10 +272,16 @@ function defaultIndexes(_ctx: MemoryContext): OracleCreateIndexOptions[] {
       columns: ['resourceId', 'createdAt'],
     },
     {
+      name: indexName('MASTRA_THREADS_RESOURCE_ID_IDX'),
+      table: TABLE_THREADS,
+      columns: ['resourceId', 'id'],
+    },
+    {
       name: indexName('MASTRA_MESSAGES_THREAD_CREATED_IDX'),
       table: TABLE_MESSAGES,
       columns: ['thread_id', 'createdAt'],
     },
+    { name: indexName('MASTRA_MESSAGES_RESOURCE_THREAD_IDX'), table: TABLE_MESSAGES, columns: ['resourceId', 'thread_id'] },
     {
       name: indexName('MASTRA_MESSAGES_RESOURCE_CREATED_IDX'),
       table: TABLE_MESSAGES,
