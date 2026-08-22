@@ -170,25 +170,25 @@ describe('executeScoreRun', () => {
       listScorers: vi.fn().mockResolvedValue({ 'scorer-1': { scorer: mockScorer } }),
     });
 
-    await expect(
-      executeScoreRun({ mastra: mockMastra, input: { hookData: createHookData() as any } }),
-    ).rejects.toThrow('judge rate limited');
+    await expect(executeScoreRun({ mastra: mockMastra, input: { hookData: createHookData() as any } })).rejects.toThrow(
+      'judge rate limited',
+    );
   });
 
   it('throws when the scorer cannot be resolved', async () => {
     mockMastra.getAgentById.mockReturnValue({ listScorers: vi.fn().mockResolvedValue({}) });
     mockMastra.getScorerById.mockReturnValue(undefined);
 
-    await expect(
-      executeScoreRun({ mastra: mockMastra, input: { hookData: createHookData() as any } }),
-    ).rejects.toThrow(/not found/i);
+    await expect(executeScoreRun({ mastra: mockMastra, input: { hookData: createHookData() as any } })).rejects.toThrow(
+      /not found/i,
+    );
   });
 
   it('throws when storage is missing', async () => {
     mockMastra.getStorage.mockReturnValue(undefined);
-    await expect(
-      executeScoreRun({ mastra: mockMastra, input: { hookData: createHookData() as any } }),
-    ).rejects.toThrow(/storage not found/i);
+    await expect(executeScoreRun({ mastra: mockMastra, input: { hookData: createHookData() as any } })).rejects.toThrow(
+      /storage not found/i,
+    );
   });
 });
 

@@ -200,10 +200,7 @@ export function runScorer({
  * Fire-and-forget write of a sampling decision record. Hosts without storage
  * (or adapters without an override) degrade to a no-op.
  */
-function recordScoringDecision({
-  mastra,
-  ...decision
-}: { mastra?: Mastra } & SaveScoringDecisionPayload): void {
+function recordScoringDecision({ mastra, ...decision }: { mastra?: Mastra } & SaveScoringDecisionPayload): void {
   try {
     void Promise.resolve(mastra?.getStorage()?.getStore('scores'))
       .then(scoresStore => scoresStore?.saveScoringDecision(decision))

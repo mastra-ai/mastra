@@ -105,7 +105,9 @@ describe('getTraceStep failure surfacing', () => {
         total: 2,
         succeeded: 1,
         failed: 1,
-        failures: [expect.objectContaining({ traceId: 'trace-missing', error: expect.stringContaining('Trace not found') })],
+        failures: [
+          expect.objectContaining({ traceId: 'trace-missing', error: expect.stringContaining('Trace not found') }),
+        ],
       }),
     );
   });
