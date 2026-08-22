@@ -300,6 +300,7 @@ export class MessageList {
 
       if (sameId || sameLogicalSignal) {
         this.messages.splice(i, 1);
+        this.stateManager.removeMessage(existing);
       }
     }
   }

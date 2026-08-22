@@ -1,1 +1,1 @@
-../../.mastracode/commands/gh-debug-issue.md
+/Users/abhiramaiyer/.mastracode/web/sandboxes/mastra-ai/mastra/.mastracode/commands/gh-debug-issue.md
