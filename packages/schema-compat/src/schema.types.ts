@@ -37,3 +37,13 @@ export type InferPublicSchema<T extends PublicSchema> = T extends { _output: inf
       : T extends PublicSchema<infer Output>
         ? Output
         : never;
+
+export type InferPublicSchemaInput<T extends PublicSchema> = T extends { _input: infer Input }
+  ? Input
+  : T extends { '~standard': { types: { input: infer Input } } }
+    ? Input
+    : T extends z4.ZodType<any, infer Input>
+      ? Input
+      : T extends z3.Schema<any, z3.ZodTypeDef, infer Input>
+        ? Input
+        : InferPublicSchema<T>;
