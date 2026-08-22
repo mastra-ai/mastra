@@ -139,6 +139,18 @@ describe('feature usage telemetry', () => {
     expect(capture.mock.calls[0]![0].properties).not.toHaveProperty('project_id2');
   });
 
+  it('drops caller-supplied project_id2 metadata when no identifier resolves', () => {
+    // MASTRA_PROJECT_ROOT points at a nonexistent directory, so the git fallback fails.
+    delete process.env.MASTRA_PROJECT_ID;
+
+    trackFeatureUsage('agent_builder', { project_id2: 'spoofed', action: 'open' });
+
+    expect(capture).toHaveBeenCalledTimes(1);
+    const properties = capture.mock.calls[0]![0].properties;
+    expect(properties).not.toHaveProperty('project_id2');
+    expect(properties.action).toBe('open');
+  });
+
   it('does not track feature usage when telemetry is disabled', () => {
     process.env.MASTRA_TELEMETRY_DISABLED = 'true';
 
