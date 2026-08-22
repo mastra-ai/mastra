@@ -15,6 +15,7 @@ import type {
 import pg from 'pg';
 import type { Pool, PoolClient } from 'pg';
 
+import { connectWithClientErrorHandler } from '../shared/client-error-guard';
 import { PostgresStore } from './index';
 
 export type PgFactoryStorageConfig =
@@ -405,7 +406,7 @@ class PgFactoryStorageOps implements FactoryStorageOps {
     if (this.#transactionClient) return run(this.#transactionClient);
 
     const pool = this.#queryable as Pool;
-    const client = await pool.connect();
+    const client = await connectWithClientErrorHandler(pool);
     try {
       await client.query('BEGIN');
       try {
@@ -524,7 +525,7 @@ export class PgFactoryStorage extends FactoryStorage {
   ): Promise<T> {
     const maxAttempts = options?.isolationLevel === 'serializable' ? 3 : 1;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      const client = await this.#pool.connect();
+      const client = await connectWithClientErrorHandler(this.#pool);
       let transactionOpen = false;
       let releaseError: Error | undefined;
       try {
