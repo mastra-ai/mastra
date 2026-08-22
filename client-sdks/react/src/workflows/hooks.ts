@@ -1,11 +1,11 @@
 import { useMutation } from '../lib/use-mutation';
-import { useMastraClient } from '../mastra-client-context';
 import type {
   CreateWorkflowRunParams,
   CreateWorkflowRunResult,
   CancelWorkflowRunParams,
   CancelWorkflowRunResult,
 } from './types';
+import { useWorkflowClient } from './workflow-client-context';
 
 export { useStreamWorkflow } from './use-stream-workflow';
 
@@ -24,7 +24,7 @@ export { useStreamWorkflow } from './use-stream-workflow';
  * ```
  */
 export function useCreateWorkflowRun() {
-  const client = useMastraClient();
+  const client = useWorkflowClient();
 
   return useMutation<CreateWorkflowRunResult, Error, CreateWorkflowRunParams>(async ({ workflowId, prevRunId }) => {
     try {
@@ -54,13 +54,13 @@ export function useCreateWorkflowRun() {
  * ```
  */
 export function useCancelWorkflowRun() {
-  const client = useMastraClient();
+  const client = useWorkflowClient();
 
   return useMutation<CancelWorkflowRunResult, Error, CancelWorkflowRunParams>(async ({ workflowId, runId }) => {
     try {
       const workflow = client.getWorkflow(workflowId);
       const run = await workflow.createRun({ runId });
-      return run.cancelRun();
+      return run.cancel();
     } catch (error) {
       console.error('Error canceling workflow run:', error);
       throw error;
