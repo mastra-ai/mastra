@@ -2,6 +2,7 @@ import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { Lock } from 'lucide-react';
 import { useAuthCapabilities } from '../hooks/use-auth-capabilities';
 import { isAuthenticated } from '../types';
+import { AuthHeadersForm } from './auth-headers-form';
 import { LoginButton } from './login-button';
 import { withStudioBasePath } from '@/lib/studio-base-path';
 
@@ -53,7 +54,9 @@ export function AuthRequired({ children, loginUrl = '/login', signupUrl = '/sign
   // User is not authenticated - show login prompt
   const redirectUri = typeof window !== 'undefined' ? window.location.href : undefined;
 
-  // No login capability available - show auth required message without login option
+  // No login capability available - show auth required message without login
+  // option. Every route stays blocked; the blocked screen itself collects the
+  // authorization header.
   if (!capabilities.login) {
     return (
       <div className="flex h-full w-full items-center justify-center">
@@ -62,9 +65,10 @@ export function AuthRequired({ children, loginUrl = '/login', signupUrl = '/sign
           <div className="space-y-2">
             <h2 className="text-neutral6 text-xl font-semibold">Authentication Required</h2>
             <p className="text-neutral3 max-w-sm">
-              This page requires authentication, but no login method is configured. Please contact your administrator.
+              Add the authorization header that Studio needs to reach your Mastra server.
             </p>
           </div>
+          <AuthHeadersForm />
         </div>
       </div>
     );

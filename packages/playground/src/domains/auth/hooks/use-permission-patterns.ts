@@ -25,7 +25,7 @@ export const usePermissionPatterns = () => {
   const rbacEnabled = !!(capabilities && isAuthenticated(capabilities) && capabilities.capabilities.rbac);
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['permission-patterns'],
+    queryKey: ['permission-patterns', client.options],
     queryFn: () => client.getPermissionPatterns(),
     // Only fetch the pattern vocabulary when RBAC gating is in effect.
     enabled: rbacEnabled,
