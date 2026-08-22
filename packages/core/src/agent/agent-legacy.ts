@@ -581,8 +581,9 @@ export class AgentLegacyHandler {
 
         const memory = await this.capabilities.getMemory({ requestContext });
         const memoryRunState = memory ? getMemoryRunState(requestContext, memory, threadId, resourceId) : undefined;
-        const thread =
-          memoryRunState?.thread ?? (threadId ? await memory?.getThreadById({ threadId }) : undefined) ?? threadAfter;
+        // re-read the latest thread so metadata written mid-run (working memory, processors) isn't overwritten.
+        // This write path stays authoritative and never reads through the run snapshot.
+        const thread = (threadId ? await memory?.getThreadById({ threadId }) : undefined) ?? threadAfter;
 
         if (memory && resourceId && thread) {
           try {
@@ -605,7 +606,7 @@ export class AgentLegacyHandler {
               messageList.add(responseMessages, 'response');
             }
 
-            if (!threadExists && !memoryRunState) {
+            if (!threadExists && !memoryRunState?.ownershipValidated) {
               await memory.createThread({
                 threadId: thread.id,
                 metadata: thread.metadata,
@@ -649,6 +650,7 @@ export class AgentLegacyHandler {
                           resourceId,
                           memoryConfig,
                           title,
+                          metadata: thread.metadata,
                         });
                       }
                     }),

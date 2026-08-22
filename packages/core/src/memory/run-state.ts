@@ -55,18 +55,6 @@ export class MemoryRunState {
     return this.#ownershipValidated;
   }
 
-  setThread(thread: StorageThreadType | null, ownershipValidated = this.#ownershipValidated): void {
-    this.#threadLoaded = true;
-    this.#thread = thread;
-    this.#ownershipValidated = ownershipValidated;
-  }
-
-  invalidateThread(): void {
-    this.#threadLoaded = false;
-    this.#thread = null;
-    this.#ownershipValidated = false;
-  }
-
   load<T>(key: string, loader: () => Promise<T>): Promise<T> {
     const existing = this.#cache.get(key);
     if (existing) return existing.promise as Promise<T>;
@@ -81,16 +69,6 @@ export class MemoryRunState {
 
   set<T>(key: string, value: T): void {
     this.#cache.set(key, { promise: Promise.resolve(value) });
-  }
-
-  invalidate(key: string): void {
-    this.#cache.delete(key);
-  }
-
-  invalidatePrefix(prefix: string): void {
-    for (const key of this.#cache.keys()) {
-      if (key.startsWith(prefix)) this.#cache.delete(key);
-    }
   }
 }
 
