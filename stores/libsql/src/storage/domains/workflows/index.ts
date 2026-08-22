@@ -308,7 +308,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
             sql: `INSERT INTO ${TABLE_WORKFLOW_SNAPSHOT} (workflow_name, run_id, resourceId, snapshot, createdAt, updatedAt)
                 VALUES (?, ?, ?, jsonb(?), ?, ?)
                 ON CONFLICT(workflow_name, run_id)
-                DO UPDATE SET resourceId = excluded.resourceId, snapshot = excluded.snapshot, updatedAt = excluded.updatedAt`,
+                DO UPDATE SET resourceId = COALESCE(excluded.resourceId, ${TABLE_WORKFLOW_SNAPSHOT}.resourceId), snapshot = excluded.snapshot, updatedAt = excluded.updatedAt`,
             args: [workflowName, runId, resourceId ?? null, safeStringify(snapshot), createdAtValue, updatedAtValue],
           }),
         ),

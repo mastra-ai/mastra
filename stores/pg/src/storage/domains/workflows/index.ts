@@ -452,11 +452,11 @@ export class WorkflowsPG extends WorkflowsStorage {
       // Sanitize the snapshot JSON to remove problematic Unicode sequences
       const sanitizedSnapshot = sanitizeJsonForPg(JSON.stringify(snapshot));
       await this.#db.client.none(
-        `INSERT INTO ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })}
+        `INSERT INTO ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })} AS t
                  (workflow_name, run_id, "resourceId", snapshot, "createdAt", "updatedAt", "createdAtZ", "updatedAtZ")
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                  ON CONFLICT (workflow_name, run_id) DO UPDATE
-                 SET "resourceId" = $3, snapshot = $4, "updatedAt" = $6, "updatedAtZ" = $8`,
+                 SET "resourceId" = COALESCE($3, t."resourceId"), snapshot = $4, "updatedAt" = $6, "updatedAtZ" = $8`,
         [
           workflowName,
           runId,

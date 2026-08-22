@@ -8037,16 +8037,20 @@ export class Agent<
       });
     }
 
-    // threadId/resourceId live inside the snapshot state rather than in storage
-    // columns, so fetch all matching rows and filter/paginate here to keep
-    // `total` accurate. Durable agents persist their agentic loop under a
-    // separate workflow name, so query both — otherwise suspended durable runs
-    // are never discoverable.
+    // resourceId is a storage column, so push it down to narrow the query;
+    // threadId lives inside the snapshot state, so fetch matching rows and
+    // filter/paginate here to keep `total` accurate. The in-process resource
+    // check below stays as the correctness backstop: adapters silently skip
+    // the filter when the column is missing, and rows persisted before the
+    // column was populated carry the resource only in the snapshot. Durable
+    // agents persist their agentic loop under a separate workflow name, so
+    // query both — otherwise suspended durable runs are never discoverable.
     const runs: Awaited<ReturnType<typeof workflowsStore.listWorkflowRuns>>['runs'] = [];
     for (const workflowName of ['agentic-loop', DurableStepIds.AGENTIC_LOOP]) {
       const { runs: workflowRuns } = await workflowsStore.listWorkflowRuns({
         workflowName,
         status: 'suspended',
+        resourceId,
         fromDate,
         toDate,
       });
