@@ -19,7 +19,7 @@ import {
   SandboxNotReadyError,
   SandboxProcessManager,
 } from '@mastra/core/workspace';
-import type { PlatformClientOptions } from './client.js';
+import type { PlatformClientOptions, PlatformRequestOptions } from './client.js';
 import { PlatformApiError, PlatformClient } from './client.js';
 import type { DirectExecWebSocketFactory, ExecLease } from './direct-exec.js';
 import { execViaLease } from './direct-exec.js';
@@ -74,7 +74,8 @@ export interface PlatformSandboxOptions extends Omit<MastraSandboxOptions, 'proc
    * Serializable template definition, or a lazy resolver for one. The resolver
    * runs only when start() must provision a fresh sandbox; Platform builds and
    * waits for the template before creating the sandbox. Resolution/build
-   * failures fall back to the provider's ordinary default template.
+   * failures fall back to the provider's ordinary default template and are
+   * retried on the next fresh provision, so resolver work may run again.
    */
   template?: PlatformSandboxTemplate;
   idleTimeoutMinutes?: number;
@@ -372,6 +373,7 @@ export class PlatformSandbox extends MastraSandbox {
   declare readonly processes: PlatformProcessManager;
 
   private readonly _client: PlatformClient;
+  private readonly _usesProviderRoutes: boolean;
   private readonly _environmentId: string;
   private _sandboxId?: string;
   private readonly _seedCheckpointName?: string;
@@ -469,6 +471,8 @@ export class PlatformSandbox extends MastraSandbox {
     if (options.template !== undefined && options.templateId !== undefined) {
       throw new Error('template cannot be combined with templateId and templateDefinition');
     }
+    this._usesProviderRoutes =
+      options.templateId !== undefined || options.templateDefinition !== undefined || options.template !== undefined;
     this._templateId = options.templateId;
     this._templateDefinition = options.templateDefinition ? structuredClone(options.templateDefinition) : undefined;
     this._template =
@@ -490,6 +494,10 @@ export class PlatformSandbox extends MastraSandbox {
 
   private generateId(): string {
     return `platform-sandbox-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  private _request(path: string, options: PlatformRequestOptions = {}): Promise<Response> {
+    return this._usesProviderRoutes ? this._client.requestProvider(path, options) : this._client.request(path, options);
   }
 
   /**
@@ -520,7 +528,7 @@ export class PlatformSandbox extends MastraSandbox {
       ...(id !== undefined && { id }),
       accessToken: this._client.accessToken,
       projectId: this._client.projectId,
-      ...(this._templateId !== undefined || this._client.sandboxProvider !== 'railway'
+      ...(this._usesProviderRoutes || this._client.sandboxProvider !== 'railway'
         ? { sandboxProvider: this._client.sandboxProvider }
         : {}),
       actingUserId: options.actingUserId ?? this._client.actingUserId,
@@ -567,7 +575,7 @@ export class PlatformSandbox extends MastraSandbox {
     if (this._sandboxId) {
       try {
         const requestStartedAt = Date.now();
-        const response = await this._client.request(`/sandbox/${encodeURIComponent(this._sandboxId)}`);
+        const response = await this._request(`/sandbox/${encodeURIComponent(this._sandboxId)}`);
         const requestMs = Date.now() - requestStartedAt;
         const json = (await response.json()) as CreateSandboxResponse;
         // A destroyed record (idle GC, manual delete) is not reattachable —
@@ -613,11 +621,7 @@ export class PlatformSandbox extends MastraSandbox {
     const requestStartedAt = Date.now();
     for (let attempt = 1; ; attempt++) {
       try {
-        const request =
-          this._templateId === undefined
-            ? this._client.request.bind(this._client)
-            : this._client.requestProvider.bind(this._client);
-        response = await request('/sandbox', {
+        response = await this._request('/sandbox', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body,
@@ -902,7 +906,7 @@ export class PlatformSandbox extends MastraSandbox {
       // teardown; other failures are surfaced in logs but do not abort
       // — the VM DELETE below is the operation the caller most needs.
       try {
-        await this._client.request(`/sandbox/${encodeURIComponent(destroyedSandboxId)}/checkpoint`, {
+        await this._request(`/sandbox/${encodeURIComponent(destroyedSandboxId)}/checkpoint`, {
           method: 'DELETE',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ id: this.id }),
@@ -939,7 +943,7 @@ export class PlatformSandbox extends MastraSandbox {
     this._probeGeneration++;
     this._probeTarget = null;
     this._transportReadyPromise = null;
-    await this._client.request(`/sandbox/${encodeURIComponent(destroyedSandboxId)}`, { method: 'DELETE' });
+    await this._request(`/sandbox/${encodeURIComponent(destroyedSandboxId)}`, { method: 'DELETE' });
     // Clear local state so a subsequent start() creates a fresh remote sandbox
     // instead of taking the reattach branch and pointing exec at a deleted resource.
     this._sandboxId = undefined;
@@ -1046,7 +1050,7 @@ export class PlatformSandbox extends MastraSandbox {
   private async _doCaptureCheckpoint(sandboxId: string): Promise<CaptureCheckpointResult> {
     let response: Response;
     try {
-      response = await this._client.request(`/sandbox/${encodeURIComponent(sandboxId)}/checkpoint`, {
+      response = await this._request(`/sandbox/${encodeURIComponent(sandboxId)}/checkpoint`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ id: this.id }),
@@ -1417,7 +1421,7 @@ export class PlatformSandbox extends MastraSandbox {
     if (!this._sandboxId) throw new SandboxNotReadyError(this.id);
     const sandboxId = this._sandboxId;
     const inFlight = (async () => {
-      const response = await this._client.request(`/sandbox/${encodeURIComponent(sandboxId)}/exec-lease`, {
+      const response = await this._request(`/sandbox/${encodeURIComponent(sandboxId)}/exec-lease`, {
         method: 'POST',
       });
       const json = (await response.json()) as ExecLeaseResponse;
@@ -1482,7 +1486,7 @@ export class PlatformSandbox extends MastraSandbox {
         },
       };
     }
-    const response = await this._client.request(`/sandbox/${encodeURIComponent(this._sandboxId)}`);
+    const response = await this._request(`/sandbox/${encodeURIComponent(this._sandboxId)}`);
     const json = (await response.json()) as CreateSandboxResponse;
     return {
       id: json.id,

@@ -171,10 +171,12 @@ describe('PlatformSandbox', () => {
     },
   );
 
-  it('uses the provider-prefixed Railway route for templates when SANDBOX_PROVIDER is unset', async () => {
+  it('uses provider-prefixed Railway routes for a template-backed sandbox when SANDBOX_PROVIDER is unset', async () => {
     vi.unstubAllEnvs();
     vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
-    const fetchMock = vi.fn().mockResolvedValue(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }));
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(() => Promise.resolve(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' })));
     const sandbox = new PlatformSandbox({
       accessToken: 'sk_test',
       projectId: 'proj_123',
@@ -185,8 +187,10 @@ describe('PlatformSandbox', () => {
     });
 
     await sandbox._start();
+    await sandbox.getInfo();
 
     expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v1/railway/projects/proj_123/sandbox');
+    expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/railway/projects/proj_123/sandbox/sbx_1');
   });
 
   it('resolves, builds, and waits for a lazy template only when a fresh sandbox starts', async () => {
@@ -2639,6 +2643,32 @@ describe('PlatformSandbox', () => {
         return url.endsWith('/sandbox') && (call[1] as RequestInit | undefined)?.method === 'POST';
       });
       expect(createCalls).toHaveLength(0);
+    });
+
+    it('keeps provider-prefixed routes when cloning an unresolved lazy template', async () => {
+      vi.unstubAllEnvs();
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const resolveTemplate = vi.fn().mockResolvedValue(undefined);
+      const fetchMock = vi
+        .fn()
+        .mockImplementation(() => Promise.resolve(json({ id: 'sbx_child', createdAt: '2026-06-26T00:00:00.000Z' })));
+      const template = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        template: resolveTemplate,
+        fetch: fetchMock,
+      });
+
+      const child = template.clone();
+      await child._start();
+      await child.getInfo();
+
+      expect(resolveTemplate).toHaveBeenCalledTimes(1);
+      expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v1/railway/projects/proj_123/sandbox');
+      expect(String(fetchMock.mock.calls[1]![0])).toBe(
+        'https://proxy.test/v1/railway/projects/proj_123/sandbox/sbx_child',
+      );
     });
 
     it('inherits template defaults when no overrides are passed', async () => {

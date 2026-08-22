@@ -2,7 +2,7 @@
 '@mastra/platform-workspace': minor
 ---
 
-Added asynchronous sandbox template builds, reusable template handles, and lazy repository templates for Platform workspaces. `PlatformSandbox` can now resolve a providerless definition only when a fresh sandbox is required, wait for its build, and fall back to the provider default when resolution or building fails. `createRepoTemplate()` produces credential-free, commit-pinned definitions for public GitHub repositories.
+Added reusable sandbox templates to Platform workspaces. Build and poll templates with `PlatformTemplateClient`, create sandboxes from tenant-bound handles, or lazily warm public repositories with `createRepoTemplate()`.
 
 ```ts
 const templates = new PlatformTemplateClient();
