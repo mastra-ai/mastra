@@ -868,7 +868,82 @@ describe('session start (onSessionStart)', () => {
     expect(session.model.switch).not.toHaveBeenCalled();
     // The factory stamp still lands: org-first credential resolution keys off
     // controller state even when the model choice is already persisted.
-    expect(session.state.set).toHaveBeenCalledWith({ factoryProjectId: 'fp-1', factoryOrgId: 'org-1' });
+    expect(session.state.set).toHaveBeenCalledWith({ factoryProjectId: 'fp-1' });
+    expect(session.state.set).toHaveBeenCalledWith(expect.objectContaining({ factoryOrgId: 'org-1' }));
+  });
+
+  // An ungated dispatch marks the session unresolved above every guard. Owner
+  // recovery is the resolution, so it has to take the marker down with it —
+  // otherwise capture refuses for the life of the session over a stale flag.
+  it('clears the unresolved marker when owner recovery resolves the organization', async () => {
+    const deps = makeStartDeps();
+    const session = makeSession();
+    session.state.get = vi.fn(() => ({ factoryOrgUnresolved: true })) as any;
+
+    await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
+
+    expect(session.state.set).toHaveBeenCalledWith({ factoryOrgId: 'org-1', factoryOrgUnresolved: false });
+  });
+
+  // The org rung knowledge capture scopes on. `gateDispatch` stamps it on the
+  // request context before the session exists, so it is in hand above every
+  // guard below — and seeding it must not cost a storage read.
+  const orgContext = (organizationId: unknown) => ({
+    get: (key: string) => (key === 'user' ? { id: 'user-1', organizationId } : undefined),
+  });
+
+  it('seeds the organization on a chat-only thread, which reaches no other seam', async () => {
+    const deps = makeStartDeps();
+    const session = makeSession();
+
+    await createChannelSessionStartHook(deps as any)({
+      ...startArgs(session, 'channel:slack:C-1:1700.42'),
+      requestContext: orgContext('org-1'),
+    } as any);
+
+    expect(session.state.set).toHaveBeenCalledWith({ factoryOrgId: 'org-1' });
+    expect(deps.sourceControl.sessions.getBySessionId).not.toHaveBeenCalled();
+  });
+
+  it('still seeds the organization when a mode model is already persisted', async () => {
+    const deps = makeStartDeps();
+    const session = makeSession({ persistedModeModel: 'anthropic/claude-fable-5' });
+
+    await createChannelSessionStartHook(deps as any)({
+      ...startArgs(session),
+      requestContext: orgContext('org-1'),
+    } as any);
+
+    expect(session.state.set).toHaveBeenCalledWith({ factoryOrgId: 'org-1' });
+    // The guard still holds: the persisted mode model is left alone.
+    expect(session.model.switch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['no request context at all', undefined],
+    ['a context whose user carries no org', orgContext(null)],
+  ])('marks the session unresolved given %s', async (_label, requestContext) => {
+    const deps = makeStartDeps();
+    const session = makeSession();
+
+    await createChannelSessionStartHook(deps as any)({
+      ...startArgs(session, 'channel:slack:C-1:1700.42'),
+      requestContext,
+    } as any);
+
+    expect(session.state.set).toHaveBeenCalledWith({ factoryOrgUnresolved: true });
+    expect(session.state.set).not.toHaveBeenCalledWith(expect.objectContaining({ factoryOrgId: expect.anything() }));
+  });
+
+  it('marks the session unresolved when the channel dependencies are absent', async () => {
+    const session = makeSession();
+
+    await createChannelSessionStartHook({} as any)({
+      ...startArgs(session),
+      requestContext: undefined,
+    } as any);
+
+    expect(session.state.set).toHaveBeenCalledWith({ factoryOrgUnresolved: true });
   });
 
   it('skips chat-only threads, whose resourceId names no project', async () => {

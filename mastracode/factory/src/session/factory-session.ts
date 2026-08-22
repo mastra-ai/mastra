@@ -9,6 +9,7 @@ import type { MemorySettingsStorage } from '../storage/domains/memory-settings/b
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import { applyStoredMemorySettings } from './memory-settings-hydration.js';
+import { seedSessionOrg } from './org-seed.js';
 
 type FactorySession = Awaited<ReturnType<AgentController<MastraCodeState>['createSession']>>;
 
@@ -226,6 +227,9 @@ export interface HydrateFactorySessionArgs {
  * default it was created with, and the reason is logged.
  */
 export async function hydrateFactorySession(session: FactorySession, args: HydrateFactorySessionArgs): Promise<void> {
+  // The org rung knowledge capture scopes on. Seeded first so it lands even if
+  // a later best-effort step fails; an empty org marks the session unresolved.
+  await seedSessionOrg(session, args.orgId);
   try {
     const record =
       args.memorySettings && args.factoryProjectId

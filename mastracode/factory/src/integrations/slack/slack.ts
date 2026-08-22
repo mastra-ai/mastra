@@ -19,6 +19,7 @@ import {
   resolveFactoryProjectForSession,
   resolveFactorySourceRepository,
 } from '../../session/factory-session.js';
+import { readRequestContextOrgId, seedSessionOrg } from '../../session/org-seed.js';
 import type {
   ChannelAccountLink,
   ChannelAccountLinkKey,
@@ -396,7 +397,15 @@ export const resolveChannelThreadId: ResolveThreadId = ({ resourceId, defaultThr
  */
 export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSessionStart {
   const { projects, sourceControl, memorySettings } = deps;
-  return async ({ session, thread }) => {
+  return async ({ session, thread, requestContext }) => {
+    // Seed the tenant org above every guard below. `gateDispatch` stamps it on
+    // the message's request context before the session exists, so this needs no
+    // storage read — which matters, because the guards below deliberately skip
+    // storage on a restarted session. A channel-only thread and a thread whose
+    // dispatch was ungated both land here with no org and are marked unresolved
+    // rather than being left to look like a local session.
+    await seedSessionOrg(session, readRequestContextOrgId(requestContext));
+
     if (!projects || !sourceControl) return;
     if (thread.resourceId.startsWith('channel:')) return;
 
@@ -406,7 +415,11 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
     // Repo-backed Slack sessions are factory sessions: stamp the owning
     // project onto controller state so downstream reads (org-first credential
     // resolution, authority gates) recognize them, same as board runs.
-    await session.state.set({ factoryProjectId: owner.factoryProjectId, factoryOrgId: owner.orgId });
+    await session.state.set({ factoryProjectId: owner.factoryProjectId });
+    // Route the org through the seed helper rather than stamping it directly:
+    // an ungated dispatch marked this session unresolved above, and owner
+    // recovery is the resolution that has to clear that marker with it.
+    await seedSessionOrg(session, owner.orgId);
 
     const modeModelKey = `modeModelId_${session.mode.get()}`;
     if (await session.thread.getSetting({ key: modeModelKey })) return;
