@@ -72,6 +72,7 @@ import type {
   InferSchemaOutput,
 } from '../../workflows/types';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
+import { loadSnapshotForResume } from '../load-snapshot-for-resume';
 import { validateCron } from '../scheduler/cron';
 import type { WorkflowScheduleConfig } from '../scheduler/types';
 import { forwardAgentStreamChunk } from '../stream-utils';
@@ -2324,7 +2325,8 @@ export class EventedRun<
     if (!workflowsStore) {
       throw new Error('Cannot resume workflow: workflows store is required');
     }
-    const snapshot = await workflowsStore.loadWorkflowSnapshot({
+    const snapshot = await loadSnapshotForResume({
+      workflowsStore,
       workflowName: this.workflowId,
       runId: this.runId,
     });

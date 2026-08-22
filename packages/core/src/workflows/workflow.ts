@@ -57,6 +57,7 @@ import type { DynamicArgument } from '../types';
 import { PUBSUB_SYMBOL } from './constants';
 import { DefaultExecutionEngine } from './default';
 import type { ExecutionEngine, ExecutionGraph } from './execution-engine';
+import { loadSnapshotForResume } from './load-snapshot-for-resume';
 import { validateTemplate } from './mapping-template';
 import { derivePredicateLabel, evaluatePredicate } from './predicate';
 import type { Predicate } from './predicate';
@@ -4386,7 +4387,8 @@ export class Run<
     }
 
     const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
-    const snapshot = await workflowsStore?.loadWorkflowSnapshot({
+    const snapshot = await loadSnapshotForResume({
+      workflowsStore,
       workflowName: this.workflowId,
       runId: this.runId,
     });

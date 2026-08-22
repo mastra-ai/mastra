@@ -29,6 +29,9 @@ import type { WorkflowRunState } from '../../workflows/types';
  *    their resume state (see foreach-suspend-payload.test.ts).
  *  - `context.input` is the loop's initial iteration data (another full
  *    conversation copy): heavy fields are stripped.
+ *  - on a **`running`** snapshot only, completed steps additionally give up
+ *    `messageListState` / `accumulatedSteps` (issue #20747 — see
+ *    `pruneRunningHistory`).
  *  - engine routing state (`suspendedPaths`, `waitingPaths`, `activePaths`,
  *    `resumeLabels`, `serializedStepGraph`, `status`, `runId`, timestamps,
  *    request context) is never touched.
@@ -246,12 +249,76 @@ function pruneResultMirror(result: Record<string, any>): Record<string, any> {
 }
 
 /**
+ * Per-step fields that carry the accumulated conversation forward through the
+ * durable loop. `messageListState` is the serialized message list;
+ * `accumulatedSteps` is the running step history. Both grow with the run.
+ */
+const RUNNING_HISTORY_FIELDS = ['messageListState', 'accumulatedSteps'] as const;
+
+function stripRunningHistoryFields<T>(value: T): T {
+  if (!isPlainObject(value)) return value;
+
+  const present = RUNNING_HISTORY_FIELDS.filter(key => key in value);
+  // The mapping steps wrap the same state one level down under `llmOutput`,
+  // so a top-level-only strip would leave those copies behind.
+  const nested = isPlainObject(value.llmOutput) && RUNNING_HISTORY_FIELDS.some(key => key in value.llmOutput);
+  if (present.length === 0 && !nested) return value;
+
+  const pruned: Record<string, any> = { ...value };
+  for (const key of present) delete pruned[key];
+  if (nested) pruned.llmOutput = stripRunningHistoryFields(pruned.llmOutput);
+  return pruned as T;
+}
+
+/**
+ * Extra pruning applied **only** to `running` snapshots (issue #20747).
+ *
+ * The durable agent loop persists `running` on every step so
+ * `recoverActiveRuns()` can find in-flight runs after a crash (issue #19056).
+ * Unlike a suspended snapshot, a running one is not a resume artifact — it is a
+ * liveness marker that recovery re-drives via `restart()`. But it is written
+ * once per step and, because the snapshot is cumulative, each write
+ * re-serialized every completed step's `messageListState` and
+ * `accumulatedSteps` on both the payload and the output side. That is ~20
+ * copies of the conversation per write, times one write per step: the O(N^2)
+ * curve behind 135 MB on disk for a 57-step run.
+ *
+ * Live execution never reads these back — an in-flight run holds its state in
+ * memory, and the snapshot is only ever loaded again by recovery, which
+ * re-drives the run through `restart()` from `context.input` and the step
+ * graph. So a running snapshot keeps its routing and status fields and gives
+ * up the conversation entirely, making each running write O(1) in run length
+ * rather than O(N).
+ *
+ * Suspended/paused snapshots are untouched — they are the resume path and keep
+ * exactly the bytes they keep today.
+ */
+function pruneRunningHistory(context: WorkflowRunState['context']): void {
+  for (const [key, value] of Object.entries(context ?? {})) {
+    if (key === 'input' || !isPlainObject(value)) continue;
+    if (!TERMINAL_STEP_STATUSES.has((value as any).status)) continue;
+
+    const pruned: Record<string, any> = { ...value };
+    pruned.payload = stripRunningHistoryFields(pruned.payload);
+    if ('output' in pruned) pruned.output = stripRunningHistoryFields(pruned.output);
+    if ('prevOutput' in pruned) pruned.prevOutput = stripRunningHistoryFields(pruned.prevOutput);
+    context[key] = pruned as any;
+  }
+}
+
+/**
  * `pruneSnapshot` hook for the internal agent workflows. Reduces a persisted
  * run snapshot to what resume actually reads: the suspended step's
  * `suspendPayload` (one live `__streamState` copy) plus engine routing state.
  * Copy-on-write — never mutates the snapshot it is given.
  */
-export function pruneAgentLoopSnapshot({ snapshot }: { snapshot: WorkflowRunState }): WorkflowRunState {
+export function pruneAgentLoopSnapshot({
+  snapshot,
+  workflowStatus,
+}: {
+  snapshot: WorkflowRunState;
+  workflowStatus?: string;
+}): WorkflowRunState {
   const context: WorkflowRunState['context'] = {} as WorkflowRunState['context'];
   for (const [key, value] of Object.entries(snapshot.context ?? {})) {
     if (key === 'input') {
@@ -271,6 +338,10 @@ export function pruneAgentLoopSnapshot({ snapshot }: { snapshot: WorkflowRunStat
       context[key] = pruneStepResult(value as Record<string, any>) as any;
     }
   }
+
+  // `context` is freshly built above, so this is still copy-on-write with
+  // respect to the caller's snapshot.
+  if ((workflowStatus ?? snapshot.status) === 'running') pruneRunningHistory(context);
 
   const result =
     isPlainObject(snapshot.result) && typeof snapshot.result.status === 'string'
