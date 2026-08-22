@@ -90,6 +90,8 @@ A local `.env` file is optional. Environment variables stored on the platform ar
   </StepItem>
 </Steps>
 
+Each deploy replaces the running server process, which affects agent turns that are still streaming when the new version goes live. See [graceful shutdown and rolling deploys](/docs/deployment/mastra-server#graceful-shutdown-and-rolling-deploys) for how the server drains in-flight turns and when to use durable agents instead.
+
 The first deploy writes a `.mastra-project.json` file linking your directory to the platform project. Commit it so later deploys, CI runs, and [`mastra env`](/docs/mastra-platform/environments) commands target the same project without extra flags.
 
 ## Deploy to another environment

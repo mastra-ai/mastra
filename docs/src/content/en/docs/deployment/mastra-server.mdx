@@ -68,6 +68,59 @@ The `mastra start` command provides additional features:
 
 Read the [`mastra start`](/reference/cli/mastra#mastra-start) reference for all available flags.
 
+## Graceful shutdown and rolling deploys
+
+A deploy replaces the running server process. Any agent turn served by a plain `agent.stream()` call is owned by that process, so no other replica can pick up the stream. If the process is killed mid-turn, the client sees the connection close without a terminal event, and observability spans for the run stay unfinished.
+
+This section covers what the generated server does when it's asked to stop, how to give long turns time to finish, and when to reach for [durable agents](/docs/harness/durable-agents) instead.
+
+### What happens on `SIGINT` or `SIGTERM`
+
+By default the generated server installs its own signal handlers. On the first `SIGINT` or `SIGTERM` it:
+
+1. Stops accepting new connections. Idle keep-alive connections are closed immediately so they don't consume the drain window.
+1. Waits for in-flight requests, including active streams, to finish, bounded by [`server.drainTimeout`](/reference/configuration#serverdraintimeout) (default 5 seconds). When the window passes, remaining HTTP connections are force-closed.
+1. Runs `mastra.shutdown()` to release storage and other resources, bounded by a separate 5 second limit.
+1. Exits the process.
+
+A second shutdown signal skips the drain and terminates immediately. Set [`server.handleShutdownSignals`](/reference/configuration#serverhandleshutdownsignals) to `false` to manage signals yourself, with the caveats described in the reference.
+
+### Let long turns finish with `server.drainTimeout`
+
+The 5 second default is too short for agent turns that run for minutes. Set `drainTimeout` above your longest expected turn:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+
+export const mastra = new Mastra({
+  server: {
+    // Allow in-flight turns up to 4 minutes to finish during shutdown
+    drainTimeout: 240_000,
+  },
+})
+```
+
+The drain only helps if your hosting platform waits that long between sending `SIGTERM` and hard-killing the process. Check your platform's termination grace period (for example `terminationGracePeriodSeconds` on Kubernetes) and keep `drainTimeout` below it, leaving room for the 5 second `mastra.shutdown()` bound.
+
+### When draining isn't enough
+
+A drained stream finishes normally, but a stream cut off by the drain timeout or a hard kill can't be recovered: the run state only existed in the terminated process. If turns must survive a process replacement, wrap the agent with [durable agents](/docs/harness/durable-agents). Durable runs persist their state to storage, clients can [reconnect to the stream](/docs/harness/durable-agents#resumable-streams) after a disconnect, and [crash recovery](/docs/harness/durable-agents#crash-recovery) can re-drive interrupted runs on the next server start.
+
+Durability isn't free. Recovery re-issues model calls and re-executes tool calls, so your tools must be idempotent. Run state also needs a shared persistent database, and multi-replica recovery has no distributed lease yet. Reserve durability for turns where losing progress is worse than that added complexity.
+
+### Handling interrupted streams in the client
+
+No configuration can guarantee a final application event when the process is hard-killed. Treat a connection that closes before your protocol's terminal event (for example a `finish` chunk over SSE) as an interrupted turn: surface it to the user and offer a retry, or reconcile against persisted state. With durable agents, reconnect to the run's stream instead of retrying the whole turn.
+
+### Choosing a strategy
+
+| Situation | Approach |
+| - | - |
+| Turns are short or bounded interruption is acceptable | Default drain; optionally raise `server.drainTimeout` |
+| Turns run for minutes and the platform's grace period allows it | Raise `server.drainTimeout` above the longest turn |
+| Turns must survive process replacement or client disconnects | [Durable agents](/docs/harness/durable-agents) with reconnect and recovery |
+| Interruption is rare and cheap to redo | Detect premature stream close in the client and retry |
+
 ## Build configuration
 
 ### Build-time configuration
@@ -163,4 +216,5 @@ NODE_OPTIONS="--max-old-space-size=4096" mastra build
 - [Server Overview](/docs/server/overview): Configure server behavior, middleware, and authentication
 - [Server Adapters](/docs/server/server-adapters): Use Express or Hono instead of `mastra build`
 - [Custom API Routes](/docs/server/custom-api-routes): Add custom HTTP endpoints
+- [Durable Agents](/docs/harness/durable-agents): Persist agent runs so they survive process restarts
 - [Configuration Reference](/reference/configuration): Full configuration options
