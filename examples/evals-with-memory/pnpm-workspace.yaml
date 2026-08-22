@@ -1,5 +1,18 @@
 packages:
-  - '.'
+  - 'shared'
+  - 'headless'
+  - 'studio'
 
 catalog:
+  '@types/node': 22.19.15
+  '@mastra/core': 1.57.0
+  '@mastra/duckdb': 1.6.0
+  '@mastra/editor': 0.13.11
+  '@mastra/evals': 1.7.0
+  '@mastra/libsql': 1.19.0
+  '@mastra/observability': 1.16.5
+  '@mastra/memory': 1.26.0
+  mastra: 1.23.0
   tsx: ^4.23.1
+  typescript: ^6.0.3
+  zod: ^4.4.3

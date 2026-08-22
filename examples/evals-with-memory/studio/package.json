@@ -1,0 +1,34 @@
+{
+  "name": "@workshop/studio",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Studio surface — persistent storage so eval runs are inspectable in the dashboard",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "dev": "mastra dev",
+    "build": "mastra build",
+    "start": "mastra start",
+    "seed": "tsx src/seed.ts",
+    "clean": "rm -rf .mastra node_modules *.db *.db-journal"
+  },
+  "dependencies": {
+    "@mastra/core": "catalog:",
+    "@mastra/duckdb": "catalog:",
+    "@mastra/editor": "catalog:",
+    "@mastra/evals": "catalog:",
+    "@mastra/libsql": "catalog:",
+    "@mastra/memory": "catalog:",
+    "@mastra/observability": "catalog:",
+    "@workshop/shared": "workspace:*",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "mastra": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:"
+  }
+}
