@@ -7443,12 +7443,11 @@ export class Agent<
 
     const memory = await this.getMemory({ requestContext });
     const memoryRunState = memory ? getMemoryRunState(requestContext, memory, threadId, resourceId) : undefined;
-    // Prefer the ownership-validated run snapshot. Older/custom execution paths without
-    // run state keep the finish-time refresh so their metadata freshness is unchanged.
-    const thread =
-      memoryRunState?.thread ??
-      (!readOnlyMemory && threadId ? await memory?.getThreadById({ threadId }) : undefined) ??
-      threadAfter;
+    // re-read the latest thread so metadata written mid-run (working memory, processors) isn't overwritten.
+    // The run snapshot is taken before the run, so it must not be used as the source for this write.
+    const thread = (!readOnlyMemory && threadId ? await memory?.getThreadById({ threadId }) : undefined) ?? threadAfter;
+    // keep the run snapshot coherent with what we just read
+    if (thread) memoryRunState?.setThread(thread);
 
     // Add LLM response messages to the list
     // Prefer dbMessages (MastraDBMessage[] with original IDs) over response.messages
@@ -7477,7 +7476,7 @@ export class Agent<
 
     if (memory && resourceId && thread && !readOnlyMemory) {
       try {
-        if (!threadExists && !memoryRunState) {
+        if (!threadExists) {
           await memory.createThread({
             threadId: thread.id,
             metadata: thread.metadata,
@@ -7536,6 +7535,7 @@ export class Agent<
                       resourceId,
                       memoryConfig,
                       title,
+                      metadata: thread.metadata,
                     });
                     if (typeof onTitleGenerated === 'function') {
                       await onTitleGenerated(title);

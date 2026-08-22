@@ -283,6 +283,52 @@ function memoryMetadataTests(version: 'v1' | 'v2') {
       expect(thread?.metadata).toEqual({ client: 'test', fromProcessor: 'survived' });
     });
 
+    it('should preserve metadata written mid-run when title generation persists the thread', async () => {
+      const mockMemory = new SerializingMockMemory();
+      mockMemory.getMergedThreadConfig = () => ({ generateTitle: true }) as any;
+
+      const metadataWriter: Processor = {
+        id: 'metadata-writer',
+        async processInput({ messages }) {
+          await mockMemory.updateThread({
+            id: 'thread-title-metadata',
+            title: '',
+            metadata: { fromProcessor: 'survived' },
+          });
+          return messages;
+        },
+      };
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'test',
+        model: dummyModel,
+        memory: mockMemory,
+        inputProcessors: [metadataWriter],
+      });
+
+      const memoryOptions = {
+        resource: 'user-1',
+        thread: { id: 'thread-title-metadata', metadata: { client: 'test' } },
+      };
+
+      if (version === 'v1') {
+        await agent.generateLegacy('hello', { memory: memoryOptions });
+      } else {
+        await agent.generate('hello', { memory: memoryOptions });
+      }
+
+      // title generation is fire-and-forget on the v2 path
+      await vi.waitFor(async () => {
+        const titled = await mockMemory.getThreadById({ threadId: 'thread-title-metadata' });
+        expect(titled?.title).toBeTruthy();
+      });
+
+      const thread = await mockMemory.getThreadById({ threadId: 'thread-title-metadata' });
+      expect(thread?.metadata).toEqual({ client: 'test', fromProcessor: 'survived' });
+    });
+
     it('should not update metadata if it is the same using generate', async () => {
       const mockMemory = new MockMemory();
       const initialThread: StorageThreadType = {
