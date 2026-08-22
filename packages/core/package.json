@@ -251,6 +251,16 @@
         "default": "./dist/evals/scoreTraces/index.cjs"
       }
     },
+    "./evals/scoreRun": {
+      "import": {
+        "types": "./dist/evals/scoreRun/index.d.ts",
+        "default": "./dist/evals/scoreRun/index.js"
+      },
+      "require": {
+        "types": "./dist/evals/scoreRun/index.d.ts",
+        "default": "./dist/evals/scoreRun/index.cjs"
+      }
+    },
     "./events": {
       "import": {
         "types": "./dist/events/index.d.ts",

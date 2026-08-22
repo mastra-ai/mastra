@@ -5,7 +5,9 @@ import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource 
 import {
   createStorageErrorId,
   TABLE_SCORERS,
+  TABLE_SCORING_DECISIONS,
   SCORERS_SCHEMA,
+  SCORING_DECISIONS_SCHEMA,
   ScoresStorage,
   calculatePagination,
   normalizePerPage,
@@ -15,6 +17,7 @@ import type {
   PruneOptions,
   PruneResult,
   RetentionTablesDescriptor,
+  SaveScoringDecisionPayload,
   ScoreTenancyFilters,
   StoragePagination,
   TableRetentionPolicy,
@@ -42,6 +45,7 @@ export class ScoresLibSQL extends ScoresStorage {
    */
   static override readonly retentionTables: RetentionTablesDescriptor = {
     scorers: { table: TABLE_SCORERS, column: 'createdAt', indexed: true },
+    scoringDecisions: { table: TABLE_SCORING_DECISIONS, column: 'createdAt', indexed: true },
   };
 
   #db: LibSQLDB;
@@ -56,6 +60,7 @@ export class ScoresLibSQL extends ScoresStorage {
 
   async init(): Promise<void> {
     await this.#db.createTable({ tableName: TABLE_SCORERS, schema: SCORERS_SCHEMA });
+    await this.#db.createTable({ tableName: TABLE_SCORING_DECISIONS, schema: SCORING_DECISIONS_SCHEMA });
     // Add columns for backwards compatibility
     await this.#db.alterTable({
       tableName: TABLE_SCORERS,
@@ -66,6 +71,7 @@ export class ScoresLibSQL extends ScoresStorage {
 
   async dangerouslyClearAll(): Promise<void> {
     await this.#db.deleteData({ tableName: TABLE_SCORERS });
+    await this.#db.deleteData({ tableName: TABLE_SCORING_DECISIONS });
   }
 
   /** Delete scorer results older than the `scorers` policy's `maxAge`, batched. */
@@ -73,7 +79,7 @@ export class ScoresLibSQL extends ScoresStorage {
     const targets = resolveTargets({
       policies,
       descriptor: ScoresLibSQL.retentionTables,
-      order: ['scorers'],
+      order: ['scorers', 'scoringDecisions'],
     });
     return runPrune({ db: this.#db, domain: 'scores', targets, options, logger: this.logger });
   }
@@ -256,6 +262,29 @@ export class ScoresLibSQL extends ScoresStorage {
       args: [id],
     });
     return result.rows?.[0] ? this.transformScoreRow(result.rows[0]) : null;
+  }
+
+  async saveScoringDecision(decision: SaveScoringDecisionPayload): Promise<void> {
+    try {
+      await this.#db.insert({
+        tableName: TABLE_SCORING_DECISIONS,
+        record: {
+          ...decision,
+          id: decision.id ?? crypto.randomUUID(),
+          createdAt: new Date().toISOString(),
+        },
+      });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'SAVE_SCORING_DECISION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { scorerId: decision.scorerId, decision: decision.decision },
+        },
+        error,
+      );
+    }
   }
 
   async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {

@@ -41,6 +41,7 @@ import {
   TABLE_KNOWLEDGE_CURSORS,
   TABLE_KNOWLEDGE_ACTIVITY,
   TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
+  TABLE_SCORING_DECISIONS,
 } from '@mastra/core/storage';
 import type { ClickhouseReplicationConfig } from './replication';
 
@@ -92,6 +93,7 @@ export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
   [TABLE_KNOWLEDGE_CURSORS]: `ReplacingMergeTree()`,
   [TABLE_KNOWLEDGE_ACTIVITY]: `ReplacingMergeTree()`,
   [TABLE_KNOWLEDGE_SEMANTIC_OUTBOX]: `ReplacingMergeTree()`,
+  [TABLE_SCORING_DECISIONS]: `ReplacingMergeTree()`,
 };
 
 export const COLUMN_TYPES: Record<StorageColumn['type'], string> = {

@@ -84,6 +84,7 @@ export default defineConfig({
     'src/utils/collect-tool-mocks.ts',
     'src/utils/safe-stringify.ts',
     'src/evals/scoreTraces/index.ts',
+    'src/evals/scoreRun/index.ts',
     'src/agent/message-list/index.ts',
     'src/agent/durable/index.ts',
     'src/auth/ee/index.ts',

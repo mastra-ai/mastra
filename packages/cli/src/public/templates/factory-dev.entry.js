@@ -1,5 +1,7 @@
 // @ts-ignore
 import { scoreTracesWorkflow } from '@mastra/core/evals/scoreTraces';
+// @ts-ignore
+import { scoreRunWorkflow } from '@mastra/core/evals/scoreRun';
 import { mastra } from '#mastra';
 import { createNodeServer, getToolExports } from '#server';
 import { tools } from '#tools';
@@ -12,4 +14,5 @@ await createNodeServer(mastra, {
 
 if (mastra.getStorage()) {
   mastra.__registerInternalWorkflow(scoreTracesWorkflow);
+  mastra.__registerInternalWorkflow(scoreRunWorkflow);
 }

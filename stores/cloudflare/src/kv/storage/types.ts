@@ -187,6 +187,7 @@ export type RecordTypes = {
   mastra_knowledge_cursors: Record<string, any>;
   mastra_knowledge_activity: Record<string, any>;
   mastra_knowledge_semantic_outbox: Record<string, any>;
+  mastra_scoring_decisions: Record<string, any>;
 };
 
 export type ListOptions = {

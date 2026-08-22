@@ -323,3 +323,66 @@ describe('hashToUnitInterval', () => {
     }
   });
 });
+
+describe('runScorer sampling decision records', () => {
+  let mockScoresStore: any;
+  let mockMastra: any;
+
+  beforeEach(() => {
+    mockScoresStore = { saveScoringDecision: vi.fn().mockResolvedValue(undefined) };
+    mockMastra = {
+      getStorage: vi.fn().mockReturnValue({
+        getStore: vi.fn((domain: string) => Promise.resolve(domain === 'scores' ? mockScoresStore : undefined)),
+      }),
+      getLogger: vi.fn().mockReturnValue({ debug: vi.fn() }),
+    };
+  });
+
+  function baseArgs(scorerObject: any) {
+    return {
+      runId: 'run-1',
+      scorerId: 'scorer-1',
+      scorerObject,
+      input: [],
+      output: {},
+      requestContext: {},
+      entity: { id: 'entity-1' },
+      structuredOutput: false,
+      source: 'LIVE' as const,
+      entityType: 'AGENT' as const,
+      mastra: mockMastra,
+    };
+  }
+
+  it('records a declined decision when ratio sampling rejects', async () => {
+    // Sampling is deterministic (hash of traceId ?? runId) — rate 0 always declines.
+    runScorer(baseArgs({ scorer: { id: 'scorer-1' }, sampling: { type: 'ratio', rate: 0 } }) as any);
+
+    await new Promise(resolve => setImmediate(resolve));
+    expect(mockScoresStore.saveScoringDecision).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scorerId: 'scorer-1',
+        decision: 'declined',
+        samplingType: 'ratio',
+        samplingRate: 0,
+        entityId: 'entity-1',
+      }),
+    );
+  });
+
+  it('records a sampled decision when scoring proceeds', async () => {
+    runScorer(baseArgs({ scorer: { id: 'scorer-1' } }) as any);
+
+    await new Promise(resolve => setImmediate(resolve));
+    expect(mockScoresStore.saveScoringDecision).toHaveBeenCalledWith(
+      expect.objectContaining({ scorerId: 'scorer-1', decision: 'sampled' }),
+    );
+  });
+
+  it('degrades to a no-op without storage', async () => {
+    mockMastra.getStorage.mockReturnValue(undefined);
+    expect(() => runScorer(baseArgs({ scorer: { id: 'scorer-1' } }) as any)).not.toThrow();
+    await new Promise(resolve => setImmediate(resolve));
+    expect(mockScoresStore.saveScoringDecision).not.toHaveBeenCalled();
+  });
+});

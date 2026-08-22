@@ -6,6 +6,7 @@ import type {
   PruneOptions,
   PruneResult,
   RetentionTablesDescriptor,
+  SaveScoringDecisionPayload,
   ScoreTenancyFilters,
   StoragePagination,
   TABLE_NAMES,
@@ -17,6 +18,7 @@ import {
   normalizePerPage,
   ScoresStorage,
   TABLE_SCORERS,
+  TABLE_SCORING_DECISIONS,
   TABLE_SCHEMAS,
   transformScoreRow as coreTransformScoreRow,
 } from '@mastra/core/storage';
@@ -76,7 +78,7 @@ export class ScoresPG extends ScoresStorage {
   #indexes?: CreateIndexOptions[];
 
   /** Tables managed by this domain */
-  static readonly MANAGED_TABLES = [TABLE_SCORERS] as const;
+  static readonly MANAGED_TABLES = [TABLE_SCORERS, TABLE_SCORING_DECISIONS] as const;
 
   /**
    * Scorer results accumulate as evals run. Single table, anchored on the
@@ -84,6 +86,7 @@ export class ScoresPG extends ScoresStorage {
    */
   static override readonly retentionTables: RetentionTablesDescriptor = {
     scorers: { table: TABLE_SCORERS, column: 'createdAtZ', indexed: true },
+    scoringDecisions: { table: TABLE_SCORING_DECISIONS, column: 'createdAt', indexed: true },
   };
 
   constructor(config: PgDomainConfig) {
@@ -103,6 +106,10 @@ export class ScoresPG extends ScoresStorage {
       tableName: TABLE_SCORERS,
       schema: TABLE_SCHEMAS[TABLE_SCORERS],
       ifNotExists: ['spanId', 'requestContext', 'organizationId', 'projectId', 'batchId', 'datasetId', 'datasetItemId'],
+    });
+    await this.#db.createTable({
+      tableName: TABLE_SCORING_DECISIONS,
+      schema: TABLE_SCHEMAS[TABLE_SCORING_DECISIONS],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -156,11 +163,19 @@ export class ScoresPG extends ScoresStorage {
     const parsedSchema = schemaName ? parseSqlIdentifier(schemaName, 'schema name') : '';
     const schemaPrefix = parsedSchema && parsedSchema !== 'public' ? `${parsedSchema}_` : '';
 
-    // Table
+    // Tables
     statements.push(
       generateTableSQL({
         tableName: TABLE_SCORERS,
         schema: TABLE_SCHEMAS[TABLE_SCORERS],
+        schemaName,
+        includeAllConstraints: true,
+      }),
+    );
+    statements.push(
+      generateTableSQL({
+        tableName: TABLE_SCORING_DECISIONS,
+        schema: TABLE_SCHEMAS[TABLE_SCORING_DECISIONS],
         schemaName,
         includeAllConstraints: true,
       }),
@@ -220,6 +235,7 @@ export class ScoresPG extends ScoresStorage {
 
   async dangerouslyClearAll(): Promise<void> {
     await this.#db.clearTable({ tableName: TABLE_SCORERS });
+    await this.#db.clearTable({ tableName: TABLE_SCORING_DECISIONS });
   }
 
   /** Delete scorer results older than the `scorers` policy's `maxAge`, batched. */
@@ -228,7 +244,7 @@ export class ScoresPG extends ScoresStorage {
     const targets = resolveTargets({
       policies,
       descriptor: ScoresPG.retentionTables,
-      order: ['scorers'],
+      order: ['scorers', 'scoringDecisions'],
     });
     return runPrune({ db: this.#db, domain: 'scores', targets, options });
   }
@@ -333,6 +349,29 @@ export class ScoresPG extends ScoresStorage {
           id: createStorageErrorId('PG', 'GET_SCORES_BY_SCORER_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  async saveScoringDecision(decision: SaveScoringDecisionPayload): Promise<void> {
+    try {
+      await this.#db.insert({
+        tableName: TABLE_SCORING_DECISIONS,
+        record: {
+          ...decision,
+          id: decision.id ?? crypto.randomUUID(),
+          createdAt: new Date().toISOString(),
+        },
+      });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'SAVE_SCORING_DECISION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { scorerId: decision.scorerId, decision: decision.decision },
         },
         error,
       );

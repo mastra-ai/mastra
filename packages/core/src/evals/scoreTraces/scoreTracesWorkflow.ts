@@ -9,7 +9,7 @@ import type { ScoreRowData } from '../types';
 import { saveScorePayloadSchema } from '../types';
 import { transformTraceToScorerInputAndOutput } from './utils';
 
-const getTraceStep = createStep({
+export const getTraceStep = createStep({
   id: '__process-trace-scoring',
   inputSchema: z.object({
     targets: z.array(
@@ -64,6 +64,8 @@ const getTraceStep = createStep({
       return;
     }
 
+    const failures: { traceId: string; spanId?: string; error: string }[] = [];
+
     await pMap(
       inputData.targets,
       async target => {
@@ -84,10 +86,35 @@ const getTraceStep = createStep({
             error,
           );
           logger?.trackException(mastraError);
+          failures.push({
+            traceId: target.traceId,
+            spanId: target.spanId,
+            error: error instanceof Error ? error.message : String(error),
+          });
         }
       },
       { concurrency: 3 },
     );
+
+    // Surface per-target failures in the step output instead of swallowing
+    // them. If every target failed, fail the step (and therefore the run) so
+    // the workflow run status reflects the scoring outcome.
+    if (failures.length > 0 && failures.length === inputData.targets.length) {
+      throw new MastraError({
+        id: 'MASTRA_SCORER_ALL_TRACE_SCORING_TARGETS_FAILED',
+        domain: ErrorDomain.SCORER,
+        category: ErrorCategory.SYSTEM,
+        text: `All ${failures.length} trace scoring target(s) failed for scorer ${scorer.id}`,
+        details: { scorerId: scorer.id, failedCount: failures.length, failures: JSON.stringify(failures) },
+      });
+    }
+
+    return {
+      total: inputData.targets.length,
+      succeeded: inputData.targets.length - failures.length,
+      failed: failures.length,
+      failures,
+    };
   },
 });
 

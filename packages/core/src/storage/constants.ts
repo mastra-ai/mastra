@@ -8,6 +8,7 @@ export const TABLE_THREADS = 'mastra_threads';
 export const TABLE_TRACES = 'mastra_traces';
 export const TABLE_RESOURCES = 'mastra_resources';
 export const TABLE_SCORERS = 'mastra_scorers';
+export const TABLE_SCORING_DECISIONS = 'mastra_scoring_decisions';
 export const TABLE_SPANS = 'mastra_ai_spans';
 export const TABLE_AGENTS = 'mastra_agents';
 export const TABLE_AGENT_VERSIONS = 'mastra_agent_versions';
@@ -76,6 +77,7 @@ export type TABLE_NAMES =
   | typeof TABLE_TRACES
   | typeof TABLE_RESOURCES
   | typeof TABLE_SCORERS
+  | typeof TABLE_SCORING_DECISIONS
   | typeof TABLE_SPANS
   | typeof TABLE_AGENTS
   | typeof TABLE_AGENT_VERSIONS
@@ -160,6 +162,27 @@ export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   datasetItemId: { type: 'text', nullable: true },
   createdAt: { type: 'timestamp' },
   updatedAt: { type: 'timestamp' },
+};
+
+/**
+ * Sampling decision records for live scoring. One row per sampling decision
+ * (sampled or declined) so scoring coverage has a computable denominator.
+ */
+export const SCORING_DECISIONS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  scorerId: { type: 'text' },
+  decision: { type: 'text' }, // 'sampled' | 'declined'
+  samplingType: { type: 'text', nullable: true }, // 'none' | 'ratio'
+  samplingRate: { type: 'float', nullable: true },
+  traceId: { type: 'text', nullable: true },
+  spanId: { type: 'text', nullable: true },
+  entityId: { type: 'text', nullable: true },
+  entityType: { type: 'text', nullable: true },
+  source: { type: 'text', nullable: true },
+  resourceId: { type: 'text', nullable: true },
+  threadId: { type: 'text', nullable: true },
+  projectId: { type: 'text', nullable: true },
+  createdAt: { type: 'timestamp' },
 };
 
 export const SPAN_SCHEMA = buildStorageSchema(spanRecordSchema);
@@ -755,6 +778,7 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     },
   },
   [TABLE_SCORERS]: SCORERS_SCHEMA,
+  [TABLE_SCORING_DECISIONS]: SCORING_DECISIONS_SCHEMA,
   [TABLE_THREADS]: {
     id: { type: 'text', nullable: false, primaryKey: true },
     resourceId: { type: 'text', nullable: false },
