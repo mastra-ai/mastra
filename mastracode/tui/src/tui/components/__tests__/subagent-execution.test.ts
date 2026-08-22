@@ -1,6 +1,6 @@
 import type { TUI } from '@earendil-works/pi-tui';
 import stripAnsi from 'strip-ansi';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { SubagentExecutionComponent } from '../subagent-execution.js';
 
 // Minimal mock TUI — only requestRender() is called by SubagentExecutionComponent
@@ -29,6 +29,7 @@ describe('SubagentExecutionComponent', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     Object.defineProperty(process.stdout, 'columns', {
       value: originalColumns,
       writable: true,
@@ -151,6 +152,41 @@ describe('SubagentExecutionComponent', () => {
     const rendered = renderPlain(comp).join('\n');
 
     expect(rendered.match(/Final answer after lookup/g)).toHaveLength(1);
+  });
+
+  it('measures elapsed time when completion does not provide a duration', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1000);
+    const comp = new SubagentExecutionComponent('explore', 'Find usages', mockTui);
+
+    vi.setSystemTime(2234);
+    comp.finish(false);
+
+    expect(renderPlain(comp).join('\n')).toContain('1.2s');
+  });
+
+  it('uses a caller-provided duration instead of measuring elapsed time', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1000);
+    const comp = new SubagentExecutionComponent('explore', 'Find usages', mockTui);
+
+    vi.setSystemTime(999999);
+    comp.finish(false, 42);
+
+    const rendered = renderPlain(comp).join('\n');
+    expect(rendered).toContain('42ms');
+    expect(rendered).not.toContain('999.0s');
+  });
+
+  it('omits the duration when completion duration is unknown', () => {
+    const comp = new SubagentExecutionComponent('explore', 'Find usages', mockTui, undefined, {
+      durationMode: 'unknown',
+    });
+    comp.finish(false);
+
+    const rendered = renderPlain(comp).join('\n');
+    expect(rendered).toContain('subagent explore ✓');
+    expect(rendered).not.toMatch(/\d+(?:\.\d+)?(?:ms|s)/);
   });
 
   // ─── Default behavior: NO collapse ──────────────────────────────────────
