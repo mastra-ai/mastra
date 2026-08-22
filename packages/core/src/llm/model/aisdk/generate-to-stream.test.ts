@@ -141,4 +141,104 @@ describe('createStreamFromGenerateResult', () => {
     expect(textEnd.providerMetadata).toBeUndefined();
     expect(file.providerMetadata).toBeUndefined();
   });
+
+  // The AI SDK content union is wider than the parts this converter expands
+  // explicitly. 'reasoning-file' and 'custom' are provider-v4 content types and
+  // 'tool-approval-request' exists in provider-v3 and v4. All three are also
+  // valid stream parts with an identical shape, so doStream() forwards them
+  // untouched; the generate path must not be lossier than the stream path.
+  describe('content parts that map straight to a stream part', () => {
+    it('should forward a reasoning-file part instead of dropping it', async () => {
+      const result = {
+        warnings: [],
+        content: [{ type: 'reasoning-file', mediaType: 'image/png', data: 'aGVsbG8=' }],
+        finishReason: 'stop',
+        usage: { promptTokens: 1, completionTokens: 1 },
+      };
+
+      const chunks = await collectStream(createStreamFromGenerateResult(result));
+
+      expect(chunks).toContainEqual({
+        type: 'reasoning-file',
+        mediaType: 'image/png',
+        data: 'aGVsbG8=',
+      });
+    });
+
+    it('should forward a custom part with its provider kind and metadata', async () => {
+      const providerMetadata = { openai: { itemId: 'item_1' } };
+      const result = {
+        warnings: [],
+        content: [{ type: 'custom', kind: 'openai.reasoning-summary', providerMetadata }],
+        finishReason: 'stop',
+        usage: { promptTokens: 1, completionTokens: 1 },
+      };
+
+      const chunks = await collectStream(createStreamFromGenerateResult(result));
+
+      expect(chunks).toContainEqual({
+        type: 'custom',
+        kind: 'openai.reasoning-summary',
+        providerMetadata,
+      });
+    });
+
+    it('should forward a tool-approval-request so approvals reach consumers', async () => {
+      const result = {
+        warnings: [],
+        content: [
+          { type: 'tool-call', toolCallId: 'call_1', toolName: 'deleteFile', input: '{}' },
+          { type: 'tool-approval-request', approvalId: 'approval_1', toolCallId: 'call_1' },
+        ],
+        finishReason: 'tool-calls',
+        usage: { promptTokens: 1, completionTokens: 1 },
+      };
+
+      const chunks = await collectStream(createStreamFromGenerateResult(result));
+
+      expect(chunks).toContainEqual({
+        type: 'tool-approval-request',
+        approvalId: 'approval_1',
+        toolCallId: 'call_1',
+      });
+    });
+
+    it('should preserve content order when forwarded parts sit between expanded ones', async () => {
+      const result = {
+        warnings: [],
+        content: [
+          { type: 'text', text: 'before' },
+          { type: 'custom', kind: 'acme.marker' },
+          { type: 'text', text: 'after' },
+        ],
+        finishReason: 'stop',
+        usage: { promptTokens: 1, completionTokens: 1 },
+      };
+
+      const chunks = (await collectStream(createStreamFromGenerateResult(result))) as Array<{
+        type: string;
+        delta?: string;
+      }>;
+
+      const order = chunks
+        .filter(c => c.type === 'text-delta' || c.type === 'custom')
+        .map(c => (c.type === 'custom' ? 'custom' : c.delta));
+
+      expect(order).toEqual(['before', 'custom', 'after']);
+    });
+
+    it('should still map handled parts rather than forwarding them verbatim', async () => {
+      const result = {
+        warnings: [],
+        content: [{ type: 'source', sourceType: 'url', id: 'src_1', url: 'https://example.com', title: 'Example' }],
+        finishReason: 'stop',
+        usage: { promptTokens: 1, completionTokens: 1 },
+      };
+
+      const chunks = (await collectStream(createStreamFromGenerateResult(result))) as Array<{ type: string }>;
+
+      // A single mapped 'source' event, not the raw content part echoed alongside it.
+      expect(chunks.filter(c => c.type === 'source')).toHaveLength(1);
+    });
+  });
 });
