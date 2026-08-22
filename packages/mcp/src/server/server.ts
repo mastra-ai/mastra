@@ -20,7 +20,7 @@ import type { InternalCoreTool, MCPToolType, MastraToolInvocationOptions } from 
 import { makeCoreTool } from '@mastra/core/utils';
 import type { Workflow } from '@mastra/core/workflows';
 import { PromptSchema } from '@modelcontextprotocol/core';
-import { RESOURCE_MIME_TYPE, RESOURCE_URI_META_KEY } from '@modelcontextprotocol/ext-apps';
+import { RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps';
 import {
   hostHeaderValidation,
   NodeStreamableHTTPServerTransport,
@@ -50,7 +50,7 @@ import type { SSEStreamingApi } from 'hono/streaming';
 import { streamSSE } from 'hono/streaming';
 import { SSETransport } from 'hono-mcp-server-sse-transport';
 
-import { withMastraToolStrictMeta } from '../shared/mastra-tool-meta';
+import { mergeToolMeta, normalizeToolUiMeta, withMastraToolStrictMeta } from '../shared/mastra-tool-meta';
 import {
   createReplayElicitation,
   ElicitationReplayInterrupt,
@@ -993,19 +993,11 @@ export class MCPServer extends MCPServerBase {
           if (tool.mcp?.annotations) {
             toolSpec.annotations = tool.mcp.annotations;
           }
-          const toolMeta = withMastraToolStrictMeta(tool.mcp?._meta, tool.strict);
+          // Normalize UI metadata for backward compatibility with older hosts:
+          // If _meta.ui.resourceUri is set, also set the legacy flat key and vice versa
+          const toolMeta = normalizeToolUiMeta(withMastraToolStrictMeta(tool.mcp?._meta, tool.strict));
           if (toolMeta) {
-            // Normalize UI metadata for backward compatibility with older hosts:
-            // If _meta.ui.resourceUri is set, also set the legacy flat key and vice versa
-            const uiMeta = toolMeta.ui as { resourceUri?: string } | undefined;
-            const legacyUri = toolMeta[RESOURCE_URI_META_KEY] as string | undefined;
-            if (uiMeta?.resourceUri && !legacyUri) {
-              toolSpec._meta = { ...toolMeta, [RESOURCE_URI_META_KEY]: uiMeta.resourceUri };
-            } else if (legacyUri && !uiMeta?.resourceUri) {
-              toolSpec._meta = { ...toolMeta, ui: { ...((toolMeta.ui as object) ?? {}), resourceUri: legacyUri } };
-            } else {
-              toolSpec._meta = toolMeta;
-            }
+            toolSpec._meta = toolMeta;
           }
           return toolSpec;
         }),
@@ -1210,6 +1202,24 @@ export class MCPServer extends MCPServerBase {
               text: typeof result === 'string' ? result : JSON.stringify(result),
             },
           ];
+        }
+
+        // Surface `_meta` on the call result the same way `tools/list` does. MCP Apps
+        // hosts resolve which app to render from the tool-call result's
+        // `_meta.ui.resourceUri`, so emitting it only in `tools/list` leaves every
+        // non-Studio host unable to open the app. `_meta` returned by the tool's own
+        // execute() takes precedence over the statically declared tool metadata. Each
+        // source is normalized before merging so an author-supplied resourceUri cannot
+        // leave a stale legacy key behind from the declared metadata.
+        const declaredMeta = normalizeToolUiMeta(withMastraToolStrictMeta(tool.mcp?._meta, tool.strict));
+        const authorMeta = normalizeToolUiMeta(
+          result && typeof result === 'object' && '_meta' in result && result._meta && typeof result._meta === 'object'
+            ? (result._meta as Record<string, unknown>)
+            : undefined,
+        );
+        const mergedMeta = mergeToolMeta(declaredMeta, authorMeta);
+        if (mergedMeta) {
+          response._meta = mergedMeta;
         }
 
         return response;
