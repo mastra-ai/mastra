@@ -33,6 +33,10 @@ describe('factoryRuleBranch', () => {
       }),
     ).toBe('factory/linear-eng-42');
   });
+
+  it('falls back to the board session branch for a manual item', () => {
+    expect(factoryRuleBranch({ ...item, externalSource: null })).toBe('factory/item-item-1');
+  });
 });
 
 async function seedFactoryWithRepository(options?: { defaultModelId?: string }) {
@@ -136,6 +140,20 @@ describe('prepareFactoryRuleBinding', () => {
     expect(userId).toBe('user-1');
     await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toEqual(
       expect.objectContaining({ branch: 'factory/issue-49', baseBranch: 'main', userId: 'user-1' }),
+    );
+  });
+
+  it('starts a manual card run on its id-derived branch', async () => {
+    const { seeded, sourceControl, project, github } = await seedFactoryWithRepository();
+    const prepare = vi.fn(async () => ({}) as never);
+    const input = bindingInput(project.id);
+    (input.item as { externalSource: unknown }).externalSource = null;
+
+    await prepareFactoryRuleBinding(github, { prepare } as unknown as FactoryStartCoordinator, seeded.projects, input);
+
+    const { sessionId } = prepare.mock.calls[0]![0] as unknown as { sessionId: string };
+    await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toEqual(
+      expect.objectContaining({ branch: 'factory/item-item-1', baseBranch: 'main' }),
     );
   });
 });

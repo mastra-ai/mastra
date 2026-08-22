@@ -161,7 +161,9 @@ export function factoryRuleBranch(item: FactoryBindingPreparationInput['item']):
   if (item.externalSource?.integrationId === 'linear' && typeof metadata.identifier === 'string') {
     return `factory/linear-${metadata.identifier.toLowerCase()}`;
   }
-  throw new Error('Factory skill invocation requires a supported issue or pull request identifier.');
+  // Manual cards (and any card whose source carries no issue/PR identity) run
+  // on the same id-derived branch the board uses when opening their session.
+  return `factory/item-${item.id}`;
 }
 
 /**
