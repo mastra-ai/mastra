@@ -139,7 +139,7 @@ If you set the strategy to `'auto'`, the `MastraStorageExporter` automatically s
 
 :::note
 
-Under `insert-only`, only completed spans are persisted — span start and update events are ignored. A trace therefore appears in Studio only after its root span ends, and filtering traces by `status: 'running'` returns no results. `PostgresStoreVNext` supports `insert-only` exclusively, so an explicit `realtime` or `batch-with-updates` strategy falls back to `insert-only` as described above.
+Under `insert-only`, only completed spans are persisted, and span start and update events are ignored. A trace therefore becomes visible in Studio only after its root span ends, and filtering traces by `status: 'running'` returns no results. `PostgresStoreVNext` supports `insert-only` exclusively, so an explicit `realtime` or `batch-with-updates` strategy falls back to `insert-only`.
 
 :::
 
