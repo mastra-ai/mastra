@@ -6,7 +6,7 @@ import {
   isLocalPostgresUrl,
   parseArgs,
 } from '../../../../scripts/simulate/extract';
-import { positiveInt } from '../../../../scripts/simulate/replay';
+import { cadenceOrOff, positiveInt } from '../../../../scripts/simulate/replay';
 
 describe('simulate extract — local target guard', () => {
   it.each([
@@ -85,5 +85,18 @@ describe('simulate replay — numeric flag parsing', () => {
 
   it.each(['abc', '0', '-1', '2.5', ''])('rejects %j instead of silently producing NaN', value => {
     expect(() => positiveInt('cadence', value, 3)).toThrow(/positive integer/);
+  });
+
+  it('reads the literal "off" as driver-initiated curation disabled', () => {
+    expect(cadenceOrOff('cadence', 'off', 3)).toBe(false);
+  });
+
+  it('still parses numbers and still rejects junk', () => {
+    expect(cadenceOrOff('cadence', '4', 3)).toBe(4);
+    expect(cadenceOrOff('cadence', undefined, 3)).toBe(3);
+    // "false"/"none" are not accepted spellings — a typo'd off switch must fail loudly
+    // rather than quietly running a cadence-1 arm and reporting it as a no-curation run.
+    expect(() => cadenceOrOff('cadence', 'false', 3)).toThrow(/positive integer/);
+    expect(() => cadenceOrOff('cadence', 'none', 3)).toThrow(/positive integer/);
   });
 });

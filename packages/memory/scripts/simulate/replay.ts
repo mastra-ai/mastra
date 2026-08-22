@@ -44,6 +44,17 @@ export function positiveInt(flag: string, value: string | undefined, fallback: n
   return parsed;
 }
 
+/**
+ * Cadence accepts the literal `off` in addition to a positive integer. `off` stops the
+ * driver from ever calling the curator itself, so a run can serve as evidence about when
+ * the library decides to curate on its own — with a cadence set, the driver's calls and
+ * the library's are indistinguishable in the results.
+ */
+export function cadenceOrOff(flag: string, value: string | undefined, fallback: number): number | false {
+  if (value === 'off') return false;
+  return positiveInt(flag, value, fallback);
+}
+
 // `pg` and `@mastra/pg` are not dependencies of this package; borrow the workspace
 // copies rather than adding one for a dev tool.
 const require = createRequire(new URL('../../../../stores/pg/package.json', import.meta.url));
@@ -219,13 +230,15 @@ async function main() {
   const curateModel = args.get('curate-model') ?? model;
 
   if (!input || !target) {
-    throw new Error('Usage: simulate:replay --input <local-pg-url> --target <local-pg-url> [--org id] [--model id]');
+    throw new Error(
+      'Usage: simulate:replay --input <local-pg-url> --target <local-pg-url> [--org id] [--model id] [--cadence N|off]',
+    );
   }
 
   const arm: ArmConfig = {
     name: args.get('arm') ?? 'a',
     prompts: { capture: args.get('capture-instructions'), curate: args.get('curate-instructions') },
-    curationCadence: positiveInt('cadence', args.get('cadence'), 3),
+    curationCadence: cadenceOrOff('cadence', args.get('cadence'), 3),
     defaultScope: 'resource',
     maxScope: 'resource',
     curateMaxSteps: positiveInt('curate-max-steps', args.get('curate-max-steps'), 25),
@@ -243,6 +256,9 @@ async function main() {
   });
 
   console.log(`ARM=${arm.name}`);
+  // Printed because a curation count means opposite things with the cadence on and off:
+  // with it on the driver produced them, with it off the system under test did.
+  console.log(`DRIVER_CADENCE=${arm.curationCadence === false ? 'off' : arm.curationCadence}`);
   console.log(`CAPTURE_MODEL=${captureModel}`);
   console.log(`CURATE_MODEL=${curateModel}`);
   console.log(`THREADS_REPLAYED=${result.threadsReplayed}`);

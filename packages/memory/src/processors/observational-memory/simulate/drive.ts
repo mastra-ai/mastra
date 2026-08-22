@@ -22,8 +22,14 @@ export type ArmPrompts = {
 export type ArmConfig = {
   name: string;
   prompts: ArmPrompts;
-  /** Run a curation after every Nth cycle. */
-  curationCadence: number;
+  /**
+   * Run a curation after every Nth cycle, or `false` to leave curation entirely to the
+   * system under test. The driver curating on its own schedule is the right default for
+   * comparing prompts, but it makes the replay useless for observing whether something
+   * *else* — a lifecycle trigger inside Memory — decides to curate, because the driver's
+   * calls are indistinguishable from the ones being measured.
+   */
+  curationCadence: number | false;
   defaultScope: 'thread' | 'resource' | 'org';
   maxScope: 'thread' | 'resource' | 'org';
   /**
@@ -180,7 +186,8 @@ export type ReplayOptions = {
   subconscious: Subconscious;
   /** Agent used for the capture extraction call; carries the arm's observer model. */
   captureAgent: Pick<Agent, 'generate'>;
-  curationCadence: number;
+  /** Cycles between driver-issued curations, or `false` to never curate from the driver. */
+  curationCadence: number | false;
   onEvent?: (line: string) => void;
 };
 
@@ -281,7 +288,7 @@ export async function replayCycles(options: ReplayOptions): Promise<ReplayResult
     options.onEvent?.(`CYCLE=${cycleIndex} source=${cycle.source} captured=${extracted === undefined ? 0 : 1}`);
     sinceLastCuration += 1;
 
-    if (sinceLastCuration >= options.curationCadence) {
+    if (options.curationCadence !== false && sinceLastCuration >= options.curationCadence) {
       sinceLastCuration = 0;
       await runCurationStep(cycleIndex, requestContext);
     }
@@ -289,8 +296,9 @@ export async function replayCycles(options: ReplayOptions): Promise<ReplayResult
 
   // Flush: a cycle count that is not a multiple of the cadence would otherwise leave the
   // tail of the run uncurated, and the arms' knowledge would be compared at different
-  // stages of curation.
-  if (sinceLastCuration > 0 && cycles.length) {
+  // stages of curation. Skipped entirely when the cadence is off — flushing there would
+  // reintroduce exactly the driver-initiated curation the caller asked us not to do.
+  if (options.curationCadence !== false && sinceLastCuration > 0 && cycles.length) {
     await runCurationStep(cycles.length - 1, requestContextWithOrg(organizationId));
   }
 

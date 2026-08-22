@@ -18,7 +18,7 @@ import { diffArms } from '../../src/processors/observational-memory/simulate/dif
 import type { KnowledgeDiff } from '../../src/processors/observational-memory/simulate/diff';
 import { armConfigHash, assertArmsComparable } from '../../src/processors/observational-memory/simulate/drive';
 import type { ArmConfig } from '../../src/processors/observational-memory/simulate/drive';
-import { parseFlags, positiveInt, recreateDatabase, runArm, snapshotArm } from './replay';
+import { cadenceOrOff, parseFlags, positiveInt, recreateDatabase, runArm, snapshotArm } from './replay';
 
 function readInstructions(path: string | undefined): string | undefined {
   return path ? readFileSync(path, 'utf8').trim() : undefined;
@@ -56,7 +56,7 @@ async function main() {
   const runControl = args.get('control') !== 'false';
 
   const shared = {
-    curationCadence: positiveInt('cadence', args.get('cadence'), 1),
+    curationCadence: cadenceOrOff('cadence', args.get('cadence'), 1),
     defaultScope: 'resource' as const,
     maxScope: 'resource' as const,
     curateMaxSteps: positiveInt('curate-max-steps', args.get('curate-max-steps'), 25),

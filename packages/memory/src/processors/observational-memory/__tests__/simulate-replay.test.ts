@@ -122,6 +122,32 @@ describe('replayCycles', () => {
     expect(result.curations.map(curation => curation.cycleIndex)).toEqual([1, 2]);
   });
 
+  it('never curates when the cadence is off, including the tail flush', async () => {
+    const memory = createMemory();
+    curatorAlwaysCompletes();
+    const runCuration = vi.spyOn(memory, 'runCuration');
+
+    // 3 cycles with the cadence off: the scheduled branch and the flush must both stay
+    // shut. This is the mode that lets a run be evidence about the library's own
+    // curation triggers — a single driver-initiated call would invalidate it.
+    const result = await run(memory, { cycles: cycles(3), curationCadence: false });
+
+    expect(result.cyclesReplayed).toBe(3);
+    expect(result.curations).toEqual([]);
+    expect(runCuration).not.toHaveBeenCalled();
+
+    // Capture still happened — the arm is a real run, just an uncurated one.
+    const store = (await memory.storage.getStore('knowledge'))!;
+    const nodes = await store.knowledgeBySource({
+      sourceThreadId: 'alpha',
+      scope: ['org:acme', 'resource:user-42', 'thread:alpha'],
+      limit: 100,
+    });
+    expect(nodes.records.length).toBeGreaterThan(0);
+    const cursor = await store.getCurationCursor({ sourceThreadId: 'alpha', agent: 'curate' });
+    expect(cursor?.lastKnowledgeId).toBeFalsy();
+  });
+
   it('fails fast when no Subconscious is configured rather than reporting an empty run', async () => {
     const memory = createMemory({ subconscious: undefined });
     await expect(run(memory)).rejects.toThrow(/experimental_subconscious/);

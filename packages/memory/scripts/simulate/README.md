@@ -50,6 +50,21 @@ pnpm simulate:ab -- \
 runner refuses to start when the two arms differ in anything else — models, cadence, scopes,
 thread selection — so a printed diff can only be attributable to the prompt.
 
+### Letting the library decide when to curate
+
+By default the replay driver curates on its own schedule (`--cadence N`, after every Nth
+cycle, plus a flush at the end so no arm's tail is left uncurated). Pass `--cadence off` and
+the driver never calls the curator at all — neither on schedule nor at the flush.
+
+```sh
+pnpm simulate:replay -- ... --cadence off
+```
+
+That mode exists so a run can answer _when curation fires_ rather than _what the curator
+produces_: with the driver's own calls off, every curation recorded during a run came from
+the memory package's own triggers. A run configured this way against a build with no
+triggers enabled should record zero curations — that is the point, not a failure.
+
 A third **control** arm re-runs arm A's own configuration. Capture and curation are live
 model calls, so identical prompts still diff; `CONTROL_CHANGED_RECORDS` is that noise floor.
 An A-vs-B diff at or below it means the prompt change had no detectable effect. Pass
