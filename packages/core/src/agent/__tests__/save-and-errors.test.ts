@@ -1825,6 +1825,9 @@ describe('message persistence across completed steps', () => {
             stream: convertArrayToReadableStream([
               { type: 'stream-start', warnings: [] },
               { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-start', id: 'text-0' },
+              { type: 'text-delta', id: 'text-0', delta: 'Response after tool' },
+              { type: 'text-end', id: 'text-0' },
               {
                 type: 'tool-call',
                 toolCallId: 'call-1',
@@ -1894,7 +1897,7 @@ describe('message persistence across completed steps', () => {
         stepFinishCount++;
       },
       onChunk: async chunk => {
-        if (chunk.type === 'text-delta') {
+        if (doStreamCallCount === 2 && chunk.type === 'text-delta') {
           abortController.abort();
         }
       },
@@ -1915,8 +1918,8 @@ describe('message persistence across completed steps', () => {
       threadId: 'thread-save-per-step-abort',
       resourceId: 'resource-save-per-step-abort',
     });
-    expect(recalled.messages.map(message => message.role)).toEqual(['user', 'assistant']);
-    expect(new Set(recalled.messages.map(message => message.id)).size).toBe(2);
+    expect(recalled.messages.map(message => message.role)).toEqual(['user', 'assistant', 'assistant']);
+    expect(new Set(recalled.messages.map(message => message.id)).size).toBe(3);
     expect(saveMessagesSpy).toHaveBeenCalledTimes(1);
     expect(saveMessagesSpy.mock.calls[0]?.[0].messages.map(message => message.id)).toEqual(
       recalled.messages.map(message => message.id),
@@ -1940,7 +1943,7 @@ describe('message persistence across completed steps', () => {
         .flatMap(message => message.content.parts ?? [])
         .filter(part => part.type === 'text')
         .map(part => part.text),
-    ).toEqual(['test message', 'Response after tool']);
+    ).toEqual(['test message', 'Response after tool', 'Response after tool']);
   });
 });
 

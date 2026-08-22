@@ -1051,11 +1051,11 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   if (self.#status === 'canceled' && self.#bufferedByStep.text.trim().length > 0) {
                     self.messageList.add(
                       {
-                        id: self.messageId,
                         role: 'assistant',
                         content: [{ type: 'text', text: self.#bufferedByStep.text }],
                       },
                       'response',
+                      { merge: false },
                     );
                   }
 
