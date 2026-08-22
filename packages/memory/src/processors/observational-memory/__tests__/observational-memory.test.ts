@@ -3295,6 +3295,57 @@ User asked about </current-task> parsing and how it works
       expect(result.degenerate).toBe(true);
       expect(result.observations).toBe('');
     });
+
+    // Long-period multi-line loops defeat the window-sampling strategy: with a
+    // repeating block of period P chars, sampled windows only collide when two
+    // sample positions are congruent mod P, so ~50 samples land on ~50 distinct
+    // phases and find zero duplicates. Both cases below reproduce real observer
+    // output found in production records (2026-08-21).
+    it('should detect a long-period multi-line repetition loop (21-line block x 62)', () => {
+      const block = Array.from(
+        { length: 21 },
+        (_, i) =>
+          `* 🟡 (08:44) Found \`API.md\` lines ${200 + i * 10}-${210 + i * 10}: \`/api/learning/entities/:entityId/route-${i}\` accepts \`signalName\` — no catalog enrichment currently present.`,
+      ).join('\n');
+      const uniquePrefix = Array.from(
+        { length: 30 },
+        (_, i) =>
+          `* 🔴 (0${(i % 9) + 1}:1${i % 6}) User asked about distinct topic number ${i} with unique detail ${i * 37}`,
+      ).join('\n');
+      const text = `${uniquePrefix}\n${Array(62).fill(block).join('\n')}`;
+      expect(detectDegenerateRepetition(text)).toBe(true);
+    });
+
+    it('should detect a short-period multi-line repetition loop (8-line block x 140)', () => {
+      const block = Array.from(
+        { length: 8 },
+        (_, i) =>
+          `* 🟡 (14:0${i}) Verified \`verifier-runner.ts\` line ${100 + i}: baseline replay hook number ${i} registered against the lifecycle map.`,
+      ).join('\n');
+      const text = Array(140).fill(block).join('\n');
+      expect(detectDegenerateRepetition(text)).toBe(true);
+    });
+
+    it('should not flag long legitimate output with unique lines', () => {
+      const text = Array.from(
+        { length: 300 },
+        (_, i) =>
+          `* 🟡 (1${i % 10}:${String(i % 60).padStart(2, '0')}) Observation number ${i}: examined file-${i}.ts and found unique detail ${i * 13} relating to subsystem ${i % 7}`,
+      ).join('\n');
+      expect(text.length).toBeGreaterThan(2000);
+      expect(detectDegenerateRepetition(text)).toBe(false);
+    });
+
+    it('should not flag output where only short lines repeat', () => {
+      const unique = Array.from(
+        { length: 40 },
+        (_, i) =>
+          `* 🟡 (12:${String(i % 60).padStart(2, '0')}) Unique observation ${i} with distinct content token ${i * 31}`,
+      );
+      // Interleave legitimately repetitive short separators/bullets
+      const text = unique.flatMap(line => [line, '---', '## Current Task']).join('\n');
+      expect(detectDegenerateRepetition(text)).toBe(false);
+    });
   });
 
   describe('describeDegenerateOutput', () => {
@@ -3305,6 +3356,8 @@ User asked about </current-task> parsing and how it works
       const description = describeDegenerateOutput(text);
       expect(description).toContain(`length=${text.length}`);
       expect(description).toMatch(/duplicateRatio=0\.\d+/);
+      expect(description).toMatch(/duplicateLineRatio=(?:\d+\.\d+|n\/a)/);
+      expect(description).toMatch(/countedLines=\d+/);
       expect(description).toMatch(/topWindowCount=\d+/);
       expect(description).toContain('topWindow="');
       expect(description).toContain('head="');
