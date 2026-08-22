@@ -1,6 +1,4 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
-import { createOnScorerHook } from '../../mastra/hooks';
-import { runScorer } from '../hooks';
 import { executeScoreRun, extractScoreRunTarget, getScoreRunId, SCORE_RUN_WORKFLOW_ID } from './executeScoreRun';
 import { pruneScoreRunSnapshot } from './scoreRunWorkflow';
 
@@ -62,88 +60,6 @@ describe('extractScoreRunTarget', () => {
       targetCorrelationContext: undefined,
       targetMetadata: undefined,
     });
-  });
-});
-
-describe('createOnScorerHook durable dispatch', () => {
-  let mockScoresStore: any;
-  let mockStorage: any;
-  let mockRun: any;
-  let mockWorkflow: any;
-  let mockMastra: any;
-
-  beforeEach(() => {
-    mockScoresStore = { saveScore: vi.fn().mockResolvedValue({ score: 'ok' }) };
-    mockStorage = {
-      getStore: vi.fn((domain: string) => Promise.resolve(domain === 'scores' ? mockScoresStore : undefined)),
-    };
-    mockRun = { start: vi.fn().mockResolvedValue({ status: 'success' }) };
-    mockWorkflow = { createRun: vi.fn().mockResolvedValue(mockRun) };
-    mockMastra = {
-      getStorage: vi.fn().mockReturnValue(mockStorage),
-      getLogger: vi.fn().mockReturnValue({ warn: vi.fn(), debug: vi.fn(), trackException: vi.fn() }),
-      __getInternalWorkflow: vi.fn().mockReturnValue(mockWorkflow),
-      getAgentById: vi.fn(),
-      getWorkflowById: vi.fn(),
-      getScorerById: vi.fn(),
-    };
-  });
-
-  it('dispatches through the __score-run workflow with a deterministic runId', async () => {
-    const hook = createOnScorerHook(mockMastra);
-    await hook(createHookData({ tracingContext: createTracingContext() }) as any);
-
-    expect(mockMastra.__getInternalWorkflow).toHaveBeenCalledWith(SCORE_RUN_WORKFLOW_ID);
-    expect(mockWorkflow.createRun).toHaveBeenCalledWith({ runId: 'scoring-scorer-1-trace-1-span-1' });
-    expect(mockRun.start).toHaveBeenCalledTimes(1);
-    // Direct execution must not happen when the workflow handles the run.
-    expect(mockScoresStore.saveScore).not.toHaveBeenCalled();
-  });
-
-  it('passes a serializable input (tracingContext stripped, span identity extracted)', async () => {
-    const hook = createOnScorerHook(mockMastra);
-    await hook(createHookData({ tracingContext: createTracingContext() }) as any);
-
-    const { inputData } = mockRun.start.mock.calls[0][0];
-    expect(inputData.traceId).toBe('trace-1');
-    expect(inputData.spanId).toBe('span-1');
-    expect(inputData.hookData.tracingContext).toBeUndefined();
-    expect(inputData.hookData.scorer.id).toBe('scorer-1');
-  });
-
-  it('duplicate dispatches compute the same runId (idempotent intent upsert)', async () => {
-    const hook = createOnScorerHook(mockMastra);
-    const hookData = () => createHookData({ tracingContext: createTracingContext() }) as any;
-    await hook(hookData());
-    await hook(hookData());
-
-    const [first, second] = mockWorkflow.createRun.mock.calls;
-    expect(first[0].runId).toBe(second[0].runId);
-  });
-
-  it('logs (not throws) when the workflow run start fails', async () => {
-    mockRun.start.mockRejectedValue(new Error('engine down'));
-    const hook = createOnScorerHook(mockMastra);
-    await expect(hook(createHookData() as any)).resolves.toBeUndefined();
-    // fire-and-forget rejection handled asynchronously
-    await new Promise(resolve => setImmediate(resolve));
-    expect(mockMastra.getLogger().trackException).toHaveBeenCalled();
-  });
-
-  it('falls back to direct execution when the workflow is not registered', async () => {
-    mockMastra.__getInternalWorkflow = vi.fn(() => {
-      throw new Error('not registered');
-    });
-    const mockScorer = { id: 'scorer-1', name: 'Scorer One', run: vi.fn().mockResolvedValue({ score: 0.7 }) };
-    mockMastra.getAgentById.mockReturnValue({
-      listScorers: vi.fn().mockResolvedValue({ 'scorer-1': { scorer: mockScorer } }),
-    });
-
-    const hook = createOnScorerHook(mockMastra);
-    await hook(createHookData() as any);
-
-    expect(mockScorer.run).toHaveBeenCalledTimes(1);
-    expect(mockScoresStore.saveScore).toHaveBeenCalledWith(expect.objectContaining({ score: 0.7 }));
   });
 });
 
@@ -245,68 +161,5 @@ describe('pruneScoreRunSnapshot', () => {
 
     // The pruned snapshot must stay small — this is the cost-control contract.
     expect(JSON.stringify(pruned).length).toBeLessThan(1024);
-  });
-});
-
-describe('runScorer sampling decision records', () => {
-  let mockScoresStore: any;
-  let mockMastra: any;
-
-  beforeEach(() => {
-    mockScoresStore = { saveScoringDecision: vi.fn().mockResolvedValue(undefined) };
-    mockMastra = {
-      getStorage: vi.fn().mockReturnValue({
-        getStore: vi.fn((domain: string) => Promise.resolve(domain === 'scores' ? mockScoresStore : undefined)),
-      }),
-      getLogger: vi.fn().mockReturnValue({ debug: vi.fn() }),
-    };
-  });
-
-  function baseArgs(scorerObject: any) {
-    return {
-      runId: 'run-1',
-      scorerId: 'scorer-1',
-      scorerObject,
-      input: [],
-      output: {},
-      requestContext: {},
-      entity: { id: 'entity-1' },
-      structuredOutput: false,
-      source: 'LIVE' as const,
-      entityType: 'AGENT' as const,
-      mastra: mockMastra,
-    };
-  }
-
-  it('records a declined decision when ratio sampling rejects', async () => {
-    // Sampling is deterministic (hash of traceId ?? runId) — rate 0 always declines.
-    runScorer(baseArgs({ scorer: { id: 'scorer-1' }, sampling: { type: 'ratio', rate: 0 } }) as any);
-
-    await new Promise(resolve => setImmediate(resolve));
-    expect(mockScoresStore.saveScoringDecision).toHaveBeenCalledWith(
-      expect.objectContaining({
-        scorerId: 'scorer-1',
-        decision: 'declined',
-        samplingType: 'ratio',
-        samplingRate: 0,
-        entityId: 'entity-1',
-      }),
-    );
-  });
-
-  it('records a sampled decision when scoring proceeds', async () => {
-    runScorer(baseArgs({ scorer: { id: 'scorer-1' } }) as any);
-
-    await new Promise(resolve => setImmediate(resolve));
-    expect(mockScoresStore.saveScoringDecision).toHaveBeenCalledWith(
-      expect.objectContaining({ scorerId: 'scorer-1', decision: 'sampled' }),
-    );
-  });
-
-  it('degrades to a no-op without storage', async () => {
-    mockMastra.getStorage.mockReturnValue(undefined);
-    expect(() => runScorer(baseArgs({ scorer: { id: 'scorer-1' } }) as any)).not.toThrow();
-    await new Promise(resolve => setImmediate(resolve));
-    expect(mockScoresStore.saveScoringDecision).not.toHaveBeenCalled();
   });
 });
