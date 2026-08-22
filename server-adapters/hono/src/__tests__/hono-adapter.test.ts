@@ -18,6 +18,7 @@ import {
 } from '@internal/server-adapter-test-utils';
 import { Mastra } from '@mastra/core';
 import { registerApiRoute } from '@mastra/core/server';
+import { MASTRA_USER_KEY } from '@mastra/server/auth';
 import { MASTRA_IS_STUDIO_KEY, createRoute } from '@mastra/server/server-adapter';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import { Hono } from 'hono';
@@ -251,6 +252,57 @@ describe('Hono Server Adapter', () => {
     const open = await app.request('/custom/open');
     expect(open.status).toBe(200);
     await expect(open.json()).resolves.toEqual({ open: true });
+  });
+
+  it('keeps authenticated request context authoritative over body values', async () => {
+    const route = createRoute({
+      method: 'POST',
+      path: '/custom/auth-context',
+      responseType: 'json',
+      requiresAuth: true,
+      handler: async ({ requestContext }) => ({
+        namespacedUser: requestContext.get(MASTRA_USER_KEY),
+        legacyUser: requestContext.get('user'),
+        myKey: requestContext.get('myKey'),
+      }),
+    });
+
+    const mastra = new Mastra({ logger: false, server: { apiRoutes: [route] } });
+    const originalGetServer = mastra.getServer.bind(mastra);
+    mastra.getServer = () =>
+      ({
+        ...originalGetServer(),
+        auth: {
+          authenticateToken: async (token: string) => (token === 'valid-token' ? { id: 'user-1' } : null),
+          authorize: async () => true,
+        },
+      }) as any;
+
+    const app = new Hono();
+    const adapter = new MastraServer({ app, mastra });
+    await adapter.init();
+
+    const response = await app.request('/custom/auth-context', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer valid-token',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        requestContext: {
+          [MASTRA_USER_KEY]: { id: 'spoofed-namespaced-user' },
+          user: { id: 'spoofed-legacy-user' },
+          myKey: 'safe-value',
+        },
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      namespacedUser: { id: 'user-1' },
+      legacyUser: { id: 'user-1' },
+      myKey: 'safe-value',
+    });
   });
 
   it('includes createRoute routes from server.apiRoutes in the OpenAPI spec', async () => {
