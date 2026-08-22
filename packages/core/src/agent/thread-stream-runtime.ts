@@ -840,6 +840,19 @@ export class AgentThreadStreamRuntime {
     };
   }
 
+  /**
+   * Whether an abort was already requested for `runId`.
+   *
+   * `abortRun()` records the intent in `abortedRunIds` when the run has not
+   * prepared its options yet, so that the run aborts the moment it starts.
+   * The regular agent path consumes that intent in `prepareRunOptions()`;
+   * execution paths that do not go through `prepareRunOptions()`, such as the
+   * durable agent's, read it here instead.
+   */
+  isRunAborted(runId: string, pubsub?: PubSub): boolean {
+    return this.#getState(pubsub).abortedRunIds.has(runId);
+  }
+
   abortRun(runId: string, pubsub?: PubSub): boolean {
     const state = this.#getState(pubsub);
     const preparedRun = state.preparedRunsById.get(runId);

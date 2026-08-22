@@ -61,6 +61,35 @@ function createAbortableModel() {
   });
 }
 
+/** A model that streams a short reply and finishes normally. */
+function createFinishingModel() {
+  return new MockLanguageModelV2({
+    doStream: async () => ({
+      stream: new ReadableStream({
+        start(controller) {
+          controller.enqueue({ type: 'stream-start', warnings: [] });
+          controller.enqueue({
+            type: 'response-metadata',
+            id: 'id-0',
+            modelId: 'mock-model-id',
+            timestamp: new Date(0),
+          });
+          controller.enqueue({ type: 'text-start', id: 'text-1' });
+          controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'hello' });
+          controller.enqueue({ type: 'text-end', id: 'text-1' });
+          controller.enqueue({
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          });
+          controller.close();
+        },
+      }),
+      rawCall: { rawPrompt: null, rawSettings: {} },
+    }),
+  });
+}
+
 describe('DurableAgent abort signal', () => {
   let pubsub: EventEmitterPubSub;
 
@@ -193,6 +222,68 @@ describe('DurableAgent abort signal', () => {
     expect(finishReason).toBe('abort');
 
     source.cleanup();
+  });
+
+  it('an abort requested before the run starts short-circuits it', async () => {
+    // `abortRunStream()` on a run that has not started yet has no controller
+    // to flip, so it records the intent. The durable path has to honor that
+    // intent when the run finally starts, or a run cancelled while it was
+    // queued executes to completion.
+    const mockModel = createAbortableModel();
+    const baseAgent = new Agent({
+      id: 'abort-preabort-intent-agent',
+      name: 'Abort Preabort Intent Agent',
+      instructions: 'Test',
+      model: mockModel as LanguageModelV2,
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    const runId = 'queued-run-1';
+    durableAgent.abortRunStream(runId);
+
+    let abortPayload: unknown;
+    const { output, cleanup } = await durableAgent.stream('Go', {
+      runId,
+      onAbort: data => {
+        abortPayload = data;
+      },
+    });
+
+    try {
+      await output.consumeStream();
+    } catch {
+      // expected — the run never produced a normal finish
+    }
+
+    expect(abortPayload).toBeDefined();
+
+    cleanup();
+  });
+
+  it('a run whose id was never aborted still runs', async () => {
+    const baseAgent = new Agent({
+      id: 'abort-preabort-negative-agent',
+      name: 'Abort Preabort Negative Agent',
+      instructions: 'Test',
+      model: createFinishingModel() as LanguageModelV2,
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    // Another run's recorded intent must not bleed onto this one.
+    durableAgent.abortRunStream('some-other-run');
+
+    let abortPayload: unknown;
+    const { output, cleanup } = await durableAgent.stream('Go', {
+      runId: 'unaffected-run',
+      onAbort: data => {
+        abortPayload = data;
+      },
+    });
+
+    expect(await output.text).toBe('hello');
+    expect(abortPayload).toBeUndefined();
+
+    cleanup();
   });
 
   it('pre-aborted external abortSignal short-circuits the run', async () => {

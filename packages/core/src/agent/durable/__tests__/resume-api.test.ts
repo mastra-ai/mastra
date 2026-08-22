@@ -24,6 +24,7 @@ import type { WorkflowRunState } from '../../../workflows/types';
 import { Agent } from '../../agent';
 import { DurableStepIds } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
+import { emitAbortEvent } from '../stream-adapter';
 
 // ============================================================================
 // Helper Functions
@@ -498,6 +499,39 @@ describe('Resume API', () => {
       const durableAgent = createDurableAgent({ agent: baseAgent });
 
       expect(typeof durableAgent.resume).toBe('function');
+    });
+
+    it('forwards onAbort from resume() so an aborted resumed segment reaches the caller', async () => {
+      const mockModel = createTextModel('Resumed successfully');
+      const testPubsub = new EventEmitterPubSub();
+
+      const baseAgent = new Agent({
+        id: 'resume-onabort-agent',
+        name: 'Resume OnAbort Agent',
+        instructions: 'Test resume onAbort',
+        model: mockModel as LanguageModelV2,
+      });
+
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub: testPubsub });
+
+      const { runId } = await durableAgent.prepare('Hello');
+
+      let abortPayload: unknown;
+      const result = await durableAgent.resume(
+        runId,
+        { action: 'continue' },
+        {
+          onAbort: (data: unknown) => {
+            abortPayload = data;
+          },
+        },
+      );
+
+      await emitAbortEvent(testPubsub, runId, { steps: [], text: 'partial' });
+      await vi.waitFor(() => expect(abortPayload).toEqual({ steps: [], text: 'partial' }));
+
+      result.cleanup();
+      await testPubsub.close();
     });
 
     it('should return stream result from resume', async () => {
