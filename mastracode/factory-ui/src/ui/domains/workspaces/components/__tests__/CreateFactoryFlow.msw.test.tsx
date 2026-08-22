@@ -220,6 +220,24 @@ describe('Create Factory wizard', () => {
     expect(sessionStorage.getItem(STEP_KEY)).toBeNull();
   });
 
+  it('skips the intake write when the repository already feeds issue intake', async () => {
+    const calls: string[] = [];
+    seedDraft('model-provider');
+    const { intakeConfigs } = stubModelStepEndpoints(calls, {
+      github: { enabled: true, sourceIds: ['octo/hello'] },
+    });
+    const user = userEvent.setup();
+
+    const { client } = renderFlow();
+
+    await user.click(await screen.findByRole('option', { name: /Anthropic/ }));
+    await user.click(await screen.findByRole('option', { name: /anthropic\/claude-sonnet-4-5/ }));
+
+    await waitForMutationsIdle(client);
+    // A retry or a second Factory over the same repo must not rewrite the selection.
+    expect(intakeConfigs).toEqual([]);
+  });
+
   it('resumes a failed commit without creating a second Factory', async () => {
     const calls: string[] = [];
     let linkFails = true;
@@ -522,13 +540,13 @@ const linkedRepository = {
  * Stub the intake config the last step reads and writes, collecting every
  * saved config body.
  */
-function stubIntakeConfig() {
+function stubIntakeConfig(config: Record<string, unknown> = {}) {
   const savedConfigs: unknown[] = [];
   server.use(
-    http.get(`${TEST_BASE_URL}/web/intake/config`, () => HttpResponse.json({ config: {} })),
+    http.get(`${TEST_BASE_URL}/web/intake/config`, () => HttpResponse.json({ config })),
     http.put(`${TEST_BASE_URL}/web/intake/config`, async ({ request }) => {
       savedConfigs.push(await request.json());
-      return HttpResponse.json({ config: {} });
+      return HttpResponse.json({ config });
     }),
   );
   return savedConfigs;
@@ -541,9 +559,9 @@ function stubIntakeConfig() {
  * records the write order; the returned arrays collect the PATCH and intake
  * bodies.
  */
-function stubModelStepEndpoints(calls: string[]) {
+function stubModelStepEndpoints(calls: string[], intakeConfig: Record<string, unknown> = {}) {
   const patchedBodies: unknown[] = [];
-  const intakeConfigs = stubIntakeConfig();
+  const intakeConfigs = stubIntakeConfig(intakeConfig);
   let savedModelId: string | null = null;
   let created = false;
   server.use(
