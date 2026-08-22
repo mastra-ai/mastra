@@ -3,6 +3,7 @@ import { APICallError } from '@internal/ai-sdk-v5';
 import { describe, expect, it } from 'vitest';
 import { MessageList } from '../agent/message-list';
 import {
+  anthropicStripEmptySignedReasoningContent,
   anthropicStripForeignReasoningContent,
   azureSystemReminderTransform,
   cerebrasStripReasoningContent,
@@ -466,6 +467,95 @@ describe('anthropicStripForeignReasoningContent', () => {
       model: { provider: 'openai.chat', modelId: 'gpt-4o' },
     });
     expect(result).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Trailing assistant protection (Anthropic "thinking blocks in the latest
+// assistant message cannot be modified")
+// ---------------------------------------------------------------------------
+
+describe('trailing assistant message protection', () => {
+  const anthropicModel = { provider: 'anthropic.messages', modelId: 'claude-opus-4-6' };
+
+  /** Active tool-use continuation: last assistant is followed only by tool messages. */
+  function toolContinuationPrompt(): LanguageModelV2Prompt {
+    return [
+      { role: 'user', content: [{ type: 'text', text: 'hi' }] },
+      {
+        role: 'assistant',
+        content: [
+          // Historical assistant turn with a strippable part
+          { type: 'reasoning', text: 'old foreign reasoning' },
+          { type: 'text', text: 'earlier answer' },
+        ],
+      },
+      { role: 'user', content: [{ type: 'text', text: 'do the thing' }] },
+      {
+        role: 'assistant',
+        content: [
+          // Unsigned interleaved thinking (no anthropic metadata) — must NOT be
+          // stripped from the latest assistant message.
+          { type: 'reasoning', text: 'live thinking' },
+          // Signed-but-empty block — must also survive untouched.
+          { type: 'reasoning', text: '', providerOptions: { anthropic: { signature: 'sig-live' } } },
+          { type: 'tool-call', toolCallId: 'call-1', toolName: 'doThing', input: {} },
+        ],
+      },
+      {
+        role: 'tool',
+        content: [
+          { type: 'tool-result', toolCallId: 'call-1', toolName: 'doThing', output: { type: 'text', value: 'ok' } },
+        ],
+      },
+    ];
+  }
+
+  it('foreign-reasoning strip skips the trailing assistant of a tool continuation', () => {
+    const result = anthropicStripForeignReasoningContent.applyToPrompt!({
+      prompt: toolContinuationPrompt(),
+      model: anthropicModel,
+    });
+
+    expect(result).toBeDefined();
+    // Historical assistant stripped
+    expect((result![1].content as any[]).map(p => p.type)).toEqual(['text']);
+    // Trailing assistant untouched
+    expect((result![3].content as any[]).map(p => p.type)).toEqual(['reasoning', 'reasoning', 'tool-call']);
+  });
+
+  it('empty-signed strip skips the trailing assistant of a tool continuation', () => {
+    const prompt = toolContinuationPrompt();
+    // Give the historical assistant an empty signed block so the rule has
+    // something to strip outside the protected message.
+    (prompt[1].content as any[]).unshift({
+      type: 'reasoning',
+      text: '',
+      providerOptions: { anthropic: { signature: 'sig-legacy' } },
+    });
+
+    const result = anthropicStripEmptySignedReasoningContent.applyToPrompt!({
+      prompt,
+      model: anthropicModel,
+    });
+
+    expect(result).toBeDefined();
+    expect((result![1].content as any[]).map(p => p.type)).toEqual(['reasoning', 'text']);
+    // Trailing assistant keeps its empty signed block untouched
+    expect((result![3].content as any[]).map(p => p.type)).toEqual(['reasoning', 'reasoning', 'tool-call']);
+  });
+
+  it('still strips the last assistant message when a new user turn follows it', () => {
+    const prompt = toolContinuationPrompt();
+    prompt.push({ role: 'user', content: [{ type: 'text', text: 'next question' }] });
+
+    const result = anthropicStripForeignReasoningContent.applyToPrompt!({
+      prompt,
+      model: anthropicModel,
+    });
+
+    expect(result).toBeDefined();
+    expect((result![3].content as any[]).map(p => p.type)).toEqual(['reasoning', 'tool-call']);
   });
 });
 

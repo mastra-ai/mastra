@@ -249,8 +249,31 @@ export function isMaybeAzure(
 }
 
 /**
+ * Returns the index of the trailing assistant message whose thinking blocks
+ * Anthropic verifies byte-for-byte: the last message when it is an assistant
+ * message, or the assistant message that only has tool messages after it (an
+ * active tool-use continuation). Returns `-1` when no such message exists —
+ * e.g. when the prompt ends with a fresh user turn, in which case Anthropic
+ * ignores thinking blocks on earlier assistant messages.
+ */
+function getProtectedAssistantIndex(prompt: LanguageModelV2Prompt): number {
+  for (let i = prompt.length - 1; i >= 0; i--) {
+    const role = prompt[i]!.role;
+    if (role === 'assistant') return i;
+    if (role !== 'tool') return -1;
+  }
+  return -1;
+}
+
+/**
  * Returns a copy of the prompt with selected `reasoning` parts stripped from
  * assistant messages. Returns `undefined` if no changes were necessary.
+ *
+ * `skipIndex` excludes one message from stripping — used to protect the
+ * trailing assistant message of an active tool-use continuation, which
+ * Anthropic requires to be replayed unmodified ("`thinking` or
+ * `redacted_thinking` blocks in the latest assistant message cannot be
+ * modified").
  */
 function stripReasoningFromPrompt(
   prompt: LanguageModelV2Prompt,
@@ -260,9 +283,11 @@ function stripReasoningFromPrompt(
       { type: 'reasoning' }
     >,
   ) => boolean = () => true,
+  skipIndex = -1,
 ): LanguageModelV2Prompt | undefined {
   let mutated = false;
-  const next: LanguageModelV2Prompt = prompt.map(message => {
+  const next: LanguageModelV2Prompt = prompt.map((message, index) => {
+    if (index === skipIndex) return message;
     if (message.role !== 'assistant') return message;
     if (typeof message.content === 'string') return message;
     if (!Array.isArray(message.content)) return message;
@@ -350,7 +375,7 @@ export const anthropicStripEmptySignedReasoningContent: CompatRule = {
   name: 'anthropic-strip-empty-signed-reasoning-content',
   applyToPrompt({ prompt, model }) {
     if (!isMaybeAnthropic(model)) return undefined;
-    return stripReasoningFromPrompt(prompt, hasAnthropicSignatureWithoutText);
+    return stripReasoningFromPrompt(prompt, hasAnthropicSignatureWithoutText, getProtectedAssistantIndex(prompt));
   },
 };
 
@@ -364,7 +389,11 @@ export const anthropicStripForeignReasoningContent: CompatRule = {
   name: 'anthropic-strip-foreign-reasoning-content',
   applyToPrompt({ prompt, model }) {
     if (!isMaybeAnthropic(model)) return undefined;
-    return stripReasoningFromPrompt(prompt, part => !isAnthropicReasoningPart(part));
+    return stripReasoningFromPrompt(
+      prompt,
+      part => !isAnthropicReasoningPart(part),
+      getProtectedAssistantIndex(prompt),
+    );
   },
 };
 
