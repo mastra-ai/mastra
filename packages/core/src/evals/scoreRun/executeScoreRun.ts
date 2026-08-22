@@ -38,7 +38,7 @@ function toScorerTargetEntityType(entityType: string): EntityType | undefined {
  * serialization into a workflow run.
  */
 export function extractScoreRunTarget(hookData: ScoringHookInput): Omit<ScoreRunInput, 'hookData'> {
-  const currentSpan = hookData.tracingContext?.currentSpan;
+  const currentSpan = (hookData.tracingContext ?? hookData.tracing)?.currentSpan;
   const traceId = currentSpan?.isValid ? currentSpan.traceId : undefined;
   const spanId = currentSpan?.isValid ? currentSpan.id : undefined;
   const targetCorrelationContext = currentSpan?.isValid ? currentSpan.getCorrelationContext?.() : undefined;

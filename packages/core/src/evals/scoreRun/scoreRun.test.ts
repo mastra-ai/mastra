@@ -279,9 +279,8 @@ describe('runScorer sampling decision records', () => {
   }
 
   it('records a declined decision when ratio sampling rejects', async () => {
-    vi.spyOn(Math, 'random').mockReturnValue(0.99);
-    runScorer(baseArgs({ scorer: { id: 'scorer-1' }, sampling: { type: 'ratio', rate: 0.5 } }) as any);
-    vi.restoreAllMocks();
+    // Sampling is deterministic (hash of traceId ?? runId) — rate 0 always declines.
+    runScorer(baseArgs({ scorer: { id: 'scorer-1' }, sampling: { type: 'ratio', rate: 0 } }) as any);
 
     await new Promise(resolve => setImmediate(resolve));
     expect(mockScoresStore.saveScoringDecision).toHaveBeenCalledWith(
@@ -289,7 +288,7 @@ describe('runScorer sampling decision records', () => {
         scorerId: 'scorer-1',
         decision: 'declined',
         samplingType: 'ratio',
-        samplingRate: 0.5,
+        samplingRate: 0,
         entityId: 'entity-1',
       }),
     );

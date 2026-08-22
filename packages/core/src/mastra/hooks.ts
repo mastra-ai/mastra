@@ -34,11 +34,21 @@ export function createOnScorerHook(mastra: Mastra) {
       return;
     }
 
-    // Extract the serializable target span identity up front — tracingContext
-    // does not survive serialization into a workflow run input.
+    // Extract the serializable target span identity up front — the observability
+    // context (tracing/tracingContext/loggerVNext/metrics) does not survive
+    // serialization into a workflow run input.
     const target = extractScoreRunTarget(hookData);
-    const { tracingContext: _tracingContext, ...serializableHookData } = hookData as ScoringHookInput & {
+    const {
+      tracingContext: _tracingContext,
+      tracing: _tracing,
+      loggerVNext: _loggerVNext,
+      metrics: _metrics,
+      ...serializableHookData
+    } = hookData as ScoringHookInput & {
       tracingContext?: unknown;
+      tracing?: unknown;
+      loggerVNext?: unknown;
+      metrics?: unknown;
     };
     const input: ScoreRunInput = { hookData: serializableHookData as ScoringHookInput, ...target };
 
