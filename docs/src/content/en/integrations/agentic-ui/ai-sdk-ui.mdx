@@ -281,6 +281,17 @@ const { messages, sendMessage } = useChat({
 
 Set `memory.thread` and `memory.resource` from your app's own state, such as URL params, auth context, or your database.
 
+### When a client echoes the full transcript
+
+If a client does echo the full transcript back, Mastra attempts to reconcile each message against the stored record with the same ID and thread. When the request includes a resource, the stored resource must also match. If the lookup succeeds, unchanged echoes aren't persisted again, and lossy client copies can't replace server-authored content such as output-processor transformations or completed tool history.
+
+A stored tool invocation in `call` state accepts two client-authored terminal transitions:
+
+- `result`: The client contributes `state` and `result`. A v4-style error result can also contribute `isError` and `errorText`.
+- `output-error`: The client contributes `state` and `errorText` for a v6 error.
+
+The stored tool name, call ID, and args remain unchanged, and other client-supplied fields are dropped. For user messages, an edited resend replaces the stored copy. If the stored-record lookup fails, Mastra saves the original input and output instead of aborting persistence, which is why sending only the new message remains recommended.
+
 See [Message history](/docs/memory/message-history) for more on how Mastra memory loads and stores messages.
 
 [`chatRoute()`](/reference/ai-sdk/chat-route) and [`handleChatStream()`](/reference/ai-sdk/handle-chat-stream) already work with memory. Configure the client to send only the new message and include the thread and resource identifiers.

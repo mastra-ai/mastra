@@ -1836,6 +1836,21 @@ export class ObservationalMemory {
     }
   }
 
+  /** Persist client input after reconciliation, while leaving server-authored messages untouched. */
+  async persistClientInputMessages(
+    clientInput: MastraDBMessage[],
+    serverAuthored: MastraDBMessage[],
+    threadId: string,
+    resourceId: string | undefined,
+  ): Promise<void> {
+    const reconciledInput = await this.messageHistory.reconcileClientInputMessages({
+      messages: clientInput,
+      threadId,
+      resourceId,
+    });
+    await this.persistMessages([...reconciledInput, ...serverAuthored], threadId, resourceId);
+  }
+
   /**
    * Load messages from storage that haven't been observed yet.
    * Uses cursor-based query with lastObservedAt timestamp for efficiency.

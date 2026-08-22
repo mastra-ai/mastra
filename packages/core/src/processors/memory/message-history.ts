@@ -7,6 +7,7 @@ import { SpanType, EntityType } from '../../observability';
 import type { ObservabilityContext, MemoryOperationAttributes } from '../../observability';
 import type { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage';
+import { reconcileClientEchoes } from './reconcile-client-echoes';
 
 /**
  * Options for the MessageHistory processor
@@ -252,7 +253,7 @@ export class MessageHistory implements Processor {
 
     const newInput = messageList.get.input.db();
     const newOutput = messageList.get.response.db();
-    const messagesToSave = [...newInput, ...newOutput];
+    let messagesToSave = [...newInput, ...newOutput];
 
     if (messagesToSave.length === 0) {
       return messageList;
@@ -263,6 +264,22 @@ export class MessageHistory implements Processor {
     if (result?.finishReason === 'error' && newOutput.length === 0) {
       return messageList;
     }
+
+    // Client-submitted transcripts can echo already-persisted messages back with
+    // the same IDs. Persisting them as-is is a whole-record upsert, so a stale or
+    // lossy echo would silently replace the canonical stored message (dropping
+    // output-processor transformations, tool history, and server-authored
+    // metadata). Reconcile input echoes against the stored records by ID (not the
+    // `lastMessages` recall window): identical echoes are skipped, and only
+    // supported client-authored transitions (e.g. a client-side tool result
+    // advancing a stored `call` to `result`) are merged into the stored version.
+    const reconciledInput = await this.reconcileClientInputMessages({
+      messages: newInput,
+      threadId,
+      resourceId,
+      observabilityContext,
+    });
+    messagesToSave = [...reconciledInput, ...newOutput];
 
     const span = this.createMemorySpan('save', observabilityContext, undefined, {
       messageCount: messagesToSave.length,
@@ -281,6 +298,45 @@ export class MessageHistory implements Processor {
     } catch (error) {
       span?.error({ error: error as Error, endSpan: true });
       throw error;
+    }
+  }
+
+  /**
+   * Reconcile only messages classified as client input before persistence.
+   * Server-authored output and marker updates must bypass this lookup.
+   */
+  async reconcileClientInputMessages(args: {
+    messages: MastraDBMessage[];
+    threadId: string;
+    resourceId?: string;
+    observabilityContext?: Partial<ObservabilityContext>;
+  }): Promise<MastraDBMessage[]> {
+    const { messages, threadId, resourceId, observabilityContext } = args;
+    if (messages.length === 0 || typeof this.storage.listMessagesById !== 'function') return messages;
+
+    const messageIds = messages.map(message => message.id).filter((id): id is string => Boolean(id));
+    if (messageIds.length === 0) return messages;
+
+    const lookupSpan = this.createMemorySpan(
+      'recall',
+      observabilityContext,
+      { messageIds },
+      {
+        messageCount: messageIds.length,
+      },
+    );
+    try {
+      const { messages: storedInput } = await this.storage.listMessagesById({ messageIds });
+      lookupSpan?.end({ output: { success: true } });
+      const storedById = new Map(
+        storedInput
+          .filter(message => message.threadId === threadId && (!resourceId || message.resourceId === resourceId))
+          .map(message => [message.id, message]),
+      );
+      return reconcileClientEchoes(messages, storedById);
+    } catch (error) {
+      lookupSpan?.error({ error: error as Error, endSpan: true });
+      return messages;
     }
   }
 
