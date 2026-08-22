@@ -53,7 +53,6 @@ import type { MastraServerCache } from '@mastra/core/cache';
 import { CachingPubSub } from '@mastra/core/events';
 import type { Event, PubSub } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
-import { SpanType, EntityType } from '@mastra/core/observability';
 import type { MastraModelOutput, ChunkType, FullOutput, MastraOnFinishCallback } from '@mastra/core/stream';
 import type { Workflow } from '@mastra/core/workflows';
 import type { Inngest } from 'inngest';
@@ -716,6 +715,9 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         runId: streamOptions?.runId,
         requestContext: streamOptions?.requestContext,
         methodType: (streamOptions as any)?.__methodType ?? 'stream',
+        mastra,
+        durableAgentId: agentId,
+        durableAgentName: agentName,
       });
 
       const { runId, messageId, workflowInput, registryEntry, threadId, resourceId } = preparation;
@@ -751,47 +753,11 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // workflow steps running in the same process can recover it.
       globalRunRegistry.set(runId, registryEntry);
 
-      // 2. Create AGENT_RUN span BEFORE the workflow starts
-      // This ensures the agent_run is the root of the trace, not the workflow
-      const observability = mastra?.observability?.getSelectedInstance({
-        requestContext: streamOptions?.requestContext,
-      });
-      const agentSpan = observability?.startSpan({
-        type: SpanType.AGENT_RUN,
-        name: `agent run: '${agentId}'`,
-        entityType: EntityType.AGENT,
-        entityId: agentId,
-        entityName: agentName,
-        input: workflowInput.messageListState,
-        metadata: {
-          runId,
-          threadId,
-          resourceId,
-        },
-      });
-      // Export span data so it can be passed to the workflow
-      const agentSpanData = agentSpan?.exportSpan();
-
-      // 3. Create MODEL_GENERATION span BEFORE the workflow starts
-      // This ensures ONE model_generation span contains all steps (like regular agents)
-      const modelSpan = agentSpan?.createChildSpan({
-        type: SpanType.MODEL_GENERATION,
-        name: `llm: '${workflowInput.modelConfig.modelId}'`,
-        input: { messages: workflowInput.messageListState },
-        attributes: {
-          model: workflowInput.modelConfig.modelId,
-          provider: workflowInput.modelConfig.provider,
-          streaming: true,
-          parameters: {
-            temperature: workflowInput.options?.modelSettings?.temperature,
-          },
-        },
-      });
-      const modelSpanData = modelSpan?.exportSpan();
-
-      // Add span data to workflow input
-      workflowInput.agentSpanData = agentSpanData;
-      workflowInput.modelSpanData = modelSpanData;
+      // 2. The AGENT_RUN and MODEL_GENERATION spans were already opened by the
+      // preparation phase and exported onto `workflowInput`. Reusing them (rather
+      // than minting new ones here) keeps the whole run on a single trace and
+      // keeps the preparation-phase spans — input processors and memory recall —
+      // parented under the agent run root.
       workflowInput.stepIndex = 0;
 
       // Track cleanup state and global registry entry lifecycle.
@@ -852,9 +818,11 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
 
       // 3. Wait for subscription to be established, then trigger workflow
       // Pass tracing options so workflow spans are children of the agent span
-      const tracingOptions = agentSpanData
-        ? { traceId: agentSpanData.traceId, parentSpanId: agentSpanData.id }
-        : undefined;
+      const agentSpanData = workflowInput.agentSpanData as { traceId?: string; id?: string } | undefined;
+      const tracingOptions =
+        agentSpanData?.traceId && agentSpanData?.id
+          ? { traceId: agentSpanData.traceId, parentSpanId: agentSpanData.id }
+          : undefined;
 
       // Wait for subscription to be ready before triggering workflow
       // This prevents race conditions where events are published before subscription.
@@ -1097,6 +1065,9 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         messages,
         options: prepareOptions,
         requestContext: prepareOptions?.requestContext,
+        mastra,
+        durableAgentId: agentId,
+        durableAgentName: agentName,
       });
 
       // Override with durable agent's id/name

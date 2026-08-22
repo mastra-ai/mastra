@@ -740,3 +740,185 @@ describe('InngestAgent parity surface', () => {
     expect(durableAgent.generate).not.toBe((durableAgent.agent as any).generate);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Observability tracing (regression for #19841)
+//
+// The Inngest wrapper used to call prepareForDurableExecution() without a
+// `mastra` instance, so the preparation phase could not open its AGENT_RUN root
+// and every span it parents (input processors, memory recall) was dropped or
+// orphaned into whatever trace the caller happened to supply. The wrapper then
+// minted a *second* AGENT_RUN of its own, producing two traces per run.
+//
+// These tests drive the driver-side preparation path with a recording
+// observability instance and assert a single root with correctly parented
+// children.
+// ---------------------------------------------------------------------------
+describe('InngestAgent observability tracing', () => {
+  const inngest = new Inngest({
+    id: 'observability-tests',
+    baseUrl: `http://localhost:${INNGEST_PORT}`,
+  });
+
+  function createRecordingObservability() {
+    const spans: any[] = [];
+    let idCounter = 0;
+
+    function makeSpan(opts: any, parent?: any): any {
+      idCounter += 1;
+      const span: any = {
+        id: `span-${idCounter}`,
+        traceId: parent?.traceId ?? `trace-${idCounter}`,
+        type: opts?.type,
+        name: opts?.name,
+        input: opts?.input,
+        parent,
+        end: vi.fn(),
+        error: vi.fn(),
+        update: vi.fn(),
+        findParent: (spanType: string) => {
+          let current = span.parent;
+          while (current) {
+            if (current.type === spanType) return current;
+            current = current.parent;
+          }
+          return undefined;
+        },
+        createChildSpan: (childOpts: any) => makeSpan(childOpts, span),
+        createEventSpan: (childOpts: any) => makeSpan(childOpts, span),
+        executeInContext: async (fn: () => Promise<any>) => fn(),
+        executeInContextSync: (fn: () => any) => fn(),
+        createTracker: () => ({
+          getTracingContext: () => ({ currentSpan: span }),
+          reportGenerationError: vi.fn(),
+          endGeneration: vi.fn(),
+          updateGeneration: vi.fn(),
+          wrapStream: <T>(stream: T) => stream,
+          startStep: vi.fn(),
+          startInference: vi.fn(),
+          updateStep: vi.fn(),
+          setStepIndex: vi.fn(),
+          setDeferStepClose: vi.fn(),
+          setInferenceContext: vi.fn(),
+          exportCurrentStep: vi.fn(),
+          getPendingStepFinishPayload: vi.fn(),
+        }),
+        exportSpan: () => ({ id: span.id, traceId: span.traceId, type: span.type }),
+        getParentSpanId: () => parent?.id,
+        getCorrelationContext: vi.fn(),
+        observabilityInstance: {},
+      };
+      spans.push(span);
+      return span;
+    }
+
+    const mastra = {
+      observability: {
+        getSelectedInstance: () => ({
+          startSpan: (opts: any) => makeSpan(opts),
+        }),
+      },
+    };
+
+    return {
+      mastra,
+      spans,
+      spansOfType: (type: string) => spans.filter(span => span.type === type),
+    };
+  }
+
+  function makeTracedAgent(id: string, inputProcessors: any[] = []) {
+    const agent = new Agent({
+      id,
+      name: id,
+      instructions: 'Test',
+      model: createMockModel() as any,
+      ...(inputProcessors.length > 0 ? { inputProcessors } : {}),
+    });
+    const durableAgent = createInngestAgent({ agent, inngest });
+    (durableAgent.pubsub as any).inner = new EventEmitterPubSub();
+    return durableAgent;
+  }
+
+  it('opens exactly one AGENT_RUN span per durable run', async () => {
+    // The wrapper used to mint its own AGENT_RUN on top of preparation's, so a
+    // single run reported two roots on two different traces.
+    const durableAgent = makeTracedAgent('tracing-single-root');
+    const recording = createRecordingObservability();
+    (durableAgent as any).__setMastra(recording.mastra);
+    const sendSpy = vi.spyOn(inngest as any, 'send').mockResolvedValue(undefined as any);
+
+    const result = await durableAgent.stream([{ role: 'user', content: 'hi' }]);
+    try {
+      const agentRuns = recording.spansOfType('agent_run');
+      expect(agentRuns).toHaveLength(1);
+      expect(agentRuns[0].parent).toBeUndefined();
+
+      // Every span produced by the run shares the root's traceId.
+      const traceIds = new Set(recording.spans.map(span => span.traceId));
+      expect(traceIds).toEqual(new Set([agentRuns[0].traceId]));
+    } finally {
+      result.cleanup();
+      sendSpy.mockRestore();
+    }
+  });
+
+  it('parents preparation-phase input processor spans to the AGENT_RUN root', async () => {
+    const durableAgent = makeTracedAgent('tracing-input-proc', [
+      { id: 'test-input-processor', processInput: async ({ messageList }: any) => messageList },
+    ]);
+    const recording = createRecordingObservability();
+    (durableAgent as any).__setMastra(recording.mastra);
+    const sendSpy = vi.spyOn(inngest as any, 'send').mockResolvedValue(undefined as any);
+
+    const result = await durableAgent.stream([{ role: 'user', content: 'hi' }]);
+    try {
+      const agentRun = recording.spansOfType('agent_run')[0];
+      expect(agentRun).toBeDefined();
+
+      const processorSpan = recording
+        .spansOfType('processor_run')
+        .find(span => span.name === 'input processor: test-input-processor');
+      expect(processorSpan).toBeDefined();
+      // Used to be a parentless root on its own trace.
+      expect(processorSpan.findParent('agent_run')).toBe(agentRun);
+      expect(processorSpan.traceId).toBe(agentRun.traceId);
+    } finally {
+      result.cleanup();
+      sendSpy.mockRestore();
+    }
+  });
+
+  it('records the caller messages as AGENT_RUN input, not serialized message-list state', async () => {
+    const durableAgent = makeTracedAgent('tracing-span-input');
+    const recording = createRecordingObservability();
+    (durableAgent as any).__setMastra(recording.mastra);
+    const sendSpy = vi.spyOn(inngest as any, 'send').mockResolvedValue(undefined as any);
+
+    const result = await durableAgent.stream([{ role: 'user', content: 'hi' }]);
+    try {
+      const agentRun = recording.spansOfType('agent_run')[0];
+      expect(agentRun.input).toEqual([{ role: 'user', content: 'hi' }]);
+      // messageListState is the internal serialized shape the wrapper used to record.
+      expect(agentRun.input).not.toHaveProperty('messageListState');
+    } finally {
+      result.cleanup();
+      sendSpy.mockRestore();
+    }
+  });
+
+  it('exports preparation spans onto workflowInput from prepare()', async () => {
+    const durableAgent = makeTracedAgent('tracing-prepare');
+    const recording = createRecordingObservability();
+    (durableAgent as any).__setMastra(recording.mastra);
+
+    const prepared = await durableAgent.prepare([{ role: 'user', content: 'hi' }]);
+
+    const agentRun = recording.spansOfType('agent_run')[0];
+    expect(agentRun).toBeDefined();
+    expect(prepared.workflowInput.agentSpanData).toMatchObject({
+      id: agentRun.id,
+      traceId: agentRun.traceId,
+    });
+  });
+});
