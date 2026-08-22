@@ -247,6 +247,8 @@ import type { CompressionLevel } from './reflector-agent';
 import { ReflectorRunner } from './reflector-runner';
 import { isOmReproCaptureEnabled, writeObserverExchangeReproCapture } from './repro-capture';
 import { CURATION_AGENT } from './subconscious/curate';
+import type { CurationAttemptState } from './subconscious/curation-backoff';
+import { clearedBackoff, isBackingOff, nextBackoff, readAttemptState } from './subconscious/curation-backoff';
 import { curationQueryLimit, shouldCurate } from './subconscious/curation-trigger';
 import { resolveKnowledgeResourceId } from './subconscious/scope';
 import {
@@ -3848,8 +3850,17 @@ ${formattedMessages}
    *
    * Concurrency: evaluations are serialised per record within this process via
    * {@link curationEvaluations}, so several sites in the same turn cannot each decide to run.
-   * That is a process-local backstop only — two live instances sharing storage can still both
-   * evaluate. The curation cursor remains the real serializer for correctness.
+   * Retry state is persisted on the record, so a failing curator stays backed off across a
+   * restart rather than resuming once per turn.
+   *
+   * Known limitation — two live instances sharing one storage can still both evaluate and both
+   * run the curator. Closing that needs an atomic claim, which the storage layer does not
+   * currently expose for this data: `updateObservationalMemoryConfig` is an unconditional
+   * deep-merge with no expected-version or conditional-write argument, and the one claim/lease
+   * primitive that does exist (`claimSemanticOutbox`, with its `workerId`/`claimedAt`/
+   * `claimTimeoutMs` columns) is welded to the semantic outbox table. Duplicate work is bounded
+   * rather than unbounded: the curation cursor is the real serializer, so the loser of a race
+   * re-processes records instead of corrupting them.
    */
   /** @internal Called by the observation turn's lifecycle sites. Do not call directly. */
   async maybeCurate(
@@ -3870,7 +3881,7 @@ ${formattedMessages}
     const previous = this.curationEvaluations.get(record.id) ?? Promise.resolve();
     const next = previous
       .catch(() => {})
-      .then(() => this.evaluateCuration(threadId, resourceId, triggerConfig, limit, requestContext));
+      .then(() => this.evaluateCuration(threadId, resourceId, record, triggerConfig, limit, requestContext));
     this.curationEvaluations.set(record.id, next);
     try {
       await next;
@@ -3882,6 +3893,7 @@ ${formattedMessages}
   private async evaluateCuration(
     threadId: string,
     resourceId: string | undefined,
+    record: ObservationalMemoryRecord,
     triggerConfig: { curationThreshold: number | false; curationMaxAgeMs: number | false },
     limit: number,
     requestContext?: RequestContext,
@@ -3891,6 +3903,14 @@ ${formattedMessages}
 
     const organizationId = requestContext?.get('organizationId');
     if (typeof organizationId !== 'string' || !organizationId.trim()) return;
+
+    // Re-read the record: the caller's copy may predate a sibling lifecycle site's write.
+    const fresh = (await this.getRecord(threadId, resourceId)) ?? record;
+    const attempt = readAttemptState(fresh.config);
+    if (isBackingOff(attempt, this.now())) {
+      omDebug(`[OM:curate] backing off after ${attempt?.failures} failure(s) thread=${threadId}`);
+      return;
+    }
 
     const store = await memory.storage.getStore('knowledge');
     if (!store) return;
@@ -3918,12 +3938,36 @@ ${formattedMessages}
     });
     if (!reason) return;
 
-    const result = await memory.runCuration({
-      threadId,
-      resourceId: resourceId ?? threadId,
-      requestContext,
+    let outcome: string;
+    try {
+      const result = await memory.runCuration({
+        threadId,
+        resourceId: resourceId ?? threadId,
+        requestContext,
+      });
+      outcome = result.outcome;
+    } catch (error) {
+      await this.recordCurationAttempt(fresh.id, nextBackoff(attempt, this.now()));
+      omDebug(`[OM:curate] threw: ${error instanceof Error ? error.message : String(error)} thread=${threadId}`);
+      throw error;
+    }
+
+    // `skipped` means the curator declined for a reason of its own; it is neither progress nor a
+    // failure, so the existing backoff state is left exactly as it was.
+    if (outcome === 'failed' || outcome === 'no-model') {
+      await this.recordCurationAttempt(fresh.id, nextBackoff(attempt, this.now()));
+    } else if (outcome !== 'skipped' && attempt && attempt.failures > 0) {
+      await this.recordCurationAttempt(fresh.id, clearedBackoff());
+    }
+
+    omDebug(`[OM:curate] trigger=${reason} outcome=${outcome} thread=${threadId}`);
+  }
+
+  private async recordCurationAttempt(recordId: string, attempt: CurationAttemptState): Promise<void> {
+    await this.storage.updateObservationalMemoryConfig({
+      id: recordId,
+      config: { subconscious: { curationAttempt: attempt } },
     });
-    omDebug(`[OM:curate] trigger=${reason} outcome=${result.outcome} thread=${threadId}`);
   }
 
   /**
