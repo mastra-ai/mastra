@@ -96,6 +96,14 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
     defaultValue: 'Console logger with INFO level',
   },
   {
+    name: 'loggerOptions',
+    type: '{ correlation?: boolean; export?: boolean }',
+    description:
+      'Controls logger observability behavior. `correlation` injects trace_id/span_id into native log output during traced operations; `export` forwards log records to observability storage.',
+    isOptional: true,
+    defaultValue: '{ correlation: true, export: true }',
+  },
+  {
     name: 'idGenerator',
     type: '(context?: IdGeneratorContext) => string',
     description:

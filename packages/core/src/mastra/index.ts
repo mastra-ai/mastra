@@ -28,8 +28,17 @@ import { LicenseClient } from '../license';
 import type { MastraModelGatewayInterface } from '../llm/model/gateways';
 import { getGatewayId } from '../llm/model/gateways';
 import { defaultGateways } from '../llm/model/gateways/defaults';
-import { LogLevel, noopLogger, ConsoleLogger, DualLogger } from '../logger';
-import type { IMastraLogger } from '../logger';
+import {
+  LogLevel,
+  noopLogger,
+  ConsoleLogger,
+  DualLogger,
+  isAdaptableLogger,
+  resolveTraceFields,
+  isObservabilityExportSuppressed,
+  createExportSuppressedLogger,
+} from '../logger';
+import type { IMastraLogger, LoggerAdapterOptions } from '../logger';
 import type { MCPServerBase } from '../mcp';
 import type { MastraMemory } from '../memory';
 import type { NotificationDispatchConfig } from '../notifications/workflow';
@@ -49,6 +58,7 @@ import type {
 } from '../observability';
 import { NoOpObservability, noOpLoggerContext, noOpMetricsContext } from '../observability';
 import { initContextStorage } from '../observability/context-storage';
+import { resolveCurrentSpan } from '../observability/utils';
 import type { Processor } from '../processors';
 import type { AgentScheduleHandler } from '../schedules/define';
 import { metadataEqual, targetsEqual } from '../schedules/row-diff';
@@ -273,6 +283,18 @@ export interface Config<
    * @default `INFO` level in development, `WARN` in production.
    */
   logger?: TLogger | false;
+
+  /**
+   * How the configured logger integrates with Mastra observability.
+   *
+   * - `correlation` — inject `trace_id`/`span_id` into the logger's native
+   *   records (stdout, transports) when a span is active. Requires a logger
+   *   that supports adapters (e.g. `ConsoleLogger`, `PinoLogger`). Default: true.
+   * - `export` — export log records to Mastra observability storage/exporters.
+   *   Set to false to keep trace-correlated stdout without shipping logs.
+   *   Default: true.
+   */
+  loggerOptions?: Partial<LoggerAdapterOptions>;
 
   /**
    * Workflows provide type-safe, composable task execution with built-in error handling.
@@ -652,6 +674,14 @@ export interface MastraRecoveryConfig {
  * });
  * ```
  */
+// Tracks which Mastra instance last attached observability to a logger, so
+// sharing one logger instance across multiple Mastras warns instead of
+// silently re-targeting the export (weak: never pins loggers or Mastras).
+// Keyed on the logger's attachment identity (`__observabilityAttachmentKey`,
+// e.g. PinoLogger's family-shared ref cell) so attaching a child of an
+// already-wired family also warns; falls back to the instance itself.
+const attachedLoggerOwners = new WeakMap<object, unknown>();
+
 export class Mastra<
   TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
   TWorkflows extends Record<string, AnyWorkflow> = Record<string, AnyWorkflow>,
@@ -671,6 +701,9 @@ export class Mastra<
   #vectors?: TVectors;
   #agents: TAgents;
   #logger: TLogger;
+  #loggerAdapterOptions: LoggerAdapterOptions = { correlation: true, export: true };
+  #wiredLoggers = new WeakSet<IMastraLogger>();
+  #fallbackWrappers = new WeakMap<IMastraLogger, DualLogger>();
   #loggerExplicit = false;
   #workflows: TWorkflows;
   #harnesses: Record<string, Harness<any>> = {};
@@ -1229,7 +1262,7 @@ export class Mastra<
   ): void {
     if (this.#observability instanceof NoOpObservability) {
       this.#observability = entrypoint;
-      this.#observability.setLogger({ logger: this.#logger });
+      this.#observability.setLogger({ logger: this.#observabilitySafeLogger() as unknown as TLogger });
       this.#observability.setMastraContext({ mastra: this });
       this.#observability.registerInstance('default', instance, true);
     }
@@ -1457,8 +1490,9 @@ export class Mastra<
       this.#observabilityExplicit = true;
       if (typeof config.observability.getDefaultInstance === 'function') {
         this.#observability = config.observability;
-        // Set logger early
-        this.#observability.setLogger({ logger: this.#logger });
+        // Set logger early (export-suppressed so observability's own logs
+        // never feed back into observability export once wiring completes)
+        this.#observability.setLogger({ logger: this.#observabilitySafeLogger() as unknown as TLogger });
       } else {
         this.#logger?.warn(
           'Observability configuration error: Expected an Observability instance, but received a config object. ' +
@@ -1472,13 +1506,15 @@ export class Mastra<
       this.#observability = new NoOpObservability();
     }
 
-    // Wrap the logger in a DualLogger so all existing this.logger.info(...) calls
-    // also forward to loggerVNext (observability structured logging).
-    // This is transparent — no call sites need to change.
-    // Uses a lazy getter so loggerVNext is always resolved at call time
-    // (observability may not be fully initialized yet at this point).
-    const dualLogger = new DualLogger(this.#logger, () => this.loggerVNext);
-    this.#logger = dualLogger as unknown as TLogger;
+    // Wire the logger into observability so all existing this.logger.info(...)
+    // calls get trace correlation and/or export. Adaptable loggers (ConsoleLogger,
+    // PinoLogger) are attached in place — trace fields land in their native
+    // records. Other loggers fall back to the deprecated DualLogger wrapper.
+    this.#loggerAdapterOptions = {
+      correlation: config?.loggerOptions?.correlation ?? true,
+      export: config?.loggerOptions?.export ?? true,
+    };
+    this.#logger = this.#wireLoggerObservability(this.#logger);
 
     this.#storage = storage;
 
@@ -2866,10 +2902,9 @@ export class Mastra<
     }
 
     this.#observability = fsObservability;
-    // Pass the raw logger (not the DualLogger) to observability to avoid
-    // circular forwarding, mirroring setLogger().
-    const rawLogger = this.#logger instanceof DualLogger ? this.#logger.baseLogger : this.#logger;
-    this.#observability.setLogger({ logger: rawLogger as any });
+    // Pass an export-suppressed view of the logger to observability so its
+    // internal logs never feed back into observability export.
+    this.#observability.setLogger({ logger: this.#observabilitySafeLogger() as any });
     this.#observability.setMastraContext({ mastra: this as any });
   }
 
@@ -5262,10 +5297,96 @@ export class Mastra<
     // will pick it up when startWorkers() is called.
   }
 
+  /**
+   * Wire a logger into observability. Adaptable loggers get trace
+   * correlation + export attached in place (native record path); other
+   * loggers are wrapped in the deprecated DualLogger fallback.
+   */
+  #wireLoggerObservability(logger: TLogger): TLogger {
+    const inner = logger as unknown as IMastraLogger;
+
+    if (isAdaptableLogger(inner)) {
+      // Idempotent: the constructor and setLogger() may both wire the same
+      // logger instance — attach only once.
+      if (this.#wiredLoggers.has(inner)) return logger;
+      this.#wiredLoggers.add(inner);
+      // __attachObservability mutates the logger instance: sharing one logger
+      // across Mastra instances means the last attach wins — earlier
+      // instances' logs export to the newest Mastra's observability (and the
+      // logger holds a strong reference to it). Surface this instead of
+      // silently clobbering.
+      const ownershipKey = inner.__observabilityAttachmentKey?.() ?? inner;
+      const previousOwner = attachedLoggerOwners.get(ownershipKey);
+      if (previousOwner && previousOwner !== this) {
+        try {
+          inner.warn(
+            'This logger instance is already wired to another Mastra instance; re-attaching. ' +
+              'Its observability export now targets the newest Mastra. ' +
+              'Create a separate logger per Mastra instance to keep exports isolated.',
+          );
+        } catch {
+          // A throwing logger must not break Mastra construction.
+        }
+      }
+      attachedLoggerOwners.set(ownershipKey, this);
+      inner.__attachObservability({
+        resolveTraceFields,
+        getLogSink: () => {
+          if (!this.#loggerAdapterOptions.export || isObservabilityExportSuppressed()) return undefined;
+          // Prefer the span-correlated logger context; fall back to the
+          // global one so non-span logs are still exported (uncorrelated).
+          const span = resolveCurrentSpan();
+          const correlated = span?.observabilityInstance?.getLoggerContext?.(span);
+          // Resolve the real logger context directly (not `loggerVNext`,
+          // which falls back to a truthy no-op) so adapters skip record
+          // derivation entirely when observability is not configured.
+          return correlated ?? this.#observability.getDefaultInstance()?.getLoggerContext?.();
+        },
+        options: this.#loggerAdapterOptions,
+      });
+      return logger;
+    }
+
+    // Already wrapped (e.g. setLogger() re-invoked with the wired logger, or
+    // another Mastra instance's wrapper passed in). Rewire the underlying
+    // logger for this instance so exports target this instance's
+    // observability; for our own wrapper this is idempotent via
+    // #fallbackWrappers.
+    if (inner instanceof DualLogger) {
+      return this.#wireLoggerObservability(inner.baseLogger as unknown as TLogger);
+    }
+
+    // Idempotent: the constructor wires the logger and then setLogger() is
+    // called with the same unwrapped instance — reuse the existing wrapper
+    // so the deprecation notice fires only once per logger instance.
+    const existing = this.#fallbackWrappers.get(inner);
+    if (existing) return existing as unknown as TLogger;
+
+    // Deprecated fallback: dual-write wrapper. Native records (stdout) do
+    // not receive trace correlation on this path.
+    try {
+      inner.debug?.(
+        'Configured logger does not support observability adapters; falling back to DualLogger (deprecated). ' +
+          'Implement __attachObservability() on your logger to get trace-correlated stdout.',
+      );
+    } catch {
+      // A throwing logger must not break Mastra construction.
+    }
+    // Resolve the real logger context directly (not `loggerVNext`, which
+    // falls back to a truthy no-op) so the fallback skips record derivation
+    // entirely when observability is not configured.
+    const wrapper = new DualLogger(
+      inner,
+      this.#loggerAdapterOptions.export
+        ? () => this.#observability.getDefaultInstance()?.getLoggerContext?.()
+        : undefined,
+    );
+    this.#fallbackWrappers.set(inner, wrapper);
+    return wrapper as unknown as TLogger;
+  }
+
   public setLogger({ logger }: { logger: TLogger }) {
-    // Wrap the new logger in a DualLogger to maintain dual-write to loggerVNext
-    const dualLogger = new DualLogger(logger, () => this.loggerVNext);
-    this.#logger = dualLogger as unknown as TLogger;
+    this.#logger = this.#wireLoggerObservability(logger);
 
     if (this.#agents) {
       Object.keys(this.#agents).forEach(key => {
@@ -5319,8 +5440,19 @@ export class Mastra<
       });
     }
 
-    // Pass the raw logger (not the DualLogger) to observability to avoid circular forwarding
-    this.#observability.setLogger({ logger });
+    // Pass an export-suppressed view of the logger to observability so its
+    // internal logs never feed back into observability export.
+    this.#observability.setLogger({ logger: this.#observabilitySafeLogger() as unknown as TLogger });
+  }
+
+  /**
+   * A view of the current logger safe to hand to observability internals:
+   * unwraps the DualLogger fallback and suppresses observability export.
+   */
+  #observabilitySafeLogger(): IMastraLogger {
+    const inner =
+      this.#logger instanceof DualLogger ? this.#logger.baseLogger : (this.#logger as unknown as IMastraLogger);
+    return createExportSuppressedLogger(inner);
   }
 
   /**

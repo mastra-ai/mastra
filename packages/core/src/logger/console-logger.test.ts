@@ -238,4 +238,180 @@ describe('ConsoleLogger', () => {
       errorSpy.mockRestore();
     });
   });
+
+  describe('observability adapter (__attachObservability)', () => {
+    const TRACE_FIELDS = { trace_id: '0af7651916cd43dd8448eb211c80319c', span_id: 'b7ad6b7169203331' };
+
+    function makeSink() {
+      return { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    }
+
+    function makeCtx(overrides: Partial<Parameters<ConsoleLogger['__attachObservability']>[0]> = {}) {
+      const sink = makeSink();
+      return {
+        sink,
+        ctx: {
+          resolveTraceFields: () => TRACE_FIELDS,
+          getLogSink: () => sink,
+          options: { correlation: true, export: true },
+          ...overrides,
+        },
+      };
+    }
+
+    it('appends trace fields to the native console record when a span is active', () => {
+      const logger = new ConsoleLogger({ level: LogLevel.INFO });
+      const { ctx } = makeCtx();
+      logger.__attachObservability(ctx);
+
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+      logger.info('hello', { a: 1 });
+
+      expect(infoSpy).toHaveBeenCalledWith('hello', { a: 1 }, TRACE_FIELDS);
+      infoSpy.mockRestore();
+    });
+
+    it('omits trace fields when no span is active', () => {
+      const logger = new ConsoleLogger({ level: LogLevel.INFO });
+      const { ctx } = makeCtx({ resolveTraceFields: () => undefined });
+      logger.__attachObservability(ctx);
+
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+      logger.info('hello');
+
+      expect(infoSpy).toHaveBeenCalledWith('hello');
+      infoSpy.mockRestore();
+    });
+
+    it('does not append trace fields when correlation is disabled', () => {
+      const logger = new ConsoleLogger({ level: LogLevel.INFO });
+      const { ctx } = makeCtx({ options: { correlation: false, export: true } });
+      logger.__attachObservability(ctx);
+
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+      logger.info('hello');
+
+      expect(infoSpy).toHaveBeenCalledWith('hello');
+      infoSpy.mockRestore();
+    });
+
+    it('exports a record derived from the same native call', () => {
+      const logger = new ConsoleLogger({ level: LogLevel.INFO });
+      const { ctx, sink } = makeCtx();
+      logger.__attachObservability(ctx);
+
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+      const err = new Error('boom');
+      logger.info('hello', { a: 1 }, err);
+
+      expect(sink.info).toHaveBeenCalledWith('hello', {
+        a: 1,
+        error: { name: 'Error', message: 'boom', stack: err.stack },
+      });
+      infoSpy.mockRestore();
+    });
+
+    it('exports even when the console level filter suppresses native output', () => {
+      const logger = new ConsoleLogger({ level: LogLevel.ERROR });
+      const { ctx, sink } = makeCtx();
+      logger.__attachObservability(ctx);
+
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+      logger.info('suppressed natively');
+
+      expect(infoSpy).not.toHaveBeenCalled();
+      expect(sink.info).toHaveBeenCalledWith('suppressed natively', undefined);
+      infoSpy.mockRestore();
+    });
+
+    it('does not export when export option is disabled', () => {
+      const logger = new ConsoleLogger({ level: LogLevel.INFO });
+      const { ctx, sink } = makeCtx({ options: { correlation: true, export: false } });
+      logger.__attachObservability(ctx);
+
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+      logger.info('hello');
+
+      expect(sink.info).not.toHaveBeenCalled();
+      // Correlation stays on
+      expect(infoSpy).toHaveBeenCalledWith('hello', TRACE_FIELDS);
+      infoSpy.mockRestore();
+    });
+
+    it('never lets a throwing sink break the native log call', () => {
+      const logger = new ConsoleLogger({ level: LogLevel.INFO });
+      const { ctx, sink } = makeCtx();
+      sink.info.mockImplementation(() => {
+        throw new Error('sink boom');
+      });
+      logger.__attachObservability(ctx);
+
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+      expect(() => logger.info('hello')).not.toThrow();
+      expect(infoSpy).toHaveBeenCalled();
+      infoSpy.mockRestore();
+    });
+
+    it('routes trackException through the sink with MastraError fields', () => {
+      const logger = new ConsoleLogger({ level: LogLevel.INFO });
+      const { ctx, sink } = makeCtx();
+      logger.__attachObservability(ctx);
+
+      const err = Object.assign(new Error('tracked boom'), { id: 'ERR_1', domain: 'AGENT', category: 'USER' });
+      logger.trackException(err, { runId: 'r1' });
+
+      expect(sink.error).toHaveBeenCalledWith('tracked boom', {
+        errorId: 'ERR_1',
+        domain: 'AGENT',
+        category: 'USER',
+        runId: 'r1',
+      });
+    });
+
+    it('forwards details and serializes the Error cause on tracked exceptions', () => {
+      const logger = new ConsoleLogger({ level: LogLevel.INFO });
+      const { ctx, sink } = makeCtx();
+      logger.__attachObservability(ctx);
+
+      const err = Object.assign(new Error('tracked boom', { cause: new Error('root cause') }), {
+        id: 'ERR_1',
+        domain: 'AGENT',
+        category: 'USER',
+        details: { step: 'generate' },
+      });
+      logger.trackException(err);
+
+      expect(sink.error).toHaveBeenCalledWith('tracked boom', {
+        errorId: 'ERR_1',
+        domain: 'AGENT',
+        category: 'USER',
+        details: { step: 'generate' },
+        cause: 'root cause',
+      });
+    });
+
+    it('does not export tracked exceptions when export is disabled', () => {
+      const logger = new ConsoleLogger({ level: LogLevel.INFO });
+      const { ctx, sink } = makeCtx({ options: { correlation: true, export: false } });
+      logger.__attachObservability(ctx);
+
+      logger.trackException(new Error('silent'));
+
+      expect(sink.error).not.toHaveBeenCalled();
+    });
+
+    it('propagates the adapter context to child loggers', () => {
+      const logger = new ConsoleLogger({ level: LogLevel.INFO });
+      const { ctx, sink } = makeCtx();
+      logger.__attachObservability(ctx);
+      const child = logger.child(RegisteredLogger.AGENT);
+
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+      child.info('from child');
+
+      expect(infoSpy).toHaveBeenCalledWith('[AGENT] from child', TRACE_FIELDS);
+      expect(sink.info).toHaveBeenCalledWith('from child', undefined);
+      infoSpy.mockRestore();
+    });
+  });
 });
