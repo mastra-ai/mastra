@@ -172,6 +172,23 @@ async function withAbortCheck<T>(fn: () => Promise<T>, abortSignal?: AbortSignal
 const EARLY_ACTIVATION_SIZE_FLOOR_RATIO = 0.75;
 
 /**
+ * How long to suppress threshold-triggered synchronous reflection after an
+ * attempt that failed or finished still over the reflection threshold.
+ * Without this, `maybeReflect` is awaited after every observation activation,
+ * so a reflector that cannot get under threshold blocks every turn with a
+ * full (often multi-minute) reflection that is known unlikely to succeed.
+ */
+const SYNC_REFLECTION_BACKOFF_MS = 5 * 60_000;
+
+/**
+ * Growth escape hatch for the backoff: if observation tokens have grown by
+ * this factor since the unproductive attempt, retry immediately — there is
+ * substantially new content, so the previous outcome no longer predicts this
+ * one.
+ */
+const SYNC_REFLECTION_RETRY_GROWTH = 1.15;
+
+/**
  * Result of an attempt to activate a buffered reflection. The caller uses
  * this to decide whether to fall through to sync reflection or background
  * buffering, without re-deriving state that `tryActivateBufferedReflection`
@@ -211,6 +228,16 @@ export class ReflectorRunner {
   private readonly memory?: Memory;
   private readonly onReflectionCommitted?: (context: ReflectionCommittedContext) => Promise<void>;
   private mastra?: Mastra;
+
+  /**
+   * Per-lock-key record of the last unproductive synchronous reflection
+   * (failed, or completed while still over the reflection threshold). Used to
+   * back off threshold-triggered sync reflection instead of blocking every
+   * subsequent activation on an attempt that is known unlikely to succeed.
+   * Keyed by lock key (thread/resource), which is stable across generations —
+   * record ids change every time a generation is created.
+   */
+  private readonly syncReflectionBackoff = new Map<string, { atObservationTokens: number; until: number }>();
 
   constructor(opts: {
     reflectionConfig: ResolvedReflectionConfig;
@@ -541,6 +568,18 @@ export class ReflectorRunner {
       }
 
       currentLevel = Math.min(currentLevel + 1, maxLevel) as CompressionLevel;
+    }
+
+    // A reflection of non-empty observations must never come back empty: the
+    // caller commits the result as the new activeObservations (sync path) or
+    // as the bufferedReflection replacing the reflected slice (buffered path),
+    // so returning '' here silently wipes memory. Empty output only happens
+    // when every ladder attempt was degenerate (parseReflectorOutput discards
+    // degenerate text) or the model returned nothing — both are failures.
+    if (observations.trim().length > 0 && parsed.observations.trim().length === 0) {
+      throw new Error(
+        `Reflector produced empty output after ${attemptNumber} attempt(s)${parsed.degenerate ? ' (degenerate repetition)' : ''} — refusing to commit an empty reflection over ${originalTokens} observation tokens`,
+      );
     }
 
     const structuredExtraction = await extractStructuredValues({
@@ -1195,6 +1234,27 @@ export class ReflectorRunner {
     // ════════════════════════════════════════════════════════════
     // SYNC PATH: Do synchronous reflection (blocking)
     // ════════════════════════════════════════════════════════════
+    // Back off threshold-triggered sync reflection after an unproductive
+    // attempt: shouldReflect stays true while observations remain over
+    // threshold, so without this every activation blocks on a reflection
+    // that just demonstrated it cannot get under threshold. Retry once the
+    // backoff expires or observations have grown substantially. TTL and
+    // provider-change triggers are exempt — they reflect for activation
+    // semantics, not to shrink observations.
+    if (activationTriggeredBy === 'threshold') {
+      const backoff = this.syncReflectionBackoff.get(lockKey);
+      if (
+        backoff &&
+        Date.now() < backoff.until &&
+        observationTokens < backoff.atObservationTokens * SYNC_REFLECTION_RETRY_GROWTH
+      ) {
+        omDebug(
+          `[OM:reflect] skipping sync reflection — backing off after unproductive attempt at ${backoff.atObservationTokens} tokens (now ${observationTokens}, retry after ${new Date(backoff.until).toISOString()} or at ${Math.round(backoff.atObservationTokens * SYNC_REFLECTION_RETRY_GROWTH)} tokens)`,
+        );
+        return;
+      }
+    }
+
     await this.storage.setReflectingFlag(record.id, true);
     registerOp(record.id, 'reflecting');
 
@@ -1276,6 +1336,19 @@ export class ReflectorRunner {
         reflection: reflectResult.observations,
         tokenCount: reflectionTokenCount,
       });
+
+      // Best-effort results still over threshold are committed (they usually
+      // shrink observations somewhat), but shouldReflect remains true — back
+      // off so the next activation doesn't immediately block on another
+      // attempt with the same input characteristics.
+      if (reflectionTokenCount >= reflectThreshold) {
+        this.syncReflectionBackoff.set(lockKey, {
+          atObservationTokens: reflectionTokenCount,
+          until: Date.now() + SYNC_REFLECTION_BACKOFF_MS,
+        });
+      } else {
+        this.syncReflectionBackoff.delete(lockKey);
+      }
       await this.notifyReflectionCommitted({
         parentThreadId: requestedThreadId ?? record.threadId ?? '',
         resourceId: record.resourceId ?? '',
@@ -1335,6 +1408,10 @@ export class ReflectorRunner {
       if (abortSignal?.aborted) {
         throw error;
       }
+      this.syncReflectionBackoff.set(lockKey, {
+        atObservationTokens: observationTokens,
+        until: Date.now() + SYNC_REFLECTION_BACKOFF_MS,
+      });
       omError('[OM] Reflection failed', error);
     } finally {
       await this.storage.setReflectingFlag(record.id, false);
