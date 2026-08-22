@@ -289,22 +289,52 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
 
       const results: PruneResult[] = [];
       const now = Date.now();
+      let invalidatesTagDiscovery = false;
+      let pruneFailed = false;
+      let pruneError: unknown;
 
-      for (const [key, entry] of Object.entries(ObservabilityStoragePostgresVNext.retentionTables)) {
-        const policy = policies[key];
-        if (!policy) continue;
+      try {
+        for (const [key, entry] of Object.entries(ObservabilityStoragePostgresVNext.retentionTables)) {
+          const policy = policies[key];
+          if (!policy) continue;
 
-        if (options?.signal?.aborted) {
-          results.push({ domain: 'observability', table: entry.table, deleted: 0, done: false });
-          continue;
+          if (options?.signal?.aborted) {
+            results.push({ domain: 'observability', table: entry.table, deleted: 0, done: false });
+            continue;
+          }
+
+          const cutoff = retentionCutoff(policy, now);
+          const args = { client: this.#client, schema: this.#schema, table: entry.table, cutoff, options };
+          const outcome = mode === 'timescale' ? await pruneTimescaleTable(args) : await prunePartitionedTable(args);
+
+          if (
+            outcome.deleted > 0 &&
+            (entry.table === TABLE_SPAN_EVENTS ||
+              entry.table === TABLE_METRIC_EVENTS ||
+              entry.table === TABLE_LOG_EVENTS)
+          ) {
+            invalidatesTagDiscovery = true;
+          }
+
+          results.push({ domain: 'observability', table: entry.table, deleted: outcome.deleted, done: outcome.done });
         }
-
-        const cutoff = retentionCutoff(policy, now);
-        const args = { client: this.#client, schema: this.#schema, table: entry.table, cutoff, options };
-        const outcome = mode === 'timescale' ? await pruneTimescaleTable(args) : await prunePartitionedTable(args);
-
-        results.push({ domain: 'observability', table: entry.table, deleted: outcome.deleted, done: outcome.done });
+      } catch (error) {
+        pruneFailed = true;
+        pruneError = error;
       }
+
+      // Pruning is not atomic across signal tables. If a later table fails
+      // after an earlier one deleted rows, the monotonic tag cache still
+      // has to be rebuilt on its next read.
+      if (invalidatesTagDiscovery) {
+        try {
+          await discoveryOps.invalidateTagDiscoveryCache(this.#client, this.#schema);
+        } catch (error) {
+          if (!pruneFailed) throw error;
+          this.logger?.warn?.('[observability/v-next] tag discovery invalidation failed after prune', { error });
+        }
+      }
+      if (pruneFailed) throw pruneError;
 
       return results;
     });
@@ -576,9 +606,17 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
   // -------------------------------------------------------------------------
 
   override async batchDeleteTraces(args: BatchDeleteTracesArgs): Promise<void> {
-    await this.#run('BATCH_DELETE_TRACES', () => tracingOps.batchDeleteTraces(this.#client, this.#schema, args), {
-      count: args.traceIds.length,
-    });
+    await this.#run(
+      'BATCH_DELETE_TRACES',
+      async () => {
+        if (args.traceIds.length === 0) return;
+        await this.#client.tx(async tx => {
+          const deletedRows = await tracingOps.batchDeleteTraces(tx, this.#schema, args);
+          await discoveryOps.reconcileTagDiscoveryCacheAfterTraceDelete(tx, this.#schema, deletedRows);
+        });
+      },
+      { count: args.traceIds.length },
+    );
   }
 
   override async dangerouslyClearAll(): Promise<void> {
