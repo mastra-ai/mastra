@@ -62,7 +62,14 @@ export function getScoreRunId({
   spanId?: string;
 }): string {
   const entityId = hookData.entity?.id as string | undefined;
-  return `scoring-${scorerId}-${traceId ?? hookData.runId}-${spanId ?? entityId}`;
+  const primary = traceId ?? hookData.runId;
+  const secondary = spanId ?? entityId;
+  // No stable identity available — fall back to a random id so unrelated
+  // scoring events don't collide on `scoring-<scorer>-undefined-undefined`.
+  if (primary === undefined && secondary === undefined) {
+    return `scoring-${scorerId}-${crypto.randomUUID()}`;
+  }
+  return `scoring-${scorerId}-${primary}-${secondary}`;
 }
 
 /**
@@ -122,6 +129,9 @@ export async function executeScoreRun({
   const payload = {
     ...rest,
     ...runResult,
+    // Deterministic score id: retries of the same (scorer, span) upsert the
+    // same row instead of inserting duplicates.
+    id: getScoreRunId({ scorerId, hookData, traceId, spanId }),
     entityId,
     scorerId,
     spanId,
@@ -179,12 +189,16 @@ async function findScorer(mastra: Mastra, entityId: string, entityType: string, 
       // Resolution or scorer listing failed — fall back to mastra-registered scorer
     }
   } else if (entityType === 'WORKFLOW') {
-    const scorers = await mastra.getWorkflowById(entityId).listScorers();
-    for (const [_, scorer] of Object.entries(scorers)) {
-      if (scorer.scorer.id === scorerId) {
-        scorerToUse = scorer;
-        break;
+    try {
+      const scorers = await mastra.getWorkflowById(entityId).listScorers();
+      for (const [_, scorer] of Object.entries(scorers)) {
+        if (scorer.scorer.id === scorerId) {
+          scorerToUse = scorer;
+          break;
+        }
       }
+    } catch {
+      // Workflow lookup or scorer listing failed — fall back to mastra-registered scorer
     }
   }
 

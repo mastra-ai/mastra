@@ -70,6 +70,7 @@ export class ScoresLibSQL extends ScoresStorage {
 
   async dangerouslyClearAll(): Promise<void> {
     await this.#db.deleteData({ tableName: TABLE_SCORERS });
+    await this.#db.deleteData({ tableName: TABLE_SCORING_DECISIONS });
   }
 
   /** Delete scorer results older than the `scorers` policy's `maxAge`, batched. */

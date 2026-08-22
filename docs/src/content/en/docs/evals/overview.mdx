@@ -1,9 +1,9 @@
 ---
-title: "Evals"
+title: 'Evals'
 description: Overview of evaluations and scorers in Mastra, including Quick Checks, live evaluations, and trace evaluations.
 packages:
-  - "@mastra/core"
-  - "@mastra/evals"
+  - '@mastra/core'
+  - '@mastra/evals'
 ---
 
 # Evals
@@ -68,19 +68,19 @@ export const evaluatedAgent = new Agent({
 You can also add scorers to individual workflow steps to evaluate outputs at specific points in your process. Each scorer receives that step's own input and output, so you can measure quality at each step instead of only scoring the final answer:
 
 ```typescript title="src/mastra/workflows/content-generation.ts" prettier:false
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
-import { customStepScorer } from "../scorers/custom-step-scorer";
+import { createWorkflow, createStep } from '@mastra/core/workflows';
+import { z } from 'zod';
+import { customStepScorer } from '../scorers/custom-step-scorer';
 
 const contentStep = createStep({
-  id: "content-step",
+  id: 'content-step',
   inputSchema: z.object({ topic: z.string() }),
   outputSchema: z.object({ content: z.string() }),
   scorers: {
     customStepScorer: {
       scorer: customStepScorer(),
       sampling: {
-        type: "ratio",
+        type: 'ratio',
         rate: 1, // Score every step execution
       },
     },
@@ -91,7 +91,7 @@ const contentStep = createStep({
 });
 
 export const contentWorkflow = createWorkflow({
-  id: "content-workflow",
+  id: 'content-workflow',
   inputSchema: z.object({ topic: z.string() }),
   outputSchema: z.object({ content: z.string() }),
 })
@@ -146,7 +146,7 @@ Eligibility filters decide _whether a scorer runs_; to filter _which messages a 
 
 **Automatic storage**: All scoring results are automatically stored in the `mastra_scorers` table in your configured database, allowing you to analyze performance trends over time.
 
-**Durable runs**: When storage is configured, each live evaluation executes inside an internal workflow run. A `pending` run record is written before the scorer executes, and the run ends with a queryable `success` or `failed` status (including the error), so scoring failures leave a record instead of a log line. Transient scorer failures, such as a rate-limited judge model, are retried automatically.
+**Durable runs**: When storage is configured, each live evaluation executes inside an internal workflow run. A `pending` run record is written before the scorer executes, and the run ends with a queryable `success` or `failed` status (including the error), so scoring failures leave a record instead of a log line. Transient scorer failures, such as a rate-limited judge model, are retried automatically. If the internal workflow isn't registered (for example in a custom host that doesn't register internal workflows), the scorer falls back to direct execution with the previous fire-and-forget behavior: failures are logged but no durable run record is written.
 
 **Sampling decision records**: On supported storage adapters, sampling outcomes are recorded in the `mastra_scoring_decisions` table, including declines. Comparing decision rows against saved scores shows how much eligible traffic was actually scored.
 

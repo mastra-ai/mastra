@@ -1,7 +1,7 @@
 import { z } from 'zod/v4';
 import { InternalSpans } from '../../observability';
-import { createStep, createWorkflow } from '../../workflows/evented';
 import type { WorkflowRunState } from '../../workflows';
+import { createStep, createWorkflow } from '../../workflows/evented';
 import { executeScoreRun, SCORE_RUN_WORKFLOW_ID } from './executeScoreRun';
 import type { ScoreRunInput } from './executeScoreRun';
 
@@ -17,9 +17,8 @@ const executeScorerStep = createStep({
   id: '__execute-scorer',
   inputSchema: scoreRunInputSchema,
   outputSchema: z.any(),
-  // Transient scorer failures (rate-limited judge, network) retry with a fixed
-  // delay — the existing engine capability. Exponential backoff is Phase 2.
-  retries: 3,
+  // Retries are configured at the workflow level (retryConfig) — a step-level
+  // `retries` here would override `retryConfig.attempts` and drop the delay.
   execute: async ({ inputData, mastra }) => {
     // Errors propagate: the run must end `failed` with the error recorded in
     // the snapshot so scoring failures are queryable (unlike the legacy
@@ -33,6 +32,10 @@ const executeScorerStep = createStep({
  * intent/outcome record, not a resume artifact. Keeps run identity, status,
  * error, timestamps, and the scorer/target identity needed for coverage
  * queries; drops hook input/output payloads and step results' bodies.
+ *
+ * Limitation: because the input payload is pruned, an interrupted run cannot
+ * be resumed from its snapshot — a pruned snapshot is a record, not a
+ * checkpoint. Re-scoring requires a fresh dispatch.
  */
 export function pruneScoreRunSnapshot({ snapshot }: { snapshot: WorkflowRunState }): WorkflowRunState {
   const context = snapshot.context as Record<string, any> | undefined;

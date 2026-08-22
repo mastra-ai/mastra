@@ -105,7 +105,7 @@ export const getTraceStep = createStep({
         domain: ErrorDomain.SCORER,
         category: ErrorCategory.SYSTEM,
         text: `All ${failures.length} trace scoring target(s) failed for scorer ${scorer.id}`,
-        details: { scorerId: scorer.id, failedCount: failures.length },
+        details: { scorerId: scorer.id, failedCount: failures.length, failures: JSON.stringify(failures) },
       });
     }
 

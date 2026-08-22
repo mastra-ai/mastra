@@ -162,11 +162,19 @@ export class ScoresPG extends ScoresStorage {
     const parsedSchema = schemaName ? parseSqlIdentifier(schemaName, 'schema name') : '';
     const schemaPrefix = parsedSchema && parsedSchema !== 'public' ? `${parsedSchema}_` : '';
 
-    // Table
+    // Tables
     statements.push(
       generateTableSQL({
         tableName: TABLE_SCORERS,
         schema: TABLE_SCHEMAS[TABLE_SCORERS],
+        schemaName,
+        includeAllConstraints: true,
+      }),
+    );
+    statements.push(
+      generateTableSQL({
+        tableName: TABLE_SCORING_DECISIONS,
+        schema: TABLE_SCHEMAS[TABLE_SCORING_DECISIONS],
         schemaName,
         includeAllConstraints: true,
       }),
@@ -226,6 +234,7 @@ export class ScoresPG extends ScoresStorage {
 
   async dangerouslyClearAll(): Promise<void> {
     await this.#db.clearTable({ tableName: TABLE_SCORERS });
+    await this.#db.clearTable({ tableName: TABLE_SCORING_DECISIONS });
   }
 
   /** Delete scorer results older than the `scorers` policy's `maxAge`, batched. */

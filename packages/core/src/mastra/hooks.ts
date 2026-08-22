@@ -68,6 +68,12 @@ export function createOnScorerHook(mastra: Mastra) {
         // upsert the same intent row instead of creating new runs.
         const runId = getScoreRunId({ scorerId, hookData, traceId: target.traceId, spanId: target.spanId });
         const run = await workflow.createRun({ runId });
+        // Duplicate dispatch of an already-finished run: start() would
+        // overwrite the terminal snapshot with a fresh `running` one, erasing
+        // the recorded result/error. Keep the existing outcome instead.
+        if (run.workflowRunStatus === 'success' || run.workflowRunStatus === 'failed') {
+          return;
+        }
         // Not awaited: dispatch stays fire-and-forget; the pending intent row
         // written by createRun records the orphan if start never completes.
         void run.start({ inputData: input }).catch((error: unknown) => {
