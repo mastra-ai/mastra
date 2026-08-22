@@ -208,6 +208,12 @@ const sidebars = {
           customProps: { icon: '/img/integrations/e2b.svg', customCSS: 'dark:invert' },
         },
         {
+          type: 'doc',
+          id: 'sandboxes/e2b-desktop',
+          label: 'E2B Desktop',
+          customProps: { icon: '/img/integrations/e2b.svg', customCSS: 'dark:invert' },
+        },
+        {
           type: 'link',
           label: 'Mastra',
           href: '/reference/workspace/platform-sandbox',
