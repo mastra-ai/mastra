@@ -18,4 +18,6 @@ export {
   createStreamWithUnserializableChunk,
   expectSerializedStreamChunks,
   consumeSSEStream,
+  createStreamThatErrorsMidStream,
+  consumeRawStream,
 } from './test-helpers';

@@ -1592,3 +1592,39 @@ export async function consumeSSEStream(stream: ReadableStream<Uint8Array> | null
 
   return chunks;
 }
+
+/**
+ * Emits two chunks then rejects, simulating a transport-level failure mid-stream.
+ * Uses `pull()` so each chunk maps 1:1 to a `reader.read()` call.
+ */
+export function createStreamThatErrorsMidStream(): ReadableStream {
+  let pullCount = 0;
+  return new ReadableStream({
+    pull(controller) {
+      pullCount++;
+      if (pullCount === 1) {
+        controller.enqueue({ type: 'text-delta', payload: { text: 'first chunk' } });
+      } else if (pullCount === 2) {
+        controller.enqueue({ type: 'text-delta', payload: { text: 'second chunk' } });
+      } else {
+        controller.error(new Error('Simulated transport-level stream failure'));
+      }
+    },
+  });
+}
+
+/** Consumes a stream without parsing, keeping the raw `[DONE]` marker and error frames. */
+export async function consumeRawStream(stream: ReadableStream<Uint8Array> | null): Promise<string> {
+  if (!stream) return '';
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  let raw = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    raw += decoder.decode(value, { stream: true });
+  }
+
+  return raw;
+}

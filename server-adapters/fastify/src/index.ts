@@ -7,6 +7,8 @@ import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/serv
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
 import {
   MastraServer as MastraServerBase,
+  buildStreamDoneFrame,
+  buildStreamErrorFrame,
   checkRouteFGA,
   isZodError,
   normalizeQueryParams,
@@ -254,10 +256,24 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           }
         }
       }
+
+      const doneFrame = buildStreamDoneFrame(streamFormat);
+      if (doneFrame && !reply.raw.writableEnded && !reply.raw.destroyed) {
+        reply.raw.write(doneFrame);
+      }
     } catch (error) {
       this.mastra.getLogger()?.error('Error in stream processing', {
         error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
       });
+      try {
+        if (!reply.raw.writableEnded && !reply.raw.destroyed) {
+          reply.raw.write(buildStreamErrorFrame(error, streamFormat));
+          const errorDoneFrame = buildStreamDoneFrame(streamFormat);
+          if (errorDoneFrame) {
+            reply.raw.write(errorDoneFrame);
+          }
+        }
+      } catch {}
     } finally {
       reply.raw.off('close', cancelReaderOnResponseClose);
       request?.raw.off('close', cancelReaderOnRequestClose);

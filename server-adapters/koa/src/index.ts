@@ -8,6 +8,8 @@ import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/serv
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
 import {
   MastraServer as MastraServerBase,
+  buildStreamDoneFrame,
+  buildStreamErrorFrame,
   checkRouteFGA,
   isZodError,
   normalizeQueryParams,
@@ -599,10 +601,24 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           }
         }
       }
+
+      const doneFrame = buildStreamDoneFrame(streamFormat);
+      if (doneFrame && !ctx.res.writableEnded) {
+        ctx.res.write(doneFrame);
+      }
     } catch (error) {
       this.mastra.getLogger()?.error('Error in stream processing', {
         error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
       });
+      try {
+        if (!ctx.res.writableEnded) {
+          ctx.res.write(buildStreamErrorFrame(error, streamFormat));
+          const errorDoneFrame = buildStreamDoneFrame(streamFormat);
+          if (errorDoneFrame) {
+            ctx.res.write(errorDoneFrame);
+          }
+        }
+      } catch {}
     } finally {
       ctx.res.end();
     }

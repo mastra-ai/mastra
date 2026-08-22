@@ -35,6 +35,7 @@ export { applyMcpRequestAuth, buildMcpAuthInfoFromRequestContext } from './mcp-a
 export type { McpAuthInfo, SetMcpRequestAuth } from './mcp-auth';
 export { redactStreamChunk } from './redact';
 export { serializeStreamChunk, type SerializedStreamChunk } from './serialize';
+export { buildStreamDoneFrame, buildStreamErrorFrame } from './stream-frames';
 export {
   MASTRA_AUTH_MODE_KEY,
   MASTRA_CLIENT_TYPE_HEADER,

@@ -1,5 +1,10 @@
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
-import { redactStreamChunk, serializeStreamChunk } from '@mastra/server/server-adapter';
+import {
+  buildStreamDoneFrame,
+  buildStreamErrorFrame,
+  redactStreamChunk,
+  serializeStreamChunk,
+} from '@mastra/server/server-adapter';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { CallHandler, ExecutionContext, NestInterceptor } from '@nestjs/common';
 import type { Request, Response } from 'express';
@@ -181,10 +186,22 @@ export class StreamingInterceptor implements NestInterceptor {
           }
         }
       }
+
+      const doneFrame = buildStreamDoneFrame(streamFormat);
+      if (doneFrame && !response.writableFinished) {
+        response.write(doneFrame);
+      }
     } catch (error) {
       // Log error but don't throw - stream may have been aborted by client
       if (!response.writableFinished) {
         this.logger.error('Stream error:', error);
+        try {
+          response.write(buildStreamErrorFrame(error, streamFormat));
+          const errorDoneFrame = buildStreamDoneFrame(streamFormat);
+          if (errorDoneFrame) {
+            response.write(errorDoneFrame);
+          }
+        } catch {}
       }
     } finally {
       if (heartbeatInterval) {

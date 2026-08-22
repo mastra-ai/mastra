@@ -1,11 +1,13 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, beforeAll, afterAll } from 'vitest';
 import { SERVER_ROUTES, type ServerRoute } from '@mastra/server/server-adapter';
 
 import {
   AdapterTestContext,
   AdapterTestSuiteConfig,
   buildRouteRequest,
+  consumeRawStream,
   createDefaultTestContext,
+  createStreamThatErrorsMidStream,
   HttpRequest,
   parseDatesInResponse,
 } from './test-helpers';
@@ -680,6 +682,54 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
 
         // Should return 404 - double-slash path should not exist
         expect(response.status).toBe(404);
+      });
+    });
+
+    describe('Mid-stream Error Handling', () => {
+      const midStreamErrorRoute: ServerRoute = {
+        method: 'POST',
+        path: '/test/mid-stream-error',
+        responseType: 'stream',
+        streamFormat: 'sse',
+        handler: async () => createStreamThatErrorsMidStream(),
+      } as ServerRoute;
+
+      let midStreamApp: any;
+
+      beforeAll(() => {
+        (SERVER_ROUTES as ServerRoute[]).push(midStreamErrorRoute);
+      });
+
+      afterAll(() => {
+        const index = (SERVER_ROUTES as ServerRoute[]).indexOf(midStreamErrorRoute);
+        if (index >= 0) {
+          (SERVER_ROUTES as ServerRoute[]).splice(index, 1);
+        }
+      });
+
+      beforeEach(async () => {
+        const midStreamContext = createTestContext ? await createTestContext() : await createDefaultTestContext();
+        const setup = await setupAdapter(midStreamContext);
+        midStreamApp = setup.app;
+      });
+
+      it('sends an error frame and [DONE] instead of silently closing when the source stream errors mid-transmission', async () => {
+        const response = await executeHttpRequest(midStreamApp, {
+          method: 'POST',
+          path: '/test/mid-stream-error',
+          body: {},
+        });
+
+        expect(response.status).toBe(200);
+        expect(response.type).toBe('stream');
+        expect(response.stream).toBeDefined();
+
+        const raw = await consumeRawStream(response.stream as ReadableStream<Uint8Array>);
+
+        expect(raw).toContain('first chunk');
+        expect(raw).toContain('second chunk');
+        expect(raw).toContain('data: [DONE]');
+        expect(raw).toMatch(/data:\s*\{"type":"error"/);
       });
     });
   });
