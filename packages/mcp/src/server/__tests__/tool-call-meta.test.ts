@@ -186,6 +186,33 @@ describe('MCPServer tools/call _meta', () => {
     });
   });
 
+  it('drops author-returned _meta for tools with an outputSchema, keeping declared _meta', async () => {
+    // A Mastra tool validates its own output inside Tool.execute(), and the default
+    // object schema strips unknown keys — so `_meta` returned alongside the structured
+    // payload is gone before the result reaches this handler. Declared `mcp._meta` is
+    // resolved from the tool definition and is unaffected. Pinned so the limitation is
+    // a deliberate, visible contract rather than a silent surprise.
+    const server = makeServer({
+      structuredAuthor: createTool({
+        id: 'structuredAuthor',
+        description: 'structuredAuthor',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.string() }),
+        execute: async () => ({ value: 'hello', _meta: { traceId: 'trace-1' } }),
+        mcp: { _meta: { ui: { resourceUri: NESTED_URI } } },
+      } as any),
+    });
+
+    const result = await callTool(server, 'structuredAuthor');
+
+    expect(result.structuredContent).toEqual({ value: 'hello' });
+    expect(result._meta).not.toHaveProperty('traceId');
+    expect(result._meta).toMatchObject({
+      ui: { resourceUri: NESTED_URI },
+      [RESOURCE_URI_META_KEY]: NESTED_URI,
+    });
+  });
+
   it('advertises the same _meta on tools/list as on tools/call', async () => {
     const server = makeServer({
       chart: createTool({

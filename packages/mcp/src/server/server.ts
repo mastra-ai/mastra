@@ -1211,6 +1211,11 @@ export class MCPServer extends MCPServerBase {
         // execute() takes precedence over the statically declared tool metadata. Each
         // source is normalized before merging so an author-supplied resourceUri cannot
         // leave a stale legacy key behind from the declared metadata.
+        //
+        // Caveat: a tool that declares an `outputSchema` cannot return `_meta` from
+        // execute(). Mastra tools validate their own output before returning, and the
+        // schema strips unknown keys, so author `_meta` never reaches this point. Only
+        // the declared `mcp._meta` applies to those tools.
         const declaredMeta = normalizeToolUiMeta(withMastraToolStrictMeta(tool.mcp?._meta, tool.strict));
         const authorMeta = normalizeToolUiMeta(
           result && typeof result === 'object' && '_meta' in result && result._meta && typeof result._meta === 'object'
