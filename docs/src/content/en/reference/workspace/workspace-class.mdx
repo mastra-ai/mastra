@@ -425,6 +425,18 @@ Initialization performs:
 - Starts the sandbox provider (creates working directory, sets up isolation if configured)
 - Indexes files from `autoIndexPaths` for search
 
+#### `stop()`
+
+Stop the workspace's live resources without destroying them.
+
+```typescript
+await workspace.stop()
+```
+
+`stop()` shuts down language servers and closes the browser, then stops the sandbox provider. Remote sandbox providers suspend or pause the sandbox so it can resume later. `LocalSandbox` kills its background processes and unmounts filesystems. Stopping isn't a teardown. The filesystem, search index, and skills keep working, and the next sandbox operation starts the sandbox again.
+
+`mastra.shutdown()` calls `stop()` for registered workspaces, so a process restart suspends remote sandboxes instead of deleting them. To fully tear a workspace down, call `destroy()` or `mastra.removeWorkspace(id, { destroy: true })` explicitly.
+
 #### `destroy()`
 
 Destroy the workspace and clean up resources.
@@ -435,7 +447,7 @@ await workspace.destroy()
 
 `destroy()` closes workspace-owned resources in order: language servers, browsers, sandbox providers, and filesystem providers. It also clears cached sandbox references.
 
-Call `destroy()` when your application is done with a workspace. `mastra.shutdown()` calls it for registered workspaces during shutdown. To remove a workspace from the Mastra registry, use [`mastra.removeWorkspace()`](/reference/core/removeWorkspace).
+Call `destroy()` when your application is done with a workspace and its sandbox. To remove a workspace from the Mastra registry, use [`mastra.removeWorkspace()`](/reference/core/removeWorkspace).
 
 `LocalFilesystem.destroy()` doesn't delete files on disk. Resolver-backed filesystem and sandbox providers are owned by your application and must be cleaned up by your application.
 

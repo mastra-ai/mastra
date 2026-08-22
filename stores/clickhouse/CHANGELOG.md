@@ -1,5 +1,24 @@
 # @mastra/clickhouse
 
+## 1.16.0-alpha.0
+
+### Minor Changes
+
+- Added support for filtering scores by metadata key-value pairs in listScores. ([#22047](https://github.com/mastra-ai/mastra/pull/22047))
+
+  ```typescript
+  const result = await storage.listScores({
+    filters: { metadata: { env: 'prod' } },
+  });
+  ```
+
+  Each top-level metadata key is matched with exact equality against the stored value. Nested objects and arrays compare structurally (key order doesn't matter) with no partial/subset matching, and an empty metadata filter is a no-op.
+
+### Patch Changes
+
+- Updated dependencies [[`e737014`](https://github.com/mastra-ai/mastra/commit/e737014e0fc7035759762bb5b48baef1d6c0f6a7), [`d6ce34a`](https://github.com/mastra-ai/mastra/commit/d6ce34aeceb06ddf3d595a1eed5cc74f481a46a1), [`e6f8450`](https://github.com/mastra-ai/mastra/commit/e6f845074d478527026b18d85031b23353e1d0a4)]:
+  - @mastra/core@1.62.0-alpha.2
+
 ## 1.15.2
 
 ### Patch Changes
