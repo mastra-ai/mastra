@@ -208,12 +208,14 @@ Dynamic workflow definitions (beta) are workflows expressed as JSON, persisted t
 
 | Method | Path | Description |
 | - | - | - |
-| `GET` | `/api/stored/workflows` | List dynamic workflow definitions, filterable by `status` and `authorId` |
-| `GET` | `/api/stored/workflows/:dynamicWorkflowId` | Get a dynamic workflow definition by ID |
-| `POST` | `/api/stored/workflows` | Upsert a definition (plus optional helper `dependencies`) and live-register it |
+| `GET` | `/api/stored/workflows` | List the caller's dynamic workflow definitions. Admins can filter by `status` and `authorId` |
+| `GET` | `/api/stored/workflows/:dynamicWorkflowId` | Get a caller-owned dynamic workflow definition. Admins can read any definition |
+| `POST` | `/api/stored/workflows` | Upsert a caller-owned definition (plus optional helper `dependencies`) and live-register it |
 | `DELETE` | `/api/stored/workflows/:dynamicWorkflowId` | Delete a dynamic workflow definition and unregister the live workflow |
 
-On authenticated servers, the read routes require the `stored-workflows:read` permission and the write routes require `stored-workflows:write`. Registered dynamic workflows are executed through the ordinary `/api/workflows/:workflowId` routes above.
+On authenticated servers, the read routes require the `stored-workflows:read` permission and the write routes require `stored-workflows:write`. List, get, and upsert derive the author from the server-owned request context. Regular callers can't select another `authorId`. The `stored-workflows:admin` permission bypasses read scoping and preserves the existing author during updates. Legacy definitions without an author are hidden from regular callers and read-only for admins.
+
+Registered dynamic workflows are executed through the ordinary `/api/workflows/:workflowId` routes above. On authenticated servers, these routes resolve the definition owner from request context, bind new runs to that owner as their `resourceId`, and scope run listing and controls to the same owner. A client-provided `resourceId` can't override this scope. Cross-owner definition and run requests return `404` without disclosing whether the target exists. Code-defined workflows retain their existing resource behavior. Definition deletion and nested workflow reference authorization are separate boundaries.
 
 ### Create run request body
 

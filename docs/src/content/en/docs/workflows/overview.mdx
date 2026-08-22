@@ -506,6 +506,12 @@ Use `restartAllActiveWorkflowRuns()` to restart all active workflow runs of a wo
 workflow.restartAllActiveWorkflowRuns()
 ```
 
+Pass a `resourceId` to restart only active runs owned by that resource:
+
+```typescript
+await workflow.restartAllActiveWorkflowRuns({ resourceId: 'user-123' })
+```
+
 ### Restarting an active workflow run with `restart()`
 
 Use `restart()` to restart an active workflow run from the last active step. This will resume execution from the last active step, and the workflow will continue from there.

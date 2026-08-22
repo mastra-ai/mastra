@@ -2943,10 +2943,11 @@ export class Workflow<
     return workflowsStore.listWorkflowRuns({ workflowName: this.id, ...(args ?? {}) });
   }
 
-  public async listActiveWorkflowRuns() {
+  public async listActiveWorkflowRuns(options?: { resourceId?: string }) {
+    const resourceFilter = options?.resourceId === undefined ? {} : { resourceId: options.resourceId };
     const [runningRuns, waitingRuns] = await Promise.all([
-      this.listWorkflowRuns({ status: 'running' }),
-      this.listWorkflowRuns({ status: 'waiting' }),
+      this.listWorkflowRuns({ status: 'running', ...resourceFilter }),
+      this.listWorkflowRuns({ status: 'waiting', ...resourceFilter }),
     ]);
 
     return {
@@ -2955,18 +2956,18 @@ export class Workflow<
     };
   }
 
-  public async restartAllActiveWorkflowRuns(): Promise<void> {
+  public async restartAllActiveWorkflowRuns(options?: { resourceId?: string }): Promise<void> {
     if (this.engineType !== 'default') {
       this.logger.debug('Cannot restart active workflow runs for engine type', { engineType: this.engineType });
       return;
     }
-    const activeRuns = await this.listActiveWorkflowRuns();
+    const activeRuns = await this.listActiveWorkflowRuns(options);
     if (activeRuns.runs.length > 0) {
       this.logger.debug('Restarting active workflow runs', { count: activeRuns.runs.length });
     }
     for (const runSnapshot of activeRuns.runs) {
       try {
-        const run = await this.createRun({ runId: runSnapshot.runId });
+        const run = await this.createRun({ runId: runSnapshot.runId, resourceId: runSnapshot.resourceId ?? undefined });
         await run.restart();
         this.logger.debug('Restarted workflow run', { workflowId: this.id, runId: runSnapshot.runId });
       } catch (error) {
