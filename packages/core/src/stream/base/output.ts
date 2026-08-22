@@ -1056,7 +1056,6 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                         content: [{ type: 'text', text: self.#bufferedByStep.text }],
                       },
                       'response',
-                      { merge: false },
                     );
                   }
 

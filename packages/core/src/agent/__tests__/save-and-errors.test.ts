@@ -1892,7 +1892,9 @@ describe('message persistence across completed steps', () => {
       abortSignal: abortController.signal,
       onStepFinish: async () => {
         stepFinishCount++;
-        if (stepFinishCount === 1) {
+      },
+      onChunk: async chunk => {
+        if (chunk.type === 'text-delta') {
           abortController.abort();
         }
       },
@@ -1933,6 +1935,12 @@ describe('message persistence across completed steps', () => {
         result: { output: 'hello' },
       },
     });
+    expect(
+      recalled.messages
+        .flatMap(message => message.content.parts ?? [])
+        .filter(part => part.type === 'text')
+        .map(part => part.text),
+    ).toEqual(['test message', 'Response after tool']);
   });
 });
 
