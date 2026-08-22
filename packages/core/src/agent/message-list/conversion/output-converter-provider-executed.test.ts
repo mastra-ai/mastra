@@ -209,6 +209,101 @@ describe('sanitizeV5UIMessages — provider-executed tool handling', () => {
   });
 });
 
+describe('aiV5UIMessagesToAIV5ModelMessages — provider-executed tool metadata', () => {
+  it('preserves provider metadata and providerExecuted when converting provider-executed tool history', () => {
+    const providerMetadata = {
+      anthropic: {
+        itemId: 'srvtoolu_01MkPKoctHhE9KDNjDvEHnSD',
+      },
+    };
+
+    const messages: AIV5Type.UIMessage[] = [
+      {
+        id: 'assistant-with-server-tool',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'tool-webSearch_20250305',
+            toolCallId: 'srvtoolu_01MkPKoctHhE9KDNjDvEHnSD',
+            state: 'output-available',
+            input: { query: 'latest USD/CNY rate' },
+            output: { results: ['7.12'] },
+            providerExecuted: true,
+            providerMetadata,
+          } as AIV5Type.ToolUIPart,
+        ],
+      },
+    ];
+
+    const result = aiV5UIMessagesToAIV5ModelMessages(messages, [], true);
+    const assistantMessage = result.find(message => message.role === 'assistant');
+    const toolMessage = result.find(message => message.role === 'tool');
+    if (!assistantMessage || typeof assistantMessage.content === 'string') {
+      throw new Error('Expected assistant model message with array content');
+    }
+
+    const toolCall = assistantMessage.content.find(part => part.type === 'tool-call');
+    const inlineToolResult = assistantMessage.content.find(part => part.type === 'tool-result');
+    const toolMessageResult =
+      toolMessage && typeof toolMessage.content !== 'string'
+        ? toolMessage.content.find(part => part.type === 'tool-result')
+        : undefined;
+    const toolResult = inlineToolResult ?? toolMessageResult;
+
+    expect((toolCall as any)?.providerExecuted).toBe(true);
+    expect((toolCall as any)?.providerOptions).toEqual(providerMetadata);
+    expect((toolResult as any)?.providerOptions).toEqual(providerMetadata);
+  });
+
+  it('keeps previously captured provider metadata when later same-id tool parts are sparse', () => {
+    const providerMetadata = {
+      anthropic: {
+        itemId: 'srvtoolu_sparse_metadata',
+      },
+    };
+
+    const messages: AIV5Type.UIMessage[] = [
+      {
+        id: 'assistant-with-repeated-server-tool',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'tool-webSearch_20250305',
+            toolCallId: 'srvtoolu_sparse_metadata',
+            state: 'output-available',
+            input: { query: 'latest USD/CNY rate' },
+            output: { results: ['7.12'] },
+            providerExecuted: true,
+            providerMetadata,
+          } as AIV5Type.ToolUIPart,
+          {
+            type: 'tool-webSearch_20250305',
+            toolCallId: 'srvtoolu_sparse_metadata',
+            state: 'output-available',
+            input: { query: 'latest USD/CNY rate' },
+            output: { results: ['7.12'] },
+            providerExecuted: true,
+          } as AIV5Type.ToolUIPart,
+        ],
+      },
+    ];
+
+    const result = aiV5UIMessagesToAIV5ModelMessages(messages, [], true);
+    const providerToolParts = result.flatMap(message =>
+      typeof message.content === 'string'
+        ? []
+        : message.content.filter(
+            part =>
+              (part.type === 'tool-call' || part.type === 'tool-result') &&
+              (part as any).toolCallId === 'srvtoolu_sparse_metadata',
+          ),
+    );
+
+    expect(providerToolParts).not.toHaveLength(0);
+    expect(providerToolParts.every(part => (part as any).providerOptions === providerMetadata)).toBe(true);
+  });
+});
+
 /**
  * Regression tests for https://github.com/mastra-ai/mastra/issues/15668
  *
