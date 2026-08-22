@@ -59,7 +59,7 @@ export function buildFullPrompt(ctx: PromptContext): string {
 
   // Map new context to base context
   const baseCtx: BasePromptContext = {
-    projectPath: ctx.workingDir,
+    projectPath: ctx.workingDir || '(no workspace attached)',
     projectName: ctx.projectName || 'unknown',
     gitBranch: ctx.gitBranch,
     platform: process.platform,
@@ -101,9 +101,15 @@ export function buildFullPrompt(ctx: PromptContext): string {
       ? createGitRefInstructionReader(ctx.workingDir, baseRef)
       : { exists: () => false, read: () => '' }
     : undefined;
-  const instructionSources = loadAgentInstructions(ctx.workingDir, configDir, projectReader, {
-    skipGlobal: skipGlobalInstructions,
-  });
+  // No working directory means a hosted session with no project attached:
+  // load NO instruction files at all — project locations would resolve
+  // against the server's own cwd, and global locations against the server's
+  // homedir. Neither belongs in a hosted session's prompt.
+  const instructionSources = ctx.workingDir
+    ? loadAgentInstructions(ctx.workingDir, configDir, projectReader, {
+        skipGlobal: skipGlobalInstructions,
+      })
+    : [];
   const instructionsSection = formatAgentInstructions(instructionSources);
 
   const sections = [base, instructionsSection.trim(), modelSpecific.trim(), modeSpecific.trim()].filter(Boolean);

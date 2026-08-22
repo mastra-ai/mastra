@@ -58,9 +58,9 @@ const agent = new Agent({
   },
   {
     name: 'template',
-    type: 'string | TemplateBuilder | function',
+    type: 'string | TemplateBuilder | function | NamedTemplateSpec',
     description:
-      'Sandbox template specification. Can be a template ID string, a TemplateBuilder, or a function that customizes the default template.',
+      'Sandbox template specification. Can be a template ID string, a TemplateBuilder, a function that customizes the default template, or a named spec such as the one returned by createRepoTemplate.',
     isOptional: true,
   },
   {
@@ -302,6 +302,130 @@ const workspace = new Workspace({
 ```
 
 This is optional: `gcsfuse` is installed automatically at mount time if not present.
+
+### Repository templates
+
+`createRepoTemplate` produces a template spec that clones a repository and
+runs its setup command at build time, so sandboxes start with a warm checkout
+and installed dependencies instead of paying for a cold clone on every
+session:
+
+```typescript
+import { E2BSandbox, createRepoTemplate } from '@mastra/e2b'
+
+const sandbox = new E2BSandbox({
+  id: sessionId,
+  template: createRepoTemplate({
+    repoFullName: 'octocat/hello-world',
+    setupCommand: 'pnpm install',
+  }),
+})
+```
+
+There is exactly one template per repository and setup command: the template
+name carries the repo slug plus a short hash of the inputs, and the commit
+sha rides as a tag on that name
+(`mastra-repo-<owner>-<repo>-<hash>:sha-<sha>`). Without an explicit
+`sha`, the spec pins itself to the repository's current default-branch head
+at resolution time: right before the template lookup it runs `git ls-remote`
+(no clone, \~100ms) and keys the tag on that sha. When the default branch
+moves, the next new sandbox rebuilds the same template in place under a new
+tag — old sha tags remain as prunable build history instead of piling up as
+stale templates. If the head can't be resolved, the ref degrades to the
+stable `current` tag and the build clones whatever the default branch is at
+build time. Pass `sha` to pin a specific commit instead, or `resolveHead` to
+supply the head sha yourself.
+
+Resolution is lazy and only ever blocks on a template's very first build.
+Every successful build also moves a stable `current` tag, so when the head
+moves, the next sandbox boots immediately from the previous build while the
+fresh sha ref builds in the background on E2B's side (its runtime setup
+`git fetch` fast-forwards the slightly stale checkout — freshness never
+depends on the template). A changed setup command hashes to a new template
+name.
+
+To warm templates proactively instead of waiting for the first session
+after a merge, call `refreshRepoTemplate` with the same options from a
+scheduled job or a merge-to-main event handler. It performs the same
+resolution as sandbox start — resolves the current head, reuses the build
+when it already exists, and otherwise builds it (moving `current`) — and
+reports `{ ref, action, sha }`:
+
+```typescript
+import { refreshRepoTemplate } from '@mastra/e2b'
+
+const result = await refreshRepoTemplate({
+  repoFullName: 'octocat/hello-world',
+  setupCommand: 'pnpm install',
+})
+// { ref: 'mastra-repo-octocat-hello-world-…:sha-…', action: 'built' | 'reused', sha: '…' }
+```
+
+The template layers on top of the default mountable base (E2B's `base`
+image, so git and common tooling are present, plus `s3fs`/FUSE for mount
+support). The clone lands in the build user's home directory
+(`$HOME/<repo>` by default) — build steps and runtime commands both run as
+the sandbox's non-root `user` in its home, so no directory prep is needed
+and runtime file ownership stays correct. Pass `workdir` to clone somewhere
+else.
+
+Failure handling is designed so a broken template never wedges a session:
+
+- A failed build falls back to the default mountable template; the
+  session's runtime cold clone into `$HOME` keeps working.
+- E2B keeps a failed build's ref visible to `Template.exists`, so a broken
+  ref could otherwise be reused forever. When creating a sandbox from a
+  named ref fails, the cached resolution is dropped and creation retries
+  down the fallback ladder.
+
+Private repositories build warm templates through `getAuthToken`: a callback
+that mints a fresh, short-lived credential (such as a GitHub App
+installation token) per template resolution. The token authenticates the
+head lookup and the build's clone through an in-shell `http.extraheader` —
+it enters the template definition's environment (visible to build steps but
+not persisted into runtime sandbox environments) and never touches the image
+filesystem, so no captured layer can contain it. Only pass short-lived
+credentials here — the value stays in the template definition until the next
+rebuild, so its expiry is what bounds the exposure. Note that the cloned
+repository contents become part of a team-visible template image. Without
+`getAuthToken` the clone is tokenless: public repositories build fine, and a
+private repository's build degrades to the fallback, where the session's own
+runtime setup (with runtime-injected auth) does the clone.
+
+`repoTemplateAlias` computes the tagged ref for a spec without building
+anything — useful for pruning old sha tags with the E2B CLI.
+
+### Per-session sandboxes
+
+Hosts that construct one sandbox per session, such as Mastra Factory's
+`sandbox` config, combine the pieces above in a small callback: sandbox
+identity is the session id (id-keyed getOrCreate — the sandbox pauses on
+E2B's idle timeout and resumes by id), the repo template comes from
+`createRepoTemplate`, and the host's `onStart` setup hook runs inside the
+start lifecycle.
+
+```typescript
+import { MastraFactory } from '@mastra/factory'
+import { E2BSandbox, createRepoTemplate } from '@mastra/e2b'
+
+new MastraFactory({
+  sandbox: ctx =>
+    new E2BSandbox({
+      id: ctx.sessionId,
+      ...(ctx.repoFullName
+        ? {
+            template: createRepoTemplate({
+              repoFullName: ctx.repoFullName,
+              // Short-lived installation token so private repos build warm
+              // templates too.
+              getAuthToken: ctx.getGithubToken,
+            }),
+          }
+        : {}),
+      onStart: ctx.onStart,
+    }),
+})
+```
 
 ## Using with Code Mode
 

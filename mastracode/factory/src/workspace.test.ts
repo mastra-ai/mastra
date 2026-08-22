@@ -2,7 +2,6 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { getDynamicWorkspace } from '@mastra/code-sdk/agents/workspace';
 import { RequestContext } from '@mastra/core/request-context';
 import { LocalSandbox } from '@mastra/core/workspace';
 import type { LocalFilesystem } from '@mastra/core/workspace';
@@ -12,28 +11,65 @@ const mocks = vi.hoisted(() => ({
   projects: [] as any[],
   sessions: [] as any[],
   updates: [] as Array<{ set: Record<string, unknown>; where: unknown }>,
-  ensureSandbox: vi.fn(async (binding: { sandboxId: string | null; setSandboxId: (id: string) => Promise<void> }) => {
-    if (!binding.sandboxId) await binding.setSandboxId('sandbox-1');
-    return {
-      id: 'sandbox-1',
-      start: vi.fn(async () => {}),
-      getInfo: vi.fn(async () => ({ metadata: { sandboxId: 'sandbox-1' } })),
-      executeCommand: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
-      setEnvironmentVariable: mocks.setEnvironmentVariable,
-    };
-  }),
+  /** When set, the stub models a local-provider callback rooted at <localRoot>/<sessionId>. */
+  localRoot: null as string | null,
+  createSandbox: vi.fn(
+    (ctx: {
+      sessionId: string;
+      onStart?: (hook: { sandbox: unknown; outcome?: 'created' | 'connected' }) => Promise<void>;
+    }) => {
+      // Models a well-behaved provider: lazy start via ensureRunning() on the
+      // first command/info call (coalesced, failures never latch), ctx.onStart
+      // invoked inside start() with outcome 'created', status transitions.
+      let startInFlight: Promise<void> | null = null;
+      const sandbox: any = {
+        id: `sbx-${ctx.sessionId}`,
+        provider: mocks.localRoot ? 'local' : 'stub',
+        status: 'pending',
+        ...(mocks.localRoot ? { workingDirectory: `${mocks.localRoot}/${ctx.sessionId}` } : {}),
+        start: vi.fn(async () => {
+          // Like the real base class: status flips to 'running' BEFORE the
+          // onStart hook so the hook can execute commands without
+          // self-deadlocking through ensureRunning(); a hook failure marks
+          // the sandbox errored and rejects start().
+          sandbox.status = 'running';
+          try {
+            await ctx.onStart?.({ sandbox, outcome: 'created' });
+          } catch (error) {
+            sandbox.status = 'error';
+            throw error;
+          }
+        }),
+        ensureRunning: async () => {
+          if (sandbox.status === 'running') return;
+          startInFlight ??= sandbox.start().finally(() => {
+            startInFlight = null;
+          });
+          await startInFlight;
+        },
+        stop: vi.fn(async () => {
+          sandbox.status = 'stopped';
+        }),
+        getInfo: vi.fn(async () => {
+          await sandbox.ensureRunning();
+          return { metadata: { sandboxId: `sbx-${ctx.sessionId}` } };
+        }),
+        executeCommand: vi.fn(async (command: string) => {
+          await sandbox.ensureRunning();
+          // The workdir resolver probes the VM's default cwd (its home dir).
+          if (command === 'pwd') return { exitCode: 0, stdout: '/home/user\n', stderr: '' };
+          return { exitCode: 0, stdout: '', stderr: '' };
+        }),
+        setEnvironmentVariable: mocks.setEnvironmentVariable,
+      };
+      return sandbox;
+    },
+  ),
   materializeRepo: vi.fn(async (_input: unknown) => {}),
   checkoutSessionBranch: vi.fn(async () => {}),
-  recycleClaimedWorkdir: vi.fn(async () => {}),
-  runWorktreeSetup: vi.fn(async () => {}),
-  runWorktreeTeardown: vi.fn(async () => {}),
+  runSetupCommand: vi.fn(async () => {}),
+  runTeardownCommand: vi.fn(async () => {}),
   /** Released sandboxes claimable by new sessions; claim() consumes matches. */
-  pooledSandboxes: [] as Array<{
-    projectRepositoryId: string;
-    userId: string;
-    sandboxId: string;
-    sandboxWorkdir: string;
-  }>,
   getRepositoryAccess: vi.fn(async ({ repositoryId }: { repositoryId: string }) => ({
     cloneUrl: 'https://github.com/octocat/hello.git',
     authorization: { scheme: 'bearer' as const, token: `repo-token-${repositoryId}` },
@@ -58,20 +94,14 @@ vi.mock('./integrations/github/sandbox', async importOriginal => ({
   MaterializeError: (await importOriginal<typeof import('./integrations/github/sandbox.js')>()).MaterializeError,
   materializeRepo: (...args: unknown[]) => (mocks.materializeRepo as any)(...args),
   checkoutSessionBranch: (...args: unknown[]) => (mocks.checkoutSessionBranch as any)(...args),
-  recycleClaimedWorkdir: (...args: unknown[]) => (mocks.recycleClaimedWorkdir as any)(...args),
-  runWorktreeSetup: (...args: unknown[]) => (mocks.runWorktreeSetup as any)(...args),
-  runWorktreeTeardown: (...args: unknown[]) => (mocks.runWorktreeTeardown as any)(...args),
+  runSetupCommand: (...args: unknown[]) => (mocks.runSetupCommand as any)(...args),
+  runTeardownCommand: (...args: unknown[]) => (mocks.runTeardownCommand as any)(...args),
 }));
 
 import { MaterializeError } from './integrations/github/sandbox.js';
 import { injectGithubToken } from './integrations/github/token-refresh.js';
-import { SandboxFleet } from './sandbox/fleet.js';
-import {
-  checkpointNameForSession,
-  createWorkspaceFactory,
-  FactoryWorkspaceRegistry,
-  getFactoryWorkspace,
-} from './workspace.js';
+import { __clearSessionSandboxesForTests } from './sandbox/session-sandbox.js';
+import { createWorkspaceFactory, FactoryWorkspaceRegistry } from './workspace.js';
 
 const tempDirs: string[] = [];
 
@@ -80,13 +110,13 @@ afterEach(async () => {
   mocks.projects.splice(0);
   mocks.sessions.splice(0);
   mocks.updates.splice(0);
-  mocks.ensureSandbox.mockClear();
+  mocks.createSandbox.mockClear();
+  mocks.localRoot = null;
+  __clearSessionSandboxesForTests();
   mocks.materializeRepo.mockClear();
   mocks.checkoutSessionBranch.mockClear();
-  mocks.recycleClaimedWorkdir.mockClear();
-  mocks.runWorktreeSetup.mockClear();
-  mocks.runWorktreeTeardown.mockClear();
-  mocks.pooledSandboxes.splice(0);
+  mocks.runSetupCommand.mockClear();
+  mocks.runTeardownCommand.mockClear();
   mocks.getRepositoryAccess.mockClear();
   mocks.mintInstallationToken.mockClear();
   mocks.setEnvironmentVariable.mockClear();
@@ -221,12 +251,6 @@ function fakeGithubIntegration() {
         setSandbox,
         markMaterialized: vi.fn(async () => {}),
       },
-      sandboxPool: {
-        claim: vi.fn(async ({ projectRepositoryId }: { projectRepositoryId: string }) => {
-          const index = mocks.pooledSandboxes.findIndex(row => row.projectRepositoryId === projectRepositoryId);
-          return index === -1 ? null : mocks.pooledSandboxes.splice(index, 1)[0];
-        }),
-      },
       projectRepositories: {
         get: vi.fn(async ({ orgId, id }) => {
           const project = mocks.projects.find(candidate => candidate.orgId === orgId && candidate.id === id);
@@ -257,26 +281,7 @@ function fakeGithubIntegration() {
   };
 }
 
-describe('getFactoryWorkspace', () => {
-  it('derives unique stable checkpoint names from session ids', () => {
-    expect(checkpointNameForSession('session-a')).toBe('mastracode-session-session-a');
-    expect(checkpointNameForSession('session-b')).toBe('mastracode-session-session-b');
-    expect(checkpointNameForSession('session-a')).not.toBe(checkpointNameForSession('session-b'));
-  });
-
-  it('keeps Factory and default workspace cache identities separate', async () => {
-    const projectPath = await fs.mkdtemp(path.join(os.tmpdir(), 'mastracode-web-factory-cache-'));
-    tempDirs.push(projectPath);
-    const requestContext = createRequestContext(projectPath);
-
-    const defaultWorkspace = await getDynamicWorkspace({ requestContext });
-    const factoryWorkspace = await getFactoryWorkspace({ requestContext });
-
-    expect(defaultWorkspace.id).toBe(`mastra-code-workspace-${projectPath}`);
-    expect(factoryWorkspace.id).toBe(`mastra-code-workspace-${projectPath}-web-factory`);
-    expect(factoryWorkspace.id).not.toBe(defaultWorkspace.id);
-  });
-
+describe('bundled Factory skill assets', () => {
   it('keeps the reserved skill list aligned with packaged Factory assets', async () => {
     const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
     const assetNames = (await fs.readdir(assetRoot)).sort();
@@ -529,34 +534,6 @@ describe('getFactoryWorkspace', () => {
     expect(phase3).toContain('After the pre-execution inspection from the security section clears the diff');
     expect(phase3).toContain('env -u GH_TOKEN -u GITHUB_TOKEN pnpm --filter <pkg> test');
   });
-
-  it('adds read-only Web Factory skills and keeps them authoritative over project shadows', async () => {
-    const projectPath = await fs.mkdtemp(path.join(os.tmpdir(), 'mastracode-web-factory-skills-'));
-    tempDirs.push(projectPath);
-    const shadowDir = path.join(projectPath, '.mastracode', 'skills', 'factory-triage');
-    await fs.mkdir(shadowDir, { recursive: true });
-    await fs.writeFile(
-      path.join(shadowDir, 'SKILL.md'),
-      '---\nname: factory-triage\ndescription: Project shadow\n---\n\n# Shadowed Project Skill',
-    );
-
-    const workspace = await getFactoryWorkspace({ requestContext: createRequestContext(projectPath) });
-    const configureRules = await workspace.skills?.get('configure-factory-rules');
-    const factoryTriage = await workspace.skills?.get('factory-triage');
-    const factoryReview = await workspace.skills?.get('factory-review');
-    const filesystem = workspace.filesystem as LocalFilesystem;
-
-    expect(workspace.id).toContain('-web-factory');
-    expect(configureRules?.instructions).toContain('# Configure Factory Rules');
-    expect(factoryTriage?.instructions).toContain('# Factory Triage');
-    expect(factoryTriage?.instructions).not.toContain('# Shadowed Project Skill');
-    expect(factoryReview?.instructions).toContain('# Factory Review');
-    expect(filesystem.allowedPaths).not.toContain('/__mastracode_factory_skills__');
-    await expect(filesystem.writeFile(path.join(factoryTriage!.path, 'SKILL.md'), 'mutated')).rejects.toMatchObject({
-      name: 'PermissionError',
-      code: 'EACCES',
-    });
-  });
 });
 
 describe('GitHub session workspace preparation', () => {
@@ -570,9 +547,8 @@ describe('GitHub session workspace preparation', () => {
     return async (args: any) => {
       const workspace = await resolver(args);
       if (typeof workspace?.id === 'string' && workspace.id.startsWith('mfw-')) {
-        // `start()` is intentionally a no-op on the lazy handle (metadata-only
-        // session creation must not provision); force materialization through a
-        // real sandbox operation instead.
+        // Resolution never starts the sandbox; force the lazy start through a
+        // real sandbox operation (getInfo → ensureRunning → start + hook).
         await (workspace as any).sandbox.getInfo();
       }
       return workspace;
@@ -585,19 +561,15 @@ describe('GitHub session workspace preparation', () => {
   ) {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), rootPrefix));
     tempDirs.push(root);
-    const machine = new LocalSandbox({ workingDirectory: root });
-    const fleet = new SandboxFleet({ machine, workdirBase: root });
-    (fleet as any).ensureSandbox = mocks.ensureSandbox;
+    mocks.localRoot = root;
     const resolver = createWorkspaceFactory({
-      sandbox: { machine, workdir: root },
+      sandbox: mocks.createSandbox as any,
       github: fakeGithubIntegration() as any,
-      fleet,
       workItems: { findRunBindingBySession: mocks.findRunBindingBySession } as any,
       ...(workspaceRegistry ? { workspaceRegistry } : {}),
     });
     return {
       root,
-      fleet,
       resolver,
       workspace: eager(resolver),
     };
@@ -612,30 +584,27 @@ describe('GitHub session workspace preparation', () => {
     const workspaceA = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
     const workspaceB = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-b') });
 
-    const workdirA = path.join(root, 'github-sessions', 'octocat', 'hello', 'session-a');
-    const workdirB = path.join(root, 'github-sessions', 'octocat', 'hello', 'session-b');
+    const workdirA = path.join(root, 'session-a', 'hello');
+    const workdirB = path.join(root, 'session-b', 'hello');
     expect(workspaceA.id).toContain('project-1-session-a');
     expect(workspaceB.id).toContain('project-1-session-b');
-    expect(mocks.ensureSandbox).toHaveBeenNthCalledWith(
+    expect(mocks.createSandbox).toHaveBeenNthCalledWith(
       1,
-      expect.any(Object),
-      { GH_TOKEN: 'repo-token-repository-1' },
-      undefined,
-      {
-        workingDirectory: workdirA,
+      expect.objectContaining({
+        sessionId: 'session-a',
+        repoFullName: 'octocat/hello',
+        setupCommand: 'pnpm i',
         actingUserId: 'user-1',
-      },
+      }),
     );
-    expect(mocks.ensureSandbox).toHaveBeenNthCalledWith(
+    expect(mocks.createSandbox).toHaveBeenNthCalledWith(
       2,
-      expect.any(Object),
-      { GH_TOKEN: 'repo-token-repository-1' },
-      undefined,
-      {
-        workingDirectory: workdirB,
+      expect.objectContaining({
+        sessionId: 'session-b',
         actingUserId: 'user-1',
-      },
+      }),
     );
+    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'repo-token-repository-1');
     expect(mocks.materializeRepo).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
@@ -650,7 +619,7 @@ describe('GitHub session workspace preparation', () => {
       workdirB,
       expect.objectContaining({ branch: 'feature-b', baseBranch: 'main' }),
     );
-    expect(mocks.runWorktreeSetup).toHaveBeenCalledTimes(2);
+    expect(mocks.runSetupCommand).toHaveBeenCalledTimes(2);
     expect(mocks.sessions.find(session => session.id === 'session-a')?.sandboxWorkdir).toBe(workdirA);
     expect(mocks.sessions.find(session => session.id === 'session-b')?.sandboxWorkdir).toBe(workdirB);
   });
@@ -659,10 +628,8 @@ describe('GitHub session workspace preparation', () => {
     const { resolver } = await createLocalFactory();
     addProject();
     addSession({ id: 'session-a' });
-    // Session start fires a background warm-up, so materialization *starts*;
-    // the guarantee under test is that kickoff skill resolution never awaits
-    // it. Make provisioning hang forever: skill resolution must still finish.
-    mocks.ensureSandbox.mockImplementationOnce(() => new Promise(() => {}) as any);
+    // Resolution is fully lazy (no warm-up), and kickoff skill resolution
+    // must never force materialization: provisioning never starts at all.
 
     const workspace = (await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') }))!;
     await workspace.skills?.maybeRefresh();
@@ -670,8 +637,13 @@ describe('GitHub session workspace preparation', () => {
 
     expect(review?.instructions).toContain('# Factory Review');
     // The repo checkout never happened, so project skill roots were guarded
-    // (reported empty) instead of forcing the sandbox to exist.
+    // (reported empty) instead of forcing the sandbox to exist. Resolution
+    // constructs the instance (cheap, side-effect-free by contract) to derive
+    // the workdir, but nothing may start it.
     expect(mocks.materializeRepo).not.toHaveBeenCalled();
+    expect(mocks.createSandbox).toHaveBeenCalledTimes(1);
+    const constructed = await mocks.createSandbox.mock.results[0]!.value;
+    expect(constructed.start).not.toHaveBeenCalled();
   });
 
   it('delegates project skill roots to the sandbox once it is materialized', async () => {
@@ -684,7 +656,7 @@ describe('GitHub session workspace preparation', () => {
     // then materialize the sandbox the way a first real operation would.
     await workspace.skills?.maybeRefresh();
     await (workspace as any).sandbox.getInfo();
-    const sandbox = await mocks.ensureSandbox.mock.results[0]!.value;
+    const sandbox = await mocks.createSandbox.mock.results[0]!.value;
     sandbox.executeCommand.mockClear();
 
     // With the sandbox live, the guarded fallback must pass skill discovery
@@ -713,7 +685,7 @@ describe('GitHub session workspace preparation', () => {
       expect.objectContaining({
         row: expect.objectContaining({
           id: 'session-a',
-          sandboxWorkdir: path.join(root, 'github-sessions', 'octocat', 'hello', 'session-a'),
+          sandboxWorkdir: path.join(root, 'session-a', 'hello'),
         }),
       }),
     );
@@ -761,7 +733,7 @@ describe('GitHub session workspace preparation', () => {
     const ctx = requestContext.get('controller') as {
       getState: () => { projectPath?: string; projectName?: string };
     };
-    expect(ctx.getState().projectPath).toBe(path.join(root, 'github-sessions', 'octocat', 'hello', 'session-a'));
+    expect(ctx.getState().projectPath).toBe(path.join(root, 'session-a', 'hello'));
     expect(ctx.getState().projectName).toBe('octocat/hello');
   });
 
@@ -770,13 +742,13 @@ describe('GitHub session workspace preparation', () => {
     addProject({ setupCommand: 'pnpm install', teardownCommand: 'pnpm local teardown' });
     addSession({ id: 'session-a' });
     const setupError = new Error('setup failed');
-    mocks.runWorktreeSetup.mockRejectedValueOnce(setupError);
+    mocks.runSetupCommand.mockRejectedValueOnce(setupError);
 
     await expect(workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') })).rejects.toBe(
       setupError,
     );
 
-    expect(mocks.runWorktreeTeardown).toHaveBeenCalledWith(
+    expect(mocks.runTeardownCommand).toHaveBeenCalledWith(
       expect.any(Object),
       expect.stringContaining('session-a'),
       'pnpm local teardown',
@@ -789,8 +761,8 @@ describe('GitHub session workspace preparation', () => {
     addProject({ setupCommand: 'pnpm install', teardownCommand: 'pnpm local teardown' });
     addSession({ id: 'session-a' });
     const setupError = new Error('primary setup failure');
-    mocks.runWorktreeSetup.mockRejectedValueOnce(setupError);
-    mocks.runWorktreeTeardown.mockRejectedValueOnce(new Error('secondary teardown failure'));
+    mocks.runSetupCommand.mockRejectedValueOnce(setupError);
+    mocks.runTeardownCommand.mockRejectedValueOnce(new Error('secondary teardown failure'));
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
       await expect(workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') })).rejects.toBe(
@@ -805,152 +777,80 @@ describe('GitHub session workspace preparation', () => {
     }
   });
 
-  it('tears down a git-less sandbox and retries once on a fresh one', async () => {
+  // The fleet's git-missing teardown-and-retry ladder is gone (accepted
+  // regression): a provider whose base image lacks git fails preparation
+  // loudly, and the next attempt re-runs setup on the same session sandbox.
+  it('surfaces a git-missing failure loudly and retries setup on the next attempt', async () => {
     const { workspace } = await createLocalFactory();
     addProject();
     addSession({ id: 'session-a' });
-    // First materialization lands on a bare base image (template build failed
-    // platform-side): git preflight raises `git-missing`. The retry succeeds.
     mocks.materializeRepo.mockImplementationOnce(async () => {
       throw new MaterializeError('git is not installed in the sandbox.', 'git-missing');
     });
 
-    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+    await expect(workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') })).rejects.toThrow(
+      /git is not installed/,
+    );
+    expect(mocks.checkoutSessionBranch).not.toHaveBeenCalled();
 
-    expect(mocks.ensureSandbox).toHaveBeenCalledTimes(2);
+    // The failure was not latched: the next open re-runs the setup.
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
     expect(mocks.materializeRepo).toHaveBeenCalledTimes(2);
     expect(mocks.checkoutSessionBranch).toHaveBeenCalledTimes(1);
-    // The poisoned sandbox id was cleared before re-provisioning, so a later
-    // open cannot reattach to the git-less VM.
-    expect(mocks.updates.map(update => update.set.sandboxId)).toEqual(['sandbox-1', null, 'sandbox-1']);
-    expect(mocks.sessions.find(session => session.id === 'session-a')?.sandboxId).toBe('sandbox-1');
   });
 
-  it('clears the binding and rethrows when the fresh sandbox also lacks git', async () => {
-    const { workspace } = await createLocalFactory();
-    addProject();
-    addSession({ id: 'session-a' });
-    mocks.materializeRepo.mockImplementation(async () => {
-      throw new MaterializeError('git is not installed in the sandbox.', 'git-missing');
-    });
-
-    await expect(
-      workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') }),
-    ).rejects.toMatchObject({ code: 'git-missing' });
-
-    mocks.materializeRepo.mockImplementation(async () => {});
-    expect(mocks.ensureSandbox).toHaveBeenCalledTimes(2);
-    expect(mocks.materializeRepo).toHaveBeenCalledTimes(2);
-    expect(mocks.checkoutSessionBranch).not.toHaveBeenCalled();
-    // Both poisoned sandboxes were torn down, so the next manual retry
-    // provisions fresh instead of reattaching to a bare VM.
-    expect(mocks.sessions.find(session => session.id === 'session-a')?.sandboxId).toBeNull();
-  });
-
-  it('revives a dead sandbox mid-session and retries the command once', async () => {
+  it('propagates dead-sandbox failures to the caller — recovery is provider-owned', async () => {
+    // The factory no longer revives dead VMs: providers own self-healing
+    // (E2B retryOnDead restarts + retries inside the provider; Platform
+    // resets status on destroy so the next command re-runs the start
+    // lifecycle). The factory surfaces the failure untouched and constructs
+    // nothing extra.
     const { workspace } = await createLocalFactory();
     addProject();
     addSession({ id: 'session-a' });
 
     const resolved = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
-    expect(mocks.ensureSandbox).toHaveBeenCalledTimes(1);
-    const first = await mocks.ensureSandbox.mock.results[0]!.value;
+    expect(mocks.createSandbox).toHaveBeenCalledTimes(1);
+    const first = await mocks.createSandbox.mock.results[0]!.value;
     const dead = new Error('sandbox gone');
     dead.name = 'SandboxDestroyedError';
     first.executeCommand.mockRejectedValueOnce(dead);
 
-    const result = await (resolved as any).sandbox.executeCommand('echo', ['hi']);
-
-    expect(result.exitCode).toBe(0);
-    // The dead handle was evicted and the full pipeline re-ran: provision
-    // (reattach → fresh), materialize, checkout — then the command retried
-    // on the revived sandbox.
-    expect(mocks.ensureSandbox).toHaveBeenCalledTimes(2);
-    expect(mocks.materializeRepo).toHaveBeenCalledTimes(2);
-    expect(mocks.checkoutSessionBranch).toHaveBeenCalledTimes(2);
-    const second = await mocks.ensureSandbox.mock.results[1]!.value;
-    expect(second.executeCommand).toHaveBeenCalledWith('echo', ['hi'], undefined);
-  });
-
-  it('revives a live local session whose checkout was removed from under a running turn', async () => {
-    // A local checkout can disappear while the session is still live (a user
-    // or external cleanup removes the directory). Every subsequent tool call
-    // then spawns into a directory that no longer exists, which Node reports
-    // as `spawn /bin/sh ENOENT` — nothing in the message says "sandbox", so
-    // this has to be classified by probing the workdir or the session wedges
-    // for the rest of the run. The session is NOT retired here, so revival
-    // passes the generation check and rebuilds the checkout.
-    const { workspace } = await createLocalFactory();
-    addProject();
-    addSession({ id: 'session-a' });
-
-    const resolved = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
-    const first = await mocks.ensureSandbox.mock.results[0]!.value;
-    const removed = Object.assign(new Error('spawn /bin/sh ENOENT'), {
-      code: 'ENOENT',
-      syscall: 'spawn /bin/sh',
-      path: '/bin/sh',
-    });
-    first.executeCommand.mockRejectedValueOnce(removed);
-
-    const result = await (resolved as any).sandbox.executeCommand('echo', ['hi']);
-
-    expect(result.exitCode).toBe(0);
-    expect(mocks.ensureSandbox).toHaveBeenCalledTimes(2);
-    expect(mocks.materializeRepo).toHaveBeenCalledTimes(2);
-    const second = await mocks.ensureSandbox.mock.results[1]!.value;
-    expect(second.executeCommand).toHaveBeenCalledWith('echo', ['hi'], undefined);
+    await expect((resolved as any).sandbox.executeCommand('echo', ['hi'])).rejects.toThrow('sandbox gone');
+    expect(mocks.createSandbox).toHaveBeenCalledTimes(1);
   });
 
   it('fails a held run with a clear retirement error instead of resurrecting a retired checkout', async () => {
     // Session retirement (`workspaceRegistry.invalidateSession`) increments
     // the generation and tears the workspace down while an in-flight run may
-    // still hold the lazy handle. That run's next sandbox operation re-enters
-    // materialization, which ends at the generation check — the retired
-    // checkout is never handed back, and the run gets a clear retirement
-    // error instead of wedging on `spawn /bin/sh ENOENT`.
+    // still hold the workspace. That run's next sandbox operation lazily
+    // starts the sandbox, whose onStart hook ends at the generation check —
+    // the retired checkout is never set up, and the run gets a clear
+    // retirement error instead of wedging on `spawn /bin/sh ENOENT`.
     const registry = new FactoryWorkspaceRegistry();
     const { workspace } = await createLocalFactory('mastracode-web-local-retired-run-', registry);
     addProject();
     addSession({ id: 'session-a' });
 
     const resolved = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+    const first = await mocks.createSandbox.mock.results[0]!.value;
     await registry.invalidateSession('session-a');
-
-    await expect((resolved as any).sandbox.executeCommand('echo', ['hi'])).rejects.toThrow(
-      'retired during workspace materialization',
-    );
-    // The single provision/materialization happened before retirement (the
-    // eager helper materializes at resolution). Re-entering materialization
-    // after retirement bails at the generation check before provisioning, so
-    // no fleet slot is consumed and the checkout is never recreated — even
+    // The retirement service stops the session's VM. The held workspace's
+    // next command lazily restarts it, and the onStart hook bails at the
+    // generation check — setup never re-runs for the retired session, even
     // across repeated operations on the held handle.
-    expect(mocks.ensureSandbox).toHaveBeenCalledTimes(1);
+    first.status = 'stopped';
+
+    await expect((resolved as any).sandbox.executeCommand('echo', ['hi'])).rejects.toThrow(
+      'retired during workspace materialization',
+    );
+    expect(mocks.createSandbox).toHaveBeenCalledTimes(1);
     expect(mocks.materializeRepo).toHaveBeenCalledTimes(1);
     await expect((resolved as any).sandbox.executeCommand('echo', ['hi'])).rejects.toThrow(
       'retired during workspace materialization',
     );
-    expect(mocks.ensureSandbox).toHaveBeenCalledTimes(1);
+    expect(mocks.createSandbox).toHaveBeenCalledTimes(1);
     expect(mocks.materializeRepo).toHaveBeenCalledTimes(1);
-  });
-
-  it('revives and replays when the exec transport never opened (command provably never started)', async () => {
-    // `opened: false` means the WebSocket upgrade was refused outright, so
-    // the command never reached the sandbox — safe to revive and replay.
-    const { workspace } = await createLocalFactory();
-    addProject();
-    addSession({ id: 'session-a' });
-
-    const resolved = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
-    const first = await mocks.ensureSandbox.mock.results[0]!.value;
-    const transport = Object.assign(new Error('exec transport failed'), { opened: false });
-    transport.name = 'SandboxExecTransportError';
-    first.executeCommand.mockRejectedValueOnce(transport);
-
-    const result = await (resolved as any).sandbox.executeCommand('echo', ['hi']);
-
-    expect(result.exitCode).toBe(0);
-    expect(mocks.ensureSandbox).toHaveBeenCalledTimes(2);
   });
 
   it('surfaces a transport error whose command may have started instead of replaying it', async () => {
@@ -964,17 +864,17 @@ describe('GitHub session workspace preparation', () => {
     addSession({ id: 'session-a' });
 
     const resolved = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
-    const first = await mocks.ensureSandbox.mock.results[0]!.value;
+    const first = await mocks.createSandbox.mock.results[0]!.value;
     const transport = Object.assign(new Error('exec transport failed'), { opened: true });
     transport.name = 'SandboxExecTransportError';
     first.executeCommand.mockRejectedValueOnce(transport);
 
     await expect((resolved as any).sandbox.executeCommand('git', ['commit'])).rejects.toThrow('exec transport failed');
-    expect(mocks.ensureSandbox).toHaveBeenCalledTimes(1);
+    expect(mocks.createSandbox).toHaveBeenCalledTimes(1);
   });
 
   it('returns an existing workspace immediately while its materialization is still in flight', async () => {
-    // The first session-start request can launch a slow warm-up. A second
+    // A first sandbox operation can hold the materialization gate open. A
     // metadata-only resolution (/threads, /messages, activity) must get the
     // same workspace back without waiting on the clone/setup gate.
     const { resolver } = await createLocalFactory();
@@ -1002,58 +902,42 @@ describe('GitHub session workspace preparation', () => {
     const { root, workspace } = await createLocalFactory();
     addProject();
     addSession({ id: 'session-a' });
-    await fs.mkdir(path.join(root, 'github-sessions', 'octocat', 'hello', 'session-a'), { recursive: true });
+    await fs.mkdir(path.join(root, 'session-a', 'hello'), { recursive: true });
 
     const resolved = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
-    const first = await mocks.ensureSandbox.mock.results[0]!.value;
+    const first = await mocks.createSandbox.mock.results[0]!.value;
     first.executeCommand.mockRejectedValueOnce(
       Object.assign(new Error('spawn nope ENOENT'), { code: 'ENOENT', syscall: 'spawn nope', path: 'nope' }),
     );
 
     await expect((resolved as any).sandbox.executeCommand('nope')).rejects.toThrow('ENOENT');
-    expect(mocks.ensureSandbox).toHaveBeenCalledTimes(1);
+    expect(mocks.createSandbox).toHaveBeenCalledTimes(1);
   });
 
-  it('does not provision the sandbox for metadata-only resolution or workspace init', async () => {
+  it('does not provision the sandbox for metadata-only resolution', async () => {
     // Metadata GET routes (/threads, /messages) get-or-create the controller
-    // session, which resolves the workspace and awaits `workspace.init()` —
-    // and `init()` calls `sandbox.start()`. Neither step may provision; only
-    // a real sandbox operation materializes.
+    // session, which resolves the workspace. Nothing on that path starts the
+    // sandbox (the agent controller stopped calling `workspace.init()` at
+    // session create); only a real sandbox operation provisions, via the
+    // provider's own `ensureRunning()`.
     const { resolver } = await createLocalFactory();
     addProject();
     addSession({ id: 'session-a' });
-    // Keep background warm-up from settling until after start() is asserted.
-    // Without this gate the test only passes because materialization still
-    // needs several more microtask turns after one await.
-    let releaseToken: (() => void) | undefined;
-    const tokenGate = new Promise<void>(resolve => {
-      releaseToken = resolve;
-    });
-    mocks.getRepositoryAccess.mockImplementation(async ({ repositoryId }: { repositoryId: string }) => {
-      await tokenGate;
-      return {
-        cloneUrl: 'https://github.com/octocat/hello.git',
-        authorization: { scheme: 'bearer' as const, token: `repo-token-${repositoryId}` },
-      };
-    });
 
-    try {
-      const resolved = await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
-      await (resolved as any).sandbox.start();
+    const resolved = await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
 
-      expect(mocks.ensureSandbox).not.toHaveBeenCalled();
-      expect(mocks.materializeRepo).not.toHaveBeenCalled();
+    // Resolution is fully lazy: it constructs the instance (cheap,
+    // side-effect-free by contract) to derive the workdir, but nothing may
+    // START it no matter how many microtask turns have elapsed.
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(mocks.createSandbox).toHaveBeenCalledTimes(1);
+    const constructed = await mocks.createSandbox.mock.results[0]!.value;
+    expect(constructed.start).not.toHaveBeenCalled();
+    expect(mocks.materializeRepo).not.toHaveBeenCalled();
 
-      releaseToken?.();
-      await (resolved as any).sandbox.getInfo();
-      expect(mocks.ensureSandbox).toHaveBeenCalledTimes(1);
-    } finally {
-      releaseToken?.();
-      mocks.getRepositoryAccess.mockImplementation(async ({ repositoryId }: { repositoryId: string }) => ({
-        cloneUrl: 'https://github.com/octocat/hello.git',
-        authorization: { scheme: 'bearer' as const, token: `repo-token-${repositoryId}` },
-      }));
-    }
+    await (resolved as any).sandbox.getInfo();
+    expect(constructed.start).toHaveBeenCalled();
+    expect(mocks.createSandbox).toHaveBeenCalledTimes(1);
   });
 
   it('surfaces ordinary command failures without reviving the sandbox', async () => {
@@ -1062,11 +946,11 @@ describe('GitHub session workspace preparation', () => {
     addSession({ id: 'session-a' });
 
     const resolved = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
-    const first = await mocks.ensureSandbox.mock.results[0]!.value;
+    const first = await mocks.createSandbox.mock.results[0]!.value;
     first.executeCommand.mockRejectedValueOnce(new Error('command exited 1'));
 
     await expect((resolved as any).sandbox.executeCommand('false')).rejects.toThrow('command exited 1');
-    expect(mocks.ensureSandbox).toHaveBeenCalledTimes(1);
+    expect(mocks.createSandbox).toHaveBeenCalledTimes(1);
   });
 
   it('does not retry materialization for non git-missing failures', async () => {
@@ -1081,10 +965,10 @@ describe('GitHub session workspace preparation', () => {
       workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') }),
     ).rejects.toMatchObject({ code: 'clone-failed' });
 
-    expect(mocks.ensureSandbox).toHaveBeenCalledTimes(1);
+    expect(mocks.createSandbox).toHaveBeenCalledTimes(1);
     expect(mocks.materializeRepo).toHaveBeenCalledTimes(1);
-    // The sandbox itself is healthy — keep the binding for reattach.
-    expect(mocks.sessions.find(session => session.id === 'session-a')?.sandboxId).toBe('sandbox-1');
+    // No teardown ladder anymore: the failure surfaced without retrying.
+    expect(mocks.checkoutSessionBranch).not.toHaveBeenCalled();
   });
 
   it('deduplicates concurrent materializations of the same session workspace', async () => {
@@ -1101,21 +985,17 @@ describe('GitHub session workspace preparation', () => {
     ]);
 
     expect(second).toBe(first);
-    expect(mocks.ensureSandbox).toHaveBeenCalledTimes(1);
+    expect(mocks.createSandbox).toHaveBeenCalledTimes(1);
     expect(mocks.materializeRepo).toHaveBeenCalledTimes(1);
     expect(mocks.checkoutSessionBranch).toHaveBeenCalledTimes(1);
   });
 
   function createRemoteFactory() {
-    // Any non-LocalSandbox machine makes the factory take the remote path.
-    const machine = { provider: 'railway' } as any;
-    const fleet = new SandboxFleet({ machine, workdirBase: '/workspace' });
-    (fleet as any).ensureSandbox = mocks.ensureSandbox;
+    // No localRoot: the factory takes the remote path (in-VM workdirs).
     return eager(
       createWorkspaceFactory({
-        sandbox: { machine, workdir: '/workspace' },
+        sandbox: mocks.createSandbox as any,
         github: fakeGithubIntegration() as any,
-        fleet,
         workItems: { findRunBindingBySession: mocks.findRunBindingBySession } as any,
       }),
     );
@@ -1134,73 +1014,42 @@ describe('GitHub session workspace preparation', () => {
       workspace({ requestContext: createGithubRequestContext('project-1', 'channel:slack:C-1:1700.42') }),
     ).resolves.toBeUndefined();
 
-    expect(mocks.ensureSandbox).not.toHaveBeenCalled();
+    expect(mocks.createSandbox).not.toHaveBeenCalled();
     expect(mocks.materializeRepo).not.toHaveBeenCalled();
   });
 
-  it('claims a pooled sandbox for a new remote session instead of provisioning fresh', async () => {
+  // The cross-session sandbox pool died with the fleet: sandbox identity is
+  // the session id, so there is nothing to claim or release. A remote session
+  // constructs its own sandbox through the callback.
+  it('constructs a remote session sandbox keyed by the session id', async () => {
     const workspace = createRemoteFactory();
     addProject({ sandboxProvider: 'railway' });
     addSession({ id: 'session-a' });
-    // Released by a different user: the pool is per-repository, and pooled
-    // VMs carry no credentials, so cross-user claims are expected.
-    mocks.pooledSandboxes.push({
-      projectRepositoryId: 'project-1',
-      userId: 'user-2',
-      sandboxId: 'sb-pooled',
-      sandboxWorkdir: '/workspace/pooled/hello',
-    });
 
     await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
 
-    // The binding already carried the pooled id, so ensureSandbox reattaches
-    // rather than provisioning (the mock only assigns a fresh id when empty).
-    const binding = mocks.ensureSandbox.mock.calls[0]![0] as { sandboxId: string | null };
-    expect(binding.sandboxId).toBe('sb-pooled');
-    const session = mocks.sessions.find(row => row.id === 'session-a')!;
-    expect(session.sandboxId).toBe('sb-pooled');
-    expect(session.sandboxWorkdir).toBe('/workspace/pooled/hello');
-    expect(mocks.pooledSandboxes).toHaveLength(0);
-    // The previous session's checkout gets reset before materialize/checkout.
-    expect(mocks.recycleClaimedWorkdir).toHaveBeenCalledWith(expect.any(Object), '/workspace/pooled/hello', 'main');
+    expect(mocks.createSandbox).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 'session-a',
+        repoFullName: 'octocat/hello',
+        actingUserId: 'user-1',
+      }),
+    );
+    // The workdir came from the live VM's probed home, never a persisted row.
     expect(mocks.materializeRepo).toHaveBeenCalledWith(
-      expect.objectContaining({ row: expect.objectContaining({ sandboxWorkdir: '/workspace/pooled/hello' }) }),
+      expect.objectContaining({ row: expect.objectContaining({ sandboxWorkdir: '/home/user/hello' }) }),
     );
   });
 
-  it('provisions fresh when the pool has no sandbox for this repository link', async () => {
+  it('never threads a persisted sha into the sandbox callback', async () => {
     const workspace = createRemoteFactory();
     addProject({ sandboxProvider: 'railway' });
     addSession({ id: 'session-a' });
-    mocks.pooledSandboxes.push({
-      projectRepositoryId: 'project-other',
-      userId: 'user-1',
-      sandboxId: 'sb-other',
-      sandboxWorkdir: '/workspace/other',
-    });
 
     await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
 
-    expect(mocks.sessions.find(row => row.id === 'session-a')?.sandboxId).toBe('sandbox-1');
-    expect(mocks.recycleClaimedWorkdir).not.toHaveBeenCalled();
-    expect(mocks.pooledSandboxes).toHaveLength(1);
-  });
-
-  it('never claims pooled sandboxes for local sandbox sessions', async () => {
-    const { workspace } = await createLocalFactory();
-    addProject();
-    addSession({ id: 'session-a' });
-    mocks.pooledSandboxes.push({
-      projectRepositoryId: 'project-1',
-      userId: 'user-1',
-      sandboxId: 'sb-pooled',
-      sandboxWorkdir: '/workspace/pooled/hello',
-    });
-
-    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
-
-    expect(mocks.pooledSandboxes).toHaveLength(1);
-    expect(mocks.recycleClaimedWorkdir).not.toHaveBeenCalled();
+    const ctx = mocks.createSandbox.mock.calls[0]![0] as Record<string, unknown>;
+    expect('repoSha' in ctx).toBe(false);
   });
 
   it('uses repository-scoped access when materializing a Factory session', async () => {
@@ -1224,12 +1073,8 @@ describe('GitHub session workspace preparation', () => {
     await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
 
     // gh CLI env gets the PAT…
-    expect(mocks.ensureSandbox).toHaveBeenCalledWith(
-      expect.any(Object),
-      { GH_TOKEN: 'ghp_org_pat' },
-      undefined,
-      expect.objectContaining({ actingUserId: 'user-1' }),
-    );
+    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_org_pat');
+    expect(mocks.createSandbox).toHaveBeenCalledWith(expect.objectContaining({ actingUserId: 'user-1' }));
     // …but git materialization keeps the installation-scoped token.
     expect(mocks.materializeRepo).toHaveBeenCalledWith(expect.objectContaining({ token: 'repo-token-repository-1' }));
   });
@@ -1244,12 +1089,7 @@ describe('GitHub session workspace preparation', () => {
 
     await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
 
-    expect(mocks.ensureSandbox).toHaveBeenCalledWith(
-      expect.any(Object),
-      { GH_TOKEN: 'ghp_reviewer' },
-      undefined,
-      expect.any(Object),
-    );
+    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_reviewer');
   });
 
   it('switches a cached workspace to the reviewer PAT when the review binding appears after materialization', async () => {
@@ -1260,12 +1100,7 @@ describe('GitHub session workspace preparation', () => {
     addSession({ id: 'session-a' });
 
     await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
-    expect(mocks.ensureSandbox).toHaveBeenCalledWith(
-      expect.any(Object),
-      { GH_TOKEN: 'ghp_worker' },
-      undefined,
-      expect.any(Object),
-    );
+    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_worker');
 
     // StartCoordinator creates the session before prepareRunStart creates its
     // review binding, so the first request can cache the worker PAT selection.
@@ -1289,12 +1124,7 @@ describe('GitHub session workspace preparation', () => {
     const reviewerContext = createGithubRequestContext('project-1', 'session-a');
 
     await workspace({ requestContext: reviewerContext });
-    expect(mocks.ensureSandbox).toHaveBeenCalledWith(
-      expect.any(Object),
-      { GH_TOKEN: 'ghp_reviewer' },
-      undefined,
-      expect.any(Object),
-    );
+    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_reviewer');
 
     mocks.runBindingRole = 'work';
     mocks.setEnvironmentVariable.mockClear();
@@ -1467,7 +1297,7 @@ describe('GitHub session workspace preparation', () => {
       mastra: mastra as any,
     });
 
-    expect(mocks.ensureSandbox).toHaveBeenCalledTimes(1);
+    expect(mocks.createSandbox).toHaveBeenCalledTimes(1);
     expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_reviewer');
   });
 
@@ -1480,12 +1310,7 @@ describe('GitHub session workspace preparation', () => {
 
     await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
 
-    expect(mocks.ensureSandbox).toHaveBeenCalledWith(
-      expect.any(Object),
-      { GH_TOKEN: 'ghp_worker' },
-      undefined,
-      expect.any(Object),
-    );
+    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_worker');
   });
 
   it('keeps the worker PAT for non-review sessions even when a reviewer token exists', async () => {
@@ -1498,12 +1323,7 @@ describe('GitHub session workspace preparation', () => {
 
     await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
 
-    expect(mocks.ensureSandbox).toHaveBeenCalledWith(
-      expect.any(Object),
-      { GH_TOKEN: 'ghp_worker' },
-      undefined,
-      expect.any(Object),
-    );
+    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_worker');
   });
 
   it('keeps the worker PAT when only a revoked review binding remains', async () => {
@@ -1517,12 +1337,7 @@ describe('GitHub session workspace preparation', () => {
 
     await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
 
-    expect(mocks.ensureSandbox).toHaveBeenCalledWith(
-      expect.any(Object),
-      { GH_TOKEN: 'ghp_worker' },
-      undefined,
-      expect.any(Object),
-    );
+    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_worker');
   });
 
   it('registers a runtime injector for refreshing GH_TOKEN in the active sandbox', async () => {
@@ -1558,7 +1373,9 @@ describe('GitHub session workspace preparation', () => {
     addProject();
     addSession({ id: 'session-a' });
     await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
-    expect(mocks.setEnvironmentVariable).not.toHaveBeenCalled();
+    // Initial injection carries the repo-scoped token (no PAT configured yet).
+    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'repo-token-repository-1');
+    mocks.setEnvironmentVariable.mockClear();
 
     // The org pastes a PAT in Settings while the sandbox is already running —
     // it must take effect without a server restart.
@@ -1600,7 +1417,9 @@ describe('GitHub session workspace preparation', () => {
 
     expect(result).toBe(existing);
     expect(existing.setToolsConfig).toHaveBeenCalled();
-    expect(mocks.ensureSandbox).not.toHaveBeenCalled();
+    // Resolution constructs (memoized, never started); reuse must not provision.
+    const constructed = await mocks.createSandbox.mock.results[0]!.value;
+    expect(constructed.start).not.toHaveBeenCalled();
     expect(mocks.materializeRepo).not.toHaveBeenCalled();
   });
 
@@ -1686,28 +1505,46 @@ describe('GitHub session workspace preparation', () => {
     expect(result).toBe(existing);
   });
 
-  it('keeps ordinary local-folder projects on the dynamic workspace resolver', async () => {
-    const { workspace } = await createLocalFactory();
+  // Amendment 7 (user-directed): workspaces come ONLY from the sandbox
+  // callback. Session-less requests (local-folder projects, unscoped
+  // project-level requests) get no workspace at all; the old host
+  // getDynamicWorkspace fallback is gone. Host-cwd behavior is opt-in via a
+  // LocalSandbox callback.
+  it('serves no workspace for session-less local-folder requests when a sandbox is configured', async () => {
+    const { resolver } = await createLocalFactory();
     const projectPath = await fs.mkdtemp(path.join(os.tmpdir(), 'mastracode-web-local-folder-'));
     tempDirs.push(projectPath);
 
-    const result = await workspace({ requestContext: createRequestContext(projectPath) });
+    const result = await resolver({ requestContext: createRequestContext(projectPath) });
 
-    expect(result.id).toBe(`mastra-code-workspace-${projectPath}-web-factory`);
-    expect(mocks.ensureSandbox).not.toHaveBeenCalled();
+    expect(result).toBeUndefined();
+    expect(mocks.createSandbox).not.toHaveBeenCalled();
   });
 
-  it('does not require a GitHub session scope for unscoped project-level requests', async () => {
-    const { workspace } = await createLocalFactory();
+  it('serves no workspace for unscoped project-level requests when a sandbox is configured', async () => {
+    const { resolver } = await createLocalFactory();
     addProject();
     const projectPath = await fs.mkdtemp(path.join(os.tmpdir(), 'mastracode-web-unscoped-github-'));
     tempDirs.push(projectPath);
 
-    const result = await workspace({ requestContext: createUnscopedGithubRequestContext('project-1', projectPath) });
+    const result = await resolver({ requestContext: createUnscopedGithubRequestContext('project-1', projectPath) });
 
-    expect(result.id).toBe(`mastra-code-workspace-${projectPath}-web-factory`);
-    expect(mocks.ensureSandbox).not.toHaveBeenCalled();
+    expect(result).toBeUndefined();
+    expect(mocks.createSandbox).not.toHaveBeenCalled();
     expect(mocks.materializeRepo).not.toHaveBeenCalled();
+  });
+
+  it('serves no host workspace even on deploys with no sandbox config', async () => {
+    const resolver = createWorkspaceFactory({
+      github: fakeGithubIntegration() as any,
+      workItems: { findRunBindingBySession: mocks.findRunBindingBySession } as any,
+    });
+    const projectPath = await fs.mkdtemp(path.join(os.tmpdir(), 'mastracode-web-no-sandbox-'));
+    tempDirs.push(projectPath);
+
+    const result = await resolver({ requestContext: createRequestContext(projectPath) });
+
+    expect(result).toBeUndefined();
   });
 
   // The factory used to construct a Workspace and return it without ever
@@ -1786,7 +1623,7 @@ describe('GitHub session workspace preparation', () => {
       expect(second).toBe(first);
       expect(mastra.addWorkspace).toHaveBeenCalledTimes(1);
       // Reuse path found the existing workspace instead of re-provisioning.
-      expect(mocks.ensureSandbox).toHaveBeenCalledTimes(1);
+      expect(mocks.createSandbox).toHaveBeenCalledTimes(1);
       expect(mocks.materializeRepo).toHaveBeenCalledTimes(1);
     });
 
@@ -1808,8 +1645,8 @@ describe('GitHub session workspace preparation', () => {
       });
 
       expect(mastra.removeWorkspace).toHaveBeenCalledWith('mfw-project-1-session-a-web-factory');
-      expect(mocks.ensureSandbox).toHaveBeenCalledTimes(2);
-      expect(mocks.runWorktreeSetup).toHaveBeenCalledTimes(2);
+      expect(mocks.createSandbox).toHaveBeenCalledTimes(2);
+      expect(mocks.runSetupCommand).toHaveBeenCalledTimes(2);
     });
 
     it('registers exactly one workspace under inflight materialization coalescing', async () => {
@@ -1837,10 +1674,14 @@ describe('GitHub session workspace preparation', () => {
       expect(mastra.workspaces.size).toBe(1);
     });
 
-    it('does not register a workspace that finishes materializing after session retirement', async () => {
+    it('registers no credentials when the session retires mid-setup', async () => {
+      // Retirement during an in-flight start: the onStart hook re-checks the
+      // generation after setup completes, so a retired session's start
+      // rejects and no token injector is registered for a workspace whose
+      // retirement teardown has already run. The VM itself is left to the
+      // provider's idle timeout (accepted).
       const registry = new FactoryWorkspaceRegistry();
-      const { workspace, fleet } = await createLocalFactory('mastracode-web-local-retire-race-', registry);
-      const teardownSandbox = vi.spyOn(fleet, 'teardownSandbox').mockResolvedValue(undefined);
+      const { resolver } = await createLocalFactory('mastracode-web-local-retire-race-', registry);
       addProject();
       addSession({ id: 'session-a' });
       const mastra = createMastraStub();
@@ -1849,24 +1690,22 @@ describe('GitHub session workspace preparation', () => {
         () => new Promise<void>(resolve => (finishMaterialization = resolve)),
       );
 
-      const opening = workspace({
+      const resolved = await resolver({
         requestContext: createGithubRequestContext('project-1', 'session-a'),
         mastra: mastra as any,
       });
+      const command = (resolved as any).sandbox.executeCommand('echo', ['hi']);
+      command.catch(() => {});
       await vi.waitFor(() => expect(mocks.materializeRepo).toHaveBeenCalledOnce());
       await registry.invalidateSession('session-a');
       finishMaterialization();
 
-      await expect(opening).rejects.toThrow('retired during workspace materialization');
+      await expect(command).rejects.toThrow('retired during workspace materialization');
+      // Retirement already deregistered the workspace; the failed start must
+      // not have re-registered anything.
       expect(mastra.removeWorkspace).toHaveBeenCalledWith('mfw-project-1-session-a-web-factory');
       expect(mastra.workspaces.size).toBe(0);
-      // Retirement mid-materialization must not leave a live sandbox binding
-      // behind: the just-built sandbox is torn down (releasing the binding
-      // and any fleet budget slot) before the error is surfaced, and no
-      // second provision is attempted.
-      expect(teardownSandbox).toHaveBeenCalledTimes(1);
-      expect(teardownSandbox).toHaveBeenCalledWith(expect.anything(), await mocks.ensureSandbox.mock.results[0]!.value);
-      expect(mocks.ensureSandbox).toHaveBeenCalledTimes(1);
+      expect(mocks.createSandbox).toHaveBeenCalledTimes(1);
       expect(mocks.materializeRepo).toHaveBeenCalledTimes(1);
     });
   });

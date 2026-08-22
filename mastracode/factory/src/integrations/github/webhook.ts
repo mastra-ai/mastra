@@ -356,7 +356,6 @@ async function resolveSubscriptionSession(
     const tags = {
       factoryProjectId: resourceId,
       projectRepositoryId: subscription.data.projectRepositoryId,
-      ...(scope ? { worktreePath: scope } : {}),
     };
     // Creating the session resolves its workspace, which authorizes the caller
     // against the Factory session row — no signed-in user, so run as its owner.

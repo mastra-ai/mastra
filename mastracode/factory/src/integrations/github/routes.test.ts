@@ -5,8 +5,9 @@ import type { ListIntakeIssuesInput } from '../../capabilities/intake.js';
 import type { CreatePullRequestInput, ListPullRequestsInput } from '../../capabilities/version-control.js';
 import type { RouteAuth } from '../../routes/route.js';
 import { mountApiRoutes } from '../../routes/test-utils.js';
-import type { SandboxFleet } from '../../sandbox/fleet.js';
+
 import { SessionRetirementCoordinator } from '../../sandbox/session-retirement.js';
+import { __clearSessionSandboxesForTests, getSessionSandbox } from '../../sandbox/session-sandbox.js';
 
 // ── Mocks ────────────────────────────────────────────────────────────────
 // Mock drizzle's `eq`/`and` so the fake DB below can honour `where` predicates.
@@ -107,7 +108,6 @@ function projectRepositoryRow(row: Record<string, any>) {
     sandboxProvider: row.sandboxProvider ?? 'railway',
     sandboxWorkdir: row.sandboxWorkdir,
     setupCommand: row.setupCommand ?? null,
-    baseCheckpoint: row.baseCheckpoint ?? null,
     teardownCommand: row.teardownCommand ?? null,
     createdAt: now,
     updatedAt: now,
@@ -397,6 +397,7 @@ const stateSigner = {
 const ensureProjectSandbox = vi.fn(
   async (opts: {
     row: any;
+    repoFullName?: string;
     storage: SourceControlStorageInMemory['sandboxes'];
     token: string;
     onProgress?: (e: any) => void;
@@ -406,43 +407,31 @@ const ensureProjectSandbox = vi.fn(
     await opts.storage.setSandboxId({ id: opts.row.id, sandboxId: 'sb' });
     opts.onProgress?.({ phase: 'provisioning', message: 'Provisioning a new sandbox…' });
     return {
-      id: 'sb',
-      ...(freshProvision && opts.seedCheckpointName ? { seedCheckpointNameUsed: opts.seedCheckpointName } : {}),
+      sandbox: {
+        id: 'sb',
+        ...(freshProvision && opts.seedCheckpointName ? { seedCheckpointNameUsed: opts.seedCheckpointName } : {}),
+      },
+      workdir: `/workspace/${opts.repoFullName ?? 'octo/hello'}`,
     };
   },
 );
 const materializeRepo = vi.fn(
-  async (opts: { onProgress?: (e: any) => void; skipPullOnExistingCheckout?: boolean }) => {
+  async (opts: { onProgress?: (e: any) => void }) => {
     opts.onProgress?.({ phase: 'cloning', message: 'Cloning octo/hello…' });
   },
 );
 const reattachSandbox = vi.fn(async (_id: string, _options?: { actingUserId?: string }) => ({ id: 'sb' }));
-const recycleClaimedWorkdir = vi.fn(async (_sb: any, _workdir: string, _defaultBranch: string) => {});
-const ensureWorktree = vi.fn(async (_sb: any, _workdir: string, opts: { branch: string; baseBranch: string }) => ({
-  worktreePath: `/workspace/hello/../worktrees/${opts.branch}`,
-  branch: opts.branch,
-  baseBranch: opts.baseBranch,
-}));
-const removeWorktree = vi.fn(async (_sb: any, _workdir: string, _opts: { branch: string; worktreePath: string }) => {});
-const runWorktreeSetup = vi.fn(async (_sb: any, _worktreePath: string, _command: string) => {});
-const runWorktreeTeardown = vi.fn(async (_sb: any, _worktreePath: string, _command: string) => {});
+const runSetupCommand = vi.fn(async (_sb: any, _worktreePath: string, _command: string) => {});
+const runTeardownCommand = vi.fn(async (_sb: any, _worktreePath: string, _command: string) => {});
 const commitAll = vi.fn(async () => ({ committed: true }));
 const pushBranch = vi.fn(async () => {});
+const teardownProjectSandbox = vi.fn(async (_opts: { row: { id: string } }) => {});
 const createPullRequest = vi.fn(async (_input: CreatePullRequestInput) => ({
   url: 'https://github.com/octo/hello/pull/1',
 }));
 let sandboxEnabled = true;
-/** DI-injected fleet stub — routes read `enabled`/`provider`/`computeWorkdir`/`reattachSandbox`. */
-const fleet = {
-  get enabled() {
-    return sandboxEnabled;
-  },
-  get provider() {
-    return sandboxEnabled ? 'railway' : 'none';
-  },
-  computeWorkdir: (repo: string) => `/workspace/${repo.split('/').pop()}`,
-  reattachSandbox: (id: string, options?: { actingUserId?: string }) => reattachSandbox(id, options),
-} as unknown as SandboxFleet;
+/** DI-injected sandbox callback stub — presence signals "configured". */
+const sandboxCallback = ((ctx: { sessionId: string }) => ({ id: `sbx-${ctx.sessionId}` })) as any;
 vi.mock('./sandbox', () => {
   class MaterializeError extends Error {
     code: string;
@@ -451,7 +440,7 @@ vi.mock('./sandbox', () => {
       this.code = code;
     }
   }
-  class WorktreeError extends Error {
+  class SetupCommandError extends Error {
     code: string;
     constructor(m: string, code: string) {
       super(m);
@@ -460,25 +449,21 @@ vi.mock('./sandbox', () => {
   }
   return {
     DEFAULT_COMMAND_TIMEOUT_MS: 15 * 60_000,
-    computeWorktreePath: (repoWorkdir: string, branch: string) =>
-      `${repoWorkdir.replace(/\/+$/, '').split('/').slice(0, -1).join('/')}/worktrees/${branch.replace('/', '-')}-aeab418d`,
     ensureProjectSandbox: (opts: any) => ensureProjectSandbox(opts),
     materializeRepo: (opts: any) => materializeRepo(opts),
-    ensureWorktree: (sb: any, workdir: string, opts: any) => ensureWorktree(sb, workdir, opts),
-    removeWorktree: (sb: any, workdir: string, opts: any) => removeWorktree(sb, workdir, opts),
-    runWorktreeSetup: (sb: any, worktreePath: string, command: string) => runWorktreeSetup(sb, worktreePath, command),
-    runWorktreeTeardown: (sb: any, worktreePath: string, command: string, options?: { timeoutMs?: number }) =>
-      runWorktreeTeardown(sb, worktreePath, command, options),
-    recycleClaimedWorkdir: (sb: any, workdir: string, defaultBranch: string) =>
-      recycleClaimedWorkdir(sb, workdir, defaultBranch),
+    runSetupCommand: (sb: any, worktreePath: string, command: string) => runSetupCommand(sb, worktreePath, command),
+    runTeardownCommand: (sb: any, worktreePath: string, command: string, options?: { timeoutMs?: number }) =>
+      runTeardownCommand(sb, worktreePath, command, options),
     commitAll: (...args: any[]) => commitAll(...(args as [])),
     pushBranch: (...args: any[]) => pushBranch(...(args as [])),
+    teardownProjectSandbox: (opts: any) => teardownProjectSandbox(opts),
+    projectSandboxKey: (row: { id: string }) => `project-${row.id}`,
     createPullRequest: (input: any) => createPullRequest(input),
     // Match the real ref validator closely enough for route tests.
     isValidGitRef: (v: unknown): v is string =>
       typeof v === 'string' && v.length > 0 && v.length <= 255 && /^[A-Za-z0-9_./-]+$/.test(v),
     MaterializeError,
-    WorktreeError,
+    SetupCommandError,
   };
 });
 
@@ -628,7 +613,7 @@ function buildApp(
       baseUrl: 'http://localhost:4111',
       github: githubStub as any,
       auth: testAuth,
-      fleet,
+      sandbox: sandboxEnabled ? sandboxCallback : undefined,
       stateSigner: signerOverride === null ? undefined : (signerOverride ?? stateSigner),
       emitAudit: async ({ context, input }) => {
         try {
@@ -686,13 +671,11 @@ beforeEach(() => {
   ensureProjectSandbox.mockClear();
   materializeRepo.mockClear();
   reattachSandbox.mockClear();
-  recycleClaimedWorkdir.mockClear();
-  ensureWorktree.mockClear();
-  removeWorktree.mockClear();
-  runWorktreeSetup.mockClear();
-  runWorktreeTeardown.mockClear();
+  runSetupCommand.mockClear();
+  runTeardownCommand.mockClear();
   commitAll.mockClear();
   pushBranch.mockClear();
+  teardownProjectSandbox.mockClear();
   createPullRequest.mockClear();
   addIssueLabels.mockClear();
   removeIssueLabel.mockClear();
@@ -702,6 +685,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  __clearSessionSandboxesForTests();
   delete process.env.GITHUB_APP_WEBHOOK_SECRET;
   vi.clearAllMocks();
 });
@@ -1290,7 +1274,10 @@ describe('ensure (materialize)', () => {
     expect((await res.json()).error).toBe('sandbox_not_configured');
   });
 
-  it('provisions + materializes and returns a resourceId', async () => {
+  it('returns metadata WITHOUT provisioning anything or touching sandbox state', async () => {
+    // /ensure is a metadata handshake: opening a thread in the UI must never
+    // start a VM. No sandbox construction, no repo materialization, no token
+    // mint — the session sandbox boots lazily at the first real command.
     tables.projectRepositories.push(
       projectRepositoryRow({
         id: 'p1',
@@ -1308,28 +1295,18 @@ describe('ensure (materialize)', () => {
       resourceId: 'factory-p1',
       factoryProjectId: 'factory-p1',
       projectRepositoryId: 'p1',
+      sandboxId: '',
+      sandboxWorkdir: '',
     });
-    expect(ensureProjectSandbox).toHaveBeenCalledOnce();
-    expect(ensureProjectSandbox).toHaveBeenCalledWith(
-      expect.objectContaining({ token: 'repo-token-repository-octo/hello' }),
-    );
-    expect(githubStub.versionControl.getRepositoryAccess).toHaveBeenCalledWith({
-      orgId: 'org1',
-      repositoryId: 'repository-octo/hello',
-    });
+    expect(ensureProjectSandbox).not.toHaveBeenCalled();
+    expect(materializeRepo).not.toHaveBeenCalled();
+    expect(githubStub.versionControl.getRepositoryAccess).not.toHaveBeenCalled();
     expect(githubStub.mintInstallationToken).not.toHaveBeenCalled();
-    expect(materializeRepo).toHaveBeenCalledOnce();
-    expect(materializeRepo).toHaveBeenCalledWith(
-      expect.objectContaining({ token: 'repo-token-repository-octo/hello' }),
-    );
-    // A per-user sandbox binding row was created for the caller.
-    expect(tables.sandboxes).toHaveLength(1);
-    expect(tables.sandboxes[0]).toMatchObject({ projectRepositoryId: 'p1', userId: 'u1' });
-    // No base checkpoint on this repo → no seed name is passed.
-    expect(ensureProjectSandbox.mock.calls[0]![0].seedCheckpointName).toBeUndefined();
+    // No per-user binding row either — /ensure touches no sandbox state at all.
+    expect(tables.sandboxes).toHaveLength(0);
   });
 
-  it('seeds provisioning from the repo base checkpoint when one exists', async () => {
+  it('never provisions even when the row carries stale workdir state', async () => {
     tables.projectRepositories.push(
       projectRepositoryRow({
         id: 'p1',
@@ -1338,65 +1315,15 @@ describe('ensure (materialize)', () => {
         installationId: 7,
         repoFullName: 'octo/hello',
         defaultBranch: 'main',
-        sandboxWorkdir: '/workspace/hello',
-        baseCheckpoint: { name: 'repo-p1', sha: 'abc123', builtAt: new Date(), setupCommandHash: null },
+        sandboxWorkdir: '/stale/should-not-be-read',
       }),
     );
     const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/ensure', { method: 'POST' });
     expect(res.status).toBe(200);
-    expect(ensureProjectSandbox).toHaveBeenCalledOnce();
-    expect(ensureProjectSandbox).toHaveBeenCalledWith(expect.objectContaining({ seedCheckpointName: 'repo-p1' }));
-    expect(materializeRepo).toHaveBeenCalledWith(
-      expect.objectContaining({ skipPullOnExistingCheckout: true }),
-    );
-  });
-
-  it('does not skip the pull when the provider restores the primary session checkpoint', async () => {
-    tables.projectRepositories.push(
-      projectRepositoryRow({
-        id: 'p1',
-        orgId: 'org1',
-        userId: 'u1',
-        installationId: 7,
-        repoFullName: 'octo/hello',
-        defaultBranch: 'main',
-        sandboxWorkdir: '/workspace/hello',
-        baseCheckpoint: { name: 'repo-p1', sha: 'abc123', builtAt: new Date(), setupCommandHash: null },
-      }),
-    );
-    ensureProjectSandbox.mockResolvedValueOnce({ id: 'sb' });
-
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/ensure', { method: 'POST' });
-
-    expect(res.status).toBe(200);
-    expect(ensureProjectSandbox).toHaveBeenCalledWith(expect.objectContaining({ seedCheckpointName: 'repo-p1' }));
-    expect(materializeRepo).toHaveBeenCalledWith(
-      expect.objectContaining({ skipPullOnExistingCheckout: false }),
-    );
-  });
-
-  it('does not seed provisioning from a stale repo base checkpoint', async () => {
-    tables.projectRepositories.push(
-      projectRepositoryRow({
-        id: 'p1',
-        orgId: 'org1',
-        userId: 'u1',
-        installationId: 7,
-        repoFullName: 'octo/hello',
-        defaultBranch: 'main',
-        sandboxWorkdir: '/workspace/hello',
-        setupCommand: 'pnpm install',
-        baseCheckpoint: { name: 'repo-p1', sha: 'abc123', builtAt: new Date(), setupCommandHash: null },
-      }),
-    );
-
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/ensure', { method: 'POST' });
-
-    expect(res.status).toBe(200);
-    expect(ensureProjectSandbox.mock.calls[0]![0].seedCheckpointName).toBeUndefined();
-    expect(materializeRepo).toHaveBeenCalledWith(
-      expect.objectContaining({ skipPullOnExistingCheckout: false }),
-    );
+    expect(ensureProjectSandbox).not.toHaveBeenCalled();
+    expect(materializeRepo).not.toHaveBeenCalled();
+    // The stale persisted workdir is never echoed back as truth.
+    expect(await res.json()).toMatchObject({ projectRepositoryId: 'p1', sandboxWorkdir: '' });
   });
 
   it('404s for a project the user does not own', async () => {
@@ -1406,9 +1333,7 @@ describe('ensure (materialize)', () => {
     expect(res.status).toBe(404);
   });
 
-  it('self-heals a stale sandbox provider by recomputing the workdir against the current fleet', async () => {
-    // The row was linked while a different provider was active — its workdir
-    // points into that provider's filesystem and would fail to clone here.
+  it('reuses an existing binding row without touching provider state', async () => {
     tables.projectRepositories.push(
       projectRepositoryRow({
         id: 'p1',
@@ -1421,7 +1346,6 @@ describe('ensure (materialize)', () => {
         sandboxWorkdir: '/old-provider/hello',
       }),
     );
-    // A per-user binding already inherited the stale workdir and thinks it is materialized.
     tables.sandboxes.push(
       sandboxRow({
         id: 'sbrow-1',
@@ -1434,18 +1358,11 @@ describe('ensure (materialize)', () => {
     );
     const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/ensure', { method: 'POST' });
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ projectRepositoryId: 'p1', sandboxWorkdir: '/workspace/hello' });
-    // The project row was healed to the current fleet's provider + workdir…
-    expect(tables.projectRepositories[0]).toMatchObject({
-      sandboxProvider: 'railway',
-      sandboxWorkdir: '/workspace/hello',
-    });
-    // …and the per-user binding was re-pointed and forced to re-materialize.
-    expect(tables.sandboxes[0]).toMatchObject({ sandboxWorkdir: '/workspace/hello', materializedAt: null });
-    expect(materializeRepo).toHaveBeenCalledOnce();
-    expect(materializeRepo).toHaveBeenCalledWith(
-      expect.objectContaining({ row: expect.objectContaining({ sandboxWorkdir: '/workspace/hello' }) }),
-    );
+    expect(await res.json()).toMatchObject({ projectRepositoryId: 'p1', sandboxWorkdir: '' });
+    expect(ensureProjectSandbox).not.toHaveBeenCalled();
+    expect(materializeRepo).not.toHaveBeenCalled();
+    // No duplicate binding row was created.
+    expect(tables.sandboxes).toHaveLength(1);
   });
 
   it('streams server-side progress events when the client accepts an event stream', async () => {
@@ -1467,10 +1384,12 @@ describe('ensure (materialize)', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toContain('text/event-stream');
     const body = await res.text();
-    // Progress events surface each server step, then a terminal `done` carries the result.
+    // With no provisioning, the stream is just the terminal handshake: a
+    // single `done`-phase progress event, then `done` carries the result.
     expect(body).toContain('event: progress');
-    expect(body).toContain('Provisioning a new sandbox…');
-    expect(body).toContain('Cloning octo/hello…');
+    expect(body).toContain('Workspace ready.');
+    expect(body).not.toContain('Provisioning a new sandbox…');
+    expect(body).not.toContain('Cloning octo/hello…');
     expect(body).toContain('event: done');
     expect(body).toContain('"resourceId":"factory-p1"');
     expect(body).toContain('"projectRepositoryId":"p1"');
@@ -1527,6 +1446,24 @@ function seedMaterializedSession() {
     createdAt: now,
     updatedAt: now,
   });
+  // The session's live sandbox in the per-process memo — git write routes
+  // resolve through it (they never provision).
+  seedLiveSandbox('stored-session-1', '/workspace/worktrees/feat-x', {
+    id: 'sb-1',
+    executeCommand: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
+  });
+}
+
+/**
+ * Seed the per-process session-sandbox memo with a live instance whose
+ * derived workdir equals `workdir` exactly: a local-provider instance checks
+ * out under `<workingDirectory>/<repo name>`.
+ */
+function seedLiveSandbox(sessionRowId: string, workdir: string, sandbox: Record<string, unknown>) {
+  const cut = workdir.lastIndexOf('/');
+  // Mutate in place so callers can assert on the exact seeded instance.
+  Object.assign(sandbox, { provider: 'local', workingDirectory: workdir.slice(0, cut) });
+  getSessionSandbox(sessionRowId, `seed/${workdir.slice(cut + 1)}`, () => sandbox as never);
 }
 
 function postJson(app: ReturnType<typeof buildApp>, path: string, body: unknown) {
@@ -1793,7 +1730,6 @@ describe('Factory session routes', () => {
     });
     expect(session.sessionId).toEqual(expect.any(String));
     expect(tables.sessions).toHaveLength(1);
-    expect(ensureWorktree).not.toHaveBeenCalled();
     expect(ensureProjectSandbox).not.toHaveBeenCalled();
   });
 
@@ -2020,7 +1956,7 @@ describe('Factory session routes', () => {
     expect(tables.sessions).toHaveLength(0);
   });
 
-  it('runs repository teardown before reclaiming and invalidates an explicitly deleted session', async () => {
+  it('runs repository teardown before releasing and invalidates an explicitly deleted session', async () => {
     seedMaterializedProject({ teardownCommand: 'docker compose down --remove-orphans' });
     const order: string[] = [];
     const controller = {
@@ -2032,41 +1968,36 @@ describe('Factory session routes', () => {
     const invalidateSession = vi.fn(async () => {
       order.push('invalidate');
     });
-    const sessionRetirement = new SessionRetirementCoordinator({
-      fleet: fleet as any,
-      invalidateSession,
-    });
+    const sessionRetirement = new SessionRetirementCoordinator({ invalidateSession });
     const app = buildApp({ workosId: 'u1' }, { controller, sessionRetirement });
     const created = await postJson(app, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
     const sessionId = (await created.json()).session.sessionId;
-    Object.assign(tables.sessions.find(row => row.sessionId === sessionId)!, {
-      sandboxId: 'sb-live',
-      sandboxWorkdir: '/workspace/hello',
-    });
-    reattachSandbox.mockImplementationOnce(async () => {
-      order.push('reattach');
-      return { id: 'sb-live' } as any;
-    });
-    runWorktreeTeardown.mockImplementationOnce(async () => {
+    const row = tables.sessions.find(r => r.sessionId === sessionId)!;
+    // Seed the per-process memo: the session's sandbox is live in this replica.
+    const live = {
+      id: 'sb-live',
+      destroy: vi.fn(async () => order.push('destroy')),
+      executeCommand: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
+    };
+    seedLiveSandbox(row.id, '/workspace/hello', live);
+    runTeardownCommand.mockImplementationOnce(async () => {
       order.push('teardown');
-    });
-    recycleClaimedWorkdir.mockImplementationOnce(async () => {
-      order.push('reclaim');
     });
 
     const deleted = await app.request(`/web/user-sessions/${sessionId}`, { method: 'DELETE' });
 
     expect(deleted.status).toBe(200);
     expect(controller.deleteSession).toHaveBeenCalledWith({ resourceId: sessionId });
-    expect(runWorktreeTeardown).toHaveBeenCalledWith(
-      { id: 'sb-live' },
+    expect(runTeardownCommand).toHaveBeenCalledWith(
+      live,
       '/workspace/hello',
       'docker compose down --remove-orphans',
       { timeoutMs: 15 * 60_000 },
     );
     expect(invalidateSession).toHaveBeenCalledWith(sessionId);
     expect(tables.sessions).toHaveLength(0);
-    expect(order).toEqual(['controller', 'reattach', 'teardown', 'reclaim', 'invalidate']);
+    // Deleted sessions destroy their VM — nothing resolves this id again.
+    expect(order).toEqual(['controller', 'teardown', 'destroy', 'invalidate']);
   });
 
   it('does not tear down a controller session for an unauthorized deletion', async () => {
@@ -2091,89 +2022,43 @@ describe('Factory session routes', () => {
     const app = buildApp({ workosId: 'u1' }, { controller });
     const created = await postJson(app, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
     const sessionId = (await created.json()).session.sessionId;
-    Object.assign(
-      tables.sessions.find(row => row.sessionId === sessionId)!,
-      {
-        sandboxId: 'sb-live',
-        sandboxWorkdir: '/workspace/hello',
-      },
-    );
+    const row = tables.sessions.find(r => r.sessionId === sessionId)!;
+    const live = {
+      id: 'sb-live',
+      destroy: vi.fn(async () => {}),
+      executeCommand: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
+    };
+    seedLiveSandbox(row.id, '/workspace/hello', live);
 
     const deleted = await app.request(`/web/user-sessions/${sessionId}`, { method: 'DELETE' });
 
     expect(deleted.status).toBe(200);
     expect(tables.sessions).toHaveLength(0);
-    await vi.waitFor(() =>
-      expect(reattachSandbox).toHaveBeenCalledWith('sb-live', { actingUserId: 'u1' }),
-    );
+    await vi.waitFor(() => expect(live.destroy).toHaveBeenCalledTimes(1));
     error.mockRestore();
   });
 
-  it('returns a remote session sandbox to the reuse pool on delete instead of destroying it', async () => {
+  it('destroys the deleted session sandbox held by this process instead of pooling it', async () => {
+    // The cross-session reuse pool died with the fleet: sandbox identity is
+    // the session id, so a deleted session's VM is destroyed, not shelved.
     seedMaterializedProject();
     const app = buildApp({ workosId: 'u1' });
     const created = await postJson(app, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
     const sessionId = (await created.json()).session.sessionId;
-    Object.assign(
-      tables.sessions.find(row => row.sessionId === sessionId)!,
-      {
-        sandboxId: 'sb-live',
-        sandboxWorkdir: '/workspace/hello',
-      },
-    );
+    const row = tables.sessions.find(r => r.sessionId === sessionId)!;
+    const live = {
+      id: 'sb-live',
+      destroy: vi.fn(async () => {}),
+      executeCommand: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
+    };
+    seedLiveSandbox(row.id, '/workspace/hello', live);
 
     const deleted = await app.request(`/web/user-sessions/${sessionId}`, { method: 'DELETE' });
 
     expect(deleted.status).toBe(200);
     expect(tables.sessions).toHaveLength(0);
-    // The VM stays alive for the next session, but the released session's
-    // work is scrubbed off it before it enters the pool.
-    await vi.waitFor(() => {
-      expect(reattachSandbox).toHaveBeenCalledWith('sb-live', { actingUserId: 'u1' });
-      expect(recycleClaimedWorkdir).toHaveBeenCalledWith(expect.anything(), '/workspace/hello', 'main');
-      expect(sourceControlStorage.sandboxPoolRows).toEqual([
-        expect.objectContaining({
-          orgId: 'org1',
-          projectRepositoryId: 'p1',
-          userId: 'u1',
-          sandboxId: 'sb-live',
-          sandboxWorkdir: '/workspace/hello',
-        }),
-      ]);
-    });
-  });
-
-  it('deletes the session without waiting for the sandbox scrub to finish', async () => {
-    seedMaterializedProject();
-    const app = buildApp({ workosId: 'u1' });
-    const created = await postJson(app, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
-    const sessionId = (await created.json()).session.sessionId;
-    Object.assign(
-      tables.sessions.find(row => row.sessionId === sessionId)!,
-      {
-        sandboxId: 'sb-live',
-        sandboxWorkdir: '/workspace/hello',
-      },
-    );
-    // Scrubbing a large checkout takes minutes on a real VM.
-    let finishScrub!: () => void;
-    const scrubbing = new Promise<void>(resolve => {
-      finishScrub = resolve;
-    });
-    recycleClaimedWorkdir.mockImplementationOnce(async () => {
-      await scrubbing;
-    });
-
-    const deleted = await app.request(`/web/user-sessions/${sessionId}`, { method: 'DELETE' });
-
-    // The workspace is gone from the user's list while the VM is still busy.
-    expect(deleted.status).toBe(200);
-    expect(tables.sessions).toHaveLength(0);
-    // Nothing can claim the sandbox until the scrub completes.
+    await vi.waitFor(() => expect(live.destroy).toHaveBeenCalledTimes(1));
     expect(sourceControlStorage.sandboxPoolRows).toEqual([]);
-
-    finishScrub();
-    await vi.waitFor(() => expect(sourceControlStorage.sandboxPoolRows).toHaveLength(1));
   });
 
   it('does not expose another organization\'s session regardless of visibility', async () => {
@@ -2225,6 +2110,14 @@ describe('commit route', () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ committed: true });
     expect((commitAll.mock.calls[0] as unknown as any[])[1]).toBe('/workspace/worktrees/feat-x');
+  });
+});
+
+describe('sandbox teardown route', () => {
+  it('is gone: the project-level sandbox concept no longer exists', async () => {
+    seedMaterializedProject();
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/sandbox', { method: 'DELETE' });
+    expect(res.status).toBe(404);
   });
 });
 

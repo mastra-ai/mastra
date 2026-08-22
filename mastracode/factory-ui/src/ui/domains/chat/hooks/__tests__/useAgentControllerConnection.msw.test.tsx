@@ -118,8 +118,6 @@ describe('useAgentControllerConnection', () => {
     const factorySessionState = {
       factoryProjectId: 'factory-project-1',
       projectRepositoryId: 'project-repository-1',
-      sandboxId: 'sandbox-1',
-      sandboxWorkdir: '/sandbox/repo',
     };
     const { result } = renderHookWithProviders(() =>
       useAgentControllerConnection({

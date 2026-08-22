@@ -1,6 +1,21 @@
 export { E2BSandbox, type E2BSandboxOptions } from './sandbox';
 export { E2BProcessManager } from './sandbox/process-manager';
-export { createDefaultMountableTemplate, type TemplateSpec, type MountableTemplateResult } from './utils/template';
+export {
+  createDefaultMountableTemplate,
+  isNamedTemplateSpec,
+  isDeferredNamedTemplateSpec,
+  type TemplateSpec,
+  type NamedTemplateSpec,
+  type DeferredNamedTemplateSpec,
+  type MountableTemplateResult,
+} from './utils/template';
+export {
+  createRepoTemplate,
+  refreshRepoTemplate,
+  repoTemplateAlias,
+  type RepoTemplateOptions,
+  type RefreshRepoTemplateResult,
+} from './utils/repo-template';
 export {
   type E2BS3MountConfig,
   type E2BGCSMountConfig,

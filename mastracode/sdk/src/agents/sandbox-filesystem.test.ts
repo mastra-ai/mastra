@@ -265,4 +265,48 @@ describe('SandboxFilesystem', () => {
     expect(fs.id).toBe(`sandbox-fs:fake-sandbox:${WORKDIR}`);
     expect(fs.getInfo().metadata).toMatchObject({ basePath: WORKDIR, sandboxId: 'fake-sandbox' });
   });
+
+  describe('lazy workdir', () => {
+    it('resolves the workdir once on first use and memoizes it', async () => {
+      let resolves = 0;
+      const sandbox = new FakeSandbox(script =>
+        isContainmentCheck(script) ? realpathResult(`${WORKDIR}/a.txt`) : { exitCode: 0, stdout: '', stderr: '' },
+      );
+      const fs = new SandboxFilesystem({
+        sandbox,
+        workdir: async () => {
+          resolves += 1;
+          return WORKDIR;
+        },
+      });
+      // Unresolved: no sync absolute form, empty basePath, sandbox-only id.
+      expect(fs.basePath).toBe('');
+      expect(fs.resolveAbsolutePath('/a.txt')).toBeUndefined();
+      expect(fs.id).toBe('sandbox-fs:fake-sandbox');
+
+      await fs.exists('/a.txt');
+      await fs.exists('/b.txt');
+
+      expect(resolves).toBe(1);
+      expect(fs.basePath).toBe(WORKDIR);
+      expect(fs.resolveAbsolutePath('/a.txt')).toBe(`${WORKDIR}/a.txt`);
+      expect(sandbox.calls.some(c => c.includes(`test -e '${WORKDIR}/a.txt'`))).toBe(true);
+    });
+
+    it('does not memoize a failed resolution', async () => {
+      let attempt = 0;
+      const sandbox = new FakeSandbox();
+      const fs = new SandboxFilesystem({
+        sandbox,
+        workdir: async () => {
+          attempt += 1;
+          if (attempt === 1) throw new Error('VM not up');
+          return WORKDIR;
+        },
+      });
+      await expect(fs.exists('/a.txt')).rejects.toThrow('VM not up');
+      await expect(fs.exists('/a.txt')).resolves.toBe(true);
+      expect(fs.basePath).toBe(WORKDIR);
+    });
+  });
 });

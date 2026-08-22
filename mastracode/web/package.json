@@ -29,6 +29,7 @@
     "@mastra/factory": "link:../factory",
     "@mastra/libsql": "link:../../stores/libsql",
     "@mastra/pg": "link:../../stores/pg",
+    "@mastra/e2b": "link:../../workspaces/e2b",
     "@mastra/platform-workspace": "link:../../workspaces/platform-workspace",
     "@mastra/redis-streams": "link:../../pubsub/redis-streams"
   },

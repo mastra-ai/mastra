@@ -1,6 +1,7 @@
 import type { SessionBeforeAgentEndListener } from '@mastra/core/agent-controller';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { __clearSessionSandboxesForTests, getSessionSandbox } from '../sandbox/session-sandbox.js';
 import {
   captureSessionFilesystem,
   observeSessionFilesystem,
@@ -47,6 +48,20 @@ function createSession(results = [commandResult(), commandResult()], resourceId 
   return { session, executeCommand, listeners };
 }
 
+/**
+ * Seed the per-process memo with a live sandbox whose derived workdir is
+ * `/worktree` (local provider: `<workingDirectory>/<repo name>`). Capture
+ * reads the workdir from the memo ONLY — the persisted column is
+ * observability, never a decision input.
+ */
+function seedLiveWorkdir(sessionRowId = 'source-session-1', status = 'running') {
+  getSessionSandbox(
+    sessionRowId,
+    'seed/worktree',
+    () => ({ id: 'sb-live', provider: 'local', status, workingDirectory: '/sessions/s1' }) as never,
+  );
+}
+
 function createDependencies(): FilesystemCaptureDependencies {
   return {
     filesystem: { replaceFiles: vi.fn().mockResolvedValue(undefined) },
@@ -61,7 +76,7 @@ function createDependencies(): FilesystemCaptureDependencies {
           branch: 'main',
           baseBranch: 'main',
           sandboxId: 'sandbox-1',
-          sandboxWorkdir: '/worktree',
+          sandboxWorkdir: '/sessions/s1/worktree',
           materializedAt: new Date(),
           createdAt: new Date(),
           updatedAt: new Date(),
@@ -88,6 +103,40 @@ describe('parseFilesystemCaptureFiles', () => {
 });
 
 describe('captureSessionFilesystem', () => {
+  beforeEach(() => {
+    __clearSessionSandboxesForTests();
+    seedLiveWorkdir();
+  });
+
+  it('skips capture when only the persisted workdir column exists (never a decision input)', async () => {
+    // The stale-workdir incident class: a row written under a previous
+    // provider points at a path that no longer exists. With no live memo
+    // entry there is nothing trustworthy to capture against.
+    __clearSessionSandboxesForTests();
+    const { session, executeCommand } = createSession([]);
+    const dependencies = createDependencies();
+
+    await captureSessionFilesystem(session, dependencies);
+
+    expect(executeCommand).not.toHaveBeenCalled();
+    expect(dependencies.filesystem.replaceFiles).not.toHaveBeenCalled();
+  });
+
+  it('skips capture when the memoized sandbox is not running (telemetry never boots a VM)', async () => {
+    // executeCommand lazily starts the sandbox via ensureRunning — a
+    // chat-only turn whose sandbox was constructed but never started must
+    // not have a VM provisioned just to read an empty git status.
+    __clearSessionSandboxesForTests();
+    seedLiveWorkdir('source-session-1', 'pending');
+    const { session, executeCommand } = createSession([]);
+    const dependencies = createDependencies();
+
+    await captureSessionFilesystem(session, dependencies);
+
+    expect(executeCommand).not.toHaveBeenCalled();
+    expect(dependencies.filesystem.replaceFiles).not.toHaveBeenCalled();
+  });
+
   it('captures Git changes and ignored workspace artifacts', async () => {
     const { session, executeCommand } = createSession([
       commandResult({ stdout: ' M src/app.ts\0?? new.txt\0' }),
@@ -100,13 +149,13 @@ describe('captureSessionFilesystem', () => {
     expect(executeCommand).toHaveBeenNthCalledWith(
       1,
       'git',
-      ['-C', '/worktree', 'status', '--porcelain=v1', '-z', '--untracked-files=all'],
+      ['-C', '/sessions/s1/worktree', 'status', '--porcelain=v1', '-z', '--untracked-files=all'],
       { timeout: 30_000 },
     );
     expect(executeCommand).toHaveBeenNthCalledWith(
       2,
       'sh',
-      ['-c', 'cd "$1" && test -d .artifacts && find .artifacts -type f -print0 || true', 'sh', '/worktree'],
+      ['-c', 'cd "$1" && test -d .artifacts && find .artifacts -type f -print0 || true', 'sh', '/sessions/s1/worktree'],
       { timeout: 30_000 },
     );
     expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledWith({
@@ -154,6 +203,11 @@ describe('captureSessionFilesystem', () => {
 });
 
 describe('observeSessionFilesystem', () => {
+  beforeEach(() => {
+    __clearSessionSandboxesForTests();
+    seedLiveWorkdir();
+  });
+
   it.each(['complete', 'aborted', 'error', 'suspended'] as const)(
     'captures before %s agent-end events',
     async reason => {

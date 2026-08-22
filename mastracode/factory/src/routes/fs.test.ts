@@ -3,10 +3,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { Hono } from 'hono';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { SandboxFleet } from '../sandbox/fleet.js';
+import { __clearSessionSandboxesForTests, getSessionSandbox } from '../sandbox/session-sandbox.js';
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
+
+afterEach(() => {
+  __clearSessionSandboxesForTests();
+});
 import {
   buildFsRoutes,
   listArtifacts,
@@ -227,22 +231,34 @@ function makeSession(overrides: Partial<SourceControlSession> = {}): SourceContr
 }
 
 /**
- * Fake fleet whose sandbox answers the exact shell scripts the session-backed
- * helpers issue (find listing, readlink/stat confinement checks, base64 read).
+ * Seed the per-process session memo with a fake sandbox that answers the
+ * exact shell scripts the session-backed helpers issue (find listing,
+ * readlink/stat confinement checks, base64 read). The session read path
+ * resolves through the memo only — it never constructs.
  */
-function makeFleet(
+function seedSessionSandbox(
   respond: (script: string, command: string, args: string[]) => { exitCode: number; stdout: string; stderr?: string },
+  { sessionRowId = 'row-1', workdir = WORKDIR } = {},
 ) {
   const executeCommand = vi.fn(async (command: string, args: string[] = []) => {
     const script = args[1] ?? '';
     const result = respond(script, command, args);
     return { exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr ?? '' };
   });
-  const fleet = {
-    enabled: true,
-    reattachSandbox: vi.fn(async () => ({ id: 'sbx-1', executeCommand })),
-  } as unknown as SandboxFleet;
-  return { fleet, executeCommand };
+  // The memo derives the workdir from the constructed instance: a local
+  // provider checks out under <workingDirectory>/<repo name>.
+  getSessionSandbox(
+    sessionRowId,
+    'acme/repo',
+    () =>
+      ({
+        id: 'sbx-1',
+        provider: 'local',
+        workingDirectory: workdir.slice(0, workdir.lastIndexOf('/')),
+        executeCommand,
+      }) as never,
+  );
+  return { executeCommand };
 }
 
 function makeSessionFs({
@@ -264,7 +280,6 @@ function makeSessionFs({
         tenant: () => ({ orgId: session.orgId, userId: session.userId }),
         isOrganizationAdmin: async () => false,
       },
-      fleet: makeFleet(() => ({ exitCode: 0, stdout: '' })).fleet,
       sessions: { getBySessionId: vi.fn(async () => session) },
       filesystem: { listFiles },
     },
@@ -344,7 +359,7 @@ describe('persisted session workspace files routes', () => {
 
 describe('listSessionRenderedPath', () => {
   it('lists rendered entries from the session sandbox in one command', async () => {
-    const { fleet, executeCommand } = makeFleet(script => {
+    const { executeCommand } = seedSessionSandbox(script => {
       expect(script).toContain(`'${WORKDIR}/.artifacts'`);
       return {
         exitCode: 0,
@@ -357,12 +372,8 @@ describe('listSessionRenderedPath', () => {
     });
 
     const session = makeSession();
-    const listing = await listSessionRenderedPath(fleet, session, '.artifacts');
+    const listing = await listSessionRenderedPath(session, '.artifacts');
 
-    expect(fleet.reattachSandbox).toHaveBeenCalledWith('sbx-1', {
-      workingDirectory: WORKDIR,
-      actingUserId: 'user-1',
-    });
     expect(listing.workspacePath).toBe(session.sessionId);
     expect(listing.root).toBe('.artifacts');
     expect(listing.rootPath).toBe(`${WORKDIR}/.artifacts`);
@@ -373,49 +384,38 @@ describe('listSessionRenderedPath', () => {
     expect(executeCommand).toHaveBeenCalledTimes(1);
   });
 
-  it('returns an empty listing when the session has no sandbox binding', async () => {
-    const { fleet, executeCommand } = makeFleet(() => ({ exitCode: 0, stdout: '' }));
-
-    const listing = await listSessionRenderedPath(fleet, makeSession({ sandboxId: null }), '.artifacts');
-
-    expect(listing.entries).toEqual([]);
-    expect(executeCommand).not.toHaveBeenCalled();
-  });
-
-  it('returns an empty listing when the sandbox can no longer be reattached', async () => {
-    const { fleet, executeCommand } = makeFleet(() => ({ exitCode: 0, stdout: '' }));
-    (fleet.reattachSandbox as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('sandbox gone'));
-
-    const listing = await listSessionRenderedPath(fleet, makeSession(), '.artifacts');
+  it('returns an empty listing when this process holds no sandbox for the session', async () => {
+    // Never seeded: the passive read path resolves through the memo only —
+    // it must not construct or provision anything.
+    const listing = await listSessionRenderedPath(makeSession(), '.artifacts');
 
     expect(listing.entries).toEqual([]);
-    expect(executeCommand).not.toHaveBeenCalled();
   });
 
   it('returns an empty listing when the rendered root does not exist', async () => {
-    const { fleet } = makeFleet(() => ({ exitCode: 0, stdout: '' }));
+    seedSessionSandbox(() => ({ exitCode: 0, stdout: '' }));
 
-    const listing = await listSessionRenderedPath(fleet, makeSession(), '.artifacts');
+    const listing = await listSessionRenderedPath(makeSession(), '.artifacts');
 
     expect(listing.entries).toEqual([]);
   });
 
   it('rejects roots outside the approved allowlist without touching the sandbox', async () => {
-    const { fleet, executeCommand } = makeFleet(() => ({ exitCode: 0, stdout: '' }));
+    const { executeCommand } = seedSessionSandbox(() => ({ exitCode: 0, stdout: '' }));
 
-    await expect(listSessionRenderedPath(fleet, makeSession(), '.ssh')).rejects.toThrow(
+    await expect(listSessionRenderedPath(makeSession(), '.ssh')).rejects.toThrow(
       'Root is not approved for rendered workspace access',
     );
     expect(executeCommand).not.toHaveBeenCalled();
   });
 
   it('ignores find output outside the rendered root', async () => {
-    const { fleet } = makeFleet(() => ({
+    seedSessionSandbox(() => ({
       exitCode: 0,
       stdout: `f\t5\t1700000000.0\t/etc/passwd\n`,
     }));
 
-    const listing = await listSessionRenderedPath(fleet, makeSession(), '.artifacts');
+    const listing = await listSessionRenderedPath(makeSession(), '.artifacts');
 
     expect(listing.entries).toEqual([]);
   });
@@ -433,10 +433,10 @@ describe('readSessionWorkspaceFile', () => {
   }
 
   it('reads text content through the session sandbox', async () => {
-    const { fleet } = makeFleet(respondForFile('# History'));
+    seedSessionSandbox(respondForFile('# History'));
 
     const session = makeSession();
-    const file = await readSessionWorkspaceFile(fleet, session, '.artifacts/understand-pr/HISTORY.md');
+    const file = await readSessionWorkspaceFile(session, '.artifacts/understand-pr/HISTORY.md');
 
     expect(file).toEqual(
       expect.objectContaining({
@@ -451,24 +451,22 @@ describe('readSessionWorkspaceFile', () => {
   });
 
   it('rejects reads outside approved rendered roots', async () => {
-    const { fleet, executeCommand } = makeFleet(respondForFile('secret'));
+    const { executeCommand } = seedSessionSandbox(respondForFile('secret'));
 
-    await expect(readSessionWorkspaceFile(fleet, makeSession(), '.ssh/config')).rejects.toThrow(
+    await expect(readSessionWorkspaceFile(makeSession(), '.ssh/config')).rejects.toThrow(
       'Root is not approved for rendered workspace access',
     );
     expect(executeCommand).not.toHaveBeenCalled();
   });
 
   it('rejects traversal outside the workspace', async () => {
-    const { fleet } = makeFleet(respondForFile('secret'));
+    seedSessionSandbox(respondForFile('secret'));
 
-    await expect(readSessionWorkspaceFile(fleet, makeSession(), '../secret.md')).rejects.toThrow(
-      'path escapes workspace',
-    );
+    await expect(readSessionWorkspaceFile(makeSession(), '../secret.md')).rejects.toThrow('path escapes workspace');
   });
 
   it('rejects directories', async () => {
-    const { fleet } = makeFleet(script => {
+    seedSessionSandbox(script => {
       if (script.includes(`p='${WORKDIR}/.artifacts'`)) {
         return { exitCode: 0, stdout: `${WORKDIR}\n${WORKDIR}/.artifacts` };
       }
@@ -476,22 +474,12 @@ describe('readSessionWorkspaceFile', () => {
       return { exitCode: 1, stdout: '' };
     });
 
-    await expect(readSessionWorkspaceFile(fleet, makeSession(), '.artifacts')).rejects.toThrow('Path is a directory');
+    await expect(readSessionWorkspaceFile(makeSession(), '.artifacts')).rejects.toThrow('Path is a directory');
   });
 
-  it('errors when the session workspace is not materialized', async () => {
-    const { fleet } = makeFleet(respondForFile('x'));
-
-    await expect(
-      readSessionWorkspaceFile(fleet, makeSession({ sandboxWorkdir: null }), '.artifacts/a.md'),
-    ).rejects.toThrow('Session workspace is not available');
-  });
-
-  it('errors without re-provisioning when the sandbox can no longer be reattached', async () => {
-    const { fleet } = makeFleet(respondForFile('x'));
-    (fleet.reattachSandbox as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('sandbox gone'));
-
-    await expect(readSessionWorkspaceFile(fleet, makeSession(), '.artifacts/a.md')).rejects.toThrow(
+  it('errors without provisioning when this process holds no sandbox for the session', async () => {
+    // Never seeded: reads must fail cleanly rather than construct a sandbox.
+    await expect(readSessionWorkspaceFile(makeSession(), '.artifacts/a.md')).rejects.toThrow(
       'Session workspace is not available',
     );
   });
@@ -529,7 +517,7 @@ describe('workspace changes', () => {
   });
 
   it('lists pending changes with per-file and total line counts', async () => {
-    const { fleet, executeCommand } = makeFleet((script, command, args) => {
+    const { executeCommand } = seedSessionSandbox((script, command, args) => {
       if (command === 'git') {
         expect(args).toEqual(['-C', WORKDIR, 'status', '--porcelain=v1', '-z', '--untracked-files=all']);
         return { exitCode: 0, stdout: ' M src/edited.ts\0?? src/new.ts\0' };
@@ -544,7 +532,7 @@ describe('workspace changes', () => {
     });
 
     const session = makeSession();
-    await expect(listSessionWorkspaceChanges(fleet, session)).resolves.toEqual({
+    await expect(listSessionWorkspaceChanges(session)).resolves.toEqual({
       workspacePath: session.sessionId,
       available: true,
       additions: 8,
@@ -558,14 +546,14 @@ describe('workspace changes', () => {
   });
 
   it('keeps file statuses available when line counting fails', async () => {
-    const { fleet } = makeFleet((_script, command) =>
+    seedSessionSandbox((_script, command) =>
       command === 'git'
         ? { exitCode: 0, stdout: ' M src/edited.ts\0' }
         : { exitCode: 1, stdout: '', stderr: 'numstat failed' },
     );
 
     const session = makeSession();
-    await expect(listSessionWorkspaceChanges(fleet, session)).resolves.toEqual({
+    await expect(listSessionWorkspaceChanges(session)).resolves.toEqual({
       workspacePath: session.sessionId,
       available: true,
       changes: [{ path: 'src/edited.ts', status: 'modified' }],
@@ -582,7 +570,7 @@ describe('workspace changes', () => {
       '+new',
       '',
     ].join('\n');
-    const { fleet, executeCommand } = makeFleet((script, command, args) => {
+    const { executeCommand } = seedSessionSandbox((script, command, args) => {
       expect(command).toBe('sh');
       expect(script).toContain('head -c 524289');
       expect(args.slice(3)).toEqual([
@@ -603,7 +591,7 @@ describe('workspace changes', () => {
     });
 
     const session = makeSession();
-    await expect(readSessionWorkspaceDiff(fleet, session, 'src/edited.ts')).resolves.toEqual({
+    await expect(readSessionWorkspaceDiff(session, 'src/edited.ts')).resolves.toEqual({
       workspacePath: session.sessionId,
       path: 'src/edited.ts',
       patch,
@@ -614,9 +602,9 @@ describe('workspace changes', () => {
 
   it('marks and limits a diff that exceeds the output boundary', async () => {
     const maxDiffBytes = 512 * 1024;
-    const { fleet } = makeFleet(() => ({ exitCode: 0, stdout: 'a'.repeat(maxDiffBytes + 1) }));
+    seedSessionSandbox(() => ({ exitCode: 0, stdout: 'a'.repeat(maxDiffBytes + 1) }));
 
-    const result = await readSessionWorkspaceDiff(fleet, makeSession(), 'src/large.ts');
+    const result = await readSessionWorkspaceDiff(makeSession(), 'src/large.ts');
 
     expect(result.truncated).toBe(true);
     expect(Buffer.byteLength(result.patch)).toBe(maxDiffBytes);
@@ -625,9 +613,9 @@ describe('workspace changes', () => {
   it('does not emit a replacement character when truncation splits UTF-8', async () => {
     const maxDiffBytes = 512 * 1024;
     const prefix = 'a'.repeat(maxDiffBytes - 1);
-    const { fleet } = makeFleet(() => ({ exitCode: 0, stdout: `${prefix}€` }));
+    seedSessionSandbox(() => ({ exitCode: 0, stdout: `${prefix}€` }));
 
-    const result = await readSessionWorkspaceDiff(fleet, makeSession(), 'src/unicode.ts');
+    const result = await readSessionWorkspaceDiff(makeSession(), 'src/unicode.ts');
 
     expect(result.truncated).toBe(true);
     expect(result.patch).toBe(prefix);
@@ -635,7 +623,7 @@ describe('workspace changes', () => {
   });
 
   it('includes both paths when reading a renamed file diff', async () => {
-    const { fleet } = makeFleet((_script, command, args) => {
+    seedSessionSandbox((_script, command, args) => {
       expect(command).toBe('sh');
       expect(args.slice(3)).toEqual([
         '0',
@@ -655,14 +643,14 @@ describe('workspace changes', () => {
       return { exitCode: 0, stdout: 'rename diff' };
     });
 
-    await expect(readSessionWorkspaceDiff(fleet, makeSession(), 'src/renamed.ts', 'src/old.ts')).resolves.toEqual(
+    await expect(readSessionWorkspaceDiff(makeSession(), 'src/renamed.ts', 'src/old.ts')).resolves.toEqual(
       expect.objectContaining({ path: 'src/renamed.ts', patch: 'rename diff' }),
     );
   });
 
   it('treats pathspec magic in file names literally', async () => {
     const path = 'src/:(exclude)*.ts';
-    const { fleet } = makeFleet((_script, command, args) => {
+    seedSessionSandbox((_script, command, args) => {
       expect(command).toBe('sh');
       expect(args.slice(3)).toEqual([
         '0',
@@ -681,14 +669,14 @@ describe('workspace changes', () => {
       return { exitCode: 0, stdout: 'literal path diff' };
     });
 
-    await expect(readSessionWorkspaceDiff(fleet, makeSession(), path)).resolves.toEqual(
+    await expect(readSessionWorkspaceDiff(makeSession(), path)).resolves.toEqual(
       expect.objectContaining({ path, patch: 'literal path diff' }),
     );
   });
 
   it('creates a bounded diff for an untracked file', async () => {
     let commandIndex = 0;
-    const { fleet, executeCommand } = makeFleet((script, command, args) => {
+    const { executeCommand } = seedSessionSandbox((script, command, args) => {
       commandIndex += 1;
       if (commandIndex === 1) {
         expect(command).toBe('sh');
@@ -726,16 +714,16 @@ describe('workspace changes', () => {
       return { exitCode: 0, stdout: 'new file diff' };
     });
 
-    await expect(readSessionWorkspaceDiff(fleet, makeSession(), 'src/new.ts')).resolves.toEqual(
+    await expect(readSessionWorkspaceDiff(makeSession(), 'src/new.ts')).resolves.toEqual(
       expect.objectContaining({ path: 'src/new.ts', patch: 'new file diff' }),
     );
     expect(executeCommand).toHaveBeenCalledTimes(3);
   });
 
   it('rejects diff paths that escape the workspace before running git', async () => {
-    const { fleet, executeCommand } = makeFleet(() => ({ exitCode: 0, stdout: '' }));
+    const { executeCommand } = seedSessionSandbox(() => ({ exitCode: 0, stdout: '' }));
 
-    await expect(readSessionWorkspaceDiff(fleet, makeSession(), '../secret')).rejects.toThrow('path escapes workspace');
+    await expect(readSessionWorkspaceDiff(makeSession(), '../secret')).rejects.toThrow('path escapes workspace');
     expect(executeCommand).not.toHaveBeenCalled();
   });
 });

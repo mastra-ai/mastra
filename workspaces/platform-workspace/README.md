@@ -12,15 +12,16 @@ npm install @mastra/platform-workspace
 
 All options can be passed to the constructor or read from environment variables:
 
-| Option          | Env var                        | Required         |
-| --------------- | ------------------------------ | ---------------- |
-| `accessToken`   | `MASTRA_PLATFORM_ACCESS_TOKEN` | Yes              |
-| `projectId`     | `MASTRA_PROJECT_ID`            | Yes              |
-| `environmentId` | `MASTRA_ENVIRONMENT_ID`        | Yes (sandbox)    |
-| `actingUserId`  | —                              | No (sandbox)     |
-| `bucketName`    | `MASTRA_PLATFORM_BUCKET_NAME`  | Yes (filesystem) |
+| Option            | Env var                        | Required         |
+| ----------------- | ------------------------------ | ---------------- |
+| `accessToken`     | `MASTRA_PLATFORM_ACCESS_TOKEN` | Yes              |
+| `projectId`       | `MASTRA_PROJECT_ID`            | Yes              |
+| `environmentId`   | `MASTRA_ENVIRONMENT_ID`        | Yes (sandbox)    |
+| `actingUserId`    | —                              | No (sandbox)     |
+| `sandboxProvider` | `SANDBOX_PROVIDER`             | No (sandbox)     |
+| `bucketName`      | `MASTRA_PLATFORM_BUCKET_NAME`  | Yes (filesystem) |
 
-The proxy URL defaults to `https://workspaces.mastra.ai` and can be overridden with the `MASTRA_WORKSPACE_PROXY_URL` env var (useful for staging).
+The sandbox provider resolves from the explicit `sandboxProvider` option, then `SANDBOX_PROVIDER`, then defaults to `railway`. The proxy URL defaults to `https://workspaces.mastra.ai` and can be overridden with the `MASTRA_WORKSPACE_PROXY_URL` env var (useful for staging).
 
 Requests to the proxy are authenticated with `Authorization: Bearer <accessToken>`. For sandbox requests authenticated with a project access token, set `actingUserId` to the stable opaque user subject from your authentication system. It is sent as `x-acting-user-id` for token partitioning and attribution; it is not an authorization claim.
 
@@ -66,7 +67,7 @@ Pass `readOnly: true` to mount the bucket read-only. Mutating calls will throw `
 
 ## Sandbox
 
-`PlatformSandbox` executes commands inside a Railway-backed sandbox tied to a Platform environment. Sessions boot from a pre-built recipe checkpoint (Python 3, Node 22, TypeScript/tsx, common build tooling).
+`PlatformSandbox` executes commands inside a provider-backed sandbox tied to a Platform environment. Sessions boot from the configured provider template or checkpoint.
 
 ```typescript
 const sandbox = new PlatformSandbox({ environmentId: 'env_abc' });
@@ -80,6 +81,34 @@ console.log(result.stdout);
 ```
 
 Pass an existing `sandboxId` to reattach to a live sandbox instead of creating a new one.
+
+### Reusable templates
+
+Use `Template()` to prebuild a public repository at an immutable commit. `PlatformSandbox` derives a deterministic template ID, starts or reuses the provider build, and retries sandbox creation while the build is pending:
+
+```typescript
+import { PlatformSandbox, Template } from '@mastra/platform-workspace';
+
+const commitSha = process.env.REPOSITORY_COMMIT_SHA!;
+const template = Template()
+  .setWorkdir('/workspace/repo')
+  .setEnvs({ BUILD_CONFIG_MARKER: 'template-v1' })
+  .aptInstall(['git', 'jq'])
+  .runCmd('git clone https://github.com/mastra-ai/mastra.git /workspace/repo')
+  .runCmd(`git checkout ${commitSha}`)
+  .runCmd('pnpm install --frozen-lockfile');
+
+const sandbox = new PlatformSandbox({
+  environmentId: 'env_abc',
+  sandboxProvider: 'e2b',
+  template,
+});
+await sandbox.start();
+```
+
+Platform serializes the builder and stores the build state under its deterministic ID within the authenticated organization, project, environment, and selected provider. Passing the same definition to another sandbox reuses that build.
+
+All operation arguments are serialized and sent to the provider. Values passed to `setEnvs` must contain only non-sensitive build configuration. Credentials, private-repository tokens, and other secrets aren't supported in template definitions.
 
 ## Errors
 

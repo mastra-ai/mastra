@@ -2,7 +2,8 @@ import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CreatePullRequestInput } from '../../capabilities/version-control.js';
 import { fakeRouteAuth, mountApiRoutes } from '../../routes/test-utils.js';
-import type { SandboxFleet } from '../../sandbox/fleet.js';
+import { __clearSessionSandboxesForTests, getSessionSandbox } from '../../sandbox/session-sandbox.js';
+
 import { SourceControlStorageInMemory } from '../../storage/domains/source-control/inmemory.js';
 import { buildGithubRoutes } from './routes.js';
 
@@ -206,34 +207,30 @@ vi.mock('./subscriptions', () => ({
   subscribeToPullRequest: (input: unknown) => subscribeToPullRequest(input),
 }));
 
-const ensureProjectSandbox = vi.fn(async (opts: { row: any; storage: SourceControlStorageInMemory['sandboxes'] }) => {
-  await opts.storage.setSandboxId({ id: opts.row.id, sandboxId: 'sb' });
-  return { id: 'sb' };
-});
+const ensureProjectSandbox = vi.fn(
+  async (opts: { row: any; repoFullName?: string; storage: SourceControlStorageInMemory['sandboxes'] }) => {
+    await opts.storage.setSandboxId({ id: opts.row.id, sandboxId: 'sb' });
+    return { sandbox: { id: 'sb' }, workdir: `/workspace/${opts.repoFullName ?? 'octo/hello'}` };
+  },
+);
 const materializeRepo = vi.fn(async (_opts: any) => {});
 const reattachSandbox = vi.fn(async (_id: string) => ({ id: 'sb' }));
-const ensureWorktree = vi.fn(async (_sb: any, _workdir: string, opts: { branch: string; baseBranch: string }) => ({
-  worktreePath: `/workspace/hello/../worktrees/${opts.branch}`,
-  branch: opts.branch,
-  baseBranch: opts.baseBranch,
-}));
 const commitAll = vi.fn(async () => ({ committed: true }));
 // pushBranch is overridable per-test so S2 can make it block on a deferred.
 let pushImpl: (...args: any[]) => Promise<void> = async () => {};
 const pushBranch = vi.fn((...args: any[]) => pushImpl(...args));
 const createPullRequest = vi.fn(async (..._args: any[]) => ({ url: 'https://github.com/octo/hello/pull/1' }));
 let sandboxEnabled = true;
-/** DI-injected fleet stub — routes read `enabled`/`provider`/`computeWorkdir`/`reattachSandbox`. */
-const fleet = {
+/** DI-injected sandbox surface stub — routes read `enabled`/`provider`. */
+const sandboxRuntime = {
   get enabled() {
     return sandboxEnabled;
   },
   get provider() {
     return sandboxEnabled ? 'railway' : 'none';
   },
-  computeWorkdir: (repo: string) => `/workspace/${repo.split('/').pop()}`,
-  reattachSandbox: (id: string) => reattachSandbox(id),
-} as unknown as SandboxFleet;
+  create: (ctx: { sessionId: string }) => ({ id: `sbx-${ctx.sessionId}` }),
+} as any;
 vi.mock('./sandbox', () => {
   class MaterializeError extends Error {
     code: string;
@@ -242,7 +239,7 @@ vi.mock('./sandbox', () => {
       this.code = code;
     }
   }
-  class WorktreeError extends Error {
+  class SetupCommandError extends Error {
     code: string;
     constructor(m: string, code: string) {
       super(m);
@@ -252,14 +249,13 @@ vi.mock('./sandbox', () => {
   return {
     ensureProjectSandbox: (opts: any) => ensureProjectSandbox(opts),
     materializeRepo: (opts: any) => materializeRepo(opts),
-    ensureWorktree: (sb: any, workdir: string, opts: any) => ensureWorktree(sb, workdir, opts),
     commitAll: (...args: any[]) => commitAll(...(args as [])),
     pushBranch: (...args: any[]) => pushBranch(...(args as [])),
     createPullRequest: (...args: any[]) => createPullRequest(...(args as [])),
     isValidGitRef: (v: unknown): v is string =>
       typeof v === 'string' && v.length > 0 && v.length <= 255 && /^[A-Za-z0-9_./-]+$/.test(v),
     MaterializeError,
-    WorktreeError,
+    SetupCommandError,
   };
 });
 
@@ -372,7 +368,7 @@ function buildApp(user: { workosId: string; organizationId?: string } | null) {
       github: githubStub as any,
       stateSigner,
       auth: fakeRouteAuth(),
-      fleet,
+      sandbox: sandboxRuntime,
     }),
   );
   return app;
@@ -409,7 +405,6 @@ beforeEach(() => {
   ensureProjectSandbox.mockClear();
   materializeRepo.mockClear();
   reattachSandbox.mockClear();
-  ensureWorktree.mockClear();
   commitAll.mockClear();
   pushBranch.mockClear();
   createPullRequest.mockClear();
@@ -417,6 +412,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  __clearSessionSandboxesForTests();
   vi.clearAllMocks();
 });
 
@@ -450,11 +446,12 @@ describe('S1: full write-back journey through the real route handlers', () => {
       materializedAt: null,
     });
 
-    // 2. Ensure → provisions the sandbox + materialises the repo.
+    // 2. Ensure → metadata handshake only; thread-open never provisions a
+    // VM (session sandboxes boot lazily at the first real command).
     const ensureRes = await postJson(app, `/web/github/projects/${projectId}/ensure`, {});
     expect(ensureRes.status).toBe(200);
-    expect(ensureProjectSandbox).toHaveBeenCalledOnce();
-    expect(materializeRepo).toHaveBeenCalledOnce();
+    expect(ensureProjectSandbox).not.toHaveBeenCalled();
+    expect(materializeRepo).not.toHaveBeenCalled();
 
     // 3. Session creation persists identity only; AgentController's workspace
     // factory materializes the isolated checkout when that session starts.
@@ -465,6 +462,15 @@ describe('S1: full write-back journey through the real route handlers', () => {
     expect(tables.sessions).toHaveLength(1);
     expect(tables.worktrees).toHaveLength(0);
     const persistedSessionWorkdir = '/workspace/session-feat-x';
+    // Local-provider seed: the memo derives `<workingDirectory>/<repo name>`.
+    getSessionSandbox(session.id, 'seed/session-feat-x', () =>
+      ({
+        id: 'sb-session',
+        provider: 'local',
+        workingDirectory: '/workspace',
+        executeCommand: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
+      }) as never,
+    );
     await sourceControlStorage.sessions.setSandbox({
       id: session.id,
       sandboxId: 'sb-session',
@@ -591,6 +597,14 @@ describe('S2: concurrent pushes', () => {
       materializedAt: new Date(),
     });
     const now = new Date();
+    getSessionSandbox(`stored-session-${id}`, 'seed/hello', () =>
+      ({
+        id: `sb-${id}`,
+        provider: 'local',
+        workingDirectory: '/workspace',
+        executeCommand: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
+      }) as never,
+    );
     tables.sessions.push({
       id: `stored-session-${id}`,
       sessionId: `session-${id}`,

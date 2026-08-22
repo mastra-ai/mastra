@@ -59,12 +59,8 @@ import { createFactoryTransitionTools } from './rules/tools.js';
 import { FactoryTransitionService } from './rules/transition-service.js';
 import type { FactoryRules } from './rules/types.js';
 import { assertFactoryRules } from './rules/validation.js';
-import type { BaseCheckpointTriggers } from './sandbox/base-checkpoint-triggers.js';
-import { createBaseCheckpointTriggers } from './sandbox/base-checkpoint-triggers.js';
-import { BaseCheckpointBuilder } from './sandbox/base-checkpoint.js';
-import { SandboxFleet } from './sandbox/fleet.js';
-import { registerSandboxReattach } from './sandbox/reattach.js';
 import { SessionRetirementCoordinator } from './sandbox/session-retirement.js';
+import type { MastraFactorySandboxConfig } from './sandbox/session-sandbox.js';
 import { handleServerError } from './server-error.js';
 import { observeSessionCheckpoint } from './session/checkpoint-capture.js';
 import { observeSessionFilesystem } from './session/filesystem-capture.js';
@@ -185,27 +181,7 @@ export interface MastraFactoryConfig {
   };
 }
 
-export interface MastraFactorySandboxConfig {
-  /**
-   * Template machine — `RailwaySandbox` (`@mastra/railway`), core
-   * `LocalSandbox` (`@mastra/core/workspace`), or any `WorkspaceSandbox` that
-   * implements `clone()`. Each project-repository execution environment gets
-   * its own sandbox cloned from this machine; the machine itself is never
-   * started. `prepare()` fails fast when the instance lacks `clone()`.
-   */
-  machine: WorkspaceSandbox;
-  /**
-   * In-sandbox base directory repos check out under (nested `owner/name` per
-   * repo). Default: the machine's own `workingDirectory` when it exposes one
-   * (core `LocalSandbox` does), else `/workspace`.
-   */
-  workdir?: string;
-  /**
-   * Per-replica cap on concurrently provisioned sandboxes. `0`/omitted means
-   * unlimited. A lightweight per-process budget, not a cross-replica scheduler.
-   */
-  maxSandboxes?: number;
-}
+export type { MastraFactorySandboxConfig } from './sandbox/session-sandbox.js';
 
 /**
  * Per-process cap on concurrent background Factory dispatches. Omitted means
@@ -223,24 +199,6 @@ function hasPlatformCredentials(): boolean {
   // into deployed projects; MASTRA_PLATFORM_SECRET_KEY is the org secret key
   // written by project scaffolding. Either enables the platform integrations.
   return Boolean(process.env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim() || process.env.MASTRA_PLATFORM_SECRET_KEY?.trim());
-}
-
-/**
- * The template sandbox's own working directory, when it exposes one as a
- * string (core `LocalSandbox` does; remote providers generally don't).
- * Used as the default checkout base so a local template rooted at a host
- * directory checks repos out under that same root.
- */
-function templateWorkingDirectory(sandbox: WorkspaceSandbox): string | undefined {
-  const wd = (sandbox as { workingDirectory?: unknown }).workingDirectory;
-  return typeof wd === 'string' && wd.length > 0 ? wd : undefined;
-}
-
-function resolveSandboxWorkdirBase(machine: WorkspaceSandbox, configuredWorkdir?: string): string {
-  const machineWorkdir = templateWorkingDirectory(machine);
-  const workdir =
-    configuredWorkdir === '/workspace' && machineWorkdir ? machineWorkdir : (configuredWorkdir ?? machineWorkdir);
-  return (workdir ?? '/workspace').replace(/\/+$/, '');
 }
 
 /**
@@ -409,9 +367,6 @@ export class MastraFactory {
       workItems: workItemsStorage,
       channelIdentity: channelIdentityStorage,
     };
-    // Assigned once the fleet and integrations exist below; the routes only
-    // dereference it at request time, so the late assignment is safe.
-    let baseCheckpoints: BaseCheckpointTriggers | undefined;
     const auditDomain = new AuditDomain({
       auth: routeAuth,
       audit: auditStorage,
@@ -424,35 +379,17 @@ export class MastraFactory {
       },
     });
 
-    // Repository execution needs one sandbox per project-repository link,
-    // cloned from the configured machine. A machine without `clone()` would
-    // only fail on first use, so fail fast at boot instead.
+    // The sandbox config is a bare callback constructing a session's sandbox
+    // from intent. Shape-only validation: probing it with a synthetic ctx at
+    // boot would construct against a fake session, so only the type is
+    // checked.
     const sandboxConfig = this.#config.sandbox;
-    const machine = sandboxConfig?.machine;
-    if (machine && typeof machine.clone !== 'function') {
+    if (sandboxConfig !== undefined && typeof sandboxConfig !== 'function') {
       throw new Error(
-        `MastraFactory: the configured sandbox machine (provider '${machine.provider}') does not implement clone(). ` +
-          `Project repositories each get their own sandbox cloned from the configured machine. ` +
-          `Pass a machine that implements clone() — e.g. RailwaySandbox (@mastra/railway) or ` +
-          `LocalSandbox (@mastra/core/workspace) — or omit 'sandbox' to disable sandboxes.`,
+        `MastraFactory: 'sandbox' must be a function constructing a WorkspaceSandbox from a FactorySandboxContext.`,
       );
     }
 
-    // One sandbox fleet per boot: constructed with the machine config when
-    // sandboxes are configured, disabled otherwise. Handed to integrations
-    // through the IntegrationContext — no global registry.
-    const fleet = new SandboxFleet(
-      machine
-        ? {
-            machine,
-            workdirBase: resolveSandboxWorkdirBase(machine, sandboxConfig?.workdir),
-            maxSandboxes: sandboxConfig?.maxSandboxes,
-          }
-        : undefined,
-    );
-    // Core's `getDynamicWorkspace` reattaches project sandboxes through the
-    // SDK seam; only this factory owns the fleet, so register it here.
-    registerSandboxReattach(fleet);
     const workspaceRegistry = new FactoryWorkspaceRegistry();
 
     // One shared OAuth state signer per boot. The deploy entry supplies a
@@ -533,29 +470,10 @@ export class MastraFactory {
     const githubIntegration = integrations.find(integration => integration.id === 'github') as
       | GithubIntegration
       | undefined;
-    // Base-checkpoint triggers: keep a warm per-repo checkpoint refreshed on
-    // repo connect, default-branch merges/pushes, and the reconcile sweep.
-    // Constructed only when a sandbox fleet and GitHub source control exist;
-    // otherwise sessions simply keep the cold clone+setup path.
-    if (githubIntegration && fleet.enabled && storage.isDomainReady('source-control')) {
-      const checkpointLogger = {
-        warn: (message: string) => console.warn(`[factory] ${message}`),
-      } as ConstructorParameters<typeof BaseCheckpointBuilder>[0]['logger'];
-      baseCheckpoints = createBaseCheckpointTriggers({
-        builder: new BaseCheckpointBuilder({ fleet, logger: checkpointLogger }),
-        fleet,
-        github: {
-          sourceControlStorage: sourceControlStorage.forIntegration('github'),
-          ...(githubIntegration.versionControl ? { versionControl: githubIntegration.versionControl } : {}),
-        },
-        logger: checkpointLogger,
-      });
-    }
     const workItemsReady = storage.isDomainReady('work-items');
     const sessionRetirement =
-      machine && storage.isDomainReady('source-control')
+      sandboxConfig && storage.isDomainReady('source-control')
         ? new SessionRetirementCoordinator({
-            fleet,
             invalidateSession: sessionId => workspaceRegistry.invalidateSession(sessionId),
           })
         : undefined;
@@ -583,7 +501,7 @@ export class MastraFactory {
             await factoryProcessor?.reconcileBinding(binding);
           },
           // Session retirement supersedes the older direct sandbox release: it
-          // invalidates the session and hands its sandbox back to the pool.
+          // invalidates the session and stops/destroys its sandbox.
           ...(retireTerminalSessions ? { releaseSandboxes: retireTerminalSessions } : {}),
         })
       : retireTerminalSessions;
@@ -602,7 +520,6 @@ export class MastraFactory {
         .filter(integration => integration.versionControl)
         .map(integration => integration.id),
       ...(sessionRetirement ? { sessionRetirement } : {}),
-      onProjectRepositoryLinked: args => baseCheckpoints?.onProjectRepositoryLinked(args),
     });
     const factoryProcessor = workItemsReady
       ? new FactoryPhaseStateProcessor({
@@ -669,10 +586,9 @@ export class MastraFactory {
       prepareAgentControllerMount({
         controllerId: CONTROLLER_ID,
         workspace: createWorkspaceFactory({
-          ...(this.#config.sandbox ? { sandbox: this.#config.sandbox } : {}),
+          ...(sandboxConfig ? { sandbox: sandboxConfig } : {}),
           ...(githubIntegration ? { github: githubIntegration } : {}),
           ...(workItemsStorage ? { workItems: workItemsStorage } : {}),
-          fleet,
           workspaceRegistry,
         }),
         disableGithubSignals: true,
@@ -682,7 +598,12 @@ export class MastraFactory {
         // A factory reads the repository it works on and its skill, never the
         // ~/.claude instructions of whoever hosts the process. On the controller
         // rather than per session, so webhook-recreated sessions keep it too.
-        initialState: { skipGlobalInstructions: true },
+        // Blank project identity for the same reason: the SDK's defaults seed
+        // sessions with the HOST process's own project root / name / branch,
+        // which must never reach a hosted session's prompt. Repo-backed
+        // sessions get their real workdir pinned by workspace resolution;
+        // chat-only sessions legitimately have no project.
+        initialState: { skipGlobalInstructions: true, projectPath: '', projectName: '', gitBranch: '' },
         storage: storage.getMastraStorage(),
         ...(mastraStorageBackend ? { storageBackend: mastraStorageBackend } : {}),
         ...(factoryProcessor ? { inputProcessors: [factoryProcessor] } : {}),
@@ -777,8 +698,7 @@ export class MastraFactory {
             audit: auditDomain,
             publicOrigin,
             stateSigner,
-            fleet,
-            ...(baseCheckpoints ? { baseCheckpoints } : {}),
+            sandbox: sandboxConfig,
             sessionRetirement,
             factoryStorage: storage,
             integrationStorage,
@@ -935,8 +855,7 @@ export class MastraFactory {
                 publicOrigin,
                 auth: routeAuth,
                 stateSigner,
-                fleet,
-                ...(baseCheckpoints ? { baseCheckpoints } : {}),
+                sandbox: sandboxConfig,
                 factoryStorage: storage,
                 integrationStorage,
                 sourceControlStorage,
@@ -968,8 +887,7 @@ export class MastraFactory {
               publicOrigin,
               auth: routeAuth,
               stateSigner,
-              fleet,
-              ...(baseCheckpoints ? { baseCheckpoints } : {}),
+              sandbox: sandboxConfig,
               factoryStorage: storage,
               integrationStorage,
               sourceControlStorage,

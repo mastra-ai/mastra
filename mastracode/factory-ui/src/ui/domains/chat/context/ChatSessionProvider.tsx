@@ -144,9 +144,6 @@ export function ChatSessionConfigProvider({
         ? {
             factoryProjectId: factory.id,
             projectRepositoryId: repository.projectRepositoryId,
-            sandboxId: storedSession?.sandboxId ?? ensureQuery.data?.sandboxId,
-            sandboxWorkdir:
-              storedSession?.sandboxWorkdir ?? ensureQuery.data?.sandboxWorkdir ?? repository.sandboxWorkdir,
           }
         : undefined,
     baseUrl,

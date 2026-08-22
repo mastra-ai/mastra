@@ -2,7 +2,6 @@ import { createPrivateKey, generateKeyPairSync } from 'node:crypto';
 import { describe, expect, it, vi, afterEach } from 'vitest';
 
 import { fakeRouteAuth } from '../../routes/test-utils.js';
-import { SandboxFleet } from '../../sandbox/fleet.js';
 import { createStateSigner } from '../../state-signing.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import { GithubIntegration, normalizePrivateKey } from './integration.js';
@@ -444,7 +443,7 @@ describe('GithubIntegration FactoryIntegration surface', () => {
     const github = new GithubIntegration(validConfig());
     const routes = github.routes({
       auth: fakeRouteAuth(),
-      fleet: new SandboxFleet(),
+      sandbox: { enabled: false, provider: 'none' },
       stateSigner: createStateSigner('secret'),
       storage: {
         generic: integrations.forIntegration(github.id),

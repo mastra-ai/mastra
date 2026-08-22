@@ -1,0 +1,258 @@
+import { Template } from 'e2b';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import { createRepoTemplate, refreshRepoTemplate, repoTemplateAlias } from './repo-template';
+import { isDeferredNamedTemplateSpec, isNamedTemplateSpec } from './template';
+import type { NamedTemplateSpec } from './template';
+
+const BASE = { repoFullName: 'octocat/hello', sha: 'a'.repeat(40), setupCommand: 'pnpm install' };
+
+async function serializedSteps(spec: NamedTemplateSpec): Promise<string> {
+  // JSON rendering covers the full serialized spec — every build step
+  // string, env, and image reference that would reach the E2B build API.
+  // (toDockerfile is unavailable for fromTemplate-based builders.)
+  return await Template.toJSON(spec.template as never, false);
+}
+
+function namedSpec(spec: ReturnType<typeof createRepoTemplate>): NamedTemplateSpec {
+  if (!isNamedTemplateSpec(spec as never)) throw new Error('expected a named spec');
+  return spec as NamedTemplateSpec;
+}
+
+describe('repoTemplateAlias', () => {
+  it('is deterministic for identical inputs', () => {
+    expect(repoTemplateAlias(BASE)).toBe(repoTemplateAlias({ ...BASE }));
+    expect(repoTemplateAlias(BASE)).toMatch(/^mastra-repo-octocat-hello-[0-9a-f]{8}:sha-[0-9a-f]{12}$/);
+  });
+
+  it('keys the sha as a tag on a sha-independent template name', () => {
+    const a = repoTemplateAlias(BASE);
+    const b = repoTemplateAlias({ ...BASE, sha: 'b'.repeat(40) });
+    expect(a).not.toBe(b);
+    // Same template NAME — a moved head is a rebuild-in-place under a new
+    // tag, not a new template.
+    expect(a.split(':')[0]).toBe(b.split(':')[0]);
+    expect(a.split(':')[1]).toBe(`sha-${'a'.repeat(12)}`);
+  });
+
+  it('changes when the setup command changes', () => {
+    expect(repoTemplateAlias(BASE)).not.toBe(repoTemplateAlias({ ...BASE, setupCommand: 'npm ci' }));
+  });
+
+  it('changes when the repo changes', () => {
+    expect(repoTemplateAlias(BASE)).not.toBe(repoTemplateAlias({ ...BASE, repoFullName: 'octocat/world' }));
+  });
+
+  it('degrades to the current tag without a sha', () => {
+    const shaless = { repoFullName: BASE.repoFullName, setupCommand: BASE.setupCommand };
+    expect(repoTemplateAlias(shaless)).toBe(repoTemplateAlias({ ...shaless }));
+    // Same template NAME as the tagged form, pinned to the stable `current`
+    // tag — never a bare name, whose create would resolve the unassigned
+    // `default` tag and 404.
+    const name = repoTemplateAlias(BASE).split(':')[0];
+    expect(repoTemplateAlias(shaless)).toBe(`${name}:current`);
+  });
+});
+
+describe('createRepoTemplate', () => {
+  it('returns a named spec whose alias matches repoTemplateAlias when a sha is given', () => {
+    const spec = createRepoTemplate(BASE);
+    expect(isNamedTemplateSpec(spec as never)).toBe(true);
+    expect(namedSpec(spec).alias).toBe(repoTemplateAlias(BASE));
+  });
+
+  it('clones into $HOME, pins the sha, and runs the setup command in the workdir', async () => {
+    const steps = await serializedSteps(namedSpec(createRepoTemplate(BASE)));
+    // Serialized as JSON, so the shell double quotes appear escaped.
+    expect(steps).toContain('git clone https://github.com/octocat/hello.git \\"$HOME/hello\\"');
+    expect(steps).toContain(`checkout ${BASE.sha}`);
+    expect(steps).toContain('cd \\"$HOME/hello\\" && pnpm install');
+  });
+
+  it('returns a deferred spec without a sha and pins it to the resolved head', async () => {
+    const head = 'c'.repeat(40);
+    const options = { repoFullName: BASE.repoFullName, setupCommand: BASE.setupCommand };
+    const spec = createRepoTemplate({ ...options, resolveHead: async () => head });
+    expect(isDeferredNamedTemplateSpec(spec as never)).toBe(true);
+    if (isNamedTemplateSpec(spec as never)) throw new Error('expected deferred');
+
+    const resolved = await (spec as { resolveSpec(): Promise<NamedTemplateSpec> }).resolveSpec();
+    expect(resolved.alias).toBe(repoTemplateAlias({ ...options, sha: head }));
+    const steps = await serializedSteps(resolved);
+    expect(steps).toContain(`checkout ${head}`);
+  });
+
+  it('degrades the deferred spec to the sha-less alias when head resolution fails', async () => {
+    const options = { repoFullName: BASE.repoFullName, setupCommand: BASE.setupCommand };
+    for (const resolveHead of [
+      async () => undefined,
+      async () => 'not a sha',
+      async (): Promise<string | undefined> => {
+        throw new Error('offline');
+      },
+    ]) {
+      const spec = createRepoTemplate({ ...options, resolveHead });
+      const resolved = await (spec as { resolveSpec(): Promise<NamedTemplateSpec> }).resolveSpec();
+      expect(resolved.alias).toBe(repoTemplateAlias(options));
+      const steps = await serializedSteps(resolved);
+      expect(steps).toContain('git clone https://github.com/octocat/hello.git');
+      expect(steps).not.toContain('checkout');
+    }
+  });
+
+  it('never puts anything credential-shaped in the serialized template', async () => {
+    const steps = await serializedSteps(namedSpec(createRepoTemplate(BASE)));
+    // The API takes no token at all, and the serialized spec must contain no
+    // credential mechanism: no auth headers, no credential config, no
+    // userinfo in the clone URL, no env interpolation of secrets.
+    for (const marker of [
+      'x-access-token',
+      'extraHeader',
+      'Authorization',
+      'credential',
+      'GIT_TOKEN',
+      'GH_TOKEN',
+      'GITHUB_TOKEN',
+      '@github.com',
+    ]) {
+      expect(steps).not.toContain(marker);
+    }
+  });
+
+  describe('build auth', () => {
+    const TOKEN = 'ghs_livetoken1234567890';
+    const authed = {
+      repoFullName: BASE.repoFullName,
+      setupCommand: BASE.setupCommand,
+      getAuthToken: async () => TOKEN,
+      resolveHead: async () => 'd'.repeat(40),
+    };
+
+    it('is always deferred when an auth resolver is configured', () => {
+      expect(isDeferredNamedTemplateSpec(createRepoTemplate(authed) as never)).toBe(true);
+      expect(isDeferredNamedTemplateSpec(createRepoTemplate({ ...authed, sha: BASE.sha }) as never)).toBe(true);
+    });
+
+    it('passes the token to the head resolver and sets it only via envs', async () => {
+      let sawToken: string | undefined;
+      const spec = createRepoTemplate({
+        ...authed,
+        resolveHead: async (_repo, token) => {
+          sawToken = token;
+          return 'd'.repeat(40);
+        },
+      });
+      const resolved = await (spec as { resolveSpec(): Promise<NamedTemplateSpec> }).resolveSpec();
+      expect(sawToken).toBe(TOKEN);
+      const serialized = await serializedSteps(resolved);
+      // The token VALUE appears exactly once — in the env map — and every
+      // command references it only through the env var. No expanded header,
+      // no tokened URL, nothing a filesystem layer could capture.
+      expect(serialized).toContain('"type": "ENV"');
+      expect(serialized.split(TOKEN).length - 1).toBe(1);
+      expect(serialized).toContain('$MASTRA_BUILD_GH_TOKEN');
+      expect(serialized).toContain('http.extraheader');
+      expect(serialized).not.toContain('@github.com');
+      expect(serialized).toContain('clone https://github.com/octocat/hello.git');
+    });
+
+    it('degrades to tokenless behavior when minting fails', async () => {
+      const spec = createRepoTemplate({
+        ...authed,
+        getAuthToken: async () => {
+          throw new Error('mint failed');
+        },
+        resolveHead: async (_repo, token) => (token ? 'e'.repeat(40) : undefined),
+      });
+      const resolved = await (spec as { resolveSpec(): Promise<NamedTemplateSpec> }).resolveSpec();
+      // No token → head resolver got none → untagged ref, plain clone.
+      expect(resolved.alias).toBe(
+        repoTemplateAlias({ repoFullName: BASE.repoFullName, setupCommand: BASE.setupCommand }),
+      );
+      const serialized = await serializedSteps(resolved);
+      expect(serialized).not.toContain('MASTRA_BUILD_GH_TOKEN');
+      expect(serialized).not.toContain('extraheader');
+    });
+  });
+
+  it('needs no root prep — the clone lands in the build user home', async () => {
+    const steps = await serializedSteps(namedSpec(createRepoTemplate(BASE)));
+    expect(steps).not.toContain('chown');
+    expect(steps).not.toContain('mkdir -p /workspace');
+  });
+
+  it('carries no named fallback — a broken build degrades to the default mountable template', () => {
+    const spec = namedSpec(createRepoTemplate(BASE));
+    expect(spec.fallbackTemplate).toBeUndefined();
+  });
+
+  it('carries a current-tag staleRef and build tag for stale-first resolution', () => {
+    const spec = namedSpec(createRepoTemplate(BASE));
+    const name = spec.alias.split(':')[0];
+    expect(spec.staleRef).toBe(`${name}:current`);
+    expect(spec.buildTags).toEqual(['current']);
+  });
+
+  it('constrains custom workdirs to plain $HOME-relative or absolute paths', () => {
+    expect(() => createRepoTemplate({ ...BASE, workdir: '/' })).toThrow();
+    expect(() => createRepoTemplate({ ...BASE, workdir: '$HOME' })).toThrow();
+    expect(() => createRepoTemplate({ ...BASE, workdir: '$HOME/../etc' })).toThrow();
+    expect(() => createRepoTemplate({ ...BASE, workdir: '$HOME/a;rm -rf /' })).toThrow();
+    expect(namedSpec(createRepoTemplate({ ...BASE, workdir: '$HOME/custom/dir' })).alias).toMatch(/^mastra-repo-/);
+    expect(namedSpec(createRepoTemplate({ ...BASE, workdir: '/srv/checkout' })).alias).toMatch(/^mastra-repo-/);
+  });
+
+  it('rejects malformed inputs', () => {
+    expect(() => createRepoTemplate({ repoFullName: 'no-slash' })).toThrow(/repoFullName/);
+    expect(() => createRepoTemplate({ repoFullName: 'a/b; rm -rf /' })).toThrow(/repoFullName/);
+    expect(() => createRepoTemplate({ ...BASE, sha: 'not-hex!' })).toThrow(/sha/);
+    expect(() => createRepoTemplate({ ...BASE, workdir: 'relative/path' })).toThrow(/workdir/);
+    expect(() => createRepoTemplate({ ...BASE, workdir: '/tmp/../etc' })).toThrow(/workdir/);
+  });
+});
+
+describe('refreshRepoTemplate', () => {
+  const head = 'f'.repeat(40);
+  const options = { repoFullName: BASE.repoFullName, setupCommand: BASE.setupCommand, resolveHead: async () => head };
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('reuses an existing build at the current head without building', async () => {
+    const exists = vi.spyOn(Template, 'exists').mockResolvedValue(true);
+    const build = vi.spyOn(Template, 'build').mockRejectedValue(new Error('must not build'));
+    const result = await refreshRepoTemplate(options);
+    expect(result).toEqual({ ref: repoTemplateAlias({ ...options, sha: head }), action: 'reused', sha: head });
+    expect(exists).toHaveBeenCalledWith(result.ref, undefined);
+    expect(build).not.toHaveBeenCalled();
+  });
+
+  it('builds the missing head ref and moves the current tag', async () => {
+    vi.spyOn(Template, 'exists').mockResolvedValue(false);
+    const build = vi
+      .spyOn(Template, 'build')
+      .mockResolvedValue({ alias: 'x', name: 'x', tags: [], templateId: 't', buildId: 'b' });
+    const result = await refreshRepoTemplate(options);
+    expect(result.action).toBe('built');
+    expect(result.ref).toBe(repoTemplateAlias({ ...options, sha: head }));
+    expect(build).toHaveBeenCalledTimes(1);
+    expect(build.mock.calls[0]?.[1]).toBe(result.ref);
+    expect(build.mock.calls[0]?.[2]).toMatchObject({ tags: ['current'] });
+  });
+
+  it('rejects on build failure so external warmers can observe it', async () => {
+    vi.spyOn(Template, 'exists').mockResolvedValue(false);
+    vi.spyOn(Template, 'build').mockRejectedValue(new Error('registry flake'));
+    await expect(refreshRepoTemplate(options)).rejects.toThrow('registry flake');
+  });
+
+  it('degrades to the current-tag ref when the head cannot be resolved', async () => {
+    vi.spyOn(Template, 'exists').mockResolvedValue(true);
+    const result = await refreshRepoTemplate({ ...options, resolveHead: async () => undefined });
+    expect(result).toEqual({
+      ref: repoTemplateAlias({ repoFullName: options.repoFullName, setupCommand: options.setupCommand }),
+      action: 'reused',
+    });
+  });
+});
