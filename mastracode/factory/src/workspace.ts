@@ -155,6 +155,10 @@ class FactorySkillSource implements SkillSource {
     if (this.#isFactoryPath(skillPath)) return Promise.resolve(path.normalize(skillPath));
     return this.fallback.realpath ? this.fallback.realpath(skillPath) : Promise.resolve(skillPath);
   }
+
+  warmup(): Promise<void> {
+    return this.fallback.warmup ? this.fallback.warmup() : Promise.resolve();
+  }
 }
 
 function skillSourceEnoent(skillPath: string): Error {
