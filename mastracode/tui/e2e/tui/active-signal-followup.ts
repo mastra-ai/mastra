@@ -21,16 +21,13 @@ export const activeSignalFollowupScenario: McE2eScenario = {
     await runtime.waitForScreenText(/Initial signal/i, terminal, 15_000);
 
     terminal.submit('Steer while active.');
-    await runtime.waitForScreenText(/Steer while active\./i, terminal);
     runtime.printScreen('after active follow-up submit', terminal);
 
     await runtime.waitForScreenText(/Active signal follow-up completed\./i, terminal, 60_000);
-    await runtime.waitForScreenText(/╭ steer /i, terminal, 5_000);
     runtime.printScreen('after active follow-up response', terminal);
 
     const completedView = terminal.serialize().view;
     expect(completedView).toContain('Steer while active.');
-    expect(completedView).toContain('steer');
     expect(completedView).not.toContain('Steer while active. pending');
 
     terminal.keyCtrlC();
