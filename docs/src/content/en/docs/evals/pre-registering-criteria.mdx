@@ -1,0 +1,147 @@
+---
+title: "Pre-register eval criteria | Evals"
+description: "Record scorer ids, thresholds, and a hash of the test set before an eval run, then verify the result against that record in CI."
+packages:
+  - "@mastra/core"
+---
+
+# Pre-register eval criteria
+
+A `runEvals` result records what was scored and what came back. It doesn't record what the bar was before the run, so a threshold lowered or a test case removed after the scores are known looks the same as the original criteria. When an eval gates a deploy, or when scores are published outside your team, that ordering is the part the result can't show.
+
+Pre-registration closes the gap. Write the criteria to a manifest, anchor the manifest before the run, then check the result against it. This is a pattern you assemble from Node's `crypto` module and the values [`runEvals`](/reference/evals/run-evals) already returns. Mastra doesn't add an API for it.
+
+## Describe the criteria
+
+A manifest holds what a reader would otherwise have to take on trust. Record the scorers that ran as [gates](/docs/evals/gates-and-verdicts), the threshold each tracked scorer had to meet, and the test cases behind the scores.
+
+The test cases go in as a SHA-256 hash rather than in full, so the manifest stays small and still changes if any item changes. Hash a canonical serialization, with object keys sorted, so that formatting or key order can't alter the digest.
+
+```typescript title="src/evals/criteria.ts"
+import { createHash } from 'node:crypto'
+import type { ThresholdConfig } from '@mastra/core/evals'
+
+export type EvalCriteria = {
+  gates: string[]
+  thresholds: Record<string, ThresholdConfig>
+  datasetHash: string
+}
+
+function canonicalize(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalize).join(',')}]`
+  }
+
+  if (value !== null && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) =>
+      a < b ? -1 : 1,
+    )
+    return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${canonicalize(item)}`).join(',')}}`
+  }
+
+  return JSON.stringify(value) ?? 'null'
+}
+
+export function hashDataset(data: readonly unknown[]): string {
+  return createHash('sha256').update(canonicalize(data)).digest('hex')
+}
+```
+
+`ThresholdConfig` covers both supported forms, a bare number and a `{ min, max }` range, so the manifest keeps whichever one the eval uses.
+
+## Write the manifest before the run
+
+Generate the manifest from the same values the eval will use, and write it to disk as its own step.
+
+```typescript title="src/evals/lock-criteria.ts"
+import { writeFileSync } from 'node:fs'
+import { hashDataset, type EvalCriteria } from './criteria'
+import { dataset } from './dataset'
+
+const criteria: EvalCriteria = {
+  gates: ['answered-in-english'],
+  thresholds: { 'location-accuracy': 0.9 },
+  datasetHash: hashDataset(dataset),
+}
+
+writeFileSync('criteria.json', `${JSON.stringify(criteria, null, 2)}\n`)
+```
+
+A manifest written by the job it constrains proves only that the run was self-consistent. What supplies the ordering is where you put it: commit `criteria.json` before the eval runs and the commit timestamp is the evidence, or publish it as a signed build artifact and the attestation is. Pick one and treat the manifest as read-only afterwards.
+
+## Run against the recorded criteria
+
+Read the thresholds from the manifest instead of typing them into the `runEvals` call. The manifest becomes the single place the numbers live, so the run can't drift from what was recorded.
+
+```typescript title="src/evals/run-gate.ts"
+import { readFileSync } from 'node:fs'
+import { runEvals } from '@mastra/core/evals'
+import { weatherAgent } from '../mastra/agents/weather-agent'
+import { englishGate, locationScorer } from '../mastra/scorers'
+import type { EvalCriteria } from './criteria'
+import { dataset } from './dataset'
+
+const criteria: EvalCriteria = JSON.parse(readFileSync('criteria.json', 'utf8'))
+
+const result = await runEvals({
+  data: dataset,
+  target: weatherAgent,
+  gates: [englishGate],
+  scorers: [{ scorer: locationScorer, threshold: criteria.thresholds['location-accuracy']! }],
+})
+```
+
+## Verify the result
+
+Verification compares the run against the manifest and separates two failures that look alike in a log: the agent missed the bar, and the bar moved.
+
+```typescript title="src/evals/verify.ts"
+import type { RunEvalsResult } from '@mastra/core/evals'
+import { hashDataset, type EvalCriteria } from './criteria'
+
+type Verdict = 'PASS' | 'FAIL' | 'TAMPERED'
+
+export function verify(
+  criteria: EvalCriteria,
+  result: RunEvalsResult,
+  data: readonly unknown[],
+): Verdict {
+  if (hashDataset(data) !== criteria.datasetHash) {
+    return 'TAMPERED'
+  }
+
+  const ranGates = (result.gateResults ?? []).map(gate => gate.id).sort()
+  if (JSON.stringify(ranGates) !== JSON.stringify([...criteria.gates].sort())) {
+    return 'TAMPERED'
+  }
+
+  for (const threshold of result.thresholdResults ?? []) {
+    const recorded = criteria.thresholds[threshold.id]
+    if (
+      recorded === undefined ||
+      JSON.stringify(recorded) !== JSON.stringify(threshold.threshold)
+    ) {
+      return 'TAMPERED'
+    }
+  }
+
+  return result.verdict === 'passed' ? 'PASS' : 'FAIL'
+}
+```
+
+`TAMPERED` means the run didn't answer the question that was locked, whatever score it produced. Exit CI with a distinct code for it so a swapped test set can't land as an ordinary red build that someone reruns.
+
+```bash title="Gate a deploy on the locked criteria"
+node --experimental-strip-types src/evals/run-gate.ts
+# exit 0 = PASS, 1 = FAIL, 2 = TAMPERED
+```
+
+## Limits of pre-registration
+
+Pre-registration shows that the criteria in the manifest are the criteria the reported run used. It says nothing about whether the scorers measure the right thing, and it can't stop someone who controls both the manifest and its anchor from rewriting both. Against an auditor reading your history, it turns a claim into something checkable. Against your own repository history, it's only as strong as the anchor.
+
+## Related
+
+- [Gates and verdicts](/docs/evals/gates-and-verdicts)
+- [Running scorers in CI](/docs/evals/running-in-ci)
+- [`runEvals` API reference](/reference/evals/run-evals)

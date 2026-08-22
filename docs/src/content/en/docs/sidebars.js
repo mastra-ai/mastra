@@ -626,6 +626,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'evals/pre-registering-criteria',
+              label: 'Pre-register Criteria',
+            },
+            {
+              type: 'doc',
               id: 'evals/evals-with-memory',
               label: 'Evals with Memory',
             },
