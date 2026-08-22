@@ -2843,6 +2843,27 @@ describe('Tracing', () => {
       span.end();
     });
 
+    it('honors a client-supplied feedbackId for idempotent submission', async () => {
+      const { buildFeedbackEvent } = await import('./recorded');
+      const event = buildFeedbackEvent({
+        traceId: 'trace-1',
+        spanId: 'span-1',
+        feedback: { feedbackId: 'deterministic-id-1', feedbackType: 'thumbs', value: 'up' },
+      });
+      expect(event.feedback.feedbackId).toBe('deterministic-id-1');
+    });
+
+    it('generates a feedbackId when the client does not supply one', async () => {
+      const { buildFeedbackEvent } = await import('./recorded');
+      const event = buildFeedbackEvent({
+        traceId: 'trace-1',
+        spanId: 'span-1',
+        feedback: { feedbackType: 'thumbs', value: 'up' },
+      });
+      expect(event.feedback.feedbackId).toEqual(expect.any(String));
+      expect(event.feedback.feedbackId.length).toBeGreaterThan(0);
+    });
+
     it('forwards scorerName and targetEntityType from ScoreInput onto the ExportedScore', async () => {
       const { buildScoreEvent } = await import('./recorded');
       const event = buildScoreEvent({

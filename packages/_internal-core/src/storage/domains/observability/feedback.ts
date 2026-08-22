@@ -111,6 +111,12 @@ export type FeedbackRecord = z.infer<typeof feedbackRecordSchema>;
  * The span/trace context adds traceId/spanId before emitting ExportedFeedback.
  */
 const feedbackInputObjectSchema = z.object({
+  feedbackId: z
+    .string()
+    .optional()
+    .describe(
+      'Optional client-supplied unique id. Provide a deterministic id to make feedback submission idempotent — retries with the same feedbackId will not create duplicate records. Generated at emission time when omitted.',
+    ),
   feedbackSource: feedbackSourceField.optional(),
   /**
    * @deprecated Use `feedbackSource` instead.
@@ -183,6 +189,38 @@ export const batchCreateFeedbackArgsSchema = z
 export type BatchCreateFeedbackArgs = z.infer<typeof batchCreateFeedbackArgsSchema>;
 
 // ============================================================================
+// Delete Feedback Schemas
+// ============================================================================
+
+/** Schema for deleteFeedback operation arguments */
+export const deleteFeedbackArgsSchema = z
+  .object({
+    feedbackId: z.string().describe('ID of the feedback record to delete'),
+  })
+  .describe('Arguments for deleting a feedback record');
+
+/** Arguments for deleting a feedback record */
+export type DeleteFeedbackArgs = z.infer<typeof deleteFeedbackArgsSchema>;
+
+/** Schema for deleteFeedbackByTraceIds operation arguments */
+export const deleteFeedbackByTraceIdsArgsSchema = z
+  .object({
+    traceIds: z.array(traceIdField).describe('Trace IDs whose linked feedback should be deleted'),
+  })
+  .describe('Arguments for deleting feedback linked to traces');
+
+/** Arguments for deleting feedback linked to traces */
+export type DeleteFeedbackByTraceIdsArgs = z.infer<typeof deleteFeedbackByTraceIdsArgsSchema>;
+
+/** Schema for deleteFeedback / deleteFeedbackByTraceIds operation response */
+export const deleteFeedbackResponseSchema = z
+  .object({ success: z.boolean() })
+  .describe('Response from deleting feedback');
+
+/** Response from deleting feedback */
+export type DeleteFeedbackResponse = z.infer<typeof deleteFeedbackResponseSchema>;
+
+// ============================================================================
 // Feedback Filter Schema
 // ============================================================================
 
@@ -201,6 +239,7 @@ const feedbackFilterObjectSchema = z.object({
    */
   source: feedbackSourceField.optional(),
   feedbackUserId: feedbackUserIdField.optional(),
+  sourceId: z.string().optional().describe('Filter by source record linkage (e.g. message ID or experiment result ID)'),
 });
 
 export const feedbackFilterSchema = z

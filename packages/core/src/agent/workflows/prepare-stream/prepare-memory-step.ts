@@ -93,6 +93,13 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
         _agentNetworkAppend: capabilities._agentNetworkAppend,
       });
 
+      // Bridge persisted messages back to their originating trace: stamp
+      // response messages with the AGENT_RUN span's traceId/spanId at save time.
+      const agentRunSpan = observabilityContext.tracing?.currentSpan;
+      if (agentRunSpan?.isValid) {
+        messageList.setResponseTraceContext({ traceId: agentRunSpan.traceId, agentRunSpanId: agentRunSpan.id });
+      }
+
       // Create processorStates map - persists across loop iterations within this agent turn
       // Shared by all processor methods (input and output) for state sharing
       const processorStates = new Map<string, ProcessorState>();

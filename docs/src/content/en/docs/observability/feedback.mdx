@@ -90,6 +90,64 @@ await observability!.createFeedback({
 })
 ```
 
+### Link feedback to a message
+
+Assistant messages persisted by memory are stamped with the trace that produced them. Each saved response message carries `content.metadata.mastra` with the `traceId` and `agentRunSpanId` of the agent run, so you can attach feedback to the right trace directly from a message returned by the memory APIs:
+
+```typescript
+const { messages } = await memory.recall({ threadId, resourceId })
+const message = messages.find(m => m.role === 'assistant')
+const { traceId, agentRunSpanId } = message.content.metadata.mastra
+
+await mastra.observability.addFeedback({
+  traceId,
+  spanId: agentRunSpanId,
+  feedback: {
+    feedbackSource: 'user',
+    feedbackType: 'thumbs',
+    value: 1,
+    sourceId: message.id,
+  },
+})
+```
+
+The stamp is only added when observability is enabled and never overwrites user-supplied metadata.
+
+### Idempotent retries
+
+Supply your own `feedbackId` to make feedback submission safe to retry. All storage backends deduplicate by `feedbackId`, so resubmitting the same feedback (for example after a network timeout) results in a single record. Derive the ID from stable values such as the message and user:
+
+```typescript
+await mastra.observability.addFeedback({
+  traceId,
+  feedback: {
+    feedbackId: `thumbs-${messageId}-${userId}`,
+    feedbackSource: 'user',
+    feedbackType: 'thumbs',
+    value: 1,
+    sourceId: messageId,
+  },
+})
+```
+
+Set `sourceId` to the record the feedback is about — such as the message ID — so you can later list all feedback for that message with `listFeedback({ filters: { sourceId: messageId } })`.
+
+## Delete feedback
+
+Use `deleteFeedback()` to remove a single record and `deleteFeedbackByTraceIds()` to erase all feedback linked to specific traces. Deleting traces with `batchDeleteTraces()` cascades to their linked feedback automatically.
+
+```typescript
+await observability!.deleteFeedback({ feedbackId: 'feedback-rating-1' })
+
+await observability!.deleteFeedbackByTraceIds({ traceIds: ['trace-123'] })
+```
+
+To erase everything related to a conversation thread, look up the trace IDs from the thread's message metadata, then delete the traces — the linked feedback is removed in the same operation. On ClickHouse, deletes are masked from reads immediately but physically removed later by background merges; see the [feedback reference](/reference/observability/feedback#delete-feedback) for hard-erase guidance.
+
+## Review feedback in Studio
+
+Studio includes a feedback page under **Observability → Feedback** that lists all feedback records with filters for type, source, user, and time range. Each record deep-links to its trace, and the trace detail view has a feedback tab showing all feedback for that trace. From a feedback record you can promote the underlying trace to a dataset item with **Add to dataset** — for `correction` feedback, the corrected value is pre-filled as the item's ground truth.
+
 ## List feedback
 
 Use `listFeedback()` to page through raw records or poll with delta mode.

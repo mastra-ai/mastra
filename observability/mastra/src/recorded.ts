@@ -132,7 +132,7 @@ export function buildFeedbackEvent(args: {
   return {
     type: 'feedback',
     feedback: {
-      feedbackId: generateSignalId(),
+      feedbackId: feedback.feedbackId ?? generateSignalId(),
       timestamp: new Date(),
       traceId,
       spanId,

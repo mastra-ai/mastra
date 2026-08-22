@@ -389,6 +389,8 @@ export function buildFeedbackFilterConditions(filters: FeedbackFilter | undefine
 
   addEq(col('feedbackSource'), filters.feedbackSource, 'feedbackSource', 'String', out);
 
+  addEq(col('sourceId'), filters.sourceId, 'sourceId', 'String', out);
+
   if (typeof filters.feedbackType === 'string') {
     addEq(col('feedbackType'), filters.feedbackType, 'feedbackType', 'String', out);
   } else if (Array.isArray(filters.feedbackType)) {

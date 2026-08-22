@@ -128,6 +128,36 @@ await observability.batchCreateFeedback({
 })
 ```
 
+## Delete feedback
+
+### `deleteFeedback(args)`
+
+Deletes a single feedback record by `feedbackId`. Available on the observability storage domain, the HTTP routes, and `@mastra/client-js`.
+
+```typescript
+await mastraClient.deleteFeedback({ feedbackId: 'feedback-1' })
+```
+
+<PropertiesTable
+  content={[{ name: 'feedbackId', type: 'string', description: 'ID of the feedback record to delete.' }]}
+/>
+
+### `deleteFeedbackByTraceIds(args)`
+
+Deletes all feedback records linked to the given trace IDs. Use this for data-lifecycle erasure. Deleting traces with `batchDeleteTraces()` also cascades to their linked feedback automatically.
+
+```typescript
+await mastraClient.deleteFeedbackByTraceIds({ traceIds: ['trace-123', 'trace-456'] })
+```
+
+<PropertiesTable
+  content={[{ name: 'traceIds', type: 'string[]', description: 'Trace IDs whose linked feedback should be deleted.' }]}
+/>
+
+Both methods resolve to `{ success: boolean }`.
+
+On ClickHouse, deletes use lightweight `DELETE` statements: rows are masked from reads immediately, but physical removal happens later through background merges. For compliance-driven erasure that requires physical removal, run an `ALTER TABLE ... DELETE` mutation with `mutations_sync` against the feedback tables after the lightweight delete.
+
 ## List feedback
 
 ### `listFeedback(args?)`
@@ -424,6 +454,13 @@ Use `FeedbackInput` with `mastra.observability.addFeedback()`, `recordedTrace.ad
 <PropertiesTable
   content={[
   {
+    name: 'feedbackId',
+    type: 'string',
+    description:
+      'Client-supplied deterministic ID. Retries with the same ID are deduplicated instead of creating duplicate records. Generated automatically when omitted.',
+    isOptional: true,
+  },
+  {
     name: 'feedbackSource',
     type: 'string',
     description: 'Optional source metadata for the feedback.',
@@ -504,6 +541,12 @@ Use `FeedbackFilter` in `listFeedback()` and OLAP query `filters`.
   { name: 'environment', type: 'string', description: 'Filter by environment.', isOptional: true },
   { name: 'executionSource', type: 'string', description: 'Filter by execution source.', isOptional: true },
   {
+    name: 'sourceId',
+    type: 'string',
+    description: 'Filter by the source record ID the feedback is linked to (for example a message ID).',
+    isOptional: true,
+  },
+  {
     name: 'experimentId',
     type: 'string',
     description: 'Filter by experiment or eval run identifier.',
@@ -524,6 +567,8 @@ Use `FeedbackFilter` in `listFeedback()` and OLAP query `filters`.
 | - | - | - | - |
 | `GET` | `/api/observability/feedback` | List feedback records | None derived |
 | `POST` | `/api/observability/feedback` | Create a feedback record | None derived |
+| `DELETE` | `/api/observability/feedback/:feedbackId` | Delete a feedback record | None derived |
+| `POST` | `/api/observability/feedback/delete-by-trace-ids` | Delete feedback linked to traces | None derived |
 | `POST` | `/api/observability/feedback/aggregate` | Return one aggregate value | `observability:read` |
 | `POST` | `/api/observability/feedback/breakdown` | Group feedback by dimensions | `observability:read` |
 | `POST` | `/api/observability/feedback/timeseries` | Bucket feedback by interval | `observability:read` |

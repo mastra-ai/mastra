@@ -60,6 +60,7 @@ import DatasetCompareDatasetVersions from './pages/datasets/dataset/versions';
 import Evaluation from './pages/evaluation';
 import Experiments from './pages/experiments';
 import ExperimentPage from './pages/experiments/experiment';
+import Feedback from './pages/feedback';
 import IntegrationsPage from './pages/integrations';
 import { Login } from './pages/login';
 import Logs from './pages/logs';
@@ -388,6 +389,7 @@ export const routes: RouteObject[] = [
         ]),
       },
       { path: '/traces', element: <Traces />, handle: navHandle('/traces') },
+      { path: '/feedback', element: <Feedback />, handle: navHandle('/feedback') },
       {
         path: '/traces/:traceId',
         element: <TraceDetails />,

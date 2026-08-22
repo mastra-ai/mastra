@@ -10,6 +10,8 @@ import { listFeedbackArgsSchema } from '@mastra/core/storage';
 import type {
   BatchCreateFeedbackArgs,
   CreateFeedbackArgs,
+  DeleteFeedbackArgs,
+  DeleteFeedbackByTraceIdsArgs,
   GetFeedbackAggregateArgs,
   GetFeedbackAggregateResponse,
   GetFeedbackBreakdownArgs,
@@ -64,6 +66,10 @@ function applyFeedbackFilters(
     acc.conditions.push(`"feedbackUserId" = $${acc.next++}`);
     acc.params.push(filters.feedbackUserId);
   }
+  if (filters?.sourceId) {
+    acc.conditions.push(`"sourceId" = $${acc.next++}`);
+    acc.params.push(filters.sourceId);
+  }
 }
 
 /**
@@ -88,9 +94,31 @@ function pushFeedbackIdentity(
 // Writes
 // ---------------------------------------------------------------------------
 
+/**
+ * Filter out rows whose feedbackId already exists in the table.
+ *
+ * The primary key is ("feedbackId", "timestamp"), so ON CONFLICT DO NOTHING
+ * alone does not dedupe retries that carry a fresh timestamp. Idempotency is
+ * keyed on feedbackId alone: a record with an existing feedbackId is never
+ * inserted again (records are immutable — no overwrite).
+ */
+async function filterExistingFeedbackIds(
+  client: DbClient,
+  table: string,
+  rows: Record<string, unknown>[],
+): Promise<Record<string, unknown>[]> {
+  const ids = rows.map(row => row.feedbackId).filter((id): id is string => typeof id === 'string');
+  if (ids.length === 0) return rows;
+  const result = await client.query(`SELECT DISTINCT "feedbackId" FROM ${table} WHERE "feedbackId" = ANY($1)`, [ids]);
+  const existing = new Set(result.rows.map((r: { feedbackId: string }) => r.feedbackId));
+  if (existing.size === 0) return rows;
+  return rows.filter(row => typeof row.feedbackId !== 'string' || !existing.has(row.feedbackId));
+}
+
 export async function createFeedback(client: DbClient, schema: string, args: CreateFeedbackArgs): Promise<void> {
-  const row = feedbackRecordToRow(args.feedback);
-  const insert = buildInsert(schema, TABLE_FEEDBACK_EVENTS, [row]);
+  const table = qualifiedTable(schema, TABLE_FEEDBACK_EVENTS);
+  const rows = await filterExistingFeedbackIds(client, table, [feedbackRecordToRow(args.feedback)]);
+  const insert = buildInsert(schema, TABLE_FEEDBACK_EVENTS, rows);
   if (insert) await client.query(insert.text, insert.values);
 }
 
@@ -100,9 +128,29 @@ export async function batchCreateFeedback(
   args: BatchCreateFeedbackArgs,
 ): Promise<void> {
   if (args.feedbacks.length === 0) return;
-  const rows = args.feedbacks.map(feedbackRecordToRow);
+  const table = qualifiedTable(schema, TABLE_FEEDBACK_EVENTS);
+  const rows = await filterExistingFeedbackIds(client, table, args.feedbacks.map(feedbackRecordToRow));
   const insert = buildInsert(schema, TABLE_FEEDBACK_EVENTS, rows);
   if (insert) await client.query(insert.text, insert.values);
+}
+
+// ---------------------------------------------------------------------------
+// Deletes
+// ---------------------------------------------------------------------------
+
+export async function deleteFeedback(client: DbClient, schema: string, args: DeleteFeedbackArgs): Promise<void> {
+  const table = qualifiedTable(schema, TABLE_FEEDBACK_EVENTS);
+  await client.query(`DELETE FROM ${table} WHERE "feedbackId" = $1`, [args.feedbackId]);
+}
+
+export async function deleteFeedbackByTraceIds(
+  client: DbClient,
+  schema: string,
+  args: DeleteFeedbackByTraceIdsArgs,
+): Promise<void> {
+  if (args.traceIds.length === 0) return;
+  const table = qualifiedTable(schema, TABLE_FEEDBACK_EVENTS);
+  await client.query(`DELETE FROM ${table} WHERE "traceId" = ANY($1)`, [args.traceIds]);
 }
 
 // ---------------------------------------------------------------------------

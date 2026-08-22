@@ -38,6 +38,9 @@ import type {
   ListFeedbackResponse,
   CreateFeedbackBody,
   CreateFeedbackResponse,
+  DeleteFeedbackArgs,
+  DeleteFeedbackByTraceIdsArgs,
+  DeleteFeedbackResponse,
   GetFeedbackAggregateArgs,
   GetFeedbackAggregateResponse,
   GetFeedbackBreakdownArgs,
@@ -393,6 +396,25 @@ export class Observability extends BaseResource {
    */
   createFeedback(params: CreateFeedbackBody): Promise<CreateFeedbackResponse> {
     return this.request(`/observability/feedback`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Deletes a single feedback record by feedbackId.
+   */
+  deleteFeedback(params: DeleteFeedbackArgs): Promise<DeleteFeedbackResponse> {
+    return this.request(`/observability/feedback/${encodeURIComponent(params.feedbackId)}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
+   * Deletes all feedback records linked to the given trace IDs.
+   */
+  deleteFeedbackByTraceIds(params: DeleteFeedbackByTraceIdsArgs): Promise<DeleteFeedbackResponse> {
+    return this.request(`/observability/feedback/delete-by-trace-ids`, {
       method: 'POST',
       body: params,
     });

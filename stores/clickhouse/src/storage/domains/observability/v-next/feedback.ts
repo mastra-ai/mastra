@@ -5,6 +5,8 @@ import type {
   AggregationType,
   BatchCreateFeedbackArgs,
   CreateFeedbackArgs,
+  DeleteFeedbackArgs,
+  DeleteFeedbackByTraceIdsArgs,
   ListFeedbackArgs,
   ListFeedbackResponse,
   GetFeedbackAggregateArgs,
@@ -167,15 +169,93 @@ export async function createFeedback(client: ClickHouseClient, args: CreateFeedb
   await batchCreateFeedback(client, { feedbacks: [args.feedback] });
 }
 
+/**
+ * Filter out feedbacks whose feedbackId already exists.
+ *
+ * The ReplacingMergeTree key is (traceId, timestamp, feedbackId), so retries
+ * carrying a fresh timestamp are not deduped by the engine. Idempotency is
+ * keyed on feedbackId alone: an existing feedbackId is never inserted again
+ * (records are immutable — no overwrite).
+ */
+async function filterExistingFeedbackIds(
+  client: ClickHouseClient,
+  feedbacks: BatchCreateFeedbackArgs['feedbacks'],
+): Promise<BatchCreateFeedbackArgs['feedbacks']> {
+  const ids = feedbacks.map(fb => fb.feedbackId).filter((id): id is string => typeof id === 'string');
+  if (ids.length === 0) return feedbacks;
+  const rows = await queryJson<{ feedbackId: string }>(
+    client,
+    `SELECT DISTINCT feedbackId FROM ${TABLE_FEEDBACK_EVENTS} WHERE feedbackId IN {feedbackIds:Array(String)}`,
+    { feedbackIds: ids },
+  );
+  const existing = new Set(rows.map(r => r.feedbackId));
+  if (existing.size === 0) return feedbacks;
+  return feedbacks.filter(fb => typeof fb.feedbackId !== 'string' || !existing.has(fb.feedbackId));
+}
+
 export async function batchCreateFeedback(client: ClickHouseClient, args: BatchCreateFeedbackArgs): Promise<void> {
   if (args.feedbacks.length === 0) return;
 
+  const feedbacks = await filterExistingFeedbackIds(client, args.feedbacks);
+  if (feedbacks.length === 0) return;
+
   await client.insert({
     table: TABLE_FEEDBACK_EVENTS,
-    values: args.feedbacks.map(feedbackRecordToRow),
+    values: feedbacks.map(feedbackRecordToRow),
     format: 'JSONEachRow',
     clickhouse_settings: CH_INSERT_SETTINGS,
   });
+}
+
+// ============================================================================
+// Deletes
+// ============================================================================
+
+/**
+ * Delete a single feedback record by feedbackId.
+ *
+ * Uses lightweight DELETE (immediately visible to reads) and cascades to the
+ * MV-fed delta table, mirroring the tracing delete pattern. Physical removal
+ * happens later via background merges; for compliance-driven hard erasure use
+ * `ALTER TABLE ... DELETE` with `mutations_sync`.
+ */
+export async function deleteFeedback(client: ClickHouseClient, args: DeleteFeedbackArgs): Promise<void> {
+  const params = { fid: args.feedbackId };
+  await Promise.all([
+    client.command({
+      query: `DELETE FROM ${TABLE_FEEDBACK_EVENTS} WHERE feedbackId = {fid:String}`,
+      query_params: params,
+    }),
+    client.command({
+      query: `DELETE FROM ${TABLE_FEEDBACK_EVENTS_DELTA} WHERE feedbackId = {fid:String}`,
+      query_params: params,
+    }),
+  ]);
+}
+
+/** Delete all feedback linked to the given trace IDs (both base and delta tables). */
+export async function deleteFeedbackByTraceIds(
+  client: ClickHouseClient,
+  args: DeleteFeedbackByTraceIdsArgs,
+): Promise<void> {
+  if (args.traceIds.length === 0) return;
+  const params: Record<string, string> = {};
+  const placeholders: string[] = [];
+  for (let i = 0; i < args.traceIds.length; i++) {
+    params[`tid_${i}`] = args.traceIds[i]!;
+    placeholders.push(`{tid_${i}:String}`);
+  }
+  const inList = placeholders.join(', ');
+  await Promise.all([
+    client.command({
+      query: `DELETE FROM ${TABLE_FEEDBACK_EVENTS} WHERE traceId IN (${inList})`,
+      query_params: params,
+    }),
+    client.command({
+      query: `DELETE FROM ${TABLE_FEEDBACK_EVENTS_DELTA} WHERE traceId IN (${inList})`,
+      query_params: params,
+    }),
+  ]);
 }
 
 // ============================================================================

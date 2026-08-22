@@ -21,6 +21,8 @@ import type {
 import type {
   BatchCreateFeedbackArgs,
   CreateFeedbackArgs,
+  DeleteFeedbackArgs,
+  DeleteFeedbackByTraceIdsArgs,
   ListFeedbackArgs,
   ListFeedbackResponse,
   GetFeedbackAggregateArgs,
@@ -671,6 +673,30 @@ export class ObservabilityStorage extends StorageDomain {
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
       category: ErrorCategory.SYSTEM,
       text: 'This storage provider does not support batch creating feedback',
+    });
+  }
+
+  /**
+   * Deletes a single feedback record by ID.
+   */
+  async deleteFeedback(_args: DeleteFeedbackArgs): Promise<void> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_DELETE_FEEDBACK_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support deleting feedback',
+    });
+  }
+
+  /**
+   * Deletes all feedback linked to the given trace IDs.
+   */
+  async deleteFeedbackByTraceIds(_args: DeleteFeedbackByTraceIdsArgs): Promise<void> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_DELETE_FEEDBACK_BY_TRACE_IDS_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support deleting feedback by trace IDs',
     });
   }
 

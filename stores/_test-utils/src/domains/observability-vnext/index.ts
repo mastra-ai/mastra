@@ -3204,6 +3204,144 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         expect(result.feedback[0]!.traceId).toBe('trace-legacy-feedback');
         expect(result.feedback[0]!.feedbackSource).toBe('manual');
       });
+
+      it('deduplicates retried submissions with the same feedbackId', async () => {
+        const feedback = {
+          feedbackId: 'feedback-idempotent-1',
+          timestamp: new Date('2026-01-01T00:00:00Z'),
+          traceId: 'trace-idempotent',
+          spanId: null,
+          feedbackSource: 'user' as const,
+          feedbackType: 'thumbs' as const,
+          value: 1,
+          comment: 'first submission',
+          experimentId: null,
+          feedbackUserId: null,
+          sourceId: null,
+          metadata: null,
+        };
+        await storage.createFeedback({ feedback });
+        // Retry carries a fresh timestamp — must not create a duplicate record.
+        await storage.createFeedback({
+          feedback: { ...feedback, timestamp: new Date('2026-01-01T00:00:05Z') },
+        });
+
+        const result = await storage.listFeedback({});
+        const matching = result.feedback.filter(fb => fb.feedbackId === 'feedback-idempotent-1');
+        expect(matching).toHaveLength(1);
+      });
+
+      it('filters feedback by sourceId', async () => {
+        const base = {
+          timestamp: new Date('2026-01-01T00:00:00Z'),
+          traceId: 'trace-source-filter',
+          spanId: null,
+          feedbackSource: 'user' as const,
+          feedbackType: 'thumbs' as const,
+          value: 1,
+          comment: null,
+          experimentId: null,
+          feedbackUserId: null,
+          metadata: null,
+        };
+        await storage.batchCreateFeedback({
+          feedbacks: [
+            { ...base, feedbackId: 'feedback-src-a', sourceId: 'message-abc' },
+            { ...base, feedbackId: 'feedback-src-b', sourceId: 'message-def' },
+          ],
+        });
+
+        const result = await storage.listFeedback({ filters: { sourceId: 'message-abc' } });
+        expect(result.feedback).toHaveLength(1);
+        expect(result.feedback[0]!.feedbackId).toBe('feedback-src-a');
+        expect(result.feedback[0]!.sourceId).toBe('message-abc');
+      });
+
+      it('deletes a feedback record by feedbackId', async () => {
+        const base = {
+          timestamp: new Date('2026-01-01T00:00:00Z'),
+          traceId: 'trace-delete',
+          spanId: null,
+          feedbackSource: 'user' as const,
+          feedbackType: 'thumbs' as const,
+          value: 1,
+          comment: null,
+          experimentId: null,
+          feedbackUserId: null,
+          sourceId: null,
+          metadata: null,
+        };
+        await storage.batchCreateFeedback({
+          feedbacks: [
+            { ...base, feedbackId: 'feedback-del-a' },
+            { ...base, feedbackId: 'feedback-del-b' },
+          ],
+        });
+
+        await storage.deleteFeedback({ feedbackId: 'feedback-del-a' });
+
+        const result = await storage.listFeedback({});
+        const ids = result.feedback.map(fb => fb.feedbackId);
+        expect(ids).not.toContain('feedback-del-a');
+        expect(ids).toContain('feedback-del-b');
+      });
+
+      it('deletes feedback by traceIds', async () => {
+        const base = {
+          timestamp: new Date('2026-01-01T00:00:00Z'),
+          spanId: null,
+          feedbackSource: 'user' as const,
+          feedbackType: 'thumbs' as const,
+          value: 1,
+          comment: null,
+          experimentId: null,
+          feedbackUserId: null,
+          sourceId: null,
+          metadata: null,
+        };
+        await storage.batchCreateFeedback({
+          feedbacks: [
+            { ...base, feedbackId: 'feedback-tdel-a', traceId: 'trace-erase-1' },
+            { ...base, feedbackId: 'feedback-tdel-b', traceId: 'trace-erase-1' },
+            { ...base, feedbackId: 'feedback-tdel-c', traceId: 'trace-keep-1' },
+          ],
+        });
+
+        await storage.deleteFeedbackByTraceIds({ traceIds: ['trace-erase-1'] });
+
+        const result = await storage.listFeedback({});
+        const ids = result.feedback.map(fb => fb.feedbackId);
+        expect(ids).not.toContain('feedback-tdel-a');
+        expect(ids).not.toContain('feedback-tdel-b');
+        expect(ids).toContain('feedback-tdel-c');
+      });
+
+      it('cascades feedback deletion when traces are deleted', async () => {
+        await storage.batchCreateFeedback({
+          feedbacks: [
+            {
+              feedbackId: 'feedback-cascade-a',
+              timestamp: new Date('2026-01-01T00:00:00Z'),
+              traceId: 'trace-cascade-1',
+              spanId: null,
+              feedbackSource: 'user',
+              feedbackType: 'thumbs',
+              value: 1,
+              comment: null,
+              experimentId: null,
+              feedbackUserId: null,
+              sourceId: null,
+              metadata: null,
+            },
+          ],
+        });
+
+        await storage.batchDeleteTraces({ traceIds: ['trace-cascade-1'] });
+
+        const result = await storage.listFeedback({});
+        const ids = result.feedback.map(fb => fb.feedbackId);
+        expect(ids).not.toContain('feedback-cascade-a');
+      });
     });
 
     describe('feedback (batch)', () => {

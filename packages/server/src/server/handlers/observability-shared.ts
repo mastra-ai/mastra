@@ -177,6 +177,20 @@ export const NEW_ROUTE_DEFS = {
     description: 'Creates a single feedback record in the observability store',
   },
 
+  DELETE_FEEDBACK: {
+    method: 'DELETE',
+    path: '/observability/feedback/:feedbackId',
+    summary: 'Delete feedback',
+    description: 'Deletes a single feedback record by feedbackId',
+  },
+
+  DELETE_FEEDBACK_BY_TRACE_IDS: {
+    method: 'POST',
+    path: '/observability/feedback/delete-by-trace-ids',
+    summary: 'Delete feedback by trace IDs',
+    description: 'Deletes all feedback records linked to the given trace IDs',
+  },
+
   GET_FEEDBACK_AGGREGATE: {
     method: 'POST',
     path: '/observability/feedback/aggregate',

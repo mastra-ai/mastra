@@ -373,6 +373,15 @@ const ObservabilityResults = ({
           badge="Signal"
         />
         <CommandPaletteItem
+          value="feedback thumbs rating annotations /feedback"
+          onSelect={() => handleSelect('/feedback')}
+          icon={<EyeIcon />}
+          title="Feedback"
+          subtitle="User feedback"
+          path="/feedback"
+          badge="Signal"
+        />
+        <CommandPaletteItem
           value="logs events runtime /logs"
           onSelect={() => handleSelect('/logs')}
           icon={<EyeIcon />}

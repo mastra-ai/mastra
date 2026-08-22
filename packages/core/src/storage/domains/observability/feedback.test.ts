@@ -112,6 +112,16 @@ describe('Feedback Schemas', () => {
       expect(input.comment).toBeUndefined();
       expect(input.feedbackUserId).toBeUndefined();
     });
+
+    it('accepts a client-supplied feedbackId for idempotent submission', () => {
+      const input = feedbackInputSchema.parse({
+        feedbackId: 'client-deterministic-id-1',
+        source: 'user',
+        feedbackType: 'thumbs',
+        value: 1,
+      });
+      expect(input.feedbackId).toBe('client-deterministic-id-1');
+    });
   });
 
   describe('createFeedbackRecordSchema', () => {
@@ -173,6 +183,11 @@ describe('Feedback Schemas', () => {
     it('accepts empty filter', () => {
       const filter = feedbackFilterSchema.parse({});
       expect(filter).toEqual({});
+    });
+
+    it('accepts sourceId filter', () => {
+      const filter = feedbackFilterSchema.parse({ sourceId: 'message-123' });
+      expect(filter.sourceId).toBe('message-123');
     });
   });
 
