@@ -4038,15 +4038,11 @@ describe('Agent signals', () => {
       signalTransferStarted = resolve;
     });
     let releaseTransfer!: () => void;
-    pubsub.transferLeaseWait = new Promise<void>(resolve => {
-      releaseTransfer = resolve;
-    });
-    pubsub.onTransferLease = signalTransferStarted;
     pubsub.owners.set(key, oldRunId);
 
     const agent = { id: 'drained-reservation-agent' } as Agent<any, any, any, any>;
     agent.stream = vi.fn(async (_signal, options) => ({ runId: options.runId })) as any;
-    runtime.registerRun(
+    await runtime.registerRun(
       agent,
       {
         runId: oldRunId,
@@ -4057,6 +4053,10 @@ describe('Agent signals', () => {
       { runId: oldRunId, memory: { resource: resourceId, thread: threadId } } as any,
       pubsub,
     );
+    pubsub.transferLeaseWait = new Promise<void>(resolve => {
+      releaseTransfer = resolve;
+    });
+    pubsub.onTransferLease = signalTransferStarted;
     runtime.sendSignal(
       agent,
       { type: 'user-message', contents: 'start drained run' },
@@ -4149,17 +4149,13 @@ describe('Agent signals', () => {
       signalTransferStarted = resolve;
     });
     let releaseTransfer!: () => void;
-    pubsub.transferLeaseWait = new Promise<void>(resolve => {
-      releaseTransfer = resolve;
-    });
-    pubsub.onTransferLease = signalTransferStarted;
     pubsub.owners.set(key, oldRunId);
 
     const agent = {
       id: 'continuation-reservation-agent',
       stream: vi.fn(async (_messages, options) => ({ runId: options.runId })),
     } as unknown as Agent<any, any, any, any>;
-    runtime.registerRun(
+    await runtime.registerRun(
       agent,
       {
         runId: oldRunId,
@@ -4170,6 +4166,10 @@ describe('Agent signals', () => {
       { runId: oldRunId, memory: { resource: resourceId, thread: threadId } } as any,
       pubsub,
     );
+    pubsub.transferLeaseWait = new Promise<void>(resolve => {
+      releaseTransfer = resolve;
+    });
+    pubsub.onTransferLease = signalTransferStarted;
     const continuation = runtime.continueWithMessages(
       agent,
       [] as any,

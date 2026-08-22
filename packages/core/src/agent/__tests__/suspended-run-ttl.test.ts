@@ -25,15 +25,29 @@ import type { MastraModelOutput } from '../../stream/base/output';
 import type { Agent } from '../agent';
 import { AgentThreadStreamRuntime } from '../thread-stream-runtime';
 
-const { SUSPENDED_RUN_TTL_MS } = vi.hoisted(() => {
+const { SUSPENDED_RUN_TTL_MS, originalSuspendedRunTtlMs, originalAgentThreadLeaseTtlMs } = vi.hoisted(() => {
+  const originalSuspendedRunTtlMs = process.env.MASTRA_SUSPENDED_RUN_TTL_MS;
+  const originalAgentThreadLeaseTtlMs = process.env.MASTRA_AGENT_THREAD_LEASE_TTL_MS;
   const ttlMs = 60_000;
   process.env.MASTRA_SUSPENDED_RUN_TTL_MS = String(ttlMs);
-  return { SUSPENDED_RUN_TTL_MS: ttlMs };
+  // A real suspended holder renews its thread lease while parked. Keep the
+  // in-memory test lease live across fake wall-clock jumps for the same reason.
+  process.env.MASTRA_AGENT_THREAD_LEASE_TTL_MS = String(ttlMs * 2);
+  return { SUSPENDED_RUN_TTL_MS: ttlMs, originalSuspendedRunTtlMs, originalAgentThreadLeaseTtlMs };
 });
-// Vitest reuses a worker process across test files, so leave the default TTL in place
-// for whichever file this worker picks up next.
+// Vitest reuses a worker process across test files, so restore the worker's
+// original TTL configuration for whichever file it picks up next.
 afterAll(() => {
-  delete process.env.MASTRA_SUSPENDED_RUN_TTL_MS;
+  if (originalSuspendedRunTtlMs === undefined) {
+    delete process.env.MASTRA_SUSPENDED_RUN_TTL_MS;
+  } else {
+    process.env.MASTRA_SUSPENDED_RUN_TTL_MS = originalSuspendedRunTtlMs;
+  }
+  if (originalAgentThreadLeaseTtlMs === undefined) {
+    delete process.env.MASTRA_AGENT_THREAD_LEASE_TTL_MS;
+  } else {
+    process.env.MASTRA_AGENT_THREAD_LEASE_TTL_MS = originalAgentThreadLeaseTtlMs;
+  }
 });
 
 // Mirrors the runtime's thread key + topic encoding: how a subscriber on another
@@ -100,8 +114,13 @@ async function watchThread(pubsub: EventEmitterPubSub, threadId: string) {
   });
   return {
     has: (type: string, runId: string) => events.some(event => event.type === type && event.runId === runId),
+    count: (type: string, runId: string) => events.filter(event => event.type === type && event.runId === runId).length,
     waitFor: (type: string, runId: string) =>
       vi.waitFor(() => expect(events.some(event => event.type === type && event.runId === runId)).toBe(true)),
+    waitForCount: (type: string, runId: string, count: number) =>
+      vi.waitFor(() =>
+        expect(events.filter(event => event.type === type && event.runId === runId)).toHaveLength(count),
+      ),
   };
 }
 
@@ -191,19 +210,20 @@ describe('suspended run in-memory TTL', () => {
     });
     expect(runtime.getActiveThreadRunId({ threadId: 'thread-1', resourceId: RESOURCE_ID }, pubsub)).toBe('run-1');
     expect(runtime.getThreadState({ threadId: 'thread-1', resourceId: RESOURCE_ID }, pubsub)).toBe('active');
-    expect(releaseLease).not.toHaveBeenCalledWith(threadKey(RESOURCE_ID, 'thread-1'), 'run-1');
+    expect(releaseLease).not.toHaveBeenCalledWith(threadKey(RESOURCE_ID, 'thread-1'), expect.any(String));
     expect(watcher.has('run-completed', 'run-1')).toBe(false);
   });
 
   it('finishes the teardown an abandoned suspend never got: lease released, subscribers told', async () => {
     const watcher = await watchThread(pubsub, 'thread-1');
     await registerSuspendedRun('run-1', 'thread-1', watcher);
+    const owner = await pubsub.getLeaseOwner(threadKey(RESOURCE_ID, 'thread-1'));
 
     await sweepAfter(SUSPENDED_RUN_TTL_MS + 1);
 
     // Without releasing, the run's lease-renewal timer would keep this instance
     // owning the thread forever as far as every other instance can tell.
-    expect(releaseLease).toHaveBeenCalledWith(threadKey(RESOURCE_ID, 'thread-1'), 'run-1');
+    expect(releaseLease).toHaveBeenCalledWith(threadKey(RESOURCE_ID, 'thread-1'), owner, 'run-1');
     // `run-completed` has to land on the *suspended* run's thread topic — remote
     // subscribers watch that topic to learn the thread is no longer blocked.
     await watcher.waitFor('run-completed', 'run-1');
@@ -241,7 +261,7 @@ describe('suspended run in-memory TTL', () => {
     // stream nobody is draining fast) must keep its record and its thread slot.
     expect(runtime.getActiveThreadRunId({ threadId: 'thread-1', resourceId: RESOURCE_ID }, pubsub)).toBe('run-1');
     expect(runtime.getThreadState({ threadId: 'thread-1', resourceId: RESOURCE_ID }, pubsub)).toBe('active');
-    expect(releaseLease).not.toHaveBeenCalledWith(threadKey(RESOURCE_ID, 'thread-1'), 'run-1');
+    expect(releaseLease).not.toHaveBeenCalledWith(threadKey(RESOURCE_ID, 'thread-1'), expect.any(String));
     expect(watcher.has('run-completed', 'run-1')).toBe(false);
 
     longRun.settle('success');
@@ -288,12 +308,128 @@ describe('suspended run in-memory TTL', () => {
     // released underneath it and subscribers told the run had completed.
     expect(runtime.getActiveThreadRunId({ threadId: 'thread-1', resourceId: RESOURCE_ID }, pubsub)).toBe('run-1');
     expect(runtime.getThreadState({ threadId: 'thread-1', resourceId: RESOURCE_ID }, pubsub)).toBe('active');
-    expect(releaseLease).not.toHaveBeenCalledWith(threadKey(RESOURCE_ID, 'thread-1'), 'run-1');
+    expect(releaseLease).not.toHaveBeenCalledWith(threadKey(RESOURCE_ID, 'thread-1'), expect.any(String));
     expect(watcher.has('run-completed', 'run-1')).toBe(false);
 
     // The resumed run still owns its own teardown when it finishes for real.
     resumed.settle('success');
     await watcher.waitFor('run-completed', 'run-1');
     expect(runtime.getThreadState({ threadId: 'thread-1', resourceId: RESOURCE_ID }, pubsub)).toBe('idle');
+  });
+
+  it('does not tear down a lease re-owned by a cross-instance resume', async () => {
+    const threadId = 'cross-instance-thread';
+    const runId = 'cross-instance-run';
+    const key = threadKey(RESOURCE_ID, threadId);
+    const watcher = await watchThread(pubsub, threadId);
+    await registerSuspendedRun(runId, threadId, watcher);
+    const originOwner = await pubsub.getLeaseOwner(key);
+    expect(originOwner).toBeDefined();
+
+    // A resume can land on another server while the origin still retains its
+    // parked record. Both runtimes deliberately reuse the durable runId.
+    const resumedRuntime = new AgentThreadStreamRuntime();
+    const resumed = createFakeRun(runId);
+    await resumedRuntime.registerRun(
+      fakeAgent,
+      resumed.output,
+      { memory: { thread: threadId, resource: RESOURCE_ID } },
+      pubsub,
+    );
+
+    const resumedOwner = await pubsub.getLeaseOwner(key);
+    expect(resumedOwner).toBeDefined();
+    expect(resumedOwner).not.toBe(originOwner);
+
+    await sweepAfter(SUSPENDED_RUN_TTL_MS + 1);
+
+    // The origin may discard its stale in-memory record, but it must not release
+    // the resumed holder's lease or announce that the still-live run completed.
+    await vi.waitFor(async () => expect(await pubsub.getLeaseOwner(key)).toBe(resumedOwner));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(watcher.has('run-completed', runId)).toBe(false);
+
+    resumed.settle('success');
+    await watcher.waitFor('run-completed', runId);
+  });
+
+  it('keeps a re-suspended current stream intact when a stale sweep completion arrives', async () => {
+    const threadId = 'release-race-thread';
+    const runId = 'release-race-run';
+    const key = threadKey(RESOURCE_ID, threadId);
+    const watcher = await watchThread(pubsub, threadId);
+    await registerSuspendedRun(runId, threadId, watcher);
+    const originOwner = await pubsub.getLeaseOwner(key);
+    expect(originOwner).toBeDefined();
+
+    const resumedRuntime = new AgentThreadStreamRuntime();
+    const subscription = await resumedRuntime.subscribeToThread(
+      fakeAgent,
+      { threadId, resourceId: RESOURCE_ID },
+      pubsub,
+    );
+    const resumed = createFakeRun(runId);
+    let injectResume = false;
+    const getLeaseOwner = pubsub.getLeaseOwner.bind(pubsub);
+    const releaseLeaseOriginal = EventEmitterPubSub.prototype.releaseLease.bind(pubsub);
+
+    vi.spyOn(pubsub, 'releaseLease').mockImplementation(async (leaseKey, owner, metadata) => {
+      await releaseLeaseOriginal(leaseKey, owner, metadata);
+      if (leaseKey === key && owner === originOwner) injectResume = true;
+    });
+    vi.spyOn(pubsub, 'getLeaseOwner').mockImplementation(async leaseKey => {
+      const observedOwner = await getLeaseOwner(leaseKey);
+      if (leaseKey !== key || !injectResume || observedOwner !== undefined) return observedOwner;
+      injectResume = false;
+
+      // Reproduce the release/read/publish gap deterministically: the sweep has
+      // observed an empty key, then another instance acquires and re-suspends the
+      // same durable run before that stale observation drives run-completed.
+      await resumedRuntime.registerRun(
+        fakeAgent,
+        resumed.output,
+        { memory: { thread: threadId, resource: RESOURCE_ID } },
+        pubsub,
+      );
+      const previousPartCount = watcher.count('stream-part', runId);
+      resumed.emitSuspendPart();
+      await watcher.waitForCount('stream-part', runId, previousPartCount + 1);
+      resumed.settle('suspended');
+      await vi.waitFor(() =>
+        expect(resumedRuntime.getResumableThreadRun({ threadId, resourceId: RESOURCE_ID, runId }, pubsub)).toEqual({
+          runId,
+          toolCallId: `${runId}-call`,
+        }),
+      );
+      return observedOwner;
+    });
+
+    await sweepAfter(SUSPENDED_RUN_TTL_MS + 1);
+    await watcher.waitFor('run-completed', runId);
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    // The completion belongs to the origin's older stream. It may close that
+    // proxy, but it cannot clear or drain the resumed runtime's current stream.
+    expect(resumedRuntime.getResumableThreadRun({ threadId, resourceId: RESOURCE_ID, runId }, pubsub)).toEqual({
+      runId,
+      toolCallId: `${runId}-call`,
+    });
+    const resumedOwner = await pubsub.getLeaseOwner(key);
+    expect(resumedOwner).toBeDefined();
+    expect(resumedOwner).not.toBe(originOwner);
+    expect(subscription.activeRunId()).toBe(runId);
+
+    // Finish a same-instance resume so its renewal timer and lease do not leak
+    // beyond this test.
+    const cleanupRun = createFakeRun(runId);
+    await resumedRuntime.registerRun(
+      fakeAgent,
+      cleanupRun.output,
+      { memory: { thread: threadId, resource: RESOURCE_ID } },
+      pubsub,
+    );
+    cleanupRun.settle('success');
+    await vi.waitFor(async () => expect(await pubsub.getLeaseOwner(key)).toBeUndefined());
+    subscription.unsubscribe();
   });
 });

@@ -1,7 +1,7 @@
 import EventEmitter from 'node:events';
 import type { IMastraLogger } from '../../logger';
 import { PubSub } from '../pubsub';
-import type { LeaseProvider, PubSubDeliveryMode } from '../pubsub';
+import type { LeaseRecordProvider, PubSubDeliveryMode } from '../pubsub';
 import type { Event, EventCallback, SubscribeOptions } from '../types';
 import { AckHandleBuffer } from './ack-handle-buffer';
 
@@ -18,7 +18,7 @@ export interface EventEmitterPubSubOptions {
 // to module scope so we don't allocate two new closures per emitted event.
 const NOOP_ACK = async (): Promise<void> => {};
 
-export class EventEmitterPubSub extends PubSub implements LeaseProvider {
+export class EventEmitterPubSub extends PubSub implements LeaseRecordProvider {
   // EventEmitter dispatches synchronously to listeners, so it can serve both
   // a push consumer (no worker) and a pull-style worker that simply calls
   // `subscribe()` to register a listener. Both modes are advertised so the
@@ -373,43 +373,52 @@ export class EventEmitterPubSub extends PubSub implements LeaseProvider {
     }
   }
 
-  // key → { owner, expiresAt }. In-process so a single Map is enough;
+  // key → { owner, metadata, expiresAt }. In-process so a single Map is enough;
   // there is no other process to race against. The same owner can renew
   // their own lease; expired entries are reclaimed lazily on the next
   // acquireLease call.
-  private leases: Map<string, { owner: string; expiresAt: number }> = new Map();
+  private leases: Map<string, { owner: string; metadata?: string; expiresAt: number }> = new Map();
 
-  acquireLease(key: string, owner: string, ttlMs: number): Promise<{ acquired: boolean; owner?: string }> {
+  acquireLease(
+    key: string,
+    owner: string,
+    ttlMs: number,
+    metadata?: string,
+  ): Promise<{ acquired: boolean; owner?: string }> {
     const now = Date.now();
     const existing = this.leases.get(key);
-    if (existing && existing.expiresAt > now && existing.owner !== owner) {
+    if (existing && existing.expiresAt > now && (existing.owner !== owner || existing.metadata !== metadata)) {
       return Promise.resolve({ acquired: false, owner: existing.owner });
     }
-    this.leases.set(key, { owner, expiresAt: now + ttlMs });
+    this.leases.set(key, { owner, metadata, expiresAt: now + ttlMs });
     return Promise.resolve({ acquired: true, owner });
   }
 
-  getLeaseOwner(key: string): Promise<string | undefined> {
+  getLeaseRecord(key: string): Promise<{ owner: string; metadata?: string } | undefined> {
     const existing = this.leases.get(key);
     if (!existing) return Promise.resolve(undefined);
     if (existing.expiresAt <= Date.now()) {
       this.leases.delete(key);
       return Promise.resolve(undefined);
     }
-    return Promise.resolve(existing.owner);
+    return Promise.resolve({ owner: existing.owner, metadata: existing.metadata });
   }
 
-  releaseLease(key: string, owner: string): Promise<void> {
+  getLeaseOwner(key: string): Promise<string | undefined> {
+    return this.getLeaseRecord(key).then(record => record?.owner);
+  }
+
+  releaseLease(key: string, owner: string, metadata?: string): Promise<void> {
     const existing = this.leases.get(key);
-    if (existing && existing.owner === owner) {
+    if (existing && existing.owner === owner && existing.metadata === metadata) {
       this.leases.delete(key);
     }
     return Promise.resolve();
   }
 
-  renewLease(key: string, owner: string, ttlMs: number): Promise<boolean> {
+  renewLease(key: string, owner: string, ttlMs: number, metadata?: string): Promise<boolean> {
     const existing = this.leases.get(key);
-    if (!existing || existing.owner !== owner || existing.expiresAt <= Date.now()) {
+    if (!existing || existing.owner !== owner || existing.metadata !== metadata || existing.expiresAt <= Date.now()) {
       return Promise.resolve(false);
     }
     existing.expiresAt = Date.now() + ttlMs;
@@ -420,12 +429,24 @@ export class EventEmitterPubSub extends PubSub implements LeaseProvider {
   // key is never empty during the swap (mirrors the Redis GET==from -> SET to
   // Lua). Lets a finishing run hand the lease to its drain run without a
   // release/acquire gap, even on the in-process backend.
-  transferLease(key: string, fromOwner: string, toOwner: string, ttlMs: number): Promise<boolean> {
+  transferLease(
+    key: string,
+    fromOwner: string,
+    toOwner: string,
+    ttlMs: number,
+    fromMetadata?: string,
+    toMetadata?: string,
+  ): Promise<boolean> {
     const existing = this.leases.get(key);
-    if (!existing || existing.owner !== fromOwner || existing.expiresAt <= Date.now()) {
+    if (
+      !existing ||
+      existing.owner !== fromOwner ||
+      existing.metadata !== fromMetadata ||
+      existing.expiresAt <= Date.now()
+    ) {
       return Promise.resolve(false);
     }
-    this.leases.set(key, { owner: toOwner, expiresAt: Date.now() + ttlMs });
+    this.leases.set(key, { owner: toOwner, metadata: toMetadata, expiresAt: Date.now() + ttlMs });
     return Promise.resolve(true);
   }
 }

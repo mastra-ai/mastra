@@ -32,6 +32,10 @@ function leaseKeyFor(resourceId: string, threadId: string): string {
   return `mastra:topic:lease:${resourceId}${AGENT_THREAD_KEY_SEPARATOR}${threadId}`;
 }
 
+function leaseMetadataKeyFor(resourceId: string, threadId: string): string {
+  return `mastra:topic:lease-metadata:${resourceId}${AGENT_THREAD_KEY_SEPARATOR}${threadId}`;
+}
+
 function threadStreamKeyFor(resourceId: string, threadId: string): string {
   const key = `${resourceId}${AGENT_THREAD_KEY_SEPARATOR}${threadId}`;
   return `mastra:topic:agent.thread-stream.${encodeURIComponent(key)}`;
@@ -574,16 +578,18 @@ describe.skipIf(!process.env.REDIS_URL && !process.env.CI && process.env.SKIP_RE
         let owner: string | null = null;
         await waitFor(async () => {
           owner = await probe.get(leaseKey);
-          return owner === runId;
+          return owner !== null;
         }, 2_000).catch(() => {});
-        expect(owner).toBe(runId);
+        expect(owner).not.toBeNull();
+        expect(await probe.get(leaseMetadataKeyFor(resourceId, threadId))).toBe(runId);
 
         // Renewal proof: wait two full TTLs past the acquire while the run is
         // still live. Without renewal the 1000ms lease would have expired and
         // the key would be nil; with renewal the owner is unchanged.
         await new Promise(r => setTimeout(r, 2_000));
         expect(eventsByType(a, 'run-finished')).toHaveLength(0); // run must still be live for this to prove anything
-        expect(await probe.get(leaseKey)).toBe(runId);
+        expect(await probe.get(leaseKey)).toBe(owner);
+        expect(await probe.get(leaseMetadataKeyFor(resourceId, threadId))).toBe(runId);
 
         // After the run finishes the lease is released — release is
         // fire-and-forget, so poll rather than asserting immediately.

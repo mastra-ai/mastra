@@ -9,10 +9,10 @@
  * Kept in its own file (rather than agent-signals.test.ts) so the suite Tyler's
  * PR shipped stays untouched.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { PubSub } from '../../events/pubsub';
-import type { LeaseProvider } from '../../events/pubsub';
+import type { LeaseRecord, LeaseRecordProvider } from '../../events/pubsub';
 import type { EventCallback } from '../../events/types';
 import type { Agent } from '../agent';
 import { AgentThreadStreamRuntime } from '../thread-stream-runtime';
@@ -33,13 +33,42 @@ async function waitForCondition(predicate: () => boolean, timeoutMs = 2_000) {
   }
 }
 
+function createRun(runId: string) {
+  let finish!: () => void;
+  const finished = new Promise<void>(resolve => {
+    finish = resolve;
+  });
+  const fullStream = new ReadableStream({
+    start(controller) {
+      controller.enqueue({ type: 'start', runId });
+      controller.enqueue({
+        type: 'finish',
+        runId,
+        payload: { usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, finishReason: 'stop' },
+      });
+      controller.close();
+    },
+  });
+
+  return {
+    output: {
+      runId,
+      status: 'running',
+      fullStream,
+      _waitUntilFinished: () => finished,
+    } as any,
+    finish,
+  };
+}
+
 /**
  * Minimal in-memory pubsub that also implements LeaseProvider, mirroring
  * ControlledLeasePubSub in agent-signals.test.ts (copied, not imported, to
  * keep that file untouched).
  */
-class ControlledLeasePubSub extends PubSub implements LeaseProvider {
+class ControlledLeasePubSub extends PubSub implements LeaseRecordProvider {
   owners = new Map<string, string>();
+  records = new Map<string, LeaseRecord>();
   denyAcquire = false;
   failAcquire = false;
   failPublish = false;
@@ -83,29 +112,57 @@ class ControlledLeasePubSub extends PubSub implements LeaseProvider {
     await Promise.all([...this.#pending]);
   }
 
-  async acquireLease(key: string, owner: string): Promise<{ acquired: boolean; owner?: string }> {
+  async acquireLease(
+    key: string,
+    owner: string,
+    _ttlMs?: number,
+    metadata?: string,
+  ): Promise<{ acquired: boolean; owner?: string }> {
     if (this.failAcquire) throw new Error('acquire failed');
     const current = this.owners.get(key);
-    if (this.denyAcquire || (current && current !== owner)) return { acquired: false, owner: current };
+    const currentRecord = this.records.get(key);
+    if (this.denyAcquire || (current && (current !== owner || currentRecord?.metadata !== metadata))) {
+      return { acquired: false, owner: current };
+    }
     this.owners.set(key, owner);
+    this.records.set(key, { owner, ...(metadata === undefined ? {} : { metadata }) });
     return { acquired: true, owner };
+  }
+
+  async getLeaseRecord(key: string): Promise<LeaseRecord | undefined> {
+    const record = this.records.get(key);
+    return record ? { ...record } : this.owners.get(key) ? { owner: this.owners.get(key)! } : undefined;
   }
 
   async getLeaseOwner(key: string): Promise<string | undefined> {
     return this.owners.get(key);
   }
 
-  async releaseLease(key: string, owner: string): Promise<void> {
-    if (this.owners.get(key) === owner) this.owners.delete(key);
+  async releaseLease(key: string, owner: string, metadata?: string): Promise<void> {
+    const record = await this.getLeaseRecord(key);
+    if (record?.owner === owner && record.metadata === metadata) {
+      this.owners.delete(key);
+      this.records.delete(key);
+    }
   }
 
-  async renewLease(key: string, owner: string): Promise<boolean> {
-    return this.owners.get(key) === owner;
+  async renewLease(key: string, owner: string, _ttlMs?: number, metadata?: string): Promise<boolean> {
+    const record = await this.getLeaseRecord(key);
+    return record?.owner === owner && record.metadata === metadata;
   }
 
-  async transferLease(key: string, fromOwner: string, toOwner: string): Promise<boolean> {
-    if (this.owners.get(key) !== fromOwner) return false;
+  async transferLease(
+    key: string,
+    fromOwner: string,
+    toOwner: string,
+    _ttlMs?: number,
+    fromMetadata?: string,
+    toMetadata?: string,
+  ): Promise<boolean> {
+    const record = await this.getLeaseRecord(key);
+    if (record?.owner !== fromOwner || record.metadata !== fromMetadata) return false;
     this.owners.set(key, toOwner);
+    this.records.set(key, { owner: toOwner, ...(toMetadata === undefined ? {} : { metadata: toMetadata }) });
     return true;
   }
 }
@@ -119,31 +176,11 @@ describe('registerRun thread lease', () => {
     const resourceId = 'plain-lease-user';
     const key = [resourceId, threadId].join(AGENT_THREAD_KEY_SEPARATOR);
     const runId = 'plain-lease-run-1';
-
-    let finish!: () => void;
-    const finished = new Promise<void>(resolve => {
-      finish = resolve;
-    });
-    const fullStream = new ReadableStream({
-      start(controller) {
-        controller.enqueue({ type: 'start', runId });
-        controller.enqueue({
-          type: 'finish',
-          runId,
-          payload: { usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, finishReason: 'stop' },
-        });
-        controller.close();
-      },
-    });
+    const run = createRun(runId);
 
     const registered = runtime.registerRun(
       agent,
-      {
-        runId,
-        status: 'running',
-        fullStream,
-        _waitUntilFinished: () => finished,
-      } as any,
+      run.output,
       { memory: { thread: threadId, resource: resourceId } } as any,
       pubsub,
     );
@@ -151,14 +188,88 @@ describe('registerRun thread lease', () => {
     await registered;
 
     // A plain (non-signal) run must own the cross-process thread lease once
-    // registration settles — otherwise remote liveness checks treat it as a
-    // ghost and contending instances start competing runs.
-    expect(pubsub.owners.get(key)).toBe(runId);
+    // registration settles. The owner is opaque; the logical run id is stored
+    // as atomic metadata beside it.
+    expect(pubsub.owners.get(key)).toMatch(/^mastra:agent-thread:v2:/);
+    expect(pubsub.owners.get(key)).not.toBe(runId);
+    expect(pubsub.records.get(key)?.metadata).toBe(runId);
 
-    finish();
+    run.finish();
     // Release is fire-and-forget inside the completion watcher's finally —
     // poll rather than asserting immediately.
     await waitForCondition(() => pubsub.owners.get(key) === undefined);
+  });
+
+  it('migrates legacy owners and round-trips prefix-like unicode run ids without URI encoding', async () => {
+    const firstRuntime = new AgentThreadStreamRuntime();
+    const resumedRuntime = new AgentThreadStreamRuntime();
+    const pubsub = new ControlledLeasePubSub();
+    const agent = { id: 'lease-codec-agent' } as Agent<any, any, any, any>;
+    const threadId = 'lease-codec-thread';
+    const resourceId = 'lease-codec-user';
+    const key = [resourceId, threadId].join(AGENT_THREAD_KEY_SEPARATOR);
+    const runId = `mastra:agent-thread:v1:4:test:not-a-token:%:${String.fromCharCode(0xd800)}:🚀`;
+    const firstRun = createRun(runId);
+    const resumedRun = createRun(runId);
+
+    // A pre-upgrade runtime wrote the logical run id verbatim. Although this id
+    // resembles the scoped prefix, its non-canonical suffix must remain opaque.
+    pubsub.owners.set(key, runId);
+    await firstRuntime.registerRun(
+      agent,
+      firstRun.output,
+      { memory: { thread: threadId, resource: resourceId } } as any,
+      pubsub,
+    );
+    const firstOwner = pubsub.owners.get(key);
+    expect(firstOwner).toMatch(/^mastra:agent-thread:v2:/);
+    expect(firstOwner).not.toBe(runId);
+    expect(pubsub.records.get(key)?.metadata).toBe(runId);
+
+    // A second runtime uses the atomic metadata to identify the exact logical
+    // id, including the lone surrogate, and rotates it to its own holder token.
+    await resumedRuntime.registerRun(
+      agent,
+      resumedRun.output,
+      { memory: { thread: threadId, resource: resourceId } } as any,
+      pubsub,
+    );
+    const resumedOwner = pubsub.owners.get(key);
+    expect(resumedOwner).toMatch(/^mastra:agent-thread:v2:/);
+    expect(resumedOwner).not.toBe(firstOwner);
+
+    // Completion by the former holder cannot release the resumed holder's token.
+    firstRun.finish();
+    await firstRun.output._waitUntilFinished();
+    await pubsub.flush();
+    await nextTick();
+    expect(pubsub.owners.get(key)).toBe(resumedOwner);
+    resumedRun.finish();
+    await waitForCondition(() => pubsub.owners.get(key) === undefined);
+  });
+
+  it('does not claim a canonical-looking legacy owner for its embedded run id', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new ControlledLeasePubSub();
+    const agent = { id: 'legacy-collision-agent' } as Agent<any, any, any, any>;
+    const threadId = 'legacy-collision-thread';
+    const resourceId = 'legacy-collision-user';
+    const key = [resourceId, threadId].join(AGENT_THREAD_KEY_SEPARATOR);
+    const legacyRunId = 'mastra:agent-thread:v1:4:test:123e4567-e89b-42d3-a456-426614174000';
+    const run = createRun('test');
+
+    // A pre-upgrade process may have stored any arbitrary bare run id. The
+    // canonical-looking prefix is not proof that it belongs to logical runId
+    // `test`, so the new runtime must leave it untouched.
+    pubsub.owners.set(key, legacyRunId);
+    await runtime.registerRun(agent, run.output, { memory: { thread: threadId, resource: resourceId } } as any, pubsub);
+    expect(pubsub.owners.get(key)).toBe(legacyRunId);
+    expect(pubsub.records.get(key)?.metadata).toBeUndefined();
+    run.finish();
+    await run.output._waitUntilFinished();
+    await pubsub.flush();
+    await nextTick();
+    expect(pubsub.owners.get(key)).toBe(legacyRunId);
   });
 
   it('fails strict registration closed without installing a ghost record', async () => {
@@ -218,12 +329,14 @@ describe('registerRun thread lease', () => {
     expect(pubsub.owners.get(key)).toBeUndefined();
 
     const second = await register('strict-rollback-run-2');
-    expect(pubsub.owners.get(key)).toBe('strict-rollback-run-2');
+    const secondOwner = pubsub.owners.get(key);
+    expect(secondOwner).toMatch(/^mastra:agent-thread:v2:/);
+    expect(pubsub.records.get(key)?.metadata).toBe('strict-rollback-run-2');
     expect(runtime.getThreadState({ threadId, resourceId }, pubsub)).toBe('active');
     await second.rollback({ releaseLease: false });
     expect(runtime.getThreadState({ threadId, resourceId }, pubsub)).toBe('idle');
-    expect(pubsub.owners.get(key)).toBe('strict-rollback-run-2');
-    await pubsub.releaseLease(key, 'strict-rollback-run-2');
+    expect(pubsub.owners.get(key)).toBe(secondOwner);
+    await pubsub.releaseLease(key, secondOwner!, 'strict-rollback-run-2');
   });
 
   it('rolls strict registration back and releases its lease when publishing fails', async () => {
@@ -288,6 +401,143 @@ describe('registerRun thread lease', () => {
       await pubsub.flush();
       await waitForCondition(() => observer.getThreadState({ threadId, resourceId }, pubsub) === 'idle');
       expect(pubsub.publishedTypes).toEqual(['run-registered', 'run-discarded']);
+    } finally {
+      subscription.unsubscribe();
+    }
+  });
+
+  it('keeps a remote stream alive while scoped lease metadata identifies its logical run', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new ControlledLeasePubSub();
+    const agent = { id: 'scoped-remote-agent' } as Agent<any, any, any, any>;
+    const threadId = 'scoped-remote-thread';
+    const resourceId = 'scoped-remote-resource';
+    const key = [resourceId, threadId].join(AGENT_THREAD_KEY_SEPARATOR);
+    const topic = `agent.thread-stream.${encodeURIComponent(key)}`;
+    const runId = 'scoped-remote-run';
+    const owner = 'mastra:agent-thread:v2:remote-runtime:logical-run-digest';
+    pubsub.owners.set(key, owner);
+    pubsub.records.set(key, { owner, metadata: runId });
+    const subscription = await runtime.subscribeToThread(agent, { threadId, resourceId }, pubsub);
+
+    await pubsub.publish(topic, {
+      type: 'run-registered',
+      runId,
+      data: { type: 'run-registered', runId, streamId: 'scoped-remote-stream', streamSeq: 1 },
+    });
+    await pubsub.flush();
+    await waitForCondition(() => subscription.activeRunId() === runId);
+
+    vi.useFakeTimers();
+    try {
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(subscription.activeRunId()).toBe(runId);
+    } finally {
+      vi.useRealTimers();
+      subscription.unsubscribe();
+    }
+  });
+
+  it('keeps the current same-run lease when an older local stream completes', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new ControlledLeasePubSub();
+    const agent = { id: 'same-run-successor-agent' } as Agent<any, any, any, any>;
+    const threadId = 'same-run-successor-thread';
+    const resourceId = 'same-run-successor-resource';
+    const key = [resourceId, threadId].join(AGENT_THREAD_KEY_SEPARATOR);
+    const runId = 'same-run-successor-run';
+    const firstRun = createRun(runId);
+    const currentRun = createRun(runId);
+
+    await runtime.registerRun(
+      agent,
+      firstRun.output,
+      { memory: { thread: threadId, resource: resourceId } } as any,
+      pubsub,
+    );
+    await runtime.registerRun(
+      agent,
+      currentRun.output,
+      { memory: { thread: threadId, resource: resourceId } } as any,
+      pubsub,
+    );
+    const currentOwner = pubsub.owners.get(key);
+    expect(currentOwner).toMatch(/^mastra:agent-thread:v2:/);
+
+    firstRun.finish();
+    await pubsub.flush();
+    await nextTick();
+
+    expect(pubsub.records.get(key)).toEqual({ owner: currentOwner, metadata: runId });
+
+    currentRun.finish();
+    await waitForCondition(() => pubsub.owners.get(key) === undefined);
+  });
+
+  it('ignores an abort from an older stream while reading the current resumed stream', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new ControlledLeasePubSub();
+    const agent = { id: 'stale-abort-agent' } as Agent<any, any, any, any>;
+    const threadId = 'stale-abort-thread';
+    const resourceId = 'stale-abort-resource';
+    const key = [resourceId, threadId].join(AGENT_THREAD_KEY_SEPARATOR);
+    const topic = `agent.thread-stream.${encodeURIComponent(key)}`;
+    const runId = 'stale-abort-run';
+    const currentStreamId = 'stale-abort-stream-2';
+    const owner = 'mastra:agent-thread:v2:remote-runtime:logical-run-digest';
+    pubsub.owners.set(key, owner);
+    pubsub.records.set(key, { owner, metadata: runId });
+
+    const subscription = await runtime.subscribeToThread(agent, { threadId, resourceId }, pubsub);
+    const iterator = subscription.stream[Symbol.asyncIterator]();
+
+    try {
+      await pubsub.publish(topic, {
+        type: 'run-registered',
+        runId,
+        data: { type: 'run-registered', runId, streamId: currentStreamId, streamSeq: 2 },
+      });
+      await pubsub.flush();
+      await waitForCondition(() => subscription.activeRunId() === runId);
+
+      const startPart = iterator.next();
+      await pubsub.publish(topic, {
+        type: 'stream-part',
+        runId,
+        data: {
+          type: 'stream-part',
+          runId,
+          streamId: currentStreamId,
+          sourceId: 'remote-runtime',
+          part: { type: 'start', runId },
+        },
+      });
+      await pubsub.flush();
+      await expect(startPart).resolves.toMatchObject({ value: { type: 'start', runId } });
+
+      const nextPart = iterator.next();
+      await pubsub.publish(topic, {
+        type: 'run-aborted',
+        runId,
+        data: { type: 'run-aborted', runId, streamId: 'stale-abort-stream-1' },
+      });
+      await pubsub.flush();
+      await pubsub.publish(topic, {
+        type: 'stream-part',
+        runId,
+        data: {
+          type: 'stream-part',
+          runId,
+          streamId: currentStreamId,
+          sourceId: 'remote-runtime',
+          part: { type: 'text-delta', runId, payload: { text: 'still live' } },
+        },
+      });
+      await pubsub.flush();
+
+      await expect(nextPart).resolves.toMatchObject({
+        value: { type: 'text-delta', runId, payload: { text: 'still live' } },
+      });
     } finally {
       subscription.unsubscribe();
     }

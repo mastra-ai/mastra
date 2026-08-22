@@ -562,6 +562,59 @@ describe('RedisStreamsPubSub', () => {
       expect(again).toEqual({ acquired: true, owner: 'owner-a' });
     });
 
+    it('keeps metadata coherent across renew, transfer, and release', async () => {
+      const ps = createPubSub();
+      const key = `lease-${randomUUID()}`;
+
+      await ps.acquireLease(key, 'owner-a', 200, 'run-a');
+      expect(await ps.getLeaseRecord(key)).toEqual({ owner: 'owner-a', metadata: 'run-a' });
+      expect(await ps.acquireLease(key, 'owner-a', 1000, 'wrong-run')).toEqual({
+        acquired: false,
+        owner: 'owner-a',
+      });
+      expect(await ps.renewLease(key, 'owner-a', 1000, 'wrong-run')).toBe(false);
+
+      await new Promise(r => setTimeout(r, 100));
+      expect(await ps.renewLease(key, 'owner-a', 1000, 'run-a')).toBe(true);
+      await new Promise(r => setTimeout(r, 200));
+      expect(await ps.getLeaseRecord(key)).toEqual({ owner: 'owner-a', metadata: 'run-a' });
+
+      expect(await ps.transferLease(key, 'owner-a', 'owner-b', 1000, 'wrong-run', 'run-b')).toBe(false);
+      expect(await ps.transferLease(key, 'owner-a', 'owner-b', 1000, 'run-a', 'run-b')).toBe(true);
+      expect(await ps.getLeaseRecord(key)).toEqual({ owner: 'owner-b', metadata: 'run-b' });
+
+      await ps.releaseLease(key, 'owner-b', 'wrong-run');
+      expect(await ps.getLeaseRecord(key)).toEqual({ owner: 'owner-b', metadata: 'run-b' });
+      await ps.releaseLease(key, 'owner-b', 'run-b');
+      expect(await ps.getLeaseRecord(key)).toBeUndefined();
+    });
+
+    it('never interprets a JSON-looking legacy owner as lease metadata', async () => {
+      const keyPrefix = `mastra:test:${randomUUID()}`;
+      const ps = new RedisStreamsPubSub({ url: REDIS_URL, blockMs: 200, keyPrefix });
+      pubsubs.push(ps);
+      const key = `lease-${randomUUID()}`;
+      const ownerKey = `${keyPrefix}:lease:${key}`;
+      const metadataKey = `${keyPrefix}:lease-metadata:${key}`;
+      const legacyOwner = JSON.stringify({ owner: 'parsed-owner', metadata: 'parsed-run' });
+      const direct = createClient({ url: REDIS_URL });
+      await direct.connect();
+
+      try {
+        await direct.set(ownerKey, legacyOwner, { PX: 5000 });
+        expect(await ps.getLeaseRecord(key)).toEqual({ owner: legacyOwner });
+
+        expect(await ps.transferLease(key, 'parsed-owner', 'new-owner', 5000, 'parsed-run', 'new-run')).toBe(false);
+        expect(await ps.getLeaseRecord(key)).toEqual({ owner: legacyOwner });
+
+        expect(await ps.transferLease(key, legacyOwner, 'new-owner', 5000, undefined, 'new-run')).toBe(true);
+        expect(await ps.getLeaseRecord(key)).toEqual({ owner: 'new-owner', metadata: 'new-run' });
+      } finally {
+        await direct.del([ownerKey, metadataKey]);
+        await direct.quit();
+      }
+    });
+
     it('expires the lease after TTL and lets a new owner acquire it', async () => {
       const psA = createPubSub();
       const psB = createPubSub();
