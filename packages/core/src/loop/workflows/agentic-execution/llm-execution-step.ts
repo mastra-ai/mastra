@@ -1635,13 +1635,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 activeTools: currentStep.activeTools as string[] | undefined,
                 options,
                 // Per-model modelSettings shallow-merge on top of call-time modelSettings.
-                // An explicit model or agent maxRetries wins; otherwise preserve modelSettings before using the default.
+                // An explicitly configured per-model/agent maxRetries wins (including 0). When it is
+                // unset, the call-time value is preserved so execute()'s own default applies.
                 modelSettings: {
                   ...currentStep.modelSettings,
                   ...modelConfig.modelSettings,
-                  maxRetries: modelConfig.maxRetriesConfigured
-                    ? modelConfig.maxRetries
-                    : (currentStep.modelSettings?.maxRetries ?? modelConfig.maxRetries),
+                  ...(modelConfig.maxRetries !== undefined ? { maxRetries: modelConfig.maxRetries } : {}),
                 },
                 includeRawChunks,
                 structuredOutput: currentStep.structuredOutput,

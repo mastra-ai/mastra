@@ -50,6 +50,8 @@ describeForAllEngines('AIMock loop scenario: output processors and error chunks'
       prompt: 'Say hello.',
       errorProcessors: [errorProcessor],
       outputProcessors: [createRecordingProcessor(seen)],
+      // Disable the model call's own retry so the error processor is what recovers the 429.
+      modelSettings: { maxRetries: 0 },
       fixtures: llm => {
         llm.onMessage(/.*/, { content: 'hello there' });
         // One transient failure, then the fixture above serves the retry.

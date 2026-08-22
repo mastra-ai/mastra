@@ -87,7 +87,9 @@ export function serializeModelListEntry(entry: AgentModelManagerConfig): Seriali
       originalConfig: `${model.provider}/${model.modelId}`,
       providerOptions: entry.providerOptions,
     },
-    maxRetries: entry.maxRetries,
+    // The durable path runs its own retry loop over the model list, so an unconfigured
+    // retry count stays 0 here rather than deferring to the model-call default.
+    maxRetries: entry.maxRetries ?? 0,
     enabled: entry.enabled,
   };
 }

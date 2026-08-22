@@ -1072,8 +1072,8 @@ export type ExecuteStreamModelManager<T> = (
 
 export type ModelManagerModelConfig = {
   model: MastraLanguageModel;
-  maxRetries: number;
-  maxRetriesConfigured?: boolean;
+  /** Undefined when no retry count was configured on the agent or model entry. */
+  maxRetries?: number;
   id: string;
   headers?: Record<string, string>;
   modelSettings?: ModelConfigModelSettings;
