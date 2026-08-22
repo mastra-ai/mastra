@@ -189,6 +189,18 @@ function normalizeSignalType(input: Pick<AgentSignalInput, 'type' | 'tagName'>):
   );
 }
 
+/**
+ * The tag name a signal will carry once created, resolvable before `createSignal` runs.
+ *
+ * Callers that need to derive something from the tag name — such as a stable transcript id for a
+ * re-injected transient signal — must not have to duplicate the type-to-tag defaulting rules.
+ *
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export function resolveSignalTagName(input: Pick<AgentSignalInput, 'type' | 'tagName'>): AgentSignalTagName {
+  return input.tagName ?? normalizeSignalType(input).tagName;
+}
+
 function normalizeSignal(signal: AgentSignalInput | CreatedAgentSignal) {
   const { type, tagName } = normalizeSignalType(signal);
   return {

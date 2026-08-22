@@ -7,7 +7,7 @@ import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { IMastraLogger } from '../../logger';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../../tools/payload-transform';
 import type { IdGeneratorContext } from '../../types';
-import { createSignal, isCreatedAgentSignal, mastraDBMessageToSignal } from '../signals';
+import { createSignal, isCreatedAgentSignal, isTransientSignalMessage, mastraDBMessageToSignal } from '../signals';
 import type { CreatedAgentSignal } from '../signals';
 import { AIV4Adapter, AIV5Adapter, AIV6Adapter } from './adapters';
 import { CacheKeyGenerator } from './cache/CacheKeyGenerator';
@@ -259,6 +259,26 @@ export class MessageList {
         ? createSignal({ ...signalInput, type: signal.type })
         : createSignal({ ...signalInput, type: signal.type, transient: signal.transient });
 
+    // A transient signal is delivery-only and exists to be re-injected, so the transcript should
+    // hold exactly one copy and that copy should be the last thing the model reads. Dropping any
+    // previous row with the same id first makes addOne take its append path with the fresh
+    // monotonic `createdAt` stamped above, so the sort at the end of addOne places it after the
+    // newest message. Without this the id-keyed upsert either appends a duplicate (rotating id) or,
+    // when the contents are byte-identical, classifies the message as unchanged and writes nothing
+    // at all — leaving the copy anchored at its original index while the turn grows behind it.
+    //
+    // This is what makes `transient` deliver what the docs promise on its own — "a single fresh copy
+    // near the latest message" — without the caller having to know that ids drive deduplication.
+    // Repositioning a row does move it out of any prompt-cache span that already covered it, so a
+    // consumer that places cache breakpoints should exclude transient signal rows when choosing
+    // them; see the note on `isTransientSignalMessage` in agent/signals.ts.
+    //
+    // No `type` gate is needed: createSignal rejects `transient` on `state` signals, which are the
+    // ones whose cross-turn tracking depends on keeping a stable row.
+    if (signalForTranscript.transient) {
+      this.removeByIds([signalForTranscript.id]);
+    }
+
     this.addOne(signalForTranscript.toDBMessage(this.memoryInfo ?? undefined), source);
     return signalForTranscript;
   }
@@ -407,18 +427,39 @@ export class MessageList {
       metadata: { createdAt },
     };
 
-    return [
-      convertInputToMastraDBMessage(promptMessage as MessageInput, 'input', {
-        memoryInfo: this.memoryInfo,
-        newMessageId: () => message.id,
-        generateCreatedAt: (_messageSource, start) => {
-          if (start instanceof Date) return start;
-          if (typeof start === 'string' || typeof start === 'number') return new Date(start);
-          return createdAt;
-        },
-        dbMessages: this.messages,
-      }),
-    ];
+    const projected = convertInputToMastraDBMessage(promptMessage as MessageInput, 'input', {
+      memoryInfo: this.memoryInfo,
+      newMessageId: () => message.id,
+      generateCreatedAt: (_messageSource, start) => {
+        if (start instanceof Date) return start;
+        if (typeof start === 'string' || typeof start === 'number') return new Date(start);
+        return createdAt;
+      },
+      dbMessages: this.messages,
+    });
+
+    // Mark a delivery-only reminder in the outbound projection. Once the signal is rewritten to
+    // `role: 'user'` here, nothing downstream can tell it apart from a normal turn — but a consumer
+    // placing prompt-cache breakpoints has to, because a transient row is absent from the next
+    // turn's reloaded history: any cached span containing it dies at the turn boundary and costs a
+    // full prefix rebuild per turn. Surfacing the flag lets such a consumer keep its breakpoints
+    // behind the reminder without having to pattern-match on the rendered XML tag, which would also
+    // catch persisted reminders.
+    if (isTransientSignalMessage(message)) {
+      projected.content.parts = projected.content.parts.map(part =>
+        part.type === 'text'
+          ? {
+              ...part,
+              providerMetadata: {
+                ...part.providerMetadata,
+                mastra: { ...(part.providerMetadata?.mastra as Record<string, unknown> | undefined), transient: true },
+              },
+            }
+          : part,
+      );
+    }
+
+    return [projected];
   }
 
   public makeMessageSourceChecker(): {
