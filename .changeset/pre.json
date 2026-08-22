@@ -177,11 +177,20 @@
     "@mastra/platform-workspace": "1.4.0",
     "@mastra/railway": "0.6.0",
     "@mastra/s3": "0.6.1",
-    "@mastra/vercel": "1.4.0"
+    "@mastra/vercel": "1.4.0",
+    "@mastra/parallel": "0.0.0"
   },
   "changesets": [
     "automated-provider-registry-20260821-061854",
+    "calm-rivers-search",
+    "chilly-carrots-like",
     "duckdb-metadata-type-aware",
+    "fancy-items-sniff",
+    "five-clubs-study",
+    "five-squids-move",
+    "flat-news-joke",
+    "full-parents-cough",
+    "funny-plants-begin",
     "green-birds-knock",
     "long-apes-build",
     "neat-corners-push",
@@ -192,8 +201,14 @@
     "scoring-sampling-trace-lineage",
     "short-icons-trade",
     "smooth-contextual-sidebars",
+    "sparkly-boats-throw",
+    "spotty-bars-mix",
+    "spotty-walls-run",
+    "strict-clowns-kiss",
     "tall-moments-behave",
+    "tasty-dragons-fly",
     "tidy-seals-lock",
-    "workspace-shutdown-stop"
+    "workspace-shutdown-stop",
+    "yummy-worlds-shout"
   ]
 }

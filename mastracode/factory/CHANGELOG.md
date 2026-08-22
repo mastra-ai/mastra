@@ -1,5 +1,33 @@
 # @mastra/factory
 
+## 0.10.0-alpha.3
+
+### Minor Changes
+
+- Added a durable Factory action center for unresolved automation failures and proposed work waiting for approval. Per-user read/archive receipts survive reloads, while retries and canonical reconciliation resolve failures for every project member. ([#22021](https://github.com/mastra-ai/mastra/pull/22021))
+
+  Historical decision state is repaired on startup: accepted transitions become `succeeded`, obsolete terminal work and proposals become `superseded`, and active unresolved failures remain `failed`. Retry is offered only when the persisted failure code allows it.
+
+  **Before**
+
+  ```ts
+  // Failed automation and proposed runs were visible only on their board cards.
+  ```
+
+  **After**
+
+  ```ts
+  const attention = await fetch(`/web/factory/projects/${factoryId}/attention`).then(response => response.json());
+  // attention.items: per-user unresolved failures
+  // attention.approvalCount: project-wide proposed work
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`8661d7d`](https://github.com/mastra-ai/mastra/commit/8661d7d7179f0a024456aabdd8679bcecd09ac28), [`cacb839`](https://github.com/mastra-ai/mastra/commit/cacb8392d9e74189b56d857290b0615f98a2683d), [`91ad69d`](https://github.com/mastra-ai/mastra/commit/91ad69d64994c89199b0c55399e64ed91c61df2f), [`c5eaec5`](https://github.com/mastra-ai/mastra/commit/c5eaec5a860d80d0e3805e67db0414b87ac8cbed), [`e66b2ba`](https://github.com/mastra-ai/mastra/commit/e66b2ba100db63eaeab6e21e1ea34b113f2ec781)]:
+  - @mastra/core@1.62.0-alpha.3
+  - @mastra/code-sdk@1.4.1-alpha.3
+
 ## 0.10.0-alpha.2
 
 ### Patch Changes

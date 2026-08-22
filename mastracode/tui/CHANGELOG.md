@@ -1,5 +1,20 @@
 # mastracode
 
+## 0.35.1-alpha.3
+
+### Patch Changes
+
+- Improved long-session terminal performance by coalescing background renders, drawing status animations without re-rendering the full component tree, preserving completed component caches, and retaining a smaller rendered scrollback. ([#22073](https://github.com/mastra-ai/mastra/pull/22073))
+
+- Made the slash-command autocomplete dropdown in Mastra Code compact and scannable when many skills are installed. Only the highlighted item now shows its full wrapped description; other items stay on a single line with a truncated description. Fixes https://github.com/mastra-ai/mastra/issues/21967 ([#22101](https://github.com/mastra-ai/mastra/pull/22101))
+
+- Updated dependencies [[`c5eaec5`](https://github.com/mastra-ai/mastra/commit/c5eaec5a860d80d0e3805e67db0414b87ac8cbed), [`8661d7d`](https://github.com/mastra-ai/mastra/commit/8661d7d7179f0a024456aabdd8679bcecd09ac28), [`8661d7d`](https://github.com/mastra-ai/mastra/commit/8661d7d7179f0a024456aabdd8679bcecd09ac28), [`cacb839`](https://github.com/mastra-ai/mastra/commit/cacb8392d9e74189b56d857290b0615f98a2683d), [`8661d7d`](https://github.com/mastra-ai/mastra/commit/8661d7d7179f0a024456aabdd8679bcecd09ac28), [`91ad69d`](https://github.com/mastra-ai/mastra/commit/91ad69d64994c89199b0c55399e64ed91c61df2f), [`c4e2364`](https://github.com/mastra-ai/mastra/commit/c4e2364742bc37beebfa995db2d42efce6cfc7b8), [`c5eaec5`](https://github.com/mastra-ai/mastra/commit/c5eaec5a860d80d0e3805e67db0414b87ac8cbed), [`e66b2ba`](https://github.com/mastra-ai/mastra/commit/e66b2ba100db63eaeab6e21e1ea34b113f2ec781)]:
+  - @mastra/pg@1.22.0-alpha.1
+  - @mastra/libsql@1.22.0-alpha.0
+  - @mastra/core@1.62.0-alpha.3
+  - @mastra/mcp@1.17.2-alpha.0
+  - @mastra/code-sdk@1.4.1-alpha.3
+
 ## 0.35.1-alpha.2
 
 ### Patch Changes
