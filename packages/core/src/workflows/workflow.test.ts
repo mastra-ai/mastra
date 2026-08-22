@@ -1679,6 +1679,22 @@ describe('concurrent stream close', () => {
     expect(failed.status).toBe('failed');
     expect(executions).toEqual([1, 1]);
 
+    const workflowsStore = await testStorage.getStore('workflows');
+    const failedSnapshot = await workflowsStore?.loadWorkflowSnapshot({
+      workflowName: 'foreach-time-travel-preserves-results',
+      runId: run.runId,
+    });
+    const foreachMetadata = Object.values(failedSnapshot?.context ?? {}).find(
+      (stepResult: any) => stepResult?.suspendPayload?.__workflow_meta?.foreachStepId === 'process-item-for-time-travel',
+    )?.suspendPayload?.__workflow_meta;
+    expect(foreachMetadata).toMatchObject({
+      foreachStepId: 'process-item-for-time-travel',
+      foreachOutput: [
+        expect.objectContaining({ status: 'success', output: 0 }),
+        expect.objectContaining({ status: 'failed' }),
+      ],
+    });
+
     const replayed = await run.timeTravel({ step: 'process-item-for-time-travel' });
     expect(replayed.status).toBe('success');
     expect(executions).toEqual([1, 2]);
