@@ -33,7 +33,8 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "check": "tsc --noEmit",
+    "check": "tsc --noEmit && pnpm check:simulate",
+    "check:simulate": "tsc --noEmit -p tsconfig.simulate.json",
     "build:lib": "tsdown --silent --config tsdown.config.ts",
     "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "pnpm build:lib --watch",
@@ -43,7 +44,10 @@
     "lint": "oxlint . && eslint .",
     "lint:fix": "oxlint --fix . && eslint --fix .",
     "analyze:om-repro": "node ./scripts/analyze-om-repro.mjs",
-    "sanitize:om-repro": "node ./scripts/sanitize-om-repro.mjs"
+    "sanitize:om-repro": "node ./scripts/sanitize-om-repro.mjs",
+    "simulate:extract": "tsx ./scripts/simulate/extract.ts",
+    "simulate:replay": "tsx ./scripts/simulate/replay.ts",
+    "simulate:ab": "tsx ./scripts/simulate/ab.ts"
   },
   "keywords": [],
   "author": "",

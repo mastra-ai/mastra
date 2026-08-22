@@ -26,3 +26,11 @@ const filePart = {
 ```
 
 The Token Counter honors caller-supplied estimates verbatim on `image` and `file` parts. See [Caller-supplied token estimates for file parts](https://mastra.ai/docs/memory/observational-memory#caller-supplied-token-estimates-for-file-parts) for details.
+
+## Developer tooling: conversation simulation
+
+`scripts/simulate/` replays real conversation threads through the Subconscious capture and
+curation pipeline against a local Postgres, so a capture or curation prompt change can be
+A/B'd on real data instead of deployed and waited on. See
+[`scripts/simulate/README.md`](./scripts/simulate/README.md) for prerequisites, the database
+topology, and the extract → replay → A/B flow.
