@@ -158,7 +158,11 @@ const sandbox = new PlatformSandbox({
 await sandbox.start()
 ```
 
-The resolver doesn't run when `PlatformSandbox` reattaches to an existing `sandboxId`. It resolves the repository's public default-branch head at fresh-start time, then Platform starts or reuses the corresponding template build. If the repository head can't be resolved or the provider build fails, sandbox creation continues with the provider's default template so runtime setup can perform a cold checkout. The lazy definition never includes credentials. Private-repository template builds require a future secret transport capability.
+The resolver doesn't run when `PlatformSandbox` reattaches to an existing `sandboxId`. It resolves the repository's public default-branch head at fresh-start time, then Platform starts or reuses the corresponding template build. E2B stores repository builds under a tenant-scoped family and tags each build with the exact commit, which avoids client-side provider lookups or duplicate build orchestration.
+
+By default, sandbox creation waits for the resolved commit's build. Set `staleWhileRevalidate: true` only when runtime setup checks out the resolved commit after boot. With that option, Platform can start from the latest ready commit in the same repository family while the new commit builds asynchronously. Mastra Code Factory enables this option because its runtime repository setup reconciles the checkout before use.
+
+If the repository head can't be resolved or the provider build fails, sandbox creation continues with the provider's default template so runtime setup can perform a cold checkout. The lazy definition never includes credentials. Private-repository template builds require a future secret transport capability.
 
 Platform stores build state under the template's deterministic ID and binds it to the authenticated organization, project, environment, and provider.
 

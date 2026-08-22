@@ -19,4 +19,4 @@ const repoSandbox = new PlatformSandbox({
 });
 ```
 
-Template environment values are serialized and must not contain secrets.
+Repository templates carry deterministic family and commit lineage for provider-native reuse. Set `staleWhileRevalidate: true` only when runtime setup reconciles the checkout after boot; otherwise repository templates wait for the exact commit. Template environment values are serialized and must not contain secrets.

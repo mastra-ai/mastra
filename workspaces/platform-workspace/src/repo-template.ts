@@ -1,7 +1,8 @@
 import { execFile } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { promisify } from 'node:util';
 
-import { Template, type SandboxTemplateBuilder } from './template.js';
+import { createSandboxTemplate, type SandboxTemplateBuilder } from './template.js';
 
 const execFileAsync = promisify(execFile);
 const REPO_FULL_NAME_PATTERN = /^[\w.-]+\/[\w.-]+$/;
@@ -17,6 +18,8 @@ export interface PlatformRepoTemplateOptions {
   setupCommand?: string;
   /** Checkout path. Defaults to $HOME/<repository>. */
   workdir?: string;
+  /** Allow a previous commit's template while the resolved commit builds. Requires runtime checkout reconciliation. */
+  staleWhileRevalidate?: boolean;
   /** Test/integration seam for resolving the public default-branch head. */
   resolveHead?: (repoFullName: string) => Promise<string | undefined>;
 }
@@ -35,12 +38,18 @@ export type PlatformRepoTemplateResolver = () => Promise<SandboxTemplateBuilder 
 export function createRepoTemplate(options: PlatformRepoTemplateOptions): PlatformRepoTemplateResolver {
   validateRepoTemplateOptions(options);
   const resolveHead = options.resolveHead ?? resolveDefaultBranchHead;
+  const workdir = options.workdir ?? defaultWorkdir(options.repoFullName);
+  const familyId = deriveRepoTemplateFamilyId({
+    repoFullName: options.repoFullName,
+    setupCommand: options.setupCommand,
+    workdir,
+  });
 
   return async () => {
-    const sha = options.sha ?? (await resolveHead(options.repoFullName).catch(() => undefined));
-    if (!sha || !SHA_PATTERN.test(sha)) return undefined;
+    const resolvedSha = options.sha ?? (await resolveHead(options.repoFullName).catch(() => undefined));
+    if (!resolvedSha || !SHA_PATTERN.test(resolvedSha)) return undefined;
 
-    const workdir = options.workdir ?? defaultWorkdir(options.repoFullName);
+    const sha = resolvedSha.toLowerCase();
     const cloneUrl = `https://github.com/${options.repoFullName}.git`;
     const steps = [
       `git clone ${cloneUrl} "${workdir}"`,
@@ -49,8 +58,30 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
       ...(options.setupCommand ? [`cd "${workdir}" && ${options.setupCommand}`] : []),
     ];
 
-    return Template().runCmd(steps);
+    return createSandboxTemplate({
+      type: 'git',
+      familyId,
+      commitSha: sha,
+      ...(options.staleWhileRevalidate && { staleWhileRevalidate: true }),
+    }).runCmd(steps);
   };
+}
+
+function deriveRepoTemplateFamilyId(input: {
+  repoFullName: string;
+  setupCommand: string | undefined;
+  workdir: string;
+}): string {
+  return createHash('sha256')
+    .update(
+      JSON.stringify({
+        version: 1,
+        repoFullName: input.repoFullName.toLowerCase(),
+        setupCommand: input.setupCommand ?? null,
+        workdir: input.workdir,
+      }),
+    )
+    .digest('hex');
 }
 
 function validateRepoTemplateOptions(options: PlatformRepoTemplateOptions): void {
