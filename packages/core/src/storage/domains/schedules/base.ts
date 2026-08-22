@@ -19,6 +19,18 @@ export type WorkflowScheduleTarget = {
   inputData?: unknown;
   initialState?: unknown;
   requestContext?: Record<string, unknown>;
+  /**
+   * Content hash of the target workflow's serialized step graph, written by
+   * declarative schedule reconciliation on deploy. At claim time the
+   * scheduler compares this against the hash of its *locally registered*
+   * workflow and refuses to claim the fire on mismatch, fencing out
+   * not-yet-cycled instances from older builds that would otherwise execute
+   * a stale step graph (#19169). Absent on rows created by older versions
+   * and on imperative (API-created) schedules — those are unfenced.
+   *
+   * @internal — managed by `Mastra.registerDeclarativeSchedules()`.
+   */
+  definitionHash?: string;
 };
 
 // Agent-schedule semantic types are owned by the schedules feature module

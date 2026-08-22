@@ -18,6 +18,7 @@ import type {
   WorkflowRunState,
 } from '../../../workflows/types';
 import type { Workflow } from '../../../workflows/workflow';
+import { computeScheduleDefinitionHash } from '../../scheduler/definition-hash';
 import {
   createRestartExecutionParams,
   createTimeTravelExecutionParams,
@@ -416,6 +417,64 @@ export class WorkflowEventProcessor extends EventProcessor {
     } catch {
       return undefined;
     }
+  }
+
+  /**
+   * Stale-build fence for scheduled fires (#19169).
+   *
+   * A `workflow.start` published by the scheduler carries no step graph —
+   * only a workflow id, which this process resolves against its *own*
+   * registry. When the scheduler cannot keep the fire local (scheduler-only
+   * topology) the event reaches every consumer on the shared topic, so a
+   * straggler from a previous deploy could execute an outdated graph and
+   * skip steps the current build added (e.g. a gate enforcing a disable).
+   *
+   * The scheduler stamps `scheduleDefinitionHash` from the schedule row.
+   * If our locally registered definition hashes differently, we refuse the
+   * fire and record a failed trigger so the mismatch is visible in schedule
+   * history rather than silently doing nothing.
+   *
+   * Fails open when the event carries no hash (imperative/legacy schedules
+   * and all non-scheduled runs) or when our own graph can't be hashed.
+   *
+   * @returns `true` to proceed with execution, `false` to abandon the fire.
+   */
+  async #ensureScheduledDefinitionMatches(data: unknown, workflow: Workflow): Promise<boolean> {
+    const expected = (data as { scheduleDefinitionHash?: unknown } | undefined)?.scheduleDefinitionHash;
+    if (typeof expected !== 'string' || !expected) return true;
+
+    const localHash = computeScheduleDefinitionHash(workflow.serializedStepGraph);
+    if (!localHash || localHash === expected) return true;
+
+    const { workflowId, runId } = data as { workflowId: string; runId: string };
+    this.mastra
+      .getLogger()
+      ?.error?.(
+        'Refusing scheduled workflow fire: local definition does not match the schedule row. This instance is running a different build of the workflow.',
+        { workflowId, runId, expectedDefinitionHash: expected, localDefinitionHash: localHash },
+      );
+
+    try {
+      const schedulesStore = await this.mastra.getStorage()?.getStore('schedules');
+      // The scheduler derives runId as `sched_<scheduleId>_<scheduledFireAt>`.
+      const match = /^sched_(.+)_(\d+)$/.exec(runId);
+      if (schedulesStore && match) {
+        await schedulesStore.recordTrigger({
+          scheduleId: match[1]!,
+          runId,
+          scheduledFireAt: Number(match[2]),
+          actualFireAt: Date.now(),
+          outcome: 'failed',
+          error: `Stale workflow definition on consuming instance (expected ${expected}, local ${localHash})`,
+          triggerKind: 'schedule-fire',
+        });
+      }
+    } catch (err) {
+      // History is diagnostic — never let it resurrect a refused fire.
+      this.mastra.getLogger()?.warn?.('Failed to record stale-definition schedule trigger', { runId, error: err });
+    }
+
+    return false;
   }
 
   private async errorWorkflow(
@@ -3035,6 +3094,10 @@ export class WorkflowEventProcessor extends EventProcessor {
           }),
         );
       }
+    }
+
+    if (type === 'workflow.start' && workflow && !(await this.#ensureScheduledDefinitionMatches(data, workflow))) {
+      return;
     }
 
     if (type === 'workflow.start' || type === 'workflow.resume') {
