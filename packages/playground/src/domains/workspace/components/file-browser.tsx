@@ -558,8 +558,12 @@ export function FileViewer({ path, content, isLoading, mimeType, onClose }: File
           </div>
         ) : isImage ? (
           <div className="flex items-center justify-center p-4">
+            {/* content is already base64 here (the caller requests encoding: 'base64'
+                for image files) — re-encoding it through btoa() would both be wrong
+                (btoa expects raw Latin1 bytes, not an already-base64 string) and
+                throw outright once the caller stops mis-reading images as text. */}
             <img
-              src={`data:${mimeType || 'image/png'};base64,${btoa(content)}`}
+              src={`data:${mimeType || 'image/png'};base64,${content}`}
               alt={fileName}
               className="max-h-[400px] max-w-full object-contain"
             />

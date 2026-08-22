@@ -127,10 +127,15 @@ export default function Workspace() {
   const deleteFile = useDeleteWorkspaceFile();
   const createDirectory = useCreateWorkspaceDirectory();
 
-  // Selected file content - pass workspaceId
+  // Selected file content - pass workspaceId. Request base64 for images: reading
+  // binary content as text (the default) corrupts it, and previewing that text as
+  // if it were base64 throws "btoa: characters outside Latin1 range" downstream.
+  const selectedFileExt = selectedFile?.split('.').pop()?.toLowerCase();
+  const selectedFileIsImage = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'].includes(selectedFileExt ?? '');
   const { data: fileContent, isLoading: isLoadingFileContent } = useWorkspaceFile(selectedFile ?? '', {
     enabled: !!selectedFile,
     workspaceId: effectiveWorkspaceId,
+    encoding: selectedFileIsImage ? 'base64' : undefined,
   });
 
   // Skills - pass workspaceId to get skills from the selected workspace
