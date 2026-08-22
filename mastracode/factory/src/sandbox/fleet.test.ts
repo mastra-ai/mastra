@@ -559,6 +559,36 @@ describe('provision coalescing', () => {
     expect(factory).toHaveBeenCalledTimes(2);
   });
 
+  it('releases the budget slot when reattach fails before reprovisioning', async () => {
+    const existing = slowSandbox('sb-existing');
+    const replacement = slowSandbox('sb-replacement');
+    let freshProvisionCount = 0;
+    const factory = vi.fn((opts: { providerSandboxId?: string }) => {
+      if (opts.providerSandboxId) return existing.sandbox;
+      freshProvisionCount += 1;
+      return freshProvisionCount === 1 ? existing.sandbox : replacement.sandbox;
+    });
+    const subject = fleet({ maxSandboxes: 1 });
+    subject.setFactory(factory);
+    const store = bindingStore('mastracode-session-a');
+
+    const initial = subject.ensureSandbox(store);
+    existing.release();
+    await initial;
+    expect(subject.liveCount).toBe(1);
+
+    existing.sandbox.start = vi.fn(async () => {
+      throw new Error('sandbox was reaped');
+    });
+    store.sandboxId = 'sb-existing';
+    const replacementPromise = subject.ensureSandbox(store);
+    replacement.release();
+
+    await expect(replacementPromise).resolves.toBe(replacement.sandbox);
+    expect(subject.liveCount).toBe(1);
+    expect(store.setSandboxId).toHaveBeenLastCalledWith('sb-replacement');
+  });
+
   it('tears down a coalesced sandbox regardless of which caller holds the handle', async () => {
     const { sandbox, release } = slowSandbox('sb-1');
     const subject = fleet();

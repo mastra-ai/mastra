@@ -505,6 +505,9 @@ export class SandboxFleet {
         reattached.seedCheckpointNameUsed = undefined;
         return reattached;
       } catch {
+        // The provider has reaped this sandbox, so release the budget slot that
+        // was allocated when it was originally provisioned before replacing it.
+        if (this.#liveCount > 0) this.#liveCount -= 1;
         await store.setSandboxId(null);
         // fall through to fresh provision below
       }
