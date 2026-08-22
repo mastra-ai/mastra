@@ -331,6 +331,7 @@ export class FactoryDecisionDispatcher {
   }
 
   async #dispatchDecision(record: FactoryDeferredDecisionRecord, now: Date): Promise<void> {
+    let executionCompleted = false;
     try {
       const decision = validateFactoryRuleDecision(record.decision, record.causalChain.length);
       if (decision.type === 'reject') throw new Error('Deferred Factory decisions cannot reject.');
@@ -345,6 +346,7 @@ export class FactoryDecisionDispatcher {
           this.#storage.renewDeferredDecisionLease(leaseIdentity(record, this.#ownerId), leaseExpiresAt),
         async () => this.#executeDecision(record, decision),
       );
+      executionCompleted = true;
       const completed = await this.#storage.completeDeferredDecision(leaseIdentity(record, this.#ownerId), new Date());
       if (!completed) throw new Error('Factory decision lease was lost before completion.');
     } catch (error) {
@@ -355,6 +357,7 @@ export class FactoryDecisionDispatcher {
         availableAt: retryAt(now, record.attempts),
         lastError: sanitizeDispatchError(error),
         terminal,
+        advanceDeliveryGeneration: !executionCompleted,
       });
     }
   }
@@ -476,8 +479,10 @@ export class FactoryDecisionDispatcher {
               });
         const session = resolved.session as DispatcherSession;
         await this.#switchThread(session, binding);
+        const deliveryId =
+          record.deliveryGeneration === 0 ? record.id : `${record.id}:retry:${record.deliveryGeneration}`;
         const delivered = await session.thread.listActiveMessages();
-        if (delivered.some(message => message.id === record.id)) return;
+        if (delivered.some(message => message.id === deliveryId)) return;
         if (decision.cancelInFlight) session.abort();
         if (decision.precedingMessage) {
           await awaitNotification(
@@ -525,7 +530,7 @@ export class FactoryDecisionDispatcher {
         const sendKickoff = async () => {
           const result = session.sendSignal(
             {
-              id: record.id,
+              id: deliveryId,
               type: 'user',
               tagName: 'user',
               contents: resolved.message,
@@ -553,11 +558,11 @@ export class FactoryDecisionDispatcher {
             // in flight. If that run ends before draining its queue the prompt
             // is dropped silently: no turn starts, no error surfaces, and the
             // decision reports success while the card sits in its new stage with
-            // nobody working. Signals persist under their own id (the same
-            // identity the replay guard above reads), so confirm the message
-            // actually landed in the thread rather than trusting the ack.
+            // nobody working. Signals persist under their generation-scoped id
+            // (the same identity the replay guard above reads), so confirm the
+            // message actually landed in the thread rather than trusting the ack.
             const landed = await session.thread.listActiveMessages();
-            if (!landed.some(message => message.id === record.id)) {
+            if (!landed.some(message => message.id === deliveryId)) {
               // The condition that resolves this is the in-flight run ending, so
               // wait for exactly that and redeliver into the idle session. A
               // backoff cannot work here: retries are sized in seconds and a turn
