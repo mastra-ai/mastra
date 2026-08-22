@@ -725,6 +725,125 @@ describe('InngestAgent parity surface', () => {
     }
   });
 
+  // The agentic loop suspends each tool call under `resumeLabels[toolCallId]`.
+  // These cover resume() honouring that label instead of guessing a target from
+  // the run's suspended paths, which is ambiguous once two tools are parked.
+  describe('resume targeting by toolCallId', () => {
+    function makeAgentWithSnapshot(id: string, snapshot: any) {
+      const durableAgent = makeIsolatedAgent(id);
+      const loadWorkflowSnapshot = vi.fn().mockResolvedValue(snapshot);
+      (durableAgent as any).__setMastra({
+        getStorage: () => ({ getStore: async () => ({ loadWorkflowSnapshot }) }),
+      });
+      return durableAgent;
+    }
+
+    // A tool call suspends inside the nested tool-execution workflow, so the outer
+    // agentic-loop step records the leaf under `__workflow_meta.path`.
+    const nestedSuspension = {
+      status: 'suspended',
+      suspendPayload: { __workflow_meta: { runId: 'nested-run', path: ['ask-human'] } },
+    };
+
+    const twoSuspendedSteps = {
+      value: {},
+      context: {
+        'agentic-loop': nestedSuspension,
+        'other-step': { status: 'suspended', suspendPayload: {} },
+      },
+      suspendedPaths: { 'agentic-loop': [0], 'other-step': [1] },
+      resumeLabels: {
+        'tool-call-a': { stepId: 'agentic-loop' },
+        'tool-call-b': { stepId: 'other-step' },
+      },
+    };
+
+    it('targets the step the named tool call is parked on, down to the nested leaf', async () => {
+      const durableAgent = makeAgentWithSnapshot('resume-by-tool-call-id', twoSuspendedSteps);
+      const sendSpy = stubInngestSend();
+      const runId = 'resume-by-tool-call-id-run';
+
+      const result = await durableAgent.resume(runId, { answer: 'yes' }, { toolCallId: 'tool-call-a' });
+      try {
+        expect(sendSpy).toHaveBeenCalledTimes(1);
+        const sentEvent = sendSpy.mock.calls[0]?.[0];
+        // Without the nested leaf appended the engine only knows the outer step and has
+        // to guess which suspension inside it to resume.
+        expect(sentEvent?.data.resume.steps).toEqual(['agentic-loop', 'ask-human']);
+        expect(sentEvent?.data.resume.resumePath).toEqual([0]);
+        expect(sentEvent?.data.resume.resumePayload).toEqual({ answer: 'yes' });
+      } finally {
+        result.cleanup();
+        sendSpy.mockRestore();
+      }
+    });
+
+    it('rejects an unknown toolCallId instead of resuming the wrong leaf', async () => {
+      const durableAgent = makeAgentWithSnapshot('resume-unknown-tool-call-id', twoSuspendedSteps);
+      const sendSpy = stubInngestSend();
+
+      await expect(
+        durableAgent.resume('resume-unknown-run', { answer: 'yes' }, { toolCallId: 'tool-call-z' }),
+      ).rejects.toThrow(/no suspended tool call with id "tool-call-z"/);
+      expect(sendSpy).not.toHaveBeenCalled();
+      expect(globalRunRegistry.get('resume-unknown-run')).toBeUndefined();
+
+      sendSpy.mockRestore();
+    });
+
+    it('rejects an ambiguous resume when multiple tool calls are suspended', async () => {
+      const durableAgent = makeAgentWithSnapshot('resume-ambiguous', twoSuspendedSteps);
+      const sendSpy = stubInngestSend();
+
+      await expect(durableAgent.resume('resume-ambiguous-run', { answer: 'yes' })).rejects.toThrow(
+        /more than one suspension is parked/,
+      );
+      expect(sendSpy).not.toHaveBeenCalled();
+
+      sendSpy.mockRestore();
+    });
+
+    it('still infers the single suspended step when no toolCallId is given', async () => {
+      const durableAgent = makeAgentWithSnapshot('resume-single-inferred', {
+        value: {},
+        context: {},
+        suspendedPaths: { 'agentic-loop': [0] },
+        resumeLabels: { 'tool-call-a': { stepId: 'agentic-loop' } },
+      });
+      const sendSpy = stubInngestSend();
+      const runId = 'resume-single-inferred-run';
+
+      const result = await durableAgent.resume(runId, { answer: 'yes' });
+      try {
+        const sentEvent = sendSpy.mock.calls[0]?.[0];
+        expect(sentEvent?.data.resume.steps).toEqual(['agentic-loop']);
+      } finally {
+        result.cleanup();
+        sendSpy.mockRestore();
+      }
+    });
+
+    it('rejects resume() when dispatching the resume event fails', async () => {
+      // Dispatch used to be fire-and-forget: resume() resolved while the run
+      // stayed parked, and the failure only ever showed up as a stream error.
+      const durableAgent = makeAgentWithSnapshot('resume-dispatch-failure', {
+        value: {},
+        context: {},
+        suspendedPaths: { 'agentic-loop': [0] },
+        resumeLabels: {},
+      });
+      const runId = 'resume-dispatch-failure-run';
+      const sendSpy = vi.spyOn(inngest as any, 'send').mockRejectedValue(new Error('inngest unavailable'));
+
+      await expect(durableAgent.resume(runId, { answer: 'yes' })).rejects.toThrow('inngest unavailable');
+      // A run that was never resumed must not hold on to its registry entry,
+      // otherwise a retry of the same runId is blocked.
+      expect(globalRunRegistry.get(runId)).toBeUndefined();
+
+      sendSpy.mockRestore();
+    });
+  });
+
   it('exposes generate() and resumeGenerate() with durable signatures', () => {
     // Slice 5 surface check. The Proxy used to forward both methods to the
     // underlying Agent; after parity work generate() must be the durable
