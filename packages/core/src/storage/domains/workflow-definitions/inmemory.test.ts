@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { InMemoryDB } from '../inmemory-db';
+import { WorkflowDefinitionOwnershipConflictError } from './base';
 import { InMemoryWorkflowDefinitionsStorage } from './inmemory';
 
 const graph = [{ type: 'tool', id: 'echo-tool', toolId: 'echo-tool' }] as any;
@@ -36,14 +37,24 @@ describe('InMemoryWorkflowDefinitionsStorage', () => {
   });
 
   describe('update', () => {
-    it('updates authorId on an existing definition', async () => {
+    it('keeps authorId immutable on an existing definition', async () => {
       await storage.upsert({ ...baseInput(), authorId: 'author-1' });
-      const updated = await storage.upsert({ id: 'wf-1', authorId: 'author-2' });
-      expect(updated.authorId).toBe('author-2');
+      await expect(storage.upsert({ id: 'wf-1', authorId: 'author-2' })).rejects.toBeInstanceOf(
+        WorkflowDefinitionOwnershipConflictError,
+      );
       const fetched = await storage.get('wf-1');
-      expect(fetched?.authorId).toBe('author-2');
+      expect(fetched?.authorId).toBe('author-1');
       // Unspecified columns survive the partial upsert.
       expect(fetched?.graph).toEqual(graph);
+    });
+
+    it('does not disclose the existing author in ownership conflicts', async () => {
+      await storage.upsert({ ...baseInput(), authorId: 'private-owner' });
+
+      const error = await storage.upsert({ id: 'wf-1', authorId: 'other-owner' }).catch(cause => cause);
+
+      expect(error).toBeInstanceOf(WorkflowDefinitionOwnershipConflictError);
+      expect(error.message).not.toContain('private-owner');
     });
   });
 });

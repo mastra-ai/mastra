@@ -42,6 +42,8 @@ export interface WorkflowDefinition {
 
   /** Provenance — distinguishes user-stored from code-registered workflows. */
   source: 'storage';
+
+  /** Immutable owner assigned when the definition is created. */
   authorId?: string;
 
   createdAt: Date;
@@ -58,6 +60,8 @@ export interface CreateWorkflowDefinitionInput {
   stateSchema?: unknown;
   requestContextSchema?: unknown;
   graph: ValidatableStepFlowEntry[];
+
+  /** Immutable owner to assign when the definition is created. */
   authorId?: string;
 }
 
@@ -72,6 +76,8 @@ export interface UpdateWorkflowDefinitionInput {
   requestContextSchema?: unknown;
   graph?: ValidatableStepFlowEntry[];
   status?: 'active' | 'archived';
+
+  /** Expected immutable owner. A different owner produces a conflict. */
   authorId?: string;
 }
 
@@ -85,11 +91,48 @@ export interface ListWorkflowDefinitionsOutput {
   total: number;
 }
 
+export interface DeleteWorkflowDefinitionOptions {
+  /** Expected immutable owner. When supplied, a different or missing owner is not deleted. */
+  authorId?: string;
+}
+
+/**
+ * Thrown when an upsert attempts to claim a workflow definition that already
+ * belongs to a different author. The message intentionally does not disclose
+ * the existing author.
+ */
+export class WorkflowDefinitionOwnershipConflictError extends Error {
+  readonly workflowId: string;
+
+  constructor(workflowId: string) {
+    super(`Workflow definition "${workflowId}" conflicts with an existing definition.`);
+    this.name = 'WorkflowDefinitionOwnershipConflictError';
+    this.workflowId = workflowId;
+  }
+}
+
+/**
+ * Treat the supplied author as both creation ownership and the expected owner
+ * on update. Once a row has an owner, every update must supply that same owner;
+ * omitting it is not an unscoped bypass. Legacy unowned rows remain updatable
+ * only by callers that also omit ownership.
+ */
+export function assertWorkflowDefinitionAuthor(
+  existing: Pick<WorkflowDefinition, 'id' | 'authorId'>,
+  input: Pick<UpdateWorkflowDefinitionInput, 'authorId'>,
+): void {
+  if (existing.authorId !== input.authorId) {
+    throw new WorkflowDefinitionOwnershipConflictError(existing.id);
+  }
+}
+
 /**
  * Abstract storage domain for persisted workflow definitions.
  *
  * Versioning is intentionally out of scope for v1 — `upsert` overwrites in
- * place. A future revision can layer the {@link VersionedStorageDomain}
+ * place. Ownership is the exception: an explicitly supplied `authorId` is an
+ * immutable compare condition, so concurrent creators cannot take over the
+ * winning row. A future revision can layer the {@link VersionedStorageDomain}
  * pattern on top without breaking the rehydration path.
  */
 export abstract class WorkflowDefinitionsStorage extends StorageDomain {
@@ -100,5 +143,9 @@ export abstract class WorkflowDefinitionsStorage extends StorageDomain {
   abstract upsert(input: CreateWorkflowDefinitionInput | UpdateWorkflowDefinitionInput): Promise<WorkflowDefinition>;
   abstract get(id: string): Promise<WorkflowDefinition | null>;
   abstract list(args?: ListWorkflowDefinitionsInput): Promise<ListWorkflowDefinitionsOutput>;
-  abstract delete(id: string): Promise<void>;
+  /**
+   * Deletes one definition and reports whether a row matched. When `authorId`
+   * is supplied, adapters must include it in the atomic delete predicate.
+   */
+  abstract delete(id: string, options?: DeleteWorkflowDefinitionOptions): Promise<boolean>;
 }
