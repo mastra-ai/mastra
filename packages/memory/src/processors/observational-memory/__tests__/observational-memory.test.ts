@@ -11222,11 +11222,16 @@ describe('Full Async Buffering Flow', () => {
     expect(observerCalls.length).toBeGreaterThan(0);
   });
 
-  it('should trigger sync observation at step > 0 even when bufferTokens is set without blockAfter', async () => {
+  it('should keep observing at step > 0 when bufferTokens is set without blockAfter', async () => {
     // Regression test: when async buffering is enabled (bufferTokens set) but blockAfter
-    // is NOT configured, sync observation at step > 0 must still fire once pending tokens
+    // is NOT configured, observation at step > 0 must still fire once pending tokens
     // exceed the threshold. Previously, the blockAfter gate had `if (!blockAfter) return false`
     // which silently disabled ALL sync observation when blockAfter was unset.
+    //
+    // With threshold→blockAfter band semantics, pending tokens between the threshold
+    // (2000) and the default blockAfter (1.2x = 2400) are handled by background band
+    // buffering + activation instead of a blocking sync observation — so the observer
+    // still runs, just asynchronously across steps.
     const { step, waitForAsyncOps, observerCalls, storage, threadId, resourceId } = await setupAsyncBufferingScenario({
       messageTokens: 2000, // Threshold that will be exceeded
       bufferTokens: 500, // Async buffering enabled
@@ -11262,16 +11267,79 @@ describe('Full Async Buffering Flow', () => {
       );
     }
 
-    // Step 1: the blockAfter gate must not have silently disabled sync
-    // observation — the regression this test guards is `if (!blockAfter) return
-    // false` disabling ALL sync observation at step > 0.
+    // Steps 1-2: the blockAfter gate must not have silently disabled observation —
+    // the regression this test guards is `if (!blockAfter) return false` disabling
+    // ALL sync observation at step > 0. Step 1 activates the step-0 buffered chunk
+    // (a swap, no observer call) leaving the fresh messages in the threshold→blockAfter
+    // band; step 2 triggers band buffering, which runs the observer on them.
     await step(1);
+    await waitForAsyncOps();
+    await step(2);
     await waitForAsyncOps();
     expect(observerCalls.length).toBeGreaterThan(callsAfterStep0);
 
     // Verify observations were actually persisted to the record
     const record = await storage.getObservationalMemory(threadId, resourceId);
     expect(record?.activeObservations).toBeTruthy();
+  });
+
+  it('should buffer in the threshold→blockAfter band instead of running a blocking sync observation', async () => {
+    // ~2200 pending tokens sit between the threshold (2000) and blockAfter (2x = 4000).
+    // Reaching the threshold without a buffered chunk must trigger background band
+    // buffering — NOT a blocking sync observation (the sync-at-threshold race that
+    // caused blocking observer calls on every turn even with async buffering enabled).
+    const { om, step, waitForAsyncOps, observerCalls, storage, threadId, resourceId } =
+      await setupAsyncBufferingScenario({
+        messageTokens: 2000,
+        bufferTokens: 500,
+        bufferActivation: 1.0,
+        blockAfter: 2, // 2x threshold = 4000
+        reflectionObservationTokens: 50000,
+        messageCount: 20, // ~2200 tokens: in the band
+      });
+
+    const status = await om.getStatus({ threadId, resourceId });
+    expect(status.observationBlockAfter).toBe(4000);
+    expect(status.inAsyncObservationBand).toBe(true);
+    expect(status.shouldBuffer).toBe(true);
+
+    await step(0);
+    await waitForAsyncOps();
+
+    // Band buffering ran the observer in the background and produced a chunk...
+    expect(observerCalls.length).toBeGreaterThan(0);
+    const record = await storage.getObservationalMemory(threadId, resourceId);
+    expect(getBufferedChunks(record).length).toBeGreaterThan(0);
+    // ...but no sync observation committed observations directly.
+    expect(record?.activeObservations ?? '').toBe('');
+
+    // The next step activates the buffered chunk (a swap, no extra observer call).
+    const callsBeforeActivation = observerCalls.length;
+    await step(1);
+    const postActivation = await storage.getObservationalMemory(threadId, resourceId);
+    expect(postActivation?.activeObservations).toContain('Observed');
+    expect(observerCalls.length).toBe(callsBeforeActivation);
+  });
+
+  it('should run a blocking sync observation once pending tokens reach blockAfter with no buffered chunk', async () => {
+    // ~2200 pending tokens exceed blockAfter (2x threshold 1000 = 2000). With no
+    // activatable chunk, the band no longer applies — a sync observation must fire
+    // so context is bounded.
+    const { step, observerCalls, storage, threadId, resourceId } = await setupAsyncBufferingScenario({
+      messageTokens: 1000,
+      bufferTokens: 250,
+      bufferActivation: 1.0,
+      blockAfter: 2, // 2x threshold = 2000
+      reflectionObservationTokens: 50000,
+      messageCount: 20, // ~2200 tokens: past blockAfter
+    });
+
+    await step(0);
+
+    // Sync observation committed directly during the step — no async wait needed.
+    expect(observerCalls.length).toBeGreaterThan(0);
+    const record = await storage.getObservationalMemory(threadId, resourceId);
+    expect(record?.activeObservations).toContain('Observed');
   });
 
   it('should defer async buffering when messages contain pending tool calls (state: call)', async () => {

@@ -219,7 +219,26 @@ export class ObservationStep {
     // pendingTokens < threshold) nor this one — the #16523 dead zone. Now the block also
     // runs at step 0, but ONLY when observation is imminent, so buckets aren't drained on
     // turns where nothing will fire.
-    const willObserveNow = statusSnapshot.shouldObserve && !hasIncompleteToolCalls;
+    // In the threshold→blockAfter band, sync observation must not fire: buffering
+    // was (or will be) triggered above, and the resulting chunk gets activated on a
+    // later step/turn. Only run the threshold pipeline in-band when a buffered
+    // chunk is already available to activate (a cheap swap, no blocking model call).
+    const observeGate = (status: typeof statusSnapshot) =>
+      status.shouldObserve && !hasIncompleteToolCalls && (!status.inAsyncObservationBand || status.canActivate);
+    let willObserveNow = observeGate(statusSnapshot);
+    if (!willObserveNow && statusSnapshot.shouldObserve && !hasIncompleteToolCalls) {
+      // In-band without an activatable chunk per the cached record — a background
+      // buffer op may have completed since the cache was taken. Refresh once and
+      // re-check so a ready chunk gets activated instead of lingering.
+      await this.turn.refreshRecord();
+      statusSnapshot = await om.getStatus({
+        threadId,
+        resourceId,
+        record: this.turn.record,
+        messages: getObservableMessages(messageList),
+      });
+      willObserveNow = observeGate(statusSnapshot);
+    }
     /** In-flight message ids the step-0 cleanup must never remove from live context. */
     let step0PreserveIds: string[] | undefined;
     if (this.stepNumber > 0 || willObserveNow) {
@@ -276,7 +295,7 @@ export class ObservationStep {
       // Threshold observation (skip if tool calls pending)
       if (willObserveNow) {
         const preObsGeneration = this.turn.record.generationCount;
-        const obsResult = await this.runThresholdObservation();
+        const obsResult = await this.runThresholdObservation(statusSnapshot.inAsyncObservationBand);
         observerExchange = obsResult.observerExchange;
         if (obsResult.succeeded) {
           observed = true;
@@ -384,7 +403,7 @@ export class ObservationStep {
    * waitForBuffering → re-check → activate → reflect → observe (sync fallback when
    * buffered activation did not happen)
    */
-  private async runThresholdObservation(): Promise<{
+  private async runThresholdObservation(inAsyncObservationBand?: boolean): Promise<{
     succeeded: boolean;
     record: any;
     activatedMessageIds?: string[];
@@ -394,7 +413,13 @@ export class ObservationStep {
     const om = this.turn.om;
 
     // Wait for any in-flight buffering to settle, then refresh the turn cache once.
-    await om.waitForBuffering(threadId, resourceId);
+    // In the threshold→blockAfter band this path is only entered when a buffered
+    // chunk is already activatable — skip the wait so an in-flight buffer op (possibly
+    // fired earlier this same step) doesn't turn the cheap activation swap into a
+    // blocking wait on the observer model.
+    if (!inAsyncObservationBand) {
+      await om.waitForBuffering(threadId, resourceId);
+    }
     await this.turn.refreshRecord();
 
     // A step-0 seeded response message exists ONLY as a marker anchor in the live list.
@@ -455,6 +480,17 @@ export class ObservationStep {
           activatedMessageIds: activation.activatedMessageIds,
         };
       }
+    }
+
+    // In the threshold→blockAfter band, never fall through to a blocking sync
+    // observation — background buffering is responsible for producing a chunk,
+    // and activation will pick it up on a later step/turn. Sync observation is
+    // reserved for pending tokens at/above blockAfter (or async disabled).
+    if (freshStatus.inAsyncObservationBand) {
+      omDebug(
+        `[OM:observe] in async band (pending=${freshStatus.pendingTokens}, threshold=${freshStatus.threshold}, blockAfter=${freshStatus.observationBlockAfter}) — deferring to async buffering instead of sync observation`,
+      );
+      return { succeeded: false, record: freshStatus.record };
     }
 
     // Sync observation — we've waited for buffering and tried activation,
