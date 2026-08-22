@@ -30,6 +30,7 @@ import type {
 import { safeClose, safeEnqueue } from './input';
 import { createJsonTextStreamTransformer, createObjectStreamTransformer } from './output-format-handlers';
 import { getTransformedSchema } from './schema';
+import { packStepMessageMirrors, unpackStepMessageMirrors } from './step-message-mirrors';
 import { dedupeStepRequests, rehydrateStepRequests } from './step-request-dedupe';
 
 /**
@@ -2055,7 +2056,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   }
 
   serializeState() {
-    const { steps, requests } = dedupeStepRequests(this.#bufferedSteps);
+    const { steps, requests } = dedupeStepRequests(packStepMessageMirrors(this.#bufferedSteps));
     return {
       status: this.#status,
       bufferedSteps: steps,
@@ -2085,7 +2086,6 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
   deserializeState(state: any) {
     this.#status = state.status;
-    this.#bufferedSteps = rehydrateStepRequests(state.bufferedSteps, state.bufferedStepRequests);
     this.#bufferedReasoningDetails = state.bufferedReasoningDetails;
     this.#bufferedByStepReasoningDetails = state.bufferedByStepReasoningDetails ?? {};
     this.#bufferedByStep = state.bufferedByStep;
@@ -2106,5 +2106,11 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     this.#tripwire = state.tripwire;
     this.#wasSuspended = state.wasSuspended ?? state.status === 'suspended';
     this.messageList = this.messageList.deserialize(state.messageList);
+    // Buffered steps hold only a count of the response messages they had seen;
+    // rebuilding them needs the restored message list, so this has to come last.
+    this.#bufferedSteps = unpackStepMessageMirrors(
+      rehydrateStepRequests(state.bufferedSteps, state.bufferedStepRequests),
+      this.messageList,
+    );
   }
 }
