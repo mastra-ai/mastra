@@ -8,7 +8,7 @@ import type {
   StorageMCPServerConfig,
 } from '@mastra/core/storage';
 
-import { CrudEditorNamespace } from './base';
+import { CrudEditorNamespace, getVersionedEntityById } from './base';
 import type { StorageAdapter } from './base';
 
 export class EditorMCPNamespace extends CrudEditorNamespace<
@@ -40,7 +40,8 @@ export class EditorMCPNamespace extends CrudEditorNamespace<
 
     return {
       create: input => store.create({ mcpClient: input }),
-      getByIdResolved: id => store.getByIdResolved(id),
+      getByIdResolved: (id, options) =>
+        getVersionedEntityById(id, options, store.getByIdResolved.bind(store), store.getVersionByNumber.bind(store)),
       update: input => store.update(input),
       delete: id => store.delete(id),
       list: args => store.list(args),

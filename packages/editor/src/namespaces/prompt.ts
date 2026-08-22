@@ -12,7 +12,7 @@ import type {
 } from '@mastra/core/storage';
 
 import { resolveInstructionBlocks } from '../instruction-builder';
-import { CrudEditorNamespace } from './base';
+import { CrudEditorNamespace, getVersionedEntityById } from './base';
 import type { StorageAdapter } from './base';
 
 const PROMPT_BLOCK_SNAPSHOT_CONFIG_FIELDS = [
@@ -173,7 +173,8 @@ export class EditorPromptNamespace extends CrudEditorNamespace<
 
     return {
       create: input => store.create({ promptBlock: input }),
-      getByIdResolved: id => store.getByIdResolved(id),
+      getByIdResolved: (id, options) =>
+        getVersionedEntityById(id, options, store.getByIdResolved.bind(store), store.getVersionByNumber.bind(store)),
       update: input => store.update(input),
       delete: id => store.delete(id),
       list: args => store.list(args),
@@ -211,7 +212,6 @@ export class EditorPromptNamespace extends CrudEditorNamespace<
       throw new Error(`Failed to resolve entity ${input.id} after update`);
     }
 
-    this._cache.set(input.id, resolved);
     return resolved;
   }
 

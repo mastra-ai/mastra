@@ -71,4 +71,39 @@ describe('EditorPromptNamespace', () => {
     expect(versions.versions[0]!.changedFields).toEqual(['name', 'content', 'rules', 'requestContextSchema']);
     expect(updated.activeVersionId).toBeUndefined();
   });
+
+  it('keeps default reads pinned while exposing draft and specific versions', async () => {
+    const storage = new InMemoryStore();
+    const prompt = createPromptNamespace(storage);
+
+    await prompt.create({
+      id: 'pinned-block',
+      name: 'Pinned Block',
+      content: 'Published content',
+    });
+    const promptStore = await storage.getStore('promptBlocks');
+    const initialVersions = await promptStore!.listVersions({ blockId: 'pinned-block' });
+    const versionOne = initialVersions.versions.find(version => version.versionNumber === 1)!;
+    await promptStore!.update({ id: 'pinned-block', activeVersionId: versionOne.id, status: 'published' });
+
+    const updated = await prompt.update({ id: 'pinned-block', content: 'Draft content' });
+    expect(updated.content).toBe('Draft content');
+
+    const warmDefault = await prompt.getById('pinned-block');
+    const freshPrompt = createPromptNamespace(storage);
+    const coldDefault = await freshPrompt.getById('pinned-block');
+    expect(warmDefault!.content).toBe('Published content');
+    expect(coldDefault!.content).toBe('Published content');
+
+    const draft = await freshPrompt.getById('pinned-block', { status: 'draft' });
+    expect(draft!.content).toBe('Draft content');
+
+    const versions = await promptStore!.listVersions({ blockId: 'pinned-block' });
+    const versionTwo = versions.versions.find(version => version.versionNumber === 2)!;
+    const explicitVersion = await freshPrompt.getById('pinned-block', { versionId: versionTwo.id });
+    expect(explicitVersion!.content).toBe('Draft content');
+
+    const numberedVersion = await freshPrompt.getById('pinned-block', { versionNumber: 2 });
+    expect(numberedVersion!.content).toBe('Draft content');
+  });
 });
