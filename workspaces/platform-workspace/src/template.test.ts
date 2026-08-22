@@ -1,5 +1,5 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
-import { serializeSandboxTemplate } from './template.js';
+import { createSandboxTemplate, serializeSandboxTemplate } from './template.js';
 import * as platformWorkspace from './index.js';
 import { Template, type SandboxTemplateBuilder, type SerializedSandboxTemplate } from './index.js';
 
@@ -59,6 +59,20 @@ describe('Template', () => {
     expect(first.id()).toBe('6c6cbd6b21036a4ed72be2d63ae2674437670d6e927adebd8e9389fb63019a39');
     expect(first.id()).toBe(sameDefinition.id());
     expect(first.id()).not.toBe(differentOrder.id());
+  });
+
+  it('keeps stale-while-revalidate policy out of repository template identity', () => {
+    const source = {
+      type: 'git' as const,
+      familyId: 'a'.repeat(64),
+      commitSha: '1'.repeat(40),
+    };
+    const exact = createSandboxTemplate(source).runCmd('pnpm install');
+    const explicitFalse = createSandboxTemplate({ ...source, staleWhileRevalidate: false }).runCmd('pnpm install');
+    const stale = createSandboxTemplate({ ...source, staleWhileRevalidate: true }).runCmd('pnpm install');
+
+    expect(explicitFalse.id()).toBe(exact.id());
+    expect(stale.id()).toBe(exact.id());
   });
 
   it.each([

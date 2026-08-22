@@ -171,7 +171,7 @@ export function serializeSandboxTemplate(template: SandboxTemplateBuilder): Seri
 
 function templateIdentityDefinition(definition: SerializedSandboxTemplate): SerializedSandboxTemplate {
   const source = definition.source;
-  if (source?.staleWhileRevalidate !== true) return definition;
+  if (!source) return definition;
   return {
     ...definition,
     source: {
