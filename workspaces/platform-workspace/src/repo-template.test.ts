@@ -103,6 +103,9 @@ describe('createRepoTemplate', () => {
     expect(firstSource?.commitSha).toBe('abcdef1');
     expect(nextSource?.commitSha).toBe('abcdef2');
     expect(changedSource?.familyId).not.toBe(firstSource?.familyId);
+
+    const extended = first!.runCmd('pnpm test');
+    expect(serializeSandboxTemplate(extended).source?.familyId).not.toBe(firstSource?.familyId);
   });
 
   it('marks stale-while-revalidate only when runtime checkout reconciliation is enabled', async () => {

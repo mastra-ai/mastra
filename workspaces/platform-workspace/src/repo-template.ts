@@ -1,5 +1,4 @@
 import { execFile } from 'node:child_process';
-import { createHash } from 'node:crypto';
 import { promisify } from 'node:util';
 
 import { createSandboxTemplate, type SandboxTemplateBuilder } from './template.js';
@@ -39,11 +38,6 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
   validateRepoTemplateOptions(options);
   const resolveHead = options.resolveHead ?? resolveDefaultBranchHead;
   const workdir = options.workdir ?? defaultWorkdir(options.repoFullName);
-  const familyId = deriveRepoTemplateFamilyId({
-    repoFullName: options.repoFullName,
-    setupCommand: options.setupCommand,
-    workdir,
-  });
 
   return async () => {
     const resolvedSha = options.sha ?? (await resolveHead(options.repoFullName).catch(() => undefined));
@@ -60,28 +54,11 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
 
     return createSandboxTemplate({
       type: 'git',
-      familyId,
+      familyId: '0'.repeat(64),
       commitSha: sha,
       ...(options.staleWhileRevalidate && { staleWhileRevalidate: true }),
     }).runCmd(steps);
   };
-}
-
-function deriveRepoTemplateFamilyId(input: {
-  repoFullName: string;
-  setupCommand: string | undefined;
-  workdir: string;
-}): string {
-  return createHash('sha256')
-    .update(
-      JSON.stringify({
-        version: 1,
-        repoFullName: input.repoFullName.toLowerCase(),
-        setupCommand: input.setupCommand ?? null,
-        workdir: input.workdir,
-      }),
-    )
-    .digest('hex');
 }
 
 function validateRepoTemplateOptions(options: PlatformRepoTemplateOptions): void {

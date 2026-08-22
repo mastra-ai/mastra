@@ -139,16 +139,26 @@ class SerializableSandboxTemplateBuilder implements SandboxTemplateBuilder {
 
     const operation = { method, args: cloneJson(args) } satisfies SandboxTemplateOperation;
     const operations = [...this.#operations, operation];
+    const source = this.#source
+      ? {
+          ...this.#source,
+          familyId: deriveSandboxTemplateFamilyId({
+            schemaVersion: 1,
+            source: this.#source,
+            operations,
+          }),
+        }
+      : undefined;
     const serialized = JSON.stringify({
       schemaVersion: 1,
-      ...(this.#source ? { source: this.#source } : {}),
+      ...(source ? { source } : {}),
       operations,
     });
     if (new TextEncoder().encode(serialized).byteLength > MAX_SERIALIZED_BYTES) {
       throw new RangeError(`Serialized sandbox template cannot exceed ${MAX_SERIALIZED_BYTES} bytes`);
     }
 
-    return new SerializableSandboxTemplateBuilder(operations, this.#source);
+    return new SerializableSandboxTemplateBuilder(operations, source);
   }
 }
 
@@ -169,6 +179,20 @@ export function serializeSandboxTemplate(template: SandboxTemplateBuilder): Seri
   return template[SERIALIZE_TEMPLATE]();
 }
 
+export function deriveSandboxTemplateFamilyId(definition: SerializedSandboxTemplate): string {
+  const source = definition.source;
+  if (!source) throw new TypeError('template source is required');
+  return createHash('sha256')
+    .update(
+      canonicalizeJson({
+        schemaVersion: definition.schemaVersion,
+        source: { type: source.type },
+        operations: normalizeTemplateCommit(definition.operations, source.commitSha),
+      }),
+    )
+    .digest('hex');
+}
+
 function templateIdentityDefinition(definition: SerializedSandboxTemplate): SerializedSandboxTemplate {
   const source = definition.source;
   if (!source) return definition;
@@ -180,6 +204,17 @@ function templateIdentityDefinition(definition: SerializedSandboxTemplate): Seri
       commitSha: source.commitSha,
     },
   };
+}
+
+function normalizeTemplateCommit(value: unknown, commitSha: string): unknown {
+  if (typeof value === 'string') return value.split(commitSha).join('$MASTRA_COMMIT');
+  if (Array.isArray(value)) return value.map(item => normalizeTemplateCommit(item, commitSha));
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, nested]) => [key, normalizeTemplateCommit(nested, commitSha)]),
+    );
+  }
+  return value;
 }
 
 function canonicalizeJson(value: unknown): string {
