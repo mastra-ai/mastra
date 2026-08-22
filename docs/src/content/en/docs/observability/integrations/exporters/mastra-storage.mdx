@@ -130,11 +130,18 @@ If you set the strategy to `'auto'`, the `MastraStorageExporter` automatically s
 | Storage Provider | Preferred Strategy | Supported Strategies | Recommended Use |
 | - | - | - | - |
 | **[ClickHouse](/integrations/databases/clickhouse)** | insert-only | insert-only | Production (high-volume) |
-| **[PostgreSQL](/integrations/databases/postgresql)** | batch-with-updates | batch-with-updates, insert-only | Production (low volume) |
+| **[PostgresStore](/integrations/databases/postgresql)** | batch-with-updates | batch-with-updates, insert-only | Production (low volume) |
+| **[PostgresStoreVNext](/integrations/databases/postgresql)** | insert-only | insert-only | Production (high-volume) |
 | **[MSSQL](/integrations/databases/mssql)** | batch-with-updates | batch-with-updates, insert-only | Production (low volume) |
 | **[MongoDB](/integrations/databases/mongodb)** | batch-with-updates | batch-with-updates, insert-only | Production (low volume) |
 | **[OracleDB](/integrations/databases/oracledb)** | batch-with-updates | batch-with-updates, insert-only | Production (low volume) |
 | **[libSQL](/integrations/databases/libsql)** | batch-with-updates | batch-with-updates, insert-only | Default storage, good for development |
+
+:::note
+
+Under `insert-only`, only completed spans are persisted — span start and update events are ignored. A trace therefore appears in Studio only after its root span ends, and filtering traces by `status: 'running'` returns no results. `PostgresStoreVNext` supports `insert-only` exclusively, so an explicit `realtime` or `batch-with-updates` strategy falls back to `insert-only` as described above.
+
+:::
 
 ### Providers without Observability Support
 
