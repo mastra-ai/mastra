@@ -217,6 +217,24 @@ export type StoredResourcesConfig = {
   scope?: StoredResourceScopeConfig;
 };
 
+export type MemoryAccessConfig = {
+  /**
+   * Require a server-derived resource scope for memory list/read routes on
+   * authenticated requests.
+   *
+   * The scope is the reserved `MASTRA_RESOURCE_ID_KEY` request-context value,
+   * normally set by `auth.mapUserToResourceId`. When a request is authenticated
+   * but no scope can be derived, memory routes fail closed with a 403 instead of
+   * exposing every resource's threads.
+   *
+   * Set this to `false` only for deployments that intentionally expose all memory
+   * to every authenticated caller.
+   *
+   * @default true
+   */
+  requireResourceScope?: boolean;
+};
+
 export type ServerConfig = {
   /**
    * Port for the server
@@ -436,6 +454,12 @@ export type ServerConfig = {
    * Stored-resource route and handler behavior.
    */
   storedResources?: StoredResourcesConfig;
+
+  /**
+   * Memory route access behavior. Controls whether authenticated requests must
+   * carry a server-derived resource scope to read memory.
+   */
+  memory?: MemoryAccessConfig;
 
   /**
    * If you want to run `mastra dev` with HTTPS, you can run it with the `--https` flag and provide the key and cert files here.

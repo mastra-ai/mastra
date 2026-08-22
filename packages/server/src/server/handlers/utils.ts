@@ -1,7 +1,7 @@
 import type { MastraFGAPermissionInput } from '@mastra/core/auth/ee';
 import type { RequestContext } from '@mastra/core/di';
 import { MastraMemory } from '@mastra/core/memory';
-import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../constants';
+import { MASTRA_AUTH_MODE_KEY, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, MASTRA_USER_KEY } from '../constants';
 import { MastraFGAPermissions } from '../fga-permissions';
 import { HTTPException } from '../http-exception';
 
@@ -97,6 +97,83 @@ export function requireEffectiveResourceId(
 }
 
 /**
+ * Whether the current request must carry a server-derived memory resource scope.
+ *
+ * Memory routes historically treated "no resource ID" as "no restriction", which
+ * let any authenticated caller enumerate and read every resource's threads when
+ * `auth.mapUserToResourceId` was not configured. Authenticated requests now have
+ * to be scoped unless the deployment opts out.
+ *
+ * The scope requirement is skipped when:
+ * - `server.memory.requireResourceScope` is explicitly `false` (opt-out),
+ * - an FGA provider is configured (those paths already filter fail-closed),
+ * - the request was authenticated by studio auth (operator surface),
+ * - the request is unauthenticated (no auth configured, e.g. local development).
+ *
+ * The authenticated check reads the reserved user key, which is only set by the
+ * auth middleware after successful authentication. `MASTRA_IS_STUDIO_KEY` is
+ * deliberately not used here: it is derived from a client-supplied header and
+ * would be trivially spoofable.
+ */
+export function requiresMemoryResourceScope(mastra: any, requestContext: RequestContext | undefined): boolean {
+  const serverConfig = mastra?.getServer?.();
+  if (serverConfig?.memory?.requireResourceScope === false) {
+    return false;
+  }
+  if (serverConfig?.fga) {
+    return false;
+  }
+  if (requestContext?.get(MASTRA_AUTH_MODE_KEY) === 'studio') {
+    return false;
+  }
+  // `user` is the legacy alias the auth middleware writes alongside MASTRA_USER_KEY.
+  return requestContext?.get(MASTRA_USER_KEY) !== undefined || requestContext?.get('user') !== undefined;
+}
+
+/**
+ * Resolves the resource ID used to scope a memory request.
+ *
+ * When a scope is required, the client-supplied value is ignored entirely: the
+ * scope must be server-derived, otherwise a caller could simply pass another
+ * user's resource ID to pass the ownership check.
+ */
+export function resolveMemoryResourceId({
+  mastra,
+  requestContext,
+  clientResourceId,
+}: {
+  mastra: any;
+  requestContext: RequestContext | undefined;
+  clientResourceId: string | undefined;
+}): string | undefined {
+  const contextResourceId = requestContext?.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
+  if (contextResourceId) {
+    return contextResourceId;
+  }
+  return requiresMemoryResourceScope(mastra, requestContext) ? undefined : clientResourceId;
+}
+
+/**
+ * Fails closed when an authenticated request has no resolvable memory scope.
+ */
+export function assertMemoryResourceScope(
+  mastra: any,
+  requestContext: RequestContext | undefined,
+  effectiveResourceId: string | undefined,
+): void {
+  if (effectiveResourceId) {
+    return;
+  }
+  if (!requiresMemoryResourceScope(mastra, requestContext)) {
+    return;
+  }
+  throw new HTTPException(403, {
+    message:
+      'Memory access requires a resource scope. Configure server auth with mapUserToResourceId so the server can derive the resource ID for the authenticated user, or set server.memory.requireResourceScope to false to allow unscoped memory access.',
+  });
+}
+
+/**
  * Gets the effective threadId, preferring the reserved key from requestContext
  * over client-provided values for security.
  */
@@ -112,12 +189,26 @@ export function getEffectiveThreadId(
  * Validates that a thread belongs to the specified resourceId.
  * Throws 403 if the thread exists but belongs to a different resource.
  * Threads with no resourceId are accessible to all (shared threads).
+ *
+ * When `scope` is provided and the request requires a server-derived resource
+ * scope, an owned thread is denied if no scope could be resolved, instead of
+ * granting access to every resource's threads.
  */
 export async function validateThreadOwnership(
   thread: { resourceId?: string | null } | null | undefined,
   effectiveResourceId: string | undefined,
+  scope?: { mastra: any; requestContext?: RequestContext },
 ): Promise<void> {
-  if (thread && effectiveResourceId && thread.resourceId && thread.resourceId !== effectiveResourceId) {
+  if (!thread?.resourceId) {
+    return;
+  }
+  if (!effectiveResourceId) {
+    if (scope) {
+      assertMemoryResourceScope(scope.mastra, scope.requestContext, effectiveResourceId);
+    }
+    return;
+  }
+  if (thread.resourceId !== effectiveResourceId) {
     throw new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' });
   }
 }
@@ -141,7 +232,7 @@ export async function enforceThreadAccess({
   effectiveResourceId?: string;
   permission?: MastraFGAPermissionInput;
 }): Promise<void> {
-  await validateThreadOwnership(thread, effectiveResourceId);
+  await validateThreadOwnership(thread, effectiveResourceId, { mastra, requestContext });
 
   const fgaProvider = mastra?.getServer?.()?.fga;
   if (!fgaProvider) {

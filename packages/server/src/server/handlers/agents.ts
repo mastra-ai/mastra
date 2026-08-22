@@ -92,6 +92,7 @@ import {
   sanitizeBody,
   validateBody,
   getEffectiveResourceId,
+  resolveMemoryResourceId,
   requireEffectiveResourceId,
   getEffectiveThreadId,
   enforceThreadAccess,
@@ -1417,7 +1418,11 @@ export const GENERATE_AGENT_ROUTE = createRoute({
       if (memoryOption) {
         const clientThreadId = typeof memoryOption.thread === 'string' ? memoryOption.thread : memoryOption.thread?.id;
 
-        const effectiveResourceId = getEffectiveResourceId(serverRequestContext, memoryOption.resource);
+        const effectiveResourceId = resolveMemoryResourceId({
+          mastra,
+          requestContext: serverRequestContext,
+          clientResourceId: memoryOption.resource,
+        });
         requireEffectiveResourceId(effectiveResourceId);
         const effectiveThreadId = getEffectiveThreadId(serverRequestContext, clientThreadId);
 
@@ -1499,7 +1504,11 @@ export const GENERATE_LEGACY_ROUTE = createRoute({
       const clientResourceId = resourceId ?? resourceid;
 
       // Authorization: context values take precedence over client-provided values
-      const effectiveResourceId = getEffectiveResourceId(requestContext, clientResourceId);
+      const effectiveResourceId = resolveMemoryResourceId({
+        mastra,
+        requestContext: requestContext,
+        clientResourceId: clientResourceId,
+      });
       const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
 
       validateBody({ messages });
@@ -1569,7 +1578,11 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
       const clientResourceId = resourceId ?? resourceid;
 
       // Authorization: context values take precedence over client-provided values
-      const effectiveResourceId = getEffectiveResourceId(requestContext, clientResourceId);
+      const effectiveResourceId = resolveMemoryResourceId({
+        mastra,
+        requestContext: requestContext,
+        clientResourceId: clientResourceId,
+      });
       const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
 
       validateBody({ messages });
@@ -1800,7 +1813,11 @@ export const STREAM_GENERATE_ROUTE = createRoute({
       if (memoryOption) {
         const clientThreadId = typeof memoryOption.thread === 'string' ? memoryOption.thread : memoryOption.thread?.id;
 
-        const effectiveResourceId = getEffectiveResourceId(serverRequestContext, memoryOption.resource);
+        const effectiveResourceId = resolveMemoryResourceId({
+          mastra,
+          requestContext: serverRequestContext,
+          clientResourceId: memoryOption.resource,
+        });
         requireEffectiveResourceId(effectiveResourceId);
         const effectiveThreadId = getEffectiveThreadId(serverRequestContext, clientThreadId);
 
@@ -1940,7 +1957,11 @@ export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
         normalizedIdleStreamOptions?.versions as VersionOverrides | undefined,
       );
       ensureDefaultVersionStatus(serverRequestContext, versionOptions);
-      const effectiveResourceId = getEffectiveResourceId(serverRequestContext, resourceId);
+      const effectiveResourceId = resolveMemoryResourceId({
+        mastra,
+        requestContext: serverRequestContext,
+        clientResourceId: resourceId,
+      });
       const effectiveThreadId = getEffectiveThreadId(serverRequestContext, threadId);
       const ifIdleWithContext = {
         ifIdle: {
@@ -1953,7 +1974,7 @@ export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
         const memory = await agent.getMemory({ requestContext: serverRequestContext });
         if (memory) {
           const thread = await memory.getThreadById({ threadId: effectiveThreadId });
-          await validateThreadOwnership(thread, effectiveResourceId);
+          await validateThreadOwnership(thread, effectiveResourceId, { mastra, requestContext: serverRequestContext });
         }
       }
 
@@ -2044,7 +2065,11 @@ async function handleAgentMessageRoute({
   });
   stashVersionOverrides(serverRequestContext, normalizedIdleStreamOptions?.versions as VersionOverrides | undefined);
   ensureDefaultVersionStatus(serverRequestContext, versionOptions);
-  const effectiveResourceId = getEffectiveResourceId(serverRequestContext, resourceId);
+  const effectiveResourceId = resolveMemoryResourceId({
+    mastra,
+    requestContext: serverRequestContext,
+    clientResourceId: resourceId,
+  });
   const effectiveThreadId = getEffectiveThreadId(serverRequestContext, threadId);
   const ifIdleWithContext = {
     ifIdle: {
@@ -2057,7 +2082,7 @@ async function handleAgentMessageRoute({
     const memory = await agent.getMemory({ requestContext: serverRequestContext });
     if (memory) {
       const thread = await memory.getThreadById({ threadId: effectiveThreadId });
-      await validateThreadOwnership(thread, effectiveResourceId);
+      await validateThreadOwnership(thread, effectiveResourceId, { mastra, requestContext: serverRequestContext });
     }
   }
 
@@ -2160,7 +2185,11 @@ export const ABORT_AGENT_THREAD_ROUTE = createRoute({
         });
       }
 
-      const effectiveResourceId = getEffectiveResourceId(serverRequestContext, resourceId);
+      const effectiveResourceId = resolveMemoryResourceId({
+        mastra,
+        requestContext: serverRequestContext,
+        clientResourceId: resourceId,
+      });
       const effectiveThreadId = getEffectiveThreadId(serverRequestContext, threadId);
 
       if (!effectiveThreadId) {
@@ -2171,7 +2200,7 @@ export const ABORT_AGENT_THREAD_ROUTE = createRoute({
         const memory = await agent.getMemory({ requestContext: serverRequestContext });
         if (memory) {
           const thread = await memory.getThreadById({ threadId: effectiveThreadId });
-          await validateThreadOwnership(thread, effectiveResourceId);
+          await validateThreadOwnership(thread, effectiveResourceId, { mastra, requestContext: serverRequestContext });
         }
       }
 
@@ -2206,7 +2235,11 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
         });
       }
 
-      const effectiveResourceId = getEffectiveResourceId(serverRequestContext, resourceId);
+      const effectiveResourceId = resolveMemoryResourceId({
+        mastra,
+        requestContext: serverRequestContext,
+        clientResourceId: resourceId,
+      });
       const effectiveThreadId = getEffectiveThreadId(serverRequestContext, threadId);
 
       if (!effectiveThreadId) {
@@ -2217,7 +2250,7 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
         const memory = await agent.getMemory({ requestContext: serverRequestContext });
         if (memory) {
           const thread = await memory.getThreadById({ threadId: effectiveThreadId });
-          await validateThreadOwnership(thread, effectiveResourceId);
+          await validateThreadOwnership(thread, effectiveResourceId, { mastra, requestContext: serverRequestContext });
         }
       }
 
@@ -2333,7 +2366,11 @@ export const STREAM_UNTIL_IDLE_GENERATE_ROUTE = createRoute({
       if (memoryOption) {
         const clientThreadId = typeof memoryOption.thread === 'string' ? memoryOption.thread : memoryOption.thread?.id;
 
-        const effectiveResourceId = getEffectiveResourceId(serverRequestContext, memoryOption.resource);
+        const effectiveResourceId = resolveMemoryResourceId({
+          mastra,
+          requestContext: serverRequestContext,
+          clientResourceId: memoryOption.resource,
+        });
         requireEffectiveResourceId(effectiveResourceId);
         const effectiveThreadId = getEffectiveThreadId(serverRequestContext, clientThreadId);
 
@@ -2342,7 +2379,10 @@ export const STREAM_UNTIL_IDLE_GENERATE_ROUTE = createRoute({
           const memoryInstance = await agent.getMemory({ requestContext: serverRequestContext });
           if (memoryInstance) {
             const thread = await memoryInstance.getThreadById({ threadId: effectiveThreadId });
-            await validateThreadOwnership(thread, effectiveResourceId);
+            await validateThreadOwnership(thread, effectiveResourceId, {
+              mastra,
+              requestContext: serverRequestContext,
+            });
           }
         }
 
@@ -2559,17 +2599,23 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
 });
 
 async function validateSubscriptionToolCallThreadAccess({
+  mastra,
   agent,
   requestContext,
   resourceId,
   threadId,
 }: {
+  mastra: any;
   agent: Agent;
   requestContext: RequestContext;
   resourceId?: string;
   threadId?: string;
 }) {
-  const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
+  const effectiveResourceId = resolveMemoryResourceId({
+    mastra,
+    requestContext: requestContext,
+    clientResourceId: resourceId,
+  });
   const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
 
   if (!effectiveThreadId) {
@@ -2580,7 +2626,7 @@ async function validateSubscriptionToolCallThreadAccess({
     const memory = await agent.getMemory({ requestContext });
     if (memory) {
       const thread = await memory.getThreadById({ threadId: effectiveThreadId });
-      await validateThreadOwnership(thread, effectiveResourceId);
+      await validateThreadOwnership(thread, effectiveResourceId, { mastra, requestContext: requestContext });
     }
   }
 
@@ -2622,6 +2668,7 @@ export const SEND_TOOL_APPROVAL_ROUTE = createRoute({
         serverRequestContext,
       );
       const { effectiveResourceId, effectiveThreadId } = await validateSubscriptionToolCallThreadAccess({
+        mastra,
         agent,
         requestContext: serverRequestContext,
         resourceId: params.resourceId,
@@ -2664,7 +2711,11 @@ export const LIST_SUSPENDED_RUNS_ROUTE = createRoute({
 
       // Honor server-enforced thread/resource scoping from the request context
       // so clients cannot list suspended runs outside their own scope.
-      const effectiveResourceId = getEffectiveResourceId(requestContext, query.resourceId);
+      const effectiveResourceId = resolveMemoryResourceId({
+        mastra,
+        requestContext: requestContext,
+        clientResourceId: query.resourceId,
+      });
       const effectiveThreadId = getEffectiveThreadId(requestContext, query.threadId);
 
       // Validate ownership/FGA before honoring a thread filter — without this a
@@ -2808,7 +2859,11 @@ export const RESUME_STREAM_ROUTE = createRoute({
 
       let authorizedMemoryOption = memoryOption;
       const clientThreadId = typeof memoryOption?.thread === 'string' ? memoryOption.thread : memoryOption?.thread?.id;
-      const effectiveResourceId = getEffectiveResourceId(serverRequestContext, memoryOption?.resource);
+      const effectiveResourceId = resolveMemoryResourceId({
+        mastra,
+        requestContext: serverRequestContext,
+        clientResourceId: memoryOption?.resource,
+      });
       if (memoryOption) {
         requireEffectiveResourceId(effectiveResourceId);
       }
@@ -2998,7 +3053,11 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
 
       let authorizedMemoryOption = memoryOption;
       const clientThreadId = typeof memoryOption?.thread === 'string' ? memoryOption.thread : memoryOption?.thread?.id;
-      const effectiveResourceId = getEffectiveResourceId(serverRequestContext, memoryOption?.resource);
+      const effectiveResourceId = resolveMemoryResourceId({
+        mastra,
+        requestContext: serverRequestContext,
+        clientResourceId: memoryOption?.resource,
+      });
       if (memoryOption) {
         requireEffectiveResourceId(effectiveResourceId);
       }
@@ -3193,7 +3252,11 @@ export const STREAM_NETWORK_ROUTE = createRoute({
       // Authorization: context values take precedence over client-provided values
       let authorizedMemoryOption = params.memory;
       if (params.memory) {
-        const effectiveResourceId = getEffectiveResourceId(requestContext, params.memory.resource);
+        const effectiveResourceId = resolveMemoryResourceId({
+          mastra,
+          requestContext: requestContext,
+          clientResourceId: params.memory.resource,
+        });
         requireEffectiveResourceId(effectiveResourceId);
         authorizedMemoryOption = { ...params.memory, resource: effectiveResourceId };
       }

@@ -61,7 +61,13 @@ import {
   toLocalMessage,
   toLocalOMRecord,
 } from './gateway-memory-client';
-import { validateBody, getEffectiveResourceId, getEffectiveThreadId, enforceThreadAccess } from './utils';
+import {
+  validateBody,
+  getEffectiveThreadId,
+  enforceThreadAccess,
+  resolveMemoryResourceId,
+  assertMemoryResourceScope,
+} from './utils';
 
 interface MemoryContext extends Context {
   agentId?: string;
@@ -836,7 +842,8 @@ export const LIST_THREADS_ROUTE = createRoute({
   handler: async ({ mastra, agentId, resourceId, metadata, requestContext, page, perPage, orderBy }) => {
     try {
       // Use effective resourceId (context key takes precedence over client-provided value)
-      const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
+      const effectiveResourceId = resolveMemoryResourceId({ mastra, requestContext, clientResourceId: resourceId });
+      assertMemoryResourceScope(mastra, requestContext, effectiveResourceId);
 
       // Gateway proxy: list threads from gateway API
       const agent = await getAgentFromContext({ mastra, agentId, requestContext });
@@ -991,7 +998,8 @@ export const GET_THREAD_BY_ID_ROUTE = createRoute({
   handler: async ({ mastra, agentId, threadId, resourceId, requestContext }) => {
     try {
       const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
-      const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
+      const effectiveResourceId = resolveMemoryResourceId({ mastra, requestContext, clientResourceId: resourceId });
+      assertMemoryResourceScope(mastra, requestContext, effectiveResourceId);
       validateBody({ threadId: effectiveThreadId });
 
       // Gateway proxy: get thread from gateway API
@@ -1094,7 +1102,8 @@ export const LIST_MESSAGES_ROUTE = createRoute({
   }: any) => {
     try {
       const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
-      const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
+      const effectiveResourceId = resolveMemoryResourceId({ mastra, requestContext, clientResourceId: resourceId });
+      assertMemoryResourceScope(mastra, requestContext, effectiveResourceId);
       validateBody({ threadId: effectiveThreadId });
 
       if (!effectiveThreadId) {
@@ -1231,7 +1240,8 @@ export const GET_WORKING_MEMORY_ROUTE = createRoute({
   handler: async ({ mastra, agentId, threadId, resourceId, requestContext, memoryConfig }) => {
     try {
       const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
-      const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
+      const effectiveResourceId = resolveMemoryResourceId({ mastra, requestContext, clientResourceId: resourceId });
+      assertMemoryResourceScope(mastra, requestContext, effectiveResourceId);
       validateBody({ threadId: effectiveThreadId });
 
       // Gateway agents: working memory is not a local concept
@@ -1290,7 +1300,8 @@ export const SAVE_MESSAGES_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, agentId, messages, requestContext }) => {
     try {
-      const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
+      const effectiveResourceId = resolveMemoryResourceId({ mastra, requestContext, clientResourceId: undefined });
+      assertMemoryResourceScope(mastra, requestContext, effectiveResourceId);
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
 
       if (!memory) {
@@ -1398,7 +1409,8 @@ export const CREATE_THREAD_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, agentId, resourceId, title, metadata, threadId, requestContext }) => {
     try {
-      const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
+      const effectiveResourceId = resolveMemoryResourceId({ mastra, requestContext, clientResourceId: resourceId });
+      assertMemoryResourceScope(mastra, requestContext, effectiveResourceId);
       const effectiveThreadId = threadId ?? mastra.generateId();
       validateBody({ resourceId: effectiveResourceId });
 
@@ -1459,7 +1471,8 @@ export const UPDATE_THREAD_ROUTE = createRoute({
   handler: async ({ mastra, agentId, threadId, title, metadata, resourceId, requestContext }) => {
     try {
       const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
-      const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
+      const effectiveResourceId = resolveMemoryResourceId({ mastra, requestContext, clientResourceId: resourceId });
+      assertMemoryResourceScope(mastra, requestContext, effectiveResourceId);
       validateBody({ threadId: effectiveThreadId });
 
       // Gateway proxy: update thread via gateway API
@@ -1543,7 +1556,8 @@ export const DELETE_THREAD_ROUTE = createRoute({
   handler: async ({ mastra, agentId, threadId, resourceId, requestContext }) => {
     try {
       const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
-      const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
+      const effectiveResourceId = resolveMemoryResourceId({ mastra, requestContext, clientResourceId: resourceId });
+      assertMemoryResourceScope(mastra, requestContext, effectiveResourceId);
       validateBody({ threadId: effectiveThreadId });
 
       // Gateway proxy: delete thread via gateway API
@@ -1612,7 +1626,8 @@ export const CLONE_THREAD_ROUTE = createRoute({
   handler: async ({ mastra, agentId, threadId, newThreadId, resourceId, title, metadata, options, requestContext }) => {
     try {
       const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
-      const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
+      const effectiveResourceId = resolveMemoryResourceId({ mastra, requestContext, clientResourceId: resourceId });
+      assertMemoryResourceScope(mastra, requestContext, effectiveResourceId);
       const effectiveNewThreadId = newThreadId ?? mastra.generateId();
       validateBody({ threadId: effectiveThreadId });
 
@@ -1672,7 +1687,8 @@ export const UPDATE_WORKING_MEMORY_ROUTE = createRoute({
   handler: async ({ mastra, agentId, threadId, resourceId, memoryConfig, workingMemory, requestContext }) => {
     try {
       const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
-      const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
+      const effectiveResourceId = resolveMemoryResourceId({ mastra, requestContext, clientResourceId: resourceId });
+      assertMemoryResourceScope(mastra, requestContext, effectiveResourceId);
       validateBody({ threadId: effectiveThreadId, workingMemory });
 
       // Gateway agents: working memory not applicable, no-op
@@ -1724,7 +1740,8 @@ export const DELETE_MESSAGES_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, agentId, resourceId, messageIds, requestContext }) => {
     try {
-      const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
+      const effectiveResourceId = resolveMemoryResourceId({ mastra, requestContext, clientResourceId: resourceId });
+      assertMemoryResourceScope(mastra, requestContext, effectiveResourceId);
 
       if (messageIds === undefined || messageIds === null) {
         throw new HTTPException(400, { message: 'messageIds is required' });
@@ -1825,7 +1842,8 @@ export const SEARCH_MEMORY_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, agentId, searchQuery, resourceId, threadId, limit = 20, requestContext, memoryConfig }) => {
     try {
-      const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
+      const effectiveResourceId = resolveMemoryResourceId({ mastra, requestContext, clientResourceId: resourceId });
+      assertMemoryResourceScope(mastra, requestContext, effectiveResourceId);
       const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
       validateBody({ searchQuery, resourceId: effectiveResourceId });
 
