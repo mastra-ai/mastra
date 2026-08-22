@@ -6,7 +6,7 @@ import type {
   UpdateWorkflowDefinitionInput,
   WorkflowDefinition,
 } from './base';
-import { WorkflowDefinitionsStorage } from './base';
+import { assertWorkflowDefinitionAuthor, WorkflowDefinitionsStorage } from './base';
 
 export class InMemoryWorkflowDefinitionsStorage extends WorkflowDefinitionsStorage {
   private db: InMemoryDB;
@@ -21,10 +21,30 @@ export class InMemoryWorkflowDefinitionsStorage extends WorkflowDefinitionsStora
   }
 
   async upsert(input: CreateWorkflowDefinitionInput | UpdateWorkflowDefinitionInput): Promise<WorkflowDefinition> {
+    const [definition] = await this.upsertMany([input]);
+    if (!definition) throw new Error(`Failed to persist workflow definition "${input.id}".`);
+    return definition;
+  }
+
+  async upsertMany(
+    inputs: readonly (CreateWorkflowDefinitionInput | UpdateWorkflowDefinitionInput)[],
+  ): Promise<WorkflowDefinition[]> {
+    const staged = new Map(this.db.workflowDefinitions);
+    const definitions = inputs.map(input => this.applyUpsert(staged, input));
+    this.db.workflowDefinitions.clear();
+    for (const [id, definition] of staged) this.db.workflowDefinitions.set(id, definition);
+    return definitions.map(definition => this.deepCopy(definition));
+  }
+
+  private applyUpsert(
+    definitions: Map<string, WorkflowDefinition>,
+    input: CreateWorkflowDefinitionInput | UpdateWorkflowDefinitionInput,
+  ): WorkflowDefinition {
     const now = new Date();
-    const existing = this.db.workflowDefinitions.get(input.id);
+    const existing = definitions.get(input.id);
 
     if (existing) {
+      assertWorkflowDefinitionAuthor(existing, input);
       const merged: WorkflowDefinition = {
         ...existing,
         ...('description' in input && input.description !== undefined && { description: input.description }),
@@ -36,11 +56,10 @@ export class InMemoryWorkflowDefinitionsStorage extends WorkflowDefinitionsStora
           input.requestContextSchema !== undefined && { requestContextSchema: input.requestContextSchema }),
         ...('graph' in input && input.graph !== undefined && { graph: input.graph }),
         ...('status' in input && input.status !== undefined && { status: input.status }),
-        ...('authorId' in input && input.authorId !== undefined && { authorId: input.authorId }),
         updatedAt: now,
       };
-      this.db.workflowDefinitions.set(input.id, merged);
-      return this.deepCopy(merged);
+      definitions.set(input.id, merged);
+      return merged;
     }
 
     // Creation requires the full schema set + graph. Check values, not key
@@ -73,8 +92,8 @@ export class InMemoryWorkflowDefinitionsStorage extends WorkflowDefinitionsStora
       createdAt: now,
       updatedAt: now,
     };
-    this.db.workflowDefinitions.set(input.id, def);
-    return this.deepCopy(def);
+    definitions.set(input.id, def);
+    return def;
   }
 
   async get(id: string): Promise<WorkflowDefinition | null> {

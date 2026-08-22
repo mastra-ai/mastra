@@ -137,6 +137,24 @@ export class MongoDBConnector {
     }
   }
 
+  /** Run a callback only when MongoDB can guarantee transaction atomicity. */
+  async withRequiredTransaction<T>(fn: (session: ClientSession) => Promise<T>): Promise<T> {
+    const supported = await this.supportsTransactions();
+    if (!supported || !this.#client) {
+      throw new Error('This operation requires a MongoDB replica set or sharded cluster with transaction support.');
+    }
+    const session = this.#client.startSession();
+    try {
+      let result!: T;
+      await session.withTransaction(async () => {
+        result = await fn(session);
+      });
+      return result;
+    } finally {
+      await session.endSession();
+    }
+  }
+
   async close() {
     if (this.#client) {
       await this.#client.close();

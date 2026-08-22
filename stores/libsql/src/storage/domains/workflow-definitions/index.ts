@@ -1,4 +1,4 @@
-import type { Client, InValue } from '@libsql/client';
+import type { Client, InValue, InStatement } from '@libsql/client';
 import type {
   CreateWorkflowDefinitionInput,
   ListWorkflowDefinitionsInput,
@@ -6,10 +6,16 @@ import type {
   UpdateWorkflowDefinitionInput,
   WorkflowDefinition,
 } from '@mastra/core/storage';
-import { TABLE_SCHEMAS, TABLE_WORKFLOW_DEFINITIONS, WorkflowDefinitionsStorage } from '@mastra/core/storage';
+import {
+  assertWorkflowDefinitionAuthor,
+  TABLE_SCHEMAS,
+  TABLE_WORKFLOW_DEFINITIONS,
+  WorkflowDefinitionOwnershipConflictError,
+  WorkflowDefinitionsStorage,
+} from '@mastra/core/storage';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
-import { buildSelectColumns } from '../../db/utils';
+import { buildSelectColumns, prepareStatement, prepareUpdateStatement } from '../../db/utils';
 
 function parseJson<T = unknown>(val: unknown, column: string, rowId: unknown): T | undefined {
   if (val == null) return undefined;
@@ -85,37 +91,11 @@ export class WorkflowDefinitionsLibSQL extends WorkflowDefinitionsStorage {
     const existing = await this.get(input.id);
 
     if (!existing) {
-      // Create — every required field must be present
-      if (!('inputSchema' in input) || !input.inputSchema)
-        throw new Error(`Cannot create workflow definition "${input.id}": inputSchema is required.`);
-      if (!('outputSchema' in input) || !input.outputSchema)
-        throw new Error(`Cannot create workflow definition "${input.id}": outputSchema is required.`);
-      if (!('graph' in input) || !input.graph)
-        throw new Error(`Cannot create workflow definition "${input.id}": graph is required.`);
-
-      const record: Record<string, any> = {
-        id: input.id,
-        description: input.description ?? null,
-        metadata: input.metadata ?? null,
-        inputSchema: input.inputSchema,
-        outputSchema: input.outputSchema,
-        stateSchema: input.stateSchema ?? null,
-        requestContextSchema: input.requestContextSchema ?? null,
-        graph: input.graph,
-        status: 'active',
-        source: 'storage',
-        authorId: 'authorId' in input ? (input.authorId ?? null) : null,
-        createdAt: now,
-        updatedAt: now,
-      };
+      this.assertCreateInput(input);
+      const record = this.mergeRecord(null, input, now);
       try {
-        // insertOnly: a plain INSERT so a concurrent create is detected as a
-        // key violation instead of INSERT OR REPLACE silently clobbering the
-        // winning row (and its createdAt).
         await this.#db.insertOnly({ tableName: TABLE_WORKFLOW_DEFINITIONS, record });
       } catch (error) {
-        // A concurrent upsert may have created the row after our existence
-        // check; fall back to updating it so the upsert stays idempotent.
         if (!(await this.get(input.id))) throw error;
         return this.#applyUpdate(input, now);
       }
@@ -127,11 +107,62 @@ export class WorkflowDefinitionsLibSQL extends WorkflowDefinitionsStorage {
     return this.#applyUpdate(input, now);
   }
 
+  async upsertMany(
+    inputs: readonly (CreateWorkflowDefinitionInput | UpdateWorkflowDefinitionInput)[],
+  ): Promise<WorkflowDefinition[]> {
+    const statements: InStatement[] = [];
+    const now = new Date();
+    for (const input of inputs) {
+      const existing = await this.get(input.id);
+      if (!existing) this.assertCreateInput(input);
+      else assertWorkflowDefinitionAuthor(existing, input);
+
+      if (input.authorId !== undefined) {
+        // This write-time guard is part of the same batch transaction as every
+        // upsert. A conflicting row makes the deliberately invalid sentinel
+        // insert violate the primary-key NOT NULL constraint, rolling back the
+        // complete bundle before any member becomes visible.
+        statements.push({
+          sql: `INSERT INTO "${TABLE_WORKFLOW_DEFINITIONS}" ("id") SELECT NULL FROM "${TABLE_WORKFLOW_DEFINITIONS}" WHERE "id" = ? AND "authorId" IS NOT ?`,
+          args: [input.id, input.authorId],
+        });
+      }
+      const record = this.mergeRecord(existing, input, now);
+      const statement = prepareStatement({ tableName: TABLE_WORKFLOW_DEFINITIONS, record, insertMode: 'insert' });
+      const mutableColumns = Object.keys(record).filter(column => !['id', 'authorId', 'createdAt'].includes(column));
+      statement.sql = `${statement.sql} ON CONFLICT("id") DO UPDATE SET ${mutableColumns
+        .map(column => `"${column}" = excluded."${column}"`)
+        .join(', ')}`;
+      statements.push(statement);
+    }
+    try {
+      if (statements.length > 0) await this.#client.batch(statements, 'write');
+    } catch (error) {
+      for (const input of inputs) {
+        const existing = await this.get(input.id);
+        if (existing && input.authorId !== undefined && existing.authorId !== input.authorId) {
+          throw new WorkflowDefinitionOwnershipConflictError(input.id);
+        }
+      }
+      throw error;
+    }
+    return Promise.all(
+      inputs.map(async input => {
+        const definition = await this.get(input.id);
+        if (!definition) throw new Error(`Failed to persist workflow definition "${input.id}".`);
+        assertWorkflowDefinitionAuthor(definition, input);
+        return definition;
+      }),
+    );
+  }
+
   async #applyUpdate(
     input: CreateWorkflowDefinitionInput | UpdateWorkflowDefinitionInput,
     now: Date,
   ): Promise<WorkflowDefinition> {
-    // Update — only patch fields present in the input
+    const existing = await this.get(input.id);
+    if (!existing) throw new Error(`Failed to update workflow definition "${input.id}".`);
+    assertWorkflowDefinitionAuthor(existing, input);
     const data: Record<string, any> = { updatedAt: now };
     if ('description' in input && input.description !== undefined) data.description = input.description;
     if ('metadata' in input && input.metadata !== undefined) data.metadata = input.metadata;
@@ -142,12 +173,43 @@ export class WorkflowDefinitionsLibSQL extends WorkflowDefinitionsStorage {
       data.requestContextSchema = input.requestContextSchema;
     if ('graph' in input && input.graph !== undefined) data.graph = input.graph;
     if ('status' in input && input.status !== undefined) data.status = input.status;
-    if ('authorId' in input && input.authorId !== undefined) data.authorId = input.authorId;
-
-    await this.#db.update({ tableName: TABLE_WORKFLOW_DEFINITIONS, keys: { id: input.id }, data });
+    const keys = { id: input.id, ...(input.authorId !== undefined ? { authorId: input.authorId } : {}) };
+    await this.#db.update({ tableName: TABLE_WORKFLOW_DEFINITIONS, keys, data });
     const updated = await this.get(input.id);
     if (!updated) throw new Error(`Failed to update workflow definition "${input.id}".`);
+    assertWorkflowDefinitionAuthor(updated, input);
     return updated;
+  }
+
+  private assertCreateInput(input: CreateWorkflowDefinitionInput | UpdateWorkflowDefinitionInput): void {
+    if (!('inputSchema' in input) || !input.inputSchema)
+      throw new Error(`Cannot create workflow definition "${input.id}": inputSchema is required.`);
+    if (!('outputSchema' in input) || !input.outputSchema)
+      throw new Error(`Cannot create workflow definition "${input.id}": outputSchema is required.`);
+    if (!('graph' in input) || !input.graph)
+      throw new Error(`Cannot create workflow definition "${input.id}": graph is required.`);
+  }
+
+  private mergeRecord(
+    existing: WorkflowDefinition | null,
+    input: CreateWorkflowDefinitionInput | UpdateWorkflowDefinitionInput,
+    now: Date,
+  ): Record<string, any> {
+    return {
+      id: input.id,
+      description: input.description ?? existing?.description ?? null,
+      metadata: input.metadata ?? existing?.metadata ?? null,
+      inputSchema: input.inputSchema ?? existing?.inputSchema,
+      outputSchema: input.outputSchema ?? existing?.outputSchema,
+      stateSchema: input.stateSchema ?? existing?.stateSchema ?? null,
+      requestContextSchema: input.requestContextSchema ?? existing?.requestContextSchema ?? null,
+      graph: input.graph ?? existing?.graph,
+      status: ('status' in input ? input.status : undefined) ?? existing?.status ?? 'active',
+      source: 'storage',
+      authorId: input.authorId ?? existing?.authorId ?? null,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
   }
 
   async get(id: string): Promise<WorkflowDefinition | null> {
