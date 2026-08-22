@@ -194,6 +194,11 @@ const sidebars = {
           ],
         },
         {
+          type: 'doc',
+          id: 'factory/skills',
+          label: 'Factory skills',
+        },
+        {
           type: 'category',
           label: 'Memory',
           link: {

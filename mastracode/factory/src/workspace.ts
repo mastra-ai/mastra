@@ -93,6 +93,11 @@ export const FACTORY_SKILLS_SOURCE_PATH =
     join(process.cwd(), 'src', 'mastra', 'public', 'factory-skills'),
   ].find(existsSync) ?? bundledFactorySkillsPath;
 const FACTORY_SKILLS_MOUNT = path.resolve(path.parse(process.cwd()).root, '__mastracode_factory_skills__');
+// The six names reserved for Factory's built-in workspace skills. A project
+// skill sharing one of these names is silently filtered out of the workspace
+// listing (see FactorySkillSource.readdir). It never errors. The docs page
+// docs/src/content/en/docs/factory/skills.mdx lists the same names; the
+// colocated skills-docs.test.ts unit test keeps the two in sync.
 export const FACTORY_SKILL_NAMES = new Set([
   'configure-factory-rules',
   'factory-complete-issue',
