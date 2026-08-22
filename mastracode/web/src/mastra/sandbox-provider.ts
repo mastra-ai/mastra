@@ -27,6 +27,7 @@ export function createRemoteFactorySandbox(
         ? {
             template: createPlatformRepoTemplate({
               repoFullName: ctx.repoFullName,
+              staleWhileRevalidate: true,
               ...(ctx.setupCommand ? { setupCommand: ctx.setupCommand } : {}),
               ...(options.resolveRepoHead ? { resolveHead: options.resolveRepoHead } : {}),
             }),

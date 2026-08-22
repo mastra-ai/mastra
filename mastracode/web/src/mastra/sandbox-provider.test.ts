@@ -52,6 +52,12 @@ describe('createRemoteFactorySandbox', () => {
     expect(createBody.templateId).toMatch(/^[a-f0-9]{64}$/);
     expect(createBody.templateDefinition).toEqual({
       schemaVersion: 1,
+      source: {
+        type: 'git',
+        familyId: expect.stringMatching(/^[a-f0-9]{64}$/),
+        commitSha: '0123456789abcdef0123456789abcdef01234567',
+        staleWhileRevalidate: true,
+      },
       operations: [
         {
           method: 'runCmd',

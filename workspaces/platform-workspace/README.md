@@ -108,6 +108,8 @@ await sandbox.start();
 
 Platform serializes the builder and stores the build state under its deterministic ID within the authenticated organization, project, environment, and selected provider. Passing the same definition to another sandbox reuses that build.
 
+`createRepoTemplate()` adds commit lineage for public GitHub repositories. E2B maps that lineage to a tenant-scoped template family with exact commit tags, so repeated starts reuse the provider artifact directly. By default, sandbox creation waits for the requested commit. Set `staleWhileRevalidate: true` only when runtime setup checks out the requested commit after boot; this allows a previous ready commit to start immediately while the new commit builds.
+
 All operation arguments are serialized and sent to the provider. Values passed to `setEnvs` must contain only non-sensitive build configuration. Credentials, private-repository tokens, and other secrets aren't supported in template definitions.
 
 ## Errors

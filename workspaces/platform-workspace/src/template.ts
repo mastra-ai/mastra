@@ -10,8 +10,18 @@ export interface SandboxTemplateOperation {
   args: JsonValue[];
 }
 
+export interface SandboxTemplateGitSource {
+  type: 'git';
+  familyId: string;
+  commitSha: string;
+  staleWhileRevalidate?: boolean;
+}
+
+export type SandboxTemplateSource = SandboxTemplateGitSource;
+
 export interface SerializedSandboxTemplate {
   schemaVersion: 1;
+  source?: SandboxTemplateSource;
   operations: SandboxTemplateOperation[];
 }
 
@@ -47,13 +57,17 @@ const MAX_COLLECTION_ITEMS = 512;
 
 class SerializableSandboxTemplateBuilder implements SandboxTemplateBuilder {
   readonly #operations: readonly SandboxTemplateOperation[];
+  readonly #source: SandboxTemplateSource | undefined;
 
-  constructor(operations: readonly SandboxTemplateOperation[] = []) {
+  constructor(operations: readonly SandboxTemplateOperation[] = [], source?: SandboxTemplateSource) {
     this.#operations = operations;
+    this.#source = source;
   }
 
   id(): string {
-    return createHash('sha256').update(canonicalizeJson(this[SERIALIZE_TEMPLATE]())).digest('hex');
+    return createHash('sha256')
+      .update(canonicalizeJson(templateIdentityDefinition(this[SERIALIZE_TEMPLATE]())))
+      .digest('hex');
   }
 
   runCmd(command: string | string[]): SandboxTemplateBuilder {
@@ -95,6 +109,7 @@ class SerializableSandboxTemplateBuilder implements SandboxTemplateBuilder {
   [SERIALIZE_TEMPLATE](): SerializedSandboxTemplate {
     return {
       schemaVersion: 1,
+      ...(this.#source ? { source: { ...this.#source } } : {}),
       operations: this.#operations.map(operation => ({
         method: operation.method,
         args: cloneJson(operation.args),
@@ -124,17 +139,25 @@ class SerializableSandboxTemplateBuilder implements SandboxTemplateBuilder {
 
     const operation = { method, args: cloneJson(args) } satisfies SandboxTemplateOperation;
     const operations = [...this.#operations, operation];
-    const serialized = JSON.stringify({ schemaVersion: 1, operations });
+    const serialized = JSON.stringify({
+      schemaVersion: 1,
+      ...(this.#source ? { source: this.#source } : {}),
+      operations,
+    });
     if (new TextEncoder().encode(serialized).byteLength > MAX_SERIALIZED_BYTES) {
       throw new RangeError(`Serialized sandbox template cannot exceed ${MAX_SERIALIZED_BYTES} bytes`);
     }
 
-    return new SerializableSandboxTemplateBuilder(operations);
+    return new SerializableSandboxTemplateBuilder(operations, this.#source);
   }
 }
 
 export function Template(): SandboxTemplateBuilder {
   return new SerializableSandboxTemplateBuilder();
+}
+
+export function createSandboxTemplate(source: SandboxTemplateSource): SandboxTemplateBuilder {
+  return new SerializableSandboxTemplateBuilder([], { ...source });
 }
 
 function isSandboxTemplateBuilder(value: unknown): value is SerializableSandboxTemplateBuilder {
@@ -144,6 +167,19 @@ function isSandboxTemplateBuilder(value: unknown): value is SerializableSandboxT
 export function serializeSandboxTemplate(template: SandboxTemplateBuilder): SerializedSandboxTemplate {
   if (!isSandboxTemplateBuilder(template)) throw new TypeError('template must be created with Template()');
   return template[SERIALIZE_TEMPLATE]();
+}
+
+function templateIdentityDefinition(definition: SerializedSandboxTemplate): SerializedSandboxTemplate {
+  const source = definition.source;
+  if (!source) return definition;
+  return {
+    ...definition,
+    source: {
+      type: source.type,
+      familyId: source.familyId,
+      commitSha: source.commitSha,
+    },
+  };
 }
 
 function canonicalizeJson(value: unknown): string {
