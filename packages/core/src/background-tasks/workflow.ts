@@ -34,6 +34,51 @@ const bodyOutputSchema = z.object({
 const WORKFLOW_STATUS_TO_PERSIST = ['suspended', 'pending', 'paused', 'waiting'];
 
 /**
+ * Key under which the inner (delegated) run id rides the `run-attempt` step's
+ * own suspend payload.
+ *
+ * Delegating tools — agent-as-tool, workflow-as-tool — do not suspend
+ * themselves: they relay a suspension that happened inside a nested run, and
+ * pass that nested run's id back through `suspendOptions.runId`. Resuming
+ * needs it, because the nested run can only be reached by id.
+ *
+ * The workflow runtime drops every `suspendOptions` field except
+ * `resumeLabel`, and `task.args` is frozen at dispatch time, so neither
+ * carries the id across a suspend. The step's suspend *payload*, however, is
+ * persisted in the run snapshot and handed back to the step body as
+ * `suspendData` on resume — so that is where we stash it.
+ *
+ * Deliberately kept out of the payload persisted on the task row: the task
+ * row's `suspendPayload` is published on `task.suspended` lifecycle events and
+ * is user-facing. Only the runtime's copy carries this key.
+ */
+const DELEGATED_RUN_ID_KEY = '__mastraDelegatedRunId';
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Attach the delegated run id to the payload handed to the workflow runtime's
+ * `suspend`. Non-object payloads are left untouched — delegating tools always
+ * suspend with an object or nothing, and rewrapping a primitive would change a
+ * shape callers may rely on.
+ */
+function withDelegatedRunId(data: unknown, delegatedRunId?: unknown): unknown {
+  if (typeof delegatedRunId !== 'string' || !delegatedRunId) return data;
+  if (data === undefined || data === null) return { [DELEGATED_RUN_ID_KEY]: delegatedRunId };
+  if (!isPlainObject(data)) return data;
+  return { ...data, [DELEGATED_RUN_ID_KEY]: delegatedRunId };
+}
+
+/** Recover the delegated run id from the step's persisted suspend payload. */
+function readDelegatedRunId(suspendData: unknown): string | undefined {
+  if (!isPlainObject(suspendData)) return undefined;
+  const value = suspendData[DELEGATED_RUN_ID_KEY];
+  return typeof value === 'string' && value ? value : undefined;
+}
+
+/**
  * Builds the per-task workflow that owns executor + retries.
  *
  * Uses the standard (default) execution engine so the workflow runs entirely
@@ -57,7 +102,7 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
     id: 'run-attempt',
     inputSchema: bodyIOSchema,
     outputSchema: attemptOutputSchema,
-    execute: async ({ inputData, abortSignal: workflowAbortSignal, suspend, resumeData }) => {
+    execute: async ({ inputData, abortSignal: workflowAbortSignal, suspend, resumeData, suspendData }) => {
       const { taskId } = inputData;
       const storage = await manager.getStorage();
       const task = await storage.getTask(taskId);
@@ -157,8 +202,24 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
         pendingSuspend = { data, suspendOptions };
       };
 
+      // Delegating tools (agent-as-tool, workflow-as-tool) suspend an *inner*
+      // run and hand its id back via `suspendOptions.runId`. That id is the
+      // only way to reach the inner snapshot on resume, and it is not part of
+      // `task.args` (which is frozen at dispatch time). It rides the step's
+      // own suspend payload — see `DELEGATED_RUN_ID_KEY` — so the runtime
+      // persists it in the workflow snapshot and hands it back here as
+      // `suspendData`. Re-inject it under the `suspendedToolRunId` key the
+      // delegating tools read.
+      //
+      // Not gated on `resumeData`: it is optional on `manager.resume()`, and a
+      // resume without it must still reach the nested run rather than silently
+      // starting a second one. On the initial attempt there is no prior
+      // suspension, so `suspendData` is undefined and nothing is injected.
+      const delegatedRunId = readDelegatedRunId(suspendData);
+      const execArgs = delegatedRunId ? { ...task.args, suspendedToolRunId: delegatedRunId } : task.args;
+
       try {
-        const result = await executor.execute(task.args, {
+        const result = await executor.execute(execArgs, {
           abortSignal: abortController.signal,
           onProgress,
           suspend: wrappedSuspend,
@@ -168,7 +229,10 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
         });
 
         if (pendingSuspend) {
-          return suspend(pendingSuspend.data, pendingSuspend.suspendOptions as SuspendOptions);
+          return suspend(
+            withDelegatedRunId(pendingSuspend.data, pendingSuspend.suspendOptions?.runId),
+            pendingSuspend.suspendOptions as SuspendOptions,
+          );
         }
 
         return { taskId, outcome: 'success' as const, result };
