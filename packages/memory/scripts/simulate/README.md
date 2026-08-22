@@ -57,7 +57,10 @@ cycle, plus a flush at the end so no arm's tail is left uncurated). Pass `--cade
 the driver never calls the curator at all — neither on schedule nor at the flush.
 
 ```sh
-pnpm simulate:replay -- ... --cadence off
+pnpm simulate:replay -- \
+  --input  "postgres://user@127.0.0.1:55432/simulate_input" \
+  --target "postgres://user@127.0.0.1:55432/simulate_arm_a" \
+  --org my-org --cadence off
 ```
 
 That mode exists so a run can answer _when curation fires_ rather than _what the curator
