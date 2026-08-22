@@ -116,6 +116,7 @@ describeWithApiKey('VoyageAI Integration Tests', () => {
       expect(voyage.large.modelId).toBe('voyage-3-large');
       expect(voyage.v35.modelId).toBe('voyage-3.5');
       expect(voyage.v35lite.modelId).toBe('voyage-3.5-lite');
+      expect(voyage.code4.modelId).toBe('voyage-code-4');
       expect(voyage.code.modelId).toBe('voyage-code-3');
       expect(voyage.finance.modelId).toBe('voyage-finance-2');
       expect(voyage.law.modelId).toBe('voyage-law-2');
@@ -130,6 +131,7 @@ describeWithApiKey('VoyageAI Integration Tests', () => {
       // Voyage-3 series V2
       expect(voyage.largeV2.specificationVersion).toBe('v2');
       expect(voyage.v35V2.specificationVersion).toBe('v2');
+      expect(voyage.code4V2.specificationVersion).toBe('v2');
       expect(voyage.codeV2.specificationVersion).toBe('v2');
     });
 
