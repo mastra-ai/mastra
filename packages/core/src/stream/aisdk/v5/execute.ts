@@ -2,7 +2,7 @@ import { injectJsonInstructionIntoMessages } from '@ai-sdk/provider-utils-v5';
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import { APICallError } from '@internal/ai-sdk-v5';
 import type { IdGenerator, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
-import { prepareJsonSchemaForOpenAIStrictMode } from '@mastra/schema-compat';
+import { OpenAIReasoningSchemaCompatLayer, OpenAISchemaCompatLayer, applyCompatLayer } from '@mastra/schema-compat';
 import type { StructuredOutputOptions } from '../../../agent/types';
 import type { ModelMethodType } from '../../../llm/model/model.loop.types';
 import { modelSupportsStructuredOutput } from '../../../llm/model/provider-registry';
@@ -224,7 +224,14 @@ export function execute<OUTPUT = undefined>({
 
   // For OpenAI strict mode, ensure all properties are required and additionalProperties: false
   if (isOpenAIStrictMode && responseFormat?.schema) {
-    responseFormat.schema = prepareJsonSchemaForOpenAIStrictMode(responseFormat.schema);
+    responseFormat.schema = applyCompatLayer({
+      schema: responseFormat.schema,
+      compatLayers: [
+        new OpenAIReasoningSchemaCompatLayer({ ...model, supportsStructuredOutputs: true }),
+        new OpenAISchemaCompatLayer({ ...model, supportsStructuredOutputs: true }),
+      ],
+      mode: 'jsonSchema',
+    });
   }
 
   const providerOptionsToUse: SharedProviderOptions | undefined = isOpenAIStrictMode

@@ -28,6 +28,16 @@ export type PublicSchema<Output = unknown, Input = Output> =
   | StandardSchemaWithJSON<Input, Output>
   | AISdkSchemaLike<Output>;
 
+export type InferPublicSchemaInput<T extends PublicSchema> = T extends { _input: infer Input }
+  ? Input
+  : T extends { _type: infer Input }
+    ? Input
+    : T extends { '~standard': { types: { input: infer O } } }
+      ? O
+      : T extends PublicSchema<unknown, infer Input>
+        ? Input
+        : never;
+
 export type InferPublicSchema<T extends PublicSchema> = T extends { _output: infer Output }
   ? Output
   : T extends { _type: infer Output }

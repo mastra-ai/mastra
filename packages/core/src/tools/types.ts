@@ -626,11 +626,12 @@ export interface ToolAction<
   TContext extends ToolExecutionContext<TSuspend, TResume, any> = ToolExecutionContext<TSuspend, TResume>,
   TId extends string = string,
   TRequestContext extends Record<string, any> | unknown = unknown,
+  TRawOutput = TSchemaOut,
 > {
   id: TId;
   description: string;
   inputSchema?: PublicSchema<TSchemaIn>;
-  outputSchema?: PublicSchema<TSchemaOut>;
+  outputSchema?: PublicSchema<TSchemaOut, TRawOutput>;
   suspendSchema?: PublicSchema<TSuspend>;
   resumeSchema?: PublicSchema<TResume>;
   /**

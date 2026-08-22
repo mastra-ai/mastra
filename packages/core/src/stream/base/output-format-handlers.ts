@@ -1,7 +1,7 @@
 import { TransformStream } from 'node:stream/web';
 import { isDeepEqualData, parsePartialJson } from '@internal/ai-sdk-v5';
 import { isZodType } from '@mastra/schema-compat';
-import type { StructuredOutputOptions } from '../../agent/types';
+import type { PublicStructuredOutputOptions } from '../../agent/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { IMastraLogger } from '../../logger';
 import type { ZodType, PublicSchema, StandardSchemaWithJSON } from '../../schema';
@@ -12,9 +12,7 @@ import type { ChunkType } from '../types';
 import { getTransformedSchema } from './schema';
 import type { ZodLikePartialSchema } from './schema';
 
-type StreamTransformerStructuredOutput<OUTPUT> = Omit<StructuredOutputOptions<OUTPUT>, 'schema'> & {
-  schema: PublicSchema<OUTPUT>;
-};
+type StreamTransformerStructuredOutput<OUTPUT> = PublicStructuredOutputOptions<OUTPUT>;
 
 /**
  * Escapes unescaped newlines, carriage returns, and tabs within JSON string values.
