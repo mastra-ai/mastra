@@ -59,6 +59,7 @@ Return nodes with short stable names, a freeform kind, and knowledge records nes
 Use common kinds such as person, task, event, project, organization, or document when they fit.
 Set node scope to the narrowest level where that identity and content should be shared. Omit it to use the configured default scope.
 Knowledge records must be grounded in the conversation, concise, and written as prose. Do not infer unstated information.
+When the conversation states a canonical identifier or URL for an entity, preserve it verbatim in the record text.
 Wrap every named node mentioned in record text in [[wikilinks]].
 Set a record scope only when the conversation establishes where it applies. Use org for organization-wide records, resource for records shared across this resource's conversations, and thread for conversation-private records.
 Omit scope when uncertain; omitted record scopes stay private to the current thread.

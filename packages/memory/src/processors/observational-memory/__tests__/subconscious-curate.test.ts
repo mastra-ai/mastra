@@ -1,14 +1,20 @@
+import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
+import type { MastraEmbeddingModel, MastraVector } from '@mastra/core/vector';
 import { describe, expect, it, vi } from 'vitest';
 
-import { Memory } from '../../../index';
+import { Memory, Subconscious } from '../../../index';
 import { createCuratorHandler } from '../subconscious/curate';
 import { createKnowledgeWriteTools } from '../subconscious/knowledge-write-tools';
 import type { ResolvedSubconsciousConfig } from '../subconscious/types';
 
 const scope = ['org:acme', 'resource:user-42', 'thread:alpha'];
+const semanticInfrastructure = {
+  vector: {} as MastraVector,
+  embedder: {} as MastraEmbeddingModel<string>,
+};
 
 function resolved(): ResolvedSubconsciousConfig {
   return {
@@ -36,6 +42,56 @@ function context() {
 }
 
 describe('Subconscious curator', () => {
+  it('composes the entity-description mandate with the cursor protocol', async () => {
+    let prompt = '';
+    let recordId = '';
+    const memory = new Memory({
+      storage: new InMemoryStore(),
+      ...semanticInfrastructure,
+      options: {
+        observationalMemory: {
+          model: new MockLanguageModelV2({
+            doGenerate: async ({ prompt: modelPrompt }) => {
+              prompt = JSON.stringify(modelPrompt);
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                finishReason: 'stop',
+                usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+                content: [{ type: 'text', text: `<curation-complete through="${recordId}" />` }],
+                warnings: [],
+              };
+            },
+          }),
+          experimental_subconscious: new Subconscious({ defaultScope: 'resource', maxScope: 'resource' }),
+        },
+      },
+    });
+    const store = (await memory.storage.getStore('knowledge'))!;
+    const node = await store.createNode({ name: 'Project Atlas', kind: 'project', scope });
+    const record = await store.appendKnowledge({
+      node: node.id,
+      text: 'Atlas launches soon.',
+      scope,
+      sourceThreadId: 'alpha',
+      resolutionScope: scope,
+      defaultScope: scope,
+    });
+    recordId = record.id;
+    const requestContext = new RequestContext();
+    requestContext.set('organizationId', 'acme');
+
+    await memory.runCuration({ threadId: 'alpha', resourceId: 'user-42', requestContext });
+
+    expect(prompt).toContain("links only from the entity's own records");
+    expect(prompt).toContain('knowledge_write_node_content');
+    const mandateMarker = 'touched by a KnowledgeRecord in the current worklist';
+    const cursorMarker = 'Do not emit a completion marker when no KnowledgeRecord was fully processed';
+    expect(prompt).toContain(mandateMarker);
+    expect(prompt).toContain(cursorMarker);
+    expect(prompt).toContain('Your final response must end with the marker');
+    expect(prompt.indexOf(mandateMarker)).toBeLessThan(prompt.indexOf(cursorMarker));
+  });
+
   it('stamps provenance, enforces ceilings, uses CAS, and only soft-deletes KnowledgeRecords', async () => {
     const memory = new Memory({ storage: new InMemoryStore() });
     const store = (await memory.storage.getStore('knowledge'))!;

@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Memory, Subconscious } from '../../../index';
 import { ObservationalMemory } from '../observational-memory';
+import type { ObservationalMemoryModel } from '../types';
 
 const scope = ['org:acme', 'resource:user-42', 'thread:alpha'];
 const semanticInfrastructure = {
@@ -15,7 +16,7 @@ const semanticInfrastructure = {
   embedder: {} as MastraEmbeddingModel<string>,
 };
 
-function createMemory(options?: { omModel?: string | false }) {
+function createMemory(options?: { omModel?: ObservationalMemoryModel | false }) {
   return new Memory({
     storage: new InMemoryStore(),
     ...semanticInfrastructure,
@@ -71,6 +72,85 @@ describe('Memory.runCuration', () => {
     const store = (await memory.storage.getStore('knowledge'))!;
     expect(await store.getCurationCursor({ sourceThreadId: 'alpha', agent: 'curate' })).toMatchObject({
       lastKnowledgeId: item.id,
+    });
+  });
+
+  it('writes and refines entity content through the curator tool path', async () => {
+    let generateCall = 0;
+    let currentRecordId = '';
+    const description = 'Project Atlas is the current launch project.\n\nLinks: https://github.com/mastra-ai/mastra';
+    const refinedDescription =
+      'Project Atlas is the current launch project, now expanding its knowledge system.\n\nLinks: https://github.com/mastra-ai/mastra';
+    const memory = createMemory({
+      omModel: new MockLanguageModelV2({
+        doGenerate: async (): Promise<any> => {
+          generateCall++;
+          if (generateCall === 1 || generateCall === 3) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'tool-calls' as const,
+              usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+              content: [
+                {
+                  type: 'tool-call' as const,
+                  toolCallId: `write-${generateCall}`,
+                  toolName: 'knowledge_write_node_content',
+                  input: JSON.stringify({
+                    name: 'Project Atlas',
+                    content: generateCall === 1 ? description : refinedDescription,
+                    scope: 'thread',
+                    expectedVersion: generateCall === 1 ? 1 : 2,
+                  }),
+                },
+              ],
+              warnings: [],
+            };
+          }
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+            content: [{ type: 'text' as const, text: `<curation-complete through="${currentRecordId}" />` }],
+            warnings: [],
+          };
+        },
+      }),
+    });
+    const store = (await memory.storage.getStore('knowledge'))!;
+    const firstRecord = await seedItem(
+      memory,
+      'Project Atlas launches soon. Repository: https://github.com/mastra-ai/mastra',
+    );
+    currentRecordId = firstRecord.id;
+
+    await memory.runCuration({
+      threadId: 'alpha',
+      resourceId: 'user-42',
+      requestContext: requestContext(),
+    });
+
+    const written = await store.resolveNode({ name: 'Project Atlas', scope });
+    expect(written).toMatchObject({ content: description, version: 2 });
+
+    const secondRecord = await store.appendKnowledge({
+      node: written!,
+      text: '[[Mastra]] is expanding its knowledge system.',
+      scope,
+      sourceThreadId: 'alpha',
+      resolutionScope: scope,
+      defaultScope: scope,
+    });
+    currentRecordId = secondRecord.id;
+
+    await memory.runCuration({
+      threadId: 'alpha',
+      resourceId: 'user-42',
+      requestContext: requestContext(),
+    });
+
+    expect(await store.resolveNode({ name: 'Project Atlas', scope })).toMatchObject({
+      content: refinedDescription,
+      version: 3,
     });
   });
 
