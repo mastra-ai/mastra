@@ -221,6 +221,43 @@ export function isMaybeAnthropic(
   return matchesProviderPrefix(model, 'anthropic');
 }
 
+const CLAUDE_VERSION_PATTERN = /claude-(?:(?:opus|sonnet|haiku)-)?(\d+)(?:[.-](\d+))?/i;
+
+function supportsAssistantPrefill(modelId: string): boolean | undefined {
+  const match = CLAUDE_VERSION_PATTERN.exec(modelId);
+  if (!match) return undefined;
+
+  const major = Number(match[1]);
+  const minor = Number(match[2] ?? 0);
+  return major < 4 || (major === 4 && minor < 6);
+}
+
+/**
+ * Detects Anthropic models that removed assistant-message prefill support.
+ * Claude 4.6 and later reject assistant-prefill requests, while earlier
+ * models retain support. Unknown Anthropic model versions are matched
+ * conservatively so a new model cannot silently bypass compatibility guards.
+ */
+export function isMaybeAnthropicWithoutAssistantPrefill(model: unknown): boolean {
+  if (typeof model === 'function') return true;
+
+  if (Array.isArray(model)) {
+    return model.some(entry => isMaybeAnthropicWithoutAssistantPrefill((entry as { model?: unknown }).model ?? entry));
+  }
+
+  if (!isMaybeAnthropic(model)) return false;
+
+  const modelId =
+    typeof model === 'string'
+      ? model
+      : model && typeof model === 'object' && typeof (model as { modelId?: unknown }).modelId === 'string'
+        ? (model as { modelId: string }).modelId
+        : undefined;
+
+  if (!modelId) return true;
+  return supportsAssistantPrefill(modelId) !== true;
+}
+
 export function isMaybeAzure(
   model:
     | string
