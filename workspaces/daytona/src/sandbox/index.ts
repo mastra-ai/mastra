@@ -23,11 +23,10 @@ import type {
   MountResult,
   FilesystemMountConfig,
   MountManager,
-  CommandResult,
-  ExecuteCommandOptions,
   SandboxNetworking,
   SandboxFileInput,
   SandboxCloneOptions,
+  SandboxStartResult,
 } from '@mastra/core/workspace';
 import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
 
@@ -371,10 +370,19 @@ export class DaytonaSandbox extends MastraSandbox {
    * Start the Daytona sandbox.
    * Reconnects to an existing sandbox with the same logical ID if one exists,
    * otherwise creates a new sandbox instance.
+   *
+   * Reports `outcome: 'created'` only when a brand-new sandbox was created;
+   * reconnecting to an existing sandbox reports `outcome: 'connected'`.
    */
-  async start(): Promise<void> {
+  /**
+   * Acquisition primitives (base-orchestrated start): the base derives
+   * `created` structurally from whether an existing sandbox was found.
+   * Lookup errors other than not-found propagate deliberately — creating a
+   * duplicate sandbox on a transient/auth error would be worse than failing.
+   */
+  protected override async find(): Promise<Sandbox | undefined> {
     if (this._sandbox) {
-      return;
+      return this._sandbox;
     }
 
     // Create Daytona client if not exists
@@ -382,21 +390,38 @@ export class DaytonaSandbox extends MastraSandbox {
       this._daytona = new Daytona(this.connectionOpts);
     }
 
-    // Try to reconnect to an existing sandbox with the same logical ID
-    const existing = await this.findExistingSandbox();
-    if (existing) {
-      this._sandbox = existing;
-      this._daytonaSandboxId = existing.id;
-      this._createdAt = existing.createdAt ? new Date(existing.createdAt) : new Date();
-      this.logger.debug(`${LOG_PREFIX} Reconnected to existing sandbox ${existing.id} for: ${this.id}`);
+    return (await this.findExistingSandbox()) ?? undefined;
+  }
 
-      // Reconcile FUSE mounts — clean up stale mounts from a previous session
-      const expectedPaths = Array.from(this.mounts.entries.keys());
-      this.logger.debug(`${LOG_PREFIX} Running mount reconciliation...`);
-      await this.reconcileMounts(expectedPaths);
-      this.logger.debug(`${LOG_PREFIX} Mount reconciliation complete`);
-      await this.detectWorkingDir();
+  protected override async connect(existing: Sandbox): Promise<void> {
+    if (existing === this._sandbox) {
       return;
+    }
+
+    // Wake a stopped/archived sandbox before adopting it.
+    if (existing.state !== SandboxState.STARTED) {
+      this.logger.debug(`${LOG_PREFIX} Restarting sandbox ${existing.id} (state: ${existing.state})`);
+      await this.waitForStableStateAndStart(existing);
+    }
+
+    this._sandbox = existing;
+    this._daytonaSandboxId = existing.id;
+    this._createdAt = existing.createdAt ? new Date(existing.createdAt) : new Date();
+    this.logger.debug(`${LOG_PREFIX} Reconnected to existing sandbox ${existing.id} for: ${this.id}`);
+
+    // Reconcile FUSE mounts — clean up stale mounts from a previous session
+    const expectedPaths = Array.from(this.mounts.entries.keys());
+    this.logger.debug(`${LOG_PREFIX} Running mount reconciliation...`);
+    await this.reconcileMounts(expectedPaths);
+    this.logger.debug(`${LOG_PREFIX} Mount reconciliation complete`);
+    await this.detectWorkingDir();
+  }
+
+  protected override async create(): Promise<void> {
+    // Create Daytona client if not exists (find() normally runs first, but
+    // keep this branch self-sufficient).
+    if (!this._daytona) {
+      this._daytona = new Daytona(this.connectionOpts);
     }
 
     this.logger.debug(`${LOG_PREFIX} Creating sandbox for: ${this.id}`);
@@ -585,20 +610,10 @@ export class DaytonaSandbox extends MastraSandbox {
   // Command Execution
   // ---------------------------------------------------------------------------
 
-  /**
-   * Execute a command in the sandbox and return the result.
-   */
-  async executeCommand(
-    command: string,
-    args: string[] = [],
-    options: ExecuteCommandOptions = {},
-  ): Promise<CommandResult> {
-    await this.ensureRunning();
-    const fullCommand = args.length > 0 ? `${command} ${args.map(shellQuote).join(' ')}` : command;
-    const handle = await this.processes!.spawn(fullCommand, options);
-    const result = await handle.wait();
-    return { ...result, command, args };
-  }
+  // executeCommand is auto-created by the MastraSandbox base class from the
+  // process manager: pm.spawn already lazy-starts via ensureRunning(), and the
+  // base default releases the process handle when the command settles (the
+  // previous override here leaked handles by never calling pm.release).
 
   /**
    * Bulk-write files into the sandbox filesystem via the SDK's native upload.
@@ -1100,11 +1115,8 @@ export class DaytonaSandbox extends MastraSandbox {
       return null;
     }
 
-    if (state !== SandboxState.STARTED) {
-      this.logger.debug(`${LOG_PREFIX} Restarting sandbox ${sandbox.id} (state: ${state})`);
-      await this.waitForStableStateAndStart(sandbox);
-    }
-
+    // Note: a stopped-but-alive sandbox is returned as-is — waking it is
+    // connect()'s job, not the lookup's.
     return sandbox;
   }
 

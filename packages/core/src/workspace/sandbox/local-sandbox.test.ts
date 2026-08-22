@@ -218,6 +218,43 @@ describe('LocalSandbox', () => {
 
       expect(await sandbox.isReady()).toBe(true);
     });
+
+    it("reports outcome 'created' when the working directory did not exist", async () => {
+      const fresh = new LocalSandbox({ workingDirectory: path.join(tempDir, 'fresh') });
+
+      await expect(fresh._start()).resolves.toEqual({ outcome: 'created' });
+    });
+
+    it("reports outcome 'connected' when reattaching to an existing working directory", async () => {
+      // beforeEach pre-creates tempDir via mkdtemp, so this is a reattach.
+      await expect(sandbox._start()).resolves.toEqual({ outcome: 'connected' });
+
+      const again = new LocalSandbox({ workingDirectory: tempDir });
+      await expect(again._start()).resolves.toEqual({ outcome: 'connected' });
+    });
+
+    it('runs a once-per-directory setup through a fatal onStart hook branching on outcome', async () => {
+      const dir = path.join(tempDir, 'boot');
+      const setup = async ({
+        sandbox: sb,
+        outcome,
+      }: {
+        sandbox: WorkspaceSandbox;
+        outcome?: 'created' | 'connected';
+      }) => {
+        if (outcome === 'created') await sb.executeCommand!('touch setup-ran.txt');
+      };
+
+      const first = new LocalSandbox({ workingDirectory: dir, onStart: setup });
+      await first._start();
+      await expect(fs.stat(path.join(dir, 'setup-ran.txt'))).resolves.toBeDefined();
+
+      // A second instance reattaches (outcome: 'connected') → the hook skips setup.
+      await fs.rm(path.join(dir, 'setup-ran.txt'));
+      const second = new LocalSandbox({ workingDirectory: dir, onStart: setup });
+      await second._start();
+      await expect(fs.stat(path.join(dir, 'setup-ran.txt'))).rejects.toThrow();
+    });
   });
 
   // ===========================================================================
