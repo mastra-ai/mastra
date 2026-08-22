@@ -287,12 +287,52 @@ function createMockModel(text: string) {
   } as any);
 }
 
-function createEngine(options: { cadence?: number; memory?: unknown }) {
+/**
+ * A `Memory` stand-in that reports a fixed number of uncurated knowledge records, so the volume
+ * trigger can be driven without a real curator.
+ */
+function stubCurationMemory(options: { uncurated: number; cursorUpdatedAt?: Date; runCuration: any }) {
+  const records = Array.from({ length: options.uncurated }, (_, i) => ({ id: `k-${i}` }));
+  return {
+    runCuration: options.runCuration,
+    storage: {
+      getStore: async (domain: string) =>
+        domain === 'knowledge'
+          ? {
+              getCurationCursor: async () =>
+                options.cursorUpdatedAt
+                  ? {
+                      sourceThreadId: 't',
+                      agent: 'curate',
+                      lastKnowledgeId: 'k-prev',
+                      updatedAt: options.cursorUpdatedAt,
+                    }
+                  : null,
+              knowledgeBySource: async ({ limit }: { limit?: number }) => ({
+                records: records.slice(0, limit ?? records.length),
+                nextCursor: undefined,
+              }),
+            }
+          : undefined,
+    },
+  };
+}
+
+function createEngine(options: {
+  cadence?: number;
+  threshold?: number | false;
+  maxAgeMs?: number | false;
+  now?: () => number;
+  memory?: unknown;
+}) {
   return new ObservationalMemory({
     storage: new InMemoryMemory({ db: new InMemoryDB() }),
     scope: 'thread',
     memory: options.memory as any,
     curationCadence: options.cadence,
+    curationThreshold: options.threshold,
+    curationMaxAgeMs: options.maxAgeMs,
+    now: options.now,
     observation: {
       model: createMockModel('<observations>\n* Something happened\n</observations>'),
       messageTokens: 100,
@@ -305,41 +345,116 @@ function createEngine(options: { cadence?: number; memory?: unknown }) {
   } as any);
 }
 
-describe('observation-cadence curation trigger', () => {
-  it('fires runCuration after every Nth committed observation run and resets the counter', async () => {
-    const runCuration = vi.fn(async () => ({ outcome: 'ran' }));
-    const om = createEngine({ cadence: 3, memory: { runCuration } });
-    const threadId = 'cadence-thread';
+describe('observation curation trigger', () => {
+  // The trigger is fire-and-forget on the observe path; let it settle.
+  const settle = () => new Promise(resolve => setTimeout(resolve, 20));
 
-    for (let run = 0; run < 3; run++) {
-      const result = await om.observe({
-        threadId,
-        messages: createBulkMessages(10, threadId, run * 10),
-        requestContext: requestContext(),
-      });
-      expect(result.observed).toBe(true);
-      // The trigger is fire-and-forget; let it settle.
-      await new Promise(resolve => setTimeout(resolve, 20));
-    }
+  it('fires runCuration once the uncurated record count reaches the threshold', async () => {
+    const runCuration = vi.fn(async () => ({ outcome: 'ran' }));
+    const om = createEngine({ threshold: 3, memory: stubCurationMemory({ uncurated: 3, runCuration }) });
+    const threadId = 'threshold-thread';
+
+    const result = await om.observe({
+      threadId,
+      messages: createBulkMessages(10, threadId),
+      requestContext: requestContext(),
+    });
+    expect(result.observed).toBe(true);
+    await settle();
 
     expect(runCuration).toHaveBeenCalledOnce();
     expect(runCuration).toHaveBeenCalledWith(expect.objectContaining({ threadId, requestContext: expect.anything() }));
-
-    const record = await om.getRecord(threadId);
-    expect((record?.config as any)?.subconscious?.observationRuns ?? 0).toBe(0);
   });
 
-  it('leaves the counter untouched and fires nothing when no cadence is configured', async () => {
+  it('does not fire while the uncurated record count is below the threshold', async () => {
     const runCuration = vi.fn(async () => ({ outcome: 'ran' }));
-    const om = createEngine({ memory: { runCuration } });
-    const threadId = 'no-cadence-thread';
+    const om = createEngine({ threshold: 5, memory: stubCurationMemory({ uncurated: 4, runCuration }) });
 
-    const result = await om.observe({ threadId, messages: createBulkMessages(10, threadId) });
+    const result = await om.observe({
+      threadId: 'below-threshold-thread',
+      messages: createBulkMessages(10, 'below-threshold-thread'),
+      requestContext: requestContext(),
+    });
     expect(result.observed).toBe(true);
-    await new Promise(resolve => setTimeout(resolve, 20));
+    await settle();
 
     expect(runCuration).not.toHaveBeenCalled();
-    const record = await om.getRecord(threadId);
-    expect((record?.config as any)?.subconscious?.observationRuns).toBeUndefined();
+  });
+
+  it('still honours the deprecated curationCadence spelling as the volume trigger', async () => {
+    const runCuration = vi.fn(async () => ({ outcome: 'ran' }));
+    const om = createEngine({ cadence: 2, memory: stubCurationMemory({ uncurated: 2, runCuration }) });
+
+    await om.observe({
+      threadId: 'cadence-thread',
+      messages: createBulkMessages(10, 'cadence-thread'),
+      requestContext: requestContext(),
+    });
+    await settle();
+
+    expect(runCuration).toHaveBeenCalledOnce();
+  });
+
+  it('fires on a stale cursor when there is uncurated work', async () => {
+    const runCuration = vi.fn(async () => ({ outcome: 'ran' }));
+    const now = Date.parse('2026-08-21T20:00:00.000Z');
+    const om = createEngine({
+      maxAgeMs: 60_000,
+      now: () => now,
+      memory: stubCurationMemory({ uncurated: 1, cursorUpdatedAt: new Date(now - 120_000), runCuration }),
+    });
+
+    await om.observe({
+      threadId: 'stale-thread',
+      messages: createBulkMessages(10, 'stale-thread'),
+      requestContext: requestContext(),
+    });
+    await settle();
+
+    expect(runCuration).toHaveBeenCalledOnce();
+  });
+
+  it('does not fire on a stale cursor when nothing is uncurated', async () => {
+    const runCuration = vi.fn(async () => ({ outcome: 'ran' }));
+    const now = Date.parse('2026-08-21T20:00:00.000Z');
+    const om = createEngine({
+      maxAgeMs: 60_000,
+      now: () => now,
+      memory: stubCurationMemory({ uncurated: 0, cursorUpdatedAt: new Date(now - 86_400_000), runCuration }),
+    });
+
+    await om.observe({
+      threadId: 'idle-thread',
+      messages: createBulkMessages(10, 'idle-thread'),
+      requestContext: requestContext(),
+    });
+    await settle();
+
+    expect(runCuration).not.toHaveBeenCalled();
+  });
+
+  it('fires nothing when both triggers are off (the default)', async () => {
+    const runCuration = vi.fn(async () => ({ outcome: 'ran' }));
+    const om = createEngine({ memory: stubCurationMemory({ uncurated: 500, runCuration }) });
+
+    const result = await om.observe({
+      threadId: 'no-trigger-thread',
+      messages: createBulkMessages(10, 'no-trigger-thread'),
+      requestContext: requestContext(),
+    });
+    expect(result.observed).toBe(true);
+    await settle();
+
+    expect(runCuration).not.toHaveBeenCalled();
+  });
+
+  it('does not fire without an organizationId in the request context', async () => {
+    const runCuration = vi.fn(async () => ({ outcome: 'ran' }));
+    const om = createEngine({ threshold: 1, memory: stubCurationMemory({ uncurated: 5, runCuration }) });
+
+    await om.observe({ threadId: 'no-org-thread', messages: createBulkMessages(10, 'no-org-thread') });
+    await settle();
+
+    expect(runCuration).not.toHaveBeenCalled();
   });
 });

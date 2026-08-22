@@ -953,6 +953,22 @@ export interface ObservationalMemoryConfig {
   curationCadence?: number;
 
   /**
+   * Run the subconscious curator once this many uncurated knowledge records have accumulated.
+   * Off by default. Requires `memory`.
+   */
+  curationThreshold?: number | false;
+
+  /**
+   * Opportunistic age threshold: how stale the curation cursor may get before the next lifecycle
+   * evaluation runs the curator. Never a timer — evaluated only when the lifecycle already looks,
+   * and only when at least one uncurated record exists. Off by default. Requires `memory`.
+   */
+  curationMaxAgeMs?: number | false;
+
+  /** Injectable clock for curation age evaluation. Tests only; defaults to `Date.now`. */
+  now?: () => number;
+
+  /**
    * Enable retrieval-mode observation group metadata.
    * When true, observation groups are treated as durable pointers to raw
    * message history and a `recall` tool is registered so the actor can

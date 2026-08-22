@@ -1970,6 +1970,14 @@ ${workingMemory}`;
         omConfig.experimental_subconscious instanceof Subconscious
           ? omConfig.experimental_subconscious.resolved.curationCadence
           : undefined,
+      curationThreshold:
+        omConfig.experimental_subconscious instanceof Subconscious
+          ? omConfig.experimental_subconscious.resolved.curationThreshold
+          : false,
+      curationMaxAgeMs:
+        omConfig.experimental_subconscious instanceof Subconscious
+          ? omConfig.experimental_subconscious.resolved.curationMaxAgeMs
+          : false,
       mastra: this._mastraInstance,
       onIndexObservations,
       hooks: omConfig.hooks,

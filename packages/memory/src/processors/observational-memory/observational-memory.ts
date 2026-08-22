@@ -9,6 +9,7 @@ import type { ObservabilityContext } from '@mastra/core/observability';
 import type { ProcessorContext, ProcessorStreamWriter } from '@mastra/core/processors';
 import { MessageHistory } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
+import { canonicalizeKnowledgeScope } from '@mastra/core/storage';
 import type { MemoryStorage, ObservationalMemoryRecord, ObservationalMemoryHistoryOptions } from '@mastra/core/storage';
 import type { ProviderMetadata } from '@mastra/core/stream';
 import xxhash from 'xxhash-wasm';
@@ -245,6 +246,9 @@ import { registerOp, unregisterOp, isOpActiveInProcess } from './operation-regis
 import type { CompressionLevel } from './reflector-agent';
 import { ReflectorRunner } from './reflector-runner';
 import { isOmReproCaptureEnabled, writeObserverExchangeReproCapture } from './repro-capture';
+import { CURATION_AGENT } from './subconscious/curate';
+import { curationQueryLimit, shouldCurate } from './subconscious/curation-trigger';
+import { resolveKnowledgeResourceId } from './subconscious/scope';
 import {
   calculateDynamicThreshold,
   calculateProjectedMessageRemoval,
@@ -253,8 +257,8 @@ import {
   resolveBlockAfter,
   resolveBufferTokens,
 } from './thresholds';
-import { TokenCounter } from './token-counter';
 import type { TokenCounterModelContext } from './token-counter';
+import { TokenCounter } from './token-counter';
 import type {
   DataOmStatusPart,
   ObservationDebugEvent,
@@ -352,6 +356,17 @@ export class ObservationalMemory {
   private mastra?: Mastra;
   private memory?: Memory;
   private curationCadence?: number;
+  private curationThreshold: number | false = false;
+  private curationMaxAgeMs: number | false = false;
+  /**
+   * Serialises curation evaluation per record within this process. Several lifecycle sites can
+   * evaluate in the same turn; without this they read the same attempt state, both decide to run,
+   * and both call the curator. Cross-process claiming is a separate concern — see
+   * {@link maybeCurate}.
+   */
+  private curationEvaluations = new Map<string, Promise<void>>();
+  /** Injectable clock, so age-trigger behaviour is testable without waiting in real time. */
+  private now: () => number = Date.now;
 
   /**
    * Track message IDs observed during this instance's lifetime.
@@ -490,6 +505,9 @@ export class ObservationalMemory {
     this.mastra = config.mastra;
     this.memory = config.memory;
     this.curationCadence = config.curationCadence;
+    this.curationThreshold = config.curationThreshold ?? false;
+    this.curationMaxAgeMs = config.curationMaxAgeMs ?? false;
+    if (config.now) this.now = config.now;
 
     // Resolve "default" to the model default for the agent being configured.
     const resolveModel = (model: ObservationalMemoryModel | undefined, defaultModel: string) =>
@@ -2989,13 +3007,18 @@ ${formattedMessages}
    * // result.observed: true if a full observation pass ran
    * ```
    */
-  async finalize(opts: { threadId: string; resourceId?: string; messages?: MastraDBMessage[] }): Promise<{
+  async finalize(opts: {
+    threadId: string;
+    resourceId?: string;
+    messages?: MastraDBMessage[];
+    requestContext?: RequestContext;
+  }): Promise<{
     activated: boolean;
     observed: boolean;
     reflected: boolean;
     record: ObservationalMemoryRecord;
   }> {
-    const { threadId, resourceId, messages } = opts;
+    const { threadId, resourceId, messages, requestContext } = opts;
     let activated = false;
     let observed = false;
     let reflected = false;
@@ -3025,6 +3048,16 @@ ${formattedMessages}
     }
 
     const record = await this.getOrCreateRecord(threadId, resourceId);
+
+    // Last chance in the turn: a final buffered capture that activated here would otherwise sit
+    // uncurated indefinitely. Awaited rather than fire-and-forget — the turn is ending, so there
+    // is no later step to carry it.
+    if (activated || observed || reflected) {
+      await this.maybeCurate(threadId, resourceId, record, requestContext).catch(error => {
+        omDebug(`[OM:finalize] curation failed: ${error instanceof Error ? error.message : String(error)}`);
+      });
+    }
+
     return { activated, observed, reflected, record };
   }
 
@@ -3793,8 +3826,8 @@ ${formattedMessages}
 
     if (observed) {
       // Fire-and-forget; a curation failure must never fail the observation.
-      void this.maybeTriggerCadenceCuration(threadId, resourceId, record, requestContext).catch(error => {
-        omDebug(`[OM:observe] cadence curation failed: ${error instanceof Error ? error.message : String(error)}`);
+      void this.maybeCurate(threadId, resourceId, record, requestContext).catch(error => {
+        omDebug(`[OM:observe] curation failed: ${error instanceof Error ? error.message : String(error)}`);
       });
     }
 
@@ -3802,38 +3835,95 @@ ${formattedMessages}
   }
 
   /**
-   * Count committed observation runs on the sync observe path and run the curator every
-   * `curationCadence` runs. The counter is persisted at `record.config.subconscious.observationRuns`
-   * (the OM record's config jsonb, deep-merged; threshold resolution only reads `_overrides`, so the
-   * sibling key is inert). Concurrent commits can miscount — the curator run is advisory, and the
-   * curation cursor is the real serializer. The async-buffer lane bypasses observe(); deployments
-   * that gate on this cadence (factory's resource scope) disable async buffering.
+   * Evaluate the curation triggers and run the curator when one fires.
+   *
+   * Called from every lifecycle point that can leave uncurated knowledge behind — step-0
+   * activation, later-step activation, the sync observe path, and end-of-turn finalize — so a
+   * short conversation that never reaches a later step still gets curated. Nothing is ever
+   * scheduled: this is lazy and turn-driven, and an idle resource never triggers anything.
+   *
+   * Volume is measured against the curation cursor with one bounded query whose limit is the
+   * smallest number that can answer the question (see `curationQueryLimit`). Age is only
+   * consulted alongside at least one uncurated record.
+   *
+   * Concurrency: evaluations are serialised per record within this process via
+   * {@link curationEvaluations}, so several sites in the same turn cannot each decide to run.
+   * That is a process-local backstop only — two live instances sharing storage can still both
+   * evaluate. The curation cursor remains the real serializer for correctness.
    */
-  private async maybeTriggerCadenceCuration(
+  /** @internal Called by the observation turn's lifecycle sites. Do not call directly. */
+  async maybeCurate(
     threadId: string,
     resourceId: string | undefined,
     record: ObservationalMemoryRecord,
     requestContext?: RequestContext,
   ): Promise<void> {
-    const cadence = this.curationCadence;
     const memory = this.memory;
-    if (!cadence || cadence < 1 || !memory) return;
+    // `curationCadence` is the deprecated spelling of the volume trigger.
+    const threshold: number | false =
+      this.curationThreshold === false ? (this.curationCadence ?? false) : this.curationThreshold;
+    const triggerConfig = { curationThreshold: threshold, curationMaxAgeMs: this.curationMaxAgeMs };
+    if (!memory) return;
+    const limit = curationQueryLimit(triggerConfig);
+    if (limit < 1) return;
 
-    const config = (record.config ?? {}) as { subconscious?: { observationRuns?: number } };
-    const runs = (config.subconscious?.observationRuns ?? 0) + 1;
-    const fire = runs >= cadence;
-    await this.storage.updateObservationalMemoryConfig({
-      id: record.id,
-      config: { subconscious: { observationRuns: fire ? 0 : runs } },
+    const previous = this.curationEvaluations.get(record.id) ?? Promise.resolve();
+    const next = previous
+      .catch(() => {})
+      .then(() => this.evaluateCuration(threadId, resourceId, triggerConfig, limit, requestContext));
+    this.curationEvaluations.set(record.id, next);
+    try {
+      await next;
+    } finally {
+      if (this.curationEvaluations.get(record.id) === next) this.curationEvaluations.delete(record.id);
+    }
+  }
+
+  private async evaluateCuration(
+    threadId: string,
+    resourceId: string | undefined,
+    triggerConfig: { curationThreshold: number | false; curationMaxAgeMs: number | false },
+    limit: number,
+    requestContext?: RequestContext,
+  ): Promise<void> {
+    const memory = this.memory;
+    if (!memory) return;
+
+    const organizationId = requestContext?.get('organizationId');
+    if (typeof organizationId !== 'string' || !organizationId.trim()) return;
+
+    const store = await memory.storage.getStore('knowledge');
+    if (!store) return;
+
+    const scope = canonicalizeKnowledgeScope([
+      `org:${organizationId}`,
+      `resource:${resolveKnowledgeResourceId(requestContext, resourceId)}`,
+      `thread:${threadId}`,
+    ]);
+
+    const cursor = await store.getCurationCursor({ sourceThreadId: threadId, agent: CURATION_AGENT });
+    const page = await store.knowledgeBySource({
+      sourceThreadId: threadId,
+      scope,
+      after: cursor?.lastKnowledgeId,
+      limit,
+      includeDeleted: true,
     });
-    if (!fire) return;
+
+    const reason = shouldCurate({
+      config: triggerConfig,
+      cursor,
+      newRecordCount: page.records.length,
+      now: this.now(),
+    });
+    if (!reason) return;
 
     const result = await memory.runCuration({
       threadId,
       resourceId: resourceId ?? threadId,
       requestContext,
     });
-    omDebug(`[OM:observe] cadence curation outcome=${result.outcome} thread=${threadId}`);
+    omDebug(`[OM:curate] trigger=${reason} outcome=${result.outcome} thread=${threadId}`);
   }
 
   /**
