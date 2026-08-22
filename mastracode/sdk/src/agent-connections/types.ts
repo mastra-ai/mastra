@@ -1,0 +1,95 @@
+export const AGENT_CONNECTIONS_STATE_ID = 'agent-connections';
+export const AGENT_CONNECTIONS_STATE_TYPE = 'agent_connection';
+
+export type AgentConnectionStatus = 'available' | 'offline';
+export type AgentConnectionOperation = 'connect' | 'disconnect';
+export type AgentSignalPriority = 'low' | 'medium' | 'high' | 'urgent';
+export type AgentSignalRoutingAction = 'wake' | 'deliver' | 'persist' | 'discard' | 'blocked';
+
+export interface AgentPeerIdentity {
+  /** Stable model-facing id used by tools. Derived from routing fields when omitted by discovery. */
+  id?: string;
+  /** Target agent id. Defaults to the current code agent when omitted by discovery. */
+  agentId?: string;
+  resourceId: string;
+  threadId: string;
+  label?: string;
+  title?: string;
+  mode?: string;
+  status?: AgentConnectionStatus;
+  pid?: number;
+  lastSeenAt?: number;
+  offlineAt?: number;
+}
+
+export interface AvailableAgentPeer extends AgentPeerIdentity {
+  id: string;
+  status: AgentConnectionStatus;
+  pid?: number;
+  lastSeenAt: number;
+  offlineAt?: number;
+  connected: boolean;
+}
+
+export interface ConnectedAgentPeer extends AgentPeerIdentity {
+  id: string;
+  status: AgentConnectionStatus;
+  pid?: number;
+  connectedAt: number;
+  lastSeenAt: number;
+  offlineAt?: number;
+}
+
+export interface SentAgentSignal {
+  messageId: string;
+  fingerprint: string;
+  targetId: string;
+  priority: AgentSignalPriority;
+  expectsReply: boolean;
+  replyTo?: string;
+  returnPeerId: string;
+  routingAction?: AgentSignalRoutingAction;
+  runId?: string;
+  sentAt: number;
+}
+
+export interface AgentConnectionsState {
+  peers: ConnectedAgentPeer[];
+  sentSignals?: SentAgentSignal[];
+}
+
+export interface AgentConnectionDeltaOp {
+  op: 'connect' | 'disconnect' | 'status-change' | 'update';
+  id: string;
+  peer?: ConnectedAgentPeer;
+  status?: AgentConnectionStatus;
+}
+
+export interface AgentConnectionListResult {
+  content: string;
+  available: AvailableAgentPeer[];
+  connected: ConnectedAgentPeer[];
+  isError?: boolean;
+}
+
+export interface AgentConnectResult {
+  content: string;
+  connected: ConnectedAgentPeer[];
+  changed: AgentConnectionDeltaOp[];
+  isError?: boolean;
+}
+
+export interface AgentSignalSendResult {
+  content: string;
+  target?: ConnectedAgentPeer;
+  priority?: AgentSignalPriority;
+  expectsReply?: boolean;
+  messageId?: string;
+  replyTo?: string;
+  returnPeerId?: string;
+  routingAction?: AgentSignalRoutingAction;
+  runId?: string;
+  notification?: unknown;
+  duplicate?: boolean;
+  isError?: boolean;
+}

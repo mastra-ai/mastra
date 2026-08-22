@@ -7970,6 +7970,30 @@ export class Agent<
     );
   }
 
+  /**
+   * @experimental Agent signals are experimental and may change in a future release.
+   */
+  async claimThreadOwnership<OUTPUT = TOutput>(
+    options: {
+      resourceId: string;
+      threadId: string;
+      streamOptions?: AgentExecutionOptions<OUTPUT> | (() => AgentExecutionOptions<OUTPUT> | Promise<AgentExecutionOptions<OUTPUT>>);
+      peer?: false | import('./types').AgentClaimThreadPeerOptions;
+    },
+  ): Promise<{ claimed: boolean; unsubscribe: () => void }> {
+    return agentThreadStreamRuntime.claimThreadOwnership(
+      this as Agent<any, any, any, any>,
+      options as Parameters<typeof agentThreadStreamRuntime.claimThreadOwnership>[1],
+      this.getPubSub(),
+    );
+  }
+
+  async discoverThreadPeers(
+    options?: import('./types').DiscoverAgentThreadPeersOptions,
+  ): Promise<import('./types').AgentThreadPeerAdvertisement[]> {
+    return agentThreadStreamRuntime.discoverThreadPeers(options, this.getPubSub());
+  }
+
   getActiveThreadRunId(options: AgentSubscribeToThreadOptions): string | undefined {
     return agentThreadStreamRuntime.getActiveThreadRunId(options, this.getPubSub());
   }

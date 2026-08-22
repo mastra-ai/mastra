@@ -165,6 +165,33 @@ export type AgentSignalIfIdleOptions<OUTPUT = unknown> = {
 /**
  * @experimental Agent signals are experimental and may change in a future release.
  */
+export type AgentThreadPeerInfo = {
+  id: string;
+  agentId: string;
+  resourceId: string;
+  threadId: string;
+  label?: string;
+  title?: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type AgentClaimThreadPeerOptions = {
+  id?: string;
+  agentId?: string;
+  label?: string;
+  title?: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type AgentThreadPeerAdvertisement = AgentThreadPeerInfo & {
+  sourceId: string;
+  discoveredAt: Date;
+};
+
+export type DiscoverAgentThreadPeersOptions = {
+  timeoutMs?: number;
+};
+
 export type SendAgentSignalOptions<OUTPUT = unknown> =
   | {
       runId: string;

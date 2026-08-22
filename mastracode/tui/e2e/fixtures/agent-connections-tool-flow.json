@@ -1,0 +1,51 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Connect to the peer reviewer agent.",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_agent_connections_list",
+            "name": "agent_connections_list",
+            "arguments": {}
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "toolCallId": "call_agent_connections_list",
+        "hasToolResult": true
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_agent_connect",
+            "name": "agent_connect",
+            "arguments": {
+              "ids": ["code-agent:mc-e2e-peer-resource:mc-e2e-peer-thread"],
+              "action": "connect"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "hasToolResult": true
+      },
+      "response": {
+        "content": "Agent connection tool flow completed. Connected to code-agent:mc-e2e-peer-resource:mc-e2e-peer-thread."
+      }
+    }
+  ]
+}

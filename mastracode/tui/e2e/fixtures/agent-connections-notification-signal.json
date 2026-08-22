@@ -1,0 +1,76 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Connect to the signal target and send a high priority peer signal.",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_agent_signal_list",
+            "name": "agent_connections_list",
+            "arguments": {}
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "toolCallId": "call_agent_signal_list",
+        "hasToolResult": true
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_agent_signal_connect",
+            "name": "agent_connect",
+            "arguments": {
+              "ids": ["peer-signal-target"],
+              "action": "connect"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "sequenceIndex": 0,
+        "hasToolResult": true
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_agent_signal_send",
+            "name": "agent_signal_send",
+            "arguments": {
+              "targetId": "peer-signal-target",
+              "summary": "Agent connection e2e signal: please review the handoff",
+              "priority": "high",
+              "expectsReply": false,
+              "payload": {
+                "scenario": "agent-connections-notification-signal"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "hasToolResult": true
+      },
+      "response": {
+        "content": "Agent notification signal flow completed. Sent high priority peer signal."
+      }
+    }
+  ]
+}

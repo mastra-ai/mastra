@@ -1,0 +1,110 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Connect to the expected reply peer.",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_expected_reply_list",
+            "name": "agent_connections_list",
+            "arguments": {}
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "toolCallId": "call_expected_reply_list",
+        "hasToolResult": true,
+        "sequenceIndex": 0
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_expected_reply_connect",
+            "name": "agent_connect",
+            "arguments": {
+              "ids": ["expected-reply-peer"],
+              "action": "connect"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "connected-agents"
+      },
+      "response": {
+        "content": "Expected reply peer connected."
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "toolCallId": "call_expected_reply_send",
+        "hasToolResult": true
+      },
+      "response": {
+        "content": "Expected reply watchdog completed."
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "hasToolResult": true,
+        "sequenceIndex": 0
+      },
+      "response": {
+        "content": "I noticed the expected-reply peer signal but did not send a reply."
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "expected-reply-reminder",
+        "hasToolResult": true
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_expected_reply_send",
+            "name": "agent_signal_send",
+            "arguments": {
+              "targetId": "expected-reply-peer",
+              "summary": "Expected reply watchdog e2e acknowledgement",
+              "priority": "high",
+              "expectsReply": false,
+              "messageId": "expected-reply-response",
+              "replyTo": "expected-reply-request",
+              "payload": {
+                "scenario": "agent-connections-expected-reply-watchdog"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "response": {
+        "content": "Processed."
+      }
+    }
+  ]
+}
