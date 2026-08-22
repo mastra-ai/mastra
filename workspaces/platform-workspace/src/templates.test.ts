@@ -1,5 +1,5 @@
-import { Template } from '@mastra/core/workspace';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { serializeSandboxTemplate, Template } from './template.js';
 import { PlatformTemplateBuildError, PlatformTemplateBuildTimeoutError, PlatformTemplateClient } from './templates.js';
 
 function jsonResponse(value: unknown, status = 200) {
@@ -29,10 +29,10 @@ describe('PlatformTemplateClient', () => {
     vi.unstubAllEnvs();
   });
 
-  it('starts a build on the explicit provider route with the exact providerless definition', async () => {
+  it('starts a build on the explicit provider route with the exact serialized definition', async () => {
     vi.stubEnv('SANDBOX_PROVIDER', 'railway');
     vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
-    const definition = Template().setEnvs({ BUILD_MODE: 'production' }).runCmd('pnpm build').toJSON();
+    const definition = serializeSandboxTemplate(Template().setEnvs({ BUILD_MODE: 'production' }).runCmd('pnpm build'));
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ templateId: 'tpl_handle', status: 'building' }, 202));
 
     await expect(
@@ -48,7 +48,7 @@ describe('PlatformTemplateClient', () => {
 
   it('uses SANDBOX_PROVIDER and defaults to provider-prefixed Railway routes when it is unset', async () => {
     vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
-    const definition = Template().runCmd('true').toJSON();
+    const definition = serializeSandboxTemplate(Template().runCmd('true'));
     const fetchMock = vi
       .fn()
       .mockImplementation(() => Promise.resolve(jsonResponse({ templateId: 'tpl', status: 'queued' }, 202)));

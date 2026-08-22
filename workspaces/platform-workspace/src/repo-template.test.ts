@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createRepoTemplate } from './repo-template.js';
+import { serializeSandboxTemplate } from './template.js';
 
 describe('createRepoTemplate', () => {
   it('is side-effect-free until the lazy definition is resolved', async () => {
@@ -12,10 +13,10 @@ describe('createRepoTemplate', () => {
 
     expect(resolveHead).not.toHaveBeenCalled();
 
-    const definition = await resolveTemplate();
+    const template = await resolveTemplate();
 
     expect(resolveHead).toHaveBeenCalledWith('acme/widgets');
-    expect(definition).toEqual({
+    expect(serializeSandboxTemplate(template!)).toEqual({
       schemaVersion: 1,
       operations: [
         {
@@ -51,10 +52,10 @@ describe('createRepoTemplate', () => {
       resolveHead,
     });
 
-    const definition = await resolveTemplate();
+    const template = await resolveTemplate();
 
     expect(resolveHead).not.toHaveBeenCalled();
-    expect(definition?.operations[0]).toEqual({
+    expect(serializeSandboxTemplate(template!).operations[0]).toEqual({
       method: 'runCmd',
       args: [
         [

@@ -9,25 +9,16 @@ type OperationSchema = {
 };
 
 describe('platformSandboxProvider', () => {
-  it('requires template handles and definitions together', () => {
-    const schema = platformSandboxProvider.configSchema!;
-
-    expect(schema.dependentRequired).toEqual({
-      templateId: ['templateDefinition'],
-      templateDefinition: ['templateId'],
-    });
-  });
-
   it('describes each protocol-v1 operation with method-specific arguments', () => {
     const schema = platformSandboxProvider.configSchema!;
     const properties = schema.properties as Record<string, Record<string, unknown>>;
-    const templateDefinition = properties.templateDefinition;
-    const templateProperties = templateDefinition.properties as Record<string, Record<string, unknown>>;
+    const template = properties.template;
+    const templateProperties = template.properties as Record<string, Record<string, unknown>>;
     const operations = templateProperties.operations;
     const operationSchemas = (operations.items as { oneOf: OperationSchema[] }).oneOf;
 
     expect(properties.sandboxProvider).toMatchObject({ enum: ['railway', 'e2b'] });
-    expect(templateDefinition).toMatchObject({
+    expect(template).toMatchObject({
       type: 'object',
       required: ['schemaVersion', 'operations'],
       additionalProperties: false,

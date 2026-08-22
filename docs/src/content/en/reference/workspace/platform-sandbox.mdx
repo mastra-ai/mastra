@@ -12,7 +12,7 @@ import TabItem from '@theme/TabItem';
 
 Client for provisioning sandboxes in a Mastra Platform environment. Each `PlatformSandbox` instance owns one remote sandbox: `start()` provisions it, `executeCommand()` runs against it, and `destroy()` tears it down. Construct additional instances to own additional remote sandboxes. Use `clone()` to derive them from a configured template (see [Cloning](#cloning-for-a-fleet-of-sandboxes)).
 
-Sandboxes boot from a pre-built provider template with Python 3, Node 22, TypeScript, tsx, and common build tooling already installed. You can also build a [reusable template](#reusable-templates) from a providerless serialized definition. Pass a stable `id` to opt into [checkpoint recovery](#checkpoint-recovery) so a new sandbox boots from the previous one's filesystem.
+Sandboxes boot from a pre-built provider template with Python 3, Node 22, TypeScript, tsx, and common build tooling already installed. You can also build a [reusable template](#reusable-templates) with the portable `Template()` builder. Pass a stable `id` to opt into [checkpoint recovery](#checkpoint-recovery) so a new sandbox boots from the previous one's filesystem.
 
 Related providers: [`RailwaySandbox`](/integrations/sandboxes/railway) for self-hosted Railway sandboxes, [`LocalSandbox`](/reference/workspace/local-sandbox) for local sandboxes.
 
@@ -119,41 +119,29 @@ When `sandboxId` is set, `environmentId` isn't required because the sandbox alre
 
 ### Reusable templates
 
-Build a reusable sandbox template from a providerless definition before creating the sandbox:
+Pass a reusable template builder to `PlatformSandbox`. A fresh sandbox start builds the template asynchronously, waits until it's ready, and then creates the sandbox from it:
 
 ```typescript
-import { Template } from '@mastra/core/workspace'
-import { PlatformSandbox, PlatformTemplateClient } from '@mastra/platform-workspace'
+import { PlatformSandbox, Template } from '@mastra/platform-workspace'
 
-const environmentId = 'env_abc'
-const sandboxProvider = 'e2b' as const
 const commitSha = process.env.REPOSITORY_COMMIT_SHA!
-const definition = Template()
+const template = Template()
   .setWorkdir('/workspace/repo')
   .setEnvs({ BUILD_CONFIG_MARKER: 'template-v1' })
   .aptInstall(['git', 'jq'])
   .runCmd('git clone https://github.com/mastra-ai/mastra.git /workspace/repo')
   .runCmd(`git checkout ${commitSha}`)
   .runCmd('pnpm install --frozen-lockfile')
-  .toJSON()
-
-const templates = new PlatformTemplateClient({ sandboxProvider })
-const build = await templates.build({ environmentId, definition })
-const ready = await templates.waitUntilReady({
-  environmentId,
-  templateId: build.templateId,
-})
 
 const sandbox = new PlatformSandbox({
-  environmentId,
-  sandboxProvider,
-  templateId: ready.templateId,
-  templateDefinition: definition,
+  environmentId: 'env_abc',
+  sandboxProvider: 'e2b',
+  template,
 })
 await sandbox.start()
 ```
 
-`Template()` supports `runCmd`, `setWorkdir`, `setEnvs`, `aptInstall`, `pipInstall`, and `npmInstall`. Platform replays these operations for E2B or converts them to equivalent Railway template operations.
+`Template()` supports `runCmd`, `setWorkdir`, `setEnvs`, `aptInstall`, `pipInstall`, and `npmInstall`. Platform serializes the builder internally. It replays operations for E2B and converts them to equivalent Railway template operations.
 
 For public GitHub repositories, `createRepoTemplate()` can resolve and build the commit-pinned definition lazily when `start()` needs a fresh sandbox:
 
@@ -172,7 +160,7 @@ await sandbox.start()
 
 The resolver doesn't run when `PlatformSandbox` reattaches to an existing `sandboxId`. It resolves the repository's public default-branch head at fresh-start time, then asks Platform to build and wait for the corresponding template. If the repository head can't be resolved or the provider build fails, sandbox creation continues with the provider's default template so runtime setup can perform a cold checkout. The lazy definition never includes credentials. Private-repository template builds require a future secret transport capability.
 
-The opaque `templateId` is bound to the authenticated organization, project, environment, provider, and definition digest. `PlatformSandbox` requires the same `templateDefinition` with the handle. A handle from another tenant, environment, provider, or definition isn't usable.
+Platform keeps the build handle internal to `PlatformSandbox` and binds it to the authenticated organization, project, environment, provider, and template digest.
 
 :::warning
 
@@ -297,23 +285,9 @@ The `command` argument is a shell string and is concatenated verbatim into the r
   },
   {
     name: 'template',
-    type: 'SerializedSandboxTemplate | (() => SerializedSandboxTemplate | undefined | Promise<SerializedSandboxTemplate | undefined>)',
+    type: 'SandboxTemplateBuilder | SerializedSandboxTemplate | (() => SandboxTemplateBuilder | SerializedSandboxTemplate | undefined | Promise<SandboxTemplateBuilder | SerializedSandboxTemplate | undefined>)',
     description:
-      'Providerless definition or lazy resolver built before a fresh sandbox provision. Resolution and build failures fall back to the provider default. Cannot be combined with templateId or templateDefinition.',
-    isOptional: true,
-  },
-  {
-    name: 'templateId',
-    type: 'string',
-    description:
-      'Opaque tenant-bound template handle returned by PlatformTemplateClient. Must be provided with templateDefinition.',
-    isOptional: true,
-  },
-  {
-    name: 'templateDefinition',
-    type: 'SerializedSandboxTemplate',
-    description:
-      'Providerless template definition whose digest is bound to templateId. Must be provided with templateId.',
+      'Reusable template or lazy resolver built before a fresh sandbox provision. Resolution and build failures fall back to the selected provider default.',
     isOptional: true,
   },
   {

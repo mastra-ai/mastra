@@ -131,14 +131,9 @@ export const platformSandboxProvider: SandboxProvider<PlatformSandboxOptions> = 
       },
       environmentId: { type: 'string', description: 'Platform environment ID (falls back to MASTRA_ENVIRONMENT_ID)' },
       sandboxId: { type: 'string', description: 'Reattach to an existing Platform sandbox by ID' },
-      templateId: {
-        type: 'string',
-        minLength: 1,
-        description: 'Opaque tenant-bound Platform template handle',
-      },
-      templateDefinition: {
+      template: {
         type: 'object',
-        description: 'Serialized non-secret template definition bound to templateId',
+        description: 'Serialized non-secret template definition built before sandbox creation',
         properties: {
           schemaVersion: { const: 1 },
           operations: {
@@ -159,10 +154,6 @@ export const platformSandboxProvider: SandboxProvider<PlatformSandboxOptions> = 
       },
       env: { type: 'object', description: 'Environment variables', additionalProperties: { type: 'string' } },
       timeout: { type: 'number', description: 'Default command timeout in ms' },
-    },
-    dependentRequired: {
-      templateId: ['templateDefinition'],
-      templateDefinition: ['templateId'],
     },
   },
   createSandbox: config => new PlatformSandbox(config),

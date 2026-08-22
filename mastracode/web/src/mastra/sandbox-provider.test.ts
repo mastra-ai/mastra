@@ -13,6 +13,7 @@ describe('createRemoteFactorySandbox', () => {
 
   afterEach(() => {
     vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
   });
 
   it('prefers PlatformSandbox and forwards a credential-free, commit-addressed Factory template', async () => {
@@ -20,6 +21,21 @@ describe('createRemoteFactorySandbox', () => {
     const onStart = vi.fn();
     const getGithubToken = vi.fn();
     const resolveRepoHead = vi.fn().mockResolvedValue('0123456789abcdef0123456789abcdef01234567');
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ templateId: 'template-handle', status: 'ready' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: 'sandbox-1', createdAt: '2026-08-22T00:00:00.000Z' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+    vi.stubGlobal('fetch', fetchMock);
     const sandbox = createRemoteFactorySandbox(
       {
         sessionId: 'session-1',
@@ -34,11 +50,13 @@ describe('createRemoteFactorySandbox', () => {
 
     expect(sandbox).toBeInstanceOf(PlatformSandbox);
     expect(sandbox).toMatchObject({ id: 'session-1' });
-    const resolveTemplate = (sandbox as unknown as { _template: () => Promise<unknown> })._template;
-    const definition = await resolveTemplate();
+    await (sandbox as PlatformSandbox).start();
+
     expect(resolveRepoHead).toHaveBeenCalledWith('acme/widgets');
     expect(getGithubToken).not.toHaveBeenCalled();
-    expect(definition).toEqual({
+    expect(String(fetchMock.mock.calls[0]![0])).toContain('/v1/e2b/projects/project-1/templates');
+    const buildBody = JSON.parse(fetchMock.mock.calls[0]![1].body as string);
+    expect(buildBody.definition).toEqual({
       schemaVersion: 1,
       operations: [
         {
@@ -54,7 +72,7 @@ describe('createRemoteFactorySandbox', () => {
         },
       ],
     });
-    expect(JSON.stringify(definition)).not.toContain('token');
+    expect(JSON.stringify(buildBody)).not.toContain('token');
     expect((sandbox as unknown as { _onStart?: unknown })._onStart).toBe(onStart);
     expect(
       (sandbox as unknown as { _client?: { actingUserId?: string; sandboxProvider?: string } })._client,
@@ -66,6 +84,13 @@ describe('createRemoteFactorySandbox', () => {
 
   it('leaves inaccessible repositories to the authenticated runtime fallback without requesting a build token', async () => {
     const getGithubToken = vi.fn();
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(JSON.stringify({ id: 'sandbox-private', createdAt: '2026-08-22T00:00:00.000Z' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
     const sandbox = createRemoteFactorySandbox(
       {
         sessionId: 'session-private',
@@ -78,8 +103,11 @@ describe('createRemoteFactorySandbox', () => {
       },
     );
 
-    const resolveTemplate = (sandbox as unknown as { _template: () => Promise<unknown> })._template;
-    await expect(resolveTemplate()).resolves.toBeUndefined();
+    await (sandbox as PlatformSandbox).start();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0]![0])).toContain('/v1/e2b/projects/project-1/sandbox');
+    expect(JSON.parse(fetchMock.mock.calls[0]![1].body as string)).not.toHaveProperty('templateId');
     expect(getGithubToken).not.toHaveBeenCalled();
   });
 

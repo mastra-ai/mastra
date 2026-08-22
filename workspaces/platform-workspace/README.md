@@ -84,41 +84,29 @@ Pass an existing `sandboxId` to reattach to a live sandbox instead of creating a
 
 ### Reusable templates
 
-Use the providerless `Template()` builder to prebuild a public repository at an immutable commit. Platform starts the provider build asynchronously and returns an opaque template handle:
+Use `Template()` to prebuild a public repository at an immutable commit. `PlatformSandbox` starts the build asynchronously, waits for it to finish, and creates the sandbox from the ready template:
 
 ```typescript
-import { Template } from '@mastra/core/workspace';
-import { PlatformSandbox, PlatformTemplateClient } from '@mastra/platform-workspace';
+import { PlatformSandbox, Template } from '@mastra/platform-workspace';
 
-const environmentId = 'env_abc';
-const sandboxProvider = 'e2b' as const;
 const commitSha = process.env.REPOSITORY_COMMIT_SHA!;
-const definition = Template()
+const template = Template()
   .setWorkdir('/workspace/repo')
   .setEnvs({ BUILD_CONFIG_MARKER: 'template-v1' })
   .aptInstall(['git', 'jq'])
   .runCmd('git clone https://github.com/mastra-ai/mastra.git /workspace/repo')
   .runCmd(`git checkout ${commitSha}`)
-  .runCmd('pnpm install --frozen-lockfile')
-  .toJSON();
-
-const templates = new PlatformTemplateClient({ sandboxProvider });
-const build = await templates.build({ environmentId, definition });
-const ready = await templates.waitUntilReady({
-  environmentId,
-  templateId: build.templateId,
-});
+  .runCmd('pnpm install --frozen-lockfile');
 
 const sandbox = new PlatformSandbox({
-  environmentId,
-  sandboxProvider,
-  templateId: ready.templateId,
-  templateDefinition: definition,
+  environmentId: 'env_abc',
+  sandboxProvider: 'e2b',
+  template,
 });
 await sandbox.start();
 ```
 
-The handle is bound to the authenticated organization, project, environment, provider, and definition digest. Sandbox creation requires the same serialized definition so Platform can verify the digest and reconstruct provider-specific template input when needed.
+Platform serializes the builder and manages the tenant-bound build handle internally.
 
 All operation arguments are serialized and sent to the provider. Values passed to `setEnvs` must contain only non-sensitive build configuration. Credentials, private-repository tokens, and other secrets aren't supported in template definitions.
 

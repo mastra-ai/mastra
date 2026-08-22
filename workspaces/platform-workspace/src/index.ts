@@ -7,15 +7,17 @@ export {
 } from './client.js';
 export { PlatformFilesystem, type PlatformFilesystemOptions } from './filesystem.js';
 export {
-  PlatformTemplateClient,
-  PlatformTemplateBuildError,
-  PlatformTemplateBuildTimeoutError,
-  type BuildPlatformTemplateInput,
-  type GetPlatformTemplateInput,
-  type PlatformTemplateBuild,
-  type PlatformTemplateStatus,
-  type WaitForPlatformTemplateInput,
-} from './templates.js';
+  Template,
+  type AptInstallOptions,
+  type JsonPrimitive,
+  type JsonValue,
+  type NpmInstallOptions,
+  type PipInstallOptions,
+  type SandboxTemplateBuilder,
+  type SandboxTemplateMethod,
+  type SandboxTemplateOperation,
+  type SerializedSandboxTemplate,
+} from './template.js';
 export {
   PlatformSandbox,
   SandboxExecTransportError,

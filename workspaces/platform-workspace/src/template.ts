@@ -34,9 +34,9 @@ export interface SandboxTemplateBuilder {
   aptInstall(packages: string | string[], options?: AptInstallOptions): SandboxTemplateBuilder;
   pipInstall(packages?: string | string[], options?: PipInstallOptions): SandboxTemplateBuilder;
   npmInstall(packages?: string | string[], options?: NpmInstallOptions): SandboxTemplateBuilder;
-  toJSON(): SerializedSandboxTemplate;
 }
 
+const SERIALIZE_TEMPLATE = Symbol('serializeTemplate');
 const MAX_OPERATIONS = 256;
 const MAX_SERIALIZED_BYTES = 256 * 1024;
 const MAX_STRING_LENGTH = 32 * 1024;
@@ -85,7 +85,7 @@ class SerializableSandboxTemplateBuilder implements SandboxTemplateBuilder {
     return this.#appendOptionalInstall('npmInstall', packages, options, ['g', 'dev']);
   }
 
-  toJSON(): SerializedSandboxTemplate {
+  [SERIALIZE_TEMPLATE](): SerializedSandboxTemplate {
     return {
       schemaVersion: 1,
       operations: this.#operations.map(operation => ({
@@ -128,6 +128,15 @@ class SerializableSandboxTemplateBuilder implements SandboxTemplateBuilder {
 
 export function Template(): SandboxTemplateBuilder {
   return new SerializableSandboxTemplateBuilder();
+}
+
+function isSandboxTemplateBuilder(value: unknown): value is SerializableSandboxTemplateBuilder {
+  return value instanceof SerializableSandboxTemplateBuilder;
+}
+
+export function serializeSandboxTemplate(template: SandboxTemplateBuilder): SerializedSandboxTemplate {
+  if (!isSandboxTemplateBuilder(template)) throw new TypeError('template must be created with Template()');
+  return template[SERIALIZE_TEMPLATE]();
 }
 
 function validateString(value: unknown, name: string, allowEmpty = false): string {

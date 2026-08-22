@@ -1,16 +1,19 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
-import { Template, type SandboxTemplateBuilder, type SerializedSandboxTemplate } from './template';
+import { serializeSandboxTemplate } from './template.js';
+import * as platformWorkspace from './index.js';
+import { Template, type SandboxTemplateBuilder, type SerializedSandboxTemplate } from './index.js';
 
 describe('Template', () => {
   it('serializes the supported E2B-shaped operations in order', () => {
-    const definition = Template()
-      .setWorkdir('/workspace/repo')
-      .setEnvs({ CI: '1', EMPTY: '' })
-      .aptInstall(['git', 'jq'], { noInstallRecommends: true })
-      .pipInstall('ruff', { g: false })
-      .npmInstall(['typescript', 'tsx'], { dev: true })
-      .runCmd(['pnpm install', 'pnpm build'])
-      .toJSON();
+    const definition = serializeSandboxTemplate(
+      Template()
+        .setWorkdir('/workspace/repo')
+        .setEnvs({ CI: '1', EMPTY: '' })
+        .aptInstall(['git', 'jq'], { noInstallRecommends: true })
+        .pipInstall('ruff', { g: false })
+        .npmInstall(['typescript', 'tsx'], { dev: true })
+        .runCmd(['pnpm install', 'pnpm build']),
+    );
 
     expect(definition).toEqual({
       schemaVersion: 1,
@@ -27,7 +30,7 @@ describe('Template', () => {
   });
 
   it('preserves E2B optional install argument positions', () => {
-    expect(Template().pipInstall().npmInstall(undefined, { g: true }).toJSON().operations).toEqual([
+    expect(serializeSandboxTemplate(Template().pipInstall().npmInstall(undefined, { g: true })).operations).toEqual([
       { method: 'pipInstall', args: [] },
       { method: 'npmInstall', args: [null, { g: true }] },
     ]);
@@ -39,13 +42,13 @@ describe('Template', () => {
     const extended = base.runCmd('pnpm build');
     envs.MODE = 'mutated';
 
-    const first = base.toJSON();
-    const second = extended.toJSON();
+    const first = serializeSandboxTemplate(base);
+    const second = serializeSandboxTemplate(extended);
     expect(first.operations).toEqual([{ method: 'setEnvs', args: [{ MODE: 'build' }] }]);
     expect(second.operations).toHaveLength(2);
 
     (first.operations[0]!.args[0] as Record<string, string>).MODE = 'changed again';
-    expect(base.toJSON().operations).toEqual([{ method: 'setEnvs', args: [{ MODE: 'build' }] }]);
+    expect(serializeSandboxTemplate(base).operations).toEqual([{ method: 'setEnvs', args: [{ MODE: 'build' }] }]);
   });
 
   it.each([
@@ -81,15 +84,17 @@ describe('Template', () => {
 
   it('enforces exact string and collection boundaries', () => {
     const maximumString = 'x'.repeat(32 * 1024);
-    expect(Template().runCmd(maximumString).toJSON().operations[0]!.args[0]).toBe(maximumString);
+    expect(serializeSandboxTemplate(Template().runCmd(maximumString)).operations[0]!.args[0]).toBe(maximumString);
     expect(() => Template().runCmd(`${maximumString}x`)).toThrow(/32768 characters/);
 
     const maximumPackages = new Array(512).fill('package');
-    expect(Template().aptInstall(maximumPackages).toJSON().operations[0]!.args[0]).toHaveLength(512);
+    expect(serializeSandboxTemplate(Template().aptInstall(maximumPackages)).operations[0]!.args[0]).toHaveLength(512);
     expect(() => Template().aptInstall([...maximumPackages, 'one-too-many'])).toThrow(/512 items/);
 
     const maximumEnvs = Object.fromEntries(Array.from({ length: 512 }, (_, index) => [`KEY_${index}`, 'value']));
-    expect(Object.keys(Template().setEnvs(maximumEnvs).toJSON().operations[0]!.args[0] as object)).toHaveLength(512);
+    expect(
+      Object.keys(serializeSandboxTemplate(Template().setEnvs(maximumEnvs)).operations[0]!.args[0] as object),
+    ).toHaveLength(512);
     expect(() => Template().setEnvs({ ...maximumEnvs, ONE_TOO_MANY: 'value' })).toThrow(/512 items/);
   });
 
@@ -105,14 +110,18 @@ describe('Template', () => {
     }).toThrow(/262144 bytes/);
   });
 
-  it('exposes the intended public builder type', () => {
+  it('exposes only fluent template methods on the public builder type', () => {
+    expect(platformWorkspace.Template).toBe(Template);
+    expect(platformWorkspace).not.toHaveProperty('PlatformTemplateClient');
     expectTypeOf(Template).parameters.toEqualTypeOf<[]>();
     expectTypeOf(Template()).toEqualTypeOf<SandboxTemplateBuilder>();
-    expectTypeOf(Template().toJSON()).toEqualTypeOf<SerializedSandboxTemplate>();
+    expectTypeOf(serializeSandboxTemplate(Template())).toEqualTypeOf<SerializedSandboxTemplate>();
 
     type Keys = keyof SandboxTemplateBuilder;
+    type HasPublicTemplateClient = 'PlatformTemplateClient' extends keyof typeof platformWorkspace ? true : false;
     expectTypeOf<Keys>().toEqualTypeOf<
-      'runCmd' | 'setWorkdir' | 'setEnvs' | 'aptInstall' | 'pipInstall' | 'npmInstall' | 'toJSON'
+      'runCmd' | 'setWorkdir' | 'setEnvs' | 'aptInstall' | 'pipInstall' | 'npmInstall'
     >();
+    expectTypeOf<HasPublicTemplateClient>().toEqualTypeOf<false>();
   });
 });

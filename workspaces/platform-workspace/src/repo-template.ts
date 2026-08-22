@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
-import { Template, type SerializedSandboxTemplate } from '@mastra/core/workspace';
+import { Template, type SandboxTemplateBuilder } from './template.js';
 
 const execFileAsync = promisify(execFile);
 const REPO_FULL_NAME_PATTERN = /^[\w.-]+\/[\w.-]+$/;
@@ -21,7 +21,7 @@ export interface PlatformRepoTemplateOptions {
   resolveHead?: (repoFullName: string) => Promise<string | undefined>;
 }
 
-export type PlatformRepoTemplateResolver = () => Promise<SerializedSandboxTemplate | undefined>;
+export type PlatformRepoTemplateResolver = () => Promise<SandboxTemplateBuilder | undefined>;
 
 /**
  * Create a lazy, credential-free repository template definition for PlatformSandbox.
@@ -49,7 +49,7 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
       ...(options.setupCommand ? [`cd "${workdir}" && ${options.setupCommand}`] : []),
     ];
 
-    return Template().runCmd(steps).toJSON();
+    return Template().runCmd(steps);
   };
 }
 

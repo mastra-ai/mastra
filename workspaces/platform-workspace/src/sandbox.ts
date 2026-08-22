@@ -9,7 +9,6 @@ import type {
   SandboxCloneOptions,
   SandboxInfo,
   SandboxStartResult,
-  SerializedSandboxTemplate,
   SpawnProcessOptions,
 } from '@mastra/core/workspace';
 import {
@@ -27,14 +26,22 @@ import type { E2BExecRunner } from './e2b-exec.js';
 import { execViaE2BLease } from './e2b-exec.js';
 import type { PrivateNetExecOptions, PrivateNetExecResult, PrivateNetFetch } from './private-net-exec.js';
 import { execViaPrivateNetwork, PrivateNetExecHttpError } from './private-net-exec.js';
+import type { SandboxTemplateBuilder, SerializedSandboxTemplate } from './template.js';
+import { serializeSandboxTemplate } from './template.js';
 import type { PlatformTemplateBuild } from './templates.js';
 import { PlatformTemplateBuildError, PlatformTemplateClient } from './templates.js';
 
 export type PlatformSandboxNetworkIsolation = 'ISOLATED' | 'PRIVATE';
 
+type PlatformSandboxTemplateDefinition = SandboxTemplateBuilder | SerializedSandboxTemplate;
+
 export type PlatformSandboxTemplate =
-  | SerializedSandboxTemplate
-  | (() => SerializedSandboxTemplate | undefined | Promise<SerializedSandboxTemplate | undefined>);
+  | PlatformSandboxTemplateDefinition
+  | (() => PlatformSandboxTemplateDefinition | undefined | Promise<PlatformSandboxTemplateDefinition | undefined>);
+
+function serializeTemplateDefinition(template: PlatformSandboxTemplateDefinition): SerializedSandboxTemplate {
+  return 'schemaVersion' in template ? structuredClone(template) : serializeSandboxTemplate(template);
+}
 
 /**
  * In-process `sandboxId → instanceUrl` map that lets
@@ -66,12 +73,8 @@ export interface PlatformSandboxOptions extends Omit<MastraSandboxOptions, 'proc
   sandboxId?: string;
   /** Boot-only fallback checkpoint for a fresh sandbox whose primary recovery key has no state. */
   seedCheckpointName?: string;
-  /** Opaque tenant-bound template handle returned by PlatformTemplateClient. */
-  templateId?: string;
-  /** Serialized non-secret template definition bound to templateId. */
-  templateDefinition?: SerializedSandboxTemplate;
   /**
-   * Serializable template definition, or a lazy resolver for one. The resolver
+   * Template builder or serialized definition, or a lazy resolver for one. The resolver
    * runs only when start() must provision a fresh sandbox; Platform builds and
    * waits for the template before creating the sandbox. Resolution/build
    * failures fall back to the provider's ordinary default template and are
@@ -465,22 +468,13 @@ export class PlatformSandbox extends MastraSandbox {
     if (!this._environmentId && !options.sandboxId) throw new Error('environmentId is required');
     this._sandboxId = options.sandboxId;
     this._seedCheckpointName = options.seedCheckpointName;
-    if ((options.templateId === undefined) !== (options.templateDefinition === undefined)) {
-      throw new Error('templateId and templateDefinition must be provided together');
-    }
-    if (options.template !== undefined && options.templateId !== undefined) {
-      throw new Error('template cannot be combined with templateId and templateDefinition');
-    }
-    this._usesProviderRoutes =
-      options.templateId !== undefined || options.templateDefinition !== undefined || options.template !== undefined;
-    this._templateId = options.templateId;
-    this._templateDefinition = options.templateDefinition ? structuredClone(options.templateDefinition) : undefined;
+    this._usesProviderRoutes = options.template !== undefined;
     this._template =
       typeof options.template === 'function'
         ? options.template
-        : options.template
+        : options.template && 'schemaVersion' in options.template
           ? structuredClone(options.template)
-          : undefined;
+          : options.template;
     this._idleTimeoutMinutes = options.idleTimeoutMinutes;
     this._networkIsolation = options.networkIsolation;
     this._env = options.env ?? {};
@@ -524,7 +518,7 @@ export class PlatformSandbox extends MastraSandbox {
       options.seedCheckpointName ??
       (this._client.sandboxProvider === 'e2b' ? options.checkpointName : undefined) ??
       this._seedCheckpointName;
-    return new PlatformSandbox({
+    const clone = new PlatformSandbox({
       ...(id !== undefined && { id }),
       accessToken: this._client.accessToken,
       projectId: this._client.projectId,
@@ -538,9 +532,7 @@ export class PlatformSandbox extends MastraSandbox {
       environmentId: this._environmentId,
       ...(options.sandboxId !== undefined && { sandboxId: options.sandboxId }),
       ...(seedCheckpointName !== undefined && { seedCheckpointName }),
-      ...(this._templateId !== undefined && { templateId: this._templateId }),
-      ...(this._templateDefinition !== undefined && { templateDefinition: structuredClone(this._templateDefinition) }),
-      ...(this._templateId === undefined && this._template !== undefined && { template: this._template }),
+      ...(this._template !== undefined && { template: this._template }),
       idleTimeoutMinutes: options.idleTimeoutMinutes ?? this._idleTimeoutMinutes,
       ...(this._networkIsolation !== undefined && { networkIsolation: this._networkIsolation }),
       env: options.env ?? this._env,
@@ -555,6 +547,9 @@ export class PlatformSandbox extends MastraSandbox {
       // `.scratch/factory-deploy/issue-platform-sandbox-exec-via-private-network.md`.
       ...(this._addressRegistry !== undefined && { addressRegistry: this._addressRegistry }),
     });
+    clone._templateId = this._templateId;
+    clone._templateDefinition = this._templateDefinition ? structuredClone(this._templateDefinition) : undefined;
+    return clone;
   }
 
   /**
@@ -657,7 +652,7 @@ export class PlatformSandbox extends MastraSandbox {
     try {
       const resolved = typeof this._template === 'function' ? await this._template() : this._template;
       if (!resolved) return;
-      const definition = structuredClone(resolved);
+      const definition = serializeTemplateDefinition(resolved);
       const templates = new PlatformTemplateClient({
         accessToken: this._client.accessToken,
         projectId: this._client.projectId,

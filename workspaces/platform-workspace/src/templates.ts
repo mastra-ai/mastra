@@ -1,6 +1,5 @@
-import type { SerializedSandboxTemplate } from '@mastra/core/workspace';
-import type { PlatformClientOptions } from './client.js';
-import { PlatformClient } from './client.js';
+import { PlatformClient, type PlatformClientOptions } from './client.js';
+import type { SerializedSandboxTemplate } from './template.js';
 
 export type PlatformTemplateStatus = 'queued' | 'building' | 'ready' | 'failed';
 
