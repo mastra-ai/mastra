@@ -1,9 +1,10 @@
 import { getSignalHue } from './signal-colors';
-import { formatSignalName, SIGNAL_DESCRIPTIONS } from './signal-formatting';
+import { signalDescription, signalLabel } from './signal-formatting';
 import { computeThemeShareDeltas, themeShareSeries } from './theme-compare-data';
 import { ThemeCompareSparkline } from './theme-compare-sparkline';
 import type { ThemeSelection } from './theme-drilldown-data';
 import type { ThemeFlowResponse, TraceSignalName } from './types';
+import { useTraceIntelligence } from './use-trace-intelligence';
 import { nodeColor } from '@/ds/components/SankeyChart';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 
@@ -35,18 +36,22 @@ export function SignalDeltaColumn({
   toIndex: number;
   onThemeSelect: (selection: ThemeSelection, snapshotIndex: number) => void;
 }) {
+  const { signalCatalog } = useTraceIntelligence();
+  const label = signalLabel(signalCatalog, signalName);
   const deltas = computeThemeShareDeltas(fromFlow, toFlow, signalName);
   const detailIndexFor = (delta: { toShare: number }) => (delta.toShare > 0 ? toIndex : fromIndex);
 
   return (
-    <section aria-label={`${formatSignalName(signalName)} changes`} className="min-w-0">
+    <section aria-label={`${label} changes`} className="min-w-0">
       <h3
         className="font-mono text-xs font-semibold tracking-widest uppercase"
         style={{ color: nodeColor(getSignalHue(signalName)) }}
       >
         <Tooltip>
-          <TooltipTrigger className="cursor-default uppercase">{signalName}</TooltipTrigger>
-          <TooltipContent>{SIGNAL_DESCRIPTIONS[signalName]}</TooltipContent>
+          <TooltipTrigger aria-label={signalName} className="cursor-default uppercase">
+            {label}
+          </TooltipTrigger>
+          <TooltipContent>{signalDescription(signalCatalog, signalName)}</TooltipContent>
         </Tooltip>
       </h3>
       <ul className="mt-2 space-y-1.5">
