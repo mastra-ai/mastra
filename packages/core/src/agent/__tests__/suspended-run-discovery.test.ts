@@ -291,6 +291,28 @@ describe('suspended-run discovery', () => {
       expect(scoped.total).toBe(1);
     }, 30000);
 
+    it('pushes resourceId into workflow storage queries', async () => {
+      const { agent, storage } = createSuspendedSetup();
+      await suspendRun(agent, 'thread-1', 'resource-1');
+
+      const workflowsStore = (await storage.getStore('workflows'))!;
+      const listWorkflowRuns = vi.spyOn(workflowsStore, 'listWorkflowRuns');
+
+      await agent.listSuspendedRuns({ resourceId: 'resource-1' });
+
+      expect(listWorkflowRuns).toHaveBeenCalledTimes(2);
+      expect(listWorkflowRuns).toHaveBeenCalledWith(
+        expect.objectContaining({ workflowName: 'agentic-loop', status: 'suspended', resourceId: 'resource-1' }),
+      );
+      expect(listWorkflowRuns).toHaveBeenCalledWith(
+        expect.objectContaining({
+          workflowName: DurableStepIds.AGENTIC_LOOP,
+          status: 'suspended',
+          resourceId: 'resource-1',
+        }),
+      );
+    }, 30000);
+
     it('paginates with perPage/page while keeping total accurate', async () => {
       // The mock model only tool-calls on its first invocation, so suspend each
       // run from a fresh agent sharing the same storage.
