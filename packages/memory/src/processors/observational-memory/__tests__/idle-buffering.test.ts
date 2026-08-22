@@ -140,6 +140,41 @@ describe('turn.end() idle buffering', () => {
     );
   });
 
+  it('accounts for the completed idle buffer without another turn', async () => {
+    const unobservedMessages = createMessages(5);
+    const cadenceAccounted = vi.fn();
+    let finishBuffer!: () => void;
+    const bufferFinished = new Promise<void>(resolve => {
+      finishBuffer = resolve;
+    });
+    const mockOM = createMockOM({ asyncEnabled: true, unobservedMessages });
+    mockOM.buffer.mockImplementation(async () => {
+      await bufferFinished;
+      cadenceAccounted();
+      return { buffered: true, record: mockOM._mockRecord };
+    });
+    const mockMessageList = createMockMessageList(unobservedMessages);
+
+    const turn = new ObservationTurn({
+      om: mockOM as any,
+      threadId,
+      resourceId,
+      messageList: mockMessageList as any,
+      sendSignal: vi.fn(),
+      requestContext: { get: vi.fn() } as any,
+    });
+
+    (turn as any)._started = true;
+    (turn as any)._record = mockOM._mockRecord;
+
+    await turn.end();
+    expect(cadenceAccounted).not.toHaveBeenCalled();
+
+    finishBuffer();
+    await vi.waitFor(() => expect(cadenceAccounted).toHaveBeenCalledOnce(), { timeout: 1_000 });
+    expect(mockOM.buffer).toHaveBeenCalledOnce();
+  });
+
   // Regression: https://github.com/mastra-ai/mastra/issues/19730
   // `context`-sourced messages are per-run ephemeral input. They must never reach the
   // buffer/seal/persist pipeline, which would upsert them as durable user messages.

@@ -3,7 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { Agent, createSignal } from '@mastra/core/agent';
+import { Agent, MessageList, createSignal } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/request-context';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
@@ -418,6 +418,130 @@ describe('Subconscious LibSQL integration', () => {
         ifIdle: { behavior: 'persist' },
       }),
     ]);
+  });
+
+  it('curates a final buffered commit and resumes from the durable cursor after reconstruction', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'subconscious-buffer-curate-libsql-'));
+    directories.push(directory);
+    const databaseUrl = `file:${join(directory, 'knowledge.db')}`;
+    const threadId = randomUUID();
+    const resourceId = randomUUID();
+    const requestContext = new RequestContext();
+    requestContext.set('organizationId', 'acme');
+
+    const captureStream = vi.fn(async () => ({
+      stream: convertArrayToReadableStream([
+        { type: 'stream-start', warnings: [] },
+        { type: 'response-metadata', id: randomUUID(), modelId: 'aimock', timestamp: new Date() },
+        { type: 'text-start', id: 'text' },
+        { type: 'text-delta', id: 'text', delta: '<observations>- Project Atlas launches Friday.</observations>' },
+        { type: 'text-end', id: 'text' },
+        { type: 'finish', finishReason: 'stop', usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 } },
+      ]),
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      warnings: [],
+    }));
+    const captureModel = new MockLanguageModelV2({ doStream: captureStream as never });
+    const curateGenerate = vi.fn(async ({ prompt }: { prompt: unknown }) => {
+      const worklist = JSON.stringify(prompt);
+      const knowledgeIds = [...worklist.matchAll(/\\?"id\\?"\s*:\s*\\?"([^"\\]+)\\?"/g)].map(match => match[1]);
+      if (knowledgeIds.length === 0) {
+        throw new Error(`Curator worklist contained no knowledge ids: ${worklist}`);
+      }
+      return {
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+        warnings: [],
+        content: [{ type: 'text' as const, text: `<curation-complete through="${knowledgeIds.at(-1)}" />` }],
+      };
+    });
+    const curatorModel = new MockLanguageModelV2({ doGenerate: curateGenerate as never });
+    const createMemory = async () => {
+      const storage = new LibSQLStore({ id: randomUUID(), url: databaseUrl });
+      const vector = new LibSQLVector({ id: randomUUID(), url: databaseUrl });
+      await storage.init();
+      return new Memory({
+        storage,
+        vector,
+        embedder,
+        options: {
+          observationalMemory: {
+            enabled: true,
+            model: captureModel,
+            experimental_subconscious: new Subconscious({
+              observation: [],
+              reflection: [{ name: 'curate', model: curatorModel }],
+              curationCadence: 1,
+            }),
+            observation: { messageTokens: 100, bufferTokens: 1, bufferOnIdle: true, previousObserverTokens: 1_000 },
+          },
+        },
+      });
+    };
+
+    const memory = await createMemory();
+    await memory.createThread({ threadId, resourceId, title: 'Final buffered curation' });
+    const scope = ['org:acme', `resource:${resourceId}`, `thread:${threadId}`];
+    const knowledge = (await memory.storage.getStore('knowledge'))!;
+    const atlas = await knowledge.createNode({ name: 'Project Atlas', kind: 'project', scope: scope.slice(0, 2) });
+    const pending = await knowledge.appendKnowledge({
+      node: atlas.id,
+      text: '[[Project Atlas]] launches Friday.',
+      scope: scope.slice(0, 2),
+      sourceThreadId: threadId,
+      resolutionScope: scope,
+      defaultScope: scope,
+    });
+    const messageList = new MessageList({ threadId, resourceId });
+    messageList.add(message(threadId, resourceId), 'input');
+    const om = (await memory.omEngine)!;
+    const bufferSpy = vi.spyOn(om, 'buffer');
+    const turn = om.beginTurn({ threadId, resourceId, requestContext, messageList });
+    await turn.start();
+    expect(om.buffering.isAsyncObservationEnabled()).toBe(true);
+    expect(om.getObservationConfig().bufferOnIdle).toBe(true);
+    expect(om.getUnobservedMessages(messageList.get.all.db(), turn.record)).toHaveLength(1);
+    await turn.end();
+    await om.settled();
+    expect(bufferSpy).toHaveBeenCalledOnce();
+    await expect(bufferSpy.mock.results[0]?.value).resolves.toMatchObject({ buffered: true });
+    expect(captureStream).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(curateGenerate).toHaveBeenCalledOnce(), { timeout: 5_000 });
+
+    let cursor = await knowledge.getCurationCursor({ sourceThreadId: threadId, agent: 'curate' });
+    await vi.waitFor(
+      async () => {
+        cursor = await knowledge.getCurationCursor({ sourceThreadId: threadId, agent: 'curate' });
+        expect(cursor?.lastKnowledgeId).toBe(pending.id);
+      },
+      { timeout: 5_000 },
+    );
+
+    curateGenerate.mockClear();
+    const reconstructed = await createMemory();
+    const reconstructedKnowledge = (await reconstructed.storage.getStore('knowledge'))!;
+    expect(await reconstructedKnowledge.getCurationCursor({ sourceThreadId: threadId, agent: 'curate' })).toMatchObject(
+      {
+        lastKnowledgeId: cursor!.lastKnowledgeId,
+      },
+    );
+    const reconstructedOm = (await reconstructed.omEngine)!;
+    const second = await reconstructedOm.buffer({
+      threadId,
+      resourceId,
+      messages: [message(threadId, resourceId, 'No new durable knowledge.')],
+      requestContext,
+      skipMinimumTokenCheck: true,
+    });
+    expect(second.buffered).toBe(true);
+    await reconstructedOm.settled();
+    expect(curateGenerate).not.toHaveBeenCalled();
+    expect(await reconstructedKnowledge.getCurationCursor({ sourceThreadId: threadId, agent: 'curate' })).toMatchObject(
+      {
+        lastKnowledgeId: cursor!.lastKnowledgeId,
+      },
+    );
   });
 
   it('runs curate after reflection with cursor recovery, CAS, and application restore', async () => {

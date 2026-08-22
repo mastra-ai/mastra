@@ -102,8 +102,9 @@ export interface SubconsciousConfig {
    */
   pins?: boolean | { maxPins?: number; maxCharacters?: number; capturePinning?: boolean };
   /**
-   * Run the curator after every N committed observation runs (in addition to any
-   * caller-driven `Memory.runCuration` triggers). Off by default.
+   * Run the curator after every N successful committed observation cycles across synchronous and
+   * buffered lanes (in addition to caller-driven `Memory.runCuration` triggers). Off by default.
+   * This is event-driven accounting, not a timer, poller, or idle-process wake-up.
    */
   curationCadence?: number;
   maxSteps?: number;

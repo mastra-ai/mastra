@@ -12,7 +12,7 @@ import { generateText, stepCountIs, tool } from '@internal/ai-sdk-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
 import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { z } from 'zod';
 
 import { BufferingCoordinator } from '../buffering-coordinator';
@@ -173,10 +173,15 @@ function createMessagesExceedingThreshold(count: number, threadId: string): Mast
   ).map(m => ({ ...m, threadId }));
 }
 
-function createOM(storage: InMemoryMemory, opts?: { messageTokens?: number; bufferTokens?: number | false }) {
+function createOM(
+  storage: InMemoryMemory,
+  opts?: { messageTokens?: number; bufferTokens?: number | false; cadence?: number; memory?: unknown },
+) {
   return new ObservationalMemory({
     storage,
     scope: 'thread',
+    memory: opts?.memory as any,
+    curationCadence: opts?.cadence,
     observation: {
       model: createMockObserverModel(),
       messageTokens: opts?.messageTokens ?? 100,
@@ -874,22 +879,31 @@ describe('AI SDK: finalize()', () => {
     storage = createInMemoryStorage();
   });
 
-  it('activates remaining chunks and observes if threshold crossed', async () => {
+  it('activates remaining chunks and schedules cadence once when finalize observes', async () => {
+    const runCuration = vi.fn(async () => ({ outcome: 'ran' }));
     // Low threshold so observe triggers
-    const om = createOM(storage, { messageTokens: 50, bufferTokens: 0.2 });
+    const om = createOM(storage, { messageTokens: 50, bufferTokens: 0.2, cadence: 1, memory: { runCuration } });
 
     await storage.saveMessages({ messages: createMessagesExceedingThreshold(5, threadId) });
     await om.buffer({ threadId });
+    await vi.waitFor(() => expect(runCuration).toHaveBeenCalledOnce());
+    runCuration.mockClear();
 
     // Before finalize: chunks exist, pending tokens > 0
     const before = await om.getStatus({ threadId });
     expect(before.canActivate).toBe(true);
     expect(before.pendingTokens).toBeGreaterThan(0);
 
-    const result = await om.finalize({ threadId });
+    const finalMessages = createMessagesExceedingThreshold(5, threadId).map((message, index) => ({
+      ...message,
+      id: `${threadId}-final-${index}`,
+      createdAt: new Date(Date.now() + index + 1),
+    }));
+    const result = await om.finalize({ threadId, messages: finalMessages });
 
-    expect(result.activated).toBe(true);
+    expect(result).toMatchObject({ activated: true, observed: true });
     expect(result.record.activeObservations).toBeTruthy();
+    await vi.waitFor(() => expect(runCuration).toHaveBeenCalledOnce());
 
     // After finalize: clean state
     const after = await om.getStatus({ threadId });
@@ -906,18 +920,22 @@ describe('AI SDK: finalize()', () => {
     expect(result.observed).toBe(false);
   });
 
-  it('only activates when below observe threshold', async () => {
+  it('only activates without scheduling cadence when below observe threshold', async () => {
+    const runCuration = vi.fn(async () => ({ outcome: 'ran' }));
     // High threshold so observe doesn't trigger, but buffer+activate works
-    const om = createOM(storage, { messageTokens: 500, bufferTokens: 0.2 });
+    const om = createOM(storage, { messageTokens: 500, bufferTokens: 0.2, cadence: 1, memory: { runCuration } });
 
     await storage.saveMessages({ messages: createMessagesExceedingThreshold(5, threadId) });
     await om.buffer({ threadId });
+    await vi.waitFor(() => expect(runCuration).toHaveBeenCalledOnce());
+    runCuration.mockClear();
 
     const result = await om.finalize({ threadId });
 
     expect(result.activated).toBe(true);
     expect(result.observed).toBe(false);
     expect(result.record.activeObservations).toBeTruthy();
+    expect(runCuration).not.toHaveBeenCalled();
 
     const after = await om.getStatus({ threadId });
     expect(after.canActivate).toBe(false);

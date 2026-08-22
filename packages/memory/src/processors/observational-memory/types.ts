@@ -947,8 +947,10 @@ export interface ObservationalMemoryConfig {
   memory?: Memory;
 
   /**
-   * Run the subconscious curator (via `memory.runCuration`) after every N committed
-   * observation runs on the synchronous observe path. Off by default. Requires `memory`.
+   * Run the subconscious curator (via `memory.runCuration`) after every N
+   * successful committed observation cycles across synchronous and buffered lanes.
+   * This is event-driven accounting: it runs only after a commit and does not create
+   * a timer, poller, or wake an idle process. Off by default. Requires `memory`.
    */
   curationCadence?: number;
 

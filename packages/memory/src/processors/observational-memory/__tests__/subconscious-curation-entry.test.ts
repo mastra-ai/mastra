@@ -156,10 +156,8 @@ describe('curationCadence config resolution', () => {
 // =============================================================================
 // Observation-cadence trigger (engine level)
 //
-// The counter is pinned to the SYNC observation path (om.observe covers both
-// the turn-driven and manual triggers). The async-buffer lane bypasses
-// observe(); factory's resource scope disables async buffering, so the sync
-// path is the only one that fires in the deployment this gates.
+// Successful synchronous and buffered observation cycles share the same
+// event-driven cadence accounting. The counter remains off by default.
 // =============================================================================
 
 function createTestMessage(content: string, role: 'user' | 'assistant', id: string): MastraDBMessage {
@@ -207,7 +205,7 @@ function createMockModel(text: string) {
   } as any);
 }
 
-function createEngine(options: { cadence?: number; memory?: unknown }) {
+function createEngine(options: { cadence?: number; memory?: unknown; bufferTokens?: number | false }) {
   return new ObservationalMemory({
     storage: new InMemoryMemory({ db: new InMemoryDB() }),
     scope: 'thread',
@@ -216,7 +214,7 @@ function createEngine(options: { cadence?: number; memory?: unknown }) {
     observation: {
       model: createMockModel('<observations>\n* Something happened\n</observations>'),
       messageTokens: 100,
-      bufferTokens: false,
+      bufferTokens: options.bufferTokens ?? false,
     },
     reflection: {
       model: createMockModel('<observations>\n* Condensed\n</observations>'),
@@ -247,6 +245,138 @@ describe('observation-cadence curation trigger', () => {
 
     const record = await om.getRecord(threadId);
     expect((record?.config as any)?.subconscious?.observationRuns ?? 0).toBe(0);
+  });
+
+  it('counts successful buffered observation cycles toward the cadence', async () => {
+    const runCuration = vi.fn(async () => ({ outcome: 'ran' }));
+    const om = createEngine({ cadence: 1, memory: { runCuration }, bufferTokens: 50 });
+    const threadId = 'buffered-cadence-thread';
+    const context = requestContext();
+
+    const result = await om.buffer({
+      threadId,
+      messages: createBulkMessages(10, threadId),
+      requestContext: context,
+      skipMinimumTokenCheck: true,
+    });
+
+    expect(result.buffered).toBe(true);
+    await vi.waitFor(() => expect(runCuration).toHaveBeenCalledOnce());
+    expect(runCuration).toHaveBeenCalledWith(expect.objectContaining({ threadId, requestContext: context }));
+  });
+
+  it('counts mixed successful observation cycles once each', async () => {
+    const runCuration = vi.fn(async () => ({ outcome: 'ran' }));
+    const om = createEngine({ cadence: 3, memory: { runCuration }, bufferTokens: 50 });
+    const threadId = 'mixed-cadence-thread';
+
+    expect((await om.observe({ threadId, messages: createBulkMessages(10, threadId) })).observed).toBe(true);
+    await vi.waitFor(async () => {
+      const record = await om.getRecord(threadId);
+      expect((record?.config as any)?.subconscious?.observationRuns).toBe(1);
+    });
+
+    expect(
+      (
+        await om.buffer({
+          threadId,
+          messages: createBulkMessages(10, threadId, 10),
+          skipMinimumTokenCheck: true,
+        })
+      ).buffered,
+    ).toBe(true);
+    await vi.waitFor(async () => {
+      const record = await om.getRecord(threadId);
+      expect((record?.config as any)?.subconscious?.observationRuns).toBe(2);
+    });
+    expect(runCuration).not.toHaveBeenCalled();
+
+    expect((await om.observe({ threadId, messages: createBulkMessages(10, threadId, 20) })).observed).toBe(true);
+    await vi.waitFor(() => expect(runCuration).toHaveBeenCalledOnce());
+  });
+
+  it('does not account again when buffered knowledge is only activated', async () => {
+    const runCuration = vi.fn(async () => ({ outcome: 'ran' }));
+    const om = createEngine({ cadence: 1, memory: { runCuration }, bufferTokens: 50 });
+    const threadId = 'activation-only-cadence-thread';
+
+    expect(
+      (
+        await om.buffer({
+          threadId,
+          messages: createBulkMessages(10, threadId),
+          skipMinimumTokenCheck: true,
+        })
+      ).buffered,
+    ).toBe(true);
+    await vi.waitFor(() => expect(runCuration).toHaveBeenCalledOnce());
+
+    expect((await om.activate({ threadId })).activated).toBe(true);
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(runCuration).toHaveBeenCalledOnce();
+  });
+
+  it('does not account for a no-op observation', async () => {
+    const runCuration = vi.fn(async () => ({ outcome: 'ran' }));
+    const om = createEngine({ cadence: 1, memory: { runCuration } });
+
+    expect((await om.observe({ threadId: 'no-op-cadence-thread', messages: [] })).observed).toBe(false);
+    expect(runCuration).not.toHaveBeenCalled();
+  });
+
+  it('accounts a successful synchronous commit before rethrowing an end-hook error', async () => {
+    const runCuration = vi.fn(async () => ({ outcome: 'ran' }));
+    const om = createEngine({ cadence: 1, memory: { runCuration } });
+    const hookError = new Error('end hook failed');
+
+    await expect(
+      om.observe({
+        threadId: 'sync-hook-error-cadence-thread',
+        messages: createBulkMessages(10, 'sync-hook-error-cadence-thread'),
+        hooks: {
+          onObservationEnd: () => {
+            throw hookError;
+          },
+        },
+      }),
+    ).rejects.toBe(hookError);
+    await vi.waitFor(() => expect(runCuration).toHaveBeenCalledOnce());
+  });
+
+  it('preserves buffered end-hook error precedence when the observation also throws', async () => {
+    const runCuration = vi.fn();
+    const om = createEngine({ cadence: 1, memory: { runCuration } });
+    const runError = new Error('buffered observation failed');
+    const hookError = new Error('buffered end hook failed');
+    vi.spyOn(om as any, 'composeHooks').mockReturnValue({
+      onObservationEnd: () => {
+        throw hookError;
+      },
+    });
+
+    await expect(
+      (om as any).runBufferedObservationCycle({ threadId: 'buffered-double-error-thread' }, undefined, async () => {
+        throw runError;
+      }),
+    ).rejects.toBe(hookError);
+    expect(runCuration).not.toHaveBeenCalled();
+  });
+
+  it('does not fail buffered observation when cadence curation rejects', async () => {
+    const runCuration = vi.fn(async () => {
+      throw new Error('curation failed');
+    });
+    const om = createEngine({ cadence: 1, memory: { runCuration }, bufferTokens: 50 });
+    const threadId = 'buffered-cadence-failure-thread';
+
+    await expect(
+      om.buffer({
+        threadId,
+        messages: createBulkMessages(10, threadId),
+        skipMinimumTokenCheck: true,
+      }),
+    ).resolves.toMatchObject({ buffered: true });
+    await vi.waitFor(() => expect(runCuration).toHaveBeenCalledOnce());
   });
 
   it('leaves the counter untouched and fires nothing when no cadence is configured', async () => {
