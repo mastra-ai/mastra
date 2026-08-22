@@ -2,7 +2,7 @@
 '@mastra/platform-workspace': minor
 ---
 
-Added reusable sandbox templates to Platform workspaces. Build templates through `PlatformSandbox` with the portable `Template()` API, or lazily warm public repositories with `createRepoTemplate()`.
+Added reusable sandbox templates to Platform workspaces. Build templates through `PlatformSandbox` with the portable `Template()` API, which derives a deterministic identity for reuse, or lazily warm public repositories with `createRepoTemplate()`.
 
 ```ts
 const sandbox = new PlatformSandbox({

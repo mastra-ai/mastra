@@ -21,20 +21,12 @@ describe('createRemoteFactorySandbox', () => {
     const onStart = vi.fn();
     const getGithubToken = vi.fn();
     const resolveRepoHead = vi.fn().mockResolvedValue('0123456789abcdef0123456789abcdef01234567');
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ templateId: 'template-handle', status: 'ready' }), {
-          status: 200,
-          headers: { 'content-type': 'application/json' },
-        }),
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ id: 'sandbox-1', createdAt: '2026-08-22T00:00:00.000Z' }), {
-          status: 200,
-          headers: { 'content-type': 'application/json' },
-        }),
-      );
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(JSON.stringify({ id: 'sandbox-1', createdAt: '2026-08-22T00:00:00.000Z' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
     vi.stubGlobal('fetch', fetchMock);
     const sandbox = createRemoteFactorySandbox(
       {
@@ -54,9 +46,11 @@ describe('createRemoteFactorySandbox', () => {
 
     expect(resolveRepoHead).toHaveBeenCalledWith('acme/widgets');
     expect(getGithubToken).not.toHaveBeenCalled();
-    expect(String(fetchMock.mock.calls[0]![0])).toContain('/v1/e2b/projects/project-1/templates');
-    const buildBody = JSON.parse(fetchMock.mock.calls[0]![1].body as string);
-    expect(buildBody.definition).toEqual({
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0]![0])).toContain('/v1/e2b/projects/project-1/sandbox');
+    const createBody = JSON.parse(fetchMock.mock.calls[0]![1].body as string);
+    expect(createBody.templateId).toMatch(/^[a-f0-9]{64}$/);
+    expect(createBody.templateDefinition).toEqual({
       schemaVersion: 1,
       operations: [
         {
@@ -72,7 +66,7 @@ describe('createRemoteFactorySandbox', () => {
         },
       ],
     });
-    expect(JSON.stringify(buildBody)).not.toContain('token');
+    expect(JSON.stringify(createBody)).not.toContain('token');
     expect((sandbox as unknown as { _onStart?: unknown })._onStart).toBe(onStart);
     expect(
       (sandbox as unknown as { _client?: { actingUserId?: string; sandboxProvider?: string } })._client,

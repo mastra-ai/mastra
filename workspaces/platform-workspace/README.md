@@ -84,7 +84,7 @@ Pass an existing `sandboxId` to reattach to a live sandbox instead of creating a
 
 ### Reusable templates
 
-Use `Template()` to prebuild a public repository at an immutable commit. `PlatformSandbox` starts the build asynchronously, waits for it to finish, and creates the sandbox from the ready template:
+Use `Template()` to prebuild a public repository at an immutable commit. `PlatformSandbox` derives a deterministic template ID, starts or reuses the provider build, and retries sandbox creation while the build is pending:
 
 ```typescript
 import { PlatformSandbox, Template } from '@mastra/platform-workspace';
@@ -106,7 +106,7 @@ const sandbox = new PlatformSandbox({
 await sandbox.start();
 ```
 
-Platform serializes the builder and manages the tenant-bound build handle internally.
+Platform serializes the builder and stores the build state under its deterministic ID within the authenticated organization, project, environment, and selected provider. Passing the same definition to another sandbox reuses that build.
 
 All operation arguments are serialized and sent to the provider. Values passed to `setEnvs` must contain only non-sensitive build configuration. Credentials, private-repository tokens, and other secrets aren't supported in template definitions.
 

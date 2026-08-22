@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 export type JsonPrimitive = null | boolean | number | string;
 export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
 
@@ -28,6 +30,7 @@ export interface NpmInstallOptions {
 }
 
 export interface SandboxTemplateBuilder {
+  id(): string;
   runCmd(command: string | string[]): SandboxTemplateBuilder;
   setWorkdir(path: string): SandboxTemplateBuilder;
   setEnvs(envs: Record<string, string>): SandboxTemplateBuilder;
@@ -47,6 +50,10 @@ class SerializableSandboxTemplateBuilder implements SandboxTemplateBuilder {
 
   constructor(operations: readonly SandboxTemplateOperation[] = []) {
     this.#operations = operations;
+  }
+
+  id(): string {
+    return createHash('sha256').update(canonicalizeJson(this[SERIALIZE_TEMPLATE]())).digest('hex');
   }
 
   runCmd(command: string | string[]): SandboxTemplateBuilder {
@@ -137,6 +144,17 @@ function isSandboxTemplateBuilder(value: unknown): value is SerializableSandboxT
 export function serializeSandboxTemplate(template: SandboxTemplateBuilder): SerializedSandboxTemplate {
   if (!isSandboxTemplateBuilder(template)) throw new TypeError('template must be created with Template()');
   return template[SERIALIZE_TEMPLATE]();
+}
+
+function canonicalizeJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalizeJson).join(',')}]`;
+  if (value !== null && typeof value === 'object') {
+    const entries = Object.entries(value).sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
+    return `{${entries.map(([key, nested]) => `${JSON.stringify(key)}:${canonicalizeJson(nested)}`).join(',')}}`;
+  }
+  const serialized = JSON.stringify(value);
+  if (serialized === undefined) throw new TypeError('template contains a non-JSON value');
+  return serialized;
 }
 
 function validateString(value: unknown, name: string, allowEmpty = false): string {

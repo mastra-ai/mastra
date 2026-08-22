@@ -141,14 +141,13 @@ describe('PlatformSandbox', () => {
   });
 
   it.each(['railway', 'e2b'] as const)(
-    'builds direct template inputs internally and propagates the ready template to clones for %s',
+    'submits deterministic template identity with sandbox creation and propagates it to clones for %s',
     async sandboxProvider => {
       vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
       const template = Template().setWorkdir('/workspace/repo').runCmd('pnpm build');
       const definition = serializeSandboxTemplate(template);
       const fetchMock = vi
         .fn()
-        .mockResolvedValueOnce(json({ templateId: 'opaque-template-handle', status: 'ready' }))
         .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
         .mockResolvedValueOnce(json({ id: 'sbx_2', createdAt: '2026-06-26T00:01:00.000Z' }));
       const parent = new PlatformSandbox({
@@ -163,22 +162,15 @@ describe('PlatformSandbox', () => {
       await parent._start();
       await parent.clone()._start();
 
-      expect(fetchMock).toHaveBeenCalledTimes(3);
-      expect(String(fetchMock.mock.calls[0]![0])).toBe(
-        `https://proxy.test/v1/${sandboxProvider}/projects/proj_123/templates`,
-      );
-      expect(JSON.parse(fetchMock.mock.calls[0]![1].body as string)).toEqual({
-        environmentId: 'env_123',
-        definition,
-      });
-      expect(String(fetchMock.mock.calls[2]![0])).toBe(
-        `https://proxy.test/v1/${sandboxProvider}/projects/proj_123/sandbox`,
-      );
-      expect(JSON.parse(fetchMock.mock.calls[2]![1].body as string)).toMatchObject({
-        environmentId: 'env_123',
-        templateId: 'opaque-template-handle',
-        templateDefinition: definition,
-      });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      for (const [url, options] of fetchMock.mock.calls) {
+        expect(String(url)).toBe(`https://proxy.test/v1/${sandboxProvider}/projects/proj_123/sandbox`);
+        expect(JSON.parse(options.body as string)).toMatchObject({
+          environmentId: 'env_123',
+          templateId: template.id(),
+          templateDefinition: definition,
+        });
+      }
     },
   );
 
@@ -187,7 +179,6 @@ describe('PlatformSandbox', () => {
     vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(json({ templateId: 'opaque-template-handle', status: 'ready' }))
       .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
       .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }));
     const sandbox = new PlatformSandbox({
@@ -201,20 +192,25 @@ describe('PlatformSandbox', () => {
     await sandbox._start();
     await sandbox.getInfo();
 
-    expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v1/railway/projects/proj_123/templates');
-    expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/railway/projects/proj_123/sandbox');
-    expect(String(fetchMock.mock.calls[2]![0])).toBe('https://proxy.test/v1/railway/projects/proj_123/sandbox/sbx_1');
+    expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v1/railway/projects/proj_123/sandbox');
+    expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/railway/projects/proj_123/sandbox/sbx_1');
   });
 
-  it('resolves, builds, and waits for a lazy template only when a fresh sandbox starts', async () => {
+  it('resolves a lazy template and retries sandbox creation while the provider build is pending', async () => {
     vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
     const template = Template().setWorkdir('/workspace/repo').runCmd('pnpm install');
     const definition = serializeSandboxTemplate(template);
     const resolveTemplate = vi.fn().mockResolvedValue(template);
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(json({ templateId: 'opaque-template-handle', status: 'building' }, { status: 202 }))
-      .mockResolvedValueOnce(json({ templateId: 'opaque-template-handle', status: 'ready' }))
+      .mockResolvedValueOnce(
+        json(
+          {
+            error: { message: 'Sandbox template is building', type: 'template_building', retryAfterMs: 0 },
+          },
+          { status: 409 },
+        ),
+      )
       .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }));
     const sandbox = new PlatformSandbox({
       accessToken: 'sk_test',
@@ -231,28 +227,23 @@ describe('PlatformSandbox', () => {
     await sandbox._start();
 
     expect(resolveTemplate).toHaveBeenCalledTimes(1);
-    expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v1/e2b/projects/proj_123/templates');
-    expect(JSON.parse(fetchMock.mock.calls[0]![1].body as string)).toEqual({
-      environmentId: 'env_123',
-      definition,
-    });
-    expect(String(fetchMock.mock.calls[1]![0])).toBe(
-      'https://proxy.test/v1/e2b/projects/proj_123/templates/opaque-template-handle?environmentId=env_123',
-    );
-    expect(JSON.parse(fetchMock.mock.calls[2]![1].body as string)).toMatchObject({
-      templateId: 'opaque-template-handle',
-      templateDefinition: definition,
-    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    for (const [url, options] of fetchMock.mock.calls) {
+      expect(String(url)).toBe('https://proxy.test/v1/e2b/projects/proj_123/sandbox');
+      expect(JSON.parse(options.body as string)).toMatchObject({
+        templateId: template.id(),
+        templateDefinition: definition,
+      });
+    }
   });
 
-  it('reuses the ready template handle when a dead provider sandbox requires fresh provisioning', async () => {
+  it('reuses the resolved template identity when a dead provider sandbox requires fresh provisioning', async () => {
     vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
     const template = Template().runCmd('pnpm install');
     const definition = serializeSandboxTemplate(template);
     const resolveTemplate = vi.fn().mockResolvedValue(template);
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(json({ templateId: 'opaque-template-handle', status: 'ready' }))
       .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
       .mockResolvedValueOnce(json({ error: { message: 'not found', type: 'not_found' } }, { status: 404 }))
       .mockResolvedValueOnce(json({ id: 'sbx_2', createdAt: '2026-06-26T00:01:00.000Z' }));
@@ -270,11 +261,10 @@ describe('PlatformSandbox', () => {
     await sandbox._start();
 
     expect(resolveTemplate).toHaveBeenCalledTimes(1);
-    expect(fetchMock).toHaveBeenCalledTimes(4);
-    expect(String(fetchMock.mock.calls[0]![0])).toContain('/templates');
-    expect(String(fetchMock.mock.calls[2]![0])).toContain('/sandbox/sbx_1');
-    expect(JSON.parse(fetchMock.mock.calls[3]![1].body as string)).toMatchObject({
-      templateId: 'opaque-template-handle',
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(String(fetchMock.mock.calls[1]![0])).toContain('/sandbox/sbx_1');
+    expect(JSON.parse(fetchMock.mock.calls[2]![1].body as string)).toMatchObject({
+      templateId: template.id(),
       templateDefinition: definition,
     });
   });
@@ -322,12 +312,23 @@ describe('PlatformSandbox', () => {
     expect(JSON.parse(fetchMock.mock.calls[0]![1].body as string)).not.toHaveProperty('templateId');
   });
 
-  it('falls back to ordinary sandbox creation when a lazy template build fails', async () => {
+  it('falls back to the provider default when the next template retry exceeds the build deadline', async () => {
     vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
     const template = Template().runCmd('pnpm install');
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(json({ templateId: 'failed-template', status: 'failed', error: 'clone failed' }))
+      .mockResolvedValueOnce(
+        json(
+          {
+            error: {
+              message: 'Sandbox template is building',
+              type: 'template_building',
+              retryAfterMs: 15 * 60_000,
+            },
+          },
+          { status: 409 },
+        ),
+      )
       .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }));
     const sandbox = new PlatformSandbox({
       accessToken: 'sk_test',
@@ -340,6 +341,10 @@ describe('PlatformSandbox', () => {
     await sandbox._start();
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(fetchMock.mock.calls[0]![1].body as string)).toMatchObject({
+      templateId: template.id(),
+      templateDefinition: serializeSandboxTemplate(template),
+    });
     expect(JSON.parse(fetchMock.mock.calls[1]![1].body as string)).not.toHaveProperty('templateId');
   });
 

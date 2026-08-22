@@ -51,6 +51,16 @@ describe('Template', () => {
     expect(serializeSandboxTemplate(base).operations).toEqual([{ method: 'setEnvs', args: [{ MODE: 'build' }] }]);
   });
 
+  it('derives a deterministic SHA-256 identity from the canonical definition', () => {
+    const first = Template().setEnvs({ ZED: 'last', ALPHA: 'first' }).runCmd('pnpm build');
+    const sameDefinition = Template().setEnvs({ ALPHA: 'first', ZED: 'last' }).runCmd('pnpm build');
+    const differentOrder = Template().runCmd('pnpm build').setEnvs({ ALPHA: 'first', ZED: 'last' });
+
+    expect(first.id()).toBe('6c6cbd6b21036a4ed72be2d63ae2674437670d6e927adebd8e9389fb63019a39');
+    expect(first.id()).toBe(sameDefinition.id());
+    expect(first.id()).not.toBe(differentOrder.id());
+  });
+
   it.each([
     () => Template().runCmd(''),
     () => Template().runCmd([]),
@@ -120,7 +130,7 @@ describe('Template', () => {
     type Keys = keyof SandboxTemplateBuilder;
     type HasPublicTemplateClient = 'PlatformTemplateClient' extends keyof typeof platformWorkspace ? true : false;
     expectTypeOf<Keys>().toEqualTypeOf<
-      'runCmd' | 'setWorkdir' | 'setEnvs' | 'aptInstall' | 'pipInstall' | 'npmInstall'
+      'id' | 'runCmd' | 'setWorkdir' | 'setEnvs' | 'aptInstall' | 'pipInstall' | 'npmInstall'
     >();
     expectTypeOf<HasPublicTemplateClient>().toEqualTypeOf<false>();
   });
