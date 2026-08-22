@@ -1168,6 +1168,93 @@ The standalone `ObservationalMemory` class accepts all the same options as the `
 ]}
 />
 
+### Forcing compaction
+
+Observation normally waits until pending context crosses the observation threshold. Providers count tokens more aggressively than Mastra's local estimate, so a request can be rejected for context overflow while observational memory still considers itself below the threshold. In that state `observe()` and `finalize()` do nothing.
+
+`compact()` observes the oldest pending messages in chunks until pending context drops to `targetTokens`, ignoring the threshold. Nothing is written to the record's configuration, so the forced compaction cannot affect later requests.
+
+Call it from an [error processor](/docs/agents/processors#api-error-handling) so a rejected request compacts and retries:
+
+```typescript title="src/mastra/processors/context-overflow-handler.ts"
+import { APICallError } from '@ai-sdk/provider'
+import type { Processor, ProcessAPIErrorArgs, ProcessAPIErrorResult } from '@mastra/core/processors'
+import type { ObservationalMemory } from '@mastra/memory/processors'
+
+export class ContextOverflowHandler implements Processor {
+  id = 'context-overflow-handler'
+
+  constructor(private om: ObservationalMemory) {}
+
+  async processAPIError({
+    error,
+    messageList,
+    retryCount,
+  }: ProcessAPIErrorArgs): Promise<ProcessAPIErrorResult | void> {
+    if (retryCount > 0) return
+    if (!APICallError.isInstance(error) || !error.message.includes('context length exceeded'))
+      return
+
+    const [message] = messageList.get.all.db()
+    if (!message?.threadId) return
+
+    const result = await this.om.compact({
+      threadId: message.threadId,
+      resourceId: message.resourceId ?? undefined,
+    })
+
+    if (result.compacted) return { retry: true }
+  }
+}
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'threadId',
+    type: 'string',
+    description: 'Thread to compact.',
+    isOptional: false,
+  },
+  {
+    name: 'resourceId',
+    type: 'string',
+    description: 'Resource that owns the thread. Required for resource scope.',
+    isOptional: true,
+  },
+  {
+    name: 'messages',
+    type: 'MastraDBMessage[]',
+    description:
+      'Messages to compact from. Use this when conversation messages are not stored in Mastra. Defaults to reading unobserved messages from storage.',
+    isOptional: true,
+  },
+  {
+    name: 'targetTokens',
+    type: 'number',
+    description: 'Stop once pending context drops to this many tokens.',
+    isOptional: true,
+    defaultValue: 'half the observation threshold',
+  },
+  {
+    name: 'chunkTokens',
+    type: 'number',
+    description: 'Maximum tokens of messages observed per iteration.',
+    isOptional: true,
+    defaultValue: 'the observation threshold',
+  },
+  {
+    name: 'maxIterations',
+    type: 'number',
+    description: 'Upper bound on observation passes, so an error handler cannot loop indefinitely.',
+    isOptional: true,
+    defaultValue: '10',
+  },
+]}
+/>
+
+Returns `compacted` (whether any observation ran), `iterations`, `tokensCompacted`, `pendingTokens`, `reachedTarget`, and the updated `record`. Rebuild the prompt from the returned record before retrying the request.
+
 ## Recall tool
 
 When `retrieval` is set (any truthy value), a `recall` tool is registered so the agent can page through raw messages behind observation group ranges. By default (scope `'resource'`), the tool supports listing threads (`mode: "threads"`), browsing other threads (`threadId`), and cross-thread search. With `retrieval: { vector: true }`, semantic search is available (`mode: "search"`). Set `scope: 'thread'` to restrict the tool to the current thread only. The tool is automatically added to the agent's tool list.
