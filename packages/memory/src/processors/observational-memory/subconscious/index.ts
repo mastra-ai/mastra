@@ -34,14 +34,15 @@ let warnedCurationCadence = false;
  * Once, not per construction: an app that builds a `Subconscious` per request would otherwise
  * emit this on every turn.
  */
-function warnCurationCadenceDeprecated(): void {
+function warnCurationCadenceDeprecated(thresholdAlsoSet: boolean): void {
   if (warnedCurationCadence) return;
   warnedCurationCadence = true;
   console.warn(
     '[mastra:memory] `curationCadence` is deprecated; use `curationThreshold`. Note the meaning changed: ' +
       '`curationCadence` counted committed observation runs, while `curationThreshold` counts uncurated ' +
       'knowledge records since the last curation. Curation now also runs from activation and end-of-turn, ' +
-      'not only the synchronous observe path.',
+      'not only the synchronous observe path.' +
+      (thresholdAlsoSet ? ' `curationThreshold` is set, so `curationCadence` is ignored.' : ''),
   );
 }
 
@@ -160,7 +161,9 @@ export class Subconscious {
       throw new Error('Subconscious curationCadence must be a positive integer.');
     }
 
-    if (config.curationCadence !== undefined) warnCurationCadenceDeprecated();
+    if (config.curationCadence !== undefined) {
+      warnCurationCadenceDeprecated(typeof config.curationThreshold === 'number');
+    }
 
     if (
       typeof config.curationThreshold === 'number' &&

@@ -205,15 +205,54 @@ describe('curationCadence deprecation', () => {
     }
   });
 
-  it('lets curationThreshold win when both are configured', () => {
+  it('lets curationThreshold win when both are configured, and says the alias is ignored', () => {
     __resetCurationCadenceWarning();
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
       const subconscious = new Subconscious({ curationCadence: 5, curationThreshold: 20 });
       expect(subconscious.resolved.curationThreshold).toBe(20);
-      expect(subconscious.resolved.curationCadence).toBe(5);
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0]?.[0]).toContain('is ignored');
     } finally {
       warn.mockRestore();
     }
+  });
+
+  it('resolves the alias onto the threshold path when curationThreshold is unset', () => {
+    __resetCurationCadenceWarning();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const subconscious = new Subconscious({ curationCadence: 7 });
+      expect(subconscious.resolved.curationCadence).toBe(7);
+      expect(subconscious.resolved.curationThreshold).toBe(false);
+      expect(warn.mock.calls[0]?.[0]).not.toContain('is ignored');
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('keeps the existing validation error for an invalid alias value', () => {
+    __resetCurationCadenceWarning();
+    expect(() => new Subconscious({ curationCadence: 0 })).toThrow(
+      'Subconscious curationCadence must be a positive integer.',
+    );
+    expect(() => new Subconscious({ curationCadence: 1.5 })).toThrow(
+      'Subconscious curationCadence must be a positive integer.',
+    );
+  });
+
+  it('rejects invalid values for the new options', () => {
+    expect(() => new Subconscious({ curationThreshold: 0 })).toThrow(
+      'Subconscious curationThreshold must be a positive integer or false.',
+    );
+    expect(() => new Subconscious({ curationMaxAgeMs: -1 })).toThrow(
+      'Subconscious curationMaxAgeMs must be a positive integer of milliseconds or false.',
+    );
+  });
+
+  it('defaults both curation triggers to off', () => {
+    const subconscious = new Subconscious();
+    expect(subconscious.resolved.curationThreshold).toBe(false);
+    expect(subconscious.resolved.curationMaxAgeMs).toBe(false);
   });
 });
