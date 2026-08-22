@@ -86,6 +86,7 @@ export class ScoresPG extends ScoresStorage {
    */
   static override readonly retentionTables: RetentionTablesDescriptor = {
     scorers: { table: TABLE_SCORERS, column: 'createdAtZ', indexed: true },
+    scoringDecisions: { table: TABLE_SCORING_DECISIONS, column: 'createdAt', indexed: true },
   };
 
   constructor(config: PgDomainConfig) {
@@ -243,7 +244,7 @@ export class ScoresPG extends ScoresStorage {
     const targets = resolveTargets({
       policies,
       descriptor: ScoresPG.retentionTables,
-      order: ['scorers'],
+      order: ['scorers', 'scoringDecisions'],
     });
     return runPrune({ db: this.#db, domain: 'scores', targets, options });
   }

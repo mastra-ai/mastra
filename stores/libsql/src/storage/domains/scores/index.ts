@@ -45,6 +45,7 @@ export class ScoresLibSQL extends ScoresStorage {
    */
   static override readonly retentionTables: RetentionTablesDescriptor = {
     scorers: { table: TABLE_SCORERS, column: 'createdAt', indexed: true },
+    scoringDecisions: { table: TABLE_SCORING_DECISIONS, column: 'createdAt', indexed: true },
   };
 
   #db: LibSQLDB;
@@ -78,7 +79,7 @@ export class ScoresLibSQL extends ScoresStorage {
     const targets = resolveTargets({
       policies,
       descriptor: ScoresLibSQL.retentionTables,
-      order: ['scorers'],
+      order: ['scorers', 'scoringDecisions'],
     });
     return runPrune({ db: this.#db, domain: 'scores', targets, options, logger: this.logger });
   }

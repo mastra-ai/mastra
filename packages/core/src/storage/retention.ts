@@ -145,7 +145,7 @@ export interface DomainRetentionTables {
   memory: 'threads' | 'messages' | 'resources';
   threadState: 'threadState';
   observability: 'spans' | 'metrics' | 'logs' | 'scores' | 'feedback';
-  scores: 'scorers';
+  scores: 'scorers' | 'scoringDecisions';
   workflows: 'workflowSnapshot';
   backgroundTasks: 'backgroundTasks';
   experiments: 'experiments';
