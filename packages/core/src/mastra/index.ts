@@ -6557,13 +6557,23 @@ export class Mastra<
       }
     });
 
+    // Stop — don't destroy — registered workspaces. Remote sandboxes
+    // suspend/pause and stay resumable across process restarts, and
+    // LocalSandbox.stop() kills its background processes, so nothing leaks.
+    // Callers that want a full teardown destroy workspaces explicitly via
+    // removeWorkspace(id, { destroy: true }) or workspace.destroy().
     const workspaceIds = Object.keys(this.#workspaces);
     const teardownResults = await Promise.allSettled(
-      workspaceIds.map(id => this.removeWorkspace(id, { destroy: true })),
+      workspaceIds.map(async id => {
+        const entry = this.#workspaces[id];
+        if (!entry) return;
+        await entry.workspace.stop();
+        await this.removeWorkspace(id);
+      }),
     );
     teardownResults.forEach((result, index) => {
       if (result.status === 'rejected') {
-        this.#logger?.error('Failed to destroy workspace during shutdown', {
+        this.#logger?.error('Failed to tear down workspace during shutdown', {
           workspaceId: workspaceIds[index],
           error: result.reason,
         });
