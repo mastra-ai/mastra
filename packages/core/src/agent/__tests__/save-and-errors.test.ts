@@ -1477,8 +1477,12 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
         });
 
         const mockMemory = new MockMemory();
-        const memoryStore = await mockMemory.storage.getStore('memory');
-        const saveMessagesSpy = vi.spyOn(memoryStore!, 'saveMessages');
+        const persistedBatches: MastraDBMessage[][] = [];
+        const originalSaveMessages = mockMemory.saveMessages.bind(mockMemory);
+        mockMemory.saveMessages = async args => {
+          persistedBatches.push(structuredClone(args.messages));
+          return originalSaveMessages(args);
+        };
         let outputProcessorCalls = 0;
         let onAbortCalls = 0;
         let onFinishCalls = 0;
@@ -1530,11 +1534,9 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
           content: { parts: [{ type: 'text', text: 'message before abort' }] },
         });
         expect(afterAbort.messages[0]?.id).toBeTruthy();
-        expect(saveMessagesSpy).toHaveBeenCalledTimes(1);
-        expect(saveMessagesSpy.mock.calls[0]?.[0].messages.map(message => message.id)).toEqual([
-          afterAbort.messages[0]?.id,
-        ]);
-        expect(outputProcessorCalls).toBe(1);
+        expect(persistedBatches).toHaveLength(1);
+        expect(persistedBatches[0]?.map(message => message.id)).toEqual([afterAbort.messages[0]?.id]);
+        expect(outputProcessorCalls).toBe(0);
         expect(onAbortCalls).toBe(1);
         expect(onFinishCalls).toBe(0);
 
@@ -1552,10 +1554,11 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
         expect(afterNextTurn.messages[0]?.id).toBe(afterAbort.messages[0]?.id);
       });
 
-      it('should persist the assistant text available when the abort is saved', async () => {
+      it('should persist exactly the assistant text emitted before abort', async () => {
         const abortController = new AbortController();
         const totalChunks = 20;
         const abortAfterChunks = 5;
+        let generatedTextChunkCount = 0;
         let resolveProviderFinished!: () => void;
         const providerFinished = new Promise<void>(resolve => {
           resolveProviderFinished = resolve;
@@ -1603,8 +1606,11 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
                         await new Promise(resolve => setTimeout(resolve, 5));
                         const chunk = allChunks[index++]!;
                         const textDeltaCount = index - 3;
-                        if (chunk.type === 'text-delta' && textDeltaCount === abortAfterChunks) {
-                          abortController.abort();
+                        if (chunk.type === 'text-delta') {
+                          generatedTextChunkCount++;
+                          if (textDeltaCount === abortAfterChunks) {
+                            abortController.abort();
+                          }
                         }
 
                         try {
@@ -1629,8 +1635,12 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
         });
 
         const mockMemory = new MockMemory();
-        const memoryStore = await mockMemory.storage.getStore('memory');
-        const saveMessagesSpy = vi.spyOn(memoryStore!, 'saveMessages');
+        const persistedBatches: MastraDBMessage[][] = [];
+        const originalSaveMessages = mockMemory.saveMessages.bind(mockMemory);
+        mockMemory.saveMessages = async args => {
+          persistedBatches.push(structuredClone(args.messages));
+          return originalSaveMessages(args);
+        };
         const agent = new Agent({
           id: 'bounded-abort-agent',
           name: 'Bounded Abort Agent',
@@ -1657,6 +1667,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
           threadId: 'bounded-abort-thread',
           resourceId: 'bounded-abort-resource',
         });
+        expect(generatedTextChunkCount).toBe(totalChunks);
         expect(recalled.messages.map(message => message.role)).toEqual(['user', 'assistant']);
         expect(new Set(recalled.messages.map(message => message.id)).size).toBe(2);
         expect(
@@ -1669,10 +1680,8 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
             ?.filter(part => part.type === 'text')
             .map(part => ({ type: part.type, text: part.text })),
         ).toEqual([{ type: 'text', text: 'chunk-1 chunk-2 chunk-3 chunk-4 ' }]);
-        expect(saveMessagesSpy).toHaveBeenCalledTimes(1);
-        expect(saveMessagesSpy.mock.calls[0]?.[0].messages.map(message => message.id)).toEqual(
-          recalled.messages.map(message => message.id),
-        );
+        expect(persistedBatches).toHaveLength(1);
+        expect(persistedBatches[0]?.map(message => message.id)).toEqual(recalled.messages.map(message => message.id));
       });
     });
   }
@@ -1814,8 +1823,6 @@ describe('message persistence across completed steps', () => {
   it('should persist messages from completed steps when stream is aborted', async () => {
     let doStreamCallCount = 0;
 
-    // Cancellation cannot erase submitted history or completed tool calls/results: they are
-    // historical facts, and the tool may already have caused an irreversible external side effect.
     // Model that produces a tool call on first invocation, then text on second
     const toolCallModel = new MockLanguageModelV2({
       doStream: async () => {
@@ -1825,9 +1832,6 @@ describe('message persistence across completed steps', () => {
             stream: convertArrayToReadableStream([
               { type: 'stream-start', warnings: [] },
               { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-              { type: 'text-start', id: 'text-0' },
-              { type: 'text-delta', id: 'text-0', delta: 'Response after tool' },
-              { type: 'text-end', id: 'text-0' },
               {
                 type: 'tool-call',
                 toolCallId: 'call-1',
@@ -1865,8 +1869,12 @@ describe('message persistence across completed steps', () => {
     });
 
     const mockMemory = new MockMemory();
-    const memoryStore = await mockMemory.storage.getStore('memory');
-    const saveMessagesSpy = vi.spyOn(memoryStore!, 'saveMessages');
+    const persistedBatches: MastraDBMessage[][] = [];
+    const originalSaveMessages = mockMemory.saveMessages.bind(mockMemory);
+    mockMemory.saveMessages = async args => {
+      persistedBatches.push(structuredClone(args.messages));
+      return originalSaveMessages(args);
+    };
 
     const echoTool = createTool({
       id: 'echo-tool',
@@ -1895,9 +1903,7 @@ describe('message persistence across completed steps', () => {
       abortSignal: abortController.signal,
       onStepFinish: async () => {
         stepFinishCount++;
-      },
-      onChunk: async chunk => {
-        if (doStreamCallCount === 2 && chunk.type === 'text-delta') {
+        if (stepFinishCount === 1) {
           abortController.abort();
         }
       },
@@ -1918,12 +1924,10 @@ describe('message persistence across completed steps', () => {
       threadId: 'thread-save-per-step-abort',
       resourceId: 'resource-save-per-step-abort',
     });
-    expect(recalled.messages.map(message => message.role)).toEqual(['user', 'assistant', 'assistant']);
-    expect(new Set(recalled.messages.map(message => message.id)).size).toBe(3);
-    expect(saveMessagesSpy).toHaveBeenCalledTimes(1);
-    expect(saveMessagesSpy.mock.calls[0]?.[0].messages.map(message => message.id)).toEqual(
-      recalled.messages.map(message => message.id),
-    );
+    expect(recalled.messages.map(message => message.role)).toEqual(['user', 'assistant']);
+    expect(new Set(recalled.messages.map(message => message.id)).size).toBe(2);
+    expect(persistedBatches).toHaveLength(1);
+    expect(persistedBatches[0]?.map(message => message.id)).toEqual(recalled.messages.map(message => message.id));
 
     const toolInvocationParts = recalled.messages
       .flatMap(message => message.content.parts ?? [])
@@ -1938,12 +1942,6 @@ describe('message persistence across completed steps', () => {
         result: { output: 'hello' },
       },
     });
-    expect(
-      recalled.messages
-        .flatMap(message => message.content.parts ?? [])
-        .filter(part => part.type === 'text')
-        .map(part => part.text),
-    ).toEqual(['test message', 'Response after tool', 'Response after tool']);
   });
 });
 

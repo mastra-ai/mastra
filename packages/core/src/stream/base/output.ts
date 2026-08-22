@@ -1045,28 +1045,20 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     steps: [...self.#bufferedSteps] as LLMStepResult[],
                   };
 
-                  // Canceled runs still pass through the normal output-processor pipeline so
-                  // MessageHistory can persist submitted input, completed tool side effects,
-                  // and any nonblank response that reached this terminal output.
-                  if (self.#status === 'canceled' && self.#bufferedByStep.text.trim().length > 0) {
-                    self.messageList.add(
-                      {
-                        role: 'assistant',
-                        content: [{ type: 'text', text: self.#bufferedByStep.text }],
-                      },
-                      'response',
-                      { merge: false },
+                  // Output processors must still run on failed streams so user-configured
+                  // processors (and onFinish consumers) observe error terminals. Only
+                  // canceled (aborted) streams skip the pass. Orphan-input protection for
+                  // failed turns lives in MessageHistory.processOutputResult.
+                  if (self.#status !== 'canceled') {
+                    self.messageList = await self.processorRunner.runOutputProcessors(
+                      self.messageList,
+                      resolveObservabilityContext(options),
+                      self.#options.requestContext,
+                      0,
+                      outputResultWriter,
+                      outputResult,
                     );
                   }
-
-                  self.messageList = await self.processorRunner.runOutputProcessors(
-                    self.messageList,
-                    resolveObservabilityContext(options),
-                    self.#options.requestContext,
-                    0,
-                    outputResultWriter,
-                    outputResult,
-                  );
 
                   // Get text from the latest response message (the last assistant message)
                   const outputText = resolveOutputTextSkippingCompletionChecks(self.messageList);
@@ -1075,12 +1067,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   // This preserves text from retry scenarios where step.text is already correct.
                   // Compare against undefined, not truthiness, so a processor clearing the text
                   // to '' still overwrites the step text instead of leaking the original.
-                  if (
-                    self.#status !== 'canceled' &&
-                    lastStep &&
-                    outputText !== undefined &&
-                    outputText !== originalText
-                  ) {
+                  if (lastStep && outputText !== undefined && outputText !== originalText) {
                     lastStep.text = outputText;
                   }
 
