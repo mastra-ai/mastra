@@ -107,6 +107,63 @@ mastra dev
 These are forwarded to the Mastra model router and will work with any `"openai/..."`
 or `"anthropic/..."` model selections.
 
+## `mastra factory create`
+
+Creates a Mastra Factory project from the scaffold bundled with the CLI, installs its dependencies, and initializes a Git repository.
+
+```bash npm2yarn
+npx mastra factory create my-factory
+```
+
+By default, the command prompts you to connect the project to the Mastra platform. Use `--no-platform` to create the local project without platform provisioning:
+
+```bash npm2yarn
+npx mastra factory create my-factory --no-platform
+```
+
+The standalone `create-factory` package uses the same command implementation:
+
+```bash npm2yarn
+npm create factory@latest -- my-factory
+```
+
+### Arguments and flags
+
+<PropertiesTable
+  content={[
+  {
+    name: '[project-name]',
+    type: 'string',
+    description: 'Project directory name. When omitted, the command prompts for it.',
+    isOptional: true,
+  },
+  {
+    name: '--template <url>',
+    type: 'string',
+    description: 'Clone a custom Git repository instead of using the bundled Factory scaffold.',
+    isOptional: true,
+  },
+  {
+    name: '--no-platform',
+    type: 'boolean',
+    description: 'Skip Mastra platform provisioning.',
+    isOptional: true,
+  },
+  {
+    name: '--region <region>',
+    type: 'string',
+    description: 'Platform project region: eu or us.',
+    isOptional: true,
+  },
+  {
+    name: '--org <id-or-name>',
+    type: 'string',
+    description: 'Mastra organization ID or name to use for platform provisioning.',
+    isOptional: true,
+  },
+]}
+/>
+
 ## `mastra factory dev`
 
 Starts a development server for [Agent Builder](https://agent-builder.mastra.ai/) development. It uses the same dev runtime and flags as [`mastra dev`](#mastra-dev) and writes to the same `.mastra/output` directory.

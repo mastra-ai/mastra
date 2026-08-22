@@ -1,13 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import * as p from '@clack/prompts';
-// `mastra/internal/auth` is the CLI's internal barrel — drives the browser-auth
-// flow and reuses persisted credentials + org resolution rather than duplicating
-// them here.
-import type { PosthogAnalytics } from 'mastra/dist/analytics/index.js';
-import { fetchOrgs, getToken, loadCredentials, LoginCancelledError, resolveCurrentOrg } from 'mastra/internal/auth';
 import color from 'picocolors';
 import { x } from 'tinyexec';
+import { fetchOrgs } from '../auth/api.js';
+import { getToken, loadCredentials, LoginCancelledError } from '../auth/credentials.js';
+import { resolveCurrentOrg } from '../auth/orgs.js';
+import type { FactoryAnalytics } from './analytics.js';
 
 import { upsertEnvFile } from './env.js';
 import type { PlatformProject, ProjectRegion } from './platform.js';
@@ -19,12 +18,13 @@ import {
   PlatformApiError,
   waitForDatabaseReady,
 } from './platform.js';
+import { writeFactoryScaffold } from './scaffold.js';
 import { cloneTemplate, renameProject } from './utils/clone.js';
 import { detectPackageManager, getInstallArgs } from './utils/pm.js';
 
 export interface CreateArgs {
   projectName?: string;
-  template: string;
+  template?: string;
   /**
    * Skip the platform round-trip (auth, project, sk_ key, Neon). Useful for
    * offline scaffold testing. `.env` is left as-is from the template's
@@ -39,7 +39,7 @@ export interface CreateArgs {
    * equals the value. If no match, provisioning fails with a clear message.
    */
   org?: string;
-  analytics: PosthogAnalytics;
+  analytics: FactoryAnalytics;
 }
 
 interface PlatformProvisionResult {
@@ -87,6 +87,7 @@ export async function create(args: CreateArgs): Promise<void> {
   }
 
   const projectPath = path.resolve(projectName);
+  const projectDirectoryName = path.basename(projectPath);
   const packageManager = detectPackageManager();
 
   args.analytics.trackEvent('sf_create_started', {
@@ -94,12 +95,18 @@ export async function create(args: CreateArgs): Promise<void> {
     no_platform: Boolean(args.noPlatform),
   });
 
-  // ── Clone template ───────────────────────────────────────────────────────
+  // ── Scaffold project ─────────────────────────────────────────────────────
   const spinner = p.spinner();
-  spinner.start('Downloading the Mastra Factory template...');
+  spinner.start(
+    args.template ? 'Downloading the custom Factory template...' : 'Creating the Mastra Factory project...',
+  );
   try {
-    await cloneTemplate(args.template, projectPath);
-    await renameProject(projectPath, projectName);
+    if (args.template) {
+      await cloneTemplate(args.template, projectPath);
+      await renameProject(projectPath, projectDirectoryName);
+    } else {
+      writeFactoryScaffold(projectPath, projectDirectoryName);
+    }
     // Seed .env from the example. Platform-provisioning below rewrites the
     // handful of platform keys idempotently; other keys stay as-is so the
     // user can configure them from the web UI.
@@ -111,9 +118,9 @@ export async function create(args: CreateArgs): Promise<void> {
     } catch {
       // Best-effort on Unix; no-op or unsupported on Windows.
     }
-    spinner.stop('Template downloaded.');
+    spinner.stop(args.template ? 'Custom template downloaded.' : 'Factory project created.');
   } catch (err) {
-    spinner.stop('Template download failed.');
+    spinner.stop(args.template ? 'Custom template download failed.' : 'Factory project creation failed.');
     throw err;
   }
 
@@ -140,7 +147,7 @@ export async function create(args: CreateArgs): Promise<void> {
   if (!args.noPlatform) {
     try {
       platformResult = await runPlatformProvisioning({
-        projectName,
+        projectName: projectDirectoryName,
         projectPath,
         region: requestedRegion,
         org: args.org,
@@ -179,7 +186,7 @@ export async function create(args: CreateArgs): Promise<void> {
     try {
       await x('git', ['init', '-q'], { throwOnError: true, nodeOptions: { cwd: projectPath } });
       await x('git', ['add', '-A'], { throwOnError: true, nodeOptions: { cwd: projectPath } });
-      await x('git', ['commit', '-q', '-m', 'Initial commit from create-factory'], {
+      await x('git', ['commit', '-q', '-m', 'Initial commit from Mastra Factory'], {
         throwOnError: true,
         nodeOptions: { cwd: projectPath },
       });
@@ -224,7 +231,7 @@ export async function create(args: CreateArgs): Promise<void> {
   } else if (platformError) {
     lines.push(
       `${color.yellow('Platform provisioning failed:')} ${platformError}`,
-      `Any credentials that were minted before the failure have been written to ${color.cyan('.env')}. Re-run \`npx create factory\` after fixing, or fill in the rest manually from ${color.underline('https://platform.mastra.ai')}.`,
+      `Any credentials that were minted before the failure have been written to ${color.cyan('.env')}. Re-run \`mastra factory create\` after fixing, or fill in the rest manually from ${color.underline('https://platform.mastra.ai')}.`,
     );
   } else {
     lines.push('Open the Factory UI to finish setup (models, integrations, database).');
@@ -270,8 +277,8 @@ async function runPlatformProvisioning({
         p.cancel('Operation cancelled');
         process.exit(0);
       }
+      p.log.info('Signing in to Mastra…');
     }
-    p.log.info('Signing in to Mastra…');
     const token = await getToken(undefined, { skipOnInput: true });
 
     // 2. Org — `--org <id-or-name>` skips the picker; otherwise prompt every
@@ -317,7 +324,7 @@ async function runPlatformProvisioning({
       secretKey = await mintOrgApiKey({
         token,
         orgId,
-        keyName: `create-factory: ${projectName}`,
+        keyName: `mastra factory create: ${projectName}`,
       });
       keySpinner.stop('Platform API key created.');
     } catch (err) {
@@ -396,9 +403,12 @@ async function resolveOrgFromFlag(token: string, value: string): Promise<{ orgId
  * outside that, and clip length.
  */
 function sanitizeDatabaseName(projectName: string): string {
-  const cleaned = projectName.replace(/[^a-zA-Z0-9_-]/g, '-').replace(/^-+|-+$/g, '');
-  const truncated = (cleaned || 'factory').slice(0, 64);
-  return truncated;
+  const cleaned = projectName.replace(/[^a-zA-Z0-9_-]/g, '-');
+  let start = 0;
+  let end = cleaned.length;
+  while (cleaned[start] === '-') start++;
+  while (end > start && cleaned[end - 1] === '-') end--;
+  return (cleaned.slice(start, end) || 'factory').slice(0, 64);
 }
 
 /**
@@ -425,6 +435,6 @@ function ensureEnvGitignored(projectPath: string): void {
   const prefix = existing.length > 0 && !existing.endsWith('\n') ? '\n' : '';
   fs.writeFileSync(
     gitignorePath,
-    `${existing}${prefix}\n# Added by create-factory to protect platform credentials\n.env\n`,
+    `${existing}${prefix}\n# Added by Mastra Factory create to protect platform credentials\n.env\n`,
   );
 }

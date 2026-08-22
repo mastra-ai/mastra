@@ -10,6 +10,7 @@ export default defineConfig({
     'src/index.ts',
     'src/analytics/index.ts',
     'src/commands/create/create.ts',
+    'src/commands/factory/command.ts',
     'src/commands/experiment/runtime.ts',
     'src/internal/auth.ts',
   ],
@@ -32,6 +33,7 @@ export default defineConfig({
     });
     await copy(join('src', 'public', 'starter-files'), join('dist', 'starter-files'));
     await copy(join('src', 'public', 'templates'), join('dist', 'templates'));
+    await copy(join('src', 'commands', 'factory', 'generated', 'scaffold'), join('dist', 'generated', 'scaffold'));
     await copy(join(studioPath, 'dist'), join('dist', 'studio'));
     await copy(join(factoryUIPath, 'dist'), join('dist', 'factory'));
     await generateTypes(process.cwd());
