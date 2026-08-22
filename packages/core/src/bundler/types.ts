@@ -47,5 +47,11 @@ export type BundlerConfig = {
    */
   dynamicPackages?: string[];
 
+  /**
+   * Optional bundle lockfile copied beside the generated manifest before dependencies are installed.
+   * Relative paths are resolved from the project root and must use one of the supported lockfile basenames.
+   */
+  lockfile?: string;
+
   [key: symbol]: boolean | undefined;
 };

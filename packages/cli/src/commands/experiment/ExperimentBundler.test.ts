@@ -106,6 +106,23 @@ describe('ExperimentBundler', () => {
     expect(options).toEqual({ externals: true, dynamicPackages: ['dynamic-package'] });
   });
 
+  it('forwards explicit bundle install state through its cleanup override', async () => {
+    const { Bundler } = await import('@mastra/deployer/bundler');
+    const install = vi.spyOn(Bundler.prototype as any, 'installDependencies').mockResolvedValue(undefined);
+    const { ExperimentBundler } = await import('./ExperimentBundler');
+    const bundler = new ExperimentBundler();
+    const installState = {
+      packageManager: 'npm' as const,
+      frozen: true,
+      generateSecondaryNpmLockfile: false,
+      explicitLockfile: { sourcePath: '/project/package-lock.json', basename: 'package-lock.json' as const },
+    };
+
+    await (bundler as any).installDependencies('/output', '/project', { lodash: '^4.0.0' }, installState);
+
+    expect(install).toHaveBeenCalledWith('/output', '/project', { lodash: '^4.0.0' }, installState);
+  });
+
   it('removes pnpm install metadata that embeds build-machine paths', async () => {
     const { removePnpmInstallMetadata } = await import('./ExperimentBundler');
     const output = await createTemporaryDirectory('mastra-experiment-worker-');

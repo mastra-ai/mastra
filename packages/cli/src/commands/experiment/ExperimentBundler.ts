@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import type { Config } from '@mastra/core/mastra';
 import { FileService } from '@mastra/deployer/build';
 import { Bundler } from '@mastra/deployer/bundler';
+import type { BundleDependencyInstallState } from '@mastra/deployer/services';
 import { shouldSkipDotenvLoading } from '../utils.js';
 import {
   EXPERIMENT_DATASET_CANONICALIZATION_VERSION,
@@ -101,8 +102,9 @@ export class ExperimentBundler extends Bundler {
     outputDirectory: string,
     rootDir?: string,
     pnpmOverrides?: Record<string, string>,
+    installState?: BundleDependencyInstallState,
   ): Promise<void> {
-    await super.installDependencies(outputDirectory, rootDir, pnpmOverrides);
+    await super.installDependencies(outputDirectory, rootDir, pnpmOverrides, installState);
     await removePnpmInstallMetadata(join(outputDirectory, this.outputDir));
   }
 

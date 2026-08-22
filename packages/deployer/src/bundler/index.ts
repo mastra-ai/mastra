@@ -1,7 +1,7 @@
 import { execSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
-import { readFile, rm, stat, writeFile } from 'node:fs/promises';
-import { dirname, join, posix } from 'node:path';
+import { existsSync, realpathSync, statSync } from 'node:fs';
+import { copyFile, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { dirname, isAbsolute, join, posix, relative, resolve, sep } from 'node:path';
 import { MastraBundler } from '@mastra/core/bundler';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import type { Config } from '@mastra/core/mastra';
@@ -16,7 +16,12 @@ import { getBundlerOptions } from '../build/bundlerOptions';
 import type { BundlerOptions, ExternalDependencyInfo } from '../build/types';
 import type { BundlerPlatform } from '../build/utils';
 import { getPackageName, isBareModuleSpecifier, slash } from '../build/utils';
-import { DepsService } from '../services/deps';
+import {
+  DepsService,
+  type BundleDependencyInstallState,
+  type BundleLockfileName,
+  type PackageManager,
+} from '../services/deps';
 import { FileService } from '../services/fs';
 import {
   collectTransitiveWorkspaceDependencies,
@@ -28,6 +33,13 @@ export type { BundlerOptions, ExternalDependencyInfo } from '../build/types';
 export type { BundlerPlatform } from '../build/utils';
 
 export const IS_DEFAULT = Symbol('IS_DEFAULT');
+
+function isPathWithin(rootPath: string, candidatePath: string): boolean {
+  const relativePath = relative(rootPath, candidatePath);
+  return (
+    relativePath !== '' && relativePath !== '..' && !relativePath.startsWith(`..${sep}`) && !isAbsolute(relativePath)
+  );
+}
 
 const NPM_ALIAS_PREFIX = 'npm:';
 /** Characters a registry range or dist tag can contain. Protocols need `:`, git shorthand needs `/` or `#`. */
@@ -389,6 +401,7 @@ export abstract class Bundler extends MastraBundler {
     outputDirectory: string,
     rootDir = process.cwd(),
     pnpmOverrides?: Record<string, string>,
+    installState?: BundleDependencyInstallState,
   ) {
     const deps = new DepsService(rootDir);
     deps.__setLogger(this.logger);
@@ -397,7 +410,87 @@ export abstract class Bundler extends MastraBundler {
       dir: join(outputDirectory, this.outputDir),
       pnpmOverrides,
       pnpmNodeLinker: this.pnpmNodeLinker,
+      installState,
     });
+  }
+
+  protected getBundleDependencyPackageManager(rootDir: string, explicitManager?: PackageManager): PackageManager {
+    return explicitManager ?? new DepsService(rootDir).getPackageManager();
+  }
+
+  protected resolveBundleDependencyInstallState({
+    projectRoot,
+    lockfile,
+    hasPackedWorkspaceDependencies,
+  }: {
+    projectRoot: string;
+    lockfile?: string;
+    hasPackedWorkspaceDependencies: boolean;
+  }): BundleDependencyInstallState {
+    if (lockfile === undefined) {
+      const packageManager = this.getBundleDependencyPackageManager(projectRoot);
+      return {
+        packageManager,
+        frozen: false,
+        generateSecondaryNpmLockfile: packageManager === 'npm' && !hasPackedWorkspaceDependencies,
+      };
+    }
+
+    const basename = lockfile.split(/[\\/]/).pop();
+    const supportedManagers: Record<string, PackageManager> = {
+      'package-lock.json': 'npm',
+      'pnpm-lock.yaml': 'pnpm',
+      'yarn.lock': 'yarn',
+      'bun.lock': 'bun',
+    };
+    const explicitManager = basename ? supportedManagers[basename] : undefined;
+    if (!explicitManager) {
+      throw new Error(
+        `Unsupported bundle lockfile ${lockfile}; supported basenames are package-lock.json, pnpm-lock.yaml, yarn.lock, and bun.lock`,
+      );
+    }
+
+    const sourcePath = resolve(projectRoot, lockfile);
+    const projectRootPath = resolve(projectRoot);
+    if (!isPathWithin(projectRootPath, sourcePath)) {
+      throw new Error(`Bundle lockfile must stay within project root: ${sourcePath}`);
+    }
+
+    let canonicalProjectRootPath: string;
+    let canonicalSourcePath: string;
+    try {
+      canonicalProjectRootPath = realpathSync(projectRootPath);
+      canonicalSourcePath = realpathSync(sourcePath);
+    } catch {
+      throw new Error(`Bundle lockfile does not exist: ${sourcePath}`);
+    }
+    if (!isPathWithin(canonicalProjectRootPath, canonicalSourcePath)) {
+      throw new Error(`Bundle lockfile must stay within project root: ${sourcePath}`);
+    }
+    const sourceStats = statSync(canonicalSourcePath);
+    if (!sourceStats.isFile()) {
+      throw new Error(`Bundle lockfile must be a file: ${sourcePath}`);
+    }
+
+    const packageManager = this.getBundleDependencyPackageManager(projectRoot, explicitManager);
+
+    return {
+      packageManager,
+      explicitLockfile: { sourcePath: canonicalSourcePath, basename: basename as BundleLockfileName },
+      frozen: true,
+      generateSecondaryNpmLockfile: false,
+    };
+  }
+
+  private async copyBundleDependencyLockfile(
+    bundleDirectory: string,
+    state: BundleDependencyInstallState,
+  ): Promise<void> {
+    if (!state.explicitLockfile) {
+      return;
+    }
+
+    await copyFile(state.explicitLockfile.sourcePath, join(bundleDirectory, state.explicitLockfile.basename));
   }
 
   /**
@@ -687,7 +780,13 @@ export abstract class Bundler extends MastraBundler {
       });
     }
 
+    let bundleDependencyInstallState: BundleDependencyInstallState;
     try {
+      bundleDependencyInstallState = this.resolveBundleDependencyInstallState({
+        projectRoot,
+        lockfile: bundlerOptions.lockfile,
+        hasPackedWorkspaceDependencies: transitiveWorkspaceDependencies.usedWorkspacePackages.size > 0,
+      });
       await this.writePackageJson(
         join(outputDirectory, this.outputDir),
         dependenciesToInstall,
@@ -772,14 +871,20 @@ export const tools = [${toolsExports.join(', ')}]`,
       this.logger.info('Done copying .npmrc file');
 
       this.logger.info('Installing dependencies');
-      await this.installDependencies(outputDirectory, projectRoot, transitiveWorkspaceDependencies.resolutions);
+      await this.copyBundleDependencyLockfile(join(outputDirectory, this.outputDir), bundleDependencyInstallState);
+      await this.installDependencies(
+        outputDirectory,
+        projectRoot,
+        transitiveWorkspaceDependencies.resolutions,
+        bundleDependencyInstallState,
+      );
       this.logger.info('Done installing dependencies');
 
-      if (Object.keys(transitiveWorkspaceDependencies.resolutions).length === 0) {
+      if (bundleDependencyInstallState.generateSecondaryNpmLockfile) {
         this.logger.info('Generating package-lock.json for deploy');
         await this.generateNpmLockfile(join(outputDirectory, this.outputDir));
         this.logger.info('Done generating package-lock.json');
-      } else {
+      } else if (Object.keys(transitiveWorkspaceDependencies.resolutions).length > 0) {
         this.logger.warn(
           'Skipping package-lock.json generation because the output contains packed workspace dependencies',
         );
