@@ -1,0 +1,32 @@
+{
+  "name": "@internal/agent-sdk-base",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "scripts": {
+    "build:lib": "tsdown --silent --config tsdown.config.ts"
+  },
+  "dependencies": {
+    "@mastra/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@internal/types-builder": "workspace:*",
+    "@types/node": "22.20.1",
+    "tsdown": "0.22.9",
+    "typescript": "catalog:"
+  }
+}

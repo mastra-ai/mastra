@@ -6,15 +6,11 @@ export default defineConfig({
   format: ['esm', 'cjs'],
   fixedExtension: false,
   nodeProtocol: 'strip',
-  deps: {
-    alwaysBundle: ['@internal/agent-sdk-base'],
-    neverBundle: ['@cursor/sdk'],
-  },
   clean: true,
   dts: false,
   treeshake: true,
   sourcemap: true,
   onSuccess: async () => {
-    await generateTypes(process.cwd(), new Set(['@internal/agent-sdk-base']));
+    await generateTypes(process.cwd());
   },
 });

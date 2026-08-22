@@ -12,18 +12,6 @@ import type {
   SendOptions,
 } from '@cursor/sdk';
 
-import { Agent } from '@mastra/core/agent';
-import type { MessageListInput } from '@mastra/core/agent/message-list';
-import type { Mastra } from '@mastra/core/mastra';
-import { RequestContext } from '@mastra/core/request-context';
-import type {
-  ChunkType,
-  FullOutput,
-  LanguageModelUsage,
-  ProviderMetadata,
-  MastraModelOutput,
-} from '@mastra/core/stream';
-import { ChunkFrom } from '@mastra/core/stream';
 import {
   createMastraOutput,
   createNoopModel,
@@ -36,8 +24,21 @@ import {
   sumDefined,
   toFullOutput,
   toLanguageModelUsage,
-} from './utils';
-import type { SDKAgentRunOptions, SDKAgentTelemetry, SDKModelGenerateResult, V3Usage } from './utils';
+} from '@internal/agent-sdk-base';
+import type { SDKAgentTelemetry, SDKModelGenerateResult, V3Usage } from '@internal/agent-sdk-base';
+import { Agent } from '@mastra/core/agent';
+import type { MessageListInput } from '@mastra/core/agent/message-list';
+import type { Mastra } from '@mastra/core/mastra';
+import { RequestContext } from '@mastra/core/request-context';
+import type {
+  ChunkType,
+  FullOutput,
+  LanguageModelUsage,
+  ProviderMetadata,
+  MastraModelOutput,
+} from '@mastra/core/stream';
+import { ChunkFrom } from '@mastra/core/stream';
+import type { CursorSDKAgentRunOptions } from './utils';
 
 const PROVIDER = '@cursor/sdk';
 const MODEL_ID = 'cursor-agent-sdk';
@@ -142,7 +143,7 @@ export class CursorSDKAgent extends Agent {
 
   async generate<OUTPUT = undefined>(
     messages: MessageListInput,
-    options?: SDKAgentRunOptions<OUTPUT>,
+    options?: CursorSDKAgentRunOptions<OUTPUT>,
   ): Promise<FullOutput<OUTPUT>> {
     assertStructuredOutputUnsupported(options);
     const sdkAgent = await this.resolveCursorAgent();
@@ -152,7 +153,7 @@ export class CursorSDKAgent extends Agent {
   private async generateWithAgent<OUTPUT = undefined>(
     messages: MessageListInput,
     sdkAgent: SDKAgent,
-    options?: SDKAgentRunOptions<OUTPUT>,
+    options?: CursorSDKAgentRunOptions<OUTPUT>,
   ): Promise<FullOutput<OUTPUT>> {
     const prompt = promptToText(messages);
     const runId = options?.runId ?? randomUUID();
@@ -198,7 +199,7 @@ export class CursorSDKAgent extends Agent {
 
   async stream<OUTPUT = undefined>(
     messages: MessageListInput,
-    options?: SDKAgentRunOptions<OUTPUT>,
+    options?: CursorSDKAgentRunOptions<OUTPUT>,
   ): Promise<MastraModelOutput<OUTPUT>> {
     assertStructuredOutputUnsupported(options);
     const sdkAgent = await this.resolveCursorAgent();
@@ -208,7 +209,7 @@ export class CursorSDKAgent extends Agent {
   private async streamWithAgent<OUTPUT = undefined>(
     messages: MessageListInput,
     sdkAgent: SDKAgent,
-    options?: SDKAgentRunOptions<OUTPUT>,
+    options?: CursorSDKAgentRunOptions<OUTPUT>,
   ): Promise<MastraModelOutput<OUTPUT>> {
     const runId = options?.runId ?? randomUUID();
     const prompt = promptToText(messages);
@@ -247,7 +248,7 @@ export class CursorSDKAgent extends Agent {
 
   async resumeGenerate<OUTPUT = undefined>(
     resumeData: CursorSDKAgentResumeData,
-    options?: SDKAgentRunOptions<OUTPUT>,
+    options?: CursorSDKAgentRunOptions<OUTPUT>,
   ): Promise<FullOutput<OUTPUT>> {
     assertStructuredOutputUnsupported(options);
     const data = validateCursorResumeData(resumeData);
@@ -257,7 +258,7 @@ export class CursorSDKAgent extends Agent {
 
   async resumeStream<OUTPUT = undefined>(
     resumeData: CursorSDKAgentResumeData,
-    options?: SDKAgentRunOptions<OUTPUT>,
+    options?: CursorSDKAgentRunOptions<OUTPUT>,
   ): Promise<MastraModelOutput<OUTPUT>> {
     assertStructuredOutputUnsupported(options);
     const data = validateCursorResumeData(resumeData);
