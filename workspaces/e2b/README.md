@@ -29,6 +29,19 @@ const agent = new Agent({
 });
 ```
 
+### Sandbox Lifecycle
+
+Sandboxes pause when their timeout expires by default. To destroy an expired sandbox instead, pass an E2B lifecycle policy:
+
+```typescript
+const sandbox = new E2BSandbox({
+  timeout: 60 * 60 * 1000,
+  lifecycle: { onTimeout: 'kill' },
+});
+```
+
+Use kill-on-timeout when the sandbox is disposable and persistent data lives in an external filesystem. A later request will create a new sandbox.
+
 ### Mounting Cloud Storage
 
 E2B sandboxes can mount S3, GCS, or Azure Blob filesystems, making cloud storage accessible as a local directory inside the sandbox:
