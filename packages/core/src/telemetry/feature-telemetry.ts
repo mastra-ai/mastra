@@ -80,13 +80,14 @@ export function trackFeatureUsage(name: string, metadata?: Record<string, unknow
     }
 
     const { projectId, projectId2, distinctId, command, nodeEnv } = getServerTelemetryContext();
+    // Metadata is spread first so it can never override telemetry-controlled fields.
     captureTelemetryEvent(FEATURE_USAGE_EVENT, distinctId, {
+      ...metadata,
       feature_name: name,
       project_id: projectId,
       ...(projectId2 ? { project_id2: projectId2 } : {}),
       command,
       node_env: nodeEnv,
-      ...metadata,
     });
   } catch {
     // Feature telemetry must never affect server startup or runtime behavior.
