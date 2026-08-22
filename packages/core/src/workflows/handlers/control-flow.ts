@@ -1123,9 +1123,29 @@ export async function executeForeach(
       const stepExecResult = await executeForeachIteration(item, k, resumeToUse);
 
       engine.applyMutableContext(executionContext, stepExecResult.mutableContext);
-      Object.assign(stepResults, stepExecResult.stepResults);
 
       const result = stepExecResult.result as ForeachStepResult;
+
+      // The child step's failure is persisted before the outer foreach result
+      // is rebuilt. Keep the replay metadata on that persisted child result as
+      // well, otherwise timeTravel() cannot recover it from a failed snapshot.
+      if (result.status === 'failed') {
+        const failedResult = {
+          ...result,
+          suspendPayload: {
+            ...result.suspendPayload,
+            __workflow_meta: {
+              ...result.suspendPayload?.__workflow_meta,
+              foreachStepId: stepId,
+              foreachOutput: prevForeachOutput,
+              resumeLabels,
+            },
+          },
+        } as ForeachStepResult;
+        Object.assign(stepExecResult.stepResults, { [step.id]: failedResult });
+      }
+
+      Object.assign(stepResults, stepExecResult.stepResults);
 
       if (result.status !== 'success') {
         await handleNonSuccessResult(result, k);
@@ -1253,7 +1273,17 @@ export async function executeForeach(
     const execResults = {
       status: finalErrorResult.status,
       error: finalErrorResult.error,
-      suspendPayload: finalErrorResult.suspendPayload,
+      // Keep completed foreach iterations in the snapshot so time travel can
+      // resume from the failed iteration instead of replaying side effects.
+      suspendPayload: {
+        ...finalErrorResult.suspendPayload,
+        __workflow_meta: {
+          ...finalErrorResult.suspendPayload?.__workflow_meta,
+          foreachStepId: stepId,
+          foreachOutput: prevForeachOutput,
+          resumeLabels,
+        },
+      },
       suspendedAt: finalErrorResult.suspendedAt,
       endedAt: finalErrorResult.endedAt,
     };
