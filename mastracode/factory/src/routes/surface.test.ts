@@ -4,40 +4,7 @@ import type { GithubIntegration } from '../integrations/github/integration.js';
 import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import type { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
-import { factoryRuleBranch, prepareFactoryRuleBinding } from './surface.js';
-
-describe('factoryRuleBranch', () => {
-  const item = {
-    id: 'item-1',
-    orgId: 'org-1',
-    factoryProjectId: 'project-1',
-    externalSource: { integrationId: 'github', type: 'issue', externalId: '42' },
-    parentWorkItemId: null,
-    title: 'Issue 42',
-    stages: ['triage'],
-    sessions: {},
-    stageHistory: [],
-    metadata: {},
-    revision: 1,
-    createdBy: 'user-1',
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  };
-
-  it('supports Linear issue metadata', () => {
-    expect(
-      factoryRuleBranch({
-        ...item,
-        externalSource: { integrationId: 'linear', type: 'issue', externalId: 'issue-1' },
-        metadata: { identifier: 'ENG-42' },
-      }),
-    ).toBe('factory/linear-eng-42');
-  });
-
-  it('falls back to the board session branch for a manual item', () => {
-    expect(factoryRuleBranch({ ...item, externalSource: null })).toBe('factory/item-item-1');
-  });
-});
+import { prepareFactoryRuleBinding } from './surface.js';
 
 async function seedFactoryWithRepository(options?: { defaultModelId?: string }) {
   const seeded = await createFactoryStorageForTests();

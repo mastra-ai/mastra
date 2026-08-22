@@ -11,6 +11,7 @@ import type {
 import type { FactoryRunBindingRecord, WorkItemsStorage, WorkItemRow } from '../storage/domains/work-items/base.js';
 import { getFactorySessionCoordinates } from './binding-context.js';
 import { resolveFactoryToolRule } from './resolve.js';
+import { workItemSource } from './transition-service.js';
 import type { FactoryTransitionService } from './transition-service.js';
 import { isFactoryRuleStage } from './types.js';
 import type {
@@ -78,15 +79,6 @@ type PhaseSnapshotValue = {
   ruleSetVersion?: string;
   status: 'active' | 'none';
 };
-
-function workItemSource(item: WorkItemRow) {
-  if (!item.externalSource) return 'manual' as const;
-  if (item.externalSource.integrationId === 'linear') return 'linear-issue' as const;
-  // See transition-service: non-GitHub, non-Linear provenance (Slack threads)
-  // is a plain work item, not a GitHub issue.
-  if (item.externalSource.integrationId !== 'github') return 'manual' as const;
-  return item.externalSource.type === 'pull-request' ? ('github-pr' as const) : ('github-issue' as const);
-}
 
 function workItemSourceKey(item: WorkItemRow): string | null {
   const source = item.externalSource;
@@ -296,7 +288,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       return;
 
     const linkedText = linked.length
-      ? `\nLinked items: ${linked.map(candidate => `${workItemSource(candidate)} ${candidate.title}`).join('; ')}`
+      ? `\nLinked items: ${linked.map(candidate => `${workItemSource(candidate.externalSource)} ${candidate.title}`).join('; ')}`
       : '';
     const snapshotContents =
       `Factory ${board} phase: ${PHASE_LABELS[stage]} (${escapeText(stage)})\n` +
@@ -418,7 +410,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       ruleSetVersion: this.options.rules.version,
       item: {
         id: item.id,
-        source: workItemSource(item),
+        source: workItemSource(item.externalSource),
         sourceKey: workItemSourceKey(item),
         parentWorkItemId: item.parentWorkItemId,
         title: item.title,
