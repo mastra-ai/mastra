@@ -181,13 +181,19 @@
   },
   "changesets": [
     "automated-provider-registry-20260821-061854",
+    "duckdb-metadata-type-aware",
     "green-birds-knock",
     "long-apes-build",
+    "neat-corners-push",
     "petite-clouds-strive",
+    "pink-ends-travel",
+    "salty-things-refuse",
+    "scoring-predicate-filters",
     "scoring-sampling-trace-lineage",
     "short-icons-trade",
     "smooth-contextual-sidebars",
     "tall-moments-behave",
-    "tidy-seals-lock"
+    "tidy-seals-lock",
+    "workspace-shutdown-stop"
   ]
 }

@@ -187,6 +187,7 @@
     "vertex-anthropic/claude-sonnet-5",
     "vertex-openai/grok-4-20-non-reasoning",
     "vertex-openai/grok-4-20-reasoning",
+    "vertex-openai/grok-4-6",
     "xai/grok-4",
     "xai/grok-4-20-beta-0309-non-reasoning",
     "xai/grok-4-20-beta-0309-reasoning",
@@ -462,6 +463,7 @@
     "vertex-openai/glm-5",
     "vertex-openai/grok-4-20-non-reasoning",
     "vertex-openai/grok-4-20-reasoning",
+    "vertex-openai/grok-4-6",
     "vertex-openai/kimi-k2-thinking",
     "vertex-openai/qwen3-235b-a22b-instruct-2507",
     "vertex-openai/qwen3-coder-480b-a35b-instruct",
@@ -608,6 +610,7 @@
     "vertex-anthropic/claude-opus-4-7",
     "vertex-anthropic/claude-sonnet-4-5",
     "vertex-anthropic/claude-sonnet-4-6",
-    "vertex-anthropic/claude-sonnet-5"
+    "vertex-anthropic/claude-sonnet-5",
+    "vertex-openai/grok-4-6"
   ]
 }

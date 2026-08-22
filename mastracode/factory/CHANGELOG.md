@@ -1,5 +1,15 @@
 # @mastra/factory
 
+## 0.10.0-alpha.2
+
+### Patch Changes
+
+- add installable PWA metadata and device icons to the Factory UI ([#22051](https://github.com/mastra-ai/mastra/pull/22051))
+
+- Updated dependencies [[`e737014`](https://github.com/mastra-ai/mastra/commit/e737014e0fc7035759762bb5b48baef1d6c0f6a7), [`d6ce34a`](https://github.com/mastra-ai/mastra/commit/d6ce34aeceb06ddf3d595a1eed5cc74f481a46a1), [`e6f8450`](https://github.com/mastra-ai/mastra/commit/e6f845074d478527026b18d85031b23353e1d0a4)]:
+  - @mastra/core@1.62.0-alpha.2
+  - @mastra/code-sdk@1.4.1-alpha.2
+
 ## 0.10.0-alpha.1
 
 ### Patch Changes
