@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 vi.mock('@mastra/deployer/build', () => ({
   FileService: vi.fn().mockImplementation(() => ({
     getFirstExistingFile: vi.fn().mockImplementation((files: string[]) => files[0]),
+    getExistingFiles: vi.fn().mockImplementation((files: string[]) => files),
   })),
 }));
 
@@ -129,18 +130,18 @@ describe('MigrateBundler', () => {
   });
 
   describe('getEnvFiles', () => {
-    it('should return env files when no custom env file specified', async () => {
+    it('layers default dotenv files from base to development override', async () => {
       const bundler = new MigrateBundler();
       const envFiles = await bundler.getEnvFiles();
 
-      expect(Array.isArray(envFiles)).toBe(true);
+      expect(envFiles).toEqual(['.env', '.env.local', '.env.development']);
     });
 
-    it('should accept custom env file', async () => {
-      const bundler = new MigrateBundler('.env.production');
+    it('uses only an explicit env file', async () => {
+      const bundler = new MigrateBundler('.env.custom');
       const envFiles = await bundler.getEnvFiles();
 
-      expect(Array.isArray(envFiles)).toBe(true);
+      expect(envFiles).toEqual(['.env.custom']);
     });
 
     it('should return empty array when MASTRA_SKIP_DOTENV is set to "true"', async () => {
