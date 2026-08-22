@@ -6711,6 +6711,21 @@ export class Agent<
     return undefined;
   }
 
+  /**
+   * Exact stored version id the run was executing when it suspended, if any. Absent for
+   * code-defined agents and for snapshots written before version pinning existed.
+   */
+  #getSnapshotAgentVersionId(existingSnapshot: WorkflowRunState | null | undefined): string | undefined {
+    for (const key in existingSnapshot?.context) {
+      const step = existingSnapshot?.context[key];
+      if (step && step.status === 'suspended' && step.suspendPayload?.__agentVersionId) {
+        return step.suspendPayload.__agentVersionId;
+      }
+    }
+
+    return undefined;
+  }
+
   #getSuspendedToolCalls(existingSnapshot: WorkflowRunState | null | undefined): AgentRunToolCall[] {
     const toolCalls: AgentRunToolCall[] = [];
 
@@ -7016,14 +7031,33 @@ export class Agent<
       requestContext.set(MASTRA_VERSIONS_KEY, mergedVersions);
     }
 
+    // A run that suspended while executing a stored version must resume on *that* version.
+    // The exact id was persisted into the suspend payload, so prefer it over any status
+    // selector, which would otherwise re-resolve to whatever is published now. Kept as a
+    // local value: the caller's requestContext keeps its original selector so their later
+    // (new) runs still hot-switch.
+    const pinnedVersionId =
+      existingSnapshot &&
+      (() => {
+        const snapshotAgentId = this.#getSnapshotAgentId(existingSnapshot);
+        // Sub-agent suspensions carry the sub-agent's id/version; those must not pin the root.
+        if (snapshotAgentId && snapshotAgentId !== this.id) return undefined;
+        return this.#getSnapshotAgentVersionId(existingSnapshot);
+      })();
+
     // Resolve a versioned variant of *this* agent when a version override
     // selects it (by id or defaultStatus) and delegate execution to it. This
     // keeps direct programmatic calls consistent with HTTP routes and
     // sub-agent delegation, which already honor version overrides.
-    if (mergedVersions && !this.#storedVersionApplied && this.#mastra) {
+    if ((mergedVersions || pinnedVersionId) && !this.#storedVersionApplied && this.#mastra) {
+      const callSiteSelector = options.versions?.agents?.[this.id];
       const selfVersionSelector =
-        mergedVersions.agents?.[this.id] ??
-        (mergedVersions.defaultStatus ? { status: mergedVersions.defaultStatus } : undefined);
+        // An explicit exact version at the call site is an operator escape hatch and wins
+        // over the pin; status selectors and defaults do not.
+        (callSiteSelector && 'versionId' in callSiteSelector ? callSiteSelector : undefined) ??
+        (pinnedVersionId ? { versionId: pinnedVersionId } : undefined) ??
+        mergedVersions?.agents?.[this.id] ??
+        (mergedVersions?.defaultStatus ? { status: mergedVersions.defaultStatus } : undefined);
       if (selfVersionSelector) {
         try {
           const resolved = await this.#mastra.resolveVersionedAgent(this as unknown as Agent, selfVersionSelector);
@@ -7363,6 +7397,7 @@ export class Agent<
       toolCallConcurrency: options.toolCallConcurrency,
       resumeContext,
       agentId: this.id,
+      agentVersionId: this.toRawConfig()?.resolvedVersionId as string | undefined,
       agentName: this.name,
       toolCallId: options.toolCallId,
       workspace,
