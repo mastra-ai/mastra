@@ -170,7 +170,7 @@ const sandbox = new PlatformSandbox({
 await sandbox.start()
 ```
 
-The resolver doesn't run when `PlatformSandbox` reattaches to an existing `sandboxId`. It resolves the repository's public default-branch head at fresh-start time, then asks Platform to build and wait for the corresponding template. If the repository head can't be resolved or the provider build fails, sandbox creation continues with the provider's default template so runtime setup can perform a cold checkout. The lazy definition never includes credentials; private-repository template builds require a future secret transport capability.
+The resolver doesn't run when `PlatformSandbox` reattaches to an existing `sandboxId`. It resolves the repository's public default-branch head at fresh-start time, then asks Platform to build and wait for the corresponding template. If the repository head can't be resolved or the provider build fails, sandbox creation continues with the provider's default template so runtime setup can perform a cold checkout. The lazy definition never includes credentials. Private-repository template builds require a future secret transport capability.
 
 The opaque `templateId` is bound to the authenticated organization, project, environment, provider, and definition digest. `PlatformSandbox` requires the same `templateDefinition` with the handle. A handle from another tenant, environment, provider, or definition isn't usable.
 
