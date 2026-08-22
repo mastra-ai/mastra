@@ -11,3 +11,7 @@ pnpm --filter @mastra/memory simulate:ab -- \
   --arm-a ./arm-a.txt \
   --arm-b ./arm-b.txt
 ```
+
+`--cadence off` disables the driver's own curation calls entirely, so a replay records only
+the curations the memory package decided to run by itself — the mode you want when the
+question is *when* curation fires rather than what the curator produces.
