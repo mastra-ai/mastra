@@ -13,6 +13,7 @@ import { WorkflowLayout } from './domains/workflows/workflow-layout';
 import SignalsOverviewPage from './ee/signals';
 import { SignalsEntityCrumb } from './ee/signals/signals-entity-crumb';
 import { PostHogProvider } from './lib/analytics';
+import { isTraceReviewEnabled } from './lib/feature-flags';
 import { Link } from './lib/link';
 import { StudioIndexRedirect } from './lib/studio-index-redirect';
 import { AgentBuilderRoot } from './pages/agent-builder';
@@ -76,6 +77,8 @@ import { StudioSettingsPage } from './pages/settings';
 import { SignUp } from './pages/signup';
 import Templates from './pages/templates';
 import Template from './pages/templates/template';
+import ThreadsPage from './pages/threads';
+import ThreadPage from './pages/threads/thread';
 import AgentTool from './pages/tools/agent-tool';
 import Tool from './pages/tools/tool';
 import Traces from './pages/traces';
@@ -218,6 +221,7 @@ const MinimalRootLayout = () => {
 // Determine platform status at module level for route configuration
 const isMastraPlatform = Boolean(window.MASTRA_CLOUD_API_ENDPOINT);
 const isExperimentalFeatures = coreFeatures.has('datasets');
+const isTraceReview = isTraceReviewEnabled();
 
 const agentCmsChildRoutes = [
   { index: true, element: <CmsAgentInformationPage /> },
@@ -387,6 +391,12 @@ export const routes: RouteObject[] = [
           { id: 'signals-agent', Component: SignalsEntityCrumb, heading: 'Agent' },
         ]),
       },
+      ...(isTraceReview
+        ? [
+            { path: '/threads', element: <ThreadsPage />, handle: navHandle('/threads') },
+            { path: '/threads/:threadKey', element: <ThreadPage />, handle: navHandle('/threads') },
+          ]
+        : []),
       { path: '/traces', element: <Traces />, handle: navHandle('/traces') },
       {
         path: '/traces/:traceId',

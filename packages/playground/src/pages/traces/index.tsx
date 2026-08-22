@@ -10,6 +10,11 @@ import { NoTracesInfo } from '@mastra/playground-ui/domains/traces/components/no
 import { SpanDataPanelView } from '@mastra/playground-ui/domains/traces/components/span-data-panel-view';
 import { TraceColumnsMenu } from '@mastra/playground-ui/domains/traces/components/trace-columns-menu';
 import { TraceDataPanelView } from '@mastra/playground-ui/domains/traces/components/trace-data-panel-view';
+import { TraceReviewView } from '@mastra/playground-ui/domains/traces/components/trace-review-view';
+import type {
+  TraceReviewSelection,
+  TraceReviewTarget,
+} from '@mastra/playground-ui/domains/traces/components/trace-review-view';
 import { TracesErrorContent } from '@mastra/playground-ui/domains/traces/components/traces-error-content';
 import { TracesLayout } from '@mastra/playground-ui/domains/traces/components/traces-layout';
 import { TracesListView } from '@mastra/playground-ui/domains/traces/components/traces-list-view';
@@ -26,6 +31,7 @@ import { useTraceOrBranchSpans } from '@mastra/playground-ui/domains/traces/hook
 import { useTraceSpanNavigation } from '@mastra/playground-ui/domains/traces/hooks/use-trace-span-navigation';
 import { useTraceUrlState } from '@mastra/playground-ui/domains/traces/hooks/use-trace-url-state';
 import { useTraceUsage } from '@mastra/playground-ui/domains/traces/hooks/use-trace-usage';
+import { useTraceViewMode } from '@mastra/playground-ui/domains/traces/hooks/use-trace-view-mode';
 import { useTraces } from '@mastra/playground-ui/domains/traces/hooks/use-traces';
 import {
   buildTraceListFilters,
@@ -47,7 +53,10 @@ import { ScoreDataPanel } from '@/domains/traces/components/score-data-panel';
 import { SpanFeedbackList } from '@/domains/traces/components/span-feedback-list';
 import { SpanScoresList } from '@/domains/traces/components/span-scores-list';
 import { SpanScoring } from '@/domains/traces/components/span-scoring';
+import { TraceAnnotationComposer, TraceAnnotationList } from '@/domains/traces/components/trace-annotations';
+import { TraceReviewFeedback } from '@/domains/traces/components/trace-review-feedback';
 import { useTraceFeedback } from '@/domains/traces/hooks/use-trace-feedback';
+import { isTraceReviewEnabled } from '@/lib/feature-flags';
 import { Link } from '@/lib/link';
 
 type TracesPageProps = {
@@ -59,6 +68,15 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   const isScoped = !!scopedEntityId;
   const [searchParams, setSearchParams] = useSearchParams();
   const url = useTraceUrlState(searchParams, setSearchParams);
+  const traceReviewEnabled = isTraceReviewEnabled();
+  const { viewMode: storedViewMode, setViewMode } = useTraceViewMode();
+  const viewMode = traceReviewEnabled ? storedViewMode : 'advanced';
+  const [reviewTarget, setReviewTarget] = useState<TraceReviewTarget | undefined>();
+  const [pendingAnnotation, setPendingAnnotation] = useState<TraceReviewSelection | undefined>();
+  useEffect(() => {
+    setReviewTarget(undefined);
+    setPendingAnnotation(undefined);
+  }, [url.traceIdParam]);
 
   useEffect(() => {
     if (!scopedEntityId) return;
@@ -132,6 +150,13 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     anchorSpanId: url.listMode === 'branches' ? (url.anchorSpanIdParam ?? null) : null,
     listMode: url.listMode,
   });
+  const reviewRootSpan = anchorSpanId
+    ? lightSpans?.find(span => span.spanId === anchorSpanId)
+    : lightSpans?.find(span => span.parentSpanId == null);
+  const { data: reviewRootSpanData, isLoading: isLoadingReviewRootSpan } = useSpanDetail(
+    viewMode === 'review' ? url.traceIdParam : undefined,
+    viewMode === 'review' ? reviewRootSpan?.spanId : undefined,
+  );
   const { data: spanDetailData, isLoading: isLoadingSpanDetail } = useSpanDetail(
     url.traceIdParam ?? '',
     url.spanIdParam ?? '',
@@ -518,6 +543,40 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
               placement="traces-list"
               LinkComponent={Link}
               traceHref={`/traces/${url.traceIdParam}`}
+              viewMode={traceReviewEnabled ? viewMode : undefined}
+              onViewModeChange={traceReviewEnabled ? setViewMode : undefined}
+              reviewSlot={
+                !traceReviewEnabled ? undefined : (
+                  <TraceReviewView
+                    rootSpan={reviewRootSpanData?.span}
+                    spans={lightSpans ?? []}
+                    isLoading={isLoadingReviewRootSpan}
+                    onReviewTargetChange={setReviewTarget}
+                    onAnnotate={setPendingAnnotation}
+                    annotationsSlot={target => (
+                      <>
+                        <TraceAnnotationList feedbackData={feedbackData} target={target} />
+                        {pendingAnnotation?.target === target && url.traceIdParam && (
+                          <TraceAnnotationComposer
+                            traceId={url.traceIdParam}
+                            spanId={reviewRootSpan?.spanId}
+                            selection={pendingAnnotation}
+                            onDone={() => setPendingAnnotation(undefined)}
+                          />
+                        )}
+                      </>
+                    )}
+                    feedbackSlot={
+                      <TraceReviewFeedback
+                        traceId={url.traceIdParam}
+                        spanId={reviewRootSpan?.spanId}
+                        target={reviewTarget}
+                        onClearTarget={() => setReviewTarget(undefined)}
+                      />
+                    }
+                  />
+                )
+              }
             />
           ) : null
         }

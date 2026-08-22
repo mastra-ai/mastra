@@ -30,6 +30,7 @@ export type TraceDatePreset = 'all' | 'last-24h' | 'last-3d' | 'last-7d' | 'last
 
 /** Tab identifier for SpanDataPanelView. */
 export type SpanTab = 'details' | 'scoring' | 'feedback';
+export type TraceViewMode = 'review' | 'advanced';
 
 /** Canonical list of context field IDs used for trace filtering and value extraction */
 export const CONTEXT_FIELD_IDS = [

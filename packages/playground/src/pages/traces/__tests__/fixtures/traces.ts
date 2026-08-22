@@ -6,6 +6,7 @@ type ListTracesResponse = Awaited<ReturnType<MastraClient['listTraces']>>;
 type ListBranchesResponse = Awaited<ReturnType<MastraClient['listBranches']>>;
 type MetricBreakdownResponse = Awaited<ReturnType<MastraClient['getMetricBreakdown']>>;
 type GetTraceLightResponse = Awaited<ReturnType<MastraClient['getTraceLight']>>;
+type GetSpanResponse = Awaited<ReturnType<MastraClient['getSpan']>>;
 type GetBranchResponse = Awaited<ReturnType<MastraClient['getBranch']>>;
 type ListFeedbackResponse = Awaited<ReturnType<MastraClient['listFeedback']>>;
 
@@ -75,6 +76,15 @@ export const traceUsageBreakdown: MetricBreakdownResponse = {
 export const traceLightSpans: GetTraceLightResponse = {
   traceId: 'trace-a',
   spans: [{ ...trace, parentSpanId: null }],
+};
+
+export const traceRootSpan: GetSpanResponse = {
+  span: {
+    ...trace,
+    parentSpanId: null,
+    input: [{ role: 'user', content: 'A patient reports sudden chest pain.' }],
+    output: { text: 'The presentation requires urgent evaluation.' },
+  },
 };
 
 export const rootBranchSpans: GetBranchResponse = {

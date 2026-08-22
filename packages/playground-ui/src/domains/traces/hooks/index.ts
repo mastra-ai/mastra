@@ -15,6 +15,7 @@ export { useEntityNames } from './use-entity-names';
 export { useEnvironments } from './use-environments';
 export { useServiceNames } from './use-service-names';
 export { useTraceSpanNavigation } from './use-trace-span-navigation';
+export { useTraceViewMode } from './use-trace-view-mode';
 export { useTraceListNavigation } from './use-trace-list-navigation';
 export {
   useTraceUrlState,

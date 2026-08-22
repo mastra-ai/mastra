@@ -22,6 +22,56 @@ afterEach(() => {
   scrollIntoView.mockClear();
 });
 
+describe('TraceDataPanelView — review mode', () => {
+  describe('when readable review content is provided', () => {
+    it('shows the review content instead of the technical timeline', () => {
+      render(
+        <TraceDataPanelView
+          {...baseProps}
+          viewMode="review"
+          onViewModeChange={vi.fn()}
+          reviewSlot={<div>Readable clinical review</div>}
+        />,
+      );
+
+      expect(screen.getByText('Readable clinical review')).not.toBeNull();
+      expect(screen.queryByText('agent run')).toBeNull();
+    });
+
+    it('lets the user switch to the advanced trace', () => {
+      const onViewModeChange = vi.fn();
+      render(
+        <TraceDataPanelView
+          {...baseProps}
+          viewMode="review"
+          onViewModeChange={onViewModeChange}
+          reviewSlot={<div>Readable clinical review</div>}
+        />,
+      );
+
+      fireEvent.click(screen.getByRole('tab', { name: 'Advanced' }));
+
+      expect(onViewModeChange).toHaveBeenCalledWith('advanced');
+    });
+  });
+
+  describe('when advanced mode is selected', () => {
+    it('shows the technical timeline', () => {
+      render(
+        <TraceDataPanelView
+          {...baseProps}
+          viewMode="advanced"
+          onViewModeChange={vi.fn()}
+          reviewSlot={<div>Readable clinical review</div>}
+        />,
+      );
+
+      expect(screen.getByText('agent run')).not.toBeNull();
+      expect(screen.queryByText('Readable clinical review')).toBeNull();
+    });
+  });
+});
+
 describe('TraceDataPanelView — Add tool mocks to item', () => {
   it('fires onAddTraceMocksToItem with the traceId when the button is clicked', () => {
     const onAddTraceMocksToItem = vi.fn();
