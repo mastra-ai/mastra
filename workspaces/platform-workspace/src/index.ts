@@ -22,8 +22,14 @@ export {
   SandboxDestroyedError,
   type PlatformSandboxOptions,
   type PlatformSandboxNetworkIsolation,
+  type PlatformSandboxTemplate,
   type SandboxAddressRegistry,
 } from './sandbox.js';
+export {
+  createRepoTemplate,
+  type PlatformRepoTemplateOptions,
+  type PlatformRepoTemplateResolver,
+} from './repo-template.js';
 export { platformFilesystemProvider, platformSandboxProvider } from './provider.js';
 export {
   execViaPrivateNetwork,

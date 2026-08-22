@@ -155,6 +155,23 @@ await sandbox.start()
 
 `Template()` supports `runCmd`, `setWorkdir`, `setEnvs`, `aptInstall`, `pipInstall`, and `npmInstall`. Platform replays these operations for E2B or converts them to equivalent Railway template operations.
 
+For public GitHub repositories, `createRepoTemplate()` can resolve and build the commit-pinned definition lazily when `start()` needs a fresh sandbox:
+
+```typescript
+import { createRepoTemplate, PlatformSandbox } from '@mastra/platform-workspace'
+
+const sandbox = new PlatformSandbox({
+  environmentId: 'env_abc',
+  template: createRepoTemplate({
+    repoFullName: 'mastra-ai/mastra',
+    setupCommand: 'pnpm install --frozen-lockfile',
+  }),
+})
+await sandbox.start()
+```
+
+The resolver doesn't run when `PlatformSandbox` reattaches to an existing `sandboxId`. It resolves the repository's public default-branch head at fresh-start time, then asks Platform to build and wait for the corresponding template. If the repository head can't be resolved or the provider build fails, sandbox creation continues with the provider's default template so runtime setup can perform a cold checkout. The lazy definition never includes credentials; private-repository template builds require a future secret transport capability.
+
 The opaque `templateId` is bound to the authenticated organization, project, environment, provider, and definition digest. `PlatformSandbox` requires the same `templateDefinition` with the handle. A handle from another tenant, environment, provider, or definition isn't usable.
 
 :::warning
@@ -276,6 +293,13 @@ The `command` argument is a shell string and is concatenated verbatim into the r
     type: 'string',
     description:
       'Boot-only fallback checkpoint used when the primary recovery checkpoint for id has no stored state. Later snapshots continue writing to the checkpoint for id.',
+    isOptional: true,
+  },
+  {
+    name: 'template',
+    type: 'SerializedSandboxTemplate | (() => SerializedSandboxTemplate | undefined | Promise<SerializedSandboxTemplate | undefined>)',
+    description:
+      'Providerless definition or lazy resolver built before a fresh sandbox provision. Resolution and build failures fall back to the provider default. Cannot be combined with templateId or templateDefinition.',
     isOptional: true,
   },
   {

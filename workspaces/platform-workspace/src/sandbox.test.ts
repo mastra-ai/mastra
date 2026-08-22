@@ -189,7 +189,142 @@ describe('PlatformSandbox', () => {
     expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v1/railway/projects/proj_123/sandbox');
   });
 
-  it('requires templateId and templateDefinition together', () => {
+  it('resolves, builds, and waits for a lazy template only when a fresh sandbox starts', async () => {
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const definition = Template().setWorkdir('/workspace/repo').runCmd('pnpm install').toJSON();
+    const resolveTemplate = vi.fn().mockResolvedValue(definition);
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ templateId: 'opaque-template-handle', status: 'building' }, { status: 202 }))
+      .mockResolvedValueOnce(json({ templateId: 'opaque-template-handle', status: 'ready' }))
+      .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }));
+    const sandbox = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      sandboxProvider: 'e2b',
+      environmentId: 'env_123',
+      template: resolveTemplate,
+      fetch: fetchMock,
+    });
+
+    expect(resolveTemplate).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    await sandbox._start();
+
+    expect(resolveTemplate).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v1/e2b/projects/proj_123/templates');
+    expect(JSON.parse(fetchMock.mock.calls[0]![1].body as string)).toEqual({
+      environmentId: 'env_123',
+      definition,
+    });
+    expect(String(fetchMock.mock.calls[1]![0])).toBe(
+      'https://proxy.test/v1/e2b/projects/proj_123/templates/opaque-template-handle?environmentId=env_123',
+    );
+    expect(JSON.parse(fetchMock.mock.calls[2]![1].body as string)).toMatchObject({
+      templateId: 'opaque-template-handle',
+      templateDefinition: definition,
+    });
+  });
+
+  it('reuses the ready template handle when a dead provider sandbox requires fresh provisioning', async () => {
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const definition = Template().runCmd('pnpm install').toJSON();
+    const resolveTemplate = vi.fn().mockResolvedValue(definition);
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ templateId: 'opaque-template-handle', status: 'ready' }))
+      .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+      .mockResolvedValueOnce(json({ error: { message: 'not found', type: 'not_found' } }, { status: 404 }))
+      .mockResolvedValueOnce(json({ id: 'sbx_2', createdAt: '2026-06-26T00:01:00.000Z' }));
+    const sandbox = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      sandboxProvider: 'e2b',
+      environmentId: 'env_123',
+      template: resolveTemplate,
+      fetch: fetchMock,
+    });
+
+    await sandbox._start();
+    sandbox.status = 'stopped';
+    await sandbox._start();
+
+    expect(resolveTemplate).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(String(fetchMock.mock.calls[0]![0])).toContain('/templates');
+    expect(String(fetchMock.mock.calls[2]![0])).toContain('/sandbox/sbx_1');
+    expect(JSON.parse(fetchMock.mock.calls[3]![1].body as string)).toMatchObject({
+      templateId: 'opaque-template-handle',
+      templateDefinition: definition,
+    });
+  });
+
+  it('does not resolve a lazy template when reattaching to an existing sandbox', async () => {
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const resolveTemplate = vi.fn().mockResolvedValue(Template().runCmd('pnpm install').toJSON());
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ id: 'sbx_existing', createdAt: '2026-06-26T00:00:00.000Z', destroyedAt: null }));
+    const sandbox = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      sandboxId: 'sbx_existing',
+      template: resolveTemplate,
+      fetch: fetchMock,
+    });
+
+    await sandbox._start();
+
+    expect(resolveTemplate).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0]![0])).toBe(
+      'https://proxy.test/v1/railway/projects/proj_123/sandbox/sbx_existing',
+    );
+  });
+
+  it('falls back to ordinary sandbox creation when a lazy template cannot be resolved', async () => {
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const resolveTemplate = vi.fn().mockResolvedValue(undefined);
+    const fetchMock = vi.fn().mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }));
+    const sandbox = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      template: resolveTemplate,
+      fetch: fetchMock,
+    });
+
+    await sandbox._start();
+
+    expect(resolveTemplate).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(fetchMock.mock.calls[0]![1].body as string)).not.toHaveProperty('templateId');
+  });
+
+  it('falls back to ordinary sandbox creation when a lazy template build fails', async () => {
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const definition = Template().runCmd('pnpm install').toJSON();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ templateId: 'failed-template', status: 'failed', error: 'clone failed' }))
+      .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }));
+    const sandbox = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      template: () => definition,
+      fetch: fetchMock,
+    });
+
+    await sandbox._start();
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(fetchMock.mock.calls[1]![1].body as string)).not.toHaveProperty('templateId');
+  });
+
+  it('requires templateId and templateDefinition together and rejects a second lazy template source', () => {
     const options = { accessToken: 'sk_test', projectId: 'proj_123', environmentId: 'env_123' };
     expect(() => new PlatformSandbox({ ...options, templateId: 'opaque-template-handle' })).toThrow(
       'templateId and templateDefinition must be provided together',
@@ -197,6 +332,15 @@ describe('PlatformSandbox', () => {
     expect(() => new PlatformSandbox({ ...options, templateDefinition: Template().runCmd('true').toJSON() })).toThrow(
       'templateId and templateDefinition must be provided together',
     );
+    expect(
+      () =>
+        new PlatformSandbox({
+          ...options,
+          templateId: 'opaque-template-handle',
+          templateDefinition: Template().runCmd('true').toJSON(),
+          template: () => Template().runCmd('false').toJSON(),
+        }),
+    ).toThrow('template cannot be combined with templateId and templateDefinition');
   });
 
   it('uses E2B direct exec for E2B leases instead of the Railway WebSocket protocol', async () => {

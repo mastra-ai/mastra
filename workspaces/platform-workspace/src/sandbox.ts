@@ -27,8 +27,14 @@ import type { E2BExecRunner } from './e2b-exec.js';
 import { execViaE2BLease } from './e2b-exec.js';
 import type { PrivateNetExecOptions, PrivateNetExecResult, PrivateNetFetch } from './private-net-exec.js';
 import { execViaPrivateNetwork, PrivateNetExecHttpError } from './private-net-exec.js';
+import type { PlatformTemplateBuild } from './templates.js';
+import { PlatformTemplateBuildError, PlatformTemplateClient } from './templates.js';
 
 export type PlatformSandboxNetworkIsolation = 'ISOLATED' | 'PRIVATE';
+
+export type PlatformSandboxTemplate =
+  | SerializedSandboxTemplate
+  | (() => SerializedSandboxTemplate | undefined | Promise<SerializedSandboxTemplate | undefined>);
 
 /**
  * In-process `sandboxId → instanceUrl` map that lets
@@ -64,6 +70,13 @@ export interface PlatformSandboxOptions extends Omit<MastraSandboxOptions, 'proc
   templateId?: string;
   /** Serialized non-secret template definition bound to templateId. */
   templateDefinition?: SerializedSandboxTemplate;
+  /**
+   * Serializable template definition, or a lazy resolver for one. The resolver
+   * runs only when start() must provision a fresh sandbox; Platform builds and
+   * waits for the template before creating the sandbox. Resolution/build
+   * failures fall back to the provider's ordinary default template.
+   */
+  template?: PlatformSandboxTemplate;
   idleTimeoutMinutes?: number;
   networkIsolation?: PlatformSandboxNetworkIsolation;
   env?: Record<string, string>;
@@ -362,8 +375,10 @@ export class PlatformSandbox extends MastraSandbox {
   private readonly _environmentId: string;
   private _sandboxId?: string;
   private readonly _seedCheckpointName?: string;
-  private readonly _templateId?: string;
-  private readonly _templateDefinition?: SerializedSandboxTemplate;
+  private _templateId?: string;
+  private _templateDefinition?: SerializedSandboxTemplate;
+  private readonly _template?: PlatformSandboxTemplate;
+  private _templateBuildInFlight?: Promise<void>;
   private readonly _idleTimeoutMinutes?: number;
   private readonly _networkIsolation?: PlatformSandboxNetworkIsolation;
   private readonly _env: Record<string, string>;
@@ -451,8 +466,17 @@ export class PlatformSandbox extends MastraSandbox {
     if ((options.templateId === undefined) !== (options.templateDefinition === undefined)) {
       throw new Error('templateId and templateDefinition must be provided together');
     }
+    if (options.template !== undefined && options.templateId !== undefined) {
+      throw new Error('template cannot be combined with templateId and templateDefinition');
+    }
     this._templateId = options.templateId;
     this._templateDefinition = options.templateDefinition ? structuredClone(options.templateDefinition) : undefined;
+    this._template =
+      typeof options.template === 'function'
+        ? options.template
+        : options.template
+          ? structuredClone(options.template)
+          : undefined;
     this._idleTimeoutMinutes = options.idleTimeoutMinutes;
     this._networkIsolation = options.networkIsolation;
     this._env = options.env ?? {};
@@ -508,6 +532,7 @@ export class PlatformSandbox extends MastraSandbox {
       ...(seedCheckpointName !== undefined && { seedCheckpointName }),
       ...(this._templateId !== undefined && { templateId: this._templateId }),
       ...(this._templateDefinition !== undefined && { templateDefinition: structuredClone(this._templateDefinition) }),
+      ...(this._templateId === undefined && this._template !== undefined && { template: this._template }),
       idleTimeoutMinutes: options.idleTimeoutMinutes ?? this._idleTimeoutMinutes,
       ...(this._networkIsolation !== undefined && { networkIsolation: this._networkIsolation }),
       env: options.env ?? this._env,
@@ -563,6 +588,8 @@ export class PlatformSandbox extends MastraSandbox {
 
     if (!this._environmentId) throw new Error('environmentId is required');
 
+    await this._prepareLazyTemplate();
+
     const body = JSON.stringify({
       // Sent so the platform can associate the provisioned resource with a
       // caller-stable identifier (used for opt-in checkpoint recovery). The
@@ -609,6 +636,49 @@ export class PlatformSandbox extends MastraSandbox {
     this._populateAddressFromResponse(json);
     this._logStartComplete(json.id, startedAt, requestMs, 'provision');
     return { outcome: 'created' };
+  }
+
+  private async _prepareLazyTemplate(): Promise<void> {
+    if (this._templateId !== undefined || this._template === undefined) return;
+    if (!this._templateBuildInFlight) {
+      const attempt = this._buildLazyTemplate();
+      this._templateBuildInFlight = attempt.finally(() => {
+        this._templateBuildInFlight = undefined;
+      });
+    }
+    await this._templateBuildInFlight;
+  }
+
+  private async _buildLazyTemplate(): Promise<void> {
+    try {
+      const resolved = typeof this._template === 'function' ? await this._template() : this._template;
+      if (!resolved) return;
+      const definition = structuredClone(resolved);
+      const templates = new PlatformTemplateClient({
+        accessToken: this._client.accessToken,
+        projectId: this._client.projectId,
+        sandboxProvider: this._client.sandboxProvider,
+        actingUserId: this._client.actingUserId,
+        sessionId: this._client.sessionId,
+        threadId: this._client.threadId,
+        fetch: this._client.fetch,
+      });
+      let template: PlatformTemplateBuild = await templates.build({
+        environmentId: this._environmentId,
+        definition,
+      });
+      if (template.status === 'failed') throw new PlatformTemplateBuildError(template);
+      if (template.status !== 'ready') {
+        template = await templates.waitUntilReady({
+          environmentId: this._environmentId,
+          templateId: template.templateId,
+        });
+      }
+      this._templateId = template.templateId;
+      this._templateDefinition = definition;
+    } catch (error) {
+      this.logger.warn(`Platform sandbox template build failed; using provider default template: ${String(error)}`);
+    }
   }
 
   /**
