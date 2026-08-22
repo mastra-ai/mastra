@@ -129,6 +129,10 @@ export function createMapResultsStep<OUTPUT = undefined>({
       requestContext,
       messageList,
       onStepFinish: async (props: any) => {
+        // Completed-step output is already represented in MessageList. Only track text from the
+        // current in-flight step so an abort cannot synthesize a duplicate of an older step.
+        streamedText = '';
+
         // When OM is enabled saving per step corrupts things because OM handles its own saving
         const shouldSavePerStep = options.savePerStep && !memoryConfig?.observationalMemory;
         if (shouldSavePerStep && !memoryConfig?.readOnly) {
@@ -395,6 +399,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
                         content: [{ type: 'text', text: partialText }],
                       },
                       'response',
+                      { merge: false },
                     );
                   }
 

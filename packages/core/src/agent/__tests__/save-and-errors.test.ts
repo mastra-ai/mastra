@@ -1823,7 +1823,9 @@ describe('message persistence across completed steps', () => {
   it('should persist messages from completed steps when stream is aborted', async () => {
     let doStreamCallCount = 0;
 
-    // Model that produces a tool call on first invocation, then text on second
+    // Cancellation cannot erase submitted history or completed tool calls/results: they are
+    // historical facts, and the tool may already have caused an irreversible external side effect.
+    // The repeated text also proves the bounded in-flight response is not deduplicated against an older step.
     const toolCallModel = new MockLanguageModelV2({
       doStream: async () => {
         doStreamCallCount++;
@@ -1832,6 +1834,9 @@ describe('message persistence across completed steps', () => {
             stream: convertArrayToReadableStream([
               { type: 'stream-start', warnings: [] },
               { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-start', id: 'text-0' },
+              { type: 'text-delta', id: 'text-0', delta: 'Response after tool' },
+              { type: 'text-end', id: 'text-0' },
               {
                 type: 'tool-call',
                 toolCallId: 'call-1',
@@ -1903,7 +1908,9 @@ describe('message persistence across completed steps', () => {
       abortSignal: abortController.signal,
       onStepFinish: async () => {
         stepFinishCount++;
-        if (stepFinishCount === 1) {
+      },
+      onChunk: async chunk => {
+        if (doStreamCallCount === 2 && chunk.type === 'text-delta') {
           abortController.abort();
         }
       },
@@ -1924,8 +1931,8 @@ describe('message persistence across completed steps', () => {
       threadId: 'thread-save-per-step-abort',
       resourceId: 'resource-save-per-step-abort',
     });
-    expect(recalled.messages.map(message => message.role)).toEqual(['user', 'assistant']);
-    expect(new Set(recalled.messages.map(message => message.id)).size).toBe(2);
+    expect(recalled.messages.map(message => message.role)).toEqual(['user', 'assistant', 'assistant']);
+    expect(new Set(recalled.messages.map(message => message.id)).size).toBe(3);
     expect(persistedBatches).toHaveLength(1);
     expect(persistedBatches[0]?.map(message => message.id)).toEqual(recalled.messages.map(message => message.id));
 
@@ -1942,6 +1949,12 @@ describe('message persistence across completed steps', () => {
         result: { output: 'hello' },
       },
     });
+    expect(
+      recalled.messages
+        .flatMap(message => message.content.parts ?? [])
+        .filter(part => part.type === 'text')
+        .map(part => part.text),
+    ).toEqual(['test message', 'Response after tool', 'Response after tool']);
   });
 });
 
