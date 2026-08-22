@@ -2,7 +2,7 @@ import { Container } from '@earendil-works/pi-tui';
 import stripAnsi from 'strip-ansi';
 import { describe, expect, it, vi } from 'vitest';
 
-import { showFormattedError } from './display.js';
+import { showError, showFormattedError, showInfo } from './display.js';
 import type { TUIState } from './state.js';
 
 function createState(): TUIState {
@@ -45,4 +45,25 @@ describe('showFormattedError', () => {
 
     expect(renderedText(state)).toContain('retry 1/10 in 0.5s');
   });
+});
+
+describe('display message ordering', () => {
+  it.each(['activeInlineQuestion', 'activeInlinePlanApproval'] as const)(
+    'keeps %s at the end of the chat while background messages arrive',
+    activePromptKey => {
+      const state = createState();
+      const activePrompt = new Container();
+      state.chatContainer.addChild(activePrompt);
+      (state as unknown as Record<string, unknown>)[activePromptKey] = activePrompt;
+
+      showInfo(state, 'Background info');
+      showError(state, 'Background failure');
+      showFormattedError(state, new Error('Formatted background failure'));
+
+      expect(state.chatContainer.children.at(-1)).toBe(activePrompt);
+      expect(renderedText(state)).toContain('Background info');
+      expect(renderedText(state)).toContain('Background failure');
+      expect(renderedText(state)).toContain('Formatted background failure');
+    },
+  );
 });

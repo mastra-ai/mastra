@@ -27,15 +27,31 @@ class InfoMessageComponent extends Container {
   }
 }
 
+function insertDisplayMessage(state: TUIState, component: InfoMessageComponent): void {
+  const children = state.chatContainer.children;
+  let insertIndex = children.length;
+
+  for (const activePrompt of [state.activeInlineQuestion, state.activeInlinePlanApproval]) {
+    if (!activePrompt) continue;
+
+    const activePromptIndex = children.indexOf(activePrompt);
+    if (activePromptIndex >= 0) {
+      insertIndex = Math.min(insertIndex, activePromptIndex);
+    }
+  }
+
+  insertChatComponentWithBoundarySpacing(state.chatContainer, component, insertIndex);
+}
+
 export function showError(state: TUIState, message: string): void {
   const component = new InfoMessageComponent([new Text(theme.fg('error', `Error: ${message}`), 1, 0)]);
-  insertChatComponentWithBoundarySpacing(state.chatContainer, component);
+  insertDisplayMessage(state, component);
   state.ui.requestRender();
 }
 
 export function showInfo(state: TUIState, message: string): void {
   const component = new InfoMessageComponent([new Text(theme.fg('muted', message), 1, 0)]);
-  insertChatComponentWithBoundarySpacing(state.chatContainer, component);
+  insertDisplayMessage(state, component);
   state.ui.requestRender();
 }
 
@@ -85,7 +101,7 @@ export function showFormattedError(
   }
 
   const component = new InfoMessageComponent(lines);
-  insertChatComponentWithBoundarySpacing(state.chatContainer, component);
+  insertDisplayMessage(state, component);
   state.ui.requestRender();
 }
 
