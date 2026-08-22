@@ -14,6 +14,18 @@ const JsonCodeBlock = ({ value, testId }: { value: unknown; testId: string }) =>
   </div>
 );
 
+/** Provider-executed tools (OpenAI `web_search`, `mcp`, `image_generation`…) declare an empty input schema. */
+const argumentsSlot = (args: ToolBadgeProps['args']) => {
+  try {
+    const { __mastraMetadata: _, _background, ...formattedArgs } = typeof args === 'object' ? args : JSON.parse(args);
+    if (Object.keys(formattedArgs).length === 0) return null;
+    return <JsonCodeBlock value={formattedArgs} testId="tool-args" />;
+  } catch {
+    if (typeof args !== 'string' || !args) return null;
+    return <pre className="bg-surface4 overflow-x-auto rounded-md p-4 whitespace-pre">{args}</pre>;
+  }
+};
+
 export interface ToolBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCalled'> {
   toolName: string;
   args: Record<string, unknown> | string;
@@ -38,14 +50,7 @@ export const ToolBadge = ({
   toolCalled: toolCalledProp,
   withoutArgs,
 }: ToolBadgeProps) => {
-  let argSlot = null;
-
-  try {
-    const { __mastraMetadata: _, _background, ...formattedArgs } = typeof args === 'object' ? args : JSON.parse(args);
-    argSlot = <JsonCodeBlock value={formattedArgs} testId="tool-args" />;
-  } catch {
-    argSlot = <pre className="bg-surface4 overflow-x-auto rounded-md p-4 whitespace-pre">{args as string}</pre>;
-  }
+  const argSlot = argumentsSlot(args);
 
   let resultSlot =
     typeof result === 'string' ? (
@@ -91,7 +96,7 @@ export const ToolBadge = ({
       initialCollapsed={!!!(toolApprovalMetadata ?? suspendPayload)}
     >
       <div className="space-y-4">
-        {withoutArgs ? null : (
+        {withoutArgs || !argSlot ? null : (
           <div>
             <p className="pb-2 font-medium">Tool arguments</p>
             {argSlot}

@@ -8,6 +8,12 @@ import { Box, Spacer, Text, visibleWidth } from '@earendil-works/pi-tui';
 import type { TUI } from '@earendil-works/pi-tui';
 import { MC_TOOLS } from '@mastra/code-sdk/tool-names';
 import type { TaskItemInput } from '@mastra/core/signals';
+import {
+  isWebSearchToolName,
+  webSearchAction,
+  webSearchLinks,
+  webSearchTarget,
+} from '@mastra/core/tools/provider-web-search';
 import chalk from 'chalk';
 import { highlight } from 'cli-highlight';
 import type { Theme as HighlightTheme } from 'cli-highlight';
@@ -138,9 +144,10 @@ function fileLink(displayText: string, filePath: string, line?: number): string 
   return `\x1b]8;;file://${absPath}${lineFragment}\x07${displayText}\x1b]8;;\x07`;
 }
 
-/** Check if a tool name is a web search provider tool (e.g. web_search, web_search_20250305) */
-function isWebSearchTool(name: string): boolean {
-  return name === 'web_search' || /^web_search_\d+$/.test(name);
+function withoutEncryptedContent(item: unknown): unknown {
+  if (typeof item !== 'object' || item === null) return item;
+  const { encryptedContent, ...rest } = item as Record<string, unknown>;
+  return rest;
 }
 
 function isBrowserTool(name: string): boolean {
@@ -425,7 +432,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
         this.renderTaskWriteEnhanced();
         break;
       default:
-        if (isWebSearchTool(this.toolName)) {
+        if (isWebSearchToolName(this.toolName)) {
           this.renderWebSearchEnhanced();
         } else {
           this.renderGenericToolEnhanced();
@@ -752,7 +759,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
 
   private getQuietActivePreview(): string {
     if (this.isErrorResult()) return this.formatQuietErrorPreview();
-    if (isWebSearchTool(this.toolName)) return this.formatQuietWebSearchPreview();
+    if (isWebSearchToolName(this.toolName)) return this.formatQuietWebSearchPreview();
     if (isBrowserTool(this.toolName)) return this.formatQuietBrowserPreview();
     if (isSkillTool(this.toolName)) return this.formatQuietSkillPreview();
     if (this.toolName === MC_TOOLS.GET_PROCESS_OUTPUT) return this.formatQuietProcessOutputPreview();
@@ -1092,7 +1099,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   }
 
   private getCompactToolSummary(): string {
-    if (isWebSearchTool(this.toolName)) return this.formatWebSearchSummary();
+    if (isWebSearchToolName(this.toolName)) return this.formatWebSearchSummary();
     if (isBrowserTool(this.toolName)) return this.formatBrowserSummary();
     if (isSkillTool(this.toolName)) return this.formatSkillSummary();
 
@@ -1128,7 +1135,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   }
 
   private getCompactToolLabel(): string {
-    if (isWebSearchTool(this.toolName)) return 'web';
+    if (isWebSearchToolName(this.toolName)) return 'web';
 
     switch (this.toolName) {
       case MC_TOOLS.EXECUTE_COMMAND:
@@ -1197,10 +1204,26 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   }
 
   private formatWebSearchSummary(): string {
+    const detail = this.webSearchDetail();
+    return detail ? `"${detail}"` : '';
+  }
+
+  /** A provider-run search carries no input, so what it did is read back out of the result. */
+  private webSearchDetail(): string {
     const argsObj = this.args as Record<string, unknown> | undefined;
-    const action = argsObj?.action as Record<string, unknown> | undefined;
-    const query = argsObj?.query ? String(argsObj.query) : action?.query ? String(action.query) : '';
-    return query ? `"${query}"` : '';
+    if (argsObj?.query) return String(argsObj.query);
+
+    const action = webSearchAction(this.args) ?? webSearchAction(this.parsedWebSearchResult());
+    return action ? (webSearchTarget(action) ?? '') : '';
+  }
+
+  private parsedWebSearchResult(): unknown {
+    if (!this.result) return undefined;
+    try {
+      return JSON.parse(this.getFormattedOutput());
+    } catch {
+      return undefined;
+    }
   }
 
   private formatBrowserSummary(): string {
@@ -2283,19 +2306,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   }
 
   private renderWebSearchEnhanced(): void {
-    const argsObj = this.args as Record<string, unknown> | undefined;
-    const action = argsObj?.action as Record<string, unknown> | undefined;
-    let query = argsObj?.query ? String(argsObj.query) : action?.query ? String(action.query) : '';
-    // Fallback: extract query from result content (OpenAI format: { action: { query } })
-    if (!query && this.result) {
-      try {
-        const raw = this.getFormattedOutput();
-        const parsed = JSON.parse(raw);
-        if (parsed?.action?.query) query = String(parsed.action.query);
-      } catch {
-        /* ignore */
-      }
-    }
+    const query = this.webSearchDetail();
     const status = this.getStatusIndicator();
 
     const queryDisplay = query ? ` ${theme.fg('toolArgs', `"${query}"`)}` : '';
@@ -2357,69 +2368,29 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     }
   }
 
-  /**
-   * Format web search results as a clean list of titles + URLs.
-   * Handles both Anthropic provider results (JSON array with encryptedContent)
-   * and Tavily results (markdown-formatted text).
-   */
+  /** Tavily answers with ready-made markdown; the provider tools answer with a payload to read. */
   private formatWebSearchResults(): string {
     const raw = this.getFormattedOutput();
     if (!raw) return '';
 
-    // Try to parse as JSON
+    let parsed: unknown;
     try {
-      const parsed = JSON.parse(raw);
-
-      // Anthropic provider format: JSON array of { url, title, pageAge, ... }
-      if (Array.isArray(parsed)) {
-        const lines: string[] = [];
-        for (const item of parsed) {
-          if (typeof item !== 'object' || item === null) continue;
-          const url = typeof item.url === 'string' ? item.url : '';
-          if (!url) continue;
-          const title = typeof item.title === 'string' && item.title ? item.title : '';
-          const age = typeof item.pageAge === 'string' && item.pageAge ? theme.fg('muted', ` (${item.pageAge})`) : '';
-          if (title) {
-            lines.push(`  ${theme.fg('toolOutput', title)}${age}`);
-            lines.push(`  ${theme.fg('muted', url)}`);
-          } else {
-            lines.push(`  ${theme.fg('toolOutput', url)}${age}`);
-          }
-        }
-        if (lines.length > 0) return lines.join('\n');
-
-        // Parsed as JSON array but couldn't extract results — strip encryptedContent
-        // before falling through, so we never dump huge base64 blobs to the terminal
-        const stripped = parsed.map((item: unknown) => {
-          if (typeof item !== 'object' || item === null) return item;
-          const { encryptedContent, ...rest } = item as Record<string, unknown>;
-          return rest;
-        });
-        return JSON.stringify(stripped, null, 2);
-      }
-
-      // OpenAI provider format: { action: { query }, sources: [{ url, title }, ...] }
-      if (typeof parsed === 'object' && parsed !== null && Array.isArray(parsed.sources)) {
-        const lines: string[] = [];
-        for (const source of parsed.sources) {
-          if (typeof source !== 'object' || source === null) continue;
-          const url = typeof source.url === 'string' ? source.url : '';
-          if (!url) continue;
-          const title = typeof source.title === 'string' && source.title ? source.title : '';
-          if (title) {
-            lines.push(`  ${theme.fg('toolOutput', title)}`);
-            lines.push(`  ${theme.fg('muted', url)}`);
-          } else {
-            lines.push(`  ${theme.fg('toolOutput', url)}`);
-          }
-        }
-        if (lines.length > 0) return lines.join('\n');
-      }
+      parsed = JSON.parse(raw);
     } catch {
-      // Not JSON — fall through to raw text (Tavily format)
+      return raw;
     }
 
-    // Not JSON (e.g. Tavily format) — already readable text, return as-is
+    const lines = webSearchLinks(parsed).flatMap(link => {
+      const age = link.pageAge ? theme.fg('muted', ` (${link.pageAge})`) : '';
+      if (!link.title) return [`  ${theme.fg('toolOutput', link.url)}${age}`];
+      return [`  ${theme.fg('toolOutput', link.title)}${age}`, `  ${theme.fg('muted', link.url)}`];
+    });
+    if (lines.length > 0) return lines.join('\n');
+
+    // A payload we cannot read still must not dump Anthropic's base64 blobs to the terminal.
+    if (Array.isArray(parsed)) {
+      return JSON.stringify(parsed.map(withoutEncryptedContent), null, 2);
+    }
     return raw;
   }
 
