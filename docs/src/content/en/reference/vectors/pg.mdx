@@ -405,6 +405,8 @@ interface PGIndexStats {
 }
 ```
 
+`count` is an exact `SELECT COUNT(*)`, which scans the whole table, so avoid calling `describeIndex()` on a hot path for a large index. Reads and writes never pay for it: they only use the index metadata, which comes from the Postgres catalog.
+
 ### `deleteIndex()`
 
 <PropertiesTable

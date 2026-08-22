@@ -816,6 +816,14 @@ describe('PgVector', () => {
           });
         });
 
+        it('should report the current row count, not a cached one', async () => {
+          const before = await vectorDB.describeIndex({ indexName });
+          await vectorDB.upsert({ indexName, vectors: [[7, 8, 9]] });
+
+          const after = await vectorDB.describeIndex({ indexName });
+          expect(after.count).toBe(before.count + 1);
+        });
+
         it('should throw error for non-existent index', async () => {
           await expect(vectorDB.describeIndex({ indexName: 'non_existent' })).rejects.toThrow();
         });
