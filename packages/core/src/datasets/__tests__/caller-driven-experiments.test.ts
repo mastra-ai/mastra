@@ -45,7 +45,7 @@ const createMockScorer = (scorerId: string, score = 1): MastraScorer<any, any, a
   }) as unknown as MastraScorer<any, any, any, any>;
 
 async function setup(
-  inputs: { input: unknown; groundTruth?: unknown; scorerIds?: string[] }[],
+  inputs: { input: unknown; groundTruth?: unknown; metadata?: Record<string, unknown>; scorerIds?: string[] }[],
   opts?: { agent?: Agent; scorers?: MastraScorer<any, any, any, any>[]; datasetScorerIds?: string[] },
 ) {
   const db = new InMemoryDB();
@@ -94,6 +94,7 @@ async function setup(
       datasetId: record.id,
       input: item.input,
       groundTruth: item.groundTruth,
+      metadata: item.metadata,
       scorerIds: item.scorerIds,
     });
     itemIds.push(created.id);
@@ -169,6 +170,18 @@ describe('submitExperimentResult', () => {
     const { results } = await ds.listExperimentResults({ experimentId });
     expect(results).toHaveLength(1);
     expect(results[0]!.output).toBe('v2');
+  });
+
+  it('snapshots metadata from the pinned dataset item version', async () => {
+    const { ds, itemIds } = await setup([{ input: 'q1', metadata: { source: 'original' } }]);
+    const { experimentId } = await ds.createExperiment({});
+
+    await ds.updateItem({ itemId: itemIds[0]!, metadata: { source: 'updated' } });
+    const result = await ds.submitExperimentResult({ experimentId, itemId: itemIds[0]!, output: 'a1' });
+
+    expect(result.metadata).toEqual({ source: 'original' });
+    const { results } = await ds.listExperimentResults({ experimentId });
+    expect(results[0]?.metadata).toEqual({ source: 'original' });
   });
 
   it('keeps separate rows per attempt for repeated trials', async () => {
