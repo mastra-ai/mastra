@@ -38,7 +38,8 @@ function supportsModelInference(): boolean {
   return coreFeatures.has('model-inference-span');
 }
 
-import { extractUsageMetrics } from './usage';
+import { extractOpenRouterCost, extractUsageMetrics } from './usage';
+import type { OpenRouterCostResult } from './usage';
 
 type StepInputPreview = Array<{ role: string; content: string }> | Record<string, unknown> | string | undefined;
 
@@ -84,6 +85,38 @@ function getGatewayCostContext({ stepProviderMetadata }: Pick<EndGenerationOptio
       source: 'provider_reported',
       sdkProvider: 'vercel_ai_gateway',
       sdkCostField: 'gateway.cost',
+      scope: 'query_total',
+      reportedStepCount: costs.length,
+    },
+  };
+}
+
+function getOpenRouterCostContext({ providerMetadata, stepProviderMetadata }: EndGenerationOptions, model?: string) {
+  const metadata = stepProviderMetadata ?? (providerMetadata ? [providerMetadata] : undefined);
+  if (!metadata?.some(step => step?.openrouter !== undefined)) return undefined;
+
+  const results = metadata.map(extractOpenRouterCost);
+  if (results.some(result => result === undefined)) return undefined;
+
+  const costs = results as OpenRouterCostResult[];
+  const estimatedCost = costs.reduce((total, result) => total + result.total, 0);
+  if (!Number.isFinite(estimatedCost)) return undefined;
+
+  const sdkCostFields: string[] = [];
+  if (costs.some(result => result.usedCost)) sdkCostFields.push('openrouter.usage.cost');
+  if (costs.some(result => result.usedUpstreamCost)) {
+    sdkCostFields.push('openrouter.usage.costDetails.upstreamInferenceCost');
+  }
+
+  return {
+    provider: 'openrouter',
+    model,
+    estimatedCost,
+    costUnit: 'USD',
+    costMetadata: {
+      source: 'provider_reported',
+      sdkProvider: 'openrouter',
+      sdkCostField: sdkCostFields.join('+'),
       scope: 'query_total',
       reportedStepCount: costs.length,
     },
@@ -398,10 +431,20 @@ export class ModelSpanTracker {
    */
   endGeneration(options?: EndGenerationOptions): void {
     const { usage, providerMetadata, stepProviderMetadata, ...spanOptions } = options ?? {};
+    const model =
+      spanOptions.attributes?.responseModel ??
+      this.#modelSpan?.attributes?.responseModel ??
+      this.#modelSpan?.attributes?.model;
+    const providerCostContext = getOpenRouterCostContext({ providerMetadata, stepProviderMetadata }, model);
+
+    if (providerCostContext && !spanOptions.attributes) {
+      spanOptions.attributes = {};
+    }
 
     if (spanOptions.attributes) {
       spanOptions.attributes.completionStartTime = this.#completionStartTime;
       spanOptions.attributes.usage = extractUsageMetrics(usage, providerMetadata);
+      spanOptions.attributes.costContext = providerCostContext ?? spanOptions.attributes.costContext;
       if (!spanOptions.attributes.costContext) {
         spanOptions.attributes.costContext = getGatewayCostContext({ stepProviderMetadata });
       }

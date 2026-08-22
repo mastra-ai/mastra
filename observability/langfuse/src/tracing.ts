@@ -9,7 +9,13 @@
 
 import { LangfuseClient } from '@langfuse/client';
 import { LangfuseSpanProcessor } from '@langfuse/otel';
-import type { TracingEvent, AnyExportedSpan, InitExporterOptions, ScoreEvent } from '@mastra/core/observability';
+import type {
+  TracingEvent,
+  AnyExportedSpan,
+  InitExporterOptions,
+  ModelGenerationAttributes,
+  ScoreEvent,
+} from '@mastra/core/observability';
 import { SpanType, TracingEventType } from '@mastra/core/observability';
 import { BaseExporter } from '@mastra/observability';
 import type { BaseExporterConfig } from '@mastra/observability';
@@ -314,6 +320,24 @@ function mapMastraToLangfuseAttributes(
   if (attributes['mastra.completion_start_time']) {
     attributes['langfuse.observation.completion_start_time'] = attributes['mastra.completion_start_time'];
     delete attributes['mastra.completion_start_time'];
+  }
+
+  // Exact provider-reported cost takes precedence over Langfuse's model-price inference.
+  // Estimated costs remain unexported so Langfuse can apply its own pricing model.
+  const costContext =
+    span.type === SpanType.MODEL_GENERATION
+      ? (span.attributes as ModelGenerationAttributes | undefined)?.costContext
+      : undefined;
+  if (
+    costContext?.costMetadata?.source === 'provider_reported' &&
+    costContext.costUnit === 'USD' &&
+    typeof costContext.estimatedCost === 'number' &&
+    Number.isFinite(costContext.estimatedCost) &&
+    costContext.estimatedCost >= 0
+  ) {
+    attributes['langfuse.observation.cost_details'] = JSON.stringify({
+      total: costContext.estimatedCost,
+    });
   }
 
   // User ID: mastra.metadata.userId → user.id
