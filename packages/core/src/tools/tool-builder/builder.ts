@@ -382,6 +382,17 @@ export class CoreToolBuilder extends MastraBase {
     return schema;
   };
 
+  private serializeInputSchema(inputValidationSchema?: StandardSchemaWithJSON): string | undefined {
+    try {
+      const schema = inputValidationSchema ?? this.getParameters();
+      if (!schema) return undefined;
+
+      return JSON.stringify(standardSchemaToJSONSchema(toStandardSchema(schema), { io: 'input' }));
+    } catch {
+      return undefined;
+    }
+  }
+
   /** Compat-layer validation schema for execute-time checks (when a layer applies). */
   private buildCompatValidationSchema(
     originalSchema: unknown,
@@ -802,6 +813,7 @@ export class CoreToolBuilder extends MastraBase {
       // Fall back to build-time context for Legacy methods (AI SDK v4 doesn't support passing custom options)
       const tracingContext = execOptions?.tracingContext || options.tracingContext;
       const toolRequestContext = execOptions?.requestContext ?? options.requestContext;
+      const inputSchema = this.serializeInputSchema(inputValidationSchema);
       const toolSpan = getOrCreateSpan({
         type: mcpMeta ? SpanType.MCP_TOOL_CALL : SpanType.TOOL_CALL,
         name: mcpMeta ? `mcp_tool: '${options.name}' on '${mcpMeta.serverName}'` : `tool: '${options.name}'`,
@@ -814,10 +826,12 @@ export class CoreToolBuilder extends MastraBase {
               mcpServer: mcpMeta.serverName,
               serverVersion: mcpMeta.serverVersion,
               toolDescription: options.description,
+              inputSchema,
               toolCallId: execOptions?.toolCallId,
             }
           : {
               toolDescription: options.description,
+              inputSchema,
               toolType: logType || 'tool',
               toolCallId: execOptions?.toolCallId,
             },

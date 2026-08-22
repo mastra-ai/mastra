@@ -326,6 +326,7 @@
                     "entityId": "workflow-simpleWorkflow",
                     "attributes": {
                       "toolDescription": "Workflow: simpleWorkflow",
+                      "inputSchema": "{\"type\":\"object\",\"properties\":{\"inputData\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"input\":{\"type\":\"string\"}},\"required\":[\"input\"],\"additionalProperties\":false},\"suspendedToolRunId\":{\"type\":[\"string\",\"null\"],\"description\":\"The runId of the suspended tool\"},\"resumeData\":{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"}},\"required\":[\"inputData\"],\"additionalProperties\":true,\"$schema\":\"http://json-schema.org/draft-07/schema#\"}",
                       "toolType": "tool",
                       "toolCallId": "call-workflow-1",
                       "success": true

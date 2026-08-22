@@ -605,6 +605,7 @@ describe('Tool Tracing Context Injection', () => {
       attributes: {
         toolCallId: 'test-call-id',
         toolDescription: 'Test tool that captures tracing context',
+        inputSchema: expect.any(String),
         toolType: 'tool',
       },
       entityId: 'tracing-test-tool',
@@ -715,6 +716,7 @@ describe('Tool Tracing Context Injection', () => {
       attributes: {
         toolCallId: 'test-call-id',
         toolDescription: 'Vercel tool test',
+        inputSchema: expect.any(String),
         toolType: 'tool',
       },
       entityId: 'vercel-tool',
@@ -845,6 +847,7 @@ describe('Tool Tracing Context Injection', () => {
         type: SpanType.TOOL_CALL,
         name: "tool: 'input-validation-span-tool'",
         input: { name: 'A', age: 25 },
+        attributes: expect.objectContaining({ inputSchema: expect.any(String) }),
       }),
     );
 
@@ -1014,6 +1017,7 @@ describe('Tool Tracing Context Injection', () => {
       attributes: {
         toolCallId: 'test-call-id',
         toolDescription: 'Tool from a toolset',
+        inputSchema: expect.any(String),
         toolType: 'toolset',
       },
       entityId: 'toolset-tool',

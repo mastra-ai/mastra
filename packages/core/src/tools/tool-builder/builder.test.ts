@@ -250,10 +250,17 @@ describe('MCP Tool Tracing', () => {
           mcpServer: 'filesystem-server',
           serverVersion: '1.2.0',
           toolDescription: 'List files in a directory',
+          inputSchema: expect.any(String),
           toolCallId: 'test-call-id',
         },
       }),
     );
+    const mcpSpanArgs = (mockAgentSpan.createChildSpan as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(JSON.parse(mcpSpanArgs.attributes.inputSchema)).toMatchObject({
+      type: 'object',
+      properties: { path: { type: 'string' } },
+      required: ['path'],
+    });
 
     expect(mockToolSpan.end).toHaveBeenCalledWith({ attributes: { success: true }, output: { files: ['/tmp'] } });
   });
@@ -301,11 +308,18 @@ describe('MCP Tool Tracing', () => {
         input: { value: 'test' },
         attributes: {
           toolDescription: 'A regular tool',
+          inputSchema: expect.any(String),
           toolType: 'tool',
           toolCallId: 'test-call-id',
         },
       }),
     );
+    const toolSpanArgs = (mockAgentSpan.createChildSpan as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(JSON.parse(toolSpanArgs.attributes.inputSchema)).toMatchObject({
+      type: 'object',
+      properties: { value: { type: 'string' } },
+      required: ['value'],
+    });
   });
 
   it('should handle mcpMetadata with missing serverVersion', async () => {
@@ -353,6 +367,7 @@ describe('MCP Tool Tracing', () => {
       mcpServer: 'my-mcp-server',
       serverVersion: undefined,
       toolDescription: 'Read a resource',
+      inputSchema: expect.any(String),
       toolCallId: 'test-call-id',
     });
     expect(spanArgs.name).toBe("mcp_tool: 'mcp_read-resource' on 'my-mcp-server'");
