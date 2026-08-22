@@ -10812,13 +10812,13 @@ describe('Full Async Buffering Flow', () => {
   // TODO: This full-flow integration test needs rework — it was written for the old
   // tryActivateBufferedObservations API and doesn't account for the threshold guard in
   // activate(). The core hint-propagation behavior is covered by the direct test below:
-  // "should clear stale thread continuation hints after buffered activation when latest
+  // "should preserve existing thread continuation hints after buffered activation when latest
   // activated chunk has no hints"
-  it.todo('should clear stale thread continuation hints on sync observation when latest output omits them', async () => {
+  it.todo('should preserve existing thread continuation hints on sync observation when latest output omits them', async () => {
     // Use enough messages and a low threshold so that two activation rounds can
     // succeed sequentially.  The first observer response includes continuation
-    // hints; the second omits them.  After the second activation, the stale
-    // hints from the first round must be cleared (written as undefined).
+    // hints; the second omits them. After the second activation, the hints from
+    // the first round must remain available as continuity metadata.
     const { storage, threadId, resourceId, step, waitForAsyncOps } = await setupAsyncBufferingScenario({
       messageTokens: 1000,
       bufferTokens: 500,
@@ -10831,7 +10831,7 @@ describe('Full Async Buffering Flow', () => {
         // Note: closing tags must be on their own line — the parser regex
         // requires `^<\/current-task>` (start-of-line anchor with /m flag).
         '<observations>\n- 🔴 Initial observation\n</observations>\n<current-task>\nImplement sync path\n</current-task>\n<suggested-response>\nContinue with step 2\n</suggested-response>',
-        // Call 2 (async buffering from step 2): no hints → activation clears them.
+        // Call 2 (async buffering from step 2): no hints → activation preserves them.
         '<observations>\n- 🟡 Follow-up observation without hints\n</observations>',
       ],
     });
@@ -10883,7 +10883,7 @@ describe('Full Async Buffering Flow', () => {
 
     // New step 0 triggers another async buffering round (observer call 2, no hints).
     // After waiting, another step 0 with fresh messages activates the new chunk,
-    // clearing the stale hints.
+    // preserving the existing hints.
     await step(0, { freshState: true });
     await waitForAsyncOps();
 
@@ -10906,11 +10906,11 @@ describe('Full Async Buffering Flow', () => {
     await waitForAsyncOps();
     const threadAfterSecondObservation = await storage.getThreadById({ threadId });
     const secondOM = ((threadAfterSecondObservation?.metadata as any)?.mastra?.om ?? {}) as any;
-    expect(secondOM.currentTask).toBeUndefined();
-    expect(secondOM.suggestedResponse).toBeUndefined();
+    expect(secondOM.currentTask).toBe('Implement sync path');
+    expect(secondOM.suggestedResponse).toBe('Continue with step 2');
   });
 
-  it('should clear stale thread continuation hints after buffered activation when latest activated chunk has no hints', async () => {
+  it('should preserve existing thread continuation hints after buffered activation when latest activated chunk has no hints', async () => {
     // Use enough messages so that pending tokens exceed blockAfter (1.2 × 1000 = 1200).
     // With 20 messages at ~112 tokens each ≈ 2240 tokens, forceMaxActivation triggers.
     const { storage, threadId, resourceId, step, om, waitForAsyncOps } = await setupAsyncBufferingScenario({
@@ -10963,6 +10963,7 @@ describe('Full Async Buffering Flow', () => {
             ...((existingThread?.metadata as any)?.mastra?.om ?? {}),
             currentTask: 'Stale task before activation',
             suggestedResponse: 'Stale suggestion before activation',
+            threadTitle: 'Existing metadata title',
           },
         },
       },
@@ -10973,8 +10974,63 @@ describe('Full Async Buffering Flow', () => {
 
     const threadAfterActivation = await storage.getThreadById({ threadId });
     const omAfterActivation = ((threadAfterActivation?.metadata as any)?.mastra?.om ?? {}) as any;
-    expect(omAfterActivation.currentTask).toBeUndefined();
-    expect(omAfterActivation.suggestedResponse).toBeUndefined();
+    expect(omAfterActivation.currentTask).toBe('Stale task before activation');
+    expect(omAfterActivation.suggestedResponse).toBe('Stale suggestion before activation');
+    expect(omAfterActivation.threadTitle).toBe('Existing metadata title');
+  });
+
+  it('should replace existing thread continuation hints after buffered activation when latest activated chunk has hints', async () => {
+    const { storage, threadId, resourceId, step, om, waitForAsyncOps } = await setupAsyncBufferingScenario({
+      messageTokens: 1000,
+      bufferTokens: 200,
+      bufferActivation: 1,
+      reflectionObservationTokens: 50000,
+      messageCount: 20,
+    });
+
+    const record = await (om as any).getOrCreateRecord(threadId, resourceId);
+    await storage.updateBufferedObservations({
+      id: record!.id,
+      chunk: {
+        observations: '- 🔴 Latest chunk with hints',
+        tokenCount: 30,
+        messageIds: ['buf-msg-1'],
+        messageTokens: 1200,
+        lastObservedAt: new Date('2025-01-01T10:00:00Z'),
+        cycleId: 'buf-cycle-1',
+        currentTask: 'Updated task after activation',
+        suggestedContinuation: 'Updated suggestion after activation',
+        threadTitle: 'Updated metadata title',
+      },
+    });
+
+    const existingThread = await storage.getThreadById({ threadId });
+    await storage.updateThread({
+      id: threadId,
+      title: existingThread?.title ?? 'Test Thread',
+      metadata: {
+        ...(existingThread?.metadata ?? {}),
+        mastra: {
+          ...((existingThread?.metadata as any)?.mastra ?? {}),
+          om: {
+            ...((existingThread?.metadata as any)?.mastra?.om ?? {}),
+            currentTask: 'Task before activation',
+            suggestedResponse: 'Suggestion before activation',
+            threadTitle: 'Metadata title before activation',
+          },
+        },
+      },
+    });
+
+    await step(0, { freshState: true });
+    await waitForAsyncOps();
+
+    const threadAfterActivation = await storage.getThreadById({ threadId });
+    const omAfterActivation = ((threadAfterActivation?.metadata as any)?.mastra?.om ?? {}) as any;
+    expect(omAfterActivation.currentTask).toBe('Updated task after activation');
+    expect(omAfterActivation.suggestedResponse).toBe('Updated suggestion after activation');
+    expect(omAfterActivation.threadTitle).toBe('Updated metadata title');
+    expect(threadAfterActivation?.title).toBe('Updated metadata title');
   });
 
   it('should default reflection.bufferActivation when observation.bufferTokens is set', () => {

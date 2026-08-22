@@ -3518,11 +3518,12 @@ ${formattedMessages}
       const activatedChunks = freshChunks.filter(c => activationResult.activatedCycleIds.includes(c.cycleId));
       const lastActivated = activatedChunks[activatedChunks.length - 1];
       if (lastActivated) {
+        const previousOmMetadata = getThreadOMMetadata(thread.metadata);
         const chunkThreadTitle = lastActivated.threadTitle;
         const newMetadata = setThreadOMMetadata(thread.metadata, {
-          suggestedResponse: lastActivated.suggestedContinuation,
-          currentTask: lastActivated.currentTask,
-          threadTitle: chunkThreadTitle,
+          suggestedResponse: lastActivated.suggestedContinuation ?? previousOmMetadata?.suggestedResponse,
+          currentTask: lastActivated.currentTask ?? previousOmMetadata?.currentTask,
+          threadTitle: chunkThreadTitle ?? previousOmMetadata?.threadTitle,
         });
         const oldTitle = thread.title?.trim();
         const newTitle = chunkThreadTitle?.trim();
