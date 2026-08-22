@@ -43,7 +43,7 @@ describe('Observational Memory extracted metadata persistence', () => {
   });
 
   afterEach(async () => {
-    await rm(dbDir, { recursive: true, force: true });
+    await rm(dbDir, { recursive: true, force: true }).catch(() => {});
   });
 
   it('persists extracted values through LibSQL thread metadata helpers', async () => {

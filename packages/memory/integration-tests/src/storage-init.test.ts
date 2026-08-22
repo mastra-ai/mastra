@@ -120,7 +120,9 @@ describe('Storage domain init during agent.stream with LibSQL', () => {
     // Clean up any existing db files before each test
     for (const file of files) {
       if (fs.existsSync(file)) {
-        fs.unlinkSync(file);
+        try {
+          fs.unlinkSync(file);
+        } catch {}
       }
     }
   });
@@ -129,7 +131,9 @@ describe('Storage domain init during agent.stream with LibSQL', () => {
     // Clean up db files
     for (const file of files) {
       if (fs.existsSync(file)) {
-        fs.unlinkSync(file);
+        try {
+          fs.unlinkSync(file);
+        } catch {}
       }
     }
   });

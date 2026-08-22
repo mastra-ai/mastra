@@ -29,7 +29,9 @@ describe('Memory with UpstashStore Integration', () => {
   afterAll(() => {
     for (const file of files) {
       if (fs.existsSync(file)) {
-        fs.unlinkSync(file);
+        try {
+          fs.unlinkSync(file);
+        } catch {}
       }
     }
 
