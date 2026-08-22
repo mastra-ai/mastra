@@ -1,3 +1,6 @@
+import { randomUUID } from 'node:crypto';
+import os from 'node:os';
+import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { capture, flush, PostHog } = vi.hoisted(() => {
@@ -16,6 +19,11 @@ import { InMemoryStore } from '../storage/mock';
 import { resetProjectId2CacheForTests } from './context';
 import { FEATURE_USAGE_EVENT, syncFeatureUsageTelemetry, trackFeatureUsage } from './feature-telemetry';
 import { hashTelemetryValue, resetEETelemetryForTests } from './posthog';
+
+// Unique and intentionally never created: a nonexistent project root makes the
+// git-remote fallback fail deterministically, no matter what repositories exist
+// on the machine running the tests.
+const projectRoot = path.join(os.tmpdir(), `feature-telemetry-project-${randomUUID()}`);
 
 class UnknownStore {
   stores = {};
@@ -72,7 +80,7 @@ describe('feature usage telemetry', () => {
     originalNodeEnv = process.env.NODE_ENV;
 
     delete process.env.MASTRA_TELEMETRY_DISABLED;
-    process.env.MASTRA_PROJECT_ROOT = '/tmp/feature-telemetry-project';
+    process.env.MASTRA_PROJECT_ROOT = projectRoot;
     process.env.MASTRA_PROJECT_ID = 'platform-project-id';
     process.env.MASTRA_CLI_DISTINCT_ID = 'cli-distinct-id';
     process.env.MASTRA_TELEMETRY_COMMAND = 'dev';
@@ -111,7 +119,7 @@ describe('feature usage telemetry', () => {
       event: FEATURE_USAGE_EVENT,
       properties: {
         feature_name: 'agent_builder',
-        project_id: hashTelemetryValue('/tmp/feature-telemetry-project').slice(0, 16),
+        project_id: hashTelemetryValue(projectRoot).slice(0, 16),
         project_id2: 'mp_platform-project-id',
         command: 'dev',
         node_env: 'test',
@@ -186,7 +194,7 @@ describe('feature usage telemetry', () => {
       event: FEATURE_USAGE_EVENT,
       properties: {
         feature_name: 'mastra_instance_summary',
-        project_id: hashTelemetryValue('/tmp/feature-telemetry-project').slice(0, 16),
+        project_id: hashTelemetryValue(projectRoot).slice(0, 16),
         project_id2: 'mp_platform-project-id',
         command: 'dev',
         node_env: 'test',
