@@ -28,6 +28,7 @@ import {
 import { useState } from 'react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { coldarkCold, coldarkDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
+import { isImageFile, isVideoFile, videoMimeType } from '../file-type-utils';
 import type { FileEntry } from '../types';
 
 // =============================================================================
@@ -529,7 +530,8 @@ export interface FileViewerProps {
 export function FileViewer({ path, content, isLoading, mimeType, onClose }: FileViewerProps) {
   const fileName = path.split('/').pop() || path;
   const ext = fileName.split('.').pop()?.toLowerCase();
-  const isImage = mimeType?.startsWith('image/') || ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'].includes(ext || '');
+  const isImage = isImageFile(path, mimeType);
+  const isVideo = isVideoFile(path, mimeType);
   const language = getLanguageFromExtension(ext);
 
   return (
@@ -567,6 +569,17 @@ export function FileViewer({ path, content, isLoading, mimeType, onClose }: File
               alt={fileName}
               className="max-h-[400px] max-w-full object-contain"
             />
+          </div>
+        ) : isVideo ? (
+          <div className="flex items-center justify-center p-4">
+            {/* Same base64-content contract as the image branch above — the
+                caller requests encoding: 'base64' for video files too. */}
+            <video controls className="max-h-[400px] max-w-full">
+              <source
+                src={`data:${videoMimeType(path, mimeType)};base64,${content}`}
+                type={videoMimeType(path, mimeType)}
+              />
+            </video>
           </div>
         ) : language ? (
           <HighlightedCode content={content} language={language} />
