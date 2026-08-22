@@ -1,22 +1,16 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
-import { saveScorePayloadSchema } from '../evals';
+import {
+  executeScoreRun,
+  extractScoreRunTarget,
+  getScoreRunId,
+  SCORE_RUN_WORKFLOW_ID,
+} from '../evals/scoreRun/executeScoreRun';
+import type { ScoreRunInput } from '../evals/scoreRun/executeScoreRun';
 import type { ScoringHookInput } from '../evals/types';
 import { isScorerHookForMastra } from '../hooks/scorer-owner';
 import type { Mastra } from '../mastra';
-import { resolveAgentById } from '../mastra/resolve-agent';
-import { EntityType } from '../observability';
-import type { MastraStorage } from '../storage';
 
-function toScorerTargetEntityType(entityType: string): EntityType | undefined {
-  switch (entityType) {
-    case 'AGENT':
-      return EntityType.AGENT;
-    case 'WORKFLOW':
-      return EntityType.WORKFLOW_RUN;
-    default:
-      return undefined;
-  }
-}
+export { validateAndSaveScore } from '../evals/scoreRun/executeScoreRun';
 
 export function createOnScorerHook(mastra: Mastra) {
   return async (hookData: ScoringHookInput) => {
@@ -33,139 +27,78 @@ export function createOnScorerHook(mastra: Mastra) {
 
     const entityId = hookData.entity.id as string;
     const entityType = hookData.entityType;
-    const scorer = hookData.scorer;
-    const scorerId = scorer.id as string;
+    const scorerId = hookData.scorer.id as string;
 
     if (!scorerId) {
       mastra.getLogger()?.warn('Scorer ID not found, skipping score validation and saving');
       return;
     }
 
+    // Extract the serializable target span identity up front — tracingContext
+    // does not survive serialization into a workflow run input.
+    const target = extractScoreRunTarget(hookData);
+    const { tracingContext: _tracingContext, ...serializableHookData } = hookData as ScoringHookInput & {
+      tracingContext?: unknown;
+    };
+    const input: ScoreRunInput = { hookData: serializableHookData as ScoringHookInput, ...target };
+
+    // Durable path: run the scorer inside the internal `__score-run` workflow.
+    // A `pending` intent row is persisted before the scorer executes, and the
+    // terminal status (success/failed + error) is queryable per (scorer, span).
+    let workflow;
     try {
-      const scorerToUse = await findScorer(mastra, entityId, entityType, scorerId);
+      workflow = mastra.__getInternalWorkflow(SCORE_RUN_WORKFLOW_ID);
+    } catch {
+      // Workflow not registered (tests, custom hosts) — fall back below.
+    }
 
-      if (!scorerToUse) {
-        throw new MastraError({
-          id: 'MASTRA_SCORER_NOT_FOUND',
-          domain: ErrorDomain.MASTRA,
-          category: ErrorCategory.USER,
-          text: `Scorer with ID ${scorerId} not found`,
+    if (workflow) {
+      try {
+        // Deterministic runId: duplicate dispatches of the same (scorer, span)
+        // upsert the same intent row instead of creating new runs.
+        const runId = getScoreRunId({ scorerId, hookData, traceId: target.traceId, spanId: target.spanId });
+        const run = await workflow.createRun({ runId });
+        // Not awaited: dispatch stays fire-and-forget; the pending intent row
+        // written by createRun records the orphan if start never completes.
+        void run.start({ inputData: input }).catch((error: unknown) => {
+          mastra
+            .getLogger()
+            ?.trackException(toScorerHookError(error, { scorerId, entityId, entityType: entityType as string }));
         });
+        return;
+      } catch (error) {
+        mastra
+          .getLogger()
+          ?.trackException(toScorerHookError(error, { scorerId, entityId, entityType: entityType as string }));
+        return;
       }
+    }
 
-      let input = hookData.input;
-      let output = hookData.output;
-
-      const { structuredOutput, ...rest } = hookData;
-
-      const currentSpan = hookData.tracingContext?.currentSpan;
-      const traceId = currentSpan?.isValid ? currentSpan.traceId : undefined;
-      const spanId = currentSpan?.isValid ? currentSpan.id : undefined;
-      const targetCorrelationContext = currentSpan?.isValid ? currentSpan.getCorrelationContext?.() : undefined;
-      const targetMetadata = currentSpan?.isValid && currentSpan.metadata ? { ...currentSpan.metadata } : undefined;
-      const runResult = await scorerToUse.scorer.run({
-        ...rest,
-        input,
-        output,
-        scoreSource: 'live',
-        targetScope: 'span',
-        targetEntityType: toScorerTargetEntityType(entityType),
-        targetTraceId: traceId,
-        targetSpanId: spanId,
-        targetCorrelationContext,
-        targetMetadata,
-      } as any);
-
-      const payload = {
-        ...rest,
-        ...runResult,
-        entityId,
-        scorerId: scorerId,
-        spanId,
-        traceId,
-        scorer: {
-          ...rest.scorer,
-          hasJudge: !!scorerToUse.scorer.judge,
-        },
-        metadata: {
-          structuredOutput: !!structuredOutput,
-        },
-      };
-      // Legacy score-store emission. This path is being deprecated.
-      // ScoreEvent emission already happens inside MastraScorer.run() (see
-      // packages/core/src/evals/base.ts). The hook must not republish or every
-      // exporter would receive the same score twice.
-      await validateAndSaveScore(storage, payload);
+    // Fallback: direct execution with legacy semantics (no durable run record).
+    mastra
+      .getLogger()
+      ?.debug?.(`Internal workflow ${SCORE_RUN_WORKFLOW_ID} not registered, running scorer ${scorerId} directly`);
+    try {
+      await executeScoreRun({ mastra, input });
     } catch (error) {
-      const mastraError = new MastraError(
-        {
-          id: 'MASTRA_SCORER_FAILED_TO_RUN_HOOK',
-          domain: ErrorDomain.SCORER,
-          category: ErrorCategory.USER,
-          details: {
-            scorerId,
-            entityId,
-            entityType,
-          },
-        },
-        error,
-      );
-
-      mastra.getLogger()?.trackException(mastraError);
+      mastra
+        .getLogger()
+        ?.trackException(toScorerHookError(error, { scorerId, entityId, entityType: entityType as string }));
     }
   };
 }
 
-/**
- * @deprecated Legacy scores-store path. New score emission should use `mastra.observability.addScore()`.
- */
-export async function validateAndSaveScore(storage: MastraStorage, payload: unknown) {
-  const scoresStore = await storage.getStore('scores');
-  if (!scoresStore) {
-    throw new MastraError({
-      id: 'MASTRA_SCORES_STORAGE_NOT_AVAILABLE',
-      domain: ErrorDomain.STORAGE,
-      category: ErrorCategory.SYSTEM,
-      text: 'Scores storage domain is not available',
-    });
-  }
-  const payloadToSave = saveScorePayloadSchema.parse(payload);
-  await scoresStore.saveScore(payloadToSave);
-}
-
-async function findScorer(mastra: Mastra, entityId: string, entityType: string, scorerId: string) {
-  let scorerToUse;
-  if (entityType === 'AGENT') {
-    try {
-      // Registry first, then stored agents via the editor.
-      const resolved = await resolveAgentById(mastra, entityId);
-      if (resolved.status === 'found') {
-        const scorers = await resolved.agent.listScorers();
-        for (const [_, scorer] of Object.entries(scorers)) {
-          if (scorer.scorer.id === scorerId) {
-            scorerToUse = scorer;
-            break;
-          }
-        }
-      }
-    } catch {
-      // Resolution or scorer listing failed — fall back to mastra-registered scorer
-    }
-  } else if (entityType === 'WORKFLOW') {
-    const scorers = await mastra.getWorkflowById(entityId).listScorers();
-    for (const [_, scorer] of Object.entries(scorers)) {
-      if (scorer.scorer.id === scorerId) {
-        scorerToUse = scorer;
-        break;
-      }
-    }
-  }
-
-  // Fallback to mastra-registered scorer
-  if (!scorerToUse) {
-    const mastraRegisteredScorer = mastra.getScorerById(scorerId);
-    scorerToUse = mastraRegisteredScorer ? { scorer: mastraRegisteredScorer } : undefined;
-  }
-
-  return scorerToUse;
+function toScorerHookError(
+  error: unknown,
+  details: { scorerId: string; entityId: string; entityType: string },
+): MastraError {
+  return new MastraError(
+    {
+      id: 'MASTRA_SCORER_FAILED_TO_RUN_HOOK',
+      domain: ErrorDomain.SCORER,
+      category: ErrorCategory.USER,
+      details,
+    },
+    error,
+  );
 }

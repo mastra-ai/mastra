@@ -146,6 +146,10 @@ Eligibility filters decide _whether a scorer runs_; to filter _which messages a 
 
 **Automatic storage**: All scoring results are automatically stored in the `mastra_scorers` table in your configured database, allowing you to analyze performance trends over time.
 
+**Durable runs**: When storage is configured, each live evaluation executes inside an internal workflow run. A `pending` run record is written before the scorer executes, and the run ends with a queryable `success` or `failed` status (including the error), so scoring failures are visible instead of only appearing in logs. Transient scorer failures, such as a rate-limited judge model, are retried automatically.
+
+**Sampling decision records**: Every sampling decision, whether the output was sampled or declined, is recorded in the `mastra_scoring_decisions` table (on supported storage adapters). This gives you a denominator for scoring coverage: you can compare how many outputs were eligible against how many were actually scored.
+
 ## Score persistence
 
 Scores are persisted when the Mastra instance has `storage` configured, and when the scorer is registered on that instance. Registration is what lets Mastra resolve the scorer's metadata (name, description, type) through [`getScorerById()`](/reference/core/getScorerById) before writing the score.

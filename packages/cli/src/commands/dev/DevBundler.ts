@@ -118,8 +118,9 @@ export class DevBundler extends Bundler {
 
     const devServerAnalysisEntry = `
       import { scoreTracesWorkflow } from '@mastra/core/evals/scoreTraces';
+      import { scoreRunWorkflow } from '@mastra/core/evals/scoreRun';
       import { createNodeServer, getToolExports } from '#server';
-      export { scoreTracesWorkflow, createNodeServer, getToolExports };
+      export { scoreTracesWorkflow, scoreRunWorkflow, createNodeServer, getToolExports };
     `;
     const inputOptions = await getWatcherInputOptions(
       entryFile,

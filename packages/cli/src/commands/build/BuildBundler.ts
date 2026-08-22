@@ -82,6 +82,8 @@ export class BuildBundler extends Bundler {
     return `
     // @ts-expect-error
     import { scoreTracesWorkflow } from '@mastra/core/evals/scoreTraces';
+    // @ts-expect-error
+    import { scoreRunWorkflow } from '@mastra/core/evals/scoreRun';
     import { mastra } from '#mastra';
     import { createNodeServer, getToolExports } from '#server';
     import { tools } from '#tools';
@@ -95,6 +97,7 @@ export class BuildBundler extends Bundler {
         storage.init();
       }
       mastra.__registerInternalWorkflow(scoreTracesWorkflow);
+      mastra.__registerInternalWorkflow(scoreRunWorkflow);
     }
     `;
   }

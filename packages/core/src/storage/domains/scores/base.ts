@@ -11,6 +11,26 @@ import { StorageDomain } from '../base';
 
 export type { ScoreTenancyFilters };
 
+/**
+ * A record of a live-scoring sampling decision. Written for both sampled and
+ * declined outcomes so scoring coverage has a computable denominator.
+ */
+export interface SaveScoringDecisionPayload {
+  id?: string;
+  scorerId: string;
+  decision: 'sampled' | 'declined';
+  samplingType?: string;
+  samplingRate?: number;
+  traceId?: string;
+  spanId?: string;
+  entityId?: string;
+  entityType?: string;
+  source?: string;
+  resourceId?: string;
+  threadId?: string;
+  projectId?: string;
+}
+
 export abstract class ScoresStorage extends StorageDomain {
   constructor() {
     super({
@@ -20,6 +40,14 @@ export abstract class ScoresStorage extends StorageDomain {
   }
 
   async dangerouslyClearAll(): Promise<void> {
+    // Default no-op - subclasses override
+  }
+
+  /**
+   * Record a live-scoring sampling decision (sampled or declined).
+   * Default no-op — adapters opt in by overriding.
+   */
+  async saveScoringDecision(_decision: SaveScoringDecisionPayload): Promise<void> {
     // Default no-op - subclasses override
   }
 

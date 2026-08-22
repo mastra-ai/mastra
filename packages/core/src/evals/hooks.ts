@@ -4,6 +4,7 @@ import { setScorerHookOwner } from '../hooks/scorer-owner';
 import type { Mastra } from '../mastra';
 import type { ObservabilityContext } from '../observability';
 import { MASTRA_AUTH_TOKEN_KEY } from '../request-context';
+import type { SaveScoringDecisionPayload } from '../storage/domains/scores/base';
 import type { MastraScorerEntry } from './base';
 import { evaluateScoringPredicate } from './predicate';
 import type { ScoringEntityType, ScoringHookInput, ScoringSource } from './types';
@@ -147,6 +148,26 @@ export function runScorer({
     }
   }
 
+  // Record the sampling decision (both outcomes) so scoring coverage has a
+  // computable denominator. Fire-and-forget: decision records must never block
+  // or fail the caller. Runs after the eligibility filter so declines here mean
+  // "qualified but not sampled", matching the coverage denominator.
+  recordScoringDecision({
+    mastra,
+    scorerId: scorerObject.scorer?.id || scorerId,
+    decision: shouldExecute ? 'sampled' : 'declined',
+    samplingType: scorerObject?.sampling?.type,
+    samplingRate: scorerObject?.sampling?.type === 'ratio' ? scorerObject.sampling.rate : undefined,
+    traceId: currentSpan?.isValid ? currentSpan.traceId : undefined,
+    spanId: currentSpan?.isValid ? currentSpan.id : undefined,
+    entityId: typeof entity?.id === 'string' ? entity.id : undefined,
+    entityType,
+    source,
+    resourceId,
+    threadId,
+    projectId,
+  });
+
   if (!shouldExecute) {
     return;
   }
@@ -173,4 +194,23 @@ export function runScorer({
 
   setScorerHookOwner(payload, mastra);
   executeHook(AvailableHooks.ON_SCORER_RUN, payload);
+}
+
+/**
+ * Fire-and-forget write of a sampling decision record. Hosts without storage
+ * (or adapters without an override) degrade to a no-op.
+ */
+function recordScoringDecision({
+  mastra,
+  ...decision
+}: { mastra?: Mastra } & SaveScoringDecisionPayload): void {
+  try {
+    void Promise.resolve(mastra?.getStorage()?.getStore('scores'))
+      .then(scoresStore => scoresStore?.saveScoringDecision(decision))
+      .catch(error => {
+        mastra?.getLogger()?.debug?.('Failed to save scoring decision', { error });
+      });
+  } catch (error) {
+    mastra?.getLogger()?.debug?.('Failed to save scoring decision', { error });
+  }
 }
