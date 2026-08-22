@@ -448,18 +448,42 @@ export class MessageList {
       metadata: { createdAt },
     };
 
-    return [
-      convertInputToMastraDBMessage(promptMessage as MessageInput, 'input', {
-        memoryInfo: this.memoryInfo,
-        newMessageId: () => message.id,
-        generateCreatedAt: (_messageSource, start) => {
-          if (start instanceof Date) return start;
-          if (typeof start === 'string' || typeof start === 'number') return new Date(start);
-          return createdAt;
-        },
-        dbMessages: this.messages,
-      }),
-    ];
+    const projected = convertInputToMastraDBMessage(promptMessage as MessageInput, 'input', {
+      memoryInfo: this.memoryInfo,
+      newMessageId: () => message.id,
+      generateCreatedAt: (_messageSource, start) => {
+        if (start instanceof Date) return start;
+        if (typeof start === 'string' || typeof start === 'number') return new Date(start);
+        return createdAt;
+      },
+      dbMessages: this.messages,
+    });
+
+    // A transient signal is delivery-only: it is in the live prompt but never persisted, so the
+    // next turn reloads a history without it. A consumer that places prompt-cache breakpoints must
+    // therefore keep them behind these rows — a cached span that includes one is invalidated at the
+    // turn boundary, costing a full prefix rebuild every turn. Mark the projected parts so such a
+    // consumer can identify them (the marker surfaces as `providerOptions.mastra.transient` on the
+    // outbound message) instead of pattern-matching the rendered `<system-reminder>` tag, which
+    // would also catch reminders that ARE persisted. See `isTransientSignalMessage` in agent/signals.ts.
+    if (isTransientSignalMessage(message)) {
+      projected.content.parts = projected.content.parts.map(part =>
+        part.type === 'text'
+          ? {
+              ...part,
+              providerMetadata: {
+                ...part.providerMetadata,
+                mastra: {
+                  ...(part.providerMetadata?.mastra as Record<string, unknown> | undefined),
+                  transient: true,
+                },
+              },
+            }
+          : part,
+      );
+    }
+
+    return [projected];
   }
 
   public makeMessageSourceChecker(): {
