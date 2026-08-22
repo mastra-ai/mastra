@@ -1840,6 +1840,9 @@ export class Agent<
     const memory = await this.getMemory({ requestContext: requestContext || new RequestContext() });
 
     const memoryProcessors = memory ? await memory.getOutputProcessors(configuredProcessors, requestContext) : [];
+    const effectiveMemoryProcessors = this.#inheritedMemory(requestContext)
+      ? memoryProcessors.filter(processor => processor.id !== 'observational-memory')
+      : memoryProcessors;
 
     // Get channel output processors (with deduplication) — mirrors the input
     // processor hookup. Channels render the agent's stream to the originating
@@ -1849,7 +1852,7 @@ export class Agent<
     // User-configured processors run first so they can transform chunks
     // (e.g. PII redaction, translation) before the channel renders them.
     // Memory processors run last to persist the final form.
-    const allProcessors = [...configuredProcessors, ...channelProcessors, ...memoryProcessors];
+    const allProcessors = [...configuredProcessors, ...channelProcessors, ...effectiveMemoryProcessors];
     return this.combineProcessorsIntoWorkflow(allProcessors, `${this.id}-output-processor`);
   }
 
@@ -1878,6 +1881,9 @@ export class Agent<
     const memory = await this.getMemory({ requestContext: requestContext || new RequestContext() });
 
     const memoryProcessors = memory ? await memory.getInputProcessors(configuredProcessors, requestContext) : [];
+    const effectiveMemoryProcessors = this.#inheritedMemory(requestContext)
+      ? memoryProcessors.filter(processor => processor.id !== 'observational-memory')
+      : memoryProcessors;
 
     // Get workspace instructions processors (with deduplication)
     const workspaceProcessors = await this.getWorkspaceInstructionsProcessors(configuredProcessors, requestContext);
@@ -1898,7 +1904,7 @@ export class Agent<
     // Browser processors run after channel processors to inject browser context
     // User-configured processors run after auto-derived layers to allow customization
     return [
-      ...memoryProcessors,
+      ...effectiveMemoryProcessors,
       ...workspaceProcessors,
       ...skillsProcessors,
       ...channelProcessors,
@@ -4779,6 +4785,10 @@ export class Agent<
   private stripParentToolParts(messages: MastraDBMessage[]): MastraDBMessage[] {
     return messages
       .map(message => {
+        if (message.id === 'om-continuation') {
+          return null;
+        }
+
         if (message.role === 'assistant') {
           const content = message.content;
           const parts = Array.isArray(content) ? content : content?.parts;

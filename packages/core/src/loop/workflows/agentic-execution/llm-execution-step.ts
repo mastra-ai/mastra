@@ -70,6 +70,7 @@ import {
   MEMORY_KEY,
   RESOURCE_ID_KEY,
   STEP_ACTIVE_TOOLS_KEY,
+  STEP_MODEL_MESSAGES_KEY,
   STEP_TOOLS_KEY,
   STEP_WORKSPACE_KEY,
   THREAD_ID_KEY,
@@ -1573,6 +1574,23 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           logger?.error('Error in processLLMRequest processors:', error);
           throw error;
         }
+
+        const omContinuation = messageList.get.all.db().find(message => message.id === 'om-continuation');
+        const omContinuationText = omContinuation?.content.parts
+          .filter(part => part.type === 'text')
+          .map(part => part.text)
+          .join('');
+        const delegationMessages = omContinuationText
+          ? inputMessages.filter(message => {
+              if (message.role !== 'user' || !Array.isArray(message.content)) return true;
+              const text = message.content
+                .filter(part => part.type === 'text')
+                .map(part => part.text)
+                .join('');
+              return text !== omContinuationText;
+            })
+          : inputMessages;
+        writeScoped(scopeCtx, STEP_MODEL_MESSAGES_KEY, 'stepModelMessages', delegationMessages);
 
         if (cachedResponse) {
           // Short-circuit: replay cached chunks instead of calling the model.
