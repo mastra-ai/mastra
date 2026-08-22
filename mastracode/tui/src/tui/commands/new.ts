@@ -11,10 +11,14 @@ export async function handleNewCommand(ctx: SlashCommandContext): Promise<void> 
   state.session.thread.detachFromCurrent();
 
   state.pendingNewThread = true;
+  state.globalBackgroundNotice.setActivities([]);
   disposeAssistantRenderState(state);
   state.chatContainer.clear();
   state.pendingTools.clear();
   state.pendingTaskToolIds?.clear();
+  state.pendingSubagents.clear();
+  state.pendingSignalMessageComponentsById.clear();
+  state.followUpComponents = [];
   state.allToolComponents = [];
   state.allSlashCommandComponents = [];
   state.allSystemReminderComponents = [];

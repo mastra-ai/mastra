@@ -67,6 +67,8 @@ export type AppAction =
   | 'undo'
   | 'toggleThinking'
   | 'expandTools'
+  | 'openBackgroundActivityCenter'
+  | 'clearFinishedBackgroundActivities'
   | 'followUp'
   | 'queueFollowUp'
   | 'cycleMode'
@@ -958,6 +960,22 @@ export class CustomEditor extends Editor {
 
     if (matchesKey(data, 'ctrl+e')) {
       const handler = this.actionHandlers.get('expandTools');
+      if (handler) {
+        handler();
+        return;
+      }
+    }
+
+    if (matchesKey(data, 'ctrl+g')) {
+      const handler = this.actionHandlers.get('openBackgroundActivityCenter');
+      if (handler) {
+        handler();
+        return;
+      }
+    }
+
+    if (matchesKey(data, 'alt+g')) {
+      const handler = this.actionHandlers.get('clearFinishedBackgroundActivities');
       if (handler) {
         handler();
         return;

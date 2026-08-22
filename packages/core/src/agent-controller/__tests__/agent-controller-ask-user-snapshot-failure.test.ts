@@ -149,4 +149,36 @@ describe('AgentController: ask_user with suspended-snapshot persistence failure'
     await session.respondToToolSuspension({ toolCallId: suspendEvent.toolCallId, resumeData: 'Ada' });
     expect(events.some(e => e.type === 'error')).toBe(false);
   });
+
+  it('cancels parked suspensions when an attached thread subscription throws', async () => {
+    const { session } = await buildController('subscription-failure');
+    const events: any[] = [];
+    session.subscribe(event => {
+      events.push(event);
+    });
+
+    session.suspensions.register({ toolCallId: 'call-1', runId: 'run-1', toolName: 'ask_user' });
+
+    const subscription = {
+      stream: (async function* () {
+        yield { type: 'start', runId: 'run-1' };
+        throw new RangeError('Invalid string length');
+      })(),
+      activeRunId: () => 'run-1',
+      abort: () => {},
+      unsubscribe: () => {},
+    };
+
+    session.stream.attach({ subscription: subscription as any, key: 'test-agent:test-resource:test-thread' });
+    await session.processSubscribedThreadStream(subscription as any);
+
+    expect(events.some(event => event.type === 'error' && event.error?.message === 'Invalid string length')).toBe(true);
+    expect(events).toContainEqual({
+      type: 'tool_suspension_cancelled',
+      toolCallId: 'call-1',
+      toolName: 'ask_user',
+      reason: 'Invalid string length',
+    });
+    expect(session.suspensions.hasPending()).toBe(false);
+  });
 });

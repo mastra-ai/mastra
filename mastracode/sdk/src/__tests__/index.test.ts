@@ -213,6 +213,7 @@ vi.mock('@mastra/core/processors', () => ({
   AgentsMDInjector: class {
     readonly id = 'agents-md-injector';
   },
+  createBackgroundWorkSignalProcessor: () => ({ id: 'background-work-signals' }),
   isBadRequestError: (error: unknown) =>
     typeof error === 'object' &&
     error !== null &&
@@ -1008,6 +1009,7 @@ describe('createMastraCode', () => {
     // exactly what it was before the lane existed.
     expect(processors.map(processor => processor.id)).toEqual([
       'embedding-reconciler',
+      'background-work-signals',
       'plan-rejection-abort',
       'agents-md-injector',
       'provider-history-compat',

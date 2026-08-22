@@ -16,6 +16,7 @@ export type ScenarioName =
   | 'approval-overlay-focus'
   | 'ask-user-advanced-prompts'
   | 'automated-chat'
+  | 'background-subagents'
   | 'browser-active-pending-status'
   | 'browser-model-picker'
   | 'browser-viewport'

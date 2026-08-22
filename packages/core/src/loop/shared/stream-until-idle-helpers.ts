@@ -75,7 +75,7 @@ export async function resolveScope(
 // ---------------------------------------------------------------------------
 
 /**
- * Build the ephemeral user-prompt text that tells the LLM which tool-call
+ * Build the ephemeral system-context text that tells the LLM which tool-call
  * IDs just completed / failed / canceled. The directive stops the LLM from (a) re-processing
  * results already handled on a prior continuation and (b) mimicking the
  * prior assistant ack text ("I'm running it in the background") and
@@ -87,6 +87,7 @@ export function buildContinuationDirective(batch: Array<Record<string, unknown>>
       const payload = (chunk as { payload?: Record<string, unknown> }).payload ?? {};
       return {
         type: (chunk as { type?: string }).type,
+        taskId: payload.taskId as string | undefined,
         toolCallId: payload.toolCallId as string | undefined,
         toolName: payload.toolName as string | undefined,
         isSuspended: !!payload.suspendedAt,
@@ -97,7 +98,11 @@ export function buildContinuationDirective(batch: Array<Record<string, unknown>>
   // Suspend payloads are tool-controlled and may carry secrets, PII, or
   // large opaque blobs — never serialize them into the continuation
   // prompt. Just name the suspended tool-call IDs.
-  const formatEntry = (e: (typeof entries)[number]) => (e.toolName ? `${e.toolCallId} (${e.toolName})` : e.toolCallId!);
+  const formatEntry = (e: (typeof entries)[number]) => {
+    const tool = e.toolName ? ` (${e.toolName})` : '';
+    const task = e.taskId ? `, background task ${e.taskId}` : ', background task';
+    return `${e.toolCallId}${tool}${task}`;
+  };
 
   const completedIdList = entries
     .filter(e => e.type === 'background-task-completed' && !e.isSuspended)
@@ -120,6 +125,11 @@ export function buildContinuationDirective(batch: Array<Record<string, unknown>>
     .join(', ');
 
   let directive = '';
+
+  if (entries.length > 0) {
+    directive +=
+      ' IMPORTANT: These tool calls ran as background tasks. Their authoritative results may now look like ordinary tool results after reconciliation; do not reinterpret them as foreground calls.';
+  }
 
   if (completedIdList) {
     directive +=
@@ -165,7 +175,7 @@ export function buildContinuationOpts(
   const directive = buildContinuationDirective(batch);
   return {
     ...baseContinuationOpts,
-    context: [...(callerContext ?? []), { role: 'user' as const, content: directive }],
+    context: [...(callerContext ?? []), { role: 'system' as const, content: directive }],
   };
 }
 
@@ -379,7 +389,9 @@ export async function runIdleLoop<
         }
         if (value && typeof value === 'object' && (value as any).type === 'background-task-started') {
           const taskId = (value as any).payload?.taskId;
-          if (taskId) runningTaskIds.add(taskId);
+          if (taskId) {
+            runningTaskIds.add(taskId);
+          }
         }
       }
     } finally {
@@ -388,7 +400,7 @@ export async function runIdleLoop<
   };
 
   const processIfIdle = async () => {
-    if (isProcessing || closed || pendingCompletions.length === 0) return;
+    if (isProcessing || closed || runningTaskIds.size > 0 || pendingCompletions.length === 0) return;
     isProcessing = true;
     try {
       const batch = pendingCompletions.splice(0, pendingCompletions.length);
@@ -411,7 +423,7 @@ export async function runIdleLoop<
       return;
     } finally {
       isProcessing = false;
-      if (pendingCompletions.length > 0) {
+      if (runningTaskIds.size === 0 && pendingCompletions.length > 0) {
         void processIfIdle();
       } else {
         tryClose();
@@ -440,6 +452,7 @@ export async function runIdleLoop<
     threadId,
     resourceId,
     abortSignal: outerAbort.signal,
+    includeExisting: false,
   });
   const bgReader = bgStream.getReader();
   void (async () => {
@@ -472,7 +485,7 @@ export async function runIdleLoop<
         } else if (TERMINAL_BG_CHUNKS.has(chunk.type)) {
           runningTaskIds.delete(taskId);
           pendingCompletions.push(chunk);
-          void processIfIdle();
+          if (runningTaskIds.size === 0) void processIfIdle();
         }
       }
     } catch {
@@ -505,7 +518,7 @@ export async function runIdleLoop<
       }
     }
     isProcessing = false;
-    if (pendingCompletions.length > 0) {
+    if (runningTaskIds.size === 0 && pendingCompletions.length > 0) {
       void processIfIdle();
     } else {
       tryClose();

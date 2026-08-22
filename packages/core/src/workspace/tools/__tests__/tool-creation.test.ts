@@ -118,6 +118,20 @@ describe('createWorkspaceTools', () => {
     expect(executeTool.description).not.toContain('Local command execution');
   });
 
+  it('should apply background eligibility without mutating the shared tool', async () => {
+    const workspace = new Workspace({
+      filesystem: new LocalFilesystem({ basePath: tempDir }),
+      tools: {
+        [WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]: { background: { enabled: true, waitTimeoutMs: 1_000 } },
+      },
+    });
+
+    const tools = await createWorkspaceTools(workspace);
+
+    expect(tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].background).toEqual({ enabled: true, waitTimeoutMs: 1_000 });
+    expect(tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE].background).toBeUndefined();
+  });
+
   it('should have all expected tool names with proper namespacing', async () => {
     expect(WORKSPACE_TOOLS.FILESYSTEM.READ_FILE).toBe('mastra_workspace_read_file');
     expect(WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE).toBe('mastra_workspace_write_file');

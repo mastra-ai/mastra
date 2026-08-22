@@ -610,6 +610,49 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(stripAnsi(complete.render(100).join('\n'))).toContain('▐view▌src/example.ts');
   });
 
+  it('shows background provenance through running, completed, and failed states', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'view',
+      { path: 'package.json' },
+      { quietDisplayMode: 'normal', collapsedByDefault: false },
+      ui,
+    );
+    const placeholder = 'Background task started. Task ID: task-1. The tool "view" is running in the background.';
+
+    component.updateResult({ content: [{ type: 'text', text: placeholder }], isError: false }, true);
+
+    let output = stripAnsi(component.render(100).join('\n'));
+    expect(output).toContain('view');
+    expect(output).toContain('package.json');
+    expect(output).toContain('◌ background · task-1');
+
+    component.updateResult({ content: [{ type: 'text', text: 'completed result' }], isError: false });
+    output = stripAnsi(component.render(100).join('\n'));
+    expect(output).toContain('✓ background · task-1');
+    expect(output).toContain('completed result');
+
+    component.updateResult({ content: [{ type: 'text', text: 'failed result' }], isError: true });
+    output = stripAnsi(component.render(100).join('\n'));
+    expect(output).toContain('✗ background · task-1');
+    expect(output).toContain('failed result');
+
+    const cancelled = new ToolExecutionComponentEnhanced(
+      'find_files',
+      { path: '.' },
+      { quietDisplayMode: 'normal', collapsedByDefault: false },
+      ui,
+    );
+    cancelled.setBackgroundTaskId('task-2');
+    cancelled.updateResult(
+      { content: [{ type: 'text', text: 'Background execution cancelled.' }], isError: true },
+      true,
+    );
+    cancelled.cancelBackground();
+    output = stripAnsi(cancelled.render(100).join('\n'));
+    expect(output).toContain('■ background · task-2');
+    expect(output).not.toContain('◌ background');
+  });
+
   it('uses the active mode color for quiet compact tool badges', () => {
     const modeColor = '#3366cc';
     const component = new ToolExecutionComponentEnhanced(

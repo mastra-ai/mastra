@@ -1,9 +1,9 @@
 ---
-title: "Background tasks | Long-running agents"
+title: 'Background tasks | Long-running agents'
 description: Learn how to dispatch long-running tool calls in the background and keep the stream open until they complete, plus orchestrate subagents asynchronously.
 packages:
-  - "@mastra/core"
-  - "@mastra/memory"
+  - '@mastra/core'
+  - '@mastra/memory'
 ---
 
 # Background tasks
@@ -33,8 +33,8 @@ Background tasks require a configured [storage](/docs/storage) backend on the Ma
 Background tasks are off by default. Enable them by setting `backgroundTasks.enabled` on the Mastra instance:
 
 ```typescript title="src/mastra/index.ts" {6-12}
-import { Mastra } from '@mastra/core'
-import { LibSQLStore } from '@mastra/libsql'
+import { Mastra } from '@mastra/core';
+import { LibSQLStore } from '@mastra/libsql';
 
 export const mastra = new Mastra({
   storage: new LibSQLStore({ id: 'storage', url: 'file:mastra.db' }),
@@ -45,7 +45,7 @@ export const mastra = new Mastra({
     backpressure: 'queue',
     defaultTimeoutMs: 300_000,
   },
-})
+});
 ```
 
 The full set of options is listed in the [backgroundTasks configuration reference](/reference/configuration#backgroundtasks).
@@ -57,15 +57,15 @@ Enabling the manager doesn't run anything in the background by itself as every t
 1. **Tool-level config**: the tool itself declares it as background-eligible.
 1. **Agent-level config**: the agent declares which of its tools are background-eligible.
 
-Once a tool has opted in, the LLM can optionally include a `_background` field in the tool arguments to override the resolved config for a specific call (timeout, retries, or to flip the call back to foreground).
+Once a tool has opted in, the LLM can optionally include a `_background` field in the tool arguments to select `foreground`, `deferred`, or `awaited` execution for a specific call and override its timeout or retries.
 
 ### Tool-level
 
 Set `background.enabled: true` on the tool definition. Tools opted in at this layer run in the background whenever called by an agent that has the manager enabled.
 
 ```typescript title="src/mastra/tools/research.ts"
-import { createTool } from '@mastra/core/tools'
-import { z } from 'zod'
+import { createTool } from '@mastra/core/tools';
+import { z } from 'zod';
 
 export const researchTool = createTool({
   id: 'research',
@@ -74,6 +74,7 @@ export const researchTool = createTool({
   // highlight-start
   background: {
     enabled: true,
+    disposition: 'deferred',
     timeoutMs: 600_000,
     maxRetries: 1,
   },
@@ -81,7 +82,7 @@ export const researchTool = createTool({
   execute: async ({ topic }) => {
     // Run the research job for topic
   },
-})
+});
 ```
 
 ### Agent-level
@@ -89,7 +90,7 @@ export const researchTool = createTool({
 Use `backgroundTasks.tools` on the agent to opt in specific tools or override timeouts for individual tools, or alternatively run all background-eligible tools in the background. Use `disabled: true` to short-circuit background dispatch for the agent entirely.
 
 ```typescript title="src/mastra/agents/researcher.ts"
-import { Agent } from '@mastra/core/agent'
+import { Agent } from '@mastra/core/agent';
 
 export const researcher = new Agent({
   id: 'researcher',
@@ -104,7 +105,7 @@ export const researcher = new Agent({
     },
   },
   // highlight-end
-})
+});
 ```
 
 Set `tools: 'all'` to opt in every tool the agent has.
@@ -116,11 +117,19 @@ When a tool is registered on an agent that has background tasks enabled, the mod
 ```json
 {
   "topic": "solana",
-  "_background": { "enabled": true, "timeoutMs": 900_000 }
+  "_background": { "disposition": "awaited", "timeoutMs": 900000 }
 }
 ```
 
-The `_background` override is a _modifier_ on tools the developer has already opted in at the tool or agent layer, it's not a standalone opt-in. If a tool hasn't been opted in, `_background.enabled: true` from the model is ignored and the tool runs in the foreground. This keeps deterministic, foreground-only tools (calculators, lookups, schema validators) from being silently dispatched as tasks.
+The available dispositions are:
+
+- `foreground`: Run the tool synchronously without background-work lifecycle signals.
+- `deferred`: Dispatch the tool and let the agent continue. The task remains attached to the run, and streams using `untilIdle` wait for it to reconcile.
+- `awaited`: Dispatch the tool through the background task manager, but hold the current branch until its authoritative result has been reconciled.
+
+For compatibility, `_background.enabled: true` selects `deferred`, and `_background.enabled: false` selects `foreground`. An explicit `disposition` takes precedence over `enabled`.
+
+The `_background` override is a _modifier_ on tools the developer has already opted in at the tool or agent layer — it's not a standalone opt-in. If a tool hasn't been opted in, a model-selected background disposition is ignored and the tool runs in the foreground. This keeps deterministic, foreground-only tools (calculators, lookups, schema validators) from being silently dispatched as tasks.
 
 ### Resolution order
 
@@ -128,7 +137,7 @@ When a tool call is dispatched, the resolved background config is computed in th
 
 1. Agent-level `backgroundTasks.tools` entry for the tool.
 1. Tool-level `background` config.
-1. LLM `_background.enabled` override (only used to enable background dispatch when the tool was opted in at one of the layers above).
+1. LLM `_background.disposition` or `_background.enabled` override (only applied when the tool was opted in at one of the layers above).
 1. Manager defaults (`defaultTimeoutMs`, `defaultRetries`).
 
 If the agent has `backgroundTasks.disabled: true`, every tool call runs synchronously regardless of the layers above.
@@ -137,17 +146,17 @@ If the agent has `backgroundTasks.disabled: true`, every tool call runs synchron
 
 When a tool call dispatches as a background task, two streams may surface lifecycle events for it: the agent's own stream and the [`backgroundTaskManager.stream()`](/docs/harness/background-tasks#subscribe-to-all-task-events) SSE stream. Each stream covers a different set of chunk types:
 
-| Chunk type | When it fires | Emitted by |
-| - | - | - |
-| `background-task-started` | The task has been enqueued and assigned a `taskId`. | Agent stream |
-| `background-task-running` | The task picked up a worker and started executing. | Manager stream |
-| `background-task-progress` | Shows number of running background tasks. | Agent stream |
-| `background-task-output` | A streamed output chunk from the task's `execute`. | Manager stream |
+| Chunk type                  | When it fires                                                                          | Emitted by     |
+| --------------------------- | -------------------------------------------------------------------------------------- | -------------- |
+| `background-task-started`   | The task has been enqueued and assigned a `taskId`.                                    | Agent stream   |
+| `background-task-running`   | The task picked up a worker and started executing.                                     | Manager stream |
+| `background-task-progress`  | Shows number of running background tasks.                                              | Agent stream   |
+| `background-task-output`    | A streamed output chunk from the task's `execute`.                                     | Manager stream |
 | `background-task-completed` | The task finished successfully. The `payload.result` matches the eventual tool result. | Manager stream |
-| `background-task-failed` | The task threw or timed out. | Manager stream |
-| `background-task-cancelled` | The task was cancelled before completing. | Manager stream |
-| `background-task-suspended` | The tool called `suspend()` from inside its execute. | Manager stream |
-| `background-task-resumed` | A suspended task was resumed via `manager.resume(taskId, resumeData)`. | Manager stream |
+| `background-task-failed`    | The task threw or timed out.                                                           | Manager stream |
+| `background-task-cancelled` | The task was cancelled before completing.                                              | Manager stream |
+| `background-task-suspended` | The tool called `suspend()` from inside its execute.                                   | Manager stream |
+| `background-task-resumed`   | A suspended task was resumed via `manager.resume(taskId, resumeData)`.                 | Manager stream |
 
 `agent.stream().fullStream` only emits the agent-loop chunks (`background-task-started`, `background-task-progress`) on its own. `agent.stream()` with `untilIdle: true` emits the same two chunks and additionally subscribes to the manager pubsub for the run's memory scope and pipes the seven manager chunks (`background-task-running`, `background-task-output`, `background-task-completed`, `background-task-failed`, `background-task-cancelled`, `background-task-suspended`, `background-task-resumed`) into the same `fullStream`.
 
@@ -163,7 +172,7 @@ The full payload shapes are documented in the [background task chunks reference]
 const stream = await agent.stream('Research solana for me', {
   memory: { thread: 't1', resource: 'u1' },
   untilIdle: true,
-})
+});
 
 for await (const chunk of stream.fullStream) {
   // chunks from the initial turn AND any continuation turns triggered by
@@ -179,7 +188,7 @@ Customize the idle timeout by passing an object instead of `true`. The timer onl
 const stream = await agent.stream('Research solana for me', {
   memory: { thread: 't1', resource: 'u1' },
   untilIdle: { maxIdleMs: 30_000 },
-})
+});
 ```
 
 Visit [`Agent.stream()`](/reference/streaming/agents/stream) for the full API.
@@ -193,7 +202,7 @@ Visit [`Agent.stream()`](/reference/streaming/agents/stream) for the full API.
 Subagent invocations are dispatched as tool calls under the hood, so the same background configuration applies. The recommended pattern is to opt each subagent in on the supervisor, it's clearer and lets you tune `timeoutMs` per subagent in one place:
 
 ```typescript title="src/mastra/agents/supervisor.ts"
-import { Agent } from '@mastra/core/agent'
+import { Agent } from '@mastra/core/agent';
 
 const supervisor = new Agent({
   id: 'supervisor',
@@ -208,12 +217,12 @@ const supervisor = new Agent({
     },
   },
   // highlight-end
-})
+});
 
 const stream = await supervisor.stream('Research AI in education and write an article', {
   memory: { thread: 't1', resource: 'u1' },
   untilIdle: true,
-})
+});
 ```
 
 ### Inheriting from the subagent
@@ -236,12 +245,14 @@ const researchAgent = new Agent({
     waitTimeoutMs: 900_000,
   },
   // highlight-end
-})
+});
 ```
 
-When this `researchAgent` is delegated to from a supervisor that has no backgroundTask configuration for the `researchAgent`, the supervisor still dispatches the whole `researchAgent` invocation as a background task, and `deepResearchTool` runs in the foreground inside that invocation, instead of dispatching its own nested background task.
+When this `researchAgent` is delegated to from a supervisor that has no background task configuration for the `researchAgent`, the supervisor still dispatches the whole `researchAgent` invocation as a background task.
 
-Use this pattern when you want a subagent to behave consistently in the background regardless of which supervisor invokes it. Use the supervisor-side opt-in (above) when you want to tune background behavior centrally per supervisor.
+Mastra supports one nested background-tool level inside a delegated run: a root agent can delegate to a subagent, and that subagent can dispatch an eligible ordinary tool in the background. A second delegated-agent edge runs in the foreground and doesn't receive nested background guidance. This limit is execution-scoped and doesn't mutate the shared subagent configuration.
+
+Use this pattern when you want a subagent to behave consistently regardless of which supervisor invokes it. Use the supervisor-side opt-in above when you want to tune background behavior centrally per supervisor. Arbitrary-depth delegated background work, workflow integration, and Alexandria integration aren't supported by this boundary.
 
 ## Suspending and resuming
 
@@ -257,8 +268,8 @@ A tool calls `suspend(data)` from inside its `execute`, which:
 Resume the task with `mastra.backgroundTaskManager.resume(taskId, resumeData)`. The `resumeData` arrives in the tool's `execute` options on the resumed run, and the task transitions back to `running`.
 
 ```typescript title="src/mastra/tools/approval.ts"
-import { createTool } from '@mastra/core/tools'
-import { z } from 'zod'
+import { createTool } from '@mastra/core/tools';
+import { z } from 'zod';
 
 export const reviewTool = createTool({
   id: 'review',
@@ -267,15 +278,15 @@ export const reviewTool = createTool({
   outputSchema: z.object({ approvedBy: z.string(), edits: z.string().optional() }),
   background: { enabled: true },
   execute: async ({ draft }, context) => {
-    const { suspend, resumeData } = context.agent
+    const { suspend, resumeData } = context.agent;
     if (!resumeData) {
-      await suspend?.({ awaiting: 'approval', draft })
-      return { approvedBy: '', edits: undefined }
+      await suspend?.({ awaiting: 'approval', draft });
+      return { approvedBy: '', edits: undefined };
     }
-    const { reviewer, edits } = resumeData as { reviewer: string; edits?: string }
-    return { approvedBy: reviewer, edits }
+    const { reviewer, edits } = resumeData as { reviewer: string; edits?: string };
+    return { approvedBy: reviewer, edits };
   },
-})
+});
 ```
 
 The first invocation of `execute` sees `resumeData === undefined` and calls `suspend`. After the task is resumed, the runtime restarts the tool with `resumeData` populated. The `if` condition is false, so the tool returns its real result.
@@ -286,7 +297,7 @@ To resume the task once an approval arrives:
 await mastra.backgroundTaskManager?.resume(taskId, {
   reviewer: 'alice@example.com',
   edits: 'Reworded paragraph 3.',
-})
+});
 ```
 
 ### What happens to the agent loop
@@ -315,13 +326,13 @@ export const mastra = new Mastra({
   backgroundTasks: {
     enabled: true,
     onTaskComplete: task => {
-      logger.info('Background task complete', { taskId: task.id, toolName: task.toolName })
+      logger.info('Background task complete', { taskId: task.id, toolName: task.toolName });
     },
     onTaskFailed: task => {
-      logger.error('Background task failed', { taskId: task.id, error: task.error })
+      logger.error('Background task failed', { taskId: task.id, error: task.error });
     },
   },
-})
+});
 ```
 
 ## Streaming
@@ -331,23 +342,23 @@ export const mastra = new Mastra({
 Calling `stream()` with no filter returns a stream of every task event in the system. On connection, the stream emits a snapshot of all currently running tasks, then forwards live events as they happen.
 
 ```typescript title="src/mastra/run.ts"
-const bgManager = mastra.backgroundTaskManager
-if (!bgManager) throw new Error('Background tasks are not enabled')
+const bgManager = mastra.backgroundTaskManager;
+if (!bgManager) throw new Error('Background tasks are not enabled');
 
-const controller = new AbortController()
-const stream = bgManager.stream({ abortSignal: controller.signal })
+const controller = new AbortController();
+const stream = bgManager.stream({ abortSignal: controller.signal });
 
 for await (const chunk of stream) {
   switch (chunk.type) {
     case 'background-task-running':
-      console.log('started', chunk.payload.taskId, chunk.payload.toolName)
-      break
+      console.log('started', chunk.payload.taskId, chunk.payload.toolName);
+      break;
     case 'background-task-completed':
-      console.log('done', chunk.payload.taskId, chunk.payload.result)
-      break
+      console.log('done', chunk.payload.taskId, chunk.payload.result);
+      break;
     case 'background-task-failed':
-      console.error('failed', chunk.payload.taskId, chunk.payload.error)
-      break
+      console.error('failed', chunk.payload.taskId, chunk.payload.error);
+      break;
   }
 }
 ```
@@ -364,28 +375,28 @@ const stream = bgManager.stream({
   threadId: 't1',
   resourceId: 'u1',
   abortSignal: controller.signal,
-})
+});
 ```
 
-| Filter | Description |
-| - | - |
-| `agentId` | Only events from tasks dispatched by this agent |
-| `runId` | Only events from this specific agent run |
-| `threadId` | Only events from tasks scoped to this memory thread |
-| `resourceId` | Only events from tasks scoped to this resource |
-| `taskId` | Only events for a single task |
-| `abortSignal` | Closes the stream when the signal aborts |
+| Filter        | Description                                         |
+| ------------- | --------------------------------------------------- |
+| `agentId`     | Only events from tasks dispatched by this agent     |
+| `runId`       | Only events from this specific agent run            |
+| `threadId`    | Only events from tasks scoped to this memory thread |
+| `resourceId`  | Only events from tasks scoped to this resource      |
+| `taskId`      | Only events for a single task                       |
+| `abortSignal` | Closes the stream when the signal aborts            |
 
 ### Look up task state directly
 
 For one-off lookups instead of a live stream, use `getTask` and `listTasks`:
 
 ```typescript
-const task = await mastra.backgroundTaskManager?.getTask(taskId)
+const task = await mastra.backgroundTaskManager?.getTask(taskId);
 const { tasks, total } = await mastra.backgroundTaskManager?.listTasks({
   status: 'running',
   agentId: 'researcher',
-})
+});
 ```
 
 These read from storage rather than the pubsub stream, so they're suitable for paginated lists and detail views.

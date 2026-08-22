@@ -49,6 +49,9 @@ export async function resetUIAfterClone(ctx: CloneResetContext, clonedTitle: str
   state.chatContainer.clear();
   state.pendingTools.clear();
   state.pendingTaskToolIds?.clear();
+  state.pendingSubagents.clear();
+  state.pendingSignalMessageComponentsById.clear();
+  state.followUpComponents = [];
   state.allToolComponents = [];
   state.allSystemReminderComponents = [];
   state.messageComponentsById.clear();
