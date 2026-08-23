@@ -479,6 +479,61 @@ describe('transcript reducer message entries', () => {
       runtimeTools: { 'tool-1': { argsText: 'the implementation reuses the backing agent' } },
     });
   });
+
+  it('rewrites the entry when the same turn comes back under a new message id', () => {
+    // The engine adopts the run loop's message id only while its own message is
+    // still empty, so a turn can start streaming under one identity and keep
+    // going under another. Drawing both leaves the first copy stripped of the
+    // tool parts the second one claims, next to a full copy of its own text.
+    const started = dbMessage('streamed-turn', 'assistant', [
+      { type: 'text', text: 'gh is missing here.' },
+      {
+        type: 'tool-invocation',
+        toolInvocation: { state: 'result', toolCallId: 'tool-1', toolName: 'execute_command', args: {}, result: 'ok' },
+      },
+    ]);
+    const reidentified = dbMessage('adopted-turn', 'assistant', [
+      ...started.content.parts,
+      { type: 'text', text: 'Installing it now.' },
+    ]);
+
+    let state = transcriptReducer(initialTranscript, {
+      type: 'event',
+      event: { type: 'message_start', message: started },
+    });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_update', message: reidentified } });
+
+    expect(state.entries).toHaveLength(1);
+    expect(messageParts(state.entries[0])).toEqual(reidentified.content.parts);
+  });
+
+  it('draws a rotated turn as its own entry even when its text repeats the last one', () => {
+    // The run loop seals one response and opens the next at a step boundary, and
+    // the engine announces the new id on its first empty text part. That
+    // announcement is what tells a fresh turn apart from a re-identified one
+    // when the model happens to open with the same words.
+    const first = dbMessage('turn-1', 'assistant', [{ type: 'text', text: 'Let me check' }]);
+    let state = transcriptReducer(initialTranscript, {
+      type: 'event',
+      event: { type: 'message_start', message: first },
+    });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', message: first } });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: { type: 'message_start', message: dbMessage('turn-2', 'assistant', [{ type: 'text', text: '' }]) },
+    });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: {
+        type: 'message_update',
+        message: dbMessage('turn-2', 'assistant', [{ type: 'text', text: 'Let me check the tests too' }]),
+      },
+    });
+
+    expect(state.entries).toHaveLength(2);
+    expect(messageParts(state.entries[0])).toEqual(first.content.parts);
+    expect(messageParts(state.entries[1])).toEqual([{ type: 'text', text: 'Let me check the tests too' }]);
+  });
 });
 
 describe('transcript reducer mergeWindow', () => {
@@ -900,20 +955,122 @@ describe('transcript reducer mergeWindow', () => {
     expect(next.entries).toHaveLength(2);
   });
 
+  it('inserts a window copy whose parts prove it is a different turn', () => {
+    let state = createInitialTranscript({ messages: [] });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: {
+        type: 'message_update',
+        message: dbMessage('streamed-turn', 'assistant', [
+          { type: 'text', text: 'Checking.' },
+          {
+            type: 'tool-invocation',
+            toolInvocation: { state: 'result', toolCallId: 'tool-1', toolName: 'view', args: {}, result: 'ok' },
+          },
+        ]),
+      },
+    });
+
+    const next = transcriptReducer(state, {
+      type: 'mergeWindow',
+      messages: [
+        dbMessage('other-turn', 'assistant', [
+          {
+            type: 'tool-invocation',
+            toolInvocation: { state: 'result', toolCallId: 'tool-9', toolName: 'view', args: {}, result: 'ok' },
+          },
+          { type: 'text', text: 'Checking.' },
+        ]),
+      ],
+    });
+
+    expect(next.entries).toHaveLength(2);
+  });
+
+  it('inserts a window copy that adds a text part the gap swallowed', () => {
+    let state = createInitialTranscript({ messages: [] });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: {
+        type: 'message_update',
+        message: dbMessage('streamed-turn', 'assistant', [{ type: 'text', text: 'Almost' }]),
+      },
+    });
+
+    const next = transcriptReducer(state, {
+      type: 'mergeWindow',
+      messages: [
+        dbMessage('step-2', 'assistant', [
+          { type: 'text', text: 'Almost' },
+          { type: 'text', text: 'but not approvable yet.' },
+        ]),
+      ],
+    });
+
+    expect(next.entries).toHaveLength(2);
+  });
+
   it('lets the persisted copy claim the local echo of a steer', () => {
     // A steer sent while the tab is hidden loses its live signal event to the
     // SSE gap: the reconnect refetch is the first time the timeline sees it, and
     // the echo it belongs to carries a client-minted `local-…` id.
     let state = createInitialTranscript({ messages: [], threadId: 't1' });
     state = transcriptReducer(state, { type: 'localUser', text: 'stop and read the file', steer: true });
+    const localId = state.entries[0]?.id;
 
     const next = transcriptReducer(state, {
       type: 'mergeWindow',
-      messages: [signalMessage({ id: 'sig-1', type: 'user', tagName: 'user', text: 'stop and read the file' })],
+      messages: [
+        signalMessage({
+          id: 'sig-1',
+          type: 'user',
+          tagName: 'user',
+          text: 'stop and read the file',
+          attributes: { delivery: 'while-active' },
+        }),
+      ],
     });
 
     expect(next.entries).toHaveLength(1);
-    expect(next.entries[0]).toMatchObject({ steer: true });
+    expect(next.entries[0]).toMatchObject({
+      id: localId,
+      steer: true,
+      deliveryStatus: 'delivered',
+      message: { id: 'sig-1' },
+    });
+  });
+
+  it('does not redraw a turn whose persisted copy carries tool calls the stream never delivered', () => {
+    let state = createInitialTranscript({ messages: [] });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: {
+        type: 'message_update',
+        message: dbMessage('streamed-turn', 'assistant', [{ type: 'text', text: 'gh is missing here.' }]),
+      },
+    });
+
+    const next = transcriptReducer(state, {
+      type: 'mergeWindow',
+      messages: [
+        dbMessage('persisted-turn', 'assistant', [
+          { type: 'text', text: 'gh is missing here.' },
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'execute_command',
+              args: {},
+              result: 'ok',
+            },
+          },
+        ]),
+      ],
+    });
+
+    expect(next.entries).toHaveLength(1);
+    expect(messageParts(next.entries[0])).toHaveLength(2);
   });
 
   it('draws both when the same text is sent twice', () => {
@@ -960,6 +1117,34 @@ describe('transcript reducer error notices', () => {
   });
 });
 
+describe('transcript reducer workspace errors', () => {
+  function noticeTexts(event: Record<string, unknown> & { type: string }): string[] {
+    const state = transcriptReducer(initialTranscript, { type: 'event', event });
+    return state.entries.flatMap(entry => (entry.kind === 'notice' ? [entry.text] : []));
+  }
+
+  it('surfaces the message of a workspace_error', () => {
+    expect(noticeTexts({ type: 'workspace_error', error: { name: 'Error', message: 'clone failed' } })).toEqual([
+      'Workspace: clone failed',
+    ]);
+  });
+
+  it('surfaces the message of a failed workspace_status_changed', () => {
+    expect(
+      noticeTexts({
+        type: 'workspace_status_changed',
+        status: 'error',
+        error: { name: 'Error', message: 'no disk space left' },
+      }),
+    ).toEqual(['Workspace: no disk space left']);
+  });
+
+  it('stays quiet while the workspace is healthy', () => {
+    expect(noticeTexts({ type: 'workspace_status_changed', status: 'ready' })).toEqual([]);
+    expect(noticeTexts({ type: 'workspace_ready', workspaceId: 'w1', workspaceName: 'repo' })).toEqual([]);
+  });
+});
+
 describe('live user-signal events render the same as their persisted copy', () => {
   /**
    * `agent-channels` stamps this on every inbound channel message, and
@@ -993,14 +1178,14 @@ describe('live user-signal events render the same as their persisted copy', () =
     };
   }
 
-  /** The same live shape for a message typed into the web composer: no channel provenance. */
-  function liveComposerSignal(): MastraDBMessage {
+  function liveComposerSignal(attributes?: Record<string, unknown>): MastraDBMessage {
     const composerPayload = {
       id: 'sig-web',
       type: 'user',
       tagName: 'user',
       contents: 'hello from the composer',
       createdAt: '2026-07-27T16:00:00.000Z',
+      attributes,
     };
     return {
       id: 'sig-web',
@@ -1045,31 +1230,155 @@ describe('live user-signal events render the same as their persisted copy', () =
 
     expect(firstEntryParts(state)).toEqual([{ type: 'text', text: 'hello from slack' }]);
   });
-
-  /**
-   * Regression: the composer already renders an optimistic local echo under a
-   * `local-…` id. The streamed signal event carries the signal's own id, so the
-   * two cannot dedupe — drawing both showed the message twice. Only channel
-   * messages get the drawable-text projection.
-   */
-  it('leaves a composer-origin live event undrawable so the local echo stays the only bubble', () => {
+  it('keeps a normal composer signal hidden behind its optimistic message', () => {
     let state = createInitialTranscript({ messages: [], threadId: 't1' });
     state = transcriptReducer(state, { type: 'localUser', text: 'hello from the composer' });
     state = transcriptReducer(state, {
       type: 'event',
       event: { type: 'message_start', message: liveComposerSignal() },
     });
-    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', message: liveComposerSignal() } });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: { type: 'message_end', message: liveComposerSignal() },
+    });
 
     const drawable = state.entries.filter(
       entry =>
         entry.kind === 'message' &&
-        (entry.message.content.parts ?? []).some(
-          part => part.type === 'text' && part.text.includes('hello from the composer'),
-        ),
+        entry.message.content.parts.some(part => part.type === 'text' && part.text.includes('hello from the composer')),
     );
     expect(drawable).toHaveLength(1);
-    expect(drawable[0] && 'id' in drawable[0] ? drawable[0].id : '').toMatch(/^local-/);
+    expect(drawable[0]?.id).toMatch(/^local-/);
+  });
+
+  it('confirms the optimistic composer message with the streamed signal', () => {
+    let state = createInitialTranscript({ messages: [], threadId: 't1' });
+    state = transcriptReducer(state, {
+      type: 'localUser',
+      text: 'hello from the composer',
+      steer: true,
+    });
+    expect(state.entries[0]).toMatchObject({ steer: true, deliveryStatus: 'pending' });
+    const localId = state.entries[0]?.id;
+
+    const delivered = liveComposerSignal({ delivery: 'while-active' });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_start', message: delivered } });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', message: delivered } });
+
+    expect(state.entries).toHaveLength(1);
+    expect(state.entries[0]).toMatchObject({
+      id: localId,
+      steer: true,
+      deliveryStatus: 'delivered',
+      message: {
+        id: 'sig-web',
+        role: 'user',
+        content: { parts: [{ type: 'text', text: 'hello from the composer' }] },
+      },
+    });
+  });
+
+  it('turns an optimistic steer into a normal message when the run ended before delivery', () => {
+    let state = createInitialTranscript({ messages: [], threadId: 't1' });
+    state = transcriptReducer(state, {
+      type: 'localUser',
+      text: 'hello from the composer',
+      steer: true,
+    });
+    const localId = state.entries[0]?.id;
+
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: { type: 'message_start', message: liveComposerSignal() },
+    });
+
+    expect(state.entries).toHaveLength(1);
+    expect(state.entries[0]).toMatchObject({
+      id: localId,
+      steer: false,
+      deliveryStatus: undefined,
+      message: { id: 'sig-web' },
+    });
+  });
+
+  it('preserves optimistic content when a data-only signal confirms through a server window', () => {
+    let state = createInitialTranscript({ messages: [], threadId: 't1' });
+    state = transcriptReducer(state, {
+      type: 'localUser',
+      text: 'hello from the composer',
+      steer: true,
+    });
+    const localId = state.entries[0]?.id;
+
+    state = transcriptReducer(state, {
+      type: 'mergeWindow',
+      messages: [liveComposerSignal({ delivery: 'while-active' })],
+    });
+
+    expect(state.entries).toHaveLength(1);
+    expect(state.entries[0]).toMatchObject({
+      id: localId,
+      steer: true,
+      deliveryStatus: 'delivered',
+      message: {
+        id: 'sig-web',
+        role: 'user',
+        content: { parts: [{ type: 'text', text: 'hello from the composer' }] },
+      },
+    });
+  });
+
+  it('confirms a failed steer when its streamed signal arrives later', () => {
+    let state = createInitialTranscript({ messages: [], threadId: 't1' });
+    state = transcriptReducer(state, {
+      type: 'localUser',
+      text: 'hello from the composer',
+      steer: true,
+    });
+    const localId = state.entries[0]?.id;
+    if (!localId) throw new Error('Expected an optimistic message');
+    state = transcriptReducer(state, { type: 'failLocalUser', id: localId });
+
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: {
+        type: 'message_start',
+        message: liveComposerSignal({ delivery: 'while-active' }),
+      },
+    });
+
+    expect(state.entries).toHaveLength(1);
+    expect(state.entries[0]).toMatchObject({
+      id: localId,
+      steer: true,
+      deliveryStatus: 'delivered',
+      message: { id: 'sig-web' },
+    });
+  });
+
+  it('confirms a failed steer when its server-window copy arrives later', () => {
+    let state = createInitialTranscript({ messages: [], threadId: 't1' });
+    state = transcriptReducer(state, {
+      type: 'localUser',
+      text: 'hello from the composer',
+      steer: true,
+    });
+    const localId = state.entries[0]?.id;
+    if (!localId) throw new Error('Expected an optimistic message');
+    state = transcriptReducer(state, { type: 'failLocalUser', id: localId });
+
+    state = transcriptReducer(state, {
+      type: 'mergeWindow',
+      messages: [liveComposerSignal({ delivery: 'while-active' })],
+    });
+
+    expect(state.entries).toHaveLength(1);
+    expect(state.entries[0]).toMatchObject({
+      id: localId,
+      steer: true,
+      deliveryStatus: 'delivered',
+      message: { id: 'sig-web' },
+    });
   });
 
   it('keeps non-user signals alone', () => {
@@ -1079,5 +1388,27 @@ describe('live user-signal events render the same as their persisted copy', () =
 
     const entry = state.entries.find(e => 'id' in e && e.id === 'sig-2');
     expect(messageParts(entry)).toEqual([{ type: 'text', text: 'stay on task' }]);
+  });
+
+  it('leaves a sealed turn alone when a later turn opens with the same words', () => {
+    // A turn only gets re-identified while it is still streaming. Once sealed it
+    // is history, and a fresh turn that happens to open on the same words — an
+    // SSE gap having swallowed its empty opening event — must not overwrite it.
+    const sealed = dbMessage('turn-1', 'assistant', [{ type: 'text', text: 'Done.' }]);
+    let state = transcriptReducer(initialTranscript, {
+      type: 'event',
+      event: { type: 'message_start', message: sealed },
+    });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', message: sealed } });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: {
+        type: 'message_update',
+        message: dbMessage('turn-2', 'assistant', [{ type: 'text', text: 'Done. Now the next thing' }]),
+      },
+    });
+
+    expect(state.entries).toHaveLength(2);
+    expect(messageParts(state.entries[0])).toEqual(sealed.content.parts);
   });
 });

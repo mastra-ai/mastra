@@ -16,6 +16,7 @@ import type {
   MessageDeleteInput,
   ObservationalMemoryOptions,
   MemoryConfig,
+  MemoryRunState,
 } from '@mastra/core/memory';
 import { SpanType, EntityType } from '@mastra/core/observability';
 import type { ObservabilityContext, MemoryOperationAttributes } from '@mastra/core/observability';
@@ -38,6 +39,8 @@ import type {
   ThreadCloneMetadata,
   ObservationalMemoryRecord,
   BufferedObservationChunk,
+  KnowledgeStorage,
+  KnowledgeScope,
 } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
@@ -48,6 +51,13 @@ import type { JSONSchema7 } from 'json-schema';
 import { LRUCache } from 'lru-cache';
 import xxhash from 'xxhash-wasm';
 import type { ObservationalMemory, ObservationalMemoryConfig } from './processors/observational-memory';
+import { KnowledgeSemanticIndexCoordinator, Subconscious } from './processors/observational-memory/subconscious';
+import { createCuratorHandler } from './processors/observational-memory/subconscious/curate';
+import { createKnowledgeTools } from './processors/observational-memory/subconscious/knowledge-tools';
+import {
+  composeReflectionAgentHandlers,
+  createLearnerHandler,
+} from './processors/observational-memory/subconscious/learn';
 import { summarizeConversation, SUMMARIZE_THREAD_DEFAULTS } from './processors/observational-memory/summarize';
 import type {
   SummarizeConversationOptions,
@@ -70,6 +80,27 @@ export {
   type ExtractorSource,
 } from './processors/observational-memory';
 export { WorkingMemoryExtractor } from './processors/observational-memory/working-memory-extractor';
+export {
+  KnowledgeSemanticIndexCoordinator,
+  StaleKnowledgeSemanticIndexError,
+  Subconscious,
+} from './processors/observational-memory/subconscious';
+export type {
+  KnowledgeSemanticIndexCoordinatorConfig,
+  ResolvedSubconsciousAgent,
+  ResolvedSubconsciousConfig,
+  SubconsciousBuiltInObservationAgent,
+  SubconsciousBuiltInObservationConfig,
+  SubconsciousBuiltInReflectionAgent,
+  SubconsciousBuiltInReflectionConfig,
+  SubconsciousCaptureHook,
+  SubconsciousCaptureOutput,
+  SubconsciousConfig,
+  SubconsciousCustomObservationConfig,
+  SubconsciousCustomReflectionConfig,
+  SubconsciousObservationEntry,
+  SubconsciousReflectionEntry,
+} from './processors/observational-memory/subconscious';
 export { summarizeConversation, SUMMARIZE_THREAD_DEFAULTS } from './processors/observational-memory/summarize';
 export type {
   SummarizeConversationOptions,
@@ -86,6 +117,8 @@ type MemoryObservationalMemoryOptions = Omit<ObservationalMemoryOptions, 'model'
   model?: ObservationalMemoryConfig['model'];
   observation?: ObservationalMemoryConfig['observation'];
   reflection?: ObservationalMemoryConfig['reflection'];
+  /** @experimental This API may change without notice. */
+  experimental_subconscious?: Subconscious;
   activateAfterIdle?: ObservationalMemoryConfig['activateAfterIdle'];
   activateOnProviderChange?: ObservationalMemoryConfig['activateOnProviderChange'];
   temporalMarkers?: boolean;
@@ -274,6 +307,7 @@ export class Memory extends MastraMemory {
   private _omEngine: Promise<ObservationalMemory | null> | undefined;
   private _omEngineInstance: ObservationalMemory | null | undefined;
   private _mastraInstance: Mastra | undefined;
+  private _knowledgeSemanticIndex?: Promise<KnowledgeSemanticIndexCoordinator>;
 
   /**
    * Every vector cleanup that deleteThread or deleteMessages started in the background.
@@ -337,7 +371,84 @@ export class Memory extends MastraMemory {
   }
 
   public override getMergedThreadConfig(config?: MemoryConfigInternal): MemoryConfigInternal {
-    return this.applyManagedWorkingMemoryDefaults(super.getMergedThreadConfig(config));
+    const merged = super.getMergedThreadConfig(config);
+    return this.applyManagedWorkingMemoryDefaults(this.applySubconsciousDefaults(merged));
+  }
+
+  private applySubconsciousDefaults(config: MemoryConfigInternal): MemoryConfigInternal {
+    const omConfig = normalizeObservationalMemoryConfig(
+      config.observationalMemory as boolean | MemoryObservationalMemoryOptions | undefined,
+    );
+    if (!omConfig?.experimental_subconscious) return config;
+    if (!(omConfig.experimental_subconscious instanceof Subconscious)) {
+      throw new Error('observationalMemory.experimental_subconscious must be a Subconscious instance.');
+    }
+
+    const observation = (omConfig.observation ?? {}) as NonNullable<ObservationalMemoryConfig['observation']>;
+    const extract = observation.extract ?? [];
+    const existingSlugs = new Set(extract.map(extractor => extractor.slug));
+    const subconsciousExtractors = omConfig.experimental_subconscious
+      .createObservationExtractors(observation.model ?? omConfig.model)
+      .filter(extractor => !existingSlugs.has(extractor.slug));
+
+    return {
+      ...config,
+      observationalMemory: {
+        ...omConfig,
+        observation: {
+          ...observation,
+          extract: [...extract, ...subconsciousExtractors],
+        },
+      },
+    } as MemoryConfigInternal;
+  }
+
+  /** Threads with a curation currently in flight in this process; guards same-process double-fire only. */
+  private _curationsInFlight = new Set<string>();
+
+  /**
+   * Run the subconscious curator directly over the pending fact worklist, without a reflection.
+   * Cross-process serialization is the curation cursor's job; a lost race wastes one advisory run.
+   *
+   * Outcomes: `ran` (curator executed), `no-op` (empty worklist and no prompt, or no curate agent
+   * configured), `skipped` (a curation for this thread is already in flight in this process), and
+   * `no-model` (no per-agent, observational memory, or main-agent model could be resolved).
+   */
+  async runCuration(options: {
+    threadId: string;
+    resourceId: string;
+    requestContext?: RequestContext;
+    prompt?: string;
+  }): Promise<{ outcome: 'ran' | 'no-op' | 'skipped' | 'no-model' }> {
+    const omConfig = normalizeObservationalMemoryConfig(this.threadConfig.observationalMemory);
+    const subconscious = omConfig?.experimental_subconscious;
+    if (!omConfig || !(subconscious instanceof Subconscious)) return { outcome: 'no-op' };
+    if (this._curationsInFlight.has(options.threadId)) return { outcome: 'skipped' };
+    this._curationsInFlight.add(options.threadId);
+    try {
+      const handler = createCuratorHandler(
+        this,
+        subconscious.resolved,
+        new Memory({ storage: this.storage, options: { observationalMemory: false } }),
+        { omModel: omConfig.observation?.model ?? omConfig.model },
+      );
+      const outcome = await handler({
+        parentThreadId: options.threadId,
+        resourceId: options.resourceId,
+        // The direct path has no reflection artifacts; the optional prompt (e.g. a phase-exit
+        // framing) rides the observations slot of the curator's own prompt structure.
+        observations: options.prompt ?? '',
+        requestContext: options.requestContext,
+      });
+      return { outcome: outcome === 'ran' ? 'ran' : 'no-op' };
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('requires the main agent to resolve its model')) {
+        return { outcome: 'no-model' };
+      }
+      throw error;
+    } finally {
+      this._curationsInFlight.delete(options.threadId);
+    }
   }
 
   private applyManagedWorkingMemoryDefaults(config: MemoryConfigInternal): MemoryConfigInternal {
@@ -400,6 +511,42 @@ export class Memory extends MastraMemory {
         );
       }
     }
+    if (omConfig?.experimental_subconscious) {
+      if (!this.vector) {
+        throw new Error('Subconscious semantic knowledge requires a vector store. Pass a `vector` option to Memory.');
+      }
+      if (!this.embedder) {
+        throw new Error('Subconscious semantic knowledge requires an embedder. Pass an `embedder` option to Memory.');
+      }
+    }
+  }
+
+  private async getKnowledgeStore(): Promise<KnowledgeStorage> {
+    const store = await this.storage.getStore('knowledge');
+    if (!store) {
+      throw new Error(`Knowledge storage domain is not available on ${this.storage.constructor.name}`);
+    }
+    return store;
+  }
+
+  public async getKnowledgeSemanticIndex(): Promise<KnowledgeSemanticIndexCoordinator> {
+    if (!this.vector || !this.embedder) {
+      throw new Error('Subconscious semantic knowledge requires both a vector store and an embedder.');
+    }
+    this._knowledgeSemanticIndex ??= this.getKnowledgeStore().then(
+      knowledge =>
+        new KnowledgeSemanticIndexCoordinator({
+          knowledge,
+          vector: this.vector!,
+          embedder: this.embedder!,
+          embedderOptions: this.embedderOptions,
+        }),
+    );
+    return this._knowledgeSemanticIndex;
+  }
+
+  public async drainKnowledgeSemanticIndex(scope?: KnowledgeScope): Promise<number> {
+    return (await this.getKnowledgeSemanticIndex()).drain(scope);
   }
 
   /**
@@ -1420,10 +1567,12 @@ ${workingMemory}`;
     threadId,
     resourceId,
     memoryConfig,
+    runState,
   }: {
     threadId: string;
     resourceId?: string;
     memoryConfig?: MemoryConfigInternal;
+    runState?: MemoryRunState;
   }): Promise<string | null> {
     const config = this.getMergedThreadConfig(memoryConfig || {});
     if (!config.workingMemory?.enabled) {
@@ -1442,13 +1591,16 @@ ${workingMemory}`;
     }
 
     if (scope === 'resource' && resourceId) {
-      // Get working memory from resource table
-      const memoryStore = await this.getMemoryStore();
-      const resource = await memoryStore.getResourceById({ resourceId });
-      workingMemoryData = resource?.workingMemory || null;
+      const loadWorkingMemory = async () => {
+        const memoryStore = await this.getMemoryStore();
+        const resource = await memoryStore.getResourceById({ resourceId });
+        return resource?.workingMemory || null;
+      };
+      workingMemoryData = runState
+        ? await runState.load(`working-memory:resource:${resourceId}`, loadWorkingMemory)
+        : await loadWorkingMemory();
     } else {
-      // Get working memory from thread metadata (default behavior)
-      const thread = await this.getThreadById({ threadId });
+      const thread = runState?.threadLoaded ? runState.thread : await this.getThreadById({ threadId });
       workingMemoryData = thread?.metadata?.workingMemory as string;
     }
 
@@ -1508,10 +1660,12 @@ ${workingMemory}`;
     threadId,
     resourceId,
     memoryConfig,
+    runState,
   }: {
     threadId: string;
     resourceId?: string;
     memoryConfig?: MemoryConfigInternal;
+    runState?: MemoryRunState;
   }): Promise<string | null> {
     const config = this.getMergedThreadConfig(memoryConfig);
     this.assertWorkingMemoryStateSignalsCompatibility(config);
@@ -1526,8 +1680,16 @@ ${workingMemory}`;
       return null;
     }
 
-    const workingMemoryTemplate = await this.getWorkingMemoryTemplate({ memoryConfig });
-    const workingMemoryData = await this.getWorkingMemory({ threadId, resourceId, memoryConfig: config });
+    const loadTemplate = () => this.getWorkingMemoryTemplate({ memoryConfig });
+    const workingMemoryTemplate = runState
+      ? await runState.load('working-memory:template', loadTemplate)
+      : await loadTemplate();
+    const workingMemoryData = await this.getWorkingMemory({
+      threadId,
+      resourceId,
+      memoryConfig: config,
+      runState,
+    });
 
     if (!workingMemoryTemplate) {
       return null;
@@ -1574,6 +1736,7 @@ ${workingMemory}`;
     threadId: string;
     resourceId?: string;
     memoryConfig?: MemoryConfigInternal;
+    runState?: MemoryRunState;
   }): Promise<{
     /** Fully-formed system message (observations + instructions + working memory), or undefined if none. */
     systemMessage: string | undefined;
@@ -1588,7 +1751,7 @@ ${workingMemory}`;
     /** Formatted context blocks from other threads (resource scope only). */
     otherThreadsContext: string | undefined;
   }> {
-    const { threadId, resourceId, memoryConfig } = opts;
+    const { threadId, resourceId, memoryConfig, runState } = opts;
     const config = this.getMergedThreadConfig(memoryConfig);
     const memoryStore = await this.getMemoryStore();
 
@@ -1603,13 +1766,22 @@ ${workingMemory}`;
 
     const omEngine = await this.omEngine;
     if (omEngine) {
-      omRecord = await omEngine.getRecord(threadId, resourceId);
+      const loadOmRecord = () => omEngine.getRecord(threadId, resourceId);
+      omRecord = runState
+        ? await runState.load(`observational-memory:record:${threadId}:${resourceId ?? ''}`, loadOmRecord)
+        : await loadOmRecord();
       if (omRecord?.activeObservations) {
         hasObservations = true;
 
         // For resource scope, load other threads' unobserved context
         if (omEngine.scope === 'resource' && resourceId) {
-          otherThreadsContext = await omEngine.getOtherThreadsContext(resourceId, threadId);
+          const loadOtherThreadsContext = () => omEngine.getOtherThreadsContext(resourceId, threadId);
+          otherThreadsContext = runState
+            ? await runState.load(
+                `observational-memory:other-threads:${resourceId}:${threadId}:${omRecord.lastObservedAt ?? ''}`,
+                loadOtherThreadsContext,
+              )
+            : await loadOtherThreadsContext();
         }
 
         const obsSystemMessage = await omEngine.buildContextSystemMessage({
@@ -1644,7 +1816,12 @@ ${workingMemory}`;
     }
 
     // 2. Working memory system message
-    const workingMemoryMessage = await this.getSystemMessage({ threadId, resourceId, memoryConfig: config });
+    const workingMemoryMessage = await this.getSystemMessage({
+      threadId,
+      resourceId,
+      memoryConfig: config,
+      runState,
+    });
     if (workingMemoryMessage) {
       systemParts.push(workingMemoryMessage);
     }
@@ -1660,22 +1837,33 @@ ${workingMemory}`;
         ? { dateRange: { start: new Date(new Date(omRecord.lastObservedAt).getTime() + 1) } }
         : undefined;
 
+      const boundary = omRecord.lastObservedAt ? new Date(omRecord.lastObservedAt).toISOString() : '';
       if (omEngine.scope === 'resource' && resourceId) {
-        const result = await memoryStore.listMessagesByResourceId({
-          resourceId,
-          orderBy: { field: 'createdAt', direction: 'ASC' },
-          perPage: false,
-          filter: dateFilter,
-        });
-        messages = result.messages;
+        const loadMessages = async () => {
+          const result = await memoryStore.listMessagesByResourceId({
+            resourceId,
+            orderBy: { field: 'createdAt', direction: 'ASC' },
+            perPage: false,
+            filter: dateFilter,
+          });
+          return result.messages;
+        };
+        messages = runState
+          ? await runState.load(`observational-memory:messages:resource:${resourceId}:${boundary}`, loadMessages)
+          : await loadMessages();
       } else {
-        const result = await memoryStore.listMessages({
-          threadId,
-          orderBy: { field: 'createdAt', direction: 'ASC' },
-          perPage: false,
-          filter: dateFilter,
-        });
-        messages = result.messages;
+        const loadMessages = async () => {
+          const result = await memoryStore.listMessages({
+            threadId,
+            orderBy: { field: 'createdAt', direction: 'ASC' },
+            perPage: false,
+            filter: dateFilter,
+          });
+          return result.messages;
+        };
+        messages = runState
+          ? await runState.load(`observational-memory:messages:thread:${threadId}:${boundary}`, loadMessages)
+          : await loadMessages();
       }
     } else {
       // No OM: load recent messages
@@ -1750,6 +1938,10 @@ ${workingMemory}`;
       );
     }
 
+    if (omConfig.experimental_subconscious) {
+      await this.getKnowledgeStore();
+    }
+
     const { ObservationalMemory: OMClass } = await import('./processors/observational-memory');
 
     const onIndexObservations = this.hasRetrievalSearch(omConfig.retrieval)
@@ -1774,9 +1966,33 @@ ${workingMemory}`;
       activateOnProviderChange: omConfig.activateOnProviderChange,
       shareTokenBudget: omConfig.shareTokenBudget,
       model: omConfig.model,
+      curationCadence:
+        omConfig.experimental_subconscious instanceof Subconscious
+          ? omConfig.experimental_subconscious.resolved.curationCadence
+          : undefined,
       mastra: this._mastraInstance,
       onIndexObservations,
       hooks: omConfig.hooks,
+      onReflectionCommitted:
+        omConfig.experimental_subconscious instanceof Subconscious
+          ? (() => {
+              const resolved = omConfig.experimental_subconscious.resolved;
+              const omModel = omConfig.observation?.model ?? omConfig.model;
+              const curate = createCuratorHandler(
+                this,
+                resolved,
+                new Memory({ storage: this.storage, options: { observationalMemory: false } }),
+                { omModel },
+              );
+              const learn = createLearnerHandler(
+                this,
+                resolved,
+                new Memory({ storage: this.storage, options: { observationalMemory: false } }),
+                { omModel },
+              );
+              return composeReflectionAgentHandlers([curate, learn]);
+            })()
+          : undefined,
       observation: omConfig.observation
         ? {
             model: omConfig.observation.model,
@@ -2401,6 +2617,12 @@ Notes:
         retrievalScope,
         searchEnabled: this.hasRetrievalSearch(omConfig.retrieval),
       });
+    }
+    if (
+      omConfig?.experimental_subconscious instanceof Subconscious &&
+      omConfig.experimental_subconscious.resolved.tools
+    ) {
+      Object.assign(tools, createKnowledgeTools(this));
     }
 
     return tools;
@@ -3158,6 +3380,11 @@ Notes:
       processors.push(wm);
     }
 
+    const pins = await this.createPinnedStateProcessor(configuredProcessors, context);
+    if (pins) {
+      processors.push(pins);
+    }
+
     return processors;
   }
 
@@ -3250,6 +3477,31 @@ Notes:
     if (alreadyConfigured) return null;
 
     return new WorkingMemoryStateProcessor(this, runtimeMemory?.memoryConfig);
+  }
+
+  /**
+   * Creates a PinnedStateProcessor when Subconscious pins are enabled on the
+   * merged thread config. The gate is the validated `resolved.pins` on the
+   * Subconscious instance, never the raw user object. Returns null when pins
+   * are off or the processor is already present in the user's configured
+   * processors.
+   */
+  private async createPinnedStateProcessor(
+    configuredProcessors: InputProcessorOrWorkflow[] = [],
+    context?: RequestContext,
+  ): Promise<InputProcessor | null> {
+    const runtimeMemory = context?.get('MastraMemory') as { memoryConfig?: MemoryConfigInternal } | undefined;
+    const mergedConfig = this.getMergedThreadConfig(runtimeMemory?.memoryConfig);
+    const omConfig = normalizeObservationalMemoryConfig(mergedConfig.observationalMemory);
+    const subconscious = omConfig?.experimental_subconscious;
+    if (!(subconscious instanceof Subconscious) || subconscious.resolved.pins === false) return null;
+
+    const { PinnedStateProcessor, SUBCONSCIOUS_PINS_STATE_ID } =
+      await import('./processors/observational-memory/subconscious');
+    const alreadyConfigured = configuredProcessors.some(p => !('workflow' in p) && p.id === SUBCONSCIOUS_PINS_STATE_ID);
+    if (alreadyConfigured) return null;
+
+    return new PinnedStateProcessor({ getKnowledgeStore: () => this.storage.getStore('knowledge') });
   }
 }
 

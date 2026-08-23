@@ -93,9 +93,9 @@ export function DatasetExperimentsList({
                 </Tooltip>
               )}
             </DataList.Cell>
-            <DataList.Cell height="compact">{experiment.targetType}</DataList.Cell>
+            <DataList.Cell height="compact">{experiment.targetType ?? 'external'}</DataList.Cell>
             <DataList.Cell height="compact" className="min-w-0">
-              <span className="block truncate">{experiment.targetId}</span>
+              <span className="block truncate">{experiment.targetId ?? '—'}</span>
             </DataList.Cell>
             <DataList.Cell height="compact">
               <Tooltip>

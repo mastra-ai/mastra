@@ -175,6 +175,13 @@ Each server in the `servers` map is configured using the `MastraMCPServerDefinit
     description:
       'Require human approval before executing tools from this server. When set to `true`, all tools require approval. When set to a function, the function is called with the tool name, arguments, request context, and any tool annotations advertised by the server to dynamically decide whether approval is needed.',
   },
+  {
+    name: 'protocolVersion',
+    type: "'auto' | '2026-07-28'",
+    isOptional: true,
+    description:
+      "Opt-in MCP protocol version negotiation. Omitted keeps the legacy (2025-era) connect sequence unchanged. 'auto' probes the server at connect time and uses the stateless '2026-07-28' revision when the server supports it, with a safe fallback to the legacy handshake. '2026-07-28' pins that revision exactly and fails with a typed error when the server does not offer it. Elicitation handlers work on both eras: on a '2026-07-28' connection, embedded elicitation requests from input_required results are dispatched through the same registered handler and the originating call retries automatically.",
+  },
 ]}
 />
 

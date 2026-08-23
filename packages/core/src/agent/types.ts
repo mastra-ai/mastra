@@ -11,7 +11,7 @@ import type { MastraServerCache } from '../cache/base';
 import type { AgentChannels } from '../channels/agent-channels';
 import type { ChannelConfig } from '../channels/types';
 import type { WaitUntilFn } from '../channels/wait-until';
-import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
+import type { MastraScorer, MastraScorers, ScoringFilter, ScoringSamplingConfig } from '../evals';
 import type { PubSub } from '../events/pubsub';
 import type {
   CoreMessage,
@@ -1015,7 +1015,9 @@ export type AgentGenerateOptions<
    */
   versions?: VersionOverrides;
   /** Scorers to use for this generation */
-  scorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
+  scorers?:
+    | MastraScorers
+    | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig; filter?: ScoringFilter }>;
   /** Whether to return the input required to run scorers for agents, defaults to false */
   returnScorerData?: boolean;
   /**
@@ -1128,7 +1130,9 @@ export type AgentStreamOptions<
   /** tracing options for starting new traces */
   tracingOptions?: TracingOptions;
   /** Scorers to use for this generation */
-  scorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
+  scorers?:
+    | MastraScorers
+    | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig; filter?: ScoringFilter }>;
   /** Provider-specific options for supported AI SDK packages (Anthropic, Google, OpenAI, xAI) */
   providerOptions?: ProviderOptions;
 } & Partial<ObservabilityContext> &
@@ -1172,7 +1176,9 @@ export type AgentExecuteOnFinishOptions = {
   messageList: MessageList;
   threadExists: boolean;
   structuredOutput?: boolean;
-  overrideScorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
+  overrideScorers?:
+    | MastraScorers
+    | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig; filter?: ScoringFilter }>;
   onTitleGenerated?: (title: string) => void | Promise<void>;
   /**
    * Optional platform `waitUntil` so detached title generation survives

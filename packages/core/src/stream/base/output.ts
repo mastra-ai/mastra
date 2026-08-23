@@ -406,8 +406,20 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
           async transform(chunk, controller) {
             // Filter out intermediate finish chunks with 'tool-calls' reason
             // These are internal signals that shouldn't reach output processors
+            //
+            // Error-shaped chunks are filtered out the same way when the caller
+            // opted into `deferErrorChunks`: they describe one model call that
+            // may still be retried or served by a fallback model, so processors
+            // must not react to them here. The caller runs processors on the
+            // error once it has ruled out recovery.
+            const isDeferredErrorChunk =
+              options.deferErrorChunks &&
+              (chunk.type === 'error' || (chunk.type === 'finish' && chunk.payload?.stepResult?.reason === 'error'));
 
-            if (chunk.type === 'finish' && chunk.payload?.stepResult?.reason === 'tool-calls') {
+            if (
+              (chunk.type === 'finish' && chunk.payload?.stepResult?.reason === 'tool-calls') ||
+              isDeferredErrorChunk
+            ) {
               controller.enqueue(chunk);
               return;
             } else {

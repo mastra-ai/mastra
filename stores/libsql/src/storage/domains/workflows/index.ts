@@ -16,6 +16,7 @@ import {
   normalizePerPage,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_SCHEMAS,
+  matchesExpectedWorkflowStatus,
   WorkflowsStorage,
 } from '@mastra/core/storage';
 import type { WorkflowRunState, StepResult } from '@mastra/core/workflows';
@@ -247,8 +248,14 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
               throw new Error(`Snapshot not found for runId ${runId}`);
             }
 
+            const { expectedStatus, ...state } = opts;
+            if (!matchesExpectedWorkflowStatus(snapshot.status, expectedStatus)) {
+              await tx.rollback();
+              return undefined;
+            }
+
             // Merge the new options with the existing snapshot
-            const updatedSnapshot = { ...snapshot, ...opts };
+            const updatedSnapshot = { ...snapshot, ...state };
 
             // Update the snapshot within the same transaction
             await tx.execute({
@@ -301,7 +308,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
             sql: `INSERT INTO ${TABLE_WORKFLOW_SNAPSHOT} (workflow_name, run_id, resourceId, snapshot, createdAt, updatedAt)
                 VALUES (?, ?, ?, jsonb(?), ?, ?)
                 ON CONFLICT(workflow_name, run_id)
-                DO UPDATE SET resourceId = excluded.resourceId, snapshot = excluded.snapshot, updatedAt = excluded.updatedAt`,
+                DO UPDATE SET resourceId = COALESCE(excluded.resourceId, ${TABLE_WORKFLOW_SNAPSHOT}.resourceId), snapshot = excluded.snapshot, updatedAt = excluded.updatedAt`,
             args: [workflowName, runId, resourceId ?? null, safeStringify(snapshot), createdAtValue, updatedAtValue],
           }),
         ),

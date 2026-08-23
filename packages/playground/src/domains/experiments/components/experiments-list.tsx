@@ -113,7 +113,7 @@ export function ExperimentsList({
             <EntityList.TextCell>{dsName}</EntityList.TextCell>
             <EntityList.Cell>
               <span className="truncate">
-                {exp.targetType} {exp.targetId}
+                {exp.targetType && exp.targetId ? `${exp.targetType} ${exp.targetId}` : 'external'}
               </span>
             </EntityList.Cell>
             <EntityList.Cell>

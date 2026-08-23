@@ -1,7 +1,7 @@
 import { ReadableStream } from 'node:stream/web';
 import { isAbortError } from '@ai-sdk/provider-utils-v5';
 import type { LanguageModelV2Usage } from '@ai-sdk/provider-v5';
-import { APICallError, generateId } from '@internal/ai-sdk-v5';
+import { APICallError } from '@internal/ai-sdk-v5';
 import type { CallSettings, StepResult, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import type { StructuredOutputOptions } from '../../../agent';
 import type { MessageList } from '../../../agent/message-list';
@@ -32,8 +32,9 @@ import type {
 } from '../../../processors/index';
 import { isProcessorWorkflow } from '../../../processors/index';
 import { PrepareStepProcessor } from '../../../processors/processors/prepare-step';
-import { ProcessorRunner } from '../../../processors/runner';
+import { isMaybeAnthropicWithoutAssistantPrefill } from '../../../processors/provider-history-compat';
 import type { ProcessorState } from '../../../processors/runner';
+import { ProcessorRunner } from '../../../processors/runner';
 import { RequestContext } from '../../../request-context';
 import { execute } from '../../../stream/aisdk/v5/execute';
 import { DefaultStepResult } from '../../../stream/aisdk/v5/output-helpers';
@@ -1294,16 +1295,43 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           workspace,
         };
         const rotateResponseMessageId = () => {
-          currentMessageId = readScoped(scopeCtx, GENERATE_ID_KEY, 'generateId')?.() ?? generateId();
+          currentMessageId = rotateLoopResponseMessageId(currentMessageId);
           currentStep.messageId = currentMessageId;
           return currentMessageId;
         };
+
+        // Steps completed so far. The content of the most recent one is
+        // re-extracted here because it was captured at step-finish time, before
+        // that step's tool results reached the messageList. By now the list is
+        // complete, so this is what makes `steps[i].toolResults` visible to
+        // input-step processors.
+        const previousSteps = inputData.output?.steps || [];
+        const lastPreviousStep = previousSteps[previousSteps.length - 1];
+        if (lastPreviousStep) {
+          // modelContent is 1-indexed, so the last completed step is `length`.
+          const refreshedContent = messageList.get.response.aiV5.modelContent(previousSteps.length);
+          // Durable agents deserialize a fresh MessageList per workflow step, so
+          // the re-extraction can legitimately come back empty there. Never let
+          // that wipe content we already have.
+          if (refreshedContent.length > 0) {
+            previousSteps[previousSteps.length - 1] = new DefaultStepResult({
+              content: refreshedContent,
+              finishReason: lastPreviousStep.finishReason,
+              usage: lastPreviousStep.usage,
+              warnings: lastPreviousStep.warnings,
+              request: lastPreviousStep.request,
+              response: lastPreviousStep.response,
+              providerMetadata: lastPreviousStep.providerMetadata,
+              tripwire: lastPreviousStep.tripwire,
+            });
+          }
+        }
 
         const inputStepProcessors = [
           ...(inputProcessors || []),
           ...(options?.prepareStep ? [new PrepareStepProcessor({ prepareStep: options.prepareStep })] : []),
         ];
-        if (inputStepProcessors && inputStepProcessors.length > 0) {
+        if (inputStepProcessors.length > 0 || isMaybeAnthropicWithoutAssistantPrefill(model)) {
           const processorRunner = new ProcessorRunner({
             inputProcessors: inputStepProcessors,
             outputProcessors: [],
@@ -1707,6 +1735,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             // original call. Re-running them on replay would double up.
             outputProcessors: cachedResponse ? [] : outputProcessors,
             isLLMExecutionStep: true,
+            // Error chunks describe this single model call, which processAPIError
+            // or a fallback model may still recover from. Keep them away from the
+            // per-chunk processor pass; the deferred-error branch below runs
+            // processors on the error once recovery has been ruled out.
+            deferErrorChunks: true,
             tracingContext,
             processorStates,
             requestContext,
@@ -1946,7 +1979,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               abortSignal: options?.abortSignal,
               messageId: currentMessageId,
               rotateResponseMessageId: () => {
-                currentMessageId = readScoped(scopeCtx, GENERATE_ID_KEY, 'generateId')?.() ?? generateId();
+                currentMessageId = rotateLoopResponseMessageId(currentMessageId);
                 // Keep the active output stream in sync so bail/retry paths
                 // below report the rotated id instead of the stale one, and so
                 // any subsequent chunks the stream writes itself use the new id.
@@ -2092,7 +2125,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           abortSignal: options?.abortSignal,
           messageId: currentMessageId,
           rotateResponseMessageId: () => {
-            currentMessageId = readScoped(scopeCtx, GENERATE_ID_KEY, 'generateId')?.() ?? generateId();
+            currentMessageId = rotateLoopResponseMessageId(currentMessageId);
             // Keep the active output stream in sync so the retry payload and
             // any downstream chunks use the rotated id.
             outputStream.messageId = currentMessageId;
@@ -2169,7 +2202,46 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         const deferredError = getErrorFromUnknown(deferredChunk.payload.error, {
           fallbackMessage: 'Unknown error in agent stream',
         });
-        safeEnqueue(controller, { ...deferredChunk, payload: { ...deferredChunk.payload, error: deferredError } });
+        let errorChunk = {
+          ...deferredChunk,
+          payload: { ...deferredChunk.payload, error: deferredError },
+        };
+
+        // The per-chunk processor pass skipped this chunk (deferErrorChunks) so
+        // processors would not react to a failure that retry or a fallback model
+        // might still have recovered from. Nothing recovered, so run it through
+        // them now — this is the one place a terminal error reaches processors.
+        // A processor must never be able to swallow it: a blocked or missing
+        // result falls back to the original chunk, and a throwing processor is
+        // logged and ignored.
+        if (outputProcessors?.length) {
+          try {
+            const errorChunkRunner = new ProcessorRunner({
+              inputProcessors: inputProcessors || [],
+              outputProcessors,
+              errorProcessors: errorProcessors || [],
+              logger: logger || new ConsoleLogger({ level: 'error' }),
+              agentName: agentId || 'unknown',
+              processorStates,
+            });
+
+            const { part: processedErrorChunk } = await errorChunkRunner.processPart(
+              errorChunk as ChunkType,
+              processorStates as Map<string, ProcessorState>,
+              createObservabilityContext(modelSpanTracker?.getTracingContext() ?? tracingContext),
+              requestContext,
+              messageList,
+            );
+
+            if (processedErrorChunk) {
+              errorChunk = processedErrorChunk as typeof errorChunk;
+            }
+          } catch (processorError) {
+            logger?.debug?.(`Output processor failed on deferred error chunk: ${processorError}`, { runId });
+          }
+        }
+
+        safeEnqueue(controller, errorChunk);
         await options?.onError?.({ error: deferredError });
         runState.setState({ deferredErrorChunk: undefined });
       }
@@ -2302,13 +2374,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
       const steps = inputData.output?.steps || [];
 
-      // Only include content from this iteration, not all accumulated content
-      // Get the number of existing response messages to know where this iteration starts
-      const existingResponseCount = inputData.messages?.nonUser?.length || 0;
-      const allResponseContent = messageList.get.response.aiV5.modelContent(steps.length);
-
-      // Extract only the content added in this iteration
-      const currentIterationContent = allResponseContent.slice(existingResponseCount);
+      // Only include content from this iteration, not all accumulated content.
+      // modelContent is 1-indexed and already scopes the result to the requested
+      // step, so the step being pushed is `steps.length + 1` and no further
+      // slicing is needed.
+      const currentIterationContent = messageList.get.response.aiV5.modelContent(steps.length + 1);
 
       // Build tripwire data if this step is being rejected
       // This includes both retry scenarios and max retries exceeded

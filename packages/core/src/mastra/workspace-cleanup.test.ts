@@ -71,10 +71,12 @@ describe('Workspace cleanup', () => {
   });
 
   describe('shutdown', () => {
-    it('destroys and unregisters registered workspaces', async () => {
+    it('stops and unregisters registered workspaces by default without destroying them', async () => {
       const mastra = new Mastra({ logger: false });
       const workspaceA = createWorkspace('workspace-a');
       const workspaceB = createWorkspace('workspace-b');
+      const stopA = vi.spyOn(workspaceA, 'stop').mockResolvedValue(undefined);
+      const stopB = vi.spyOn(workspaceB, 'stop').mockResolvedValue(undefined);
       const destroyA = vi.spyOn(workspaceA, 'destroy').mockResolvedValue(undefined);
       const destroyB = vi.spyOn(workspaceB, 'destroy').mockResolvedValue(undefined);
       mastra.addWorkspace(workspaceA);
@@ -82,30 +84,32 @@ describe('Workspace cleanup', () => {
 
       await mastra.shutdown();
 
-      expect(destroyA).toHaveBeenCalledTimes(1);
-      expect(destroyB).toHaveBeenCalledTimes(1);
+      expect(stopA).toHaveBeenCalledTimes(1);
+      expect(stopB).toHaveBeenCalledTimes(1);
+      expect(destroyA).not.toHaveBeenCalled();
+      expect(destroyB).not.toHaveBeenCalled();
       expect(mastra.listWorkspaces()).toEqual({});
     });
 
-    it('continues shutdown after a workspace destroy failure and keeps failed workspaces registered', async () => {
+    it('continues shutdown after a workspace stop failure and keeps failed workspaces registered', async () => {
       const mastra = new Mastra({ logger: false });
       const failingWorkspace = createWorkspace('failing-workspace');
       const successfulWorkspace = createWorkspace('successful-workspace');
-      const error = new Error('destroy failed');
-      const failingDestroy = vi.spyOn(failingWorkspace, 'destroy').mockRejectedValue(error);
-      const successfulDestroy = vi.spyOn(successfulWorkspace, 'destroy').mockResolvedValue(undefined);
+      const error = new Error('stop failed');
+      const failingStop = vi.spyOn(failingWorkspace, 'stop').mockRejectedValue(error);
+      const successfulStop = vi.spyOn(successfulWorkspace, 'stop').mockResolvedValue(undefined);
       mastra.addWorkspace(failingWorkspace);
       mastra.addWorkspace(successfulWorkspace);
 
       await expect(mastra.shutdown()).resolves.toBeUndefined();
 
-      expect(failingDestroy).toHaveBeenCalledTimes(1);
-      expect(successfulDestroy).toHaveBeenCalledTimes(1);
+      expect(failingStop).toHaveBeenCalledTimes(1);
+      expect(successfulStop).toHaveBeenCalledTimes(1);
       expect(mastra.listWorkspaces()['failing-workspace']?.workspace).toBe(failingWorkspace);
       expect(mastra.listWorkspaces()).not.toHaveProperty('successful-workspace');
     });
 
-    it('destroys registered workspaces before closing storage', async () => {
+    it('stops registered workspaces before closing storage', async () => {
       const callOrder: string[] = [];
       const storage = {
         name: 'order-test-storage',
@@ -118,18 +122,18 @@ describe('Workspace cleanup', () => {
 
       const mastra = new Mastra({ logger: false, storage });
       const workspace = createWorkspace('order-workspace');
-      vi.spyOn(workspace, 'destroy').mockImplementation(async () => {
-        callOrder.push('workspace.destroy');
+      vi.spyOn(workspace, 'stop').mockImplementation(async () => {
+        callOrder.push('workspace.stop');
       });
       mastra.addWorkspace(workspace);
 
       await mastra.shutdown();
 
-      expect(callOrder).toEqual(['workspace.destroy', 'storage.close']);
+      expect(callOrder).toEqual(['workspace.stop', 'storage.close']);
       expect(storage.close).toHaveBeenCalledTimes(1);
     });
 
-    it('destroys multiple workspaces concurrently (parallel teardown)', async () => {
+    it('stops multiple workspaces concurrently (parallel teardown)', async () => {
       const mastra = new Mastra({ logger: false });
       const workspaceA = createWorkspace('parallel-a');
       const workspaceB = createWorkspace('parallel-b');
@@ -137,21 +141,21 @@ describe('Workspace cleanup', () => {
       let started = 0;
       let active = 0;
       let maxActive = 0;
-      let releaseDestroys!: () => void;
+      let releaseStops!: () => void;
       const release = new Promise<void>(resolve => {
-        releaseDestroys = resolve;
+        releaseStops = resolve;
       });
 
-      const slowDestroy = async () => {
+      const slowStop = async () => {
         started += 1;
         active += 1;
         maxActive = Math.max(maxActive, active);
         await release;
         active -= 1;
       };
-      vi.spyOn(workspaceA, 'destroy').mockImplementation(slowDestroy);
-      vi.spyOn(workspaceB, 'destroy').mockImplementation(slowDestroy);
-      vi.spyOn(workspaceC, 'destroy').mockImplementation(slowDestroy);
+      vi.spyOn(workspaceA, 'stop').mockImplementation(slowStop);
+      vi.spyOn(workspaceB, 'stop').mockImplementation(slowStop);
+      vi.spyOn(workspaceC, 'stop').mockImplementation(slowStop);
 
       mastra.addWorkspace(workspaceA);
       mastra.addWorkspace(workspaceB);
@@ -163,7 +167,7 @@ describe('Workspace cleanup', () => {
         await vi.waitFor(() => expect(started).toBe(3), { timeout: 500, interval: 5 });
         expect(maxActive).toBe(3);
       } finally {
-        releaseDestroys();
+        releaseStops();
       }
       await shutdownPromise;
 

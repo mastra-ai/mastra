@@ -180,6 +180,7 @@ import type {
   DatasetItem,
   DatasetExperiment,
   DatasetExperimentResult,
+  DatasetExperimentResultRow,
   ListExperimentsParams,
   ExperimentReviewCounts,
   CreateDatasetParams,
@@ -191,6 +192,12 @@ import type {
   GenerateDatasetItemsParams,
   GeneratedItem,
   TriggerDatasetExperimentParams,
+  CreateDatasetExperimentParams,
+  CreateDatasetExperimentResponse,
+  RunExperimentItemParams,
+  RunExperimentItemResponse,
+  SubmitExperimentResultParams,
+  FinalizeExperimentParams,
   UpdateExperimentResultParams,
   CompareExperimentsParams,
   CompareExperimentsResponse,
@@ -2208,6 +2215,65 @@ export class MastraClient extends BaseResource {
       method: 'POST',
       body,
     });
+  }
+
+  /**
+   * Creates an experiment without starting the in-process runner, so the caller
+   * drives the loop (e.g. a Temporal workflow). With a target, execute items
+   * server-side via `runExperimentItem`; without one, ingest results via
+   * `submitExperimentResult`. Idempotent when a caller-supplied `id` is provided.
+   */
+  public createDatasetExperiment(params: CreateDatasetExperimentParams): Promise<CreateDatasetExperimentResponse> {
+    const { datasetId, ...body } = params;
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/experiments`, {
+      method: 'POST',
+      body: { ...body, start: false },
+    });
+  }
+
+  /**
+   * Executes the experiment's target against one dataset item server-side,
+   * runs the resolved scorers, and upserts the result row keyed by
+   * (experimentId, itemId, attempt) — safe to retry.
+   */
+  public runExperimentItem(params: RunExperimentItemParams): Promise<RunExperimentItemResponse> {
+    const { datasetId, experimentId, itemId, ...body } = params;
+    return this.request(
+      `/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}/items/${encodeURIComponent(itemId)}/run`,
+      {
+        method: 'POST',
+        body,
+      },
+    );
+  }
+
+  /**
+   * Submits (or re-submits) one item result for a target-less (ingestion) experiment.
+   * Upsert semantics on (experimentId, itemId, attempt) — safe to retry.
+   */
+  public submitExperimentResult(params: SubmitExperimentResultParams): Promise<DatasetExperimentResultRow> {
+    const { datasetId, experimentId, ...body } = params;
+    return this.request(
+      `/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}/results`,
+      {
+        method: 'POST',
+        body,
+      },
+    );
+  }
+
+  /**
+   * Finalizes an external experiment. The server computes counts from persisted results. Idempotent.
+   */
+  public finalizeExperiment(params: FinalizeExperimentParams): Promise<DatasetExperiment> {
+    const { datasetId, experimentId } = params;
+    return this.request(
+      `/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}/finalize`,
+      {
+        method: 'POST',
+        body: {},
+      },
+    );
   }
 
   /**

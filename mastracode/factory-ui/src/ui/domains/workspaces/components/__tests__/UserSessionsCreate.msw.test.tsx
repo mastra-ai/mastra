@@ -21,6 +21,7 @@ function userSession(overrides: Partial<FactoryUserSession> = {}): FactoryUserSe
     projectRepositoryId,
     orgId: 'org-1',
     userId: 'user-1',
+    visibility: 'org' as const,
     branch: 'user/session-1',
     baseBranch: 'main',
     sandboxId: null,

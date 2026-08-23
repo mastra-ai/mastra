@@ -10,7 +10,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import { createAppRoutes } from '../router';
 
 const FACTORY_ID = 'fp-1';
@@ -58,10 +58,69 @@ function decision(status: 'proposed' | 'pending' | 'dismissed') {
   };
 }
 
-function stubBoardEndpoints() {
+const SESSION_ID = 'sess-1';
+
+const liveSessionWorkItem = {
+  ...workItem,
+  stages: ['planning'],
+  sessions: {
+    triage: { sessionId: SESSION_ID, branch: 'factory/issue-1', threadId: 'thread-1', startedBy: 'user-1' },
+  },
+};
+
+const userSession = {
+  id: 'us-1',
+  sessionId: SESSION_ID,
+  projectRepositoryId: REPO_ID,
+  orgId: 'org-1',
+  userId: 'user-1',
+  title: 'Fix login bug',
+  branch: 'factory/issue-1',
+  baseBranch: 'main',
+  sandboxId: null,
+  sandboxWorkdir: null,
+  materializedAt: null,
+  createdAt: '2026-08-10T00:00:00.000Z',
+  updatedAt: '2026-08-10T00:00:00.000Z',
+};
+
+/**
+ * An approved plan transitions the card to Building and writes the `work`
+ * session ref itself — no run ever started, but the slot looks used.
+ */
+const buildingWorkItem = {
+  ...workItem,
+  stages: ['execute'],
+  sessions: {
+    triage: { sessionId: SESSION_ID, branch: 'factory/issue-1', threadId: 'thread-1', startedBy: 'user-1' },
+    work: { sessionId: SESSION_ID, branch: 'factory/issue-1', threadId: 'thread-1', startedBy: 'user-1' },
+  },
+};
+
+/** A Review card whose pull request has since closed: its parked run is moot. */
+const closedPullRequestWorkItem = {
+  ...workItem,
+  externalSource: { ...workItem.externalSource, type: 'pull-request', externalId: 'github-pr:1' },
+  stages: ['review'],
+  metadata: { number: 1, state: 'closed' },
+};
+
+function stubBoardEndpoints({
+  withLiveSession = false,
+  building = false,
+  closedPullRequest = false,
+}: { withLiveSession?: boolean; building?: boolean; closedPullRequest?: boolean } = {}) {
   const settled: string[] = [];
   const startRequests: unknown[] = [];
   let status: 'proposed' | 'pending' | 'dismissed' = 'proposed';
+  const item = closedPullRequest
+    ? closedPullRequestWorkItem
+    : building
+      ? buildingWorkItem
+      : withLiveSession
+        ? liveSessionWorkItem
+        : workItem;
+  const sessions = withLiveSession || building ? [userSession] : [];
 
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
@@ -89,10 +148,16 @@ function stubBoardEndpoints() {
       }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
-      HttpResponse.json({ workItems: [workItem] }),
+      HttpResponse.json({ workItems: [item] }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions`, () =>
-      HttpResponse.json({ decisions: [decision(status)] }),
+      HttpResponse.json({ decisions: building || closedPullRequest ? [] : [decision(status)] }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/metrics`, () =>
+      HttpResponse.json({ error: 'Metrics unavailable in this scenario' }, { status: 500 }),
+    ),
+    http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () =>
+      HttpResponse.json({ session: userSession }),
     ),
     http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions/${DECISION_ID}/approve`, () => {
       settled.push('approve');
@@ -106,7 +171,19 @@ function stubBoardEndpoints() {
     }),
     http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/runs/start`, async ({ request }) => {
       startRequests.push(await request.json());
-      return HttpResponse.json({});
+      return HttpResponse.json({
+        prepared: {
+          workItemId: ITEM_ID,
+          bindingId: 'binding-1',
+          threadId: 'thread-1',
+          resourceId: 'resource-1',
+          sessionId: SESSION_ID,
+          branch: 'factory/issue-1',
+          revision: 2,
+          kickoffStatus: 'queued',
+          replayed: false,
+        },
+      });
     }),
     http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
       HttpResponse.json({
@@ -116,25 +193,115 @@ function stubBoardEndpoints() {
         },
       }),
     ),
+    http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings: [] })),
     http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
       HttpResponse.json({ enabled: false, connected: false, workspace: null }),
     ),
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, () =>
       HttpResponse.json({ issues: [], nextPage: null }),
     ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () => HttpResponse.json({ sessions: [] })),
+    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/prs`, () =>
+      HttpResponse.json({ pullRequests: [], nextPage: null }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () => HttpResponse.json({ sessions })),
     http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/ensure`, () => HttpResponse.json({ ok: true })),
+    http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:resourceId/permissions`, () =>
+      HttpResponse.json({ categories: {}, tools: {} }),
+    ),
   );
 
   return { settled, startRequests };
 }
 
+function renderBoard(board: 'work' | 'review' = 'work', initialEntry = `/factories/${FACTORY_ID}/${board}`) {
+  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [initialEntry] });
+  return renderWithProviders(<RouterProvider router={router} />);
+}
+
 function renderWorkBoard() {
-  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}/work`] });
-  renderWithProviders(<RouterProvider router={router} />);
+  return renderBoard('work');
 }
 
 describe('Board card with a proposed run', () => {
+  it('highlights and focuses a work item opened from attention', async () => {
+    stubBoardEndpoints();
+    const { client } = renderBoard('work', `/factories/${FACTORY_ID}/work?item=${ITEM_ID}`);
+
+    const card = await screen.findByRole('article', { name: 'Fix login bug' });
+    await waitForMutationsIdle(client);
+    expect(card).toHaveAttribute('data-highlighted', 'true');
+    await waitFor(() => expect(within(card).getByRole('button', { name: 'Investigate Fix login bug' })).toHaveFocus());
+  });
+
+  it('keeps a targeted Linear intake card visible while GitHub is selected', async () => {
+    stubBoardEndpoints();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({
+          workItems: [
+            {
+              ...workItem,
+              stages: ['intake'],
+              externalSource: {
+                integrationId: 'linear',
+                type: 'issue',
+                externalId: 'linear-issue:ENG-1',
+                url: 'https://linear.app/acme/issue/ENG-1',
+              },
+              metadata: { identifier: 'ENG-1' },
+            },
+          ],
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
+        HttpResponse.json({
+          config: {
+            github: { enabled: true, sourceIds: ['acme/app'] },
+            linear: { enabled: true, sourceIds: ['linear-project'] },
+          },
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
+        HttpResponse.json({ enabled: true, connected: true, workspace: { id: 'workspace-1' } }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/linear/issues`, () => HttpResponse.json({ issues: [], nextCursor: null })),
+    );
+    const { client } = renderBoard('work', `/factories/${FACTORY_ID}/work?item=${ITEM_ID}`);
+
+    expect(await screen.findByRole('button', { name: 'Issues' })).toHaveAttribute('aria-pressed', 'true');
+    const card = await screen.findByRole('article', { name: 'Fix login bug' });
+    await waitForMutationsIdle(client);
+    expect(card).toHaveAttribute('data-highlighted', 'true');
+    await waitFor(() => expect(within(card).getByRole('button', { name: 'Investigate Fix login bug' })).toHaveFocus());
+  });
+
+  it('summarizes proposed runs as one approval queue', async () => {
+    stubBoardEndpoints();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention`, () =>
+        HttpResponse.json({
+          items: [],
+          openCount: 1,
+          approvalCount: 1,
+          badgeCount: 1,
+          unreadCount: 0,
+          hasMore: false,
+          latestOccurrenceKey: null,
+          latestOccurrenceAt: null,
+          latestOccurrenceUnread: false,
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderWorkBoard();
+
+    await user.click(await screen.findByRole('button', { name: 'Needs attention, 1 waiting for approval, 1 open' }));
+    expect(await screen.findByRole('link', { name: /1 items waiting for approval/i })).toHaveAttribute(
+      'href',
+      `/factories/${FACTORY_ID}/rules?group=proposed`,
+    );
+  });
+
   it('releases the proposal instead of starting a second run when the card is clicked', async () => {
     const { settled, startRequests } = stubBoardEndpoints();
     const user = userEvent.setup();
@@ -158,5 +325,61 @@ describe('Board card with a proposed run', () => {
 
     await waitFor(() => expect(settled).toEqual(['dismiss']));
     expect(startRequests).toHaveLength(0);
+  });
+
+  it('releases the proposal from the menu when the card already links to a session', async () => {
+    const { settled, startRequests } = stubBoardEndpoints({ withLiveSession: true });
+    const user = userEvent.setup();
+    renderWorkBoard();
+
+    // The card body is a link to the existing session, so the primary action
+    // button never renders — the menu must still offer the suggested run.
+    const card = await screen.findByRole('article', { name: 'Fix login bug' });
+    await user.click(within(card).getByRole('button', { name: 'Actions for Fix login bug' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Start suggested run' }));
+
+    await waitFor(() => expect(settled).toEqual(['approve']));
+    expect(startRequests).toHaveLength(0);
+  });
+
+  it('says a run is waiting on a card that would otherwise look idle', async () => {
+    const { settled, startRequests } = stubBoardEndpoints({ withLiveSession: true });
+    const user = userEvent.setup();
+    renderWorkBoard();
+
+    // Without the badge this card reads as a plain link to its session, so the
+    // parked run is only discoverable by opening the menu on a hunch.
+    const card = await screen.findByRole('article', { name: 'Fix login bug' });
+    expect(await within(card).findByText('Suggested: Build')).toBeVisible();
+
+    await user.click(within(card).getByRole('button', { name: 'Start suggested run: Build' }));
+
+    await waitFor(() => expect(settled).toEqual(['approve']));
+    expect(startRequests).toHaveLength(0);
+  });
+
+  it('stops asking about a run parked on a pull request that already closed', async () => {
+    const { settled } = stubBoardEndpoints({ closedPullRequest: true });
+    const user = userEvent.setup();
+    renderBoard('review');
+
+    const card = await screen.findByRole('article', { name: 'Fix login bug' });
+    expect(within(card).queryByText(/^Suggested:/)).toBeNull();
+
+    await user.click(within(card).getByRole('button', { name: 'Actions for Fix login bug' }));
+    expect(screen.queryByRole('menuitem', { name: 'Dismiss suggested run' })).not.toBeInTheDocument();
+    expect(settled).toEqual([]);
+  });
+
+  it('still offers the Building run when the plan already filled the work session slot', async () => {
+    const { startRequests } = stubBoardEndpoints({ building: true });
+    const user = userEvent.setup();
+    renderWorkBoard();
+
+    const card = await screen.findByRole('article', { name: 'Fix login bug' });
+    await user.click(within(card).getByRole('button', { name: 'Actions for Fix login bug' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Build' }));
+
+    await waitFor(() => expect(startRequests).toHaveLength(1));
   });
 });

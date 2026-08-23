@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
+const { requestUIRender } = vi.hoisted(() => ({ requestUIRender: vi.fn() }));
+
 vi.mock('@earendil-works/pi-tui', () => {
   class MockContainer {
     children: unknown[] = [];
@@ -10,6 +12,8 @@ vi.mock('@earendil-works/pi-tui', () => {
   }
 
   class MockTUI {
+    requestRender = requestUIRender;
+
     constructor(public terminal: MockProcessTerminal) {}
   }
 
@@ -148,5 +152,27 @@ describe('createTUIState', () => {
 
     expect(state.editor.getModeColor?.()).toBe('#7c3aed');
     expect(controller.session.mode.resolve).toHaveBeenCalled();
+
+    vi.useFakeTimers();
+    try {
+      requestUIRender.mockClear();
+      state.ui.requestRender();
+      state.ui.requestRender();
+      expect(requestUIRender).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(0);
+      expect(requestUIRender).toHaveBeenCalledOnce();
+
+      state.chatContainer.children.push(
+        ...Array.from({ length: 501 }, () => ({ render: () => [], invalidate: () => {} })),
+      );
+      state.ui.requestRender();
+      vi.advanceTimersByTime(200);
+      expect(state.chatContainer.children).toHaveLength(250);
+      expect(requestUIRender).toHaveBeenCalledTimes(2);
+
+      state.renderScheduler?.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

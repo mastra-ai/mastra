@@ -185,6 +185,12 @@ const sidebars = {
         { type: 'doc', id: 'sandboxes/blaxel', label: 'Blaxel', customProps: { icon: '/img/integrations/blaxel.svg' } },
         {
           type: 'doc',
+          id: 'sandboxes/cloudflare-sandbox',
+          label: 'Cloudflare Sandbox',
+          customProps: { icon: 'https://cdn.simpleicons.org/cloudflare?viewbox=auto&size=28' },
+        },
+        {
+          type: 'doc',
           id: 'sandboxes/daytona',
           label: 'Daytona',
           customProps: { icon: '/img/integrations/daytona.svg', customCSS: 'dark:invert' },
@@ -293,6 +299,12 @@ const sidebars = {
           },
         },
         {
+          type: 'link',
+          label: 'Mastra',
+          href: '/docs/mastra-platform/observability',
+          customProps: { icon: '/img/integrations/mastra.svg', customCSS: 'dark:invert' },
+        },
+        {
           type: 'doc',
           id: 'observability/opentelemetry',
           label: 'OpenTelemetry',
@@ -384,6 +396,12 @@ const sidebars = {
           customProps: { icon: '/img/integrations/lancedb.svg', customCSS: 'dark:invert' },
         },
         { type: 'doc', id: 'databases/libsql', label: 'libSQL', customProps: { icon: '/img/integrations/libsql.svg' } },
+        {
+          type: 'link',
+          label: 'Mastra',
+          href: '/docs/mastra-platform/database',
+          customProps: { icon: '/img/integrations/mastra.svg', customCSS: 'dark:invert' },
+        },
         {
           type: 'doc',
           id: 'databases/mongodb',
@@ -504,6 +522,15 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'deploy/render',
+          label: 'Render',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/render/black?viewbox=auto&size=28',
+            iconDark: 'https://cdn.simpleicons.org/render/white?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
           id: 'deploy/temporal',
           label: 'Temporal',
           customProps: {
@@ -538,6 +565,12 @@ const sidebars = {
           id: 'tools/firecrawl',
           label: 'Firecrawl',
           customProps: { icon: '/img/integrations/firecrawl.svg' },
+        },
+        {
+          type: 'doc',
+          id: 'tools/parallel',
+          label: 'Parallel',
+          customProps: { icon: '/img/integrations/parallel.svg' },
         },
         {
           type: 'doc',

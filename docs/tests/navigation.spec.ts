@@ -275,7 +275,7 @@ test.describe('Contextual sidebar', () => {
     await page.goto('/docs', { waitUntil: 'domcontentloaded' })
     const rootPane = visibleSidebarPane(page, 'root')
     const standardLink = rootPane.getByRole('link', { name: 'Subagents', exact: true })
-    const contextualLink = rootPane.getByRole('link', { name: 'Sandbox', exact: true })
+    const contextualLink = rootPane.getByRole('link', { name: 'Sandboxes', exact: true })
 
     await standardLink.hover()
     const standardHover = await standardLink.evaluate(link => ({
@@ -432,51 +432,9 @@ test.describe('Contextual sidebar', () => {
     ).toBe(false)
   })
 
-  test('desktop: keeps version control aligned and visible inside the sidebar scrollport', async ({
-    page,
-    isMobile,
-  }) => {
-    test.skip(isMobile, 'Desktop sidebar not rendered on mobile')
-    await page.setViewportSize({ width: 1200, height: 360 })
-
+  test('does not show version control in current docs navigation', async ({ page }) => {
     await page.goto('/docs', { waitUntil: 'domcontentloaded' })
-    const rootPane = visibleSidebarPane(page, 'root')
-    const versionControl = rootPane.getByRole('button', { name: 'Change version' })
-
-    await expect(versionControl).toBeVisible()
-    const alignment = await rootPane.evaluate(element => {
-      const list = element.querySelector('ul[data-sidebar-panel="root"]')
-      const button = element.querySelector('button[aria-label="Change version"]')
-      if (!(list instanceof HTMLElement) || !(button instanceof HTMLElement)) {
-        throw new Error('Expected the root sidebar list and version control')
-      }
-
-      const navigationRect = element.getBoundingClientRect()
-      const listRect = list.getBoundingClientRect()
-      const buttonRect = button.getBoundingClientRect()
-      return {
-        listLeft: listRect.left - buttonRect.left,
-        listRight: listRect.right - buttonRect.right,
-        outerLeft: buttonRect.left - navigationRect.left,
-        outerRight: navigationRect.right - buttonRect.right,
-        scrollbarGutter: element.offsetWidth - element.clientWidth,
-      }
-    })
-    expect(Math.abs(alignment.listLeft)).toBeLessThan(1)
-    expect(Math.abs(alignment.listRight)).toBeLessThan(1)
-    expect(alignment.outerLeft).toBeCloseTo(16, 0)
-    expect(alignment.outerRight).toBeGreaterThanOrEqual(alignment.outerLeft - 1)
-    expect(alignment.outerRight).toBeLessThanOrEqual(alignment.outerLeft + alignment.scrollbarGutter + 1)
-
-    const initialBottom = await versionControl.evaluate(element => element.getBoundingClientRect().bottom)
-    await rootPane.evaluate(element => {
-      element.scrollTop = element.scrollHeight / 2
-    })
-    await expect.poll(() => rootPane.evaluate(element => element.scrollTop)).toBeGreaterThan(0)
-    await expect(versionControl).toBeVisible()
-    await expect
-      .poll(() => versionControl.evaluate(element => element.getBoundingClientRect().bottom))
-      .toBeCloseTo(initialBottom, 0)
+    await expect(page.getByRole('button', { name: 'Change version' })).toHaveCount(0)
   })
 
   test('desktop: body links switch to the destination contextual sidebar', async ({ page, isMobile }) => {
