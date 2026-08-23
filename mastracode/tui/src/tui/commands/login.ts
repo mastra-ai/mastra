@@ -80,9 +80,7 @@ async function performLogin(ctx: SlashCommandContext, providerId: string): Promi
 
 export async function handleLoginCommand(ctx: SlashCommandContext, mode: 'login' | 'logout'): Promise<void> {
   const allProviders = getOAuthProviders();
-  const loggedInIds = allProviders
-    .filter(p => ctx.authStorage?.isLoggedIn(p.id) || ctx.authStorage?.hasStoredApiKey(p.id))
-    .map(p => p.id);
+  const loggedInIds = allProviders.filter(p => ctx.authStorage?.isLoggedIn(p.id)).map(p => p.id);
 
   if (mode === 'logout') {
     if (loggedInIds.length === 0) {

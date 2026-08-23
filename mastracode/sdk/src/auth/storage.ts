@@ -5,12 +5,10 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { OPENCODE_DEFAULT_MODEL_ID } from '../constants.js';
 import { getAppDataDir } from '../utils/project.js';
 import { anthropicOAuthProvider } from './providers/anthropic.js';
 import { githubCopilotOAuthProvider } from './providers/github-copilot.js';
 import { openaiCodexOAuthProvider } from './providers/openai-codex.js';
-import { opencodeZenAuthProvider } from './providers/opencode-zen.js';
 import { xaiOAuthProvider } from './providers/xai.js';
 import type {
   AuthCredential,
@@ -32,7 +30,6 @@ export const PROVIDER_DEFAULT_MODELS: Record<OAuthProviderId, string> = {
   // are not yet wired up, so picking one as the post-login default would error.
   'github-copilot': 'github-copilot/gpt-4.1',
   xai: 'xai/grok-4.5',
-  opencode: OPENCODE_DEFAULT_MODEL_ID,
 };
 
 // Provider registry
@@ -41,7 +38,6 @@ const oauthProviderRegistry = new Map<string, OAuthProviderInterface>([
   [openaiCodexOAuthProvider.id, openaiCodexOAuthProvider],
   [githubCopilotOAuthProvider.id, githubCopilotOAuthProvider],
   [xaiOAuthProvider.id, xaiOAuthProvider],
-  [opencodeZenAuthProvider.id, opencodeZenAuthProvider],
 ]);
 
 /**
@@ -194,12 +190,6 @@ export class AuthStorage {
     }
 
     const credentials = await provider.login(callbacks);
-    // API-key flows (OpenCode Zen) land in the dedicated apikey: slot so they
-    // read back through getStoredApiKey like manually pasted keys do.
-    if (credentials.type === 'api_key') {
-      this.setStoredApiKey(providerId, credentials.key);
-      return;
-    }
     this.set(providerId, { type: 'oauth', ...credentials });
   }
 

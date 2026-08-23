@@ -28,9 +28,6 @@ export function validateConfigDirName(configDirName: string): void {
 // Default OM model - using gemini-3.5-flash for efficiency
 export const DEFAULT_OM_MODEL_ID = process.env.DEFAULT_OM_MODEL_ID ?? 'google/gemini-3.5-flash';
 
-// OpenCode Zen's always-available free-tier model
-export const OPENCODE_DEFAULT_MODEL_ID = 'opencode/x-preview-f-free';
-
 // Default OM thresholds — per-thread overrides are loaded from thread metadata
 export const DEFAULT_OBS_THRESHOLD = 30_000;
 export const DEFAULT_REF_THRESHOLD = 40_000;

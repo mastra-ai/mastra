@@ -198,10 +198,6 @@ function PermissionsSection({
   );
 }
 
-function isUsableModel(m: Pick<AgentControllerAvailableModel, 'hasApiKey' | 'noKeyNeeded'>): boolean {
-  return m.hasApiKey || Boolean(m.noKeyNeeded);
-}
-
 function ModelPicker({
   models,
   currentModelId,
@@ -230,9 +226,7 @@ function ModelPicker({
       )
     : models;
   const filtered = [...matched].sort((a, b) => {
-    const aUsable = isUsableModel(a);
-    const bUsable = isUsableModel(b);
-    if (aUsable !== bUsable) return aUsable ? -1 : 1;
+    if (a.hasApiKey !== b.hasApiKey) return a.hasApiKey ? -1 : 1;
     return a.id.localeCompare(b.id);
   });
 
@@ -260,7 +254,7 @@ function ModelPicker({
   }, [open]);
 
   const choose = (m: AgentControllerAvailableModel) => {
-    if (!isUsableModel(m)) return;
+    if (!m.hasApiKey) return;
     onModelChange(m.id);
     setOpen(false);
   };
@@ -337,9 +331,9 @@ function ModelPicker({
                   className={cn(
                     'flex w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-left',
                     i === active && 'bg-surface4',
-                    isUsableModel(m) ? 'cursor-pointer' : 'cursor-not-allowed opacity-50',
+                    m.hasApiKey ? 'cursor-pointer' : 'cursor-not-allowed opacity-50',
                   )}
-                  disabled={!isUsableModel(m)}
+                  disabled={!m.hasApiKey}
                   onMouseEnter={() => setActive(i)}
                   onClick={() => choose(m)}
                 >
@@ -353,9 +347,7 @@ function ModelPicker({
                   </span>
                   {m.id === currentModelId ? (
                     <Check size={14} />
-                  ) : m.hasApiKey ? null : m.noKeyNeeded ? (
-                    <Badge variant="default">free</Badge>
-                  ) : (
+                  ) : m.hasApiKey ? null : (
                     <Badge variant="default">no key</Badge>
                   )}
                 </button>

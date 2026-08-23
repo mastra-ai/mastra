@@ -60,7 +60,7 @@ export interface OAuthProviderInterface {
   readonly authModes?: ReadonlyArray<AuthMode>;
 
   /** Run the login flow, return credentials to persist */
-  login(callbacks: OAuthLoginCallbacks): Promise<OAuthCredentials | ApiKeyCredential>;
+  login(callbacks: OAuthLoginCallbacks): Promise<OAuthCredentials>;
 
   /** Refresh expired credentials, return updated credentials to persist */
   refreshToken(credentials: OAuthCredentials): Promise<OAuthCredentials>;

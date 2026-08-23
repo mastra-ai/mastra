@@ -1,10 +1,6 @@
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { DEFAULT_OM_MODEL_ID } from '@mastra/code-sdk/constants';
-import {
-  getAvailableModePacks,
-  openCodeAccessLevel,
-  resolveProviderOMDefault,
-} from '@mastra/code-sdk/onboarding/packs';
+import { getAvailableModePacks, resolveProviderOMDefault } from '@mastra/code-sdk/onboarding/packs';
 import type { ModePack, ProviderAccess, ProviderAccessLevel } from '@mastra/code-sdk/onboarding/packs';
 import {
   getCustomProviderId,
@@ -150,14 +146,7 @@ export interface OMSession extends PackSession {
 /** Minimal controller surface this module needs (model catalog + modes + sessions). */
 interface ModelCatalog {
   listAvailableModels: () => Promise<
-    Array<{
-      id?: string;
-      modelName?: string;
-      provider: string;
-      hasApiKey: boolean;
-      apiKeyEnvVar?: string;
-      noKeyNeeded?: boolean;
-    }>
+    Array<{ id?: string; modelName?: string; provider: string; hasApiKey: boolean; apiKeyEnvVar?: string }>
   >;
   listModes?: () => Array<{ id: string; defaultModelId?: string }>;
   getSessionByResource?: (resourceId: string, scope?: string) => Promise<OMSession | undefined>;
@@ -345,15 +334,6 @@ export async function buildProviderAccess({
 }): Promise<ProviderAccess> {
   const models = await controller.listAvailableModels();
   const hasModelKey = (provider: string) => models.some(m => m.provider === provider && m.hasApiKey);
-  const hasOpenCodeCredential = (): boolean => {
-    if (tenantCredentials) {
-      const userRec = tenantCredentials.find(r => r.scope === 'user' && r.provider === 'opencode');
-      const orgRec = tenantCredentials.find(r => r.scope === 'org' && r.provider === 'opencode');
-      const credential = userRec?.credential ?? orgRec?.credential;
-      return credential?.type === 'api_key' && credential.key.trim().length > 0;
-    }
-    return Boolean(authStorage?.hasStoredApiKey('opencode')) || hasModelKey('opencode');
-  };
   const accessLevel = (provider: string): ProviderAccessLevel => {
     const authProviderId = getAuthProviderId(provider);
     if (tenantCredentials) {
@@ -379,7 +359,6 @@ export async function buildProviderAccess({
     google: accessLevel('google'),
     deepseek: accessLevel('deepseek'),
     'github-copilot': accessLevel('github-copilot'),
-    opencode: openCodeAccessLevel(hasOpenCodeCredential()),
   };
   const seen = new Set(Object.keys(access));
   for (const m of models) {
@@ -923,9 +902,8 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
 
       // ── Available models ────────────────────────────────────────────────────
       // Session-independent model catalog for settings pickers (Factory default
-      // model, pack editors). Only models from reachable providers are
-      // returned — a provider is reachable with a credential or via its
-      // keyless free tier.
+      // model, pack editors). Only models whose provider has a credential are
+      // returned — the same filter the session-scoped hook applies client-side.
 
       registerApiRoute('/web/config/models', {
         method: 'GET',
@@ -947,15 +925,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             ]);
             const catalog = models
               .filter(m => canUseModelProvider(access, m.provider) && typeof m.id === 'string')
-              .map(m => ({
-                id: m.id!,
-                provider: m.provider,
-                modelName: m.modelName,
-                // Usability comes from the caller's resolved access level, not
-                // the (server-global) catalog credential flag.
-                hasApiKey: access[m.provider] === 'oauth' || access[m.provider] === 'apikey',
-                noKeyNeeded: m.noKeyNeeded || undefined,
-              }));
+              .map(m => ({ id: m.id!, provider: m.provider, modelName: m.modelName, hasApiKey: true }));
             // Append the caller's custom provider models (DB-backed, org rows in
             // tenant mode / sentinel `local` org in no-auth mode). The boot-time
             // gateway catalog only carries the local list, so tenant callers get

@@ -75,12 +75,7 @@ import { createMcpManager } from './mcp/index.js';
 import type { McpServerConfig } from './mcp/index.js';
 import { hasExplicitOMConfiguration } from './onboarding/om-settings.js';
 import type { ProviderAccess } from './onboarding/packs.js';
-import {
-  getAvailableModePacks,
-  getAvailableOmPacks,
-  openCodeAccessLevel,
-  selectPreferredOMPack,
-} from './onboarding/packs.js';
+import { getAvailableModePacks, getAvailableOmPacks, selectPreferredOMPack } from './onboarding/packs.js';
 import {
   loadSettings,
   MASTRA_GATEWAY_PROVIDER,
@@ -989,7 +984,6 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   const anthropicCred = authStorage.get('anthropic');
   const openaiCred = authStorage.get('openai-codex');
   const githubCopilotCred = authStorage.get('github-copilot');
-  const opencodeCred = authStorage.getStoredApiKey('opencode') ?? process.env['OPENCODE_API_KEY'];
   const startupAccess: ProviderAccess = {
     anthropic:
       anthropicCred?.type === 'oauth'
@@ -1007,7 +1001,6 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     google: process.env.GOOGLE_GENERATIVE_AI_API_KEY ? 'apikey' : false,
     deepseek: process.env.DEEPSEEK_API_KEY ? 'apikey' : false,
     'github-copilot': githubCopilotCred?.type === 'oauth' ? 'oauth' : false,
-    opencode: openCodeAccessLevel(Boolean(opencodeCred)),
   };
   // Gateway covers all providers — ensure Anthropic/OpenAI packs are visible
   if (mgApiKey) {
