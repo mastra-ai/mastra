@@ -1,4 +1,4 @@
-import { RequestContext } from '@mastra/core/request-context';
+import { MASTRA_AUTH_TOKEN_KEY, RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -135,6 +135,27 @@ describe('durable event payload builders', () => {
           .filter(k => signalKeys.includes(k))
           .sort(),
       ).toEqual(signalKeys);
+    });
+
+    it('never sends the framework-managed bearer token in a trigger or resume payload', () => {
+      // Inngest durably retains and displays event payloads, so a live token
+      // reaching `inngest.send()` is a real disclosure. Pinned here at the
+      // chokepoint both send paths now go through.
+      const rc = new RequestContext();
+      rc.set('tenant', 'acme');
+      rc.set(MASTRA_AUTH_TOKEN_KEY, 'live-bearer-token');
+
+      const trigger = buildDurableTriggerEventData({ inputData: null, runId: 'run-1', requestContext: rc });
+      const resume = buildDurableResumeEventData({
+        inputData: null,
+        runId: 'run-1',
+        requestContext: mergeResumeRequestContext(undefined, rc),
+      });
+
+      expect(trigger.requestContext).toEqual({ tenant: 'acme' });
+      expect(resume.requestContext).toEqual({ tenant: 'acme' });
+      expect(JSON.stringify(trigger)).not.toContain('live-bearer-token');
+      expect(JSON.stringify(resume)).not.toContain('live-bearer-token');
     });
 
     it('does not invent keys the caller did not supply', () => {

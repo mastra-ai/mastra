@@ -1,5 +1,6 @@
 import type { ActorSignal } from '@mastra/core/auth/ee';
 import type { TracingOptions } from '@mastra/core/observability';
+import { MASTRA_AUTH_TOKEN_KEY } from '@mastra/core/request-context';
 import type { RequestContext } from '@mastra/core/request-context';
 
 /**
@@ -46,7 +47,14 @@ export function serializeRequestContext(requestContext?: RequestContext<any>): R
   // `toJSON()` rather than `entries()`: it drops values that cannot survive the
   // JSON round trip through `inngest.send()` (functions, RPC proxies, cyclic
   // references). Passing those through raw makes the send throw.
-  return requestContext ? requestContext.toJSON() : {};
+  const obj = requestContext ? requestContext.toJSON() : {};
+  // Never hand the framework-managed bearer token to `inngest.send()`: Inngest
+  // durably retains and displays event payloads, so a live token would land in
+  // third-party storage on every durable start and resume. A resumed
+  // authenticated request supplies its own fresh token. Matches
+  // `DefaultExecutionEngine.serializeRequestContext`.
+  delete obj[MASTRA_AUTH_TOKEN_KEY];
+  return obj;
 }
 
 /**
@@ -128,7 +136,9 @@ export function buildDurableTimeTravelEventData(
 
 function toRequestContextEntries(requestContext?: RequestContext<any> | Record<string, any>): Record<string, any> {
   if (!requestContext) return {};
-  return typeof (requestContext as RequestContext<any>).entries === 'function'
+  // Probe `toJSON`, the method `serializeRequestContext` actually calls, so the
+  // check stays aligned with the branch it guards.
+  return typeof (requestContext as RequestContext<any>).toJSON === 'function'
     ? serializeRequestContext(requestContext as RequestContext<any>)
     : (requestContext as Record<string, any>);
 }
