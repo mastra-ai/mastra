@@ -57,6 +57,7 @@ import type { Mastra } from '@mastra/core/mastra';
 import { SpanType, EntityType } from '@mastra/core/observability';
 import type { MastraModelOutput, ChunkType, FullOutput, MastraOnFinishCallback } from '@mastra/core/stream';
 import type { Workflow } from '@mastra/core/workflows';
+import { NonRetriableError } from 'inngest';
 import type { Inngest } from 'inngest';
 
 import {
@@ -287,6 +288,13 @@ export interface InngestAgentStreamResult<OUTPUT = undefined> {
 export interface InngestAgentResumeOptions<OUTPUT = undefined> {
   threadId?: string;
   resourceId?: string;
+  /**
+   * Resume a specific suspended tool call. The agentic loop suspends tool calls
+   * with `resumeLabel: toolCallId`, so this targets that exact leaf instead of
+   * inferring one from the run's suspended paths. Required when more than one
+   * tool call is suspended concurrently.
+   */
+  toolCallId?: string;
   requestContext?: AgentExecutionOptions<OUTPUT>['requestContext'];
   /**
    * Per-call actor signal forwarded to FGA checks and tool execution. Must be
@@ -1032,47 +1040,104 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // and sends an event to the same trigger name (not a .resume suffix)
       const eventName = `workflow.${InngestDurableStepIds.AGENTIC_LOOP}`;
 
-      const workflowExecution = ready
-        .then(async () => {
-          const workflowsStore = await mastra?.getStorage()?.getStore('workflows');
-          const snapshot: any = await workflowsStore?.loadWorkflowSnapshot({
-            workflowName: InngestDurableStepIds.AGENTIC_LOOP,
-            runId,
-          });
-
-          // Find the suspended step from the snapshot
-          const suspendedStepIds = snapshot?.suspendedPaths ? Object.keys(snapshot.suspendedPaths) : [];
-          const steps = suspendedStepIds.length > 0 ? suspendedStepIds : [];
-          const requestContext = mergeResumeRequestContext(snapshot?.requestContext, resumeOptions?.requestContext);
-          const tracingOptions = snapshot?.tracingContext
-            ? {
-                traceId: snapshot.tracingContext.traceId,
-                parentSpanId: snapshot.tracingContext.spanId,
-              }
-            : undefined;
-
-          await inngest.send({
-            name: eventName,
-            data: buildDurableResumeEventData({
-              inputData: resumeData,
-              runId,
-              resourceId: resumeOptions?.resourceId,
-              requestContext,
-              tracingOptions,
-              actor: resumeOptions?.actor,
-              resume: {
-                steps,
-                resumePayload: resumeData,
-                resumePath: steps[0] ? snapshot?.suspendedPaths?.[steps[0]] : undefined,
-              },
-            }),
-          });
-        })
-        .catch(error => {
-          void emitError(runId, error);
+      const dispatch = ready.then(async () => {
+        const workflowsStore = await mastra?.getStorage()?.getStore('workflows');
+        const snapshot: any = await workflowsStore?.loadWorkflowSnapshot({
+          workflowName: InngestDurableStepIds.AGENTIC_LOOP,
+          runId,
         });
 
+        // Resolve which suspended leaf to resume. `resume.steps` is a path: the outer
+        // step id followed by the nested step ids beneath it, so a nested suspension has
+        // to be expanded from the outer step's recorded `__workflow_meta.path` rather
+        // than left as a bare step id (see `Workflow._resume` in
+        // packages/core/src/workflows/workflow.ts, which builds the same path).
+        const suspendedStepIds = snapshot?.suspendedPaths ? Object.keys(snapshot.suspendedPaths) : [];
+        const resumeLabels: Record<string, { stepId?: string } | undefined> = snapshot?.resumeLabels ?? {};
+        const toolCallId = resumeOptions?.toolCallId;
+
+        const expandToLeafPath = (stepId: string): string[] => {
+          const stepResult = (snapshot?.context ?? {})[stepId];
+          const nestedPath = stepResult?.suspendPayload?.__workflow_meta?.path;
+          return Array.isArray(nestedPath) ? [stepId, ...nestedPath] : [stepId];
+        };
+
+        let steps: string[];
+
+        if (toolCallId) {
+          // The agentic loop registers each suspended tool call under `resumeLabel:
+          // toolCallId`, so a named tool call resolves to exactly one outer step.
+          const targetStepId = resumeLabels[toolCallId]?.stepId;
+          if (!targetStepId) {
+            const available = Object.keys(resumeLabels);
+            throw new NonRetriableError(
+              `Cannot resume run ${runId}: no suspended tool call with id "${toolCallId}". ` +
+                (available.length > 0
+                  ? `Suspended tool call ids: ${available.join(', ')}.`
+                  : `No tool calls are currently suspended.`),
+            );
+          }
+          steps = expandToLeafPath(targetStepId);
+        } else {
+          // Without a `toolCallId` there is nothing to disambiguate with, so refuse
+          // instead of silently resuming whichever suspension happens to be first.
+          const available = Object.keys(resumeLabels);
+          if (suspendedStepIds.length > 1 || available.length > 1) {
+            throw new NonRetriableError(
+              `Cannot resume run ${runId}: more than one suspension is parked. ` +
+                `Pass "toolCallId" to choose which suspended tool call to resume.` +
+                (available.length > 0 ? ` Suspended tool call ids: ${available.join(', ')}.` : ''),
+            );
+          }
+          steps = suspendedStepIds[0] ? expandToLeafPath(suspendedStepIds[0]) : [];
+        }
+
+        const requestContext = mergeResumeRequestContext(snapshot?.requestContext, resumeOptions?.requestContext);
+        const tracingOptions = snapshot?.tracingContext
+          ? {
+              traceId: snapshot.tracingContext.traceId,
+              parentSpanId: snapshot.tracingContext.spanId,
+            }
+          : undefined;
+
+        await inngest.send({
+          name: eventName,
+          data: buildDurableResumeEventData({
+            inputData: resumeData,
+            runId,
+            resourceId: resumeOptions?.resourceId,
+            requestContext,
+            tracingOptions,
+            actor: resumeOptions?.actor,
+            resume: {
+              steps,
+              resumePayload: resumeData,
+              resumePath: steps[0] ? snapshot?.suspendedPaths?.[steps[0]] : undefined,
+            },
+          }),
+        });
+      });
+
+      // The registry entry still tracks the whole dispatch so watchers keep seeing
+      // dispatch failures as a stream error, exactly as before.
+      const workflowExecution = dispatch.catch(error => {
+        void emitError(runId, error);
+      });
       existingEntry.workflowExecution = workflowExecution;
+
+      // Await the dispatch itself (not workflow completion) so a failure to hand the
+      // resume event to Inngest rejects the caller. Previously it was fire-and-forget:
+      // resume() resolved successfully while the run stayed parked and resumable, and
+      // the only signal was a terminal error on the stream.
+      try {
+        await dispatch;
+      } catch (error) {
+        // A run that was never resumed must not keep its registry entry or stream
+        // subscription, otherwise a later resume of the same runId is blocked.
+        streamCleanup();
+        finalizeResumeRegistry();
+        throw error;
+      }
 
       const abort = async (reason?: unknown) => {
         if (!abortController.signal.aborted) {
