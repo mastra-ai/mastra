@@ -25,6 +25,18 @@ A survivor in a module-level initializer that _throws_ when mutated (e.g. an
 reports zero tests instead of a failing one and Stryker sees no kill. Report
 those rather than moving the initializer into the function to chase the score.
 
+recharts lays out nothing under jsdom — `ResponsiveContainer` renders an empty
+box, so no axis, series, tooltip or click handler inside a chart is reachable
+from a rendered component. Logic that only runs through those callbacks belongs
+in a sibling module of plain functions (see `flame-graph-data.ts`,
+`latency-card-view.utils.ts`), which is both testable and a cleaner split. What
+is left inside the chart is configuration, and its survivors are expected.
+
+A test that throws asynchronously still passes under vitest but crashes
+Stryker's runner with `Cannot convert object to primitive value`. jsdom ships no
+`PointerEvent`, which Base UI's Checkbox constructs on click — stub it in any
+test that clicks one.
+
 Rules:
 
 - Drive the real @mastra/client-js + React Query stack; only mock the network.
