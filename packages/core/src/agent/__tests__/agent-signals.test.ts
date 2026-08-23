@@ -4133,27 +4133,54 @@ describe('Agent signals', () => {
     expect(runtime.getActiveThreadRunId({ resourceId, threadId }, pubsub)).toBeUndefined();
   });
 
-  it('reports whether a recorded abort intent is going to reach the run', () => {
+  it('reports whether a recorded abort intent is going to reach the run', async () => {
     const pubsub = new ControlledLeasePubSub();
     const runtime = new AgentThreadStreamRuntime();
+    const resourceId = 'preabort-return-resource';
+    const threadId = 'preabort-return-thread';
 
     // A runId this runtime has never seen may belong to a run executing in
     // another process, where the recorded intent is never read.
     expect(runtime.abortRun('never-seen-run', pubsub)).toBe(false);
+    expect(runtime.isRunAborted('never-seen-run', pubsub)).toBe(true);
 
-    // A run this runtime knows about consults abortedRunIds before it starts,
-    // so recording the intent counts as a successful abort.
+    // A run that is already executing does not consult abortedRunIds again, so
+    // recording the intent does not cancel it.
     runtime.registerRun(
       { id: 'preabort-return-agent' } as any,
       {
-        runId: 'known-run',
+        runId: 'running-run',
         status: 'running',
         _waitUntilFinished: () => new Promise<any>(() => {}),
       } as any,
-      { runId: 'known-run', memory: { thread: 'preabort-return-thread', resource: 'preabort-return-user' } } as any,
+      { runId: 'running-run', memory: { thread: 'running-thread', resource: resourceId } } as any,
       pubsub,
     );
-    expect(runtime.abortRun('known-run', pubsub)).toBe(true);
+    expect(runtime.abortRun('running-run', pubsub)).toBe(false);
+    expect(runtime.isRunAborted('running-run', pubsub)).toBe(true);
+
+    // A run this runtime reserved but has not started yet reads the intent the
+    // moment it starts, so the cancellation does land.
+    const agent = { id: 'preabort-return-signal-agent' } as Agent<any, any, any, any>;
+    agent.stream = vi.fn(async (_signal, options) => {
+      const prepared = runtime.prepareRunOptions(options as any, pubsub);
+      if (prepared.abortSignal?.aborted) {
+        throw new Error('aborted before start');
+      }
+      return { runId: (options as any).runId } as any;
+    }) as any;
+
+    const result = runtime.sendSignal(
+      agent,
+      { type: 'user-message', contents: 'wake' },
+      { resourceId, threadId },
+      pubsub,
+    );
+    const reservedRunId = runtime.getActiveThreadRunId({ resourceId, threadId }, pubsub)!;
+    expect(reservedRunId).toBeDefined();
+    expect(runtime.abortRun(reservedRunId, pubsub)).toBe(true);
+
+    await expect(result.accepted).rejects.toThrow('aborted before start');
   });
 
   it('keeps follow-ups attached while a continuation reserves its lease', async () => {

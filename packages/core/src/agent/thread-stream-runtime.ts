@@ -857,21 +857,27 @@ export class AgentThreadStreamRuntime {
    * Aborts `runId` and reports whether the abort is going to reach it.
    *
    * A run that has not prepared its options has no controller to flip yet, so
-   * the intent is recorded in `abortedRunIds` instead and consumed the moment
-   * the run starts (`prepareRunOptions()` for the regular path,
-   * {@link isRunAborted} for the durable one). That still counts as a
-   * successful abort, so long as the run is one this runtime knows about: a
-   * runId this process has never seen may belong to a run executing elsewhere,
-   * where the recorded intent is never read. Those are cancelled through
-   * `abortThread()`, which publishes `run-abort-requested` to the owning
-   * process.
+   * the intent is recorded in `abortedRunIds` instead. It is consumed the
+   * moment the run starts (`prepareRunOptions()` for the regular path,
+   * {@link isRunAborted} for the durable one), so for a run this runtime has
+   * reserved but not started yet the cancellation does land, and that counts
+   * as a successful abort.
+   *
+   * It does not land on a run that is already executing: nothing reads
+   * `abortedRunIds` again once a run is under way. A regular run has a
+   * prepared controller by then and takes the branch below, so what reaches
+   * here is a durable run, which is stopped through `abortThread()` or the
+   * stream result's `abort()` in the process executing it. A runId this
+   * process has never seen may be executing elsewhere entirely; the intent is
+   * still recorded, in case the run starts here later, but it is not reported
+   * as an abort.
    */
   abortRun(runId: string, pubsub?: PubSub): boolean {
     const state = this.#getState(pubsub);
     const preparedRun = state.preparedRunsById.get(runId);
     if (!preparedRun) {
       state.abortedRunIds.add(runId);
-      return state.threadKeysByRunId.has(runId) || state.threadRunsById.has(runId);
+      return state.threadKeysByRunId.has(runId) && !state.threadRunsById.has(runId);
     }
 
     preparedRun.abortController.abort();
