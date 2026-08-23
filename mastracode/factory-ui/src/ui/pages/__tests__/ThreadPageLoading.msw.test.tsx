@@ -218,7 +218,7 @@ describe('ThreadPage loading shell', () => {
     expect(renderedEmptyState).toBe(false);
   });
 
-  it('stagger-reveals loaded transcript entries in order', async () => {
+  it('reveals the complete loaded transcript when preparation finishes', async () => {
     const { sessionGate, messagesGate } = stubThreadRoute({ messages: threadRailMessagesWithEcho });
     renderThreadRoute();
     sessionGate.resolve();
@@ -227,9 +227,9 @@ describe('ThreadPage loading shell', () => {
     messagesGate.resolve();
     await screen.findByText('Run the focused checks');
 
-    const entries = Array.from(document.querySelectorAll<HTMLElement>('.transcript-history-enter'));
-    expect(entries).toHaveLength(3);
-    expect(entries.map(entry => entry.style.animationDelay)).toEqual(['0ms', '55ms', '110ms']);
+    expect(screen.getByText('Review the implementation plan')).toBeInTheDocument();
+    expect(document.body).toHaveTextContent('The implementation is ready to review.');
+    expect(screen.queryByRole('status', { name: 'Preparing session' })).not.toBeInTheDocument();
   });
 
   it('waits for sandbox readiness before synchronizing an existing route thread', async () => {
