@@ -248,6 +248,9 @@ server.registerContextMiddleware();
 // Middleware that needs Mastra context
 app.use(customMiddleware);
 
+// Registers `server.middleware` and `setServerMiddleware()` middleware
+server.registerUserMiddleware();
+
 await server.registerRoutes();
 
 // Routes after Mastra

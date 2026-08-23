@@ -1,6 +1,8 @@
 ---
 '@mastra/hono': patch
 '@mastra/server': patch
+'@mastra/next': patch
+'@mastra/tanstack-start': patch
 ---
 
 Fixed `server.middleware` and middleware added via `mastra.setServerMiddleware()` being silently ignored when Mastra is served through a server adapter instead of `mastra dev` / `mastra build`.
