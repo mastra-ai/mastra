@@ -4133,6 +4133,29 @@ describe('Agent signals', () => {
     expect(runtime.getActiveThreadRunId({ resourceId, threadId }, pubsub)).toBeUndefined();
   });
 
+  it('reports whether a recorded abort intent is going to reach the run', () => {
+    const pubsub = new ControlledLeasePubSub();
+    const runtime = new AgentThreadStreamRuntime();
+
+    // A runId this runtime has never seen may belong to a run executing in
+    // another process, where the recorded intent is never read.
+    expect(runtime.abortRun('never-seen-run', pubsub)).toBe(false);
+
+    // A run this runtime knows about consults abortedRunIds before it starts,
+    // so recording the intent counts as a successful abort.
+    runtime.registerRun(
+      { id: 'preabort-return-agent' } as any,
+      {
+        runId: 'known-run',
+        status: 'running',
+        _waitUntilFinished: () => new Promise<any>(() => {}),
+      } as any,
+      { runId: 'known-run', memory: { thread: 'preabort-return-thread', resource: 'preabort-return-user' } } as any,
+      pubsub,
+    );
+    expect(runtime.abortRun('known-run', pubsub)).toBe(true);
+  });
+
   it('keeps follow-ups attached while a continuation reserves its lease', async () => {
     const pubsub = new ControlledLeasePubSub();
     const runtime = new AgentThreadStreamRuntime();

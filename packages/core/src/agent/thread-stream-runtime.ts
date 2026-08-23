@@ -853,12 +853,25 @@ export class AgentThreadStreamRuntime {
     return this.#getState(pubsub).abortedRunIds.has(runId);
   }
 
+  /**
+   * Aborts `runId` and reports whether the abort is going to reach it.
+   *
+   * A run that has not prepared its options has no controller to flip yet, so
+   * the intent is recorded in `abortedRunIds` instead and consumed the moment
+   * the run starts (`prepareRunOptions()` for the regular path,
+   * {@link isRunAborted} for the durable one). That still counts as a
+   * successful abort, so long as the run is one this runtime knows about: a
+   * runId this process has never seen may belong to a run executing elsewhere,
+   * where the recorded intent is never read. Those are cancelled through
+   * `abortThread()`, which publishes `run-abort-requested` to the owning
+   * process.
+   */
   abortRun(runId: string, pubsub?: PubSub): boolean {
     const state = this.#getState(pubsub);
     const preparedRun = state.preparedRunsById.get(runId);
     if (!preparedRun) {
       state.abortedRunIds.add(runId);
-      return false;
+      return state.threadKeysByRunId.has(runId) || state.threadRunsById.has(runId);
     }
 
     preparedRun.abortController.abort();
@@ -977,10 +990,11 @@ export class AgentThreadStreamRuntime {
     if (state.preparedRunsById.has(runId)) return this.abortRun(runId, resolvedPubSub);
     if (state.threadKeysByRunId.get(runId) === key) {
       // Reserved locally (a sendSignal wake that has not prepared its run yet):
-      // record the abort intent in abortedRunIds so prepareRunOptions aborts the
-      // run the moment it starts, instead of letting it run to completion.
-      this.abortRun(runId, resolvedPubSub);
-      return true;
+      // record the abort intent in abortedRunIds so the run aborts the moment
+      // it starts, instead of letting it run to completion. abortRun() reports
+      // that as a success for a run this runtime knows about, which a locally
+      // reserved run is.
+      return this.abortRun(runId, resolvedPubSub);
     }
     if (state.remoteThreadKeysByRunId.get(runId) !== key) return false;
     const streamId = state.activeThreadStreamIds.get(key);
