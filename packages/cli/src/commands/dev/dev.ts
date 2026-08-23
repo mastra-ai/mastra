@@ -158,7 +158,9 @@ const startServer = async (
       cwd: publicDir,
       env: {
         ...environmentState.getChildEnvironment(env),
-        NODE_ENV: 'production',
+        // A dotenv-provided NODE_ENV still wins, matching the behaviour before the
+        // child environment was built from the layered dotenv state.
+        NODE_ENV: env.get('NODE_ENV') ?? 'production',
         MASTRA_DEV: 'true',
         PORT: port.toString(),
         MASTRA_PACKAGES_FILE: packagesFilePath,
