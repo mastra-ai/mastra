@@ -208,6 +208,7 @@ export function isMaybeBedrockMantleGptOss(model: unknown): boolean {
 
   if (typeof model !== 'object') return false;
   const { provider, modelId } = model as { provider?: unknown; modelId?: unknown };
+  // Keep the exact Chat route and case-sensitive model prefix; Responses is out of scope.
   return provider === 'bedrock-mantle.chat' && typeof modelId === 'string' && modelId.startsWith('openai.gpt-oss-');
 }
 
@@ -576,6 +577,9 @@ export const providerBoundaryCompat = new ProviderBoundaryCompat();
  * - **anthropic-strip-foreign-reasoning-content** — strips non-Anthropic
  *   `reasoning` parts from assistant messages in the outbound prompt when the
  *   resolved model is Anthropic. Anthropic-native reasoning parts are kept.
+ * - **bedrock-mantle-gpt-oss-strip-reasoning-content** — strips assistant
+ *   `reasoning` parts for Bedrock Mantle Chat GPT-OSS models in the outbound
+ *   prompt. Mantle Responses is not matched.
  *
  * To add custom rules, pass them to the constructor:
  * ```ts
