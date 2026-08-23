@@ -2,21 +2,23 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { handleContextCommand } from '../context.js';
 
-function createCtx(overrides: { skills?: any; mcpManager?: any; promptTokens?: number } = {}) {
+function createCtx(
+  overrides: { skills?: any; mcpManager?: any; cumulativePromptTokens?: number; latestPromptTokens?: number } = {},
+) {
   const session = {
     state: { get: () => ({}) },
     mode: { get: () => 'build' },
     model: { get: () => 'anthropic/claude-sonnet-4-5' },
     displayState: {
       get: () => ({
-        tokenUsage: { promptTokens: overrides.promptTokens ?? 0, completionTokens: 0, totalTokens: 0 },
+        tokenUsage: { promptTokens: overrides.cumulativePromptTokens ?? 0, completionTokens: 0, totalTokens: 0 },
         omProgress: { observationTokens: 0 },
       }),
     },
   };
 
   return {
-    state: { session },
+    state: { session, latestRequestPromptTokens: overrides.latestPromptTokens ?? 0 },
     showInfo: vi.fn(),
     showError: vi.fn(),
     getResolvedWorkspace: () => (overrides.skills ? { skills: overrides.skills } : undefined),
@@ -71,14 +73,19 @@ describe('handleContextCommand', () => {
     expect(report).not.toContain('github_create_issue');
   });
 
-  it('separates conversation growth from the startup context', async () => {
-    const ctx = createCtx({ promptTokens: 50_000 });
+  it('uses the latest request instead of cumulative prompt usage after multiple steps', async () => {
+    const firstRequest = createCtx({ cumulativePromptTokens: 50_000, latestPromptTokens: 50_000 });
+    await handleContextCommand(firstRequest);
 
-    await handleContextCommand(ctx);
+    const secondRequest = createCtx({ cumulativePromptTokens: 140_000, latestPromptTokens: 90_000 });
+    await handleContextCommand(secondRequest);
 
-    const report = reportOf(ctx);
-    expect(report).toContain('Accumulated');
-    expect(report).toContain('Conversation');
+    const latestOnly = createCtx({ cumulativePromptTokens: 90_000, latestPromptTokens: 90_000 });
+    await handleContextCommand(latestOnly);
+
+    expect(reportOf(secondRequest)).toBe(reportOf(latestOnly));
+    expect(reportOf(secondRequest)).not.toBe(reportOf(firstRequest));
+    expect(reportOf(secondRequest)).toContain('Conversation');
   });
 
   it('still reports when the workspace cannot provide skills', async () => {

@@ -271,7 +271,9 @@ export async function dispatchEvent(
     }
 
     case 'usage_update': {
-      // Token accumulation handled by AgentController display state.
+      // Token accumulation handled by AgentController display state. Keep the
+      // latest step separate for context auditing; cumulative usage is billing data.
+      state.latestRequestPromptTokens = event.usage.promptTokens ?? 0;
       // usage_update fires at step-finish and carries the completion (and any
       // reasoning) tokens generated during this step. Measure tokens/sec over the
       // decode window only — from this step's first content delta

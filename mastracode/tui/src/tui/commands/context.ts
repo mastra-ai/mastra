@@ -154,7 +154,7 @@ export async function handleContextCommand(ctx: SlashCommandContext): Promise<vo
       instructionSections,
       skillsCatalog,
       tools: collectMcpTools(ctx),
-      conversation: { promptTokens: displayState.tokenUsage.promptTokens },
+      conversation: { promptTokens: ctx.state.latestRequestPromptTokens },
       // The OM subsystem reports the size of what it put in the context, which
       // beats re-measuring the rendered observation text.
       injectedObservations: { tokens: displayState.omProgress.observationTokens },
