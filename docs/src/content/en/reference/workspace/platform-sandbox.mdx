@@ -141,7 +141,7 @@ const sandbox = new PlatformSandbox({
 await sandbox.start()
 ```
 
-`Template()` supports `runCmd`, `setWorkdir`, `setEnvs`, `aptInstall`, `pipInstall`, and `npmInstall`. Platform serializes the builder internally, computes the content hash, replays operations for E2B, and converts them to equivalent Railway template operations.
+`Template()` supports `runCmd`, `setWorkdir`, `setEnvs`, `aptInstall`, `pipInstall`, and `npmInstall`. Platform serializes the builder internally and computes the content hash. It replays operations for E2B and converts them to equivalent Railway template operations.
 
 For public GitHub repositories, `createRepoTemplate()` can resolve and build the commit-pinned definition lazily when `start()` needs a fresh sandbox:
 
