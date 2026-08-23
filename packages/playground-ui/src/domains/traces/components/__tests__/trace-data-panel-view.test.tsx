@@ -1,6 +1,10 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { MastraReactProvider } from '@mastra/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { http } from 'msw';
+import { setupServer } from 'msw/node';
+import type { ReactNode } from 'react';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { TraceDataPanelView } from '../trace-data-panel-view';
 import type { TraceDataPanelViewProps } from '../trace-data-panel-view';
@@ -131,5 +135,302 @@ describe('TraceDataPanelView — span selected from the URL', () => {
 
       expect(onSpanSelect).toHaveBeenCalledWith(undefined);
     });
+  });
+});
+
+describe('TraceDataPanelView — the header', () => {
+  it('names the trace by a shortened id in the side panel', () => {
+    render(<TraceDataPanelView {...baseProps} traceId="0123456789abcdef0123" />);
+
+    expect(screen.getByText(/# 0123456789ab/)).toBeTruthy();
+    expect(screen.queryByText(/0123456789abcdef0123/)).toBeNull();
+  });
+
+  it('drops the trace id, and every side-panel control, on the trace page', () => {
+    render(
+      <TraceDataPanelView {...baseProps} placement="trace-page" onPrevious={vi.fn()} onCollapsedChange={vi.fn()} />,
+    );
+
+    expect(screen.getByText('Trace Timeline')).toBeTruthy();
+    expect(screen.queryByText(/# trace-1/)).toBeNull();
+    expect(screen.queryByRole('button', { name: /previous trace/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /collapse panel/i })).toBeNull();
+    // The download is the one control both layouts keep.
+    expect(screen.getByRole('button', { name: 'Download trace JSON' })).toBeTruthy();
+  });
+
+  it('offers a collapse toggle only to a caller that owns the state', () => {
+    const uncontrolled = render(<TraceDataPanelView {...baseProps} />);
+    expect(screen.queryByRole('button', { name: /collapse panel/i })).toBeNull();
+    expect(uncontrolled.container).toBeTruthy();
+
+    cleanup();
+
+    const onCollapsedChange = vi.fn();
+    render(<TraceDataPanelView {...baseProps} onCollapsedChange={onCollapsedChange} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /collapse panel/i }));
+    expect(onCollapsedChange).toHaveBeenCalledWith(true);
+  });
+
+  it('reads its collapsed label from the state the caller passes in', () => {
+    render(<TraceDataPanelView {...baseProps} collapsed onCollapsedChange={vi.fn()} />);
+
+    expect(screen.getByRole('button', { name: /expand panel/i })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /collapse panel/i })).toBeNull();
+  });
+
+  it('hides the whole body while collapsed', () => {
+    render(<TraceDataPanelView {...baseProps} collapsed onCollapsedChange={vi.fn()} />);
+
+    expect(screen.queryByText('agent run')).toBeNull();
+    // The header stays, so the panel can be expanded again.
+    expect(screen.getByText(/# trace-1/)).toBeTruthy();
+  });
+
+  it('offers trace-to-trace navigation as soon as either direction exists', () => {
+    render(<TraceDataPanelView {...baseProps} onNext={vi.fn()} />);
+
+    expect(screen.getByRole('button', { name: /next trace/i })).toBeTruthy();
+  });
+
+  it('offers no navigation when neither direction exists', () => {
+    render(<TraceDataPanelView {...baseProps} />);
+
+    expect(screen.queryByRole('button', { name: /next trace/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /previous trace/i })).toBeNull();
+  });
+
+  it('links out to the trace page only with both a link component and an href', () => {
+    const Anchor = ({ href, children, ...rest }: { href?: string; children?: React.ReactNode }) => (
+      <a href={href} {...rest}>
+        {children}
+      </a>
+    );
+
+    const noHref = render(<TraceDataPanelView {...baseProps} LinkComponent={Anchor} />);
+    expect(screen.queryByLabelText('Open trace page')).toBeNull();
+    expect(noHref.container).toBeTruthy();
+
+    cleanup();
+
+    render(<TraceDataPanelView {...baseProps} traceHref="/traces/trace-1" />);
+    expect(screen.queryByLabelText('Open trace page')).toBeNull();
+
+    cleanup();
+
+    render(<TraceDataPanelView {...baseProps} />);
+    expect(screen.queryByLabelText('Open trace page')).toBeNull();
+
+    cleanup();
+
+    render(<TraceDataPanelView {...baseProps} LinkComponent={Anchor} traceHref="/traces/trace-1" />);
+    expect(screen.getByRole('link', { name: 'Open trace page' }).getAttribute('href')).toBe('/traces/trace-1');
+  });
+
+  it('never links out from the trace page itself', () => {
+    const Anchor = ({ href, children, ...rest }: { href?: string; children?: React.ReactNode }) => (
+      <a href={href} {...rest}>
+        {children}
+      </a>
+    );
+
+    render(
+      <TraceDataPanelView {...baseProps} placement="trace-page" LinkComponent={Anchor} traceHref="/traces/trace-1" />,
+    );
+
+    expect(screen.queryByRole('link', { name: 'Open trace page' })).toBeNull();
+  });
+});
+
+describe('TraceDataPanelView — the body', () => {
+  it('says it is loading rather than showing an empty trace', () => {
+    render(<TraceDataPanelView {...baseProps} spans={[]} isLoading />);
+
+    expect(screen.getByText('Loading trace...')).toBeTruthy();
+    expect(screen.queryByText('No spans found for this trace.')).toBeNull();
+  });
+
+  it('says a settled trace has no spans', () => {
+    render(<TraceDataPanelView {...baseProps} spans={[]} />);
+
+    expect(screen.getByText('No spans found for this trace.')).toBeTruthy();
+  });
+
+  it('says the same when the spans never arrived at all', () => {
+    render(<TraceDataPanelView {...baseProps} spans={undefined} />);
+
+    expect(screen.getByText('No spans found for this trace.')).toBeTruthy();
+  });
+
+  it('shows the trace summary in the side panel but not on the trace page', () => {
+    const sidePanel = render(<TraceDataPanelView {...baseProps} />);
+    expect(screen.getByText('Status')).toBeTruthy();
+    expect(sidePanel.container).toBeTruthy();
+
+    cleanup();
+
+    render(<TraceDataPanelView {...baseProps} placement="trace-page" />);
+    expect(screen.queryByText('Status')).toBeNull();
+  });
+});
+
+describe('TraceDataPanelView — the actions row', () => {
+  it('explains where the missing actions live, when asked to', () => {
+    render(<TraceDataPanelView {...baseProps} />);
+
+    expect(screen.getByText(/available in Mastra Studio/)).toBeTruthy();
+  });
+
+  it('stays quiet about them when the caller asks it to', () => {
+    render(<TraceDataPanelView {...baseProps} showUnavailableFeaturesMsg={false} />);
+
+    expect(screen.queryByText(/available in Mastra Studio/)).toBeNull();
+  });
+
+  it('drops the explanation as soon as any one action is available', () => {
+    render(<TraceDataPanelView {...baseProps} onEvaluateTrace={vi.fn()} />);
+
+    expect(screen.queryByText(/available in Mastra Studio/)).toBeNull();
+    expect(screen.getByRole('button', { name: /evaluate trace/i })).toBeTruthy();
+  });
+
+  it('never shows the actions row on the trace page', () => {
+    render(<TraceDataPanelView {...baseProps} placement="trace-page" onEvaluateTrace={vi.fn()} />);
+
+    expect(screen.queryByRole('button', { name: /evaluate trace/i })).toBeNull();
+    expect(screen.queryByText(/available in Mastra Studio/)).toBeNull();
+  });
+
+  it('saves the dataset item against the root span it found', () => {
+    const onSaveAsDatasetItem = vi.fn();
+    render(<TraceDataPanelView {...baseProps} onSaveAsDatasetItem={onSaveAsDatasetItem} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /save as dataset item/i }));
+
+    expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'root' });
+  });
+
+  it('reports the evaluation request with no arguments of its own', () => {
+    const onEvaluateTrace = vi.fn();
+    render(<TraceDataPanelView {...baseProps} onEvaluateTrace={onEvaluateTrace} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /evaluate trace/i }));
+
+    expect(onEvaluateTrace).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('TraceDataPanelView — span selection', () => {
+  it('toggles a span off when it is clicked again', () => {
+    const onSpanSelect = vi.fn();
+    render(<TraceDataPanelView {...baseProps} onSpanSelect={onSpanSelect} />);
+
+    const span = screen.getByText('agent run');
+    fireEvent.click(span);
+    expect(onSpanSelect).toHaveBeenLastCalledWith('root');
+
+    fireEvent.click(span);
+    expect(onSpanSelect).toHaveBeenLastCalledWith(undefined);
+  });
+
+  it('clears the selection the moment the requested span is taken away', () => {
+    const onSpanSelect = vi.fn();
+    const { rerender } = render(<TraceDataPanelView {...baseProps} initialSpanId="root" onSpanSelect={onSpanSelect} />);
+    onSpanSelect.mockClear();
+
+    rerender(<TraceDataPanelView {...baseProps} initialSpanId={undefined} onSpanSelect={onSpanSelect} />);
+
+    expect(onSpanSelect).toHaveBeenCalledWith(undefined);
+  });
+
+  it('clears a requested span even while the trace is still loading', () => {
+    const onSpanSelect = vi.fn();
+    render(<TraceDataPanelView {...baseProps} spans={[]} isLoading onSpanSelect={onSpanSelect} />);
+
+    // No span was asked for, so there is nothing to wait for the data to confirm.
+    expect(onSpanSelect).toHaveBeenCalledWith(undefined);
+  });
+});
+
+describe('TraceDataPanelView — an anchored subtrace', () => {
+  it('treats the anchor span as the root the panel is describing', () => {
+    const onSaveAsDatasetItem = vi.fn();
+    render(
+      <TraceDataPanelView
+        {...baseProps}
+        spans={nestedSpanFixture}
+        anchorSpanId="child"
+        onSaveAsDatasetItem={onSaveAsDatasetItem}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /save as dataset item/i }));
+
+    expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'child' });
+  });
+
+  it('falls back to the span with no parent when there is no anchor', () => {
+    const onSaveAsDatasetItem = vi.fn();
+    render(<TraceDataPanelView {...baseProps} spans={nestedSpanFixture} onSaveAsDatasetItem={onSaveAsDatasetItem} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /save as dataset item/i }));
+
+    expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'root' });
+  });
+
+  it('still names an anchored root span even when the anchor is the trace root', () => {
+    const onSaveAsDatasetItem = vi.fn();
+    render(
+      <TraceDataPanelView
+        {...baseProps}
+        spans={nestedSpanFixture}
+        anchorSpanId="root"
+        onSaveAsDatasetItem={onSaveAsDatasetItem}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /save as dataset item/i }));
+
+    expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'root' });
+  });
+
+  it('keeps the full-trace totals when the anchor is the trace root after all', () => {
+    render(
+      <TraceDataPanelView
+        {...baseProps}
+        spans={nestedSpanFixture}
+        anchorSpanId="root"
+        usage={{ inputTokens: 12_500, outputTokens: 800, estimatedCost: 0.05, costUnit: 'usd' }}
+      />,
+    );
+
+    // Anchoring on the root span is still the whole trace, so its totals stand.
+    expect(screen.getByText('12.5K')).toBeTruthy();
+  });
+});
+
+describe('TraceDataPanelView — downloading the trace', () => {
+  const BASE_URL = 'http://localhost:4111';
+  const server = setupServer();
+
+  beforeAll(() => server.listen({ onUnhandledRequest: 'bypass' }));
+  afterEach(() => server.resetHandlers());
+  afterAll(() => server.close());
+
+  const withClient = (children: ReactNode) => <MastraReactProvider baseUrl={BASE_URL}>{children}</MastraReactProvider>;
+
+  it('refuses a second download while the first is still running', async () => {
+    // The request never settles, so the button stays in its in-flight state.
+    server.use(http.get(`${BASE_URL}/api/observability/traces/:traceId`, () => new Promise(() => {})));
+
+    render(withClient(<TraceDataPanelView {...baseProps} />));
+
+    const download = screen.getByRole('button', { name: 'Download trace JSON' });
+    expect(download.hasAttribute('disabled')).toBe(false);
+
+    fireEvent.click(download);
+
+    await waitFor(() => expect(download.hasAttribute('disabled')).toBe(true));
   });
 });
