@@ -1,4 +1,9 @@
-import { TABLE_SCHEMAS, TABLE_WORKFLOW_DEFINITIONS, WorkflowDefinitionsStorage } from '@mastra/core/storage';
+import {
+  assertWorkflowDefinitionAuthor,
+  TABLE_SCHEMAS,
+  TABLE_WORKFLOW_DEFINITIONS,
+  WorkflowDefinitionsStorage,
+} from '@mastra/core/storage';
 import type {
   CreateIndexOptions,
   CreateWorkflowDefinitionInput,
@@ -8,6 +13,7 @@ import type {
   WorkflowDefinition,
 } from '@mastra/core/storage';
 
+import type { TxClient } from '../../client';
 import { PgDB, resolvePgConfig, generateTableSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
 import { getSchemaName, getTableName, parseJsonResilient } from '../utils';
@@ -119,8 +125,39 @@ export class WorkflowDefinitionsPG extends WorkflowDefinitionsStorage {
   }
 
   async upsert(input: CreateWorkflowDefinitionInput | UpdateWorkflowDefinitionInput): Promise<WorkflowDefinition> {
+    return this.applyUpsert(input);
+  }
+
+  async upsertMany(
+    inputs: readonly (CreateWorkflowDefinitionInput | UpdateWorkflowDefinitionInput)[],
+  ): Promise<WorkflowDefinition[]> {
+    if (inputs.length === 0) return [];
+    return this.#db.client.tx(async transaction => {
+      const definitions: WorkflowDefinition[] = [];
+      for (const input of inputs) definitions.push(await this.applyUpsert(input, transaction));
+      return definitions;
+    });
+  }
+
+  private tableName(): string {
+    return getTableName({
+      indexName: TABLE_WORKFLOW_DEFINITIONS,
+      schemaName: getSchemaName(this.#schema),
+    });
+  }
+
+  private async loadDefinition(id: string, transaction?: TxClient): Promise<WorkflowDefinition | null> {
+    if (!transaction) return this.get(id);
+    const row = await transaction.oneOrNone(`SELECT * FROM ${this.tableName()} WHERE "id" = $1 FOR UPDATE`, [id]);
+    return row ? rowToDefinition(row as Record<string, unknown>) : null;
+  }
+
+  private async applyUpsert(
+    input: CreateWorkflowDefinitionInput | UpdateWorkflowDefinitionInput,
+    transaction?: TxClient,
+  ): Promise<WorkflowDefinition> {
     const now = new Date();
-    const existing = await this.get(input.id);
+    const existing = await this.loadDefinition(input.id, transaction);
 
     if (!existing) {
       if (!('inputSchema' in input) || !input.inputSchema)
@@ -146,25 +183,44 @@ export class WorkflowDefinitionsPG extends WorkflowDefinitionsStorage {
         updatedAt: now,
       };
       try {
-        await this.#db.insert({ tableName: TABLE_WORKFLOW_DEFINITIONS, record });
+        if (transaction) {
+          const columns = Object.keys(record);
+          const insertResult = await transaction.query(
+            `INSERT INTO ${this.tableName()} (${columns.map(column => `"${column}"`).join(', ')}) VALUES (${columns
+              .map((_, index) => `$${index + 1}`)
+              .join(', ')}) ON CONFLICT ("id") DO NOTHING`,
+            columns.map(column => record[column]),
+          );
+          if (insertResult.rowCount === 0) return this.applyUpdate(input, now, transaction);
+        } else {
+          await this.#db.insert({ tableName: TABLE_WORKFLOW_DEFINITIONS, record });
+        }
       } catch (error) {
         // A concurrent upsert may have created the row after our existence
         // check; fall back to updating it so the upsert stays idempotent.
-        if (!(await this.get(input.id))) throw error;
-        return this.applyUpdate(input, now);
+        // A failed statement aborts the transaction, so querying it again
+        // would mask the original persistence error.
+        if (transaction) throw error;
+        if (!(await this.loadDefinition(input.id, transaction))) throw error;
+        return this.applyUpdate(input, now, transaction);
       }
-      const created = await this.get(input.id);
+      const created = await this.loadDefinition(input.id, transaction);
       if (!created) throw new Error(`Failed to persist workflow definition "${input.id}".`);
       return created;
     }
 
-    return this.applyUpdate(input, now);
+    return this.applyUpdate(input, now, transaction);
   }
 
   private async applyUpdate(
     input: CreateWorkflowDefinitionInput | UpdateWorkflowDefinitionInput,
     now: Date,
+    transaction?: TxClient,
   ): Promise<WorkflowDefinition> {
+    const existing = await this.loadDefinition(input.id, transaction);
+    if (!existing) throw new Error(`Failed to update workflow definition "${input.id}".`);
+    assertWorkflowDefinitionAuthor(existing, input);
+
     const data: Record<string, any> = { updatedAt: now };
     if ('description' in input && input.description !== undefined) data.description = input.description;
     if ('metadata' in input && input.metadata !== undefined) data.metadata = input.metadata;
@@ -175,20 +231,31 @@ export class WorkflowDefinitionsPG extends WorkflowDefinitionsStorage {
       data.requestContextSchema = input.requestContextSchema;
     if ('graph' in input && input.graph !== undefined) data.graph = input.graph;
     if ('status' in input && input.status !== undefined) data.status = input.status;
-    if ('authorId' in input && input.authorId !== undefined) data.authorId = input.authorId;
-
-    await this.#db.update({ tableName: TABLE_WORKFLOW_DEFINITIONS, keys: { id: input.id }, data });
-    const updated = await this.get(input.id);
+    const keys = { id: input.id, ...(input.authorId !== undefined ? { authorId: input.authorId } : {}) };
+    if (transaction) {
+      const fields = Object.keys(data);
+      const values = fields.map(field => data[field]);
+      values.push(input.id);
+      let where = `"id" = $${values.length}`;
+      if (input.authorId !== undefined) {
+        values.push(input.authorId);
+        where += ` AND "authorId" = $${values.length}`;
+      }
+      await transaction.query(
+        `UPDATE ${this.tableName()} SET ${fields.map((field, index) => `"${field}" = $${index + 1}`).join(', ')} WHERE ${where}`,
+        values,
+      );
+    } else {
+      await this.#db.update({ tableName: TABLE_WORKFLOW_DEFINITIONS, keys, data });
+    }
+    const updated = await this.loadDefinition(input.id, transaction);
     if (!updated) throw new Error(`Failed to update workflow definition "${input.id}".`);
+    assertWorkflowDefinitionAuthor(updated, input);
     return updated;
   }
 
   async get(id: string): Promise<WorkflowDefinition | null> {
-    const tableName = getTableName({
-      indexName: TABLE_WORKFLOW_DEFINITIONS,
-      schemaName: getSchemaName(this.#schema),
-    });
-    const row = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE "id" = $1`, [id]);
+    const row = await this.#db.client.oneOrNone(`SELECT * FROM ${this.tableName()} WHERE "id" = $1`, [id]);
     return row ? rowToDefinition(row as Record<string, unknown>) : null;
   }
 

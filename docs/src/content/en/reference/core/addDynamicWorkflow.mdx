@@ -20,29 +20,36 @@ See [Dynamic workflows](/docs/workflows/dynamic-workflows) for a complete setup 
 ## Usage example
 
 ```typescript
-await mastra.addDynamicWorkflow({
-  id: 'greeting-workflow',
-  description: 'Returns a greeting for the supplied name',
-  inputSchema: {
-    type: 'object',
-    properties: { name: { type: 'string' } },
-    required: ['name'],
-  },
-  outputSchema: {
-    type: 'object',
-    properties: { message: { type: 'string' } },
-    required: ['message'],
-  },
-  graph: [
-    {
-      type: 'mapping',
-      id: 'create-greeting',
-      mapConfig: JSON.stringify({
-        message: { template: 'Hello, ${initData.name}!' },
-      }),
+await mastra.addDynamicWorkflow(
+  {
+    id: 'greeting-workflow',
+    description: 'Returns a greeting for the supplied name',
+    inputSchema: {
+      type: 'object',
+      properties: { name: { type: 'string' } },
+      required: ['name'],
     },
-  ],
-})
+    outputSchema: {
+      type: 'object',
+      properties: { message: { type: 'string' } },
+      required: ['message'],
+    },
+    graph: [
+      {
+        type: 'mapping',
+        id: 'create-greeting',
+        mapConfig: JSON.stringify({
+          message: { template: 'Hello, ${initData.name}!' },
+        }),
+      },
+    ],
+  },
+  {
+    authorId: authenticatedUser.id,
+    waitTimeoutMs: 5_000,
+    signal: request.signal,
+  },
+)
 
 const run = await mastra.getWorkflow('greeting-workflow').createRun()
 const result = await run.start({ inputData: { name: 'Ada' } })
@@ -58,6 +65,13 @@ const result = await run.start({ inputData: { name: 'Ada' } })
     description:
       'The workflow definition: id, optional description and metadata, JSON Schema input/output schemas, optional state and request-context schemas, and the step graph.',
   },
+  {
+    name: 'options',
+    type: 'DynamicWorkflowRegistrationOptions',
+    description:
+      'Trusted persistence metadata supplied by the host. Use `authorId` for a verified author identity that must not come from the workflow definition. `waitTimeoutMs` and `signal` limit queue admission only; after admission, persistence completes even if either later expires.',
+    isOptional: true,
+  },
 ]}
 />
 
@@ -69,7 +83,8 @@ A promise that resolves once the definition is validated, registered, and persis
 
 - The definition is fully validated (structure, references, schema flow) before anything is mutated. Agents, tools, and workflows referenced by the graph must already be registered on the instance.
 - Adding a definition with an existing ID replaces both the stored definition and the live registration. In-flight runs keep the graph they started with.
-- Without a storage adapter that supports the `workflowDefinitions` domain, the workflow is still validated and registered in memory, but the definition is lost on restart.
+- `options.authorId` is stored on the definition in the same write and becomes immutable. When replacing an existing definition, omitting `options.authorId` retains its stored author, while using a different author fails with an ownership conflict. It records a verified author but doesn't restrict access by itself. When `options.authorId` is provided, a `workflowDefinitions` storage domain is required. Authorize registration and every later read, update, deletion, and execution at the server boundary.
+- Without a storage adapter that supports the `workflowDefinitions` domain, a workflow with no `options.authorId` is still validated and registered in memory, but the definition is lost on restart. Authored registration fails instead.
 - To add a root workflow together with helper workflows it nests, use [`addDynamicWorkflows()`](/reference/core/addDynamicWorkflows).
 
 ## Related

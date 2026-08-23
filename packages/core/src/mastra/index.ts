@@ -101,6 +101,25 @@ import { createRunScope } from './run-scope';
 import type { VersionOverrides, VersionSelector } from './types';
 
 /**
+ * Trusted metadata applied while a dynamic workflow is persisted.
+ *
+ * Keep these values outside the JSON workflow definition when that definition
+ * comes from an untrusted authoring surface. This metadata is persisted with
+ * the definition but does not itself enforce authorization.
+ */
+export interface DynamicWorkflowRegistrationOptions {
+  /**
+   * Verified identity responsible for the stored definition. Callers must
+   * authorize this value before registration.
+   */
+  authorId?: string;
+  /** Maximum time to wait for an overlapping registration already using the same workflow id(s). */
+  waitTimeoutMs?: number;
+  /** Cancels only while waiting to enter registration; admitted storage mutations are always awaited. */
+  signal?: AbortSignal;
+}
+
+/**
  * Creates an error for when a null/undefined value is passed to an add* method.
  * This commonly occurs when config is spread ({ ...config }) and the original
  * object had getters or non-enumerable properties.
@@ -675,6 +694,7 @@ export class Mastra<
   #workflows: TWorkflows;
   #harnesses: Record<string, Harness<any>> = {};
   #hiddenWorkflowKeys = new Set<string>();
+  #dynamicWorkflowRegistrationTails = new Map<string, Promise<void>>();
   #observability: ObservabilityEntrypoint;
   #observabilityExplicit = false;
   #onScorerHook?: ReturnType<typeof createOnScorerHook>;
@@ -4790,6 +4810,81 @@ export class Mastra<
   }
 
   /**
+   * Serializes only registrations with overlapping ids. All ids are reserved
+   * synchronously before waiting, so bundles cannot deadlock. Cancellation and
+   * timeout apply to queue admission only: a rejected waiter never starts a
+   * storage mutation, while an admitted mutation remains awaited to completion.
+   */
+  async #serializeDynamicWorkflowRegistration<T>(
+    ids: readonly string[],
+    options: DynamicWorkflowRegistrationOptions | undefined,
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    if (options?.signal?.aborted) {
+      throw options.signal.reason ?? new Error('Dynamic workflow registration aborted.');
+    }
+    if (
+      options?.waitTimeoutMs !== undefined &&
+      (!Number.isFinite(options.waitTimeoutMs) || options.waitTimeoutMs < 0)
+    ) {
+      throw new Error('Dynamic workflow registration waitTimeoutMs must be a finite non-negative number.');
+    }
+    const uniqueIds = Array.from(new Set(ids)).sort();
+    const priors = uniqueIds.map(id => this.#dynamicWorkflowRegistrationTails.get(id) ?? Promise.resolve());
+    const admission = Promise.all(priors).then(() => undefined);
+    let release!: () => void;
+    const slot = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    for (const id of uniqueIds) this.#dynamicWorkflowRegistrationTails.set(id, slot);
+    void slot.then(() => {
+      for (const id of uniqueIds) {
+        if (this.#dynamicWorkflowRegistrationTails.get(id) === slot) this.#dynamicWorkflowRegistrationTails.delete(id);
+      }
+    });
+
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const waitWarning = setTimeout(() => {
+      this.#logger?.warn?.(`Dynamic workflow registration is waiting for ids: ${uniqueIds.join(', ')}.`);
+    }, 5_000);
+    let removeAbortListener: (() => void) | undefined;
+    let admitted = false;
+    try {
+      const blockers: Promise<void>[] = [admission];
+      if (options?.signal) {
+        blockers.push(
+          new Promise<void>((_, reject) => {
+            const rejectAbort = () =>
+              reject(options.signal?.reason ?? new Error('Dynamic workflow registration aborted.'));
+            options.signal!.addEventListener('abort', rejectAbort, { once: true });
+            removeAbortListener = () => options.signal!.removeEventListener('abort', rejectAbort);
+          }),
+        );
+      }
+      if (options?.waitTimeoutMs !== undefined) {
+        blockers.push(
+          new Promise<void>((_, reject) => {
+            timeout = setTimeout(
+              () => reject(new Error(`Timed out waiting to register dynamic workflow ids: ${uniqueIds.join(', ')}.`)),
+              options.waitTimeoutMs,
+            );
+          }),
+        );
+      }
+      await Promise.race(blockers);
+      admitted = true;
+      clearTimeout(waitWarning);
+      return await operation();
+    } finally {
+      if (timeout) clearTimeout(timeout);
+      clearTimeout(waitWarning);
+      removeAbortListener?.();
+      if (admitted) release();
+      else void admission.then(release, release);
+    }
+  }
+
+  /**
    * Flattens this instance's registries into the index the dynamic-workflow
    * validation core resolves references and schemas against. Registered keys
    * and canonical ids both count as valid references. Schemas are converted
@@ -4843,8 +4938,11 @@ export class Mastra<
    * await run.start({ inputData: { location: 'Helsinki' } });
    * ```
    */
-  public async addDynamicWorkflow(def: DynamicWorkflowGraph | WorkflowBuilderDefinitionInput): Promise<void> {
-    await this.addDynamicWorkflows([def]);
+  public async addDynamicWorkflow(
+    def: DynamicWorkflowGraph | WorkflowBuilderDefinitionInput,
+    options?: DynamicWorkflowRegistrationOptions,
+  ): Promise<void> {
+    await this.addDynamicWorkflows([def], options);
   }
 
   /**
@@ -4863,9 +4961,14 @@ export class Mastra<
    *   before anything is mutated.
    * - If hydration or persistence fails partway, the in-memory registry is
    *   restored to its prior state.
-   * - Storage writes happen last. A storage-level failure mid-bundle is the
-   *   one residual window where rows can be partially written; the registry is
-   *   still rolled back, and the orphaned rows are inert until the next boot.
+   * - Registrations with overlapping ids are serialized through validation,
+   *   hydration, and persistence so one caller's rollback cannot undo another
+   *   caller's accepted live registration. Unrelated ids proceed independently.
+   * - `waitTimeoutMs` and `signal` apply before admission. A rejected waiter
+   *   performs no registry or storage mutation; admitted writes are fully awaited.
+   * - Storage writes happen last through the workflow-definition store's
+   *   atomic bundle contract. A failure leaves both storage and the live
+   *   registry exactly as they were before registration began.
    *
    * `addDynamicWorkflow()` is the single-member case.
    *
@@ -4879,103 +4982,115 @@ export class Mastra<
    */
   public async addDynamicWorkflows(
     defs: readonly (DynamicWorkflowGraph | WorkflowBuilderDefinitionInput)[],
+    options?: DynamicWorkflowRegistrationOptions,
   ): Promise<void> {
     if (defs.length === 0) return;
 
-    const seen = new Set<string>();
-    for (const def of defs) {
-      if (seen.has(def.id)) {
-        throw new Error(
-          `Dynamic workflow bundle contains more than one definition with id "${def.id}". Ids must be unique within a bundle.`,
-        );
+    const serializeRegistration = this.#serializeDynamicWorkflowRegistration.bind(
+      this,
+      defs.map(def => def.id),
+      options,
+    );
+    await serializeRegistration(async () => {
+      const seen = new Set<string>();
+      for (const def of defs) {
+        if (seen.has(def.id)) {
+          throw new Error(
+            `Dynamic workflow bundle contains more than one definition with id "${def.id}". Ids must be unique within a bundle.`,
+          );
+        }
+        seen.add(def.id);
       }
-      seen.add(def.id);
-    }
 
-    // Save-path is strict (boot-time load is lenient — see #loadDynamicWorkflows).
-    // Normalization coerces the wire shape; one validation call per member
-    // covers structure, JSON-Schema keywords, references, and schema-flow.
-    const members = defs.map(def => ({
-      normalized: normalizeWorkflowBuilderDefinition({
-        id: def.id,
-        description: def.description,
-        metadata: def.metadata,
-        inputSchema: def.inputSchema,
-        outputSchema: def.outputSchema,
-        stateSchema: def.stateSchema,
-        requestContextSchema: def.requestContextSchema,
-        graph: def.graph,
-      }),
-    }));
-
-    // Members may nest each other, so the index every member validates against
-    // is the live registries plus the bundle itself — not the registry alone.
-    const index = this.#buildWorkflowRegistryIndex();
-    const bundleIds = new Set(members.map(member => member.normalized.id));
-    for (const { normalized } of members) {
-      (index.workflows ??= {})[normalized.id] = {
-        inputSchema: normalized.inputSchema,
-        outputSchema: normalized.outputSchema,
-      } as WorkflowRegistrySchemas;
-    }
-    for (const { normalized } of members) {
-      assertValidDynamicWorkflow(normalized, index);
-    }
-
-    // Hydration resolves nested workflows through the live registry, so a
-    // member cannot be hydrated before the bundle members it nests.
-    const ordered: typeof members = [];
-    const remaining = new Map(members.map(member => [member.normalized.id, member] as const));
-    const hydrated = new Set<string>();
-    let progress = true;
-    while (remaining.size > 0 && progress) {
-      progress = false;
-      for (const [id, member] of Array.from(remaining)) {
-        const pending = Array.from(collectNestedWorkflowIds(member.normalized.graph)).filter(
-          dependency => dependency !== id && bundleIds.has(dependency) && !hydrated.has(dependency),
-        );
-        if (pending.length > 0) continue;
-        remaining.delete(id);
-        hydrated.add(id);
-        ordered.push(member);
-        progress = true;
-      }
-    }
-    if (remaining.size > 0) {
-      throw new Error(
-        `Dynamic workflow bundle has a circular nested-workflow dependency among: ${Array.from(remaining.keys())
-          .sort()
-          .join(', ')}.`,
-      );
-    }
-
-    // Snapshot the registry slots this bundle will overwrite so a failure
-    // anywhere below leaves the instance exactly as it was found.
-    const registry = this.#workflows as Record<string, AnyWorkflow>;
-    const priorWorkflows = new Map<string, AnyWorkflow | undefined>();
-    const priorHiddenKeys = new Set<string>();
-    for (const { normalized } of ordered) {
-      priorWorkflows.set(normalized.id, registry[normalized.id]);
-      if (this.#hiddenWorkflowKeys.has(normalized.id)) priorHiddenKeys.add(normalized.id);
-    }
-    const restoreRegistry = () => {
-      for (const [id, prior] of priorWorkflows) {
-        if (prior) registry[id] = prior;
-        else delete registry[id];
-        if (priorHiddenKeys.has(id)) this.#hiddenWorkflowKeys.add(id);
-      }
-    };
-
-    try {
-      for (const { normalized } of ordered) {
-        const { workflow } = await rehydrateWorkflow(normalized, this);
-        this.#replaceDynamicWorkflow(workflow as AnyWorkflow, normalized.id);
-      }
+      // Save-path is strict (boot-time load is lenient — see #loadDynamicWorkflows).
+      // Normalization coerces the wire shape; one validation call per member
+      // covers structure, JSON-Schema keywords, references, and schema-flow.
+      const members = defs.map(def => ({
+        normalized: normalizeWorkflowBuilderDefinition({
+          id: def.id,
+          description: def.description,
+          metadata: def.metadata,
+          inputSchema: def.inputSchema,
+          outputSchema: def.outputSchema,
+          stateSchema: def.stateSchema,
+          requestContextSchema: def.requestContextSchema,
+          graph: def.graph,
+        }),
+      }));
 
       const store = await this.#storage?.getStore('workflowDefinitions');
-      if (store) {
+      if (options?.authorId !== undefined && !store) {
+        throw new Error(
+          'A workflowDefinitions storage domain is required when registering an authored dynamic workflow.',
+        );
+      }
+
+      // Members may nest each other, so the index every member validates against
+      // is the live registries plus the bundle itself — not the registry alone.
+      const index = this.#buildWorkflowRegistryIndex();
+      const bundleIds = new Set(members.map(member => member.normalized.id));
+      for (const { normalized } of members) {
+        (index.workflows ??= {})[normalized.id] = {
+          inputSchema: normalized.inputSchema,
+          outputSchema: normalized.outputSchema,
+        } as WorkflowRegistrySchemas;
+      }
+      for (const { normalized } of members) {
+        assertValidDynamicWorkflow(normalized, index);
+      }
+
+      // Hydration resolves nested workflows through the live registry, so a
+      // member cannot be hydrated before the bundle members it nests.
+      const ordered: typeof members = [];
+      const remaining = new Map(members.map(member => [member.normalized.id, member] as const));
+      const hydrated = new Set<string>();
+      let progress = true;
+      while (remaining.size > 0 && progress) {
+        progress = false;
+        for (const [id, member] of Array.from(remaining)) {
+          const pending = Array.from(collectNestedWorkflowIds(member.normalized.graph)).filter(
+            dependency => dependency !== id && bundleIds.has(dependency) && !hydrated.has(dependency),
+          );
+          if (pending.length > 0) continue;
+          remaining.delete(id);
+          hydrated.add(id);
+          ordered.push(member);
+          progress = true;
+        }
+      }
+      if (remaining.size > 0) {
+        throw new Error(
+          `Dynamic workflow bundle has a circular nested-workflow dependency among: ${Array.from(remaining.keys())
+            .sort()
+            .join(', ')}.`,
+        );
+      }
+
+      // Snapshot the registry slots this bundle will overwrite so a failure
+      // anywhere below leaves the instance exactly as it was found.
+      const registry = this.#workflows as Record<string, AnyWorkflow>;
+      const priorWorkflows = new Map<string, AnyWorkflow | undefined>();
+      const priorHiddenKeys = new Set<string>();
+      for (const { normalized } of ordered) {
+        priorWorkflows.set(normalized.id, registry[normalized.id]);
+        if (this.#hiddenWorkflowKeys.has(normalized.id)) priorHiddenKeys.add(normalized.id);
+      }
+      const restoreRegistry = () => {
+        for (const [id, prior] of priorWorkflows) {
+          if (prior) registry[id] = prior;
+          else delete registry[id];
+          if (priorHiddenKeys.has(id)) this.#hiddenWorkflowKeys.add(id);
+        }
+      };
+
+      try {
         for (const { normalized } of ordered) {
-          await store.upsert({
+          const { workflow } = await rehydrateWorkflow(normalized, this);
+          this.#replaceDynamicWorkflow(workflow as AnyWorkflow, normalized.id);
+        }
+
+        if (store) {
+          const inputs = ordered.map(({ normalized }) => ({
             id: normalized.id,
             description: normalized.description,
             metadata: normalized.metadata,
@@ -4984,13 +5099,16 @@ export class Mastra<
             stateSchema: normalized.stateSchema,
             requestContextSchema: normalized.requestContextSchema,
             graph: normalized.graph,
-          });
+            ...(options?.authorId !== undefined ? { authorId: options.authorId } : {}),
+          }));
+          if (inputs.length === 1) await store.upsert(inputs[0]!);
+          else await store.upsertMany(inputs);
         }
+      } catch (error) {
+        restoreRegistry();
+        throw error;
       }
-    } catch (error) {
-      restoreRegistry();
-      throw error;
-    }
+    });
   }
 
   /**

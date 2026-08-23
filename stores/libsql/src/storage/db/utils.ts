@@ -191,7 +191,15 @@ export function createExecuteWriteOperationWithRetry({
   };
 }
 
-export function prepareStatement({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): {
+export function prepareStatement({
+  tableName,
+  record,
+  insertMode = 'replace',
+}: {
+  tableName: TABLE_NAMES;
+  record: Record<string, any>;
+  insertMode?: 'replace' | 'insert';
+}): {
   sql: string;
   args: InValue[];
 } {
@@ -225,7 +233,7 @@ export function prepareStatement({ tableName, record }: { tableName: TABLE_NAMES
     .join(', ');
 
   return {
-    sql: `INSERT OR REPLACE INTO ${parsedTableName} (${columns.join(', ')}) VALUES (${placeholders})`,
+    sql: `${insertMode === 'replace' ? 'INSERT OR REPLACE' : 'INSERT'} INTO ${parsedTableName} (${columns.join(', ')}) VALUES (${placeholders})`,
     args: values,
   };
 }

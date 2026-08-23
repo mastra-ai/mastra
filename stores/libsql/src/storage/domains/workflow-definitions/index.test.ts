@@ -8,7 +8,7 @@
  *  - the domain is reachable through the LibSQLStore composite
  */
 import { createClient } from '@libsql/client';
-import { TABLE_WORKFLOW_DEFINITIONS } from '@mastra/core/storage';
+import { TABLE_WORKFLOW_DEFINITIONS, WorkflowDefinitionOwnershipConflictError } from '@mastra/core/storage';
 import type { SerializedStepFlowEntry } from '@mastra/core/workflows';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -81,7 +81,7 @@ describe('WorkflowDefinitionsLibSQL', () => {
     expect(updated.graph).toEqual(graph);
   });
 
-  it('updates authorId on an existing row and keeps createdAt stable', async () => {
+  it('rejects an authorId change and keeps the original row stable', async () => {
     const wd = (await store.getStore('workflowDefinitions'))!;
 
     const created = await wd.upsert({
@@ -93,14 +93,68 @@ describe('WorkflowDefinitionsLibSQL', () => {
     });
     expect(created.authorId).toBe('author-1');
 
-    await new Promise(r => setTimeout(r, 5));
-    const updated = await wd.upsert({ id: 'wf-author', authorId: 'author-2' });
-    expect(updated.authorId).toBe('author-2');
-    expect(updated.createdAt.getTime()).toBe(created.createdAt.getTime());
-    expect(updated.updatedAt.getTime()).toBeGreaterThanOrEqual(created.updatedAt.getTime());
+    await expect(wd.upsert({ id: 'wf-author', authorId: 'author-2' })).rejects.toBeInstanceOf(
+      WorkflowDefinitionOwnershipConflictError,
+    );
 
     const fetched = await wd.get('wf-author');
-    expect(fetched?.authorId).toBe('author-2');
+    expect(fetched?.authorId).toBe('author-1');
+    expect(fetched?.createdAt.getTime()).toBe(created.createdAt.getTime());
+    expect(fetched?.updatedAt.getTime()).toBe(created.updatedAt.getTime());
+  });
+
+  it('rolls back every member when one bundle member conflicts', async () => {
+    const wd = (await store.getStore('workflowDefinitions'))!;
+    await wd.upsert({ id: 'owned', description: 'winner', inputSchema, outputSchema, graph, authorId: 'author-2' });
+
+    await expect(
+      wd.upsertMany([
+        { id: 'new-member', inputSchema, outputSchema, graph, authorId: 'author-1' },
+        { id: 'owned', description: 'forged', authorId: 'author-1' },
+      ]),
+    ).rejects.toBeInstanceOf(WorkflowDefinitionOwnershipConflictError);
+
+    expect(await wd.get('new-member')).toBeNull();
+    expect(await wd.get('owned')).toMatchObject({ authorId: 'author-2', description: 'winner' });
+  });
+
+  it('does not update a different owner after a delete-and-recreate race', async () => {
+    const wd = (await store.getStore('workflowDefinitions'))!;
+    await wd.upsert({
+      id: 'wf-recreated',
+      description: 'original owner',
+      inputSchema,
+      outputSchema,
+      graph,
+      authorId: 'author-1',
+    });
+
+    const originalGet = wd.get.bind(wd);
+    const getSpy = vi.spyOn(wd, 'get');
+    let reads = 0;
+    getSpy.mockImplementation(async id => {
+      const current = await originalGet(id);
+      reads += 1;
+      if (reads === 2) {
+        getSpy.mockRestore();
+        await wd.delete(id);
+        await wd.upsert({
+          id,
+          description: 'new owner',
+          inputSchema,
+          outputSchema,
+          graph,
+          authorId: 'author-2',
+        });
+      }
+      return current;
+    });
+
+    await expect(
+      wd.upsert({ id: 'wf-recreated', description: 'stale update', authorId: 'author-1' }),
+    ).rejects.toBeInstanceOf(WorkflowDefinitionOwnershipConflictError);
+
+    expect(await wd.get('wf-recreated')).toMatchObject({ authorId: 'author-2', description: 'new owner' });
   });
 
   it('round-trips JSON columns intact', async () => {

@@ -1,4 +1,8 @@
-import { TABLE_WORKFLOW_DEFINITIONS, WorkflowDefinitionsStorage } from '@mastra/core/storage';
+import {
+  assertWorkflowDefinitionAuthor,
+  TABLE_WORKFLOW_DEFINITIONS,
+  WorkflowDefinitionsStorage,
+} from '@mastra/core/storage';
 import type {
   CreateWorkflowDefinitionInput,
   ListWorkflowDefinitionsInput,
@@ -92,9 +96,27 @@ export class MongoDBWorkflowDefinitionsStore extends WorkflowDefinitionsStorage 
   }
 
   async upsert(input: CreateWorkflowDefinitionInput | UpdateWorkflowDefinitionInput): Promise<WorkflowDefinition> {
+    return this.applyUpsert(input);
+  }
+
+  async upsertMany(
+    inputs: readonly (CreateWorkflowDefinitionInput | UpdateWorkflowDefinitionInput)[],
+  ): Promise<WorkflowDefinition[]> {
+    if (inputs.length === 0) return [];
+    return this.#connector.withRequiredTransaction(async session => {
+      const definitions: WorkflowDefinition[] = [];
+      for (const input of inputs) definitions.push(await this.applyUpsert(input, session));
+      return definitions;
+    });
+  }
+
+  private async applyUpsert(
+    input: CreateWorkflowDefinitionInput | UpdateWorkflowDefinitionInput,
+    session?: import('mongodb').ClientSession,
+  ): Promise<WorkflowDefinition> {
     const now = new Date();
     const collection = await this.getCollection(TABLE_WORKFLOW_DEFINITIONS);
-    const existing = await collection.findOne<Record<string, any>>({ id: input.id });
+    const existing = await collection.findOne<Record<string, any>>({ id: input.id }, { session });
 
     if (!existing) {
       if (!('inputSchema' in input) || input.inputSchema === undefined)
@@ -120,27 +142,34 @@ export class MongoDBWorkflowDefinitionsStore extends WorkflowDefinitionsStorage 
         updatedAt: now,
       };
       try {
-        await collection.insertOne(doc);
+        await collection.insertOne(doc, { session });
       } catch (error) {
+        // A duplicate-key error aborts a MongoDB transaction. Let the whole
+        // bundle roll back instead of attempting more work in that session.
+        if (session) throw error;
         // A concurrent upsert may have created the document after our
         // existence check; fall back to updating it so the upsert stays
         // idempotent. Only duplicate-key failures (code 11000) qualify —
         // anything else is a real persistence error and must propagate.
         const isDuplicateKey = (error as { code?: number })?.code === 11000;
-        if (!isDuplicateKey || !(await collection.findOne({ id: input.id }))) throw error;
-        return this.applyUpdate(input, now);
+        if (!isDuplicateKey || !(await collection.findOne({ id: input.id }, { session }))) throw error;
+        return this.applyUpdate(input, now, session);
       }
       return docToDefinition(doc);
     }
 
-    return this.applyUpdate(input, now);
+    return this.applyUpdate(input, now, session);
   }
 
   private async applyUpdate(
     input: CreateWorkflowDefinitionInput | UpdateWorkflowDefinitionInput,
     now: Date,
+    session?: import('mongodb').ClientSession,
   ): Promise<WorkflowDefinition> {
     const collection = await this.getCollection(TABLE_WORKFLOW_DEFINITIONS);
+    const existing = await collection.findOne<Record<string, any>>({ id: input.id }, { session });
+    if (!existing) throw new Error(`Failed to update workflow definition "${input.id}".`);
+    assertWorkflowDefinitionAuthor(docToDefinition(existing), input);
 
     const update: Record<string, any> = { updatedAt: now };
     if ('description' in input && input.description !== undefined) update.description = input.description;
@@ -152,12 +181,13 @@ export class MongoDBWorkflowDefinitionsStore extends WorkflowDefinitionsStorage 
       update.requestContextSchema = input.requestContextSchema;
     if ('graph' in input && input.graph !== undefined) update.graph = input.graph;
     if ('status' in input && input.status !== undefined) update.status = input.status;
-    if ('authorId' in input && input.authorId !== undefined) update.authorId = input.authorId;
-
-    await collection.updateOne({ id: input.id }, { $set: update });
-    const updated = await collection.findOne<Record<string, any>>({ id: input.id });
+    const filter = { id: input.id, ...(input.authorId !== undefined ? { authorId: input.authorId } : {}) };
+    await collection.updateOne(filter, { $set: update }, { session });
+    const updated = await collection.findOne<Record<string, any>>({ id: input.id }, { session });
     if (!updated) throw new Error(`Failed to update workflow definition "${input.id}".`);
-    return docToDefinition(updated);
+    const definition = docToDefinition(updated);
+    assertWorkflowDefinitionAuthor(definition, input);
+    return definition;
   }
 
   async get(id: string): Promise<WorkflowDefinition | null> {
