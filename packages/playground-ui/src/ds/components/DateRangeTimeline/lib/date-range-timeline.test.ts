@@ -272,6 +272,35 @@ describe('zoomTimelineViewport', () => {
   it('never zooms past the selection it must keep visible', () => {
     expect(zoomTimelineViewport(state, 64, 0.01, 0.5).viewport).toEqual({ from: 13, to: 29 });
   });
+
+  it('measures the span of a viewport that does not start at zero', () => {
+    const offset = { origin: parseISO('2026-05-07'), viewport: { from: 13, to: 45 }, selection: { from: 20, to: 25 } };
+
+    expect(zoomTimelineViewport(offset, 64, 0.5, 0.5).viewport).toEqual({ from: 20, to: 36 });
+  });
+
+  it('keeps the anchor point fixed when nothing forces a clamp', () => {
+    const centered = { origin: parseISO('2026-05-07'), viewport: { from: 0, to: 64 }, selection: { from: 30, to: 32 } };
+
+    expect(zoomTimelineViewport(centered, 64, 0.5, 0.5).viewport).toEqual({ from: 16, to: 48 });
+  });
+
+  it('still steps by a day when the factor rounds to no change at all', () => {
+    const narrow = { origin: parseISO('2026-05-07'), viewport: { from: 0, to: 2 }, selection: { from: 0, to: 0 } };
+
+    expect(zoomTimelineViewport(narrow, 10, 0.99, 0.5).viewport).toEqual({ from: 0, to: 1 });
+    expect(zoomTimelineViewport(narrow, 10, 1.01, 0.5).viewport).toEqual({ from: 0, to: 3 });
+  });
+
+  it('is a no-op once the viewport cannot shrink any further', () => {
+    const atMinimum = {
+      origin: parseISO('2026-05-07'),
+      viewport: { from: 0, to: 1 },
+      selection: { from: 0, to: 1 },
+    };
+
+    expect(zoomTimelineViewport(atMinimum, 64, 0.5, 0.5)).toBe(atMinimum);
+  });
 });
 
 describe('revealTimelineSelection', () => {
@@ -290,6 +319,19 @@ describe('revealTimelineSelection', () => {
 
   it('normalizes an inverted selection before revealing it', () => {
     expect(revealTimelineSelection({ from: 20, to: 40 }, { from: 55, to: 50 }, 64)).toEqual({ from: 35, to: 55 });
+  });
+
+  it('returns the normalized window, not the out-of-bounds one it was given', () => {
+    // The selection is inside the viewport as written, but the viewport itself
+    // runs past the last index and has to be pulled back first.
+    expect(revealTimelineSelection({ from: 60, to: 80 }, { from: 62, to: 63 }, 64)).toEqual({ from: 44, to: 64 });
+  });
+
+  it('leaves the viewport alone when the selection starts exactly at its edge', () => {
+    const viewport = { from: 10, to: 40 };
+
+    expect(revealTimelineSelection(viewport, { from: 10, to: 20 }, 64)).toBe(viewport);
+    expect(revealTimelineSelection(viewport, { from: 20, to: 40 }, 64)).toBe(viewport);
   });
 });
 

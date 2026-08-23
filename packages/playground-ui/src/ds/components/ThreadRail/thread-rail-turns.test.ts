@@ -233,4 +233,65 @@ describe('buildThreadRailTurns', () => {
       expect(filesOf([part])).toEqual([expected]);
     });
   });
+
+  describe('prompt text', () => {
+    it('joins several text parts as separate lines', () => {
+      expect(
+        promptOf(
+          withParts('u', [
+            { type: 'text', text: 'first' },
+            { type: 'text', text: 'second' },
+          ]),
+        ),
+      ).toBe('first second');
+    });
+
+    it('reads text only from text parts that carry a string', () => {
+      const message = withParts('u', [
+        { type: 'text', text: 'kept' },
+        // A non-text part is not prompt text even when it has its own `text`.
+        { type: 'image', text: 'alt caption', url: 'https://x.dev/a.png' },
+        // A text part whose text is not a string is not prompt text either.
+        { type: 'text', text: 42 },
+        null,
+      ]);
+
+      expect(promptOf(message)).toBe('kept');
+    });
+  });
+
+  describe('signal turns', () => {
+    it('reads the signal type from metadata rather than the message type', () => {
+      const message = {
+        ...signalMessage('s', 'state', 'text'),
+        content: { format: 2, parts: [{ type: 'text', text: 'text' }], metadata: { signal: { type: 'user' } } },
+      } as MastraDBMessage;
+
+      expect(startsUserTurn(message)).toBe(true);
+    });
+
+    it('falls back to the message type when there is no metadata at all', () => {
+      const message = {
+        ...signalMessage('s', 'user', 'text'),
+        content: { format: 2, parts: [{ type: 'text', text: 'text' }] },
+      } as MastraDBMessage;
+
+      expect(startsUserTurn(message)).toBe(true);
+    });
+  });
+
+  describe('file label sources', () => {
+    it('tolerates a null part', () => {
+      expect(filesOf([null, { type: 'file', filename: 'plan.md' }])).toEqual(['plan.md']);
+    });
+
+    it.each([['url'], ['image'], ['data']])('reads the label from a %s source', field => {
+      expect(filesOf([{ type: 'file', [field]: 'https://x.dev/docs/plan.md' }])).toEqual(['plan.md']);
+    });
+
+    it('ignores the empty trailing segment of a path', () => {
+      expect(filesOf([{ type: 'file', url: 'https://x.dev/docs/reports/' }])).toEqual(['reports']);
+      expect(filesOf([{ type: 'file', url: '/docs/reports/?token=1' }])).toEqual(['reports']);
+    });
+  });
 });
