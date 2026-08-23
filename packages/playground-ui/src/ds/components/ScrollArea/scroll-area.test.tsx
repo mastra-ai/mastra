@@ -173,3 +173,100 @@ describe('ScrollArea', () => {
     });
   });
 });
+
+describe('ScrollArea — fade masks', () => {
+  const maskSides = (props: Partial<React.ComponentProps<typeof ScrollArea>> = {}) => {
+    renderArea(props);
+    const className = getViewport().className;
+    return {
+      top: className.includes('data-[overflow-y-start]:mask-t-from'),
+      bottom: className.includes('data-[overflow-y-end]:mask-b-from'),
+      left: className.includes('data-[overflow-x-start]:mask-l-from'),
+      right: className.includes('data-[overflow-x-end]:mask-r-from'),
+    };
+  };
+
+  it('fades both ends of the axis it scrolls', () => {
+    expect(maskSides()).toEqual({ top: true, bottom: true, left: false, right: false });
+
+    cleanup();
+
+    expect(maskSides({ orientation: 'horizontal' })).toEqual({
+      top: false,
+      bottom: false,
+      left: true,
+      right: true,
+    });
+  });
+
+  it('fades all four ends when it scrolls both ways', () => {
+    expect(maskSides({ orientation: 'both' })).toEqual({ top: true, bottom: true, left: true, right: true });
+  });
+
+  it('fades nothing when the caller turns masking off', () => {
+    expect(maskSides({ orientation: 'both', mask: false })).toEqual({
+      top: false,
+      bottom: false,
+      left: false,
+      right: false,
+    });
+  });
+
+  it('fades the axis ends when the caller turns masking on explicitly', () => {
+    expect(maskSides({ mask: true })).toEqual({ top: true, bottom: true, left: false, right: false });
+  });
+
+  it('turns off a whole axis at once', () => {
+    expect(maskSides({ orientation: 'both', mask: { y: false } })).toEqual({
+      top: false,
+      bottom: false,
+      left: true,
+      right: true,
+    });
+
+    cleanup();
+
+    expect(maskSides({ orientation: 'both', mask: { x: false } })).toEqual({
+      top: true,
+      bottom: true,
+      left: false,
+      right: false,
+    });
+  });
+
+  it('turns on an axis the orientation does not scroll', () => {
+    expect(maskSides({ orientation: 'vertical', mask: { x: true } })).toEqual({
+      top: true,
+      bottom: true,
+      left: true,
+      right: true,
+    });
+  });
+
+  it.each([
+    ['top', { top: false }, { top: false, bottom: true, left: true, right: true }],
+    ['bottom', { bottom: false }, { top: true, bottom: false, left: true, right: true }],
+    ['left', { left: false }, { top: true, bottom: true, left: false, right: true }],
+    ['right', { right: false }, { top: true, bottom: true, left: true, right: false }],
+  ])('turns off the %s end on its own', (_, mask, expected) => {
+    expect(maskSides({ orientation: 'both', mask })).toEqual(expected);
+  });
+
+  it('lets a single end override the axis it belongs to', () => {
+    expect(maskSides({ orientation: 'both', mask: { y: false, top: true } })).toEqual({
+      top: true,
+      bottom: false,
+      left: true,
+      right: true,
+    });
+
+    cleanup();
+
+    expect(maskSides({ orientation: 'both', mask: { x: false, right: true } })).toEqual({
+      top: true,
+      bottom: true,
+      left: false,
+      right: true,
+    });
+  });
+});
