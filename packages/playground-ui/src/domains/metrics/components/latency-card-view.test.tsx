@@ -157,6 +157,19 @@ describe('LatencyCardView', () => {
       expect(screen.getByRole('tab', { name: 'Agents' }).getAttribute('aria-disabled')).toBe('true');
     });
 
+    it('charts a period where only workflows ran', () => {
+      render(
+        <LatencyCardView
+          data={{ agentData: [], workflowData: [agentPoint], toolData: [] }}
+          isLoading={false}
+          isError={false}
+        />,
+      );
+
+      expect(screen.queryByText('No latency data yet')).toBeNull();
+      expect(screen.getByRole('tab', { name: 'Workflows' }).getAttribute('aria-selected')).toBe('true');
+    });
+
     it('falls through to tools when neither agents nor workflows have any', () => {
       render(
         <LatencyCardView
@@ -252,6 +265,8 @@ describe('LatencyCardView', () => {
         />,
       );
 
+      expect(screen.getByText('p50')).toBeTruthy();
+      expect(screen.getByText('p95')).toBeTruthy();
       expect(screen.getByText('200')).toBeTruthy();
       expect(screen.getByText('1000')).toBeTruthy();
       expect(screen.getAllByText('avg ms')).toHaveLength(2);
