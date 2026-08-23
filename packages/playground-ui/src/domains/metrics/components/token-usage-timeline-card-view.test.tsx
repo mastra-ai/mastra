@@ -65,10 +65,12 @@ describe('TokenUsageTimelineCardView', () => {
   it('shows the cost tab only when cost has a single known unit', () => {
     render(<TokenUsageTimelineCardView data={data} interval="1d" isLoading={false} isError={false} />);
 
-    fireEvent.click(screen.getByText('Cost'));
+    fireEvent.click(screen.getByRole('tab', { name: 'Cost' }));
 
     expect(screen.getAllByText('$0.07')).toHaveLength(2);
     expect(screen.getByText('Total cost')).toBeTruthy();
+    // The tab and the chart legend both name the series being drawn.
+    expect(screen.getAllByText('Cost')).toHaveLength(2);
   });
 
   it('does not display mixed-unit cost totals', () => {
