@@ -6,14 +6,10 @@
 
 import { Box, getKeybindings, Spacer, Text } from '@earendil-works/pi-tui';
 import type { Focusable } from '@earendil-works/pi-tui';
+import { getProviderKeyUrl } from '@mastra/code-sdk/auth/index';
 import { openUrlInBrowser } from '../open-url.js';
 import { theme } from '../theme.js';
 import { MaskedInput } from './masked-input.js';
-
-/** Where a provider's API key lives, when it can be opened directly. */
-const PROVIDER_KEY_URLS: Record<string, string> = {
-  opencode: 'https://opencode.ai/auth',
-};
 
 export interface ApiKeyDialogOptions {
   /** Provider name shown in the title (e.g., "Google") */
@@ -55,7 +51,7 @@ export class ApiKeyDialogComponent extends Box implements Focusable {
     if (options.apiKeyEnvVar) {
       this.addChild(new Text(theme.fg('dim', `You can also set ${options.apiKeyEnvVar} in your environment.`), 0, 0));
     }
-    const keyUrl = PROVIDER_KEY_URLS[options.providerName];
+    const keyUrl = getProviderKeyUrl(options.providerName);
     if (keyUrl) {
       this.addChild(new Spacer(1));
       this.addChild(new Text(theme.fg('text', `Get a key: ${keyUrl}`)));

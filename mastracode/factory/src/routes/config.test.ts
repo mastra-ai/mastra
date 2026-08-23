@@ -170,6 +170,19 @@ describe('listProviders', () => {
       expect(list[0]?.source).toBe('oauth-user');
     });
 
+    it('carries the key page for providers that publish one, and omits it otherwise', async () => {
+      const list = await listProviders({
+        controller: makeAgentController([
+          { provider: 'opencode', hasApiKey: false, apiKeyEnvVar: 'OPENCODE_API_KEY' },
+          { provider: 'anthropic', hasApiKey: false, apiKeyEnvVar: 'ANTHROPIC_API_KEY' },
+        ]),
+      });
+
+      const byProvider = new Map(list.map(p => [p.provider, p]));
+      expect(byProvider.get('opencode')?.keyUrl).toBe('https://opencode.ai/auth');
+      expect(byProvider.get('anthropic')?.keyUrl).toBeUndefined();
+    });
+
     it('reports orgKey when an org-wide API key exists, even when shadowed by a personal credential', async () => {
       const controller = makeAgentController([{ provider: 'anthropic', hasApiKey: false }]);
 

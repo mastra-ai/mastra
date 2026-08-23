@@ -2,4 +2,4 @@
 'mastracode': minor
 ---
 
-The /models picker now marks OpenCode Zen free models with a (free) label instead of showing them as missing an API key, selecting them no longer prompts for a key, and the API key dialog opens opencode.ai/auth so a key is one copy-paste away when wanted.
+OpenCode Zen is easier to set up everywhere keys are handled: the /models picker marks Zen free models with a (free) label instead of a missing-key error and skips the key prompt for them, the API-key dialog shows and opens the provider's key page, and the web settings providers list carries a "Get a key" link straight from the server.

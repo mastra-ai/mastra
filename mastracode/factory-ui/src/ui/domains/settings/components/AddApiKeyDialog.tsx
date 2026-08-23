@@ -73,6 +73,14 @@ export function AddApiKeyDialog({ provider, authEnabled, defaultScope = 'user', 
           <DialogDescription>The key is stored securely and never displayed again.</DialogDescription>
         </DialogHeader>
         <DialogBody className="flex flex-col gap-4">
+          {provider.keyUrl && (
+            <Txt as="p" variant="ui-sm" className="text-icon4">
+              Get a key at{' '}
+              <a href={provider.keyUrl} target="_blank" rel="noreferrer" className="underline">
+                {provider.keyUrl.replace(/^https:\/\//, '')}
+              </a>
+            </Txt>
+          )}
           <Input
             autoFocus
             type="password"

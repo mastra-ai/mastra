@@ -1,3 +1,4 @@
+import { getProviderKeyUrl } from '@mastra/code-sdk/auth/index';
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { DEFAULT_OM_MODEL_ID } from '@mastra/code-sdk/constants';
 import { getAvailableModePacks, resolveProviderOMDefault } from '@mastra/code-sdk/onboarding/packs';
@@ -100,6 +101,8 @@ export interface ProviderInfo {
   orgCredential?: 'oauth' | 'api_key';
   /** Web OAuth sign-in capability, when the provider supports it. */
   oauth?: { supported: true; modes: LoginSessionKind[] };
+  /** Page where a key for this provider is created, when one exists. */
+  keyUrl?: string;
 }
 
 /** Minimal session surface a pack activation touches. */
@@ -208,6 +211,7 @@ export async function listProviders({
     }
 
     const flowKind = WEB_OAUTH_FLOW_KINDS[model.provider];
+    const keyUrl = getProviderKeyUrl(model.provider);
     seen.set(model.provider, {
       provider: model.provider,
       envVar: model.apiKeyEnvVar,
@@ -216,6 +220,7 @@ export async function listProviders({
       ...(userCredential ? { userCredential } : {}),
       ...(orgCredential ? { orgCredential } : {}),
       ...(flowKind ? { oauth: { supported: true as const, modes: [flowKind] } } : {}),
+      ...(keyUrl ? { keyUrl } : {}),
     });
   }
 

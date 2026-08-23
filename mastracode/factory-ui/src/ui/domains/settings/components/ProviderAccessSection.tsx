@@ -399,6 +399,16 @@ export function ProviderAccessSection() {
                     </DataList.Cell>
                     <DataList.Cell className="justify-end">
                       <span className="flex items-center gap-2">
+                        {provider.keyUrl && (
+                          <a
+                            href={provider.keyUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-icon3 hover:text-icon6 text-xs underline"
+                          >
+                            Get a key
+                          </a>
+                        )}
                         <Button
                           size="sm"
                           aria-label={`${storedKey ? 'Update key' : 'Add API key'} for ${displayName}`}
