@@ -73,6 +73,15 @@ export function AddApiKeyDialog({ provider, authEnabled, defaultScope = 'user', 
           <DialogDescription>The key is stored securely and never displayed again.</DialogDescription>
         </DialogHeader>
         <DialogBody className="flex flex-col gap-4">
+          {provider.provider === 'opencode' && (
+            <Txt as="p" variant="ui-sm" className="text-icon4">
+              Sign in at{' '}
+              <a href="https://opencode.ai/auth" target="_blank" rel="noreferrer" className="underline">
+                opencode.ai/auth
+              </a>{' '}
+              and copy your key. Free models also work without one.
+            </Txt>
+          )}
           <Input
             autoFocus
             type="password"
