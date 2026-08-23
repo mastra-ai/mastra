@@ -9,6 +9,7 @@ import { PoolAdapter } from '../../../client';
 import { PostgresStoreVNext } from '../../../index';
 import { connectionString, TEST_CONFIG } from '../../../test-utils';
 import { ALL_SIGNAL_TABLES, qualifiedTable, TABLE_DISCOVERY, TABLE_LOG_EVENTS, TABLE_SPAN_EVENTS } from './ddl';
+import * as discoveryOps from './discovery';
 import { ensurePartmanHypertables } from './partitioning';
 import { decodeDeltaCursor } from './polling';
 import { ObservabilityStoragePostgresVNext } from './index';
@@ -945,6 +946,210 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
             `SELECT "values" FROM ${qualifiedTable(harness.schema, TABLE_DISCOVERY)} WHERE "cacheKey" = 'service_names'`,
           );
           expect(row.values).toEqual(['fresh-service']);
+        });
+      } finally {
+        await harness.close();
+      }
+    });
+  });
+
+  describe('discovery — lookback window', () => {
+    // `ttlSeconds: 0` forces every call to recompute and block on the result,
+    // so each assertion below observes the refresh query itself rather than a
+    // cached value. That lets one harness exercise several window sizes.
+    const forceRefresh = (lookbackSeconds: number) => ({ ttlSeconds: 0, lookbackSeconds });
+
+    it('scans only events inside the window, and all history when disabled', async () => {
+      const harness = await createHarness({ schemaPrefix: 'obs_vnext_discovery_lookback' });
+
+      try {
+        const hoursAgo = (hours: number) => new Date(Date.now() - hours * 60 * 60 * 1000);
+
+        // Two spans in the same table, four hours apart, so a window between
+        // them proves the predicate rather than an empty table.
+        await harness.domain.createSpan({
+          span: makeSpan({
+            traceId: 'discovery-lookback-recent',
+            spanId: 'discovery-lookback-recent-root',
+            serviceName: 'recent-service',
+            startedAt: hoursAgo(2),
+            endedAt: hoursAgo(2),
+            tags: ['recent-tag'],
+          }),
+        });
+        await harness.domain.createSpan({
+          span: makeSpan({
+            traceId: 'discovery-lookback-older',
+            spanId: 'discovery-lookback-older-root',
+            serviceName: 'older-service',
+            startedAt: hoursAgo(6),
+            endedAt: hoursAgo(6),
+            tags: ['older-tag'],
+          }),
+        });
+
+        const windowed = await discoveryOps.getTags(harness.client, harness.schema, {}, forceRefresh(4 * 60 * 60));
+        expect(windowed.tags).toEqual(['recent-tag']);
+
+        const unbounded = await discoveryOps.getTags(harness.client, harness.schema, {}, forceRefresh(0));
+        expect(unbounded.tags).toEqual(['older-tag', 'recent-tag']);
+      } finally {
+        await harness.close();
+      }
+    });
+
+    it('bounds each signal table on its own partition time column', async () => {
+      const harness = await createHarness({ schemaPrefix: 'obs_vnext_discovery_lookback_cols' });
+
+      try {
+        const hoursAgo = (hours: number) => new Date(Date.now() - hours * 60 * 60 * 1000);
+
+        // Spans are bounded on "endedAt"; logs and metrics on "timestamp".
+        // Putting the old rows in the log/metric tables catches a predicate
+        // that used the span column everywhere.
+        await harness.domain.createSpan({
+          span: makeSpan({
+            traceId: 'discovery-lookback-cols',
+            spanId: 'discovery-lookback-cols-root',
+            serviceName: 'recent-service',
+            startedAt: hoursAgo(1),
+            endedAt: hoursAgo(1),
+          }),
+        });
+        await harness.domain.batchCreateLogs({
+          logs: [makeLog({ timestamp: hoursAgo(6), serviceName: 'older-log-service' })],
+        } as Parameters<typeof harness.domain.batchCreateLogs>[0]);
+        await harness.domain.batchCreateMetrics({
+          metrics: [makeMetric({ timestamp: hoursAgo(6), name: 'older_metric', serviceName: 'older-metric-service' })],
+        } as Parameters<typeof harness.domain.batchCreateMetrics>[0]);
+
+        const serviceNames = await discoveryOps.getServiceNames(
+          harness.client,
+          harness.schema,
+          {},
+          forceRefresh(4 * 60 * 60),
+        );
+        expect(serviceNames.serviceNames).toEqual(['recent-service']);
+
+        const metricNames = await discoveryOps.getMetricNames(
+          harness.client,
+          harness.schema,
+          {},
+          forceRefresh(4 * 60 * 60),
+        );
+        expect(metricNames.names).toEqual([]);
+
+        const allServiceNames = await discoveryOps.getServiceNames(harness.client, harness.schema, {}, forceRefresh(0));
+        expect(allServiceNames.serviceNames).toEqual(['older-log-service', 'older-metric-service', 'recent-service']);
+      } finally {
+        await harness.close();
+      }
+    });
+  });
+
+  describe('discovery — cross-process refresh claim', () => {
+    it('stamps the cache row before refreshing so other processes skip the duplicate scan', async () => {
+      let resolveRefresh: (() => void) | undefined;
+      const refreshStarted = Promise.withResolvers<void>();
+      const refreshGate = new Promise<void>(resolve => {
+        resolveRefresh = resolve;
+      });
+
+      const harness = await createHarness({
+        schemaPrefix: 'obs_vnext_discovery_claim',
+        discovery: { ttlSeconds: 1 },
+        wrapClient: client =>
+          wrapClient(client, {
+            manyOrNone: async (query: string, values?: QueryValues) => {
+              if (query.includes('SELECT v FROM (') && query.includes('"serviceName" AS v')) {
+                refreshStarted.resolve();
+                await refreshGate;
+              }
+              return client.manyOrNone(query, values);
+            },
+          }),
+      });
+
+      try {
+        await harness.domain.createSpan({
+          span: makeSpan({
+            traceId: 'discovery-claim-trace',
+            spanId: 'discovery-claim-root',
+            serviceName: 'fresh-service',
+          }),
+        });
+
+        const staleRefreshedAt = new Date(Date.now() - 60_000);
+        await seedDiscoveryCache(
+          harness.baseClient,
+          harness.schema,
+          'service_names',
+          ['stale-service'],
+          staleRefreshedAt,
+        );
+
+        const first = await harness.domain.getServiceNames({});
+        expect(first.serviceNames).toEqual(['stale-service']);
+
+        // While the refresh is still running, the row must already look
+        // fresh — that stamp is what a second process reads to decide it has
+        // nothing to do.
+        await refreshStarted.promise;
+        await vi.waitFor(async () => {
+          const row = await harness.baseClient.one<{ refreshedAt: Date }>(
+            `SELECT "refreshedAt" FROM ${qualifiedTable(harness.schema, TABLE_DISCOVERY)} WHERE "cacheKey" = 'service_names'`,
+          );
+          expect(new Date(row.refreshedAt).getTime()).toBeGreaterThan(staleRefreshedAt.getTime());
+        });
+
+        resolveRefresh?.();
+
+        await vi.waitFor(async () => {
+          const row = await harness.baseClient.one<{ values: string[] }>(
+            `SELECT "values" FROM ${qualifiedTable(harness.schema, TABLE_DISCOVERY)} WHERE "cacheKey" = 'service_names'`,
+          );
+          expect(row.values).toEqual(['fresh-service']);
+        });
+      } finally {
+        await harness.close();
+      }
+    });
+
+    it('hands the claim back when the refresh fails so the cache row stays stale', async () => {
+      const harness = await createHarness({
+        schemaPrefix: 'obs_vnext_discovery_claim_release',
+        discovery: { ttlSeconds: 1 },
+        wrapClient: client =>
+          wrapClient(client, {
+            manyOrNone: async (query: string, values?: QueryValues) => {
+              if (query.includes('SELECT v FROM (') && query.includes('"serviceName" AS v')) {
+                throw new Error('boom');
+              }
+              return client.manyOrNone(query, values);
+            },
+          }),
+      });
+
+      try {
+        const staleRefreshedAt = new Date(Date.now() - 60_000);
+        await seedDiscoveryCache(
+          harness.baseClient,
+          harness.schema,
+          'service_names',
+          ['stale-service'],
+          staleRefreshedAt,
+        );
+
+        const result = await harness.domain.getServiceNames({});
+        expect(result.serviceNames).toEqual(['stale-service']);
+
+        // A failed refresh must not leave behind a stamp that suppresses the
+        // next attempt — the row goes back to the timestamp it had.
+        await vi.waitFor(async () => {
+          const row = await harness.baseClient.one<{ refreshedAt: Date }>(
+            `SELECT "refreshedAt" FROM ${qualifiedTable(harness.schema, TABLE_DISCOVERY)} WHERE "cacheKey" = 'service_names'`,
+          );
+          expect(new Date(row.refreshedAt).getTime()).toBe(staleRefreshedAt.getTime());
         });
       } finally {
         await harness.close();
