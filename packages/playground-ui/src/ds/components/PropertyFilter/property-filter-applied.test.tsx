@@ -1,10 +1,18 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { useState } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { PropertyFilterApplied } from './property-filter-applied';
 import type { PropertyFilterField, PropertyFilterToken } from './types';
+
+beforeAll(() => {
+  // jsdom ships no PointerEvent, and Base UI constructs one when a radio is clicked.
+  if (typeof window.PointerEvent === 'undefined') {
+    class PointerEventStub extends MouseEvent {}
+    window.PointerEvent = PointerEventStub as unknown as typeof PointerEvent;
+  }
+});
 
 afterEach(() => {
   cleanup();
@@ -255,6 +263,52 @@ describe('PropertyFilterApplied — editing a text pill', () => {
     expect(onTokensChange).not.toHaveBeenCalled();
   });
 
+  it('takes Enter for itself so it never submits a surrounding form', () => {
+    render(
+      <PropertyFilterApplied
+        fields={FIELDS}
+        tokens={[{ fieldId: 'entityId', value: 'weather' }]}
+        onTokensChange={vi.fn()}
+      />,
+    );
+
+    // fireEvent reports false when the handler called preventDefault.
+    expect(fireEvent.keyDown(screen.getByDisplayValue('weather'), { key: 'Enter' })).toBe(false);
+  });
+
+  it('takes Escape for itself, and gives up the caret', () => {
+    render(
+      <PropertyFilterApplied
+        fields={FIELDS}
+        tokens={[{ fieldId: 'entityId', value: 'weather' }]}
+        onTokensChange={vi.fn()}
+      />,
+    );
+
+    const input = screen.getByDisplayValue('weather');
+    input.focus();
+
+    expect(fireEvent.keyDown(input, { key: 'Escape' })).toBe(false);
+    expect(document.activeElement).not.toBe(input);
+  });
+
+  it('leaves the caret in place on an ordinary key', () => {
+    render(
+      <PropertyFilterApplied
+        fields={FIELDS}
+        tokens={[{ fieldId: 'entityId', value: 'weather' }]}
+        onTokensChange={vi.fn()}
+      />,
+    );
+
+    const input = screen.getByDisplayValue('weather');
+    input.focus();
+
+    fireEvent.keyDown(input, { key: 'a' });
+
+    expect(document.activeElement).toBe(input);
+  });
+
   it('follows the stored value when it changes from outside', () => {
     const { rerender } = render(
       <PropertyFilterApplied
@@ -311,6 +365,18 @@ describe('PropertyFilterApplied — editing a text pill', () => {
     expect(document.activeElement).toBe(screen.getByDisplayValue('second'));
   });
 
+  it('focuses a pill the moment it becomes the newly created one', () => {
+    const tokens: PropertyFilterToken[] = [{ fieldId: 'entityId', value: 'first' }];
+    const { rerender } = render(<PropertyFilterApplied fields={FIELDS} tokens={tokens} onTokensChange={vi.fn()} />);
+    expect(document.activeElement).not.toBe(screen.getByDisplayValue('first'));
+
+    rerender(
+      <PropertyFilterApplied fields={FIELDS} tokens={tokens} autoFocusFieldId="entityId" onTokensChange={vi.fn()} />,
+    );
+
+    expect(document.activeElement).toBe(screen.getByDisplayValue('first'));
+  });
+
   it('focuses nothing when no pill was just created', () => {
     render(
       <PropertyFilterApplied
@@ -341,6 +407,21 @@ describe('PropertyFilterApplied — removing a pill', () => {
     fireEvent.click(screen.getByRole('button', { name: /Remove Primitive Name filter/i }));
 
     expect(onTokensChange).toHaveBeenCalledWith([{ fieldId: 'entityId', value: 'a' }]);
+  });
+
+  it('leaves the caret alone while the Remove button is being pressed', () => {
+    render(
+      <PropertyFilterApplied
+        fields={FIELDS}
+        tokens={[{ fieldId: 'entityId', value: 'weather' }]}
+        onTokensChange={vi.fn()}
+      />,
+    );
+
+    const remove = screen.getByRole('button', { name: /Remove Primitive ID filter/i });
+
+    // Pressing it must not blur the input first, or the click lands on nothing.
+    expect(fireEvent.mouseDown(remove)).toBe(false);
   });
 
   it('tells the pills apart when two share a field', () => {
@@ -412,6 +493,24 @@ describe('PropertyFilterApplied — a pick-multi pill', () => {
     expect(screen.queryByRole('textbox')).toBeNull();
   });
 
+  it('replaces the value from the pill’s own panel', async () => {
+    const onTokensChange = vi.fn();
+    render(
+      <PropertyFilterApplied
+        fields={FIELDS}
+        tokens={[{ fieldId: 'rootEntityType', value: 'agent' }]}
+        onTokensChange={onTokensChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'agent' }));
+
+    const workflow = await screen.findByRole('radio', { name: /Workflow/i });
+    fireEvent.click(workflow);
+
+    expect(onTokensChange).toHaveBeenLastCalledWith([{ fieldId: 'rootEntityType', value: 'workflow_run' }]);
+  });
+
   it('removes the pill on request', () => {
     const onTokensChange = vi.fn();
     render(<PropertyFilterApplied fields={FIELDS} tokens={pickTokens} onTokensChange={onTokensChange} />);
@@ -423,7 +522,7 @@ describe('PropertyFilterApplied — a pick-multi pill', () => {
 });
 
 describe('PropertyFilterApplied — a locked pill', () => {
-  it('uses the caller’s explanation, and its own when given none', () => {
+  it('explains itself in the caller’s words on focus', async () => {
     render(
       <PropertyFilterApplied
         fields={FIELDS}
@@ -434,7 +533,26 @@ describe('PropertyFilterApplied — a locked pill', () => {
       />,
     );
 
-    expect(screen.getByLabelText('Primitive ID filter is locked by context')).toBeTruthy();
+    fireEvent.focus(screen.getByLabelText('Primitive ID filter is locked by context'));
+
+    expect(await screen.findByText('Scoped to this agent.')).toBeTruthy();
+  });
+
+  it('explains itself in its own words when the caller gave none', async () => {
+    render(
+      <PropertyFilterApplied
+        fields={FIELDS}
+        tokens={[{ fieldId: 'entityId', value: 'a' }]}
+        lockedFieldIds={['entityId']}
+        onTokensChange={vi.fn()}
+      />,
+    );
+
+    fireEvent.focus(screen.getByLabelText('Primitive ID filter is locked by context'));
+
+    expect(
+      await screen.findByText('This filter is set by the current context and cannot be removed here.'),
+    ).toBeTruthy();
   });
 
   it('reads a locked pick-multi selection by its option labels', () => {
@@ -515,6 +633,8 @@ describe('PropertyFilterApplied — telling a choice from free text', () => {
 
     expect(screen.queryByRole('textbox')).toBeNull();
     expect(screen.getByText('a, b')).toBeTruthy();
+    // Read-only means read-only: the value is text, not something to click open.
+    expect(screen.getByText('a, b').closest('button')).toBeNull();
     expect(screen.getByRole('button', { name: /Remove Primitive ID filter/i })).toBeTruthy();
   });
 });
@@ -564,6 +684,27 @@ describe('PropertyFilterApplied — leaving the caller’s data alone', () => {
     expect(tokens).toEqual([
       { fieldId: 'entityId', value: 'a' },
       { fieldId: 'entityName', value: 'b' },
+    ]);
+  });
+
+  it('keeps the other pills when one of them is edited', () => {
+    const onTokensChange = vi.fn();
+    render(
+      <PropertyFilterApplied
+        fields={FIELDS}
+        tokens={[
+          { fieldId: 'entityId', value: 'a' },
+          { fieldId: 'entityName', value: 'b' },
+        ]}
+        onTokensChange={onTokensChange}
+      />,
+    );
+
+    fireEvent.change(screen.getByDisplayValue('b'), { target: { value: 'changed' } });
+
+    expect(onTokensChange).toHaveBeenLastCalledWith([
+      { fieldId: 'entityId', value: 'a' },
+      { fieldId: 'entityName', value: 'changed' },
     ]);
   });
 });
