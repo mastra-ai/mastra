@@ -23,6 +23,11 @@ import {
   PlanStatus,
   PlanTitle,
 } from './plan';
+import { toast } from '@/lib/toast';
+
+vi.mock('@/lib/toast', () => ({
+  toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }),
+}));
 
 const renderPlan = (element: ReactNode) => render(<TooltipProvider>{element}</TooltipProvider>);
 
@@ -102,6 +107,9 @@ describe('Plan', () => {
         'Review migration plan\n\nFile: /workspace/plans/migration.md\n\n## Steps',
       ),
     );
+
+    // The button says so on its own face; a toast on top would be noise.
+    expect(vi.mocked(toast.success)).not.toHaveBeenCalled();
   });
 
   it('preserves fixed copy behavior when unsupported button props are provided at runtime', async () => {
@@ -166,8 +174,26 @@ describe('Plan', () => {
     );
 
     expect(screen.getByText('Approved')).toBeTruthy();
+    expect(screen.getByText('Approved').classList.contains('bg-notice-success/20')).toBe(true);
     expect(screen.getByRole('button', { name: /reject plan/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: /approve plan/i })).toBeTruthy();
+  });
+
+  it('gives a status no tone of its own unless one is asked for', () => {
+    renderPlan(
+      <Plan>
+        <PlanHeader>
+          <PlanHeaderActions>
+            <PlanStatus>Draft</PlanStatus>
+          </PlanHeaderActions>
+        </PlanHeader>
+        <PlanBody>
+          <PlanContent>{'Plan'}</PlanContent>
+        </PlanBody>
+      </Plan>,
+    );
+
+    expect(screen.getByText('Draft').classList.contains('bg-surface4')).toBe(true);
   });
 
   it('hints that an overflowing plan is clipped and clears the hint when expanded', () => {
@@ -186,6 +212,8 @@ describe('Plan', () => {
 
     const clipped = document.querySelector<HTMLElement>('[data-slot="plan-content"][data-clipped]');
     expect(clipped).toBeTruthy();
+    // A bare marker attribute, so `[data-clipped]` styling matches on it.
+    expect(clipped?.getAttribute('data-clipped')).toBe('');
     expect(clipped?.classList.contains('mask-b-from-60%')).toBe(true);
     expect(clipped?.classList.contains('mask-b-to-100%')).toBe(true);
 
