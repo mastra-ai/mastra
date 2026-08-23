@@ -99,3 +99,137 @@ describe('CommandPalette', () => {
     expect(selectItem).toHaveBeenCalledOnce();
   });
 });
+
+describe('CommandPaletteScope', () => {
+  const renderScope = (props: Partial<Parameters<typeof CommandPaletteScope>[0]> = {}) =>
+    render(
+      <CommandPaletteScope
+        icon={<Search data-testid="scope-icon" />}
+        label="Navigation"
+        count={2}
+        active={false}
+        onSelect={() => {}}
+        {...props}
+      />,
+    );
+
+  it('shows its icon, name and how many it holds', () => {
+    renderScope();
+
+    const scope = screen.getByRole('button');
+    expect(within(scope).getByTestId('scope-icon')).toBeTruthy();
+    expect(scope.textContent).toContain('Navigation');
+    expect(scope.textContent).toContain('2');
+  });
+
+  it('shows a count of none rather than nothing', () => {
+    renderScope({ count: 0 });
+
+    expect(screen.getByRole('button').textContent).toContain('0');
+  });
+
+  it('says whether it is the one being searched', () => {
+    renderScope({ active: false });
+    expect(screen.getByRole('button').getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByRole('button').getAttribute('data-active')).toBe('false');
+
+    cleanup();
+
+    renderScope({ active: true });
+    expect(screen.getByRole('button').getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button').getAttribute('data-active')).toBe('true');
+  });
+
+  it('reports being chosen', () => {
+    const onSelect = vi.fn();
+    renderScope({ onSelect });
+
+    fireEvent.click(screen.getByRole('button'));
+
+    expect(onSelect).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('CommandPaletteItem', () => {
+  // cmdk items need the Command root the dialog provides.
+  const renderItem = (props: Partial<Parameters<typeof CommandPaletteItem>[0]> = {}) =>
+    render(
+      <CommandPaletteDialog
+        open
+        onOpenChange={() => {}}
+        title="Application search"
+        description="Search application resources"
+        commandLabel="Search resources"
+      >
+        <CommandPaletteResults aria-label="Search results">
+          <CommandGroup heading="Navigation">
+            <CommandPaletteItem icon={<Route data-testid="item-icon" />} title="Settings" value="settings" {...props} />
+          </CommandGroup>
+        </CommandPaletteResults>
+      </CommandPaletteDialog>,
+    );
+
+  it('shows its icon and title with nothing else attached', () => {
+    renderItem();
+
+    const item = screen.getByRole('option');
+    expect(within(item).getByTestId('item-icon')).toBeTruthy();
+    expect(item.textContent).toBe('Settings');
+  });
+
+  it('adds a subtitle when there is one', () => {
+    renderItem({ subtitle: 'Application navigation' });
+
+    expect(screen.getByText('Application navigation')).toBeTruthy();
+  });
+
+  it('adds the path it would take you to', () => {
+    renderItem({ path: '/settings' });
+
+    expect(screen.getByText('/settings')).toBeTruthy();
+  });
+
+  it('adds a badge naming what kind of result it is', () => {
+    renderItem({ badge: 'Path' });
+
+    expect(screen.getByText('Path')).toBeTruthy();
+  });
+
+  it('adds the shortcut that would reach it', () => {
+    renderItem({ shortcut: '⌘K' });
+
+    expect(screen.getByText('⌘K')).toBeTruthy();
+  });
+
+  it('leaves out the second line entirely with neither a subtitle nor a path', () => {
+    const { container } = renderItem({ badge: 'Path' });
+
+    // Title row and nothing under it.
+    expect(container.querySelectorAll('.text-ui-xs')).toHaveLength(0);
+  });
+
+  it('keeps a caller class alongside its own', () => {
+    renderItem({ className: 'my-own-class' });
+
+    const item = screen.getByRole('option');
+    expect(item.classList.contains('my-own-class')).toBe(true);
+    expect(item.classList.contains('rounded-xl')).toBe(true);
+  });
+});
+
+describe('CommandPaletteFooter', () => {
+  it('names what is being searched and the keys that drive it', () => {
+    render(<CommandPaletteFooter label="Application search" />);
+
+    expect(screen.getByText('Application search')).toBeTruthy();
+    for (const key of ['↑', '↓', '↵', 'Esc']) {
+      expect(screen.getByText(key)).toBeTruthy();
+    }
+  });
+
+  it('stays out of the way of the results behind it', () => {
+    const { container } = render(<CommandPaletteFooter label="Application search" />);
+
+    expect((container.firstElementChild as HTMLElement).classList.contains('pointer-events-none')).toBe(true);
+  });
+});
