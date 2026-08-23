@@ -866,11 +866,15 @@ export class AgentThreadStreamRuntime {
    * It does not land on a run that is already executing: nothing reads
    * `abortedRunIds` again once a run is under way. A regular run has a
    * prepared controller by then and takes the branch below, so what reaches
-   * here is a durable run, which is stopped through `abortThread()` or the
-   * stream result's `abort()` in the process executing it. A runId this
-   * process has never seen may be executing elsewhere entirely; the intent is
-   * still recorded, in case the run starts here later, but it is not reported
-   * as an abort.
+   * here is a durable run. Those are stopped through their stream result's
+   * `abort()`, which flips the controller the durable path keeps on its own
+   * run registry and publishes an abort request on the run's topic, reaching
+   * the process executing it. `abortThread()` does not stop one either, for
+   * the same reason such a run reaches this branch.
+   *
+   * A runId this process has never seen may be executing elsewhere entirely.
+   * The intent is still recorded, in case the run starts here later, but it is
+   * not reported as an abort.
    */
   abortRun(runId: string, pubsub?: PubSub): boolean {
     const state = this.#getState(pubsub);
