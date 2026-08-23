@@ -653,9 +653,7 @@ interface AgentConfigBase<
   model: DynamicArgument<MastraModelConfig | ModelWithRetries[], TRequestContext>;
   /**
    * Maximum number of retries for model calls in case of failure.
-   *
-   * When set (including `0`, which disables retries), this overrides the call-time
-   * `modelSettings.maxRetries`. When left unset, the call-time value is used, falling back to 2.
+   * @defaultValue 0
    */
   maxRetries?: number;
   /**

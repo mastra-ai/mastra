@@ -66,17 +66,14 @@ describe('agent model-call retry honors Retry-After', () => {
     await settled;
   });
 
-  it('falls back to the default retry count when neither the agent nor the call configures one', async () => {
-    vi.useFakeTimers();
+  it('does not retry when neither the agent nor the call configures retries', async () => {
     const provider = createRateLimitedModel({});
-    const settled = createAgent(provider.model)
+
+    await createAgent(provider.model)
       .generate('hi')
       .catch(() => {});
 
-    await vi.advanceTimersByTimeAsync(4_000);
-    expect(provider.getCallCount()).toBe(3);
-
-    await settled;
+    expect(provider.getCallCount()).toBe(1);
   });
 
   it('keeps a non-zero explicit agent maxRetries over call-time modelSettings', async () => {
