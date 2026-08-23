@@ -200,6 +200,7 @@ export async function dispatchEvent(
 
     case 'thread_changed': {
       ectx.showInfo(`Switched to thread: ${event.threadId}`);
+      state.latestRequestPromptTokens = undefined;
       // Clear per-thread ephemeral state first so renderExistingMessages
       // and other downstream observers see clean state.
       await state.session.state.set({ tasks: [], activePlan: null, sandboxAllowedPaths: [] });
@@ -239,6 +240,7 @@ export async function dispatchEvent(
 
     case 'thread_created': {
       ectx.showInfo(`Created thread: ${event.thread.id}`);
+      state.latestRequestPromptTokens = undefined;
       // Update current thread title for status line display
       state.currentThreadTitle = event.thread.title;
       state.activeGithubPrSubscriptions = getGithubPrSubscriptionsFromMetadata(
