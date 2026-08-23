@@ -1499,6 +1499,14 @@ export const createMastraCode = bootLocalAgentController;
 export * from './knowledge-inspector.js';
 
 /**
+ * Side-model text generation (thread titles). Resolves through the same
+ * gateway/credential paths as session models; provider-aware defaults.
+ */
+export { generateThreadTitle, resolveDefaultThreadTitleModel } from './agents/thread-title.js';
+export type { ThreadTitleModelChoice, ThreadTitleOptions } from './agents/thread-title.js';
+export type { ThinkingLevel } from './providers/openai-codex.js';
+
+/**
  * Programmatic headless API. `runMC` runs an already-built controller/session
  * (from {@link createMastraCode}) as an async-iterable run that also resolves to
  * a typed result. Also available via the `mastracode/headless` subpath.

@@ -72,6 +72,11 @@ import { observeSessionFirstExec } from './session/first-exec-capture.js';
 import { observeSessionFirstMessage } from './session/first-message-capture.js';
 import { hydrateSessionMemorySettings } from './session/memory-settings-hydration.js';
 import { hydrateSessionModelPack } from './session/model-pack-hydration.js';
+import {
+  createThreadTitleGenerator,
+  observeSessionThreadTitle,
+  type ThreadTitleGenerationConfig,
+} from './session/thread-title.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
 import { createStateSigner } from './state-signing.js';
 import { observeAgentGitAction } from './storage/domains/audit/agent-audit.js';
@@ -175,6 +180,15 @@ export interface MastraFactoryConfig {
    * Omitted → conservative built-in rules for the current deployment.
    */
   rules?: FactoryRules;
+
+  /**
+   * Automatic thread title generation. When set, the first message of an
+   * otherwise-untitled thread fires a cheap parallel model request that names
+   * the thread; threads that already carry a title (work items, review
+   * sessions, manual renames) are never touched. Omitted → threads keep their
+   * client-side fallback naming.
+   */
+  threadTitle?: ThreadTitleGenerationConfig;
 
   /**
    * Platform-specific overrides. `githubAppSlug` identifies Factory's own
@@ -877,6 +891,13 @@ export class MastraFactory {
         sourceControl: sourceControlStorage.forIntegration('github'),
       });
     });
+
+    if (this.#config.threadTitle) {
+      const generateTitle = createThreadTitleGenerator(this.#config.threadTitle);
+      prepared.base.controller.onSessionCreated(session => {
+        observeSessionThreadTitle(session, { generateTitle });
+      });
+    }
 
     // Blocking: `createSession` awaits this seed, so when hydration succeeds
     // a session's first run starts with the owner's stored OM settings.
