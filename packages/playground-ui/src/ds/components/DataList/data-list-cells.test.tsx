@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   DataListCell,
@@ -129,6 +130,46 @@ describe('DataListTextCell', () => {
     const { container } = render(<DataListTextCell>{42}</DataListTextCell>);
 
     expect(container.textContent).toBe('42');
+  });
+
+  it('truncates a number inside an element child too', () => {
+    const { container } = render(
+      <DataListTextCell>
+        <div>{42}</div>
+      </DataListTextCell>,
+    );
+
+    const inner = container.querySelector('span > div')?.firstElementChild;
+    expect(inner?.tagName).toBe('SPAN');
+    expect(inner?.textContent).toBe('42');
+    expect(inner?.classList.contains('truncate')).toBe(true);
+  });
+
+  it('leaves an element nested inside an element child as it is', () => {
+    const { container } = render(
+      <DataListTextCell>
+        <div>
+          <b>bold</b>
+        </div>
+      </DataListTextCell>,
+    );
+
+    // Only bare text and numbers get a truncating wrapper; markup is left alone.
+    const inner = container.querySelector('span > div')?.firstElementChild;
+    expect(inner?.tagName).toBe('B');
+    expect(inner?.classList.contains('truncate')).toBe(false);
+  });
+
+  it('leaves a component child’s own children alone', () => {
+    const Wrap = ({ children }: { children?: ReactNode }) => <em data-testid="wrap">{children}</em>;
+    const { container } = render(
+      <DataListTextCell>
+        <Wrap>inner</Wrap>
+      </DataListTextCell>,
+    );
+
+    expect(screen.getByTestId('wrap').innerHTML).toBe('inner');
+    expect(container.textContent).toBe('inner');
   });
 });
 
