@@ -268,7 +268,12 @@ export type ServerConfig = {
    */
   apiRoutes?: ApiRoute[];
   /**
-   * Middleware for the server
+   * Middleware for the server. Handlers use Hono's `(c, next)` signature and
+   * run on Hono-based serving paths: `mastra dev` / `mastra build`,
+   * `@mastra/hono`, and adapters built on it such as `@mastra/next` and
+   * `@mastra/tanstack-start`. Non-Hono adapters (Express, Fastify, Koa) cannot
+   * run Hono handlers and log a warning when this is set — register middleware
+   * through the framework's own API there instead.
    */
   middleware?: Middleware | Middleware[];
   /**
