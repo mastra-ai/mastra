@@ -88,15 +88,28 @@ describe('useCopyToClipboard', () => {
   });
 
   it('selects the whole value in an off-screen textarea it then removes', async () => {
-    let selectedValue: string | undefined;
-    let selectionEnd: number | undefined;
-    let wasInDocument = false;
+    let snapshot: Record<string, unknown> | undefined;
     mockExecCommand(
-      vi.fn(function execCommand(this: Document) {
+      vi.fn(function execCommand() {
         const textarea = document.querySelector('textarea');
-        wasInDocument = Boolean(textarea?.isConnected);
-        selectedValue = textarea?.value;
-        selectionEnd = textarea?.selectionEnd ?? undefined;
+        snapshot = textarea
+          ? {
+              inDocument: textarea.isConnected,
+              focused: document.activeElement === textarea,
+              value: textarea.value,
+              selectionStart: textarea.selectionStart,
+              selectionEnd: textarea.selectionEnd,
+              readonly: textarea.getAttribute('readonly'),
+              ariaHidden: textarea.getAttribute('aria-hidden'),
+              position: textarea.style.position,
+              top: textarea.style.top,
+              left: textarea.style.left,
+              width: textarea.style.width,
+              height: textarea.style.height,
+              opacity: textarea.style.opacity,
+              pointerEvents: textarea.style.pointerEvents,
+            }
+          : undefined;
         return true;
       }),
     );
@@ -108,9 +121,53 @@ describe('useCopyToClipboard', () => {
     });
 
     await waitFor(() => expect(result.current.isCopied).toBe(true));
-    expect(wasInDocument).toBe(true);
-    expect(selectedValue).toBe('the whole value');
-    expect(selectionEnd).toBe('the whole value'.length);
+
+    // The textarea has to be in the document and focused for execCommand to
+    // read it, and invisible so it never flashes or takes layout space.
+    expect(snapshot).toEqual({
+      inDocument: true,
+      focused: true,
+      value: 'the whole value',
+      selectionStart: 0,
+      selectionEnd: 'the whole value'.length,
+      readonly: '',
+      ariaHidden: 'true',
+      position: 'fixed',
+      top: '0px',
+      left: '0px',
+      width: '1px',
+      height: '1px',
+      opacity: '0',
+      pointerEvents: 'none',
+    });
+    expect(document.querySelector('textarea')).toBeNull();
+  });
+
+  it('reports a failure when neither path is available', async () => {
+    const { result } = renderHook(() => useCopyToClipboard({ showToast: false }));
+
+    await act(async () => {
+      result.current.copyToClipboard('nowhere to put it');
+    });
+
+    expect(result.current.isCopied).toBe(false);
+  });
+
+  it('reports a failure when the copy command itself throws', async () => {
+    mockExecCommand(
+      vi.fn(() => {
+        throw new Error('copy blocked');
+      }),
+    );
+
+    const { result } = renderHook(() => useCopyToClipboard({ showToast: false }));
+
+    await act(async () => {
+      result.current.copyToClipboard('will not copy');
+    });
+
+    expect(result.current.isCopied).toBe(false);
+    // The textarea is still cleaned up on the way out.
     expect(document.querySelector('textarea')).toBeNull();
   });
 
@@ -138,11 +195,11 @@ describe('useCopyToClipboard', () => {
 
     const { result } = renderHook(() => useCopyToClipboard({ showToast: false }));
 
-    act(() => {
+    await act(async () => {
       result.current.copyToClipboard('');
     });
 
-    await waitFor(() => expect(writeText).not.toHaveBeenCalled());
+    expect(writeText).not.toHaveBeenCalled();
     expect(result.current.isCopied).toBe(false);
   });
 
@@ -196,6 +253,65 @@ describe('useCopyToClipboard', () => {
 
       await waitFor(() => expect(sonnerMock.error).toHaveBeenCalledWith('Failed to copy to clipboard.', {}));
       expect(result.current.isCopied).toBe(false);
+    });
+
+    it('stays silent about a successful copy when the caller asked it to', async () => {
+      mockClipboard(vi.fn().mockResolvedValue(undefined));
+
+      const { result } = renderHook(() => useCopyToClipboard({ text: 'copy me', showToast: false }));
+
+      await act(async () => {
+        result.current.handleCopy();
+      });
+
+      expect(result.current.isCopied).toBe(true);
+      expect(sonnerMock.success).not.toHaveBeenCalled();
+    });
+
+    it('follows a change of message or of whether to speak at all', async () => {
+      mockClipboard(vi.fn().mockResolvedValue(undefined));
+
+      const { result, rerender } = renderHook(props => useCopyToClipboard(props), {
+        initialProps: { text: 'copy me', copyMessage: 'First message', showToast: true },
+      });
+
+      await act(async () => {
+        result.current.handleCopy();
+      });
+      expect(sonnerMock.success).toHaveBeenCalledWith('First message', {});
+
+      rerender({ text: 'copy me', copyMessage: 'Second message', showToast: true });
+      await act(async () => {
+        result.current.handleCopy();
+      });
+      expect(sonnerMock.success).toHaveBeenLastCalledWith('Second message', {});
+
+      rerender({ text: 'copy me', copyMessage: 'Second message', showToast: false });
+      sonnerMock.success.mockClear();
+      await act(async () => {
+        result.current.handleCopy();
+      });
+      expect(sonnerMock.success).not.toHaveBeenCalled();
+    });
+
+    it('follows a change of the text it was configured with', async () => {
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      mockClipboard(writeText);
+
+      const { result, rerender } = renderHook(props => useCopyToClipboard(props), {
+        initialProps: { text: 'first text', showToast: false },
+      });
+
+      await act(async () => {
+        result.current.handleCopy();
+      });
+      expect(writeText).toHaveBeenLastCalledWith('first text');
+
+      rerender({ text: 'second text', showToast: false });
+      await act(async () => {
+        result.current.handleCopy();
+      });
+      expect(writeText).toHaveBeenLastCalledWith('second text');
     });
 
     it('stays silent when the caller asked it to', async () => {

@@ -9,7 +9,17 @@ import { setupServer } from 'msw/node';
 import type { ReactNode } from 'react';
 import { afterAll, afterEach, assert, beforeAll, describe, expect, it, vi } from 'vitest';
 
-import { emptyTokenSeries, inputTokenSeries, outputTokenSeries } from './__tests__/fixtures/token-usage-timeseries';
+import {
+  costlessInputTokenSeries,
+  emptyTokenSeries,
+  eurOutputTokenSeries,
+  hourlyInputTokenSeries,
+  inputTokenSeries,
+  noTokenSeries,
+  outputTokenSeries,
+  partlyUnstampedInputTokenSeries,
+  unpricedUnitOutputTokenSeries,
+} from './__tests__/fixtures/token-usage-timeseries';
 import { MetricsProvider } from './use-metrics';
 import type { DatePreset, DateRange } from './use-metrics';
 import { useTokenUsageTimeSeries } from './use-token-usage-timeseries';
@@ -179,5 +189,99 @@ describe('useTokenUsageTimeSeries', () => {
     expect(inputRequest.filters?.timestamp?.end).toBeDefined();
     expect(inputRequest.filters?.rootEntityType).toBe(EntityType.AGENT);
     expect(inputRequest.filters?.entityName).toBe('research-agent');
+  });
+
+  const serveSeries = (input: unknown, output: unknown) =>
+    server.use(
+      http.post(`${BASE_URL}/api/observability/metrics/timeseries`, async ({ request }) => {
+        const body = (await request.json()) as RequestBody;
+        return HttpResponse.json(body.name?.[0] === 'mastra_model_total_input_tokens' ? input : output);
+      }),
+    );
+
+  it('asks for the token metrics it charts, summed', async () => {
+    const onTimeseries = vi.fn<(body: RequestBody) => void>();
+    server.use(
+      http.post(`${BASE_URL}/api/observability/metrics/timeseries`, async ({ request }) => {
+        onTimeseries((await request.json()) as RequestBody);
+        return HttpResponse.json(emptyTokenSeries);
+      }),
+    );
+
+    const { result } = renderHook(() => useTokenUsageTimeSeries(), { wrapper: makeWrapper() });
+
+    await waitFor(() => expect(result.current.data).toBeDefined());
+
+    expect(onTimeseries.mock.calls.map(([body]) => body.name?.[0]).sort()).toEqual([
+      'mastra_model_total_input_tokens',
+      'mastra_model_total_output_tokens',
+    ]);
+    expect(onTimeseries.mock.calls.map(([body]) => body.aggregation)).toEqual(['sum', 'sum']);
+  });
+
+  it('labels hourly buckets by their time of day, in order', async () => {
+    serveSeries(hourlyInputTokenSeries, emptyTokenSeries);
+
+    const { result } = renderHook(() => useTokenUsageTimeSeries(), { wrapper: makeWrapper({ preset: '24h' }) });
+
+    await waitFor(() => expect(result.current.data?.data).toHaveLength(2));
+
+    // The later bucket arrived first; the chart still reads left to right.
+    expect(result.current.data?.data.map(point => point.time)).toEqual(['00:05', '13:45']);
+  });
+
+  it('drops the cost unit when two series disagree on it', async () => {
+    serveSeries(inputTokenSeries, eurOutputTokenSeries);
+
+    const { result } = renderHook(() => useTokenUsageTimeSeries(), { wrapper: makeWrapper() });
+
+    await waitFor(() => expect(result.current.data?.data.length).toBeGreaterThan(0));
+
+    const shared = result.current.data?.data.find(
+      point => point.tsMs === new Date('2026-06-01T00:00:00.000Z').getTime(),
+    );
+    assert(shared, 'Expected the shared bucket');
+    // The costs still add up; the currency no longer means anything.
+    expect(shared.cost).toBeCloseTo(0.042);
+    expect(shared.costUnit).toBeNull();
+  });
+
+  it('drops the cost unit when a priced series does not name one', async () => {
+    serveSeries(emptyTokenSeries, unpricedUnitOutputTokenSeries);
+
+    const { result } = renderHook(() => useTokenUsageTimeSeries(), { wrapper: makeWrapper() });
+
+    await waitFor(() => expect(result.current.data?.data).toHaveLength(1));
+
+    expect(result.current.data?.data[0]?.cost).toBeCloseTo(0.03);
+    expect(result.current.data?.data[0]?.costUnit).toBeNull();
+  });
+
+  it('leaves cost empty when the provider prices nothing', async () => {
+    serveSeries(costlessInputTokenSeries, emptyTokenSeries);
+
+    const { result } = renderHook(() => useTokenUsageTimeSeries(), { wrapper: makeWrapper() });
+
+    await waitFor(() => expect(result.current.data?.data).toHaveLength(1));
+
+    expect(result.current.data?.data[0]).toMatchObject({ input: 500, cost: null, costUnit: null });
+  });
+
+  it('skips a bucket the backend could not stamp', async () => {
+    serveSeries(partlyUnstampedInputTokenSeries, emptyTokenSeries);
+
+    const { result } = renderHook(() => useTokenUsageTimeSeries(), { wrapper: makeWrapper() });
+
+    await waitFor(() => expect(result.current.data?.data).toHaveLength(1));
+
+    expect(result.current.data?.data[0]?.input).toBe(500);
+  });
+
+  it('returns an empty list when a response carries no series', async () => {
+    serveSeries(noTokenSeries, noTokenSeries);
+
+    const { result } = renderHook(() => useTokenUsageTimeSeries(), { wrapper: makeWrapper() });
+
+    await waitFor(() => expect(result.current.data?.data).toEqual([]));
   });
 });
