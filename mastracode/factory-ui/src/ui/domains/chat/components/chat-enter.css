@@ -5,31 +5,12 @@
   animation: chat-surface-in 300ms cubic-bezier(0.2, 0, 0, 1) backwards;
 }
 
-.session-preparation-overlay {
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  height: 100cqh;
-  margin-block-end: -100cqh;
-  flex: none;
-  overflow: hidden;
-  background: var(--chat-surface);
-  pointer-events: none;
-}
-
-.session-preparation-overlay[data-preparing='false'] {
-  background: transparent;
-}
-
 .session-preparation-veil {
   --session-reveal-overhang: calc(clamp(10rem, 28cqh, 20rem) + 15cqw);
   --session-reveal-travel: calc(100cqh + var(--session-reveal-overhang));
 
-  position: absolute;
-  inset-inline: 0;
   top: calc(-1 * var(--session-reveal-overhang));
   height: var(--session-reveal-travel);
-  opacity: 0;
   background: linear-gradient(
     172deg,
     transparent,
@@ -44,14 +25,6 @@
 }
 
 .session-preparation-loader {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  display: flex;
-  background: var(--chat-surface);
-  opacity: 0;
-  visibility: hidden;
-  translate: 0 -0.25rem;
   transition:
     opacity 140ms linear,
     translate 180ms cubic-bezier(0.2, 0.7, 0.2, 1),
