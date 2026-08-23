@@ -49,8 +49,14 @@ export class Scheduler extends MastraBase {
    * definition is stale (see `#ensureTargetCurrent`). Doubles as the
    * "already logged" marker so a straggler doesn't re-log every tick, and as
    * the counter that escalates a skip that is never being picked up by anyone.
+   *
+   * Scoped to the fire window (`nextFireAt`) the skips were observed against.
+   * A window that advances is proof some other instance claimed and fired the
+   * previous one, so the count restarts rather than accumulating across
+   * unrelated fires — otherwise a long-lived straggler would escalate even
+   * though every fire is being served correctly by a current-build instance.
    */
-  #staleDefinitionCounts = new Map<string, number>();
+  #staleDefinitionCounts = new Map<string, { fireAt: number; count: number }>();
 
   constructor({
     schedulesStore,
@@ -279,9 +285,13 @@ export class Scheduler extends MastraBase {
       return true;
     }
 
-    const prev = this.#staleDefinitionCounts.get(schedule.id) ?? 0;
+    // Only count skips against the same unclaimed fire window. If `nextFireAt`
+    // has moved on, an instance with a matching definition claimed the last
+    // fire and this is a fresh window, not a continuing stall.
+    const prevEntry = this.#staleDefinitionCounts.get(schedule.id);
+    const prev = prevEntry?.fireAt === schedule.nextFireAt ? prevEntry.count : 0;
     const next = prev + 1;
-    this.#staleDefinitionCounts.set(schedule.id, next);
+    this.#staleDefinitionCounts.set(schedule.id, { fireAt: schedule.nextFireAt, count: next });
 
     const targetSummary =
       schedule.target.type === 'workflow'

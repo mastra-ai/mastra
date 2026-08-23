@@ -657,6 +657,61 @@ describe('Scheduler', () => {
       await scheduler.stop();
     });
 
+    it('does not escalate while a current-build instance keeps claiming each fire', async () => {
+      const { store } = makeStore();
+      const pubsub = new EventEmitterPubSub();
+      const scheduler = new Scheduler({
+        schedulesStore: store,
+        pubsub,
+        // Permanently stale straggler: its definition never becomes current.
+        config: { tickIntervalMs: 60_000, isTargetCurrent: () => false, staleSkipsBeforeEscalation: 2 },
+      });
+
+      let fireAt = await makeDueSchedule(store, 'aaaaaaaaaaaaaaaa');
+
+      await scheduler.start();
+
+      // Walk well past the escalation limit. Each round a healthy instance
+      // claims the fire the straggler just declined (`start()` runs a tick of
+      // its own), advancing nextFireAt, and the straggler then declines the
+      // fresh window.
+      for (let i = 0; i < 6; i++) {
+        const nextFireAt = fireAt + 1_000;
+        expect(
+          await store.updateScheduleNextFire('sched-fence', fireAt, nextFireAt, fireAt, `sched-sched-fence-${fireAt}`),
+        ).toBe(true);
+        fireAt = nextFireAt;
+        await scheduler.tick();
+      }
+
+      // Every fire was served, so nothing should have been recorded as failed.
+      const triggers = await store.listTriggers('sched-fence');
+      expect(triggers.filter(t => t.outcome === 'failed')).toHaveLength(0);
+
+      await scheduler.stop();
+    });
+
+    it('escalates when the same fire window goes unclaimed for consecutive ticks', async () => {
+      const { store } = makeStore();
+      const pubsub = new EventEmitterPubSub();
+      const scheduler = new Scheduler({
+        schedulesStore: store,
+        pubsub,
+        config: { tickIntervalMs: 60_000, isTargetCurrent: () => false, staleSkipsBeforeEscalation: 2 },
+      });
+
+      // nextFireAt never advances: nobody in the fleet matches the row.
+      await makeDueSchedule(store, 'aaaaaaaaaaaaaaaa');
+
+      await scheduler.start();
+      for (let i = 0; i < 3; i++) await scheduler.tick();
+
+      const triggers = await store.listTriggers('sched-fence');
+      expect(triggers.filter(t => t.outcome === 'failed')).toHaveLength(1);
+
+      await scheduler.stop();
+    });
+
     it('runs the fence after target-readiness so a missing target still uses the grace window', async () => {
       const { store } = makeStore();
       const pubsub = new EventEmitterPubSub();
