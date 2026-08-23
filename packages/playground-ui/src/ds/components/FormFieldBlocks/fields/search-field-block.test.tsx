@@ -29,6 +29,13 @@ describe('SearchFieldBlock', () => {
     expect(screen.getByRole<HTMLInputElement>('textbox', { name: 'Search' }).id).toBe('input-search');
   });
 
+  it('leaves a vertical layout unspanned even when its label is hidden', () => {
+    const { container } = render(<SearchFieldBlock name="search" label="Search" labelIsHidden />);
+
+    const column = container.firstElementChild?.firstElementChild;
+    expect(column?.classList.contains('col-span-full')).toBe(false);
+  });
+
   it('keeps a visible horizontal label in a separate column', () => {
     const { container } = render(<SearchFieldBlock name="search" label="Search" layout="horizontal" />);
 
@@ -38,6 +45,9 @@ describe('SearchFieldBlock', () => {
     expect(inputColumn?.classList.contains('col-span-full')).toBe(false);
   });
 });
+
+/** The column holding the field, and whatever the caller put under it. */
+const fieldColumn = (container: HTMLElement) => container.firstElementChild?.firstElementChild;
 
 describe('SearchFieldBlock — the field itself', () => {
   it('invites a search unless the caller says otherwise', () => {
@@ -68,10 +78,20 @@ describe('SearchFieldBlock — the field itself', () => {
   });
 
   it('explains itself and its complaints', () => {
-    render(<SearchFieldBlock name="search" helpText="Matches names and ids" errorMsg="Too short" />);
+    const { container } = render(
+      <SearchFieldBlock name="search" helpText="Matches names and ids" errorMsg="Too short" />,
+    );
 
     expect(screen.getByText('Matches names and ids')).toBeTruthy();
     expect(screen.getByText('Too short')).toBeTruthy();
+    // The field, its help text and its complaint.
+    expect(fieldColumn(container)?.childElementCount).toBe(3);
+  });
+
+  it('puts nothing under the field when it has nothing to say', () => {
+    const { container } = render(<SearchFieldBlock name="search" />);
+
+    expect(fieldColumn(container)?.childElementCount).toBe(1);
   });
 
   it('leaves out a label it was never given', () => {
@@ -139,6 +159,35 @@ describe('SearchFieldBlock — minimizing', () => {
     expect(document.activeElement).toBe(screen.getByRole('textbox'));
   });
 
+  it('takes focus when it opens from the icon', () => {
+    const { rerender } = render(<SearchFieldBlock name="search" isMinimized onMinimizedChange={vi.fn()} />);
+    rerender(<SearchFieldBlock name="search" isMinimized={false} onMinimizedChange={vi.fn()} />);
+
+    expect(document.activeElement).toBe(screen.getByRole('textbox'));
+  });
+
+  it('opens quietly when there is nowhere to report it', () => {
+    render(<SearchFieldBlock name="search" isMinimized />);
+
+    expect(() => fireEvent.click(screen.getByRole('button', { name: 'Search' }))).not.toThrow();
+  });
+
+  it('explains the minimized button in the caller’s words', async () => {
+    render(<SearchFieldBlock name="search" isMinimized label="Search traces" />);
+
+    fireEvent.focus(screen.getByRole('button', { name: 'Search traces' }));
+
+    expect(await screen.findByText('Search traces')).toBeTruthy();
+  });
+
+  it('explains the minimized button in its own words when it has no label', async () => {
+    render(<SearchFieldBlock name="search" isMinimized />);
+
+    fireEvent.focus(screen.getByRole('button', { name: 'Search' }));
+
+    expect(await screen.findByText('Search')).toBeTruthy();
+  });
+
   it('leaves focus alone when minimizing was never in play', () => {
     render(<SearchFieldBlock name="search" />);
 
@@ -157,6 +206,21 @@ describe('SearchFieldBlock — minimizing', () => {
     expect(onMinimizedChange).toHaveBeenCalledWith(true);
     // Nothing was typed, so there is nothing to reset.
     expect(onReset).not.toHaveBeenCalled();
+  });
+
+  it('leaves minimizing alone when it was never in play', () => {
+    const onMinimizedChange = vi.fn();
+    render(<SearchFieldBlock name="search" value="weather" onReset={vi.fn()} onMinimizedChange={onMinimizedChange} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear search' }));
+
+    expect(onMinimizedChange).not.toHaveBeenCalled();
+  });
+
+  it('folds back quietly when there is nowhere to report it', () => {
+    render(<SearchFieldBlock name="search" value="weather" isMinimized={false} onReset={vi.fn()} />);
+
+    expect(() => fireEvent.click(screen.getByRole('button', { name: 'Clear search' }))).not.toThrow();
   });
 
   it('clears what was typed and folds back to the icon in one go', () => {
@@ -183,9 +247,10 @@ describe('SearchFieldBlock — sizing', () => {
   it.each([
     ['sm', 'px-8', 'size-3.5'],
     ['md', 'px-9', 'size-4'],
+    ['default', 'px-10', 'size-[1.125rem]'],
     ['lg', 'px-11', 'size-5'],
   ])('leaves room for the icon at size %s', (size, padding, iconSize) => {
-    const { container } = render(<SearchFieldBlock name="search" size={size as 'sm' | 'md' | 'lg'} />);
+    const { container } = render(<SearchFieldBlock name="search" size={size as 'sm' | 'md' | 'default' | 'lg'} />);
 
     expect(screen.getByRole('textbox').classList.contains(padding)).toBe(true);
     expect(container.querySelector('svg')?.classList.contains(iconSize)).toBe(true);
@@ -196,5 +261,35 @@ describe('SearchFieldBlock — sizing', () => {
 
     expect(screen.getByRole('textbox').classList.contains('px-10')).toBe(true);
     expect(container.querySelector('svg')?.classList.contains('size-[1.125rem]')).toBe(true);
+  });
+
+  // The buttons carry the field's own height, so the row keeps one line.
+  it.each([
+    ['sm', 'h-form-sm'],
+    ['md', 'h-form-md'],
+    ['default', 'h-form-default'],
+    ['lg', 'h-form-default'],
+  ])('sizes the minimized button to a %s field', (size, height) => {
+    render(<SearchFieldBlock name="search" isMinimized size={size as 'sm' | 'md' | 'default' | 'lg'} />);
+
+    expect(screen.getByRole('button', { name: 'Search' }).classList.contains(height)).toBe(true);
+  });
+
+  it('keeps the minimized button compact when the field has no size', () => {
+    render(<SearchFieldBlock name="search" isMinimized />);
+
+    expect(screen.getByRole('button', { name: 'Search' }).classList.contains('h-form-sm')).toBe(true);
+  });
+
+  it('sizes the clear button to the field it sits in', () => {
+    render(<SearchFieldBlock name="search" value="weather" onReset={vi.fn()} size="md" />);
+
+    expect(screen.getByRole('button', { name: 'Clear search' }).classList.contains('h-form-md')).toBe(true);
+  });
+
+  it('gives the clear button the roomy size when the field has none', () => {
+    render(<SearchFieldBlock name="search" value="weather" onReset={vi.fn()} />);
+
+    expect(screen.getByRole('button', { name: 'Clear search' }).classList.contains('h-form-default')).toBe(true);
   });
 });
