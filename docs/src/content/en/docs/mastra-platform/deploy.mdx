@@ -90,7 +90,7 @@ A local `.env` file is optional. Environment variables stored on the platform ar
   </StepItem>
 </Steps>
 
-Each deploy replaces the running server process, which affects agent turns that are still streaming when the new version goes live. See [graceful shutdown and rolling deploys](/docs/deployment/mastra-server#graceful-shutdown-and-rolling-deploys) for how the server drains in-flight turns and when to use durable agents instead.
+Each deploy replaces the running server process, which affects agent turns that are still streaming when the new version goes live. Because Mastra Platform doesn't currently provide a configurable or guaranteed termination grace period, don't rely on a raised `server.drainTimeout` for turns that may run longer than the default drain window. Use [durable agents](/docs/harness/durable-agents) with persistent storage and cache when turns must survive a deploy, or handle an interrupted stream in the client. See [graceful shutdown and rolling deploys](/docs/deployment/mastra-server#graceful-shutdown-and-rolling-deploys) for the available strategies.
 
 The first deploy writes a `.mastra-project.json` file linking your directory to the platform project. Commit it so later deploys, CI runs, and [`mastra env`](/docs/mastra-platform/environments) commands target the same project without extra flags.
 

@@ -70,7 +70,7 @@ Read the [`mastra start`](/reference/cli/mastra#mastra-start) reference for all 
 
 ## Graceful shutdown and rolling deploys
 
-A deploy replaces the running server process. Any agent turn served by a plain `agent.stream()` call is owned by that process, so no other replica can pick up the stream. If the process is killed mid-turn, the client sees the connection close without a terminal event, and observability spans for the run stay unfinished.
+A deploy replaces the running server process. Any agent turn served by a plain `agent.stream()` call is owned by that process, so no other replica can pick up the stream. If the process is killed mid-turn, the connection closes without a terminal event. Observability spans for the run stay unfinished.
 
 This section covers what the generated server does when it's asked to stop, how to give long turns time to finish, and when to reach for [durable agents](/docs/harness/durable-agents) instead.
 
@@ -104,9 +104,9 @@ The drain only helps if your hosting platform waits that long between sending `S
 
 ### When draining isn't enough
 
-A drained stream finishes normally, but a stream cut off by the drain timeout or a hard kill can't be recovered: the run state only existed in the terminated process. If turns must survive a process replacement, wrap the agent with [durable agents](/docs/harness/durable-agents). Durable runs persist their state to storage, clients can [reconnect to the stream](/docs/harness/durable-agents#resumable-streams) after a disconnect, and [crash recovery](/docs/harness/durable-agents#crash-recovery) can re-drive interrupted runs on the next server start.
+A drained stream finishes normally, but a stream cut off by the drain timeout or a hard kill can't be recovered: the run state only existed in the terminated process. If turns must survive a process replacement, wrap the agent with [durable agents](/docs/harness/durable-agents). Durable runs persist their execution state, and [crash recovery](/docs/harness/durable-agents#crash-recovery) can re-drive interrupted runs on the next server start. Clients can also [reconnect to the stream](/docs/harness/durable-agents#resumable-streams), but missed stream events only survive a process restart when you configure a shared persistent cache such as Redis. The default event cache is in-memory.
 
-Durability isn't free. Recovery re-issues model calls and re-executes tool calls, so your tools must be idempotent. Run state also needs a shared persistent database, and multi-replica recovery has no distributed lease yet. Reserve durability for turns where losing progress is worse than that added complexity.
+Durability isn't free. Recovery re-issues model calls and re-executes tool calls, so your tools must be idempotent. Run state needs a shared persistent database, while stream replay needs a shared persistent cache. Multi-replica recovery also has no distributed lease yet. Reserve durability for turns where losing progress is worse than that added complexity.
 
 ### Handling interrupted streams in the client
 
