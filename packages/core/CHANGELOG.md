@@ -1,5 +1,66 @@
 # @mastra/core
 
+## 1.62.0-alpha.3
+
+### Minor Changes
+
+- Added optional collection row counts for application storage, so totals no longer require loading every matching row. ([#22021](https://github.com/mastra-ai/mastra/pull/22021))
+
+  **Before**
+
+  ```ts
+  const total = (await storage.ops.findMany('jobs', { status: 'failed' })).length;
+  ```
+
+  **After**
+
+  ```ts
+  if (!storage.ops.count) throw new Error('Storage backend does not support counts');
+  const total = await storage.ops.count('jobs', { status: 'failed' });
+  ```
+
+### Patch Changes
+
+- Removed obsolete generated capability files after registry refreshes. ([#21531](https://github.com/mastra-ai/mastra/pull/21531))
+
+- Fixed AI SDK `reasoning-file` and `custom` content parts being silently dropped from agent streams. Providers on the AI SDK v7 spec emit these parts, but Mastra discarded them when converting model output, so they never reached `fullStream` for either `generate` or `stream` calls. They now arrive as `reasoning-file` and `custom` chunks. ([#22111](https://github.com/mastra-ai/mastra/pull/22111))
+
+  Content types Mastra does not recognize are no longer discarded either. They are now emitted as `raw` chunks, so you can see them by enabling raw chunks instead of losing the data with no error or warning:
+
+  ```ts
+  const stream = await agent.stream('Hello', { includeRawChunks: true });
+
+  for await (const chunk of stream.fullStream) {
+    if (chunk.type === 'raw') console.log(chunk.payload);
+  }
+  ```
+
+- Fix `steps[i].content` and `steps[i].toolCalls` being empty for input-step processors (`processInputStep`, `prepareStep`) and in the workflow output payload. Step content was extracted with a 0-indexed step count passed to a 1-indexed extractor and then sliced by message count, so the first step came back empty and later steps were misaligned. Completed steps now carry their real content, including tool results, which are re-read just before the next step's input processors run. ([#22119](https://github.com/mastra-ai/mastra/pull/22119))
+
+- Workspace no longer registers the lsp_inspect tool when LSP is not active, so agents are only offered the tool when it can actually run. ([#22126](https://github.com/mastra-ai/mastra/pull/22126))
+
+- Fixed suspended agent runs resuming on a newer published version. When an agent is resolved from a status selector (for example `{ status: 'published' }`), the version the run started on is now recorded when the run suspends and reused when it resumes, so approval and human-in-the-loop flows finish on the same version they started on. New runs still pick up the latest published version. Fixes #21846 ([#22128](https://github.com/mastra-ai/mastra/pull/22128))
+
+- Fixed Claude 4.6 and newer structured output requests that end with an assistant message, including agents without configured input processors. ([#21925](https://github.com/mastra-ai/mastra/pull/21925))
+
+- Fixed slow streaming when a workflow is used as an output processor. The workflow runs once per streamed chunk, and each of those runs was saved to storage with the whole response so far, so a long reply got quadratically slower and heavier the more it streamed. Those per-chunk runs are now transient: they no longer write workflow snapshots or emit public traces, while the processor logic and tripwire behavior are unchanged. Running the same workflow directly still persists and traces as before. Fixes #19605. ([#22124](https://github.com/mastra-ai/mastra/pull/22124))
+
+- Made language-server (LSP) support opt-in in Mastra Code. By default Mastra Code no longer checks for LSP dependencies, starts language servers, or offers the lsp_inspect tool to the agent. Turn it on by adding "lsp": true (or an LSP config object) to your settings.json; "lsp": false is now also accepted and preserved. ([#22126](https://github.com/mastra-ai/mastra/pull/22126))
+
+- Purge deduped transient signals from MessageList source-tracking sets so removed messages no longer leave stale entries behind ([#22107](https://github.com/mastra-ai/mastra/pull/22107))
+
+- Fixed experiments dropping a dataset item's expected trajectory. `dataset.startExperiment` and `runExperiment` now pass each item's `expectedTrajectory` to trajectory scorers, so a trajectory that matches the expectation scores correctly instead of always scoring 0. Inline experiment data can now supply `expectedTrajectory` too. Fixes #21743 ([#22122](https://github.com/mastra-ai/mastra/pull/22122))
+
+- Fixed transient signals duplicating within a turn. A processor that re-sends a transient reminder (e.g. via sendSignal with transient: true in processInputStep) now keeps a single fresh copy near the latest message instead of accumulating one copy per model call. Fixes https://github.com/mastra-ai/mastra/issues/22060 ([#22104](https://github.com/mastra-ai/mastra/pull/22104))
+
+- Reduced the size of stored agent run snapshots. Completed steps of an agent run no longer keep a copy of the whole conversation, which previously made snapshots grow with every step of every turn and could push long conversations past a storage provider's document size limit. Resuming a suspended run, tool approvals, and run recovery are unchanged. ([#22123](https://github.com/mastra-ai/mastra/pull/22123))
+
+- Improved agent turn latency by reusing run-scoped memory reads ([#22076](https://github.com/mastra-ai/mastra/pull/22076))
+
+- Fixed `Agent.listSuspendedRuns()` and `DurableAgent.listActiveRuns()` ignoring the `resourceId` filter at the storage level. The filter is now pushed down to the workflow storage query instead of being applied in JavaScript after fetching every snapshot in the date range, so scoped polling no longer deserializes unrelated runs. Durable and evented agents now also record the `resourceId` on their workflow runs when they are created. See https://github.com/mastra-ai/mastra/issues/21844 ([#22105](https://github.com/mastra-ai/mastra/pull/22105))
+
+- Fixed Anthropic 400 errors ("thinking or redacted_thinking blocks in the latest assistant message cannot be modified") during tool-use turns with extended thinking. ProviderHistoryCompat no longer strips reasoning parts from the trailing assistant message of an active tool-use continuation, which Anthropic requires to be replayed exactly as it was generated. Historical assistant messages are still sanitized. ([#22099](https://github.com/mastra-ai/mastra/pull/22099))
+
 ## 1.62.0-alpha.2
 
 ### Minor Changes
