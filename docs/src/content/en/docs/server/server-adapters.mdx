@@ -323,6 +323,19 @@ const server = new MastraServer({
 
 See [MastraServer](/reference/server/mastra-server) for full configuration options.
 
+## SSE streams and reconnection
+
+Routes that stream over Server-Sent Events send each chunk as a single `data:` frame containing JSON. Adapters do not emit SSE `id:` fields, and they ignore the `Last-Event-ID` request header. An interrupted SSE stream cannot be resumed at the byte or event level: reconnecting to the same endpoint starts a new run rather than continuing the previous one.
+
+Clients that parse these streams directly should read frames line by line and use only the `data:` lines, ignoring comments and any other fields. This keeps a client working if a proxy injects heartbeat comments or additional SSE fields. The Mastra clients already do this.
+
+When you need a stream that survives a dropped connection, use a surface that stores its output instead of relying on the transport:
+
+- [Durable agents](/docs/harness/durable-agents) persist run state, so a client can reconnect and resync from stored events rather than replaying HTTP bytes.
+- Workflow runs expose an observe endpoint that replays a run's cached stream history, letting a late or reconnecting client catch up on chunks it missed.
+
+For ephemeral agent streams, handle a mid-stream failure by treating the partial output as incomplete and re-issuing the request, or by moving that workload to a durable agent.
+
 ## Per-route auth overrides
 
 When authentication is configured on your Mastra instance, all routes require authentication by default. Sometimes you need exceptions: public health check endpoints or webhook receivers, or alternatively admin routes that need stricter controls.
