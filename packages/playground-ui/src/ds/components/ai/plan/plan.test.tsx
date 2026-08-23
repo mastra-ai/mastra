@@ -393,3 +393,142 @@ describe('Plan', () => {
     expect(overrideClick).not.toHaveBeenCalled();
   });
 });
+
+describe('Plan pieces on their own', () => {
+  it('refuses to render outside a Plan', () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    expect(() => render(<PlanExpandButton />)).toThrow('Plan compound components must be rendered inside <Plan>.');
+
+    consoleError.mockRestore();
+  });
+
+  it('labels itself Plan unless the caller says otherwise', () => {
+    renderPlan(
+      <Plan>
+        <PlanHeader>
+          <PlanLabel />
+        </PlanHeader>
+      </Plan>,
+    );
+
+    expect(screen.getByText('Plan')).toBeTruthy();
+  });
+
+  it('takes the label the caller gives it', () => {
+    renderPlan(
+      <Plan>
+        <PlanHeader>
+          <PlanLabel>Migration plan</PlanLabel>
+        </PlanHeader>
+      </Plan>,
+    );
+
+    expect(screen.getByText('Migration plan')).toBeTruthy();
+    expect(screen.queryByText('Plan')).toBeNull();
+  });
+
+  it('names the plan file it came from', () => {
+    renderPlan(
+      <Plan>
+        <PlanBody>
+          <PlanFile>docs/plans/2026-06-migration.md</PlanFile>
+        </PlanBody>
+      </Plan>,
+    );
+
+    expect(screen.getByText('Plan file')).toBeTruthy();
+    expect(screen.getByText('docs/plans/2026-06-migration.md')).toBeTruthy();
+  });
+});
+
+describe('PlanPath', () => {
+  const pathOf = (path: string) => {
+    const { container } = renderPlan(
+      <Plan>
+        <PlanBody>
+          <PlanPath>{path}</PlanPath>
+        </PlanBody>
+      </Plan>,
+    );
+    return container.querySelector('p');
+  };
+
+  it('shows the file name and keeps the whole path on hover', () => {
+    const path = pathOf('docs/plans/2026-06-migration.md');
+
+    expect(path?.textContent).toBe('2026-06-migration.md');
+    expect(path?.getAttribute('title')).toBe('docs/plans/2026-06-migration.md');
+  });
+
+  it('reads a Windows path the same way', () => {
+    expect(pathOf('docs\\plans\\migration.md')?.textContent).toBe('migration.md');
+  });
+
+  it('ignores a trailing separator', () => {
+    expect(pathOf('docs/plans/')?.textContent).toBe('plans');
+  });
+
+  it('shows a bare file name as it stands', () => {
+    expect(pathOf('migration.md')?.textContent).toBe('migration.md');
+  });
+
+  it('falls back to the path itself when there is nothing to take from it', () => {
+    expect(pathOf('/')?.getAttribute('title')).toBe('/');
+  });
+});
+
+describe('PlanControls', () => {
+  const clippedPlan = (controls: ReactNode) => {
+    stubContentHeight(400);
+    return renderPlan(
+      <Plan>
+        <PlanMain>
+          <PlanContent>plan body</PlanContent>
+          <PlanControls>{controls}</PlanControls>
+        </PlanMain>
+      </Plan>,
+    );
+  };
+
+  it('offers the expand control on its own when nothing else was put in it', () => {
+    clippedPlan(null);
+
+    expect(screen.getByRole('button', { name: 'Expand plan' })).toBeTruthy();
+  });
+
+  it('lays out what the caller put in it, and drops the lone expand control', () => {
+    const { container } = clippedPlan(
+      <>
+        <PlanActionGroup>
+          <Button>Apply</Button>
+        </PlanActionGroup>
+        <PlanExpandButton />
+        <PlanActionGroup />
+      </>,
+    );
+
+    expect(screen.getByRole('button', { name: 'Apply' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Expand plan' })).toBeTruthy();
+    // Three columns, so the expand control stays centred between the groups.
+    expect(container.querySelector('[class*="grid-cols-[1fr_auto_1fr]"]')).not.toBeNull();
+  });
+});
+
+describe('PlanContent without a ResizeObserver', () => {
+  it('still measures the plan once', () => {
+    vi.stubGlobal('ResizeObserver', undefined);
+    stubContentHeight(400);
+
+    renderPlan(
+      <Plan>
+        <PlanMain>
+          <PlanContent>plan body</PlanContent>
+          <PlanControls />
+        </PlanMain>
+      </Plan>,
+    );
+
+    expect(screen.getByRole('button', { name: 'Expand plan' })).toBeTruthy();
+  });
+});
