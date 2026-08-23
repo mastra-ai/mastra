@@ -10,6 +10,7 @@ import { getOAuthProviders } from '@mastra/code-sdk/auth/storage';
 import {
   getAvailableModePacks,
   getAvailableOmPacks,
+  openCodeAccessLevel,
   selectPreferredOMPack,
   ONBOARDING_VERSION,
   loadSettings,
@@ -967,6 +968,9 @@ export class MastraTUI {
       google: hasEnv('google') ? ('apikey' as const) : false,
       deepseek: hasEnv('deepseek') ? ('apikey' as const) : false,
       'github-copilot': accessLevel('github-copilot'),
+      opencode: openCodeAccessLevel(
+        Boolean(this.state.authStorage?.getStoredApiKey('opencode') ?? process.env['OPENCODE_API_KEY']),
+      ),
     };
     // Gateway covers all providers
     const mgKey =

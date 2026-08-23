@@ -36,8 +36,8 @@ interface BuiltinOMPack {
   description: (access: Exclude<ProviderAccessLevel, false>) => string;
 }
 
-/** How a provider is accessed: OAuth subscription, API key, or not at all. */
-export type ProviderAccessLevel = 'oauth' | 'apikey' | false;
+/** How a provider is accessed: OAuth subscription, API key, free tier, or not at all. */
+export type ProviderAccessLevel = 'oauth' | 'apikey' | 'free' | false;
 
 /** Which providers the user has access to and how. */
 export interface ProviderAccess {
@@ -47,7 +47,19 @@ export interface ProviderAccess {
   google: ProviderAccessLevel;
   deepseek: ProviderAccessLevel;
   'github-copilot': ProviderAccessLevel;
+  opencode: ProviderAccessLevel;
   [provider: string]: ProviderAccessLevel;
+}
+
+/** Default OpenCode Zen model: free tier, works without any credential. */
+export const OPENCODE_DEFAULT_MODEL_ID = 'opencode/x-preview-f-free';
+
+/**
+ * OpenCode Zen serves its `-free` models without any credential, so the
+ * provider is reachable whether or not the user has a Zen API key.
+ */
+export function openCodeAccessLevel(hasCredential: boolean): Exclude<ProviderAccessLevel, false> {
+  return hasCredential ? 'apikey' : 'free';
 }
 
 // ---------------------------------------------------------------------------
@@ -112,6 +124,20 @@ export function getAvailableModePacks(
     });
   }
 
+  if (access.opencode) {
+    packs.push({
+      id: 'opencode',
+      name: 'OpenCode Zen',
+      description:
+        access.opencode === 'apikey' ? 'All OpenCode Zen models via API key' : 'Free models — no API key needed',
+      models: {
+        build: OPENCODE_DEFAULT_MODEL_ID,
+        plan: OPENCODE_DEFAULT_MODEL_ID,
+        fast: OPENCODE_DEFAULT_MODEL_ID,
+      },
+    });
+  }
+
   // Saved custom packs — inserted before the "New Custom" option
   for (const cp of savedCustomPacks) {
     packs.push({
@@ -170,6 +196,13 @@ const BUILTIN_OM_PACKS: BuiltinOMPack[] = [
     name: 'DeepSeek',
     modelId: 'deepseek/deepseek-v4-flash',
     description: () => 'Via DeepSeek API key',
+  },
+  {
+    id: 'opencode',
+    providerId: 'opencode',
+    name: 'OpenCode Free',
+    modelId: OPENCODE_DEFAULT_MODEL_ID,
+    description: () => 'Free OpenCode Zen model — no API key needed',
   },
 ];
 

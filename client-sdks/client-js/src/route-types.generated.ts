@@ -20210,6 +20210,7 @@ export type GetAgentControllerControllerIdModels_Response = {
     provider: string;
     modelName: string;
     hasApiKey: boolean;
+    noKeyNeeded?: boolean | undefined;
     useCount: number;
   }[];
 };

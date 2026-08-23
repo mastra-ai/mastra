@@ -304,6 +304,7 @@ vi.mock('../onboarding/packs.js', () => ({
   getAvailableModePacks: getAvailableModePacksMock,
   getAvailableOmPacks: getAvailableOmPacksMock,
   selectPreferredOMPack: vi.fn(() => undefined),
+  openCodeAccessLevel: vi.fn(() => 'free'),
 }));
 
 vi.mock('../onboarding/om-settings.js', () => ({

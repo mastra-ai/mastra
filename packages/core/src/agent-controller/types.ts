@@ -460,6 +460,8 @@ export interface AvailableModel {
   hasApiKey: boolean;
   /** Environment variable for the provider's API key */
   apiKeyEnvVar?: string;
+  /** Whether this specific model runs without any credentials (e.g. free-tier models) */
+  noKeyNeeded?: boolean;
   /** Number of times this model has been used (from external tracking) */
   useCount: number;
 }

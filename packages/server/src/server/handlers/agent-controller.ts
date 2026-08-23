@@ -371,6 +371,7 @@ const listModelsResponseSchema = z.object({
       provider: z.string(),
       modelName: z.string(),
       hasApiKey: z.boolean(),
+      noKeyNeeded: z.boolean().optional(),
       useCount: z.number(),
     }),
   ),
@@ -1295,6 +1296,7 @@ export const LIST_AGENT_CONTROLLER_MODELS_ROUTE = createRoute({
           provider: m.provider,
           modelName: m.modelName,
           hasApiKey: m.hasApiKey,
+          noKeyNeeded: m.noKeyNeeded || undefined,
           useCount: m.useCount,
         })),
       };

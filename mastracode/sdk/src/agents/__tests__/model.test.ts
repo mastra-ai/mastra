@@ -234,6 +234,7 @@ describe('resolveModel', () => {
     delete process.env.OPENAI_BASE_URL;
     delete process.env.MOONSHOT_API_KEY;
     delete process.env.MOONSHOT_AI_API_KEY;
+    delete process.env.OPENCODE_API_KEY;
     delete process.env.DEEPSEEK_API_KEY;
     delete process.env.MASTRA_GATEWAY_API_KEY;
     delete process.env.MASTRA_GATEWAY_URL;
@@ -584,6 +585,47 @@ describe('resolveModel', () => {
       mockAuthStorageInstance.getStoredApiKey.mockReturnValue(undefined);
 
       expect(() => resolveModel('moonshotai/kimi-k2.6')).toThrow(/Need MOONSHOT_API_KEY/);
+    });
+  });
+
+  describe('opencode/* models', () => {
+    it('resolves free models anonymously with an empty key when nothing is configured', () => {
+      const result = resolveModel('opencode/x-preview-f-free') as Record<string, unknown>;
+
+      expect(result.__provider).toBe('custom-openai-compatible');
+      expect(result.modelId).toBe('x-preview-f-free');
+      expect(result.url).toBe('https://opencode.ai/zen/v1');
+      expect(result.apiKey).toBe('');
+    });
+
+    it('falls back to OPENCODE_API_KEY when set', () => {
+      process.env.OPENCODE_API_KEY = 'sk-zen-env';
+
+      const result = resolveModel('opencode/x-preview-f-free') as Record<string, unknown>;
+
+      expect(result.apiKey).toBe('sk-zen-env');
+      expect(result.url).toBe('https://opencode.ai/zen/v1');
+    });
+
+    it('prefers a stored key over the env var', () => {
+      process.env.OPENCODE_API_KEY = 'sk-zen-env';
+      mockAuthStorageInstance.getStoredApiKey.mockImplementation((provider: string) =>
+        provider === 'opencode' ? 'sk-zen-stored' : undefined,
+      );
+
+      const result = resolveModel('opencode/x-preview-f-free') as Record<string, unknown>;
+
+      expect(result.apiKey).toBe('sk-zen-stored');
+    });
+
+    it('ignores the server-global env var for tenant stores that forbid environment fallback', () => {
+      process.env.OPENCODE_API_KEY = 'sk-zen-server-key';
+      (mockAuthStorageInstance as Record<string, unknown>).allowEnvironmentFallback = false;
+
+      const result = resolveModel('opencode/x-preview-f-free') as Record<string, unknown>;
+
+      expect(result.apiKey).toBe('');
+      delete (mockAuthStorageInstance as Record<string, unknown>).allowEnvironmentFallback;
     });
   });
 

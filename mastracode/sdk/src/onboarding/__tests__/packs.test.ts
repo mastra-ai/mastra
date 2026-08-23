@@ -4,6 +4,8 @@ import { PROVIDER_DEFAULT_MODELS } from '../../auth/storage.js';
 import {
   getAvailableModePacks,
   getAvailableOmPacks,
+  OPENCODE_DEFAULT_MODEL_ID,
+  openCodeAccessLevel,
   resolveProviderOMDefault,
   selectPreferredOMPack,
   type ProviderAccess,
@@ -17,6 +19,7 @@ function providerAccess(overrides: Partial<ProviderAccess> = {}): ProviderAccess
     google: false,
     deepseek: false,
     'github-copilot': false,
+    opencode: false,
     ...overrides,
   };
 }
@@ -87,16 +90,34 @@ describe('getAvailableModePacks', () => {
   });
 
   it('hides the GitHub Copilot pack when access is unavailable', () => {
-    const packs = getAvailableModePacks({
-      anthropic: false,
-      openai: false,
-      cerebras: false,
-      google: false,
-      deepseek: false,
-      'github-copilot': false,
-    });
+    const packs = getAvailableModePacks(providerAccess());
 
     expect(packs.find(p => p.id === 'github-copilot')).toBeUndefined();
+  });
+
+  it('exposes an OpenCode Zen pack on the free tier with no credential', () => {
+    const packs = getAvailableModePacks(providerAccess({ opencode: openCodeAccessLevel(false) }));
+
+    const pack = packs.find(p => p.id === 'opencode');
+    expect(pack).toBeDefined();
+    expect(pack?.description).toBe('Free models — no API key needed');
+    expect(pack?.models).toEqual({
+      build: OPENCODE_DEFAULT_MODEL_ID,
+      plan: OPENCODE_DEFAULT_MODEL_ID,
+      fast: OPENCODE_DEFAULT_MODEL_ID,
+    });
+  });
+
+  it('labels the OpenCode Zen pack as key-backed when a Zen API key is present', () => {
+    const packs = getAvailableModePacks(providerAccess({ opencode: openCodeAccessLevel(true) }));
+
+    expect(packs.find(p => p.id === 'opencode')?.description).toBe('All OpenCode Zen models via API key');
+  });
+
+  it('hides the OpenCode Zen pack when access is unavailable', () => {
+    const packs = getAvailableModePacks(providerAccess());
+
+    expect(packs.find(p => p.id === 'opencode')).toBeUndefined();
   });
 });
 
@@ -106,6 +127,7 @@ describe('OM packs', () => {
     ['openai-codex', 'openai', 'openai/gpt-5.4-mini'],
     ['openai', 'openai', 'openai/gpt-5.4-mini'],
     ['google', 'gemini', 'google/gemini-3.5-flash'],
+    ['opencode', 'opencode', OPENCODE_DEFAULT_MODEL_ID],
   ])('maps %s to the %s OM pack', (providerId, packId, modelId) => {
     expect(resolveProviderOMDefault(providerId)).toMatchObject({ id: packId, modelId });
   });

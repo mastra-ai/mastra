@@ -4,7 +4,7 @@ import type { SelectItem } from '@earendil-works/pi-tui';
 import { setClipboardText } from '@mastra/code-sdk/clipboard/index';
 import { removeCustomPackFromSettings } from '@mastra/code-sdk/onboarding/custom-packs';
 import type { ModePack, ProviderAccess, ProviderAccessLevel } from '@mastra/code-sdk/onboarding/packs';
-import { getAvailableModePacks } from '@mastra/code-sdk/onboarding/packs';
+import { getAvailableModePacks, openCodeAccessLevel } from '@mastra/code-sdk/onboarding/packs';
 import {
   loadSettings,
   resolveDefaultThinkingLevel,
@@ -583,6 +583,9 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
     google: hasEnv('google') ? ('apikey' as const) : false,
     deepseek: hasEnv('deepseek') ? ('apikey' as const) : false,
     'github-copilot': accessLevel('github-copilot'),
+    opencode: openCodeAccessLevel(
+      Boolean(ctx.authStorage?.getStoredApiKey('opencode') ?? process.env['OPENCODE_API_KEY']),
+    ),
   };
   // Include all other providers that have API keys configured
   const seen = new Set(Object.keys(access));

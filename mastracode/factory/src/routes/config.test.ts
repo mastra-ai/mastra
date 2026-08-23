@@ -250,6 +250,28 @@ describe('buildProviderAccess', () => {
     expect(access.cerebras).toBe('apikey');
     expect(access.xai).toBe('apikey');
   });
+
+  it('keeps opencode reachable via the free tier when the tenant has no Zen key', async () => {
+    const freeAccess = await buildProviderAccess({
+      controller: makeAgentController([{ provider: 'opencode', hasApiKey: false }]),
+      tenantCredentials: [],
+    });
+    expect(freeAccess.opencode).toBe('free');
+
+    const keyedAccess = await buildProviderAccess({
+      controller: makeAgentController([{ provider: 'opencode', hasApiKey: true, apiKeyEnvVar: 'OPENCODE_API_KEY' }]),
+      tenantCredentials: [
+        {
+          provider: 'opencode',
+          scope: 'user',
+          credential: { type: 'api_key', key: 'zen-key' },
+          updatedAt: new Date(),
+        },
+      ],
+    });
+    // Tenant key wins; the server-global catalog key must not upgrade the level.
+    expect(keyedAccess.opencode).toBe('apikey');
+  });
 });
 
 // ── Scoped API key routes (tenant mode) ─────────────────────────────────
@@ -412,6 +434,36 @@ describe('GET /web/config/models', () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
       models: [{ id: 'anthropic/claude-fable-5', provider: 'anthropic', modelName: 'claude-fable-5', hasApiKey: true }],
+    });
+  });
+
+  it('includes keyless free models with the noKeyNeeded flag', async () => {
+    const controller = {
+      listAvailableModels: async () => [
+        {
+          id: 'opencode/x-preview-f-free',
+          modelName: 'x-preview-f-free',
+          provider: 'opencode',
+          hasApiKey: false,
+          noKeyNeeded: true,
+        },
+      ],
+    };
+    const app = new Hono();
+    mountApiRoutes(app as any, new ConfigRoutes({ auth: fakeRouteAuth({ enabled: false }), controller }).routes());
+
+    const res = await app.request('/web/config/models');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      models: [
+        {
+          id: 'opencode/x-preview-f-free',
+          provider: 'opencode',
+          modelName: 'x-preview-f-free',
+          hasApiKey: false,
+          noKeyNeeded: true,
+        },
+      ],
     });
   });
 

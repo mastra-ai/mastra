@@ -3,12 +3,14 @@ import { useQuery } from '@tanstack/react-query';
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 
-/** One selectable model from `GET /web/config/models` (credentialed providers only). */
+/** One selectable model from `GET /web/config/models` (reachable providers only). */
 export interface AvailableModelOption {
   id: string;
   provider: string;
   modelName: string;
   hasApiKey: boolean;
+  /** Set when the model runs without any credential (free tier). */
+  noKeyNeeded?: boolean;
 }
 
 /**

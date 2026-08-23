@@ -23,6 +23,8 @@ export interface ModelItem {
   hasApiKey: boolean;
   /** Environment variable name for the API key (e.g., "ANTHROPIC_API_KEY") */
   apiKeyEnvVar?: string;
+  /** Whether this model runs without any credentials (e.g. free-tier models) */
+  noKeyNeeded?: boolean;
   /** Number of times this model has been selected (for ranking) */
   useCount?: number;
 }
@@ -48,25 +50,38 @@ export interface ModelSelectorOptions {
 // Helpers
 // =============================================================================
 
+/** Whether the model can be used right now, regardless of stored credentials. */
+function isUsable(model: ModelItem): boolean {
+  return model.hasApiKey || Boolean(model.noKeyNeeded);
+}
+
+function keyStatusSuffix(model: ModelItem): string {
+  if (model.hasApiKey) return '';
+  if (model.noKeyNeeded) return theme.fg('muted', ' (free)');
+  return theme.fg('error', ' ✗') + theme.fg('muted', model.apiKeyEnvVar ? ` (${model.apiKeyEnvVar})` : ' (no key)');
+}
+
 /**
  * Build a synthetic "Use: <id>" ModelItem for an arbitrary model id typed by
  * the user. The provider prefix is parsed from the id; key metadata is
- * derived from any sibling model that already lives under the same provider
- * so the API-key prompt still fires for known providers without a key.
+ * derived from a matching entry (exact id first, then any sibling under the
+ * same provider) so the API-key prompt still fires for known providers
+ * without a key.
  *
- * If no sibling is found (truly novel provider), we default `hasApiKey: false`
+ * If no match is found (truly novel provider), we default `hasApiKey: false`
  * so the user is still prompted for a key by provider name.
  */
 export function makeCustomModelItem(id: string, models: ModelItem[]): ModelItem {
   const parts = id.split('/');
   const provider = parts.length > 1 ? parts[0]! : 'custom';
   const modelName = parts.length > 1 ? parts.slice(1).join('/') : id;
-  const sibling = models.find(m => m.provider === provider);
+  const sibling = models.find(m => m.id === id) ?? models.find(m => m.provider === provider);
   return {
     id,
     provider,
     modelName,
     hasApiKey: sibling?.hasApiKey ?? false,
+    noKeyNeeded: sibling?.noKeyNeeded,
     apiKeyEnvVar: sibling?.apiKeyEnvVar,
   };
 }
@@ -161,9 +176,9 @@ export class ModelSelectorComponent extends Box implements Focusable {
       if (aIsCurrent && !bIsCurrent) return -1;
       if (!aIsCurrent && bIsCurrent) return 1;
 
-      // Models with API keys come before those without
-      if (a.hasApiKey && !b.hasApiKey) return -1;
-      if (!a.hasApiKey && b.hasApiKey) return 1;
+      // Models that can run come before those that cannot
+      if (isUsable(a) && !isUsable(b)) return -1;
+      if (!isUsable(a) && isUsable(b)) return 1;
 
       // Then by use count (higher = first)
       const aCount = a.useCount ?? 0;
@@ -233,16 +248,14 @@ export class ModelSelectorComponent extends Box implements Focusable {
       const isSelected = i === this.selectedIndex;
       const isCurrent = item.id === this.currentModelId;
       const checkmark = isCurrent ? theme.fg('success', ' ✓') : '';
-      const noKeyIndicator = !item.hasApiKey
-        ? theme.fg('error', ' ✗') + theme.fg('muted', item.apiKeyEnvVar ? ` (${item.apiKeyEnvVar})` : ' (no key)')
-        : '';
+      const keySuffix = keyStatusSuffix(item);
 
       let line = '';
       if (isSelected) {
-        line = theme.fg('accent', '→ ' + item.id) + checkmark + noKeyIndicator;
+        line = theme.fg('accent', '→ ' + item.id) + checkmark + keySuffix;
       } else {
-        const modelText = item.hasApiKey ? item.id : theme.fg('muted', item.id);
-        line = '  ' + modelText + checkmark + noKeyIndicator;
+        const modelText = isUsable(item) ? item.id : theme.fg('muted', item.id);
+        line = '  ' + modelText + checkmark + keySuffix;
       }
 
       this.listContainer.addChild(new Text(line, 0, 0));

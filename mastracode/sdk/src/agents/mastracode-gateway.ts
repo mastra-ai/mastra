@@ -358,12 +358,14 @@ export class MastraCodeGateway extends MastraModelGateway {
 
         for (const modelName of modelNames) {
           const id = `${provider}/${modelName}`;
+          const isFreeZenModel = provider === 'opencode' && modelName.endsWith('-free');
           models.push({
             id,
             provider,
             modelName,
             hasApiKey: hasEnvKey || Boolean(gatewayAuth),
             apiKeyEnvVar: apiKeyEnvVar || undefined,
+            noKeyNeeded: isFreeZenModel || undefined,
           });
         }
       }
@@ -498,6 +500,22 @@ export class MastraCodeGateway extends MastraModelGateway {
         headers: args.headers,
         authStorage: this.#credentials,
       }) as unknown as GatewayLanguageModel;
+    }
+
+    if (args.providerId === 'opencode' && !this.#routeThroughMastraGateway) {
+      // Zen serves `-free` models with no Authorization header at all; an empty
+      // key is what unlocks them, so absence never throws here.
+      const apiKey =
+        args.apiKey?.trim() ||
+        (this.#credentials.allowEnvironmentFallback === false ? undefined : process.env.OPENCODE_API_KEY?.trim()) ||
+        '';
+      const opencode = createOpenAICompatible({
+        name: args.providerId,
+        baseURL: 'https://opencode.ai/zen/v1',
+        apiKey,
+        headers: args.headers,
+      });
+      return opencode.chatModel(args.modelId) as unknown as GatewayLanguageModel;
     }
 
     if (this.#routeThroughMastraGateway) {

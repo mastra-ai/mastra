@@ -20,8 +20,8 @@ export function promptForApiKeyIfNeeded(
   model: ModelItem,
   authStorage: AuthStorage | undefined,
 ): Promise<void> {
-  // Model already has a key (env var or stored) — nothing to do
-  if (model.hasApiKey || !authStorage) {
+  // Model already has a key or runs without one (free tier) — nothing to do
+  if (model.hasApiKey || model.noKeyNeeded || !authStorage) {
     return Promise.resolve();
   }
 
