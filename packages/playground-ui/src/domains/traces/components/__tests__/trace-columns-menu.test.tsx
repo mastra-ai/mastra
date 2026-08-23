@@ -167,6 +167,26 @@ describe('TraceColumnsMenu', () => {
       await waitFor(() => expect(screen.queryByLabelText('Metadata key')).toBeNull());
     });
 
+    it('forgets the complaint it made when the dialog is dismissed', async () => {
+      render(<TraceColumnsMenu {...defaultProps} />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Columns' }));
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Add metadata column' }));
+
+      fireEvent.click(screen.getByRole('button', { name: 'Add column' }));
+      expect(screen.getByRole('alert')).toBeTruthy();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+      await waitFor(() => expect(screen.queryByLabelText('Metadata key')).toBeNull());
+
+      fireEvent.click(screen.getByRole('button', { name: 'Columns' }));
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Add metadata column' }));
+
+      // A fresh attempt starts without last time's complaint still standing.
+      expect(screen.queryByRole('alert')).toBeNull();
+      expect(screen.getByLabelText('Metadata key').getAttribute('aria-describedby')).toBeNull();
+    });
+
     it('forgets what was typed when the dialog is dismissed', async () => {
       render(<TraceColumnsMenu {...defaultProps} />);
 
