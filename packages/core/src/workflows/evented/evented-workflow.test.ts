@@ -943,6 +943,82 @@ describe('Workflow (Evented Engine Specific)', () => {
     // (streaming domain: should preserve error details in streaming workflow)
   });
 
+  describe('foreach failure progress (issue #21749)', () => {
+    /**
+     * Known gap, tracked separately: the default engine preserves successful
+     * foreach iterations across a time travel to a failed foreach, but the
+     * evented engine still replays them.
+     *
+     * The two engines record foreach progress differently. The default engine
+     * keeps per-iteration results in `__workflow_meta.foreachOutput` and skips
+     * the successful ones on re-entry. The evented engine instead derives its
+     * position from the persisted result array (`idx = currentResult.output.length`,
+     * with `null` placeholders for iterations that have been dispatched but
+     * have not landed yet). Carrying that array through time travel is not
+     * sufficient on its own: a fully-populated array makes `idx` reach
+     * `targetLen`, at which point `processWorkflowForEach` neither advances nor
+     * re-dispatches the unfinished slots. Fixing it properly means teaching the
+     * processor to reset the non-successful slots and republish
+     * `workflow.step.run` for them, in the same shape as the existing bulk
+     * resume path — a self-contained change, but a larger one than this fix.
+     */
+    it.skip('does not re-execute successful iterations when time travelling to a failed foreach', async () => {
+      const executions = [0, 0];
+
+      const seed = createStep({
+        id: 'evented-foreach-seed',
+        inputSchema: z.object({}),
+        outputSchema: z.array(z.number()),
+        execute: async () => [0, 1],
+      });
+
+      const processItem = createStep({
+        id: 'evented-process-item',
+        inputSchema: z.number(),
+        outputSchema: z.number(),
+        execute: async ({ inputData }) => {
+          executions[inputData]! += 1;
+          if (inputData === 1 && executions[inputData] === 1) {
+            throw new Error('transient failure');
+          }
+          return inputData;
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'evented-foreach-failure-progress',
+        inputSchema: z.object({}),
+        outputSchema: z.array(z.number()),
+        retryConfig: { attempts: 0 },
+      });
+      workflow.then(seed).foreach(processItem, { concurrency: 1 }).commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+        workflows: { 'evented-foreach-failure-progress': workflow },
+      });
+      await mastra.startWorkers();
+
+      try {
+        const run = await workflow.createRun();
+        const first = await run.start({ inputData: {} });
+
+        expect(first.status).toBe('failed');
+        expect(executions).toEqual([1, 1]);
+
+        const result = await run.timeTravel({ step: 'evented-process-item' });
+
+        // Iteration 0 already succeeded and must not run a second time.
+        expect(executions).toEqual([1, 2]);
+        expect(result.status).toBe('success');
+      } finally {
+        await mastra.stopWorkers();
+      }
+    });
+  });
+
   describe('non-retryable workflow failures', () => {
     it('does not retry workflow steps that throw MastraNonRetryableError', async () => {
       let calls = 0;
