@@ -49,14 +49,20 @@ export function hashDataset(data: readonly unknown[]): string {
 
 `ThresholdConfig` covers both supported forms, a bare number and a `{ min, max }` range, so the manifest keeps whichever one the eval uses.
 
+Keep the test set in one module so the manifest and the eval run import the same array:
+
+```typescript title="src/evals/dataset.ts"
+export const dataset = [{ input: 'What is the weather in New York?' }]
+```
+
 ## Write the manifest before the run
 
 Generate the manifest from the same values the eval will use, and write it to disk as its own step.
 
 ```typescript title="src/evals/lock-criteria.ts"
 import { writeFileSync } from 'node:fs'
-import { hashDataset, type EvalCriteria } from './criteria'
-import { dataset } from './dataset'
+import { hashDataset, type EvalCriteria } from './criteria.ts'
+import { dataset } from './dataset.ts'
 
 const criteria: EvalCriteria = {
   gates: ['answered-in-english'],
@@ -76,19 +82,29 @@ Read the thresholds from the manifest instead of typing them into the `runEvals`
 ```typescript title="src/evals/run-gate.ts"
 import { readFileSync } from 'node:fs'
 import { runEvals } from '@mastra/core/evals'
-import { weatherAgent } from '../mastra/agents/weather-agent'
-import { englishGate, locationScorer } from '../mastra/scorers'
-import type { EvalCriteria } from './criteria'
-import { dataset } from './dataset'
+import { weatherAgent } from '../mastra/agents/weather-agent.ts'
+import { englishGate, locationScorer } from '../mastra/scorers.ts'
+import type { EvalCriteria } from './criteria.ts'
+import { dataset } from './dataset.ts'
+import { verify } from './verify.ts'
 
 const criteria: EvalCriteria = JSON.parse(readFileSync('criteria.json', 'utf8'))
+const locationThreshold = criteria.thresholds['location-accuracy']
+
+if (locationThreshold === undefined) {
+  throw new Error('The manifest is missing the location-accuracy threshold')
+}
 
 const result = await runEvals({
   data: dataset,
   target: weatherAgent,
   gates: [englishGate],
-  scorers: [{ scorer: locationScorer, threshold: criteria.thresholds['location-accuracy']! }],
+  scorers: [{ scorer: locationScorer, threshold: locationThreshold }],
 })
+
+const verdict = verify(criteria, result, dataset)
+console.log(verdict)
+process.exit({ PASS: 0, FAIL: 1, TAMPERED: 2 }[verdict])
 ```
 
 ## Verify the result
@@ -97,7 +113,7 @@ Verification compares the run against the manifest and separates two failures th
 
 ```typescript title="src/evals/verify.ts"
 import type { RunEvalsResult } from '@mastra/core/evals'
-import { hashDataset, type EvalCriteria } from './criteria'
+import { hashDataset, type EvalCriteria } from './criteria.ts'
 
 type Verdict = 'PASS' | 'FAIL' | 'TAMPERED'
 
@@ -115,12 +131,16 @@ export function verify(
     return 'TAMPERED'
   }
 
-  for (const threshold of result.thresholdResults ?? []) {
+  const thresholdResults = result.thresholdResults ?? []
+  const ranThresholds = thresholdResults.map(threshold => threshold.id).sort()
+  const recordedThresholds = Object.keys(criteria.thresholds).sort()
+  if (JSON.stringify(ranThresholds) !== JSON.stringify(recordedThresholds)) {
+    return 'TAMPERED'
+  }
+
+  for (const threshold of thresholdResults) {
     const recorded = criteria.thresholds[threshold.id]
-    if (
-      recorded === undefined ||
-      JSON.stringify(recorded) !== JSON.stringify(threshold.threshold)
-    ) {
+    if (JSON.stringify(recorded) !== JSON.stringify(threshold.threshold)) {
       return 'TAMPERED'
     }
   }
