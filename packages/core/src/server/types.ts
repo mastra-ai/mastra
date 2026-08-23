@@ -272,7 +272,7 @@ export type ServerConfig = {
    * run on Hono-based serving paths: `mastra dev` / `mastra build`,
    * `@mastra/hono`, and adapters built on it such as `@mastra/next` and
    * `@mastra/tanstack-start`. Non-Hono adapters (Express, Fastify, Koa) cannot
-   * run Hono handlers and log a warning when this is set — register middleware
+   * run Hono handlers and log a warning when this is set. Register middleware
    * through the framework's own API there instead.
    */
   middleware?: Middleware | Middleware[];
