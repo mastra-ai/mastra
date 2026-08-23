@@ -67,8 +67,8 @@ class TestStrategy extends ObservationStrategy {
   async emitEndMarkers(): Promise<void> {}
   async emitFailedMarkers(): Promise<void> {}
 
-  async testStreamMarker(marker: { type: string; data: unknown }) {
-    await this.streamMarker(marker);
+  async testStreamMarker(marker: { type: string; data: unknown }, opts?: { anchorMessageId?: string }) {
+    await this.streamMarker(marker, opts);
   }
 }
 
@@ -195,5 +195,90 @@ describe('OM marker persistence plumbing', () => {
     const liveAssistant = messageList.get.all.db().find(m => m.role === 'assistant');
     expect(liveAssistant?.content.parts).toContainEqual(marker);
     expect(listMessages).not.toHaveBeenCalled();
+  });
+});
+
+describe('OM marker anchoring (#21657)', () => {
+  it('anchors the marker to the last assistant of the observed set, not the newest assistant in the thread', async () => {
+    // Reporter's repro: a 4-message thread where only the first two messages were observed.
+    // Marking the newest assistant would hide messages 2-3 from the next prompt.
+    const observedAssistant = makeAssistantMessage('assistant-observed');
+    const newerAssistant = makeAssistantMessage('assistant-newer');
+    const messageList = new MessageList({ threadId, resourceId });
+    messageList.add(
+      [makeUserMessage('user-observed'), observedAssistant, makeUserMessage('user-newer'), newerAssistant],
+      'memory',
+    );
+
+    const { strategy, persistMessages } = createHarness({ messageList });
+    await strategy.testStreamMarker(marker, { anchorMessageId: 'assistant-observed' });
+
+    const persisted = persistMessages.mock.calls[0]![0].messages[0] as MastraDBMessage;
+    expect(persisted.id).toBe('assistant-observed');
+
+    const live = messageList.get.all.db();
+    expect(live.find(m => m.id === 'assistant-observed')?.content.parts).toContainEqual(marker);
+    expect(live.find(m => m.id === 'assistant-newer')?.content.parts.some((p: any) => p?.type === marker.type)).toBe(
+      false,
+    );
+  });
+
+  it('anchors within the observed set when scanning storage', async () => {
+    // listMessages returns newest-first.
+    const { strategy, persistMessages } = createHarness({
+      storedMessages: [
+        makeAssistantMessage('stored-assistant-newer'),
+        makeUserMessage('stored-user-newer'),
+        makeAssistantMessage('stored-assistant-observed'),
+        makeUserMessage('stored-user-observed'),
+      ],
+    });
+
+    await strategy.testStreamMarker(marker, { anchorMessageId: 'stored-assistant-observed' });
+
+    expect(persistMessages).toHaveBeenCalledTimes(1);
+    const persisted = persistMessages.mock.calls[0]![0].messages[0] as MastraDBMessage;
+    expect(persisted.id).toBe('stored-assistant-observed');
+  });
+
+  it('uses the pending assistant reply when the observed set ends on a user message', async () => {
+    // The default in-turn path: observation runs on user input before the reply exists.
+    // The nearest following assistant carries no observed content of its own.
+    const messageList = new MessageList({ threadId, resourceId });
+    messageList.add([makeUserMessage('user-anchor'), makeAssistantMessage('assistant-pending')], 'memory');
+
+    const { strategy, persistMessages } = createHarness({ messageList });
+    await strategy.testStreamMarker(marker, { anchorMessageId: 'user-anchor' });
+
+    const persisted = persistMessages.mock.calls[0]![0].messages[0] as MastraDBMessage;
+    expect(persisted.id).toBe('assistant-pending');
+  });
+
+  it('falls back to the newest assistant when the anchor is not in the list', async () => {
+    const messageList = new MessageList({ threadId, resourceId });
+    messageList.add([makeUserMessage('user-1'), makeAssistantMessage('assistant-1')], 'memory');
+
+    const { strategy, persistMessages } = createHarness({ messageList });
+    await strategy.testStreamMarker(marker, { anchorMessageId: 'not-in-this-list' });
+
+    const persisted = persistMessages.mock.calls[0]![0].messages[0] as MastraDBMessage;
+    expect(persisted.id).toBe('assistant-1');
+  });
+
+  it('does not fall back to the storage scan when the anchored list has no assistant message', async () => {
+    // The list is authoritative once it contains the anchor: scanning storage could attach
+    // the marker to a newer, unobserved message.
+    const messageList = new MessageList({ threadId, resourceId });
+    messageList.add([makeUserMessage('user-only')], 'memory');
+
+    const { strategy, persistMessages, listMessages } = createHarness({
+      messageList,
+      storedMessages: [makeAssistantMessage('stored-assistant-newer')],
+    });
+
+    await strategy.testStreamMarker(marker, { anchorMessageId: 'user-only' });
+
+    expect(listMessages).not.toHaveBeenCalled();
+    expect(persistMessages).not.toHaveBeenCalled();
   });
 });

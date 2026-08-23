@@ -1162,8 +1162,10 @@ export interface ObserveHookUsage {
  *   reflections it initiates (even when those buffer asynchronously).
  * - 'async-buffer': the buffered-observation lane (`buffer()` /
  *   `triggerAsyncBuffering`), whether awaited or fire-and-forget.
+ * - 'compact': forced compaction via `compact()`, which observes below threshold to
+ *   recover from a provider context-overflow rejection.
  */
-export type ObserveTrigger = 'manual' | 'turn-sync' | 'async-buffer';
+export type ObserveTrigger = 'manual' | 'turn-sync' | 'async-buffer' | 'compact';
 
 /**
  * Call context passed to config-level `ObserveHooks` callbacks. Config-level

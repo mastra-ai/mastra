@@ -199,7 +199,9 @@ import {
 } from './extracted-values';
 import { createBufferingStartMarker, createActivationMarker } from './markers';
 import {
+  appendMarkerPart,
   findLastCompletedObservationBoundary,
+  findMarkerTargetIndex,
   getUnobservedParts,
   getBufferedChunks,
   getObservableMessages,
@@ -1209,37 +1211,25 @@ export class ObservationalMemory {
     messageList: MessageList | undefined,
     threadId: string,
     resourceId?: string,
+    anchorMessageId?: string,
   ): Promise<void> {
     if (!messageList) return;
     const allMsgs = getObservableMessages(messageList);
-    // Find the last assistant message to attach the marker to
-    for (let i = allMsgs.length - 1; i >= 0; i--) {
-      const msg = allMsgs[i];
-      if (msg?.role === 'assistant' && msg.content?.parts && Array.isArray(msg.content.parts)) {
-        // Only push if the marker isn't already in the parts array.
-        // writer.custom() adds the marker to the stream, and the AI SDK may have
-        // already appended it to the message's parts before this runs.
-        const markerData = marker.data as { cycleId?: string } | undefined;
-        const alreadyPresent =
-          markerData?.cycleId &&
-          msg.content.parts.some((p: any) => p?.type === marker.type && p?.data?.cycleId === markerData.cycleId);
-        if (!alreadyPresent) {
-          msg.content.parts.push(marker as any);
-        }
-        // Upsert the modified message to DB so the marker part is persisted.
-        // Non-critical — if this fails, the marker is still in the stream,
-        // it just won't survive page reload.
-        try {
-          await this.messageHistory.persistMessages({
-            messages: [msg],
-            threadId,
-            resourceId,
-          });
-        } catch (e) {
-          omDebug(`[OM:persistMarker] failed to save marker to DB: ${e}`);
-        }
-        return;
-      }
+    const targetIndex = findMarkerTargetIndex(allMsgs, anchorMessageId);
+    if (targetIndex === -1) return;
+    const msg = allMsgs[targetIndex]!;
+    appendMarkerPart(msg, marker);
+    // Upsert the modified message to DB so the marker part is persisted.
+    // Non-critical — if this fails, the marker is still in the stream,
+    // it just won't survive page reload.
+    try {
+      await this.messageHistory.persistMessages({
+        messages: [msg],
+        threadId,
+        resourceId,
+      });
+    } catch (e) {
+      omDebug(`[OM:persistMarker] failed to save marker to DB: ${e}`);
     }
   }
 
@@ -1253,6 +1243,7 @@ export class ObservationalMemory {
     marker: { type: string; data: unknown },
     threadId: string,
     resourceId?: string,
+    anchorMessageId?: string,
   ): Promise<void> {
     try {
       const result = await this.storage.listMessages({
@@ -1260,26 +1251,17 @@ export class ObservationalMemory {
         perPage: 20,
         orderBy: { field: 'createdAt', direction: 'DESC' },
       });
-      const messages = result?.messages ?? [];
-      // Find the last assistant message
-      for (const msg of messages) {
-        if (msg?.role === 'assistant' && msg.content?.parts && Array.isArray(msg.content.parts)) {
-          // Only push if the marker isn't already in the parts array.
-          const markerData = marker.data as { cycleId?: string } | undefined;
-          const alreadyPresent =
-            markerData?.cycleId &&
-            msg.content.parts.some((p: any) => p?.type === marker.type && p?.data?.cycleId === markerData.cycleId);
-          if (!alreadyPresent) {
-            msg.content.parts.push(marker as any);
-          }
-          await this.messageHistory.persistMessages({
-            messages: [msg],
-            threadId,
-            resourceId,
-          });
-          return;
-        }
-      }
+      // listMessages returns newest-first; findMarkerTargetIndex expects ascending order.
+      const messages = [...(result?.messages ?? [])].reverse();
+      const targetIndex = findMarkerTargetIndex(messages, anchorMessageId);
+      if (targetIndex === -1) return;
+      const msg = messages[targetIndex]!;
+      appendMarkerPart(msg, marker);
+      await this.messageHistory.persistMessages({
+        messages: [msg],
+        threadId,
+        resourceId,
+      });
     } catch (e) {
       omDebug(`[OM:persistMarkerToStorage] failed to save marker to DB: ${e}`);
     }
@@ -2236,7 +2218,12 @@ ${formattedMessages}
       threadIds: [threadId],
       config: this.getObservationMarkerConfig(),
     });
-    await this.persistMarkerToStorage(startMarker, threadId, freshRecord.resourceId ?? undefined);
+    await this.persistMarkerToStorage(
+      startMarker,
+      threadId,
+      freshRecord.resourceId ?? undefined,
+      messagesToBuffer[messagesToBuffer.length - 1]?.id,
+    );
 
     // Emit buffering start marker without letting the stream writer create a separate data-only DB message.
     if (writer) {
@@ -2856,17 +2843,7 @@ ${formattedMessages}
     const currentObservationTokens = record.observationTokenCount ?? 0;
 
     // Use provided messages or load from storage
-    let unobservedMessages: MastraDBMessage[];
-    if (messages) {
-      unobservedMessages = this.getUnobservedMessages(messages, record);
-    } else {
-      const rawMessages = await this.loadMessagesFromStorage(
-        threadId,
-        resourceId,
-        record.lastObservedAt ? new Date(record.lastObservedAt) : undefined,
-      );
-      unobservedMessages = this.getUnobservedMessages(rawMessages, record);
-    }
+    const unobservedMessages = await this.loadUnobservedFor(threadId, resourceId, record, messages);
 
     // Count tokens
     const contextWindowTokens = await this.tokenCounter.countMessagesAsync(unobservedMessages);
@@ -2990,6 +2967,138 @@ ${formattedMessages}
 
     const record = await this.getOrCreateRecord(threadId, resourceId);
     return { activated, observed, reflected, record };
+  }
+
+  /** Unobserved messages for a record, from the caller's array when given, otherwise storage. */
+  private async loadUnobservedFor(
+    threadId: string,
+    resourceId: string | undefined,
+    record: ObservationalMemoryRecord,
+    messages?: MastraDBMessage[],
+  ): Promise<MastraDBMessage[]> {
+    if (messages) return this.getUnobservedMessages(messages, record);
+    return this.getUnobservedMessages(
+      await this.loadMessagesFromStorage(
+        threadId,
+        resourceId,
+        record.lastObservedAt ? new Date(record.lastObservedAt) : undefined,
+      ),
+      record,
+    );
+  }
+
+  /**
+   * Force compaction of pending context, ignoring the observation threshold.
+   *
+   * Observation normally waits for the threshold to be crossed. When a provider counts
+   * tokens more aggressively than OM's local estimate, a request can be rejected for
+   * context overflow while OM still considers itself below threshold — leaving
+   * `observe()` and `finalize()` as no-ops. `compact()` is the recovery path: it observes
+   * the oldest pending messages in chunks until pending context drops to `targetTokens`.
+   *
+   * Nothing is persisted to the record's config, so — unlike lowering the threshold with
+   * `updateRecordConfig()` — the choice cannot leak into later requests.
+   *
+   * @example
+   * ```ts
+   * // Recover from a provider context-overflow rejection and retry
+   * const agent = new Agent({
+   *   // ...
+   *   processAPIError: async ({ error }) => {
+   *     if (!isContextOverflow(error)) return;
+   *     await om.compact({ threadId, resourceId });
+   *     return { retry: true };
+   *   },
+   * });
+   * ```
+   */
+  async compact(opts: {
+    threadId: string;
+    resourceId?: string;
+    /** Messages to compact from. Defaults to reading unobserved messages from storage. */
+    messages?: MastraDBMessage[];
+    /** Stop once pending tokens drop to this value. Defaults to half the observation threshold. */
+    targetTokens?: number;
+    /** Max tokens of messages to observe per iteration. Defaults to the observation threshold. */
+    chunkTokens?: number;
+    /** Safety bound on observation passes. Defaults to 10. */
+    maxIterations?: number;
+    hooks?: ObserveHooks;
+    agent?: ProcessorContext['agent'];
+    requestContext?: RequestContext;
+    observabilityContext?: ObservabilityContext;
+  }): Promise<{
+    compacted: boolean;
+    iterations: number;
+    tokensCompacted: number;
+    pendingTokens: number;
+    reachedTarget: boolean;
+    record: ObservationalMemoryRecord;
+  }> {
+    const { threadId, resourceId, messages } = opts;
+    const maxIterations = opts.maxIterations ?? 10;
+
+    // Buffered chunks are already-pending work; promote them before measuring.
+    await BufferingCoordinator.awaitBuffering(threadId, resourceId ?? null, this.scope);
+    const initialStatus = await this.getStatus({ threadId, resourceId, messages });
+    if (initialStatus.canActivate) {
+      await this.activate({ threadId, resourceId, messages });
+    }
+
+    const status = await this.getStatus({ threadId, resourceId, messages });
+    const targetTokens = opts.targetTokens ?? Math.floor(status.threshold / 2);
+    const chunkTokens = opts.chunkTokens ?? status.threshold;
+    const startingPendingTokens = status.pendingTokens;
+
+    let pendingTokens = startingPendingTokens;
+    let iterations = 0;
+    let compacted = false;
+
+    while (pendingTokens > targetTokens && iterations < maxIterations) {
+      const record = await this.getOrCreateRecord(threadId, resourceId);
+      const unobserved = await this.loadUnobservedFor(threadId, resourceId, record, messages);
+      if (unobserved.length === 0) break;
+
+      // Oldest-first prefix, capped at chunkTokens but always at least one message so a
+      // single oversized message can still be compacted.
+      const chunk: MastraDBMessage[] = [];
+      for (const message of unobserved) {
+        const next = await this.tokenCounter.countMessagesAsync([...chunk, message]);
+        if (chunk.length > 0 && next > chunkTokens) break;
+        chunk.push(message);
+      }
+      if (chunk.length === 0) break;
+
+      const result = await this.observe({
+        threadId,
+        resourceId,
+        messages: chunk,
+        trigger: 'compact',
+        bypassThreshold: true,
+        hooks: opts.hooks,
+        agent: opts.agent,
+        requestContext: opts.requestContext,
+        observabilityContext: opts.observabilityContext,
+      });
+      iterations++;
+
+      const after = await this.getStatus({ threadId, resourceId, messages });
+      // Stall guard: an observation that neither ran nor moved the cursor will not move it
+      // on the next pass either, so stop instead of burning the remaining iterations.
+      if (!result.observed && after.pendingTokens >= pendingTokens) break;
+      compacted = compacted || result.observed;
+      pendingTokens = after.pendingTokens;
+    }
+
+    const record = await this.getOrCreateRecord(threadId, resourceId);
+    return {
+      compacted,
+      iterations,
+      tokensCompacted: Math.max(0, startingPendingTokens - pendingTokens),
+      pendingTokens,
+      reachedTarget: pendingTokens <= targetTokens,
+      record,
+    };
   }
 
   /**
@@ -3221,7 +3330,12 @@ ${formattedMessages}
         threadIds: [threadId],
         config: this.getObservationMarkerConfig(),
       });
-      await this.persistMarkerToStorage(startMarker, threadId, record.resourceId ?? undefined);
+      await this.persistMarkerToStorage(
+        startMarker,
+        threadId,
+        record.resourceId ?? undefined,
+        candidateMessages[candidateMessages.length - 1]?.id,
+      );
 
       // Emit buffering start marker without letting the stream writer create a separate data-only DB message.
       const writer = opts.writer;
@@ -3652,6 +3766,14 @@ ${formattedMessages}
     hooks?: ObserveHooks;
     /** Which pipeline path initiated this cycle; defaults to 'manual'. */
     trigger?: ObserveTrigger;
+    /**
+     * Observe even when the unobserved token count is below the configured threshold.
+     *
+     * Call-local: unlike lowering the threshold via `updateRecordConfig()`, this does not
+     * persist anything to the record, so it cannot leak into later requests. Used by
+     * `compact()` to force compaction after a provider rejects a request for context overflow.
+     */
+    bypassThreshold?: boolean;
     agent?: ProcessorContext['agent'];
     sendSignal?: ProcessorContext['sendSignal'];
     sendStateSignal?: ProcessorContext['sendStateSignal'];
@@ -3687,7 +3809,10 @@ ${formattedMessages}
             freshRecord.lastObservedAt ? new Date(freshRecord.lastObservedAt) : undefined,
           );
 
-      if (
+      if (opts.bypassThreshold) {
+        // Still nothing to observe — bypassing the threshold cannot conjure messages.
+        if (unobservedMessages.length === 0) return;
+      } else if (
         !this.meetsObservationThreshold({
           record: freshRecord,
           unobservedTokens: await this.tokenCounter.countMessagesAsync(unobservedMessages),
