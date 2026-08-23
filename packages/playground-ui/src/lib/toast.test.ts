@@ -155,3 +155,61 @@ describe('toast.promise wrapper', () => {
     expect(opts.error(new Error('boom'))).toBe('boom');
   });
 });
+
+describe('toast entry point', () => {
+  it('emits one sonner call per array item', () => {
+    const result = toast(['one', 'two']);
+
+    expect(Array.isArray(result)).toBe(true);
+    expect(result).toHaveLength(2);
+  });
+
+  it('accepts a React element', () => {
+    expect(() => toast(createElement('span', null, 'hi'))).not.toThrow();
+  });
+
+  it('rejects a message it cannot render', () => {
+    expect(() => toast(42 as unknown as string)).toThrow('Invalid message type');
+    expect(() => toast(null)).toThrow('Invalid message type');
+  });
+
+  it('forwards a custom node and a dismiss id', () => {
+    toast.custom(createElement('span', null, 'custom'));
+    toast.dismiss('toast-1');
+
+    expect(sonnerMock.dismiss).toHaveBeenCalledWith('toast-1');
+  });
+});
+
+describe('toast.promise fallbacks', () => {
+  it('defaults the loading message', () => {
+    toast.promise({ myPromise: Promise.resolve(null), successMessage: 'ok' });
+
+    expect(sonnerMock.promise.mock.calls[0][1].loading).toBe('Loading...');
+  });
+
+  it('falls back to a generic message for a non-Error rejection', () => {
+    toast.promise({ myPromise: Promise.resolve(null), successMessage: 'ok' });
+
+    expect(sonnerMock.promise.mock.calls[0][1].error('a string reason')).toBe('Error...');
+  });
+
+  it('runs the caller callbacks alongside the messages', () => {
+    const onSuccess = vi.fn();
+    const onError = vi.fn();
+    toast.promise({ myPromise: Promise.resolve({ id: 1 }), successMessage: 'ok', onSuccess, onError });
+
+    const opts = sonnerMock.promise.mock.calls[0][1];
+    opts.success({ id: 1 });
+    opts.error(new Error('boom'));
+
+    expect(onSuccess).toHaveBeenCalledWith({ id: 1 });
+    expect(onError).toHaveBeenCalledWith(new Error('boom'));
+  });
+
+  it('lets caller options override the derived shape', () => {
+    toast.promise({ myPromise: Promise.resolve(null), successMessage: 'ok', options: { loading: 'Mine' } });
+
+    expect(sonnerMock.promise.mock.calls[0][1].loading).toBe('Mine');
+  });
+});
