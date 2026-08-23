@@ -20,6 +20,11 @@ No dirs/globs, no unrelated files, no direct `stryker run`, no
 tests/fixtures/generated/config/docs. Strengthen the TDD/BDD tests to kill
 survivors (never weaken assertions); report truly equivalent/unreachable ones.
 
+A survivor in a module-level initializer that _throws_ when mutated (e.g. an
+`Intl.DateTimeFormat` option) cannot be killed: the import fails, so the suite
+reports zero tests instead of a failing one and Stryker sees no kill. Report
+those rather than moving the initializer into the function to chase the score.
+
 Rules:
 
 - Drive the real @mastra/client-js + React Query stack; only mock the network.
