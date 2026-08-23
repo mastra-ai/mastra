@@ -17,8 +17,16 @@ import { Button } from '../../../ds/components/Button';
 import type { ExtractedOmMarker } from '../lib/extract-markers';
 import { tToTimestampMs } from '../lib/replay-selection';
 import type { TDomain } from '../lib/timeline';
-import { formatTimeDisplay, toT, tToTimestamp } from '../lib/timeline';
+import { formatTimeDisplay, tToTimestamp } from '../lib/timeline';
 import type { MemoryMessage, OMHistoryRecord } from '../types';
+import {
+  toActiveObservationData,
+  toBufferedObservationData,
+  toCombinedRowData,
+  toContextData,
+  toEventData,
+  toMessageData,
+} from './flame-graph-data';
 
 export interface ZoomRange {
   left: number;
@@ -48,87 +56,6 @@ const MSG_COLOR = 'var(--color-green-500, #22c55e)';
 const OBS_COLOR = '#f59e0b';
 const REFLECT_COLOR = '#ec4899';
 
-function getObservationTimestamp(record: OMHistoryRecord): string {
-  const d = record.lastObservedAt ?? record.updatedAt;
-  return typeof d === 'string' ? d : new Date(d).toISOString();
-}
-
-function toContextData(records: OMHistoryRecord[], markers: ExtractedOmMarker[], domain: TDomain) {
-  const fromRecords = records.map(r => ({
-    ts: String(getObservationTimestamp(r)),
-    pendingMessageTokens: r.pendingMessageTokens,
-  }));
-  const fromMarkers = markers.flatMap(m => {
-    if (m.pendingTokens == null) return [];
-    return {
-      ts: m.timestamp,
-      pendingMessageTokens: m.pendingTokens,
-    };
-  });
-  return [...fromRecords, ...fromMarkers]
-    .sort((a, b) => a.ts.localeCompare(b.ts))
-    .map(d => ({ t: toT(d.ts, domain), pendingMessageTokens: d.pendingMessageTokens }));
-}
-
-function toActiveObservationData(records: OMHistoryRecord[], markers: ExtractedOmMarker[], domain: TDomain) {
-  const points = [
-    ...records.map(record => ({
-      ts: String(getObservationTimestamp(record)),
-      observationTokenCount: record.observationTokenCount,
-    })),
-    ...markers.flatMap(marker => {
-      if (marker.type !== 'status' || marker.observationTokens == null) return [];
-      return {
-        ts: marker.timestamp,
-        observationTokenCount: marker.observationTokens,
-      };
-    }),
-  ].sort((a, b) => a.ts.localeCompare(b.ts));
-
-  let runningTotal = 0;
-  return points.map(point => {
-    runningTotal = Math.max(runningTotal, point.observationTokenCount);
-    return { t: toT(point.ts, domain), observationTokenCount: runningTotal };
-  });
-}
-
-function toBufferedObservationData(markers: ExtractedOmMarker[], domain: TDomain) {
-  const points = markers
-    .flatMap(marker => {
-      if (marker.observationTokens == null || (marker.type !== 'buffering-end' && marker.type !== 'activation')) {
-        return [];
-      }
-      return {
-        ts: marker.timestamp,
-        bufferedObservationTokenCount:
-          marker.type === 'activation' ? -marker.observationTokens : marker.observationTokens,
-      };
-    })
-    .sort((a, b) => a.ts.localeCompare(b.ts));
-
-  let runningTotal = 0;
-  return points.map(point => {
-    runningTotal = Math.max(0, runningTotal + point.bufferedObservationTokenCount);
-    return { t: toT(point.ts, domain), bufferedObservationTokenCount: runningTotal };
-  });
-}
-
-function toEventData(records: OMHistoryRecord[], domain: TDomain) {
-  return [...records]
-    .sort((a, b) => String(getObservationTimestamp(a)).localeCompare(String(getObservationTimestamp(b))))
-    .map(r => ({ t: toT(String(getObservationTimestamp(r)), domain), event: 1 }));
-}
-
-function toMessageData(messages: MemoryMessage[], domain: TDomain) {
-  return [...messages]
-    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-    .map(m => ({
-      t: toT(new Date(m.createdAt).toISOString(), domain),
-      event: 1,
-      role: m.role,
-    }));
-}
-
 function TimeAxis({ domain }: { domain: TDomain }) {
   const ticks = [0, 0.25, 0.5, 0.75, 1];
   return (
@@ -145,7 +72,7 @@ function TimeAxis({ domain }: { domain: TDomain }) {
   );
 }
 
-function FlameTooltip({
+export function FlameTooltip({
   active,
   payload,
   domain,
@@ -312,39 +239,7 @@ function CombinedRow({
   height = 44,
   onSelectT,
 }: CombinedRowProps) {
-  const areaValueByTime = new Map<number, number>();
-  for (const point of areaData) {
-    if (point.t === undefined) continue;
-    areaValueByTime.set(point.t, Number(point[areaDataKey] ?? 0));
-  }
-  const eventsByTime = eventData.reduce<Map<number, Array<(typeof eventData)[number]>>>((acc, event) => {
-    const bucket = acc.get(event.t);
-    if (bucket) {
-      bucket.push(event);
-    } else {
-      acc.set(event.t, [event]);
-    }
-    return acc;
-  }, new Map());
-  const allTimes = Array.from(new Set([...areaValueByTime.keys(), ...eventsByTime.keys()])).sort((a, b) => a - b);
-
-  let lastAreaValue = 0;
-  const combinedData: Array<Record<string, unknown> & { t: number }> = [];
-  for (const time of allTimes) {
-    const nextAreaValue = areaValueByTime.get(time);
-    if (nextAreaValue != null) {
-      lastAreaValue = nextAreaValue;
-    }
-
-    const bucket = eventsByTime.get(time);
-    if (bucket && bucket.length > 0) {
-      for (const event of bucket) {
-        combinedData.push({ ...event, t: time, [areaDataKey]: lastAreaValue });
-      }
-    } else {
-      combinedData.push({ t: time, [areaDataKey]: lastAreaValue });
-    }
-  }
+  const combinedData = toCombinedRowData(areaData, areaDataKey, eventData);
 
   return (
     <div className="border-border1/50 relative grid grid-cols-[6rem_1fr] items-center border-b hover:z-10">
