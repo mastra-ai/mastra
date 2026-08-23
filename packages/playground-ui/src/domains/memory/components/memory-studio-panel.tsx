@@ -58,8 +58,8 @@ export function MemoryStudioPanel({
   );
   const windowState = useMemo(() => getLatestThreadContextWindowState({ markers, omRecords }), [markers, omRecords]);
 
-  const memoryTokens = contextWindow?.memoryTokens ?? windowState?.memoryTokens;
-  const memoryThreshold = contextWindow?.memoryThreshold ?? windowState?.memoryThreshold;
+  const memoryTokens = contextWindow?.memoryTokens ?? windowState.memoryTokens;
+  const memoryThreshold = contextWindow?.memoryThreshold ?? windowState.memoryThreshold;
 
   // Zoom range (epoch ms) is owned here so it can both scope the FlameGraph
   // charts and filter the observation list. It resets to the full domain
@@ -124,8 +124,8 @@ export function MemoryStudioPanel({
           </div>
           <div className="border-border1 border-t">
             <ThreadContextProgress
-              messageTokens={contextWindow?.messageTokens ?? windowState?.messageTokens}
-              messageThreshold={contextWindow?.messageThreshold ?? windowState?.messageThreshold}
+              messageTokens={contextWindow?.messageTokens ?? windowState.messageTokens}
+              messageThreshold={contextWindow?.messageThreshold ?? windowState.messageThreshold}
               memoryTokens={memoryTokens}
               memoryThreshold={memoryThreshold}
               memoryLabel="Observations"

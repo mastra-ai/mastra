@@ -139,6 +139,22 @@ describe('MemoryStudioPanel', () => {
     expect(screen.getByRole('button', { name: /User asked about onboarding/ })).toBeTruthy();
   });
 
+  it('drops an observation that falls before the zoomed range', () => {
+    render(<MemoryStudioPanel messages={memoryMessages} omRecords={omHistoryRecords} />);
+
+    const track = document.querySelector('.cursor-pointer.select-none') as HTMLElement;
+    track.getBoundingClientRect = () => ({ left: 0, width: 100, top: 0, height: 24 }) as DOMRect;
+    // Drag the left handle past om-1 (10:01) while the right bound stays put.
+    fireEvent.mouseDown(track, { clientX: 0 });
+    fireEvent.mouseMove(window, { clientX: 60 });
+    fireEvent.mouseUp(window);
+
+    expect(screen.queryByRole('button', { name: /User asked about onboarding/ })).toBeNull();
+    expect(
+      within(screen.getByTestId('observation-detail-body')).getByText(/User reported a blocking bug/),
+    ).toBeTruthy();
+  });
+
   it('falls back to the marker-derived window state when no contextWindow is supplied', () => {
     render(<MemoryStudioPanel messages={memoryMessages} omRecords={omHistoryRecords} />);
 
@@ -224,5 +240,69 @@ describe('MemoryStudioPanel — without messages', () => {
     render(<MemoryStudioPanel messages={memoryMessages} omRecords={omHistoryRecords} />);
 
     expect(() => fireEvent.click(screen.getByRole('button', { name: 'Back to memory' }))).not.toThrow();
+  });
+});
+
+describe('MemoryStudioPanel — with nothing to derive a window from', () => {
+  it('renders without a marker-derived window to read', () => {
+    expect(() => render(<MemoryStudioPanel messages={[]} omRecords={[]} />)).not.toThrow();
+  });
+
+  it('still shows the caller\u2019s window when there is no marker-derived one', () => {
+    render(
+      <MemoryStudioPanel
+        messages={[]}
+        omRecords={[]}
+        contextWindow={{ messageTokens: 14200, messageThreshold: 30000 }}
+      />,
+    );
+
+    expect(screen.getByText('14.2/30k')).toBeTruthy();
+  });
+});
+
+describe('MemoryStudioPanel — following its props', () => {
+  it('re-reads the window when new messages arrive', () => {
+    const { rerender } = render(<MemoryStudioPanel messages={[]} omRecords={omHistoryRecords} />);
+    expect(screen.queryByText('0.5/2k')).toBeNull();
+
+    rerender(<MemoryStudioPanel messages={memoryMessages} omRecords={omHistoryRecords} />);
+
+    expect(screen.getByText('0.5/2k')).toBeTruthy();
+  });
+
+  it('re-reads the window when new observations arrive', () => {
+    const { rerender } = render(<MemoryStudioPanel messages={memoryMessages} omRecords={[]} />);
+
+    rerender(<MemoryStudioPanel messages={memoryMessages} omRecords={omHistoryRecords} />);
+
+    expect(
+      within(screen.getByTestId('observation-detail-body')).getByText(/User reported a blocking bug/),
+    ).toBeTruthy();
+  });
+
+  it('opens the range back up when the thread it is showing changes', () => {
+    const { rerender } = render(<MemoryStudioPanel messages={memoryMessages} omRecords={omHistoryRecords} />);
+
+    const track = document.querySelector('.cursor-pointer.select-none') as HTMLElement;
+    track.getBoundingClientRect = () => ({ left: 0, width: 100, top: 0, height: 24 }) as DOMRect;
+    fireEvent.mouseDown(track, { clientX: 100 });
+    fireEvent.mouseMove(window, { clientX: 40 });
+    fireEvent.mouseUp(window);
+    expect(screen.queryByText('History')).toBeNull();
+
+    // A different thread spans a different stretch of time, so the old zoom
+    // means nothing and the whole new range is shown.
+    rerender(
+      <MemoryStudioPanel
+        messages={memoryMessages.map(message => ({
+          ...message,
+          createdAt: new Date(new Date(message.createdAt).getTime() + 86_400_000),
+        }))}
+        omRecords={omHistoryRecords}
+      />,
+    );
+
+    expect(screen.getByText('History')).toBeTruthy();
   });
 });
