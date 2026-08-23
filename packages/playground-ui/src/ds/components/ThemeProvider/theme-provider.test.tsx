@@ -4,23 +4,42 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ThemeProvider, useTheme } from './theme-provider';
 
-const mockMatchMedia = (matchesDark: boolean) => {
-  const listeners = new Set<(event: MediaQueryListEvent) => void>();
+type SystemPreference = {
+  /** Move the system to the other scheme and tell everyone listening for 'change'. */
+  set(matchesDark: boolean): void;
+  addEventListener: ReturnType<typeof vi.fn>;
+  removeEventListener: ReturnType<typeof vi.fn>;
+};
+
+const mockMatchMedia = (matchesDark: boolean): SystemPreference => {
+  const listeners = new Map<string, Set<(event: MediaQueryListEvent) => void>>();
+  const addEventListener = vi.fn((type: string, listener: (event: MediaQueryListEvent) => void) => {
+    if (!listeners.has(type)) listeners.set(type, new Set());
+    listeners.get(type)?.add(listener);
+  });
+  const removeEventListener = vi.fn((type: string, listener: (event: MediaQueryListEvent) => void) => {
+    listeners.get(type)?.delete(listener);
+  });
   const mql: Partial<MediaQueryList> = {
     matches: matchesDark,
     media: '(prefers-color-scheme: dark)',
-    addEventListener: (_: string, listener: (event: MediaQueryListEvent) => void) => {
-      listeners.add(listener);
-    },
-    removeEventListener: (_: string, listener: (event: MediaQueryListEvent) => void) => {
-      listeners.delete(listener);
-    },
+    addEventListener: addEventListener as unknown as MediaQueryList['addEventListener'],
+    removeEventListener: removeEventListener as unknown as MediaQueryList['removeEventListener'],
     addListener: () => {},
     removeListener: () => {},
     dispatchEvent: () => false,
     onchange: null,
   };
   window.matchMedia = vi.fn().mockReturnValue(mql) as unknown as typeof window.matchMedia;
+
+  return {
+    set(next: boolean) {
+      mql.matches = next;
+      for (const listener of listeners.get('change') ?? []) listener({ matches: next } as MediaQueryListEvent);
+    },
+    addEventListener,
+    removeEventListener,
+  };
 };
 
 describe('useTheme', () => {
@@ -110,6 +129,17 @@ describe('ThemeProvider — the class it puts on the page', () => {
     expect(document.documentElement.classList.contains('dark')).toBe(false);
   });
 
+  it('swaps the class the other way round too', () => {
+    mockMatchMedia(false);
+    const { result } = renderHook(() => useTheme(), { wrapper: wrapperFor({ defaultTheme: 'light' }) });
+    expect(document.documentElement.classList.contains('light')).toBe(true);
+
+    act(() => result.current.setTheme('dark'));
+
+    expect(document.documentElement.classList.contains('dark')).toBe(true);
+    expect(document.documentElement.classList.contains('light')).toBe(false);
+  });
+
   it('marks the element the caller names instead of the document root', () => {
     mockMatchMedia(false);
     document.documentElement.classList.remove('dark', 'light');
@@ -176,6 +206,52 @@ describe('ThemeProvider — following the system', () => {
     expect(result.current.systemTheme).toBe('dark');
   });
 
+  it('follows the system while the page is open', () => {
+    const system = mockMatchMedia(false);
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <ThemeProvider defaultTheme="system" storageKey="theme-provider-live-test">
+        {children}
+      </ThemeProvider>
+    );
+
+    const { result } = renderHook(() => useTheme(), { wrapper });
+    expect(result.current.resolvedTheme).toBe('light');
+    expect(window.matchMedia).toHaveBeenCalledWith('(prefers-color-scheme: dark)');
+
+    act(() => system.set(true));
+
+    expect(result.current.resolvedTheme).toBe('dark');
+  });
+
+  it('stops listening to the system once it is gone', () => {
+    const system = mockMatchMedia(false);
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <ThemeProvider defaultTheme="system" storageKey="theme-provider-unmount-test">
+        {children}
+      </ThemeProvider>
+    );
+
+    const { unmount } = renderHook(() => useTheme(), { wrapper });
+    const listener = system.addEventListener.mock.calls[0]?.[1];
+    expect(system.addEventListener).toHaveBeenCalledWith('change', listener);
+
+    unmount();
+
+    expect(system.removeEventListener).toHaveBeenCalledWith('change', listener);
+  });
+
+  it('opens on the system reading when the caller names no default', () => {
+    mockMatchMedia(true);
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <ThemeProvider storageKey="theme-provider-no-default-test">{children}</ThemeProvider>
+    );
+
+    const { result } = renderHook(() => useTheme(), { wrapper });
+
+    expect(result.current.theme).toBe('system');
+    expect(result.current.resolvedTheme).toBe('dark');
+  });
+
   it('assumes dark where the browser cannot be asked', () => {
     const matchMedia = window.matchMedia;
     // @ts-expect-error -- removing the API is the case under test
@@ -216,6 +292,34 @@ describe('ThemeProvider — remembering the choice', () => {
     const { result } = renderHook(() => useTheme(), { wrapper });
 
     expect(result.current.theme).toBe('light');
+  });
+
+  it('watches the key it was last given', () => {
+    mockMatchMedia(false);
+    const Reader = () => {
+      const { theme } = useTheme();
+      return <span data-testid="theme">{theme}</span>;
+    };
+    const { rerender, getByTestId } = render(
+      <ThemeProvider defaultTheme="dark" storageKey="theme-provider-first-key">
+        <Reader />
+      </ThemeProvider>,
+    );
+
+    rerender(
+      <ThemeProvider defaultTheme="dark" storageKey="theme-provider-second-key">
+        <Reader />
+      </ThemeProvider>,
+    );
+
+    act(() => {
+      window.localStorage.setItem('theme-provider-second-key', 'light');
+      window.dispatchEvent(
+        new StorageEvent('storage', { key: 'theme-provider-second-key', newValue: 'light', storageArea: localStorage }),
+      );
+    });
+
+    expect(getByTestId('theme').textContent).toBe('light');
   });
 
   it('follows a theme picked in another tab, and the default when it is cleared', () => {
