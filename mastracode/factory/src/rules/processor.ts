@@ -13,7 +13,7 @@ import { getFactorySessionCoordinates } from './binding-context.js';
 import { resolveFactoryToolRule } from './resolve.js';
 import { workItemSource } from './transition-service.js';
 import type { FactoryTransitionService } from './transition-service.js';
-import { isFactoryRuleStage } from './types.js';
+import { factoryRuleStage } from './types.js';
 import type {
   FactoryCommitDecision,
   FactoryRuleBoard,
@@ -30,8 +30,7 @@ const RULE_TIMEOUT_MS = 5_000;
 const TRANSCRIPT_PAGE_SIZE = 50;
 const MAX_LINKED_ITEMS = 5;
 function ruleStage(item: WorkItemRow | null | undefined): FactoryRuleStage | undefined {
-  const stage = item?.stages.length === 1 ? item.stages[0] : undefined;
-  return stage !== undefined && isFactoryRuleStage(stage) ? stage : undefined;
+  return item ? factoryRuleStage(item.stages) : undefined;
 }
 
 function itemInRuleStage(item: WorkItemRow | null | undefined): item is WorkItemRow {

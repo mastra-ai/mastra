@@ -41,9 +41,12 @@ import type { IToolExecutionComponent } from './components/tool-execution-interf
 import type { UserMessageComponent } from './components/user-message.js';
 import { showError, showInfo } from './display.js';
 
+import type { FooterAnimationRenderer } from './footer-animation-renderer.js';
 import { GoalManager } from './goal-manager.js';
 import type { OnboardingInlineComponent } from './onboarding-inline.js';
-import { RenderScheduler } from './render-scheduler.js';
+import { pruneChatContainer } from './prune-chat.js';
+import { installRenderScheduler } from './render-scheduler.js';
+import type { RenderScheduler } from './render-scheduler.js';
 import { getEditorTheme, mastra, TERM_WIDTH_BUFFER } from './theme.js';
 import { VoiceController } from './voice/voice-controller.js';
 
@@ -179,6 +182,7 @@ export interface TUIState {
   // ── TUI framework (set once) ──────────────────────────────────────────
   ui: TUI;
   renderScheduler?: RenderScheduler;
+  footerAnimationRenderer?: FooterAnimationRenderer;
   chatContainer: Container;
   editorContainer: Container;
   idleCounter?: IdleCounterComponent;
@@ -365,12 +369,11 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
   }
   const ui = new TUI(terminal);
   const assistantRenderRegistry = new AssistantRenderRegistry();
-  const renderScheduler = new RenderScheduler(
-    () => ui.requestRender(),
-    undefined,
-    undefined,
-    () => assistantRenderRegistry.applyPending(),
-  );
+  let result: TUIState;
+  const renderScheduler = installRenderScheduler(ui, () => {
+    assistantRenderRegistry.applyPending();
+    pruneChatContainer(result);
+  });
 
   // Perf profiling removed
 
@@ -378,8 +381,8 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
   const editorContainer = new Container();
   const footer = new Container();
   const editor = new CustomEditor(ui, getEditorTheme());
-  editor.requestRender = () => renderScheduler.request();
-  const result: TUIState = {
+  editor.requestRender = () => ui.requestRender();
+  result = {
     // Core dependencies
     controller: options.controller,
     session: options.session,

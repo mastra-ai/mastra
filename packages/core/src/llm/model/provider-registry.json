@@ -397,6 +397,7 @@
         "black-forest-labs/flux_2-klein-4b",
         "bytedance/seed-oss-36b-instruct",
         "deepseek-ai/deepseek-v4-flash",
+        "deepseek-ai/deepseek-v4-flash-0731",
         "deepseek-ai/deepseek-v4-pro",
         "google/gemma-2-2b-it",
         "google/gemma-3-12b-it",
@@ -433,6 +434,7 @@
         "mistralai/mixtral-8x7b-instruct",
         "moonshotai/kimi-k2-instruct-0905",
         "moonshotai/kimi-k2.6",
+        "moonshotai/kimi-k3",
         "nvidia/active-speaker-detection",
         "nvidia/bevformer",
         "nvidia/cosmos-predict1-5b",
@@ -928,6 +930,7 @@
         "google/gemini-pro-latest",
         "google/gemma-4-26b-a4b-it",
         "google/gemma-4-26b-a4b-it:thinking",
+        "google/gemma-4-26b-a4b-uncensored",
         "google/gemma-4-31b-it",
         "google/gemma-4-31b-it:thinking",
         "hermes-high",
@@ -2228,6 +2231,7 @@
         "tencent/hunyuan-a13b-instruct",
         "tencent/hy-mt2-1.8b",
         "tencent/hy-mt2-30b-a3b",
+        "tencent/hy-mt2-7b",
         "tencent/hy3",
         "tencent/hy3-preview",
         "thedrummer/cydonia-24b-v4.1",
@@ -3240,6 +3244,8 @@
         "deepinfra/hy3",
         "deepinfra/kimi-k2.5",
         "deepinfra/ling-3.0-flash",
+        "deepinfra/mimo-v2.5",
+        "deepinfra/mimo-v2.5-pro",
         "deepinfra/nemotron-3-ultra-550b",
         "deepinfra/qwen3-vl-235b-a22b-instruct",
         "deepinfra/qwen3-vl-30b-a3b-instruct",
@@ -3361,6 +3367,8 @@
         "novita/llama-3.3-70b-instruct",
         "novita/llama-4-maverick-17b-instruct",
         "novita/llama-4-scout-17b-instruct",
+        "novita/mimo-v2.5",
+        "novita/mimo-v2.5-pro",
         "novita/minimax-m2.1",
         "novita/minimax-m2.5",
         "novita/minimax-m2.7",
@@ -3386,9 +3394,7 @@
         "openai/gpt-4.1-nano",
         "openai/gpt-4o",
         "openai/gpt-4o-mini",
-        "openai/gpt-4o-mini-search-preview",
         "openai/gpt-4o-mini-transcribe",
-        "openai/gpt-4o-search-preview",
         "openai/gpt-4o-transcribe",
         "openai/gpt-5",
         "openai/gpt-5-mini",
@@ -5147,6 +5153,7 @@
         "bailian/qwen3.8-max",
         "deepseek/deepseek-v3.2",
         "deepseek/deepseek-v4-flash",
+        "deepseek/deepseek-v4-flash-0731",
         "deepseek/deepseek-v4-flash-vision-exp",
         "deepseek/deepseek-v4-pro",
         "deepseek/deepseek-v4-pro-0423",
@@ -7182,6 +7189,7 @@
         "nvidia/nemotron-3-super-120b-a12b",
         "nvidia/nemotron-3-ultra-550b-a55b",
         "nvidia/nemotron-3.5-lightning",
+        "nvidia/nemotron-3.5-lightning-free",
         "nvidia/nemotron-nano-12b-v2-vl",
         "nvidia/nemotron-nano-9b-v2",
         "openai/gpt-3.5-turbo",
@@ -7777,9 +7785,7 @@
         "gpt-4.1-nano",
         "gpt-4o",
         "gpt-4o-mini",
-        "gpt-4o-mini-search-preview",
         "gpt-4o-mini-transcribe",
-        "gpt-4o-search-preview",
         "gpt-4o-transcribe",
         "gpt-5",
         "gpt-5-mini",
@@ -7945,26 +7951,21 @@
         "deepseek-v4-pro",
         "deepseek-v4-pro-lightning",
         "gemma-4-31b-it",
-        "glm-4.7",
-        "glm-4.7-flash",
-        "glm-5",
         "glm-5.1",
         "glm-5.2",
         "greg-1-mini",
         "greg-2-super",
         "greg-2-ultra",
         "greg-rp",
-        "kimi-k2.5",
-        "kimi-k2.5-lightning",
         "kimi-k2.6",
         "kimi-k2.7-code",
         "kimi-k3",
         "kimi-k3-eco",
         "mimo-v2.5-pro",
-        "minimax-m2.5",
         "qwen3.5-397b-a17b",
         "qwen3.5-9b",
-        "qwen3.6-27b"
+        "qwen3.6-27b",
+        "qwen3.8-27b"
       ],
       "docUrl": "https://crof.ai/docs",
       "gateway": "models.dev",
@@ -7973,9 +7974,6 @@
           "npm": "@ai-sdk/openai-compatible"
         },
         "kimi-k3": {
-          "npm": "@ai-sdk/openai-compatible"
-        },
-        "glm-4.7": {
           "npm": "@ai-sdk/openai-compatible"
         },
         "deepseek-v4-flash": {
@@ -7993,22 +7991,16 @@
         "gemma-4-31b-it": {
           "npm": "@ai-sdk/openai-compatible"
         },
-        "glm-5": {
-          "npm": "@ai-sdk/openai-compatible"
-        },
-        "kimi-k2.5": {
-          "npm": "@ai-sdk/openai-compatible"
-        },
         "glm-5.2": {
           "npm": "@ai-sdk/openai-compatible"
         },
         "kimi-k3-eco": {
           "npm": "@ai-sdk/openai-compatible"
         },
-        "minimax-m2.5": {
+        "qwen3.6-27b": {
           "npm": "@ai-sdk/openai-compatible"
         },
-        "qwen3.6-27b": {
+        "qwen3.8-27b": {
           "npm": "@ai-sdk/openai-compatible"
         },
         "glm-5.1": {
@@ -8018,9 +8010,6 @@
           "npm": "@ai-sdk/openai-compatible"
         },
         "deepseek-v4-flash-0731": {
-          "npm": "@ai-sdk/openai-compatible"
-        },
-        "glm-4.7-flash": {
           "npm": "@ai-sdk/openai-compatible"
         },
         "kimi-k2.6": {
@@ -8536,6 +8525,7 @@
         "tencent/hunyuan-a13b-instruct",
         "tencent/hy-mt2-1.8b",
         "tencent/hy-mt2-30b-a3b",
+        "tencent/hy-mt2-7b",
         "tencent/hy3",
         "tencent/hy3-preview",
         "tencent/hy3:free",
@@ -9164,6 +9154,7 @@
         "openrouter/stepfun/step-3.7-flash",
         "openrouter/tencent/hy-mt2-1.8b",
         "openrouter/tencent/hy-mt2-30b-a3b",
+        "openrouter/tencent/hy-mt2-7b",
         "openrouter/tencent/hy3",
         "openrouter/thedrummer/cydonia-24b-v4.1",
         "openrouter/thedrummer/rocinante-12b",
@@ -9497,6 +9488,7 @@
       "black-forest-labs/flux_2-klein-4b",
       "bytedance/seed-oss-36b-instruct",
       "deepseek-ai/deepseek-v4-flash",
+      "deepseek-ai/deepseek-v4-flash-0731",
       "deepseek-ai/deepseek-v4-pro",
       "google/gemma-2-2b-it",
       "google/gemma-3-12b-it",
@@ -9533,6 +9525,7 @@
       "mistralai/mixtral-8x7b-instruct",
       "moonshotai/kimi-k2-instruct-0905",
       "moonshotai/kimi-k2.6",
+      "moonshotai/kimi-k3",
       "nvidia/active-speaker-detection",
       "nvidia/bevformer",
       "nvidia/cosmos-predict1-5b",
@@ -9995,6 +9988,7 @@
       "google/gemini-pro-latest",
       "google/gemma-4-26b-a4b-it",
       "google/gemma-4-26b-a4b-it:thinking",
+      "google/gemma-4-26b-a4b-uncensored",
       "google/gemma-4-31b-it",
       "google/gemma-4-31b-it:thinking",
       "hermes-high",
@@ -11114,6 +11108,7 @@
       "tencent/hunyuan-a13b-instruct",
       "tencent/hy-mt2-1.8b",
       "tencent/hy-mt2-30b-a3b",
+      "tencent/hy-mt2-7b",
       "tencent/hy3",
       "tencent/hy3-preview",
       "thedrummer/cydonia-24b-v4.1",
@@ -11837,6 +11832,8 @@
       "deepinfra/hy3",
       "deepinfra/kimi-k2.5",
       "deepinfra/ling-3.0-flash",
+      "deepinfra/mimo-v2.5",
+      "deepinfra/mimo-v2.5-pro",
       "deepinfra/nemotron-3-ultra-550b",
       "deepinfra/qwen3-vl-235b-a22b-instruct",
       "deepinfra/qwen3-vl-30b-a3b-instruct",
@@ -11958,6 +11955,8 @@
       "novita/llama-3.3-70b-instruct",
       "novita/llama-4-maverick-17b-instruct",
       "novita/llama-4-scout-17b-instruct",
+      "novita/mimo-v2.5",
+      "novita/mimo-v2.5-pro",
       "novita/minimax-m2.1",
       "novita/minimax-m2.5",
       "novita/minimax-m2.7",
@@ -11983,9 +11982,7 @@
       "openai/gpt-4.1-nano",
       "openai/gpt-4o",
       "openai/gpt-4o-mini",
-      "openai/gpt-4o-mini-search-preview",
       "openai/gpt-4o-mini-transcribe",
-      "openai/gpt-4o-search-preview",
       "openai/gpt-4o-transcribe",
       "openai/gpt-5",
       "openai/gpt-5-mini",
@@ -13089,6 +13086,7 @@
       "bailian/qwen3.8-max",
       "deepseek/deepseek-v3.2",
       "deepseek/deepseek-v4-flash",
+      "deepseek/deepseek-v4-flash-0731",
       "deepseek/deepseek-v4-flash-vision-exp",
       "deepseek/deepseek-v4-pro",
       "deepseek/deepseek-v4-pro-0423",
@@ -14420,6 +14418,7 @@
       "nvidia/nemotron-3-super-120b-a12b",
       "nvidia/nemotron-3-ultra-550b-a55b",
       "nvidia/nemotron-3.5-lightning",
+      "nvidia/nemotron-3.5-lightning-free",
       "nvidia/nemotron-nano-12b-v2-vl",
       "nvidia/nemotron-nano-9b-v2",
       "openai/gpt-3.5-turbo",
@@ -14982,9 +14981,7 @@
       "gpt-4.1-nano",
       "gpt-4o",
       "gpt-4o-mini",
-      "gpt-4o-mini-search-preview",
       "gpt-4o-mini-transcribe",
-      "gpt-4o-search-preview",
       "gpt-4o-transcribe",
       "gpt-5",
       "gpt-5-mini",
@@ -15133,26 +15130,21 @@
       "deepseek-v4-pro",
       "deepseek-v4-pro-lightning",
       "gemma-4-31b-it",
-      "glm-4.7",
-      "glm-4.7-flash",
-      "glm-5",
       "glm-5.1",
       "glm-5.2",
       "greg-1-mini",
       "greg-2-super",
       "greg-2-ultra",
       "greg-rp",
-      "kimi-k2.5",
-      "kimi-k2.5-lightning",
       "kimi-k2.6",
       "kimi-k2.7-code",
       "kimi-k3",
       "kimi-k3-eco",
       "mimo-v2.5-pro",
-      "minimax-m2.5",
       "qwen3.5-397b-a17b",
       "qwen3.5-9b",
-      "qwen3.6-27b"
+      "qwen3.6-27b",
+      "qwen3.8-27b"
     ],
     "groq": [
       "allam-2-7b",
@@ -15577,6 +15569,7 @@
       "tencent/hunyuan-a13b-instruct",
       "tencent/hy-mt2-1.8b",
       "tencent/hy-mt2-30b-a3b",
+      "tencent/hy-mt2-7b",
       "tencent/hy3",
       "tencent/hy3-preview",
       "tencent/hy3:free",
@@ -16130,6 +16123,7 @@
       "openrouter/stepfun/step-3.7-flash",
       "openrouter/tencent/hy-mt2-1.8b",
       "openrouter/tencent/hy-mt2-30b-a3b",
+      "openrouter/tencent/hy-mt2-7b",
       "openrouter/tencent/hy3",
       "openrouter/thedrummer/cydonia-24b-v4.1",
       "openrouter/thedrummer/rocinante-12b",
