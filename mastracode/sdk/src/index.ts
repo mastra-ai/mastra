@@ -1461,6 +1461,8 @@ export * from './knowledge-inspector.js';
  */
 export { generateThreadTitle, resolveDefaultThreadTitleModel } from './agents/thread-title.js';
 export type { ThreadTitleOptions } from './agents/thread-title.js';
+export { resolveTenantFromRequestContext } from './agents/model.js';
+export type { CredentialTenant } from './agents/credential-resolver.js';
 export type { ThinkingLevel } from './providers/openai-codex.js';
 
 /**

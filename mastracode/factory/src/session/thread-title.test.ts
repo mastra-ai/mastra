@@ -9,7 +9,7 @@ vi.mock('@mastra/code-sdk', () => ({
   generateThreadTitle: (options: { prompt: string }) => generateThreadTitleMock(options),
 }));
 
-import { createThreadTitleGenerator, FactoryThreadTitleProcessor, type ThreadTitleThreads } from './thread-title.js';
+import { FactoryThreadTitleProcessor, type ThreadTitleThreads, type TitleGenerationSetting } from './thread-title.js';
 
 function userMessage(text: string): MastraDBMessage {
   return {
@@ -54,17 +54,19 @@ function createThreads({ title }: { title?: string } = {}) {
 
 function createProcessor({
   threads,
-  generateTitle = () => Promise.resolve('Login redirect fix'),
+  setting = { enabled: true },
+  resolveSetting,
 }: {
   threads: ThreadTitleThreads;
-  generateTitle?: () => Promise<string | undefined>;
+  setting?: TitleGenerationSetting | undefined;
+  resolveSetting?: (requestContext?: RequestContext) => Promise<TitleGenerationSetting | undefined>;
 }) {
-  const generateTitleMock = vi.fn(generateTitle);
+  const resolveSettingMock = resolveSetting ?? vi.fn(() => Promise.resolve(setting));
   const processor = new FactoryThreadTitleProcessor({
-    generateTitle: generateTitleMock,
+    resolveSetting: resolveSettingMock,
     threads: () => Promise.resolve(threads),
   });
-  return { processor, generateTitle: generateTitleMock };
+  return { processor, resolveSetting: resolveSettingMock };
 }
 
 function inputArgs(messages: MastraDBMessage[], requestContext?: RequestContext): ProcessInputArgs {
@@ -84,56 +86,101 @@ function inputArgs(messages: MastraDBMessage[], requestContext?: RequestContext)
 
 beforeEach(() => {
   vi.clearAllMocks();
+  generateThreadTitleMock.mockResolvedValue('Login redirect fix');
 });
 
 describe('FactoryThreadTitleProcessor', () => {
-  it('names an untitled thread from the first user message and returns messages untouched', async () => {
+  it('returns synchronously — the pipeline never awaits naming', () => {
     const threads = createThreads();
-    const { processor, generateTitle } = createProcessor({ threads });
+    let resolveSetting: ((value: TitleGenerationSetting) => void) | undefined;
+    const settingGate = new Promise<TitleGenerationSetting>(resolve => {
+      resolveSetting = resolve;
+    });
+    const { processor } = createProcessor({ threads, resolveSetting: () => settingGate });
     const messages = [userMessage('Fix the login redirect loop')];
 
-    await expect(processor.processInput(inputArgs(messages))).resolves.toBe(messages);
+    expect(processor.processInput(inputArgs(messages))).toBe(messages);
+    resolveSetting?.({ enabled: true });
 
-    await vi.waitFor(() =>
+    return vi.waitFor(() =>
       expect(threads.updateThread).toHaveBeenCalledWith({ id: 'thread-1', title: 'Login redirect fix' }),
     );
-    expect(generateTitle).toHaveBeenCalledWith('Fix the login redirect loop', undefined);
   });
 
-  it('passes the run request context to the generator so tenant credentials resolve', async () => {
+  it('passes the run request context to the setting lookup and the generator', async () => {
     const threads = createThreads();
-    const { processor, generateTitle } = createProcessor({ threads });
     const requestContext = new RequestContext();
+    const { processor, resolveSetting } = createProcessor({ threads });
 
     await processor.processInput(inputArgs([userMessage('hello')], requestContext));
     await vi.waitFor(() => expect(threads.updateThread).toHaveBeenCalled());
 
-    expect(generateTitle).toHaveBeenCalledWith('hello', requestContext);
+    expect(resolveSetting).toHaveBeenCalledWith(requestContext);
+    expect(generateThreadTitleMock).toHaveBeenCalledWith(expect.objectContaining({ prompt: 'hello', requestContext }));
+  });
+
+  it('skips the model call entirely when the org disabled generation', async () => {
+    const threads = createThreads();
+    const { processor, resolveSetting } = createProcessor({ threads, setting: { enabled: false } });
+
+    await processor.processInput(inputArgs([userMessage('hello')]));
+    await vi.waitFor(() => expect(resolveSetting).toHaveBeenCalled());
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(generateThreadTitleMock).not.toHaveBeenCalled();
+    expect(threads.getThreadById).not.toHaveBeenCalled();
+    expect(threads.updateThread).not.toHaveBeenCalled();
+  });
+
+  it('skips when the setting cannot be resolved', async () => {
+    const threads = createThreads();
+    const { processor } = createProcessor({ threads, resolveSetting: () => Promise.resolve(undefined) });
+
+    await processor.processInput(inputArgs([userMessage('hello')]));
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(generateThreadTitleMock).not.toHaveBeenCalled();
+    expect(threads.updateThread).not.toHaveBeenCalled();
+  });
+
+  it('forwards the configured model and thinking level', async () => {
+    const threads = createThreads();
+    const { processor } = createProcessor({
+      threads,
+      setting: { enabled: true, modelId: 'google/gemini-2.5-flash', thinkingLevel: 'low' },
+    });
+
+    await processor.processInput(inputArgs([userMessage('hello')]));
+    await vi.waitFor(() => expect(threads.updateThread).toHaveBeenCalled());
+
+    expect(generateThreadTitleMock).toHaveBeenCalledWith(
+      expect.objectContaining({ model: 'google/gemini-2.5-flash', thinkingLevel: 'low' }),
+    );
   });
 
   it('leaves titled threads alone', async () => {
     const threads = createThreads({ title: 'Issue #12: Login loop' });
-    const { processor, generateTitle } = createProcessor({ threads });
+    const { processor } = createProcessor({ threads });
 
     await processor.processInput(inputArgs([userMessage('hello')]));
-    await Promise.resolve();
+    await new Promise(resolve => setTimeout(resolve, 0));
 
-    expect(generateTitle).not.toHaveBeenCalled();
+    expect(generateThreadTitleMock).not.toHaveBeenCalled();
     expect(threads.updateThread).not.toHaveBeenCalled();
   });
 
-  it('keeps a title the user set while generation was in flight', async () => {
+  it('keeps a title the user set while the setting was being resolved', async () => {
     const threads = createThreads();
     const { processor } = createProcessor({
       threads,
-      generateTitle: async () => {
+      resolveSetting: async () => {
         threads.setTitle('My own name');
-        return 'Login redirect fix';
+        return { enabled: true };
       },
     });
 
     await processor.processInput(inputArgs([userMessage('hello')]));
-    await vi.waitFor(() => expect(threads.getThreadById).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(threads.getThreadById).toHaveBeenCalled());
 
     expect(threads.updateThread).not.toHaveBeenCalled();
   });
@@ -144,42 +191,41 @@ describe('FactoryThreadTitleProcessor', () => {
     const generationGate = new Promise<string | undefined>(resolve => {
       releaseGeneration = resolve;
     });
-    const { processor, generateTitle } = createProcessor({ threads, generateTitle: () => generationGate });
+    generateThreadTitleMock.mockReturnValue(generationGate);
+    const { processor } = createProcessor({ threads });
 
     await processor.processInput(inputArgs([userMessage('first')]));
     await processor.processInput(inputArgs([userMessage('second'), assistantMessage()]));
     releaseGeneration?.('A title');
     await vi.waitFor(() => expect(threads.updateThread).toHaveBeenCalled());
 
-    expect(generateTitle).toHaveBeenCalledTimes(1);
+    expect(generateThreadTitleMock).toHaveBeenCalledTimes(1);
   });
 
   it('skips runs without a user message or without a memory store', async () => {
     const noUserThreads = createThreads();
-    const { processor: noUserProcessor, generateTitle: noUserGenerate } = createProcessor({
-      threads: noUserThreads,
-    });
+    const { processor: noUserProcessor } = createProcessor({ threads: noUserThreads });
     await noUserProcessor.processInput(inputArgs([assistantMessage()]));
-    await Promise.resolve();
-    expect(noUserGenerate).not.toHaveBeenCalled();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(generateThreadTitleMock).not.toHaveBeenCalled();
 
-    const missingStoreGenerate = vi.fn(() => Promise.resolve('Titled'));
     const missingStoreProcessor = new FactoryThreadTitleProcessor({
-      generateTitle: missingStoreGenerate,
+      resolveSetting: () => Promise.resolve({ enabled: true }),
       threads: () => Promise.resolve(undefined),
     });
     await missingStoreProcessor.processInput(inputArgs([userMessage('hello')]));
-    await Promise.resolve();
-    expect(missingStoreGenerate).not.toHaveBeenCalled();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(generateThreadTitleMock).not.toHaveBeenCalled();
   });
 
   it('warns instead of throwing when generation fails', async () => {
     const threads = createThreads();
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const failing = new FactoryThreadTitleProcessor({
-      generateTitle: () => Promise.reject(new Error('provider down')),
+      resolveSetting: () => Promise.resolve({ enabled: true }),
       threads: () => Promise.resolve(threads),
     });
+    generateThreadTitleMock.mockRejectedValue(new Error('provider down'));
 
     await failing.processInput(inputArgs([userMessage('hello')]));
     await vi.waitFor(() =>
@@ -188,20 +234,5 @@ describe('FactoryThreadTitleProcessor', () => {
     warn.mockRestore();
 
     expect(threads.updateThread).not.toHaveBeenCalled();
-  });
-});
-
-describe('createThreadTitleGenerator', () => {
-  it('passes the configured model through to the SDK generator', async () => {
-    const generate = createThreadTitleGenerator({ model: 'google/gemini-2.5-flash', thinkingLevel: 'low' });
-
-    await generate('prompt');
-
-    expect(generateThreadTitleMock).toHaveBeenCalledWith({
-      prompt: 'prompt',
-      requestContext: undefined,
-      model: 'google/gemini-2.5-flash',
-      thinkingLevel: 'low',
-    });
   });
 });

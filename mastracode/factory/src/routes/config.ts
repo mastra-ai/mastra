@@ -37,6 +37,11 @@ import type { ModelPackRecord, ModelPacksStorage } from '../storage/domains/mode
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import {
+  LOCAL_TITLE_SETTINGS_ORG_ID,
+  resolveTitleGenerationSetting,
+  TitleSettingsStorage,
+} from '../storage/domains/title-settings/base.js';
+import {
   getAuthProviderId,
   listTenantCredentialsForRequest,
   resolveCredentialContext,
@@ -532,6 +537,21 @@ export interface UpdateThinkingConfigResponse {
   modeDefaults: Record<string, ThinkingLevelSetting>;
 }
 
+/** `GET /web/config/title-generation` — effective org config after defaults. */
+export interface TitleGenerationConfigInfo {
+  enabled: boolean;
+  /** `null` → the provider-aware cheap-model pack. */
+  modelId: string | null;
+  /** `null` → no thinking-level override. */
+  thinkingLevel: ThinkingLevelSetting | null;
+}
+
+/** `PUT /web/config/title-generation` success payload. */
+export interface UpdateTitleGenerationConfigResponse {
+  ok: true;
+  config: TitleGenerationConfigInfo;
+}
+
 export function readOMConfig(session: OMSession): OMConfigInfo {
   const state = session.state.get() ?? {};
   const observeAttachments = state.observeAttachments;
@@ -633,6 +653,42 @@ async function persistMemorySettings(
   await context.storage.patch({ orgId: context.orgId, userId: context.userId, patch, fillIfUnset });
 }
 
+/**
+ * Resolve the org-scoped title-settings context for a request, or a
+ * ready-to-return error response. Thread titles are shared org state, so the
+ * row is keyed by org alone — `(local)` when auth is disabled.
+ */
+async function resolveTitleSettingsContext({
+  c,
+  auth,
+  titleSettings,
+}: {
+  c: Context;
+  auth: RouteAuth;
+  titleSettings?: TitleSettingsStorage;
+}): Promise<{ orgId: string } | { response: Response }> {
+  await auth.ensureUser(c);
+  const tenant = auth.tenant(c);
+  if (!tenant && auth.enabled()) return { response: c.json({ error: 'unauthorized' }, 401) };
+  if (!titleSettings) {
+    return {
+      response: c.json(
+        {
+          error: 'title_settings_unavailable',
+          message: 'Title settings storage is unavailable — the app database is not configured or failed to start.',
+        },
+        503,
+      ),
+    };
+  }
+  try {
+    await titleSettings.ensureReady();
+  } catch {
+    return { response: c.json({ error: 'title_settings_unavailable' }, 503) };
+  }
+  return { orgId: tenant ? tenantOrgId(tenant) : LOCAL_TITLE_SETTINGS_ORG_ID };
+}
+
 /** Dependencies injected into {@link ConfigRoutes}. */
 export interface ConfigRoutesDeps extends RouteDependencies {
   controller: ModelCatalog;
@@ -646,6 +702,8 @@ export interface ConfigRoutesDeps extends RouteDependencies {
   sourceControlSessions?: Pick<SourceControlStorageHandle['sessions'], 'getBySessionId'>;
   /** Tenant memory-settings domain handle; absent in local (no-DB) mode. */
   memorySettings?: MemorySettingsStorage;
+  /** Tenant title-settings domain handle; absent in local (no-DB) mode. */
+  titleSettings?: TitleSettingsStorage;
   /** Factory projects domain, used to derive OM fallbacks from a factory's default model. */
   factoryProjects?: FactoryProjectsStorage;
   /** Custom-providers domain handle; absent when the app database is missing. */
@@ -677,6 +735,8 @@ export interface ConfigRoutesDeps extends RouteDependencies {
  *   - `PUT    /web/config/om/:role/model`          — switch observer/reflector model
  *   - `PUT    /web/config/om/thresholds`           — set observation/reflection thresholds
  *   - `PUT    /web/config/om/observe-attachments`  — set observe-attachments (auto/on/off)
+ *   - `GET    /web/config/title-generation`        — read thread-title generation config
+ *   - `PUT    /web/config/title-generation`        — set enabled/model/thinking-level
  */
 export class ConfigRoutes extends Route<ConfigRoutesDeps> {
   routes(): ApiRoute[] {
@@ -1512,6 +1572,91 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                   await factoryOmFallback(factoryProjectId),
                 );
             return c.json({ ok: true, config });
+          } catch (error) {
+            return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+          }
+        },
+      }),
+
+      // ── Thread-title generation ──────────────────────────────────────────────
+      // Org-scoped on/off switch plus an optional writer model. `null` model
+      // falls back to the provider-aware cheap-model pack; a disabled setting
+      // names nothing and costs nothing.
+
+      registerApiRoute('/web/config/title-generation', {
+        method: 'GET',
+        requiresAuth: false,
+        handler: async c => {
+          const context = await resolveTitleSettingsContext({
+            c: loose(c),
+            auth,
+            titleSettings: options.titleSettings,
+          });
+          if ('response' in context) return context.response;
+          try {
+            const record = await options.titleSettings!.get({ orgId: context.orgId });
+            return c.json({ config: resolveTitleGenerationSetting(record) });
+          } catch (error) {
+            return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+          }
+        },
+      }),
+
+      registerApiRoute('/web/config/title-generation', {
+        method: 'PUT',
+        requiresAuth: false,
+        handler: async c => {
+          let body: { enabled?: unknown; modelId?: unknown; thinkingLevel?: unknown };
+          try {
+            const parsed: unknown = await c.req.json();
+            if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+              return c.json({ error: 'Request body must be a JSON object' }, 400);
+            }
+            body = parsed as { enabled?: unknown; modelId?: unknown; thinkingLevel?: unknown };
+          } catch {
+            return c.json({ error: 'Invalid JSON body' }, 400);
+          }
+          if (body.enabled === undefined && body.modelId === undefined && body.thinkingLevel === undefined) {
+            return c.json({ error: 'Provide enabled, modelId, and/or thinkingLevel' }, 400);
+          }
+          if (body.enabled !== undefined && typeof body.enabled !== 'boolean') {
+            return c.json({ error: 'Invalid enabled — expected a boolean' }, 400);
+          }
+          if (
+            body.modelId !== undefined &&
+            body.modelId !== null &&
+            (typeof body.modelId !== 'string' || !body.modelId.trim())
+          ) {
+            return c.json({ error: 'Invalid modelId — expected a non-empty string or null' }, 400);
+          }
+          if (
+            body.thinkingLevel !== undefined &&
+            body.thinkingLevel !== null &&
+            !isThinkingLevelSetting(body.thinkingLevel)
+          ) {
+            return c.json(
+              { error: `Invalid thinkingLevel — expected one of: ${THINKING_LEVEL_VALUES.join(', ')}` },
+              400,
+            );
+          }
+          const context = await resolveTitleSettingsContext({
+            c: loose(c),
+            auth,
+            titleSettings: options.titleSettings,
+          });
+          if ('response' in context) return context.response;
+          try {
+            const record = await options.titleSettings!.patch({
+              orgId: context.orgId,
+              patch: {
+                ...(body.enabled !== undefined ? { enabled: body.enabled } : {}),
+                ...(body.modelId !== undefined ? { modelId: body.modelId === null ? null : body.modelId.trim() } : {}),
+                ...(body.thinkingLevel !== undefined
+                  ? { thinkingLevel: body.thinkingLevel === null ? null : body.thinkingLevel }
+                  : {}),
+              },
+            });
+            return c.json({ ok: true, config: resolveTitleGenerationSetting(record) });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }

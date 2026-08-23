@@ -37,6 +37,7 @@ import { SettingsCard } from './SettingsCard';
 import { SettingsSubsection } from './SettingsSubsection';
 import { OMSection } from './OMSection';
 import { BaseThinkingSection, ModeThinkingDefaultsSection } from './ThinkingDefaultsSection';
+import { TitleGenerationSection } from './TitleGenerationSection';
 import { ProviderAccessSection } from './ProviderAccessSection';
 import { BehaviorSettings, GeneralSettings, ModelSettings } from './SettingsPanel.parts';
 
@@ -251,6 +252,7 @@ function ModelsSettingsSection({ models, settings, updating, onBehaviorChange }:
         <SettingsCard>
           <FactoryDefaultModelSection models={models} />
           <BaseThinkingSection />
+          <TitleGenerationSection models={models} />
         </SettingsCard>
       </SettingsSubsection>
       <SettingsSubsection id="model-packs" title="Your defaults" description="Applied to your interactive chats.">
