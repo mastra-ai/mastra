@@ -318,6 +318,63 @@ describe('useEnvironmentVariablesEditor row identity', () => {
     expect(result.current.getRowId(7)).toBe(madeUp);
   });
 
+  it('gives pasted rows their own ids without disturbing the rows around them', () => {
+    const { result } = renderHook(() =>
+      useEnvironmentVariablesEditor({
+        initialRows: [
+          { key: 'A', value: '1' },
+          { key: 'B', value: '2' },
+          { key: 'C', value: '3' },
+        ],
+      }),
+    );
+
+    const [idA, idB, idC] = [0, 1, 2].map(index => result.current.getRowId(index));
+
+    act(() => {
+      result.current.handlePaste(1, 'N1=1\nN2=2');
+    });
+
+    expect(result.current.rows.map(row => row.key)).toEqual(['A', 'B', 'N1', 'N2', 'C']);
+
+    const ids = [0, 1, 2, 3, 4].map(index => result.current.getRowId(index));
+    expect(ids[0]).toBe(idA);
+    expect(ids[1]).toBe(idB);
+    // C slid down two slots and kept its own id, and nothing shares an id.
+    expect(ids[4]).toBe(idC);
+    expect(new Set(ids).size).toBe(5);
+  });
+
+  it('gives rows pasted over the draft row fresh ids of their own', () => {
+    type ScopedRow = EnvironmentVariableRow & { scope: 'shared' | 'project' };
+
+    const { result } = renderHook(() =>
+      useCustomEnvironmentVariablesEditor<ScopedRow>({
+        initialRows: [
+          { scope: 'shared', key: 'SHARED', value: 'kept' },
+          { scope: 'project', key: '', value: '' },
+        ],
+        createDefaultRow: () => ({ scope: 'project', key: '', value: '' }),
+        createRow: entry => ({ scope: 'project', ...entry }),
+        getEditableRows: rows => rows.filter(row => row.scope === 'project'),
+        getPreservedRows: rows => rows.filter(row => row.scope === 'shared'),
+      }),
+    );
+
+    const sharedId = result.current.getRowId(0);
+    const draftId = result.current.getRowId(1);
+
+    act(() => {
+      result.current.handlePaste(1, 'A=1\nB=2');
+    });
+
+    const ids = [0, 1, 2].map(index => result.current.getRowId(index));
+    expect(ids[0]).toBe(sharedId);
+    // The draft row is gone, so the rows that took its place start on new ids.
+    expect(ids).not.toContain(draftId);
+    expect(new Set(ids).size).toBe(3);
+  });
+
   it('gives a reset set of rows fresh ids', () => {
     const { result } = renderHook(() => useEnvironmentVariablesEditor({ initialRows: [{ key: 'A', value: '1' }] }));
 
@@ -504,14 +561,31 @@ describe('useEnvironmentVariablesEditor paste', () => {
     expect(result.current.rows.map(row => row.key)).toEqual(['FIRST', 'A', 'B']);
   });
 
-  it('clears a standing upload error', () => {
-    const { result } = renderHook(() => useEnvironmentVariablesEditor());
+  it('clears a standing upload error', async () => {
+    const { result } = renderHook(() => useEnvironmentVariablesEditor({ maxUploadSize: 4 }));
+
+    await act(async () => {
+      await result.current.handleFileUpload(
+        fileUploadEvent(new File(['API_KEY=a-very-long-secret'], '.env', { type: 'text/plain' })),
+      );
+    });
+    expect(result.current.uploadError).not.toBeNull();
 
     act(() => {
       result.current.handlePaste(0, 'A=1\nB=2');
     });
 
     expect(result.current.uploadError).toBeNull();
+  });
+
+  it('refuses a line that assigns to nothing', () => {
+    const { result } = renderHook(() => useEnvironmentVariablesEditor({ initialRows: [{ key: 'A', value: '1' }] }));
+
+    act(() => {
+      expect(result.current.handlePaste(0, '=orphan')).toBe(false);
+    });
+
+    expect(result.current.rows).toEqual([{ key: 'A', value: '1' }]);
   });
 });
 
@@ -659,10 +733,60 @@ describe('useEnvironmentVariablesEditor pasted text', () => {
 
     expect(result.current.rows).toEqual([{ key: 'API_KEY', value: 'secret' }]);
   });
+
+  it('reads an assignment buried mid-line as a value, not a variable', () => {
+    const { result } = renderHook(() => useEnvironmentVariablesEditor({ initialRows: [{ key: 'A', value: '1' }] }));
+
+    act(() => {
+      expect(result.current.handlePaste(0, 'prefix_TOKEN=abc')).toBe(false);
+    });
+
+    expect(result.current.rows).toEqual([{ key: 'A', value: '1' }]);
+  });
+
+  it('accepts an export written with extra spacing', () => {
+    const { result } = renderHook(() => useEnvironmentVariablesEditor());
+
+    act(() => {
+      expect(result.current.handlePaste(0, 'export   API_KEY=secret')).toBe(true);
+    });
+
+    expect(result.current.rows).toEqual([{ key: 'API_KEY', value: 'secret' }]);
+  });
+
+  it('accepts an assignment padded around its equals sign', () => {
+    const { result } = renderHook(() => useEnvironmentVariablesEditor());
+
+    act(() => {
+      expect(result.current.handlePaste(0, 'API_KEY = secret')).toBe(true);
+    });
+
+    expect(result.current.rows).toEqual([{ key: 'API_KEY', value: 'secret' }]);
+  });
+
+  it('accepts a single assignment carrying the comment line above it', () => {
+    const { result } = renderHook(() => useEnvironmentVariablesEditor({ initialRows: [{ key: 'A', value: '1' }] }));
+
+    act(() => {
+      expect(result.current.handlePaste(0, '# from staging\nAPI_KEY=secret')).toBe(true);
+    });
+
+    expect(result.current.rows).toEqual([
+      { key: 'A', value: '1' },
+      { key: 'API_KEY', value: 'secret' },
+    ]);
+  });
 });
 
 describe('useEnvironmentVariablesEditor uploads', () => {
   const envFile = (text: string) => new File([text], '.env', { type: 'text/plain' });
+
+  /** jsdom refuses to fake a chosen filename on a real file input, so a plain one stands in. */
+  const fileInputHolding = (previousSelection: string) => {
+    const input = document.createElement('input');
+    input.value = previousSelection;
+    return input;
+  };
 
   it('replaces a row holding nothing but whitespace', async () => {
     const { result } = renderHook(() => useEnvironmentVariablesEditor({ initialRows: [{ key: '   ', value: '' }] }));
@@ -738,6 +862,59 @@ describe('useEnvironmentVariablesEditor uploads', () => {
     });
 
     expect(result.current.uploadError).toBeNull();
+  });
+
+  it('clears a standing error when the rows are reset', async () => {
+    const { result } = renderHook(() => useEnvironmentVariablesEditor({ maxUploadSize: 4 }));
+
+    await act(async () => {
+      await result.current.handleFileUpload(fileUploadEvent(envFile('API_KEY=a-very-long-secret')));
+    });
+    expect(result.current.uploadError).not.toBeNull();
+
+    act(() => {
+      result.current.resetRows();
+    });
+
+    expect(result.current.uploadError).toBeNull();
+  });
+
+  it('hides revealed values again once a file is imported', async () => {
+    const { result } = renderHook(() => useEnvironmentVariablesEditor({ initialRows: [{ key: 'KEEP', value: '9' }] }));
+
+    act(() => {
+      result.current.toggleValueVisibility(0);
+    });
+    expect(result.current.isValueRevealed(0)).toBe(true);
+
+    await act(async () => {
+      await result.current.handleFileUpload(fileUploadEvent(envFile('A=1')));
+    });
+
+    expect(result.current.isValueRevealed(0)).toBe(false);
+  });
+
+  it('empties the file input after an import, so the same file can be picked again', async () => {
+    const { result } = renderHook(() => useEnvironmentVariablesEditor());
+    result.current.fileInputRef.current = fileInputHolding('chosen.env');
+
+    await act(async () => {
+      await result.current.handleFileUpload(fileUploadEvent(envFile('A=1')));
+    });
+
+    expect(result.current.fileInputRef.current?.value).toBe('');
+  });
+
+  it('empties the file input after a refused file too', async () => {
+    const { result } = renderHook(() => useEnvironmentVariablesEditor({ maxUploadSize: 4 }));
+    result.current.fileInputRef.current = fileInputHolding('too-big.env');
+
+    await act(async () => {
+      await result.current.handleFileUpload(fileUploadEvent(envFile('API_KEY=a-very-long-secret')));
+    });
+
+    expect(result.current.uploadError).not.toBeNull();
+    expect(result.current.fileInputRef.current?.value).toBe('');
   });
 
   it('clears a standing error when the next upload succeeds', async () => {
