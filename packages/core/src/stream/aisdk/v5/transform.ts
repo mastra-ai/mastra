@@ -100,6 +100,18 @@ export function tryRepairJson(input: string): Record<string, any> | null {
 
 export type StreamPart =
   | Exclude<LanguageModelV2StreamPart, { type: 'finish' }>
+  // Present on newer AI SDK provider specs (V4 / AI SDK v7) but absent from the V2 union.
+  | {
+      type: 'reasoning-file';
+      data: string | Uint8Array;
+      mediaType: string;
+      providerMetadata?: SharedV2ProviderMetadata;
+    }
+  | {
+      type: 'custom';
+      kind: string;
+      providerMetadata?: SharedV2ProviderMetadata;
+    }
   | {
       type: 'finish';
       /** Includes 'tripwire' and 'retry' for processor scenarios */
@@ -115,6 +127,10 @@ export type StreamPart =
 
 export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: string }): ChunkType | undefined {
   switch (value.type) {
+    // Intentionally not converted: warnings are surfaced separately by the input stream.
+    case 'stream-start':
+      return;
+
     case 'response-metadata':
       return {
         type: 'response-metadata',
@@ -364,8 +380,42 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
         from: ChunkFrom.AGENT,
         payload: value.rawValue as Record<string, unknown>,
       };
+
+    case 'reasoning-file':
+      return {
+        type: 'reasoning-file',
+        runId: ctx.runId,
+        from: ChunkFrom.AGENT,
+        payload: {
+          data: value.data,
+          // URL-backed generated files flatten to URL strings, which are not base64.
+          base64: typeof value.data === 'string' && !isUrlString(value.data) ? value.data : undefined,
+          mimeType: value.mediaType,
+          ...(value.providerMetadata != null ? { providerMetadata: value.providerMetadata } : {}),
+        },
+      };
+
+    case 'custom':
+      return {
+        type: 'custom',
+        runId: ctx.runId,
+        from: ChunkFrom.AGENT,
+        payload: {
+          kind: value.kind,
+          ...(value.providerMetadata != null ? { providerMetadata: value.providerMetadata } : {}),
+        },
+      };
+
+    default:
+      // Unknown stream part types must not disappear silently: surface them as raw chunks
+      // so consumers opting into raw chunks still receive the provider data.
+      return {
+        type: 'raw',
+        runId: ctx.runId,
+        from: ChunkFrom.AGENT,
+        payload: value as Record<string, unknown>,
+      };
   }
-  return;
 }
 
 export type OutputChunkType<OUTPUT = undefined> =

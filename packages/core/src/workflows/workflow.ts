@@ -2540,6 +2540,14 @@ export class Workflow<
     disableScorers?: boolean;
     /** Optional pubsub instance for streaming events. If not provided, a new EventEmitterPubSub is created. */
     pubsub?: PubSub;
+    /**
+     * Overrides the workflow-wide `shouldPersistSnapshot` option for this run only.
+     * Used for transient runs that must never touch storage even when the workflow
+     * persists normally (e.g. per-chunk agent output-processor runs, #19605).
+     */
+    shouldPersistSnapshot?: WorkflowOptions['shouldPersistSnapshot'];
+    /** Overrides the workflow-wide tracing policy for this run only. */
+    tracingPolicy?: TracingPolicy;
   }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext>> {
     if (this.stepFlow.length === 0) {
       throw new Error(
@@ -2576,8 +2584,11 @@ export class Workflow<
         retryConfig: this.retryConfig,
         serializedStepGraph: this.serializedStepGraph,
         disableScorers: options?.disableScorers,
-        cleanup: () => this.#runs.delete(runIdToUse),
-        tracingPolicy: this.#options?.tracingPolicy,
+        cleanup: () => {
+          this.#runs.delete(runIdToUse);
+          this.executionEngine.clearRunPersistenceOverride(runIdToUse);
+        },
+        tracingPolicy: options?.tracingPolicy ?? this.#options?.tracingPolicy,
         workflowSteps: this.steps,
         validateInputs: this.#options?.validateInputs,
         workflowEngineType: this.engineType,
@@ -2586,7 +2597,11 @@ export class Workflow<
 
     this.#runs.set(runIdToUse, run);
 
-    const shouldPersistSnapshot = this.#options.shouldPersistSnapshot({
+    if (options?.shouldPersistSnapshot) {
+      this.executionEngine.setRunPersistenceOverride(runIdToUse, options.shouldPersistSnapshot);
+    }
+
+    const shouldPersistSnapshot = (options?.shouldPersistSnapshot ?? this.#options.shouldPersistSnapshot)({
       workflowStatus: run.workflowRunStatus,
       stepResults: {},
     });

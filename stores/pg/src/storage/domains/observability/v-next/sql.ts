@@ -7,6 +7,7 @@
  */
 
 import { parseSqlIdentifier } from '@mastra/core/utils';
+import { sanitizeJsonForPg } from '../../../db/sanitize-json';
 import { qualifiedTable } from './ddl';
 import {
   buildNamedSelectColumns,
@@ -25,10 +26,16 @@ import {
  * Encode a JS value for a `$N::jsonb` cast. Always `JSON.stringify` so a
  * plain string like `"hello"` becomes `"hello"` (a valid JSON scalar) and
  * not the bare word `hello`, which Postgres rejects when cast to jsonb.
+ *
+ * The result is sanitized because Postgres rejects some sequences that are
+ * legal in JSON: NUL (`\u0000`) fails with 22P05 and unpaired UTF-16
+ * surrogates fail with 22P02. Inserts here are batched into a single
+ * multi-row statement, so one bad value would otherwise reject the whole
+ * batch of observability events.
  */
 function encodeJsonb(value: unknown): string | null {
   if (value === null || value === undefined) return null;
-  return JSON.stringify(value);
+  return sanitizeJsonForPg(JSON.stringify(value));
 }
 
 /**
