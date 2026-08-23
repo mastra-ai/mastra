@@ -2,7 +2,8 @@
 import { MastraReactProvider } from '@mastra/react';
 import { act, renderHook } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { DEFAULT_TRACE_COLUMN_PREFERENCES } from '../../trace-list-columns';
 import { useTraceColumnPreferences } from '../use-trace-column-preferences';
 
 function createMemoryStorage(): Storage {
@@ -19,9 +20,11 @@ function createMemoryStorage(): Storage {
   };
 }
 
-function makeWrapper(baseUrl: string) {
+function makeWrapper(baseUrl: string, apiPrefix?: string) {
   return ({ children }: { children: ReactNode }) => (
-    <MastraReactProvider baseUrl={baseUrl}>{children}</MastraReactProvider>
+    <MastraReactProvider baseUrl={baseUrl} apiPrefix={apiPrefix}>
+      {children}
+    </MastraReactProvider>
   );
 }
 
@@ -75,6 +78,162 @@ describe('useTraceColumnPreferences', () => {
         visibleColumns: ['input', 'entity', 'duration'],
         metadataKeys: ['tenantId'],
       });
+    });
+
+    it('separates projects that share a host but not an API prefix', () => {
+      const defaultPrefix = renderHook(() => useTraceColumnPreferences(), {
+        wrapper: makeWrapper('http://project-a.test'),
+      });
+
+      act(() => {
+        defaultPrefix.result.current.toggleColumn('duration');
+      });
+      defaultPrefix.unmount();
+
+      const otherPrefix = renderHook(() => useTraceColumnPreferences(), {
+        wrapper: makeWrapper('http://project-a.test', '/custom-api'),
+      });
+
+      expect(otherPrefix.result.current.preferences).toEqual(DEFAULT_TRACE_COLUMN_PREFERENCES);
+    });
+  });
+
+  describe('when the columns are edited', () => {
+    const renderPreferences = () =>
+      renderHook(() => useTraceColumnPreferences(), { wrapper: makeWrapper('http://project-a.test') });
+
+    it('toggles a column off again', () => {
+      const { result } = renderPreferences();
+
+      act(() => {
+        result.current.toggleColumn('duration');
+      });
+      expect(result.current.preferences.visibleColumns).toEqual(['input', 'entity', 'duration']);
+
+      act(() => {
+        result.current.toggleColumn('duration');
+      });
+      expect(result.current.preferences.visibleColumns).toEqual(['input', 'entity']);
+
+      act(() => {
+        result.current.toggleColumn('input');
+      });
+      expect(result.current.preferences.visibleColumns).toEqual(['entity']);
+    });
+
+    it('removes a metadata column without touching the others', () => {
+      const { result } = renderPreferences();
+
+      act(() => {
+        result.current.addMetadataColumn('tenantId');
+        result.current.addMetadataColumn('requestKind');
+      });
+      expect(result.current.preferences.metadataKeys).toEqual(['tenantId', 'requestKind']);
+
+      act(() => {
+        result.current.removeMetadataColumn('tenantId');
+      });
+      expect(result.current.preferences.metadataKeys).toEqual(['requestKind']);
+
+      act(() => {
+        result.current.removeMetadataColumn('not-there');
+      });
+      expect(result.current.preferences.metadataKeys).toEqual(['requestKind']);
+    });
+
+    it('trims a metadata key and ignores a blank or duplicate one', () => {
+      const { result } = renderPreferences();
+
+      act(() => {
+        result.current.addMetadataColumn('  tenantId  ');
+      });
+      expect(result.current.preferences.metadataKeys).toEqual(['tenantId']);
+
+      act(() => {
+        result.current.addMetadataColumn('tenantId');
+        result.current.addMetadataColumn('   ');
+        result.current.addMetadataColumn('');
+      });
+      expect(result.current.preferences.metadataKeys).toEqual(['tenantId']);
+    });
+
+    it('resets back to the default columns', () => {
+      const { result } = renderPreferences();
+
+      act(() => {
+        result.current.toggleColumn('duration');
+        result.current.addMetadataColumn('tenantId');
+      });
+
+      act(() => {
+        result.current.resetColumns();
+      });
+
+      expect(result.current.preferences).toEqual(DEFAULT_TRACE_COLUMN_PREFERENCES);
+    });
+  });
+
+  describe('when storage is involved', () => {
+    it('does not write anything until the columns are edited', () => {
+      const setItem = vi.spyOn(window.localStorage, 'setItem');
+
+      const { unmount } = renderHook(() => useTraceColumnPreferences(), {
+        wrapper: makeWrapper('http://project-a.test'),
+      });
+      unmount();
+
+      expect(setItem).not.toHaveBeenCalled();
+    });
+
+    it('does not persist one project’s edits under another project’s key', () => {
+      let baseUrl = 'http://project-a.test';
+      const Wrapper = ({ children }: { children: ReactNode }) => (
+        <MastraReactProvider baseUrl={baseUrl}>{children}</MastraReactProvider>
+      );
+
+      const { result, rerender } = renderHook(() => useTraceColumnPreferences(), { wrapper: Wrapper });
+
+      act(() => {
+        result.current.toggleColumn('duration');
+      });
+
+      baseUrl = 'http://project-b.test';
+      rerender();
+
+      // Project B shows its own (default) columns...
+      expect(result.current.preferences).toEqual(DEFAULT_TRACE_COLUMN_PREFERENCES);
+      // ...and project A's edit was not copied onto B's key.
+      expect(window.localStorage.getItem('mastra:traces:columns:http://project-b.test:/api')).toBeNull();
+    });
+
+    it('falls back to the default columns when storage cannot be read', () => {
+      vi.spyOn(window.localStorage, 'getItem').mockImplementation(() => {
+        throw new Error('SecurityError');
+      });
+
+      const { result } = renderHook(() => useTraceColumnPreferences(), {
+        wrapper: makeWrapper('http://project-a.test'),
+      });
+
+      expect(result.current.preferences).toEqual(DEFAULT_TRACE_COLUMN_PREFERENCES);
+      vi.restoreAllMocks();
+    });
+
+    it('keeps editing in memory when storage cannot be written', () => {
+      vi.spyOn(window.localStorage, 'setItem').mockImplementation(() => {
+        throw new Error('QuotaExceededError');
+      });
+
+      const { result } = renderHook(() => useTraceColumnPreferences(), {
+        wrapper: makeWrapper('http://project-a.test'),
+      });
+
+      act(() => {
+        result.current.toggleColumn('duration');
+      });
+
+      expect(result.current.preferences.visibleColumns).toEqual(['input', 'entity', 'duration']);
+      vi.restoreAllMocks();
     });
   });
 });
