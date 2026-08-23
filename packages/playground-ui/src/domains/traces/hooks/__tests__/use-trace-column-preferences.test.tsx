@@ -28,6 +28,8 @@ function makeWrapper(baseUrl: string, apiPrefix?: string) {
   );
 }
 
+const STORAGE_KEY_PREFIX = 'mastra:traces:columns:';
+
 describe('useTraceColumnPreferences', () => {
   beforeEach(() => {
     Object.defineProperty(window, 'localStorage', {
@@ -78,6 +80,31 @@ describe('useTraceColumnPreferences', () => {
         visibleColumns: ['input', 'entity', 'duration'],
         metadataKeys: ['tenantId'],
       });
+    });
+
+    it('keys storage on the project URL and the default API prefix', () => {
+      const { result } = renderHook(() => useTraceColumnPreferences(), {
+        wrapper: makeWrapper('http://project-a.test'),
+      });
+
+      act(() => {
+        result.current.toggleColumn('duration');
+      });
+
+      expect(window.localStorage.getItem(`${STORAGE_KEY_PREFIX}http://project-a.test:/api`)).not.toBeNull();
+    });
+
+    it('falls back to the page origin when the client has no base URL', () => {
+      const { result } = renderHook(() => useTraceColumnPreferences(), {
+        wrapper: ({ children }: { children: ReactNode }) => <MastraReactProvider>{children}</MastraReactProvider>,
+      });
+
+      act(() => {
+        result.current.toggleColumn('duration');
+      });
+
+      expect(window.location.origin).toBeTruthy();
+      expect(window.localStorage.getItem(`${STORAGE_KEY_PREFIX}${window.location.origin}:/api`)).not.toBeNull();
     });
 
     it('separates projects that share a host but not an API prefix', () => {
@@ -203,7 +230,14 @@ describe('useTraceColumnPreferences', () => {
       // Project B shows its own (default) columns...
       expect(result.current.preferences).toEqual(DEFAULT_TRACE_COLUMN_PREFERENCES);
       // ...and project A's edit was not copied onto B's key.
-      expect(window.localStorage.getItem('mastra:traces:columns:http://project-b.test:/api')).toBeNull();
+      expect(window.localStorage.getItem(`${STORAGE_KEY_PREFIX}http://project-b.test:/api`)).toBeNull();
+
+      // An edit made after the switch starts from B's columns, not A's.
+      act(() => {
+        result.current.toggleColumn('inputTokens');
+      });
+
+      expect(result.current.preferences.visibleColumns).toEqual(['input', 'entity', 'inputTokens']);
     });
 
     it('falls back to the default columns when storage cannot be read', () => {

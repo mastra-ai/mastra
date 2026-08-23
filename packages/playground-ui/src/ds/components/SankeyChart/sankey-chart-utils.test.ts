@@ -696,6 +696,27 @@ describe('SankeyChart utilities', () => {
       );
     });
 
+    it('sizes the far end of a ribbon against what its target receives', () => {
+      expect(linkOf('A', 'X')?.targetWidth).toBeCloseTo(17.454545, 5);
+      expect(linkOf('B', 'X')?.targetWidth).toBeCloseTo(5.818181, 5);
+      // X's two incoming ribbons together fill X's bar exactly.
+      expect((linkOf('A', 'X')?.targetWidth ?? 0) + (linkOf('B', 'X')?.targetWidth ?? 0)).toBeCloseTo(
+        nodeOf('X')?.height ?? 0,
+        5,
+      );
+    });
+
+    it('stacks incoming ribbons down a target bar', () => {
+      const first = linkOf('A', 'X');
+      const second = linkOf('B', 'X');
+
+      expect(second?.targetY).toBeGreaterThan(first?.targetY ?? 0);
+      expect((first?.targetY ?? 0) + (first?.targetWidth ?? 0) / 2).toBeCloseTo(
+        (second?.targetY ?? 0) - (second?.targetWidth ?? 0) / 2,
+        5,
+      );
+    });
+
     it('stacks a node’s ribbons instead of drawing them on top of each other', () => {
       const first = linkOf('A', 'X');
       const second = linkOf('A', 'Y');

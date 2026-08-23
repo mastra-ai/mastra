@@ -163,6 +163,12 @@ describe('useClampedElementCursor', () => {
       result.current.beginTracking({ clientX: 40, clientY: 90 });
     });
     expect(element.style.getPropertyValue('--cursor-y')).toBe('80px');
+
+    // The move handler must follow the same options, not the ones it closed over.
+    act(() => {
+      result.current.updateTracking({ clientX: 40, clientY: 50 });
+    });
+    expect(element.style.getPropertyValue('--cursor-y')).toBe('50px');
   });
 
   it('re-measures the element each time tracking begins', () => {
