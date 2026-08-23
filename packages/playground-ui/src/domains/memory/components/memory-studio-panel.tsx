@@ -51,10 +51,11 @@ export function MemoryStudioPanel({
   const [manualOMRecordId, setManualOMRecordId] = useState<string | null>(null);
 
   const markers = useMemo(() => extractOmMarkers(messages), [messages]);
-  const tDomain = useMemo(() => {
-    if (messages.length === 0) return { tMin: 0, tMax: 1 };
-    return timestampsToTDomain(messages.map(m => new Date(m.createdAt).toISOString()));
-  }, [messages]);
+  // timestampsToTDomain already returns the unit domain for an empty list.
+  const tDomain = useMemo(
+    () => timestampsToTDomain(messages.map(m => new Date(m.createdAt).toISOString())),
+    [messages],
+  );
   const windowState = useMemo(() => getLatestThreadContextWindowState({ markers, omRecords }), [markers, omRecords]);
 
   const memoryTokens = contextWindow?.memoryTokens ?? windowState?.memoryTokens;
