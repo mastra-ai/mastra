@@ -41,6 +41,11 @@ describe('workItemBranch', () => {
     );
   });
 
+  it('falls back when the linear identifier is empty or whitespace', () => {
+    expect(workItemBranch({ id, source: 'linear-issue', metadata: { identifier: '' } })).toBe(`factory/item-${id}`);
+    expect(workItemBranch({ id, source: 'linear-issue', metadata: { identifier: '  ' } })).toBe(`factory/item-${id}`);
+  });
+
   it('falls back to an id-derived branch when no provider identity applies', () => {
     expect(workItemBranch({ id, source: 'manual', metadata: null })).toBe(`factory/item-${id}`);
     expect(workItemBranch({ id, source: 'slack-thread' })).toBe(`factory/item-${id}`);

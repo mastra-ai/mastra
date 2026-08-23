@@ -46,7 +46,8 @@ export function workItemBranch(item: WorkItemBranchInput): string {
     if (pullRequestNumber !== undefined) return `factory/pr-${pullRequestNumber}`;
   }
   if (item.source === 'linear-issue' && typeof metadata.identifier === 'string') {
-    return `factory/linear-${metadata.identifier.toLowerCase()}`;
+    const identifier = metadata.identifier.trim();
+    if (identifier) return `factory/linear-${identifier.toLowerCase()}`;
   }
   return `factory/item-${item.id}`;
 }
