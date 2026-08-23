@@ -1702,6 +1702,9 @@ export class DurableAgent<
         );
       }
     }
+    if (agentThreadStreamRuntime.isRunAborted(runId, this.getPubSub())) {
+      abortController.abort();
+    }
     registryEntry.abortController = abortController;
     registryEntry.abortSignal = abortController.signal;
 
@@ -1998,6 +2001,9 @@ export class DurableAgent<
           { once: true },
         );
       }
+    }
+    if (agentThreadStreamRuntime.isRunAborted(runId, this.getPubSub())) {
+      abortController.abort();
     }
     entry.abortController = abortController;
     entry.abortSignal = abortController.signal;
@@ -2608,6 +2614,9 @@ export class DurableAgent<
           { once: true },
         );
       }
+    }
+    if (agentThreadStreamRuntime.isRunAborted(runId, this.getPubSub())) {
+      abortController.abort();
     }
     registryEntry.abortController = abortController;
     registryEntry.abortSignal = abortController.signal;

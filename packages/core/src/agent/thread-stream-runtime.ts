@@ -840,6 +840,10 @@ export class AgentThreadStreamRuntime {
     };
   }
 
+  isRunAborted(runId: string, pubsub?: PubSub): boolean {
+    return this.#getState(pubsub).abortedRunIds.has(runId);
+  }
+
   abortRun(runId: string, pubsub?: PubSub): boolean {
     const state = this.#getState(pubsub);
     const preparedRun = state.preparedRunsById.get(runId);
