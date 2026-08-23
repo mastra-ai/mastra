@@ -76,6 +76,10 @@ export function reloadAuthStorage() {
   authStorage.reload();
 }
 
+export function getAuthStorage(): AuthStorage {
+  return authStorage;
+}
+
 export function stripMastraGatewayPrefix(modelId: string): string {
   return modelId.startsWith(MASTRA_GATEWAY_PREFIX) ? modelId.substring(MASTRA_GATEWAY_PREFIX.length) : modelId;
 }

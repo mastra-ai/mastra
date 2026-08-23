@@ -4,8 +4,7 @@ const generateTextMock = vi.hoisted(() => vi.fn());
 const resolveModelMock = vi.hoisted(() =>
   vi.fn(() => ({ __model: 'resolved', specificationVersion: 'v3', doGenerate: vi.fn() })),
 );
-const getAnthropicApiKeyMock = vi.hoisted(() => vi.fn<() => string | undefined>());
-const getOpenAIApiKeyMock = vi.hoisted(() => vi.fn<() => string | undefined>());
+const computeProviderAccessMock = vi.hoisted(() => vi.fn());
 const reloadAuthStorageMock = vi.hoisted(() => vi.fn());
 
 vi.mock('ai', () => ({
@@ -17,51 +16,57 @@ vi.mock('./model.js', () => ({
 }));
 
 vi.mock('./mastracode-gateway.js', () => ({
-  getAnthropicApiKey: () => getAnthropicApiKeyMock(),
-  getOpenAIApiKey: () => getOpenAIApiKeyMock(),
+  getAuthStorage: () => ({ get: () => undefined }),
+  MastraCodeGateway: { getMastraGatewayApiKey: () => undefined },
   reloadAuthStorage: reloadAuthStorageMock,
+}));
+
+vi.mock('../onboarding/provider-access.js', () => ({
+  computeProviderAccess: computeProviderAccessMock,
 }));
 
 import { generateThreadTitle, resolveDefaultThreadTitleModel } from './thread-title.js';
 
+const NO_ACCESS = {
+  anthropic: false,
+  openai: false,
+  cerebras: false,
+  google: false,
+  deepseek: false,
+  'github-copilot': false,
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   generateTextMock.mockResolvedValue({ text: 'Auth bug fix' });
+  computeProviderAccessMock.mockReturnValue({ ...NO_ACCESS, anthropic: 'apikey' });
 });
 
 describe('resolveDefaultThreadTitleModel', () => {
-  it('prefers Anthropic Haiku when an Anthropic key resolves', () => {
-    getAnthropicApiKeyMock.mockReturnValue('sk-ant');
-    expect(resolveDefaultThreadTitleModel()).toEqual({ modelId: 'anthropic/claude-haiku-4-5' });
+  it('reuses the OM cheap-model pack for the best reachable provider', () => {
+    expect(resolveDefaultThreadTitleModel()).toBe('anthropic/claude-haiku-4-5');
   });
 
-  it('falls back to OpenAI Luna at low thinking when only OpenAI credentials resolve', () => {
-    getAnthropicApiKeyMock.mockReturnValue(undefined);
-    getOpenAIApiKeyMock.mockReturnValue('sk-oai');
-    expect(resolveDefaultThreadTitleModel()).toEqual({ modelId: 'openai/gpt-5.6-luna', thinkingLevel: 'low' });
+  it('falls through to OpenAI when only OpenAI is reachable', () => {
+    computeProviderAccessMock.mockReturnValue({ ...NO_ACCESS, openai: 'oauth' });
+    expect(resolveDefaultThreadTitleModel()).toBe('openai/gpt-5.4-mini');
   });
 
-  it('returns undefined when no provider has credentials', () => {
-    getAnthropicApiKeyMock.mockReturnValue(undefined);
-    getOpenAIApiKeyMock.mockReturnValue(undefined);
+  it('returns undefined when no provider is reachable', () => {
+    computeProviderAccessMock.mockReturnValue(NO_ACCESS);
     expect(resolveDefaultThreadTitleModel()).toBeUndefined();
   });
 });
 
 describe('generateThreadTitle', () => {
   it('generates with the default model for the first credentialed provider', async () => {
-    getAnthropicApiKeyMock.mockReturnValue(undefined);
-    getOpenAIApiKeyMock.mockReturnValue('sk-oai');
-
     const title = await generateThreadTitle({ prompt: 'Fix the login redirect loop' });
 
     expect(title).toBe('Auth bug fix');
-    expect(resolveModelMock).toHaveBeenCalledWith('openai/gpt-5.6-luna', { thinkingLevel: 'low' });
+    expect(resolveModelMock).toHaveBeenCalledWith('anthropic/claude-haiku-4-5', {});
   });
 
   it('uses the explicit model and thinking level when given', async () => {
-    getAnthropicApiKeyMock.mockReturnValue('sk-ant');
-
     await generateThreadTitle({
       prompt: 'Fix the login redirect loop',
       model: 'google/gemini-2.5-flash',
@@ -72,13 +77,11 @@ describe('generateThreadTitle', () => {
   });
 
   it('forwards the request context so deployed tenants resolve their own credentials', async () => {
-    getAnthropicApiKeyMock.mockReturnValue(undefined);
-    getOpenAIApiKeyMock.mockReturnValue('sk-oai');
     const requestContext = { get: vi.fn() };
 
-    await generateThreadTitle({ prompt: 'hello', requestContext });
+    await generateThreadTitle({ prompt: 'hello', model: 'openai/gpt-5.4-mini', requestContext });
 
-    expect(resolveModelMock).toHaveBeenCalledWith('openai/gpt-5.6-luna', expect.objectContaining({ requestContext }));
+    expect(resolveModelMock).toHaveBeenCalledWith('openai/gpt-5.4-mini', expect.objectContaining({ requestContext }));
   });
 
   it('truncates the prompt sent to the model', async () => {
@@ -103,6 +106,12 @@ describe('generateThreadTitle', () => {
     expect(generateTextMock).not.toHaveBeenCalled();
   });
 
+  it('returns undefined when no provider is reachable', async () => {
+    computeProviderAccessMock.mockReturnValue(NO_ACCESS);
+    expect(await generateThreadTitle({ prompt: 'hello' })).toBeUndefined();
+    expect(generateTextMock).not.toHaveBeenCalled();
+  });
+
   it('returns undefined when the model output has no usable line', async () => {
     generateTextMock.mockResolvedValue({ text: '\n \n' });
     expect(await generateThreadTitle({ prompt: 'hello' })).toBeUndefined();
@@ -115,6 +124,8 @@ describe('generateThreadTitle', () => {
 
   it('fails loud when the resolved model does not speak an AI SDK v2/v3 interface', async () => {
     resolveModelMock.mockReturnValueOnce({ specificationVersion: 'v4' });
-    await expect(generateThreadTitle({ prompt: 'hello' })).rejects.toThrow('cannot generate thread titles');
+    await expect(generateThreadTitle({ prompt: 'hello', model: 'openai/gpt-5.4-mini' })).rejects.toThrow(
+      'cannot generate thread titles',
+    );
   });
 });

@@ -1,7 +1,7 @@
+import { MessageList } from '@mastra/core/agent/message-list';
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import type { ProcessInputArgs } from '@mastra/core/processors';
-import type { RequestContext } from '@mastra/core/request-context';
-import type { StorageThreadType } from '@mastra/core/storage';
+import { RequestContext } from '@mastra/core/request-context';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const generateThreadTitleMock = vi.hoisted(() => vi.fn());
@@ -13,27 +13,27 @@ import { createThreadTitleGenerator, FactoryThreadTitleProcessor, type ThreadTit
 
 function userMessage(text: string): MastraDBMessage {
   return {
-    id: `msg-${Math.random()}`,
+    id: 'msg-1',
     role: 'user',
     threadId: 'thread-1',
     resourceId: 'resource-1',
     createdAt: new Date(),
     content: { format: 2, parts: [{ type: 'text', text }] },
-  } as unknown as MastraDBMessage;
+  };
 }
 
 function assistantMessage(): MastraDBMessage {
   return {
-    id: 'assistant-1',
+    id: 'msg-2',
     role: 'assistant',
     threadId: 'thread-1',
     resourceId: 'resource-1',
     createdAt: new Date(),
     content: { format: 2, parts: [{ type: 'text', text: 'Working on it.' }] },
-  } as unknown as MastraDBMessage;
+  };
 }
 
-function threadRow(title?: string): StorageThreadType {
+function threadRow(title?: string) {
   return { id: 'thread-1', resourceId: 'resource-1', title, createdAt: new Date(), updatedAt: new Date() };
 }
 
@@ -41,7 +41,7 @@ function createThreads({ title }: { title?: string } = {}) {
   let current = threadRow(title);
   const threads: ThreadTitleThreads & { getThreadById: ReturnType<typeof vi.fn>; setTitle(title: string): void } = {
     getThreadById: vi.fn(async () => current),
-    updateThread: vi.fn(async ({ title: next }: { title?: string }) => {
+    updateThread: vi.fn(async ({ title: next }: { id: string; title?: string }) => {
       current = { ...current, title: next };
       return current;
     }),
@@ -70,12 +70,16 @@ function createProcessor({
 function inputArgs(messages: MastraDBMessage[], requestContext?: RequestContext): ProcessInputArgs {
   return {
     messages,
+    messageList: new MessageList(),
     requestContext,
     abortSignal: undefined,
     state: {},
     systemMessages: [],
     retryCount: 0,
-  } as unknown as ProcessInputArgs;
+    abort: () => {
+      throw new Error('not used');
+    },
+  };
 }
 
 beforeEach(() => {
@@ -99,7 +103,7 @@ describe('FactoryThreadTitleProcessor', () => {
   it('passes the run request context to the generator so tenant credentials resolve', async () => {
     const threads = createThreads();
     const { processor, generateTitle } = createProcessor({ threads });
-    const requestContext = {} as RequestContext;
+    const requestContext = new RequestContext();
 
     await processor.processInput(inputArgs([userMessage('hello')], requestContext));
     await vi.waitFor(() => expect(threads.updateThread).toHaveBeenCalled());
@@ -123,7 +127,6 @@ describe('FactoryThreadTitleProcessor', () => {
     const { processor } = createProcessor({
       threads,
       generateTitle: async () => {
-        // The user renames through another surface while the request runs.
         threads.setTitle('My own name');
         return 'Login redirect fix';
       },
