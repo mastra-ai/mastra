@@ -19,8 +19,8 @@ export const getContentPadding = (contentElement: HTMLElement | null) => {
   if (!contentElement) return { start: 0, end: 0 };
   const styles = window.getComputedStyle(contentElement);
   return {
-    start: Number.parseFloat(styles.paddingBlockStart || styles.paddingTop || '0') || 0,
-    end: Number.parseFloat(styles.paddingBlockEnd || styles.paddingBottom || '0') || 0,
+    start: Number.parseFloat(styles.paddingBlockStart || styles.paddingTop) || 0,
+    end: Number.parseFloat(styles.paddingBlockEnd || styles.paddingBottom) || 0,
   };
 };
 

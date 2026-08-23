@@ -139,8 +139,24 @@ describe('CodeBlock — its header', () => {
 
     expect(screen.getByText('index.ts')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Run' })).toBeTruthy();
+    expect(screen.getByText('index.ts').parentElement?.childElementCount).toBe(2);
+  });
+
+  it('leaves no empty slot beside the file name when there are no actions', () => {
+    renderBlock(<CodeBlock code="const a = 1" fileName="index.ts" />);
+
+    expect(screen.getByText('index.ts').parentElement?.childElementCount).toBe(1);
   });
 });
+
+/** The row holding the tab list, and anything the caller put beside it. */
+const tabHeaderRow = () => screen.getByRole('tablist').parentElement?.parentElement?.parentElement;
+
+/**
+ * The row holding the select, and anything the caller put beside it. The select
+ * itself contributes two children: the trigger and a hidden field behind it.
+ */
+const selectHeaderRow = () => screen.getByRole('combobox').parentElement;
 
 describe('CodeBlock — choosing between variants', () => {
   it('offers a select by default', () => {
@@ -198,6 +214,13 @@ describe('CodeBlock — choosing between variants', () => {
 
     expect(screen.getByRole('button', { name: 'Run' })).toBeTruthy();
     expect(screen.getAllByRole('tab')).toHaveLength(2);
+    expect(tabHeaderRow()?.childElementCount).toBe(2);
+  });
+
+  it('leaves no empty slot beside the tabs when there are no actions', () => {
+    renderBlock(<CodeBlock code="npm i" options={OPTIONS} selector="tabs" />);
+
+    expect(tabHeaderRow()?.childElementCount).toBe(1);
   });
 
   it('puts actions beside the select', () => {
@@ -205,6 +228,22 @@ describe('CodeBlock — choosing between variants', () => {
 
     expect(screen.getByRole('button', { name: 'Run' })).toBeTruthy();
     expect(screen.getByRole('combobox')).toBeTruthy();
+    expect(selectHeaderRow()?.childElementCount).toBe(3);
+  });
+
+  it('leaves no empty slot beside the select when there are no actions', () => {
+    renderBlock(<CodeBlock code="npm i" options={OPTIONS} />);
+
+    expect(selectHeaderRow()?.childElementCount).toBe(2);
+  });
+
+  it('lists every option in the select', async () => {
+    renderBlock(<CodeBlock code="npm i" options={OPTIONS} />);
+
+    fireEvent.click(screen.getByRole('combobox'));
+
+    const items = await screen.findAllByRole('option');
+    expect(items.map(item => item.textContent)).toEqual(OPTIONS.map(option => option.label));
   });
 });
 

@@ -143,6 +143,13 @@ describe('getScrollTarget', () => {
     expect(target('center', item, viewport)).toBe(300 - 20 - 175);
   });
 
+  it('lifts a centred message further to leave room above it', () => {
+    const viewport = makeViewport({ clientHeight: 500 });
+    const item = makeItem({ top: 300, height: 100, paddingStart: 20, paddingEnd: 30 });
+
+    expect(target('center', item, viewport, 16)).toBe(300 - 20 - 175 - 16);
+  });
+
   it('never centres against a negative readable area', () => {
     const viewport = makeViewport({ clientHeight: 10 });
     const item = makeItem({ top: 300, height: 100, paddingStart: 40, paddingEnd: 40 });
@@ -156,6 +163,13 @@ describe('getScrollTarget', () => {
     const item = makeItem({ top: 900, height: 100, paddingEnd: 30 });
 
     expect(target('end', item, viewport)).toBe(900 - 500 + 100 + 30);
+  });
+
+  it('leaves room below the message when asked to', () => {
+    const viewport = makeViewport({ clientHeight: 500 });
+    const item = makeItem({ top: 900, height: 100, paddingEnd: 30 });
+
+    expect(target('end', item, viewport, 16)).toBe(900 - 500 + 100 + 30 + 16);
   });
 
   describe('nearest', () => {
@@ -182,17 +196,43 @@ describe('getScrollTarget', () => {
     });
 
     it('counts a message resting exactly on the top edge as in view', () => {
+      // The message starts level with the viewport's own top: scrolled 100
+      // down, its box sits at 0 and the readable area starts 20 lower.
       const viewport = makeViewport({ clientHeight: 500, scrollTop: 100 });
-      const item = makeItem({ top: 100, height: 100 });
+      const item = makeItem({ top: 20, height: 100, paddingStart: 20 });
 
-      expect(target('nearest', item, viewport)).toBe(100);
+      expect(target('nearest', item, viewport, 8)).toBe(100);
+    });
+
+    it('scrolls to a message that starts on the top edge but runs past the bottom', () => {
+      const viewport = makeViewport({ clientHeight: 500, scrollTop: 100 });
+      const item = makeItem({ top: 20, height: 900, paddingStart: 20 });
+
+      // Too tall to fit, so its end is brought to the bottom instead.
+      expect(target('nearest', item, viewport, 8)).toBe(120 + 900 - 500 + 8);
     });
 
     it('counts a message resting exactly on the bottom edge as in view', () => {
-      const viewport = makeViewport({ clientHeight: 500, scrollTop: 0 });
-      const item = makeItem({ top: 400, height: 100 });
+      // Its end lands exactly on the bottom of the readable area: 100 + 500 - 30.
+      const viewport = makeViewport({ clientHeight: 500, scrollTop: 100 });
+      const item = makeItem({ top: 370, height: 100, paddingEnd: 30 });
 
-      expect(target('nearest', item, viewport)).toBe(0);
+      expect(target('nearest', item, viewport, 8)).toBe(100);
+    });
+
+    it('scrolls to a message tucked under the padding at the top', () => {
+      // It is on screen, but the content padding covers where it starts.
+      const viewport = makeViewport({ clientHeight: 500, scrollTop: 100 });
+      const item = makeItem({ top: 0, height: 100, paddingStart: 20 });
+
+      expect(target('nearest', item, viewport, 8)).toBe(100 - 20 - 8);
+    });
+
+    it('scrolls to a message running under the padding at the bottom', () => {
+      const viewport = makeViewport({ clientHeight: 500, scrollTop: 100 });
+      const item = makeItem({ top: 400, height: 100, paddingEnd: 30 });
+
+      expect(target('nearest', item, viewport, 8)).toBe(600 - 500 + 30 + 8);
     });
   });
 });
@@ -246,6 +286,8 @@ describe('getCurrentAnchorId', () => {
 
   it('allows a sub-pixel overshoot past the line', () => {
     expect(anchorIdFor({ items: [['first', makeAnchor(0.4)]] })).toBe('first');
+    // Half a pixel over is still on the line; more than that is not.
+    expect(anchorIdFor({ items: [['first', makeAnchor(0.5)]] })).toBe('first');
     expect(anchorIdFor({ items: [['first', makeAnchor(0.6)]] })).toBeUndefined();
   });
 
