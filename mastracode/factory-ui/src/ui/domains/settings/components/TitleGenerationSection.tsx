@@ -4,6 +4,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
 import { useTitleGenerationQuery, useUpdateTitleGenerationMutation } from '../../../../hooks/use-title-generation';
+import type { TitleGenerationConfigInfo } from '../../../../api/types';
 
 import { ModelCombobox } from './ModelCombobox';
 import { Segmented, THINKING_LEVELS } from './SettingsPanel.parts';
@@ -12,11 +13,15 @@ import { SettingsRow } from './SettingsCard';
 /** Sentinel for "no thinking-level override — the model's default applies". */
 const USE_MODEL_DEFAULT = '__default__';
 
+/** Server defaults, applied when the config cannot be loaded (e.g. older API). */
+const FALLBACK_CONFIG: TitleGenerationConfigInfo = { enabled: true, modelId: null, thinkingLevel: null };
+
 function useTitleGenerationSection() {
   const configQuery = useTitleGenerationQuery();
   const update = useUpdateTitleGenerationMutation();
   const error = update.error ?? configQuery.error;
-  return { config: configQuery.data, update, error };
+  const config = configQuery.data ?? (configQuery.isError ? FALLBACK_CONFIG : undefined);
+  return { config, update, error };
 }
 
 /**

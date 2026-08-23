@@ -113,4 +113,22 @@ describe('TitleGenerationSection', () => {
     expect(await screen.findByText(/title_settings_unavailable/)).toBeInTheDocument();
     expect(within(toggle).getByRole('button', { name: 'On' })).toHaveAttribute('aria-pressed', 'true');
   });
+
+  it('stays usable with the server defaults when the config cannot be loaded', async () => {
+    server.use(http.get(TITLE_URL, () => HttpResponse.text('<!doctype html>', { status: 200 })));
+
+    const user = userEvent.setup();
+    const { client } = renderWithProviders(<TitleGenerationSection models={MODELS} />);
+
+    // The failed GET falls back to the server default (on) instead of dead buttons.
+    const toggle = await screen.findByRole('group', { name: 'Automatic thread titles' });
+    const onButton = within(toggle).getByRole('button', { name: 'On' });
+    await waitFor(() => expect(onButton).toBeEnabled());
+
+    server.use(http.put(TITLE_URL, () => HttpResponse.json({ ok: true, config: { ...enabledConfig, enabled: false } })));
+    await user.click(within(toggle).getByRole('button', { name: 'Off' }));
+
+    await waitForMutationsIdle(client);
+    expect(within(toggle).getByRole('button', { name: 'Off' })).toHaveAttribute('aria-pressed', 'true');
+  });
 });
