@@ -42,11 +42,12 @@ type RequestBody = {
 function makeWrapper({
   preset = '3d',
   filterTokens = [],
+  queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } }),
 }: {
   preset?: DatePreset;
   filterTokens?: PropertyFilterToken[];
+  queryClient?: QueryClient;
 } = {}) {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const customRange: DateRange | undefined = undefined;
 
   return ({ children }: { children: ReactNode }) => (
@@ -257,6 +258,23 @@ describe('useTokenUsageTimeSeries', () => {
     expect(result.current.data?.data[0]?.costUnit).toBeNull();
   });
 
+  it('drops the cost unit when only part of a bucket names one', async () => {
+    // Same bucket: the input side is priced in usd, the output side is priced
+    // in nothing at all. Adding them up gives a number in no known currency.
+    serveSeries(inputTokenSeries, unpricedUnitOutputTokenSeries);
+
+    const { result } = renderHook(() => useTokenUsageTimeSeries(), { wrapper: makeWrapper() });
+
+    await waitFor(() => expect(result.current.data?.data.length).toBeGreaterThan(0));
+
+    const shared = result.current.data?.data.find(
+      point => point.tsMs === new Date('2026-06-01T00:00:00.000Z').getTime(),
+    );
+    assert(shared, 'Expected the shared bucket');
+    expect(shared.cost).toBeCloseTo(0.042);
+    expect(shared.costUnit).toBeNull();
+  });
+
   it('leaves cost empty when the provider prices nothing', async () => {
     serveSeries(costlessInputTokenSeries, emptyTokenSeries);
 
@@ -275,6 +293,25 @@ describe('useTokenUsageTimeSeries', () => {
     await waitFor(() => expect(result.current.data?.data).toHaveLength(1));
 
     expect(result.current.data?.data[0]?.input).toBe(500);
+  });
+
+  it('keeps one interval\u2019s buckets out of another\u2019s cache', async () => {
+    serveSeries(hourlyInputTokenSeries, emptyTokenSeries);
+
+    // One client for both hooks, and nothing ever goes stale, so a shared cache
+    // entry would hand the second hook the first one's answer and keep it.
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+    });
+    const wrapperWith = (preset: DatePreset) => makeWrapper({ preset, queryClient });
+
+    const daily = renderHook(() => useTokenUsageTimeSeries(), { wrapper: wrapperWith('3d') });
+    await waitFor(() => expect(daily.result.current.data?.interval).toBe('1d'));
+
+    const hourly = renderHook(() => useTokenUsageTimeSeries(), { wrapper: wrapperWith('24h') });
+    await waitFor(() => expect(hourly.result.current.data?.interval).toBe('1h'));
+
+    expect(hourly.result.current.data?.data.map(point => point.time)).toEqual(['00:05', '13:45']);
   });
 
   it('returns an empty list when a response carries no series', async () => {
