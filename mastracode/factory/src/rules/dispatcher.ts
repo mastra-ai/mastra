@@ -14,7 +14,7 @@ import type {
   WorkItemsStorage,
 } from '../storage/domains/work-items/base.js';
 import { FACTORY_RULE_MATERIALIZATION_KEY } from '../storage/domains/work-items/base.js';
-import { FactoryDispatchError, factoryDispatchFailureCode } from './dispatch-errors.js';
+import { FactoryDispatchError, factoryDispatchFailureCode, factoryDispatchFailureMetadata } from './dispatch-errors.js';
 import type { FactoryTransitionService } from './transition-service.js';
 import type { FactoryCommitDecision, FactoryRuleActor, FactoryRuleCausalEntry } from './types.js';
 import { FACTORY_RULE_STAGES } from './types.js';
@@ -77,6 +77,7 @@ interface DispatcherSession extends SkillSession {
     options: { requestContext: RequestContext; requireDelivery?: boolean },
   ): { accepted: Promise<{ accepted: true; runId?: string; action?: string }> };
   subscribe(listener: AgentControllerEventListener): () => void;
+  respondToToolSuspension(input: { resumeData: unknown; toolCallId?: string }): Promise<void>;
 }
 
 type FactoryController = Pick<AgentController<MastraCodeState>, 'getSessionByResource'>;
@@ -95,6 +96,11 @@ export interface FactoryDecisionDispatcherOptions {
   ownerId?: string;
   /** `false` parks `invokeSkill` effects as `proposed`; every other effect still runs. */
   isAutoRunEnabled: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
+  /**
+   * Whether a run's plan must wait for a person. `false` lets the dispatcher
+   * approve plans on the project's behalf so started work carries to Done.
+   */
+  isPlanReviewEnabled?: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
   reconcileToolResults?: () => Promise<void>;
   prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
@@ -205,6 +211,7 @@ export class FactoryDecisionDispatcher {
   readonly #storage: WorkItemsStorage;
   readonly #ownerId: string;
   readonly #isAutoRunEnabled: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
+  readonly #isPlanReviewEnabled?: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
   readonly #reconcileToolResults?: () => Promise<void>;
   readonly #prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   readonly #primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
@@ -225,6 +232,7 @@ export class FactoryDecisionDispatcher {
     this.#storage = options.storage;
     this.#ownerId = options.ownerId ?? `factory-dispatcher:${randomUUID()}`;
     this.#isAutoRunEnabled = options.isAutoRunEnabled;
+    this.#isPlanReviewEnabled = options.isPlanReviewEnabled;
     this.#reconcileToolResults = options.reconcileToolResults;
     this.#prepareBinding = options.prepareBinding;
     this.#primeCredentials = options.primeCredentials;
@@ -384,13 +392,17 @@ export class FactoryDecisionDispatcher {
       const completed = await this.#storage.completeDeferredDecision(leaseIdentity(record, this.#ownerId), new Date());
       if (!completed) throw new Error('Factory decision lease was lost before completion.');
     } catch (error) {
-      const terminal = record.attempts >= MAX_ATTEMPTS;
+      const failureCode = factoryDispatchFailureCode(error);
+      // A failure the metadata marks non-retryable is terminal on the spot:
+      // rescheduling a decision that can never succeed only delays the moment
+      // a person sees why.
+      const terminal = record.attempts >= MAX_ATTEMPTS || !factoryDispatchFailureMetadata(failureCode).canRetry;
       await this.#storage.failDeferredDecision({
         ...leaseIdentity(record, this.#ownerId),
         now: new Date(),
         availableAt: retryAt(now, record.attempts),
         lastError: sanitizeDispatchError(error),
-        failureCode: factoryDispatchFailureCode(error),
+        failureCode,
         terminal,
       });
     }
@@ -547,6 +559,14 @@ export class FactoryDecisionDispatcher {
         // cancelled mid-flight; without this the decision reports success and
         // the break is invisible on the card.
         let endReason: 'complete' | 'aborted' | 'error' | 'suspended' | undefined;
+        // The plan gate: a suspended submit_plan parks the run until someone
+        // answers. With plan review off, the dispatcher answers for the project;
+        // with it on, the parked run fails this decision loudly so the pause is
+        // visible instead of a silent hang.
+        const planReviewRequired = this.#isPlanReviewEnabled
+          ? await this.#isPlanReviewEnabled({ orgId: record.orgId, factoryProjectId: record.factoryProjectId })
+          : true;
+        let parkedPlanCallId: string | undefined;
         // Re-armed before a redelivery so the second send waits on its own run's
         // ending rather than seeing the one that already resolved.
         const armAgentEnd = () => {
@@ -560,6 +580,23 @@ export class FactoryDecisionDispatcher {
           if (event.type === 'agent_end') {
             endReason = event.reason;
             resolveAgentEnd();
+            return;
+          }
+          if (event.type === 'tool_suspended' && event.toolName === 'submit_plan') {
+            parkedPlanCallId = event.toolCallId;
+            if (!planReviewRequired) {
+              session
+                .respondToToolSuspension({ resumeData: { action: 'approved' }, toolCallId: event.toolCallId })
+                .then(() => {
+                  // Answered on the project's behalf: no longer a pending gate.
+                  // Cleared before the resumed run's own ending so a long build
+                  // after the approval is not misread as a stalled plan.
+                  parkedPlanCallId = undefined;
+                })
+                .catch(error => {
+                  console.error('Factory automatic plan approval failed', sanitizeDispatchError(error));
+                });
+            }
           }
         });
 
@@ -620,6 +657,12 @@ export class FactoryDecisionDispatcher {
           // in error after accepting the prompt has still failed this decision.
           {
             const observed = await waitForAgentEndOrTimeout(agentEnd);
+            if (parkedPlanCallId !== undefined && (!observed || endReason === 'suspended')) {
+              throw new FactoryDispatchError(
+                'plan_awaiting_approval',
+                'Factory run wrote a plan and is waiting for it to be reviewed.',
+              );
+            }
             if (!observed) {
               console.warn('Factory skill run terminal event was not observed before timeout', {
                 decisionId: record.id,

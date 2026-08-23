@@ -529,6 +529,7 @@ describe('GithubRules', () => {
           return () => agentEndListeners.delete(listener);
         }),
         state: { set: vi.fn(async () => {}) },
+        permissions: { setForTool: vi.fn(async () => {}) },
         sendMessage: vi.fn(async () => {}),
         sendNotificationSignal: vi.fn(async () => ({ persisted: Promise.resolve(), accepted: Promise.resolve() })),
       };
@@ -1351,6 +1352,7 @@ describe('GithubRules', () => {
       getWorkspace: () => ({ skills: { maybeRefresh: vi.fn(async () => {}), get: vi.fn(async () => undefined) } }),
       subscribe: vi.fn(() => () => {}),
       state: { set: vi.fn(async () => {}) },
+      permissions: { setForTool: vi.fn(async () => {}) },
       sendMessage: vi.fn(async () => {}),
       sendSignal: vi.fn(() => ({ accepted: Promise.resolve({ accepted: true, action: 'wake' }) })),
       sendNotificationSignal: vi.fn(

@@ -171,6 +171,26 @@ function reviewPullRequest(context: FactoryStageRuleContext) {
   } as const;
 }
 
+/**
+ * A pull request card arriving in Intake suggests its own review when the
+ * opening event stamped it as auto-reviewable — a trusted author's or
+ * Factory's own PR, fresh at open. Everyone else's work waits for a click.
+ * The suggestion is emitted only on webhook materialization, so a candidate
+ * filed by hand or an item re-synced from source never starts one.
+ */
+function suggestArrivingPullRequestReview(context: FactoryStageRuleContext) {
+  if (context.cause !== 'linked_item_materialized') return;
+  if (context.item.metadata?.autoReviewCandidate !== true) return;
+  return reviewPullRequest(context);
+}
+
+/** The issue-side twin of {@link suggestArrivingPullRequestReview}: investigation, not review. */
+function suggestArrivingIssueInvestigation(context: FactoryStageRuleContext) {
+  if (context.cause !== 'linked_item_materialized') return;
+  if (context.item.metadata?.autoReviewCandidate !== true) return;
+  return invokeIssueInvestigation(context);
+}
+
 function resultContent(value: unknown): string | undefined {
   if (typeof value === 'string') return value;
   if (!value || typeof value !== 'object' || Array.isArray(value)) return;
@@ -209,6 +229,11 @@ function createdAfterFactory(createdAt: string | undefined, factoryCreatedAt: st
 
 function issueOpened(context: FactoryGithubRuleContext) {
   if (!context.issue) return;
+  // Working lanes are entered when work starts, not when a card appears, so
+  // every issue arrives through Intake. Arrival stamps whether this issue may
+  // be picked up without a person — a trusted reporter's fresh issue may have
+  // its investigation suggested (or started, with auto-run on) by the Intake
+  // entry rule.
   return {
     type: 'upsertLinkedWorkItem',
     idempotencyKey: `${context.ingress.id}:issue-intake`,
@@ -217,14 +242,14 @@ function issueOpened(context: FactoryGithubRuleContext) {
     sourceKey: `github-issue:${context.issue.number}`,
     title: context.issue.title,
     url: context.issue.url,
-    stage:
-      trustedGithubActor(context) && createdAfterFactory(context.issue.createdAt, context.factory.createdAt)
-        ? 'triage'
-        : 'intake',
+    stage: 'intake',
     metadata: {
       githubRepositoryId: context.repository.id,
       githubIssueNumber: context.issue.number,
       ...(githubActorLogin(context) ? { author: githubActorLogin(context) } : {}),
+      authorTrusted: trustedGithubActor(context),
+      autoReviewCandidate:
+        trustedGithubActor(context) && createdAfterFactory(context.issue.createdAt, context.factory.createdAt),
       assignees: context.issue.assignees ?? [],
       labels: context.issue.labels ?? [],
     },
@@ -262,6 +287,14 @@ function pullRequestOpened(context: FactoryGithubRuleContext) {
   // Factory authorship is its own trust signal: the branch came from a Work run
   // this Factory dispatched.
   const factoryAuthored = context.actor.type === 'github' && context.actor.factoryAuthored;
+  // Every pull request arrives through Intake — working lanes are entered when
+  // work starts, not when a card appears. What arrival stamps is whether this
+  // PR may be picked up without a person: trusted authors and Factory's own
+  // output, opened after the Factory existed, may have their review suggested
+  // (or started, with auto-run on) by the Intake entry rule.
+  const autoReviewCandidate =
+    (trustedGithubActor(context) || factoryAuthored) &&
+    createdAfterFactory(context.pullRequest.createdAt, context.factory.createdAt);
   return {
     type: 'upsertLinkedWorkItem',
     idempotencyKey: `${context.ingress.id}:pull-request-intake`,
@@ -270,15 +303,13 @@ function pullRequestOpened(context: FactoryGithubRuleContext) {
     sourceKey: `github-pr:${context.pullRequest.number}`,
     title: context.pullRequest.title,
     url: context.pullRequest.url,
-    stage:
-      (trustedGithubActor(context) || factoryAuthored) &&
-      createdAfterFactory(context.pullRequest.createdAt, context.factory.createdAt)
-        ? 'review'
-        : 'intake',
+    stage: 'intake',
     metadata: {
       githubRepositoryId: context.repository.id,
       githubPullRequestNumber: context.pullRequest.number,
       factoryAuthored,
+      authorTrusted: trustedGithubActor(context),
+      autoReviewCandidate,
       state: context.pullRequest.state,
       draft: context.pullRequest.draft,
       merged: context.pullRequest.merged,
@@ -518,6 +549,7 @@ function linearIssueClosed(context: FactoryLinearRuleContext) {
 
 const BUILT_IN_DEFAULTS: FactoryRulesOverrides = {
   work: {
+    intake: { issue: { onEnter: suggestArrivingIssueInvestigation } },
     triage: {
       issue: { onEnter: investigateTriagedIssue },
       linearIssue: { onEnter: investigateTriagedLinearIssue },
@@ -536,7 +568,10 @@ const BUILT_IN_DEFAULTS: FactoryRulesOverrides = {
       issue: { onEnter: completeIssue },
     },
   },
-  review: { review: { pullRequest: { onEnter: reviewPullRequest } } },
+  review: {
+    intake: { pullRequest: { onEnter: suggestArrivingPullRequestReview } },
+    review: { pullRequest: { onEnter: reviewPullRequest } },
+  },
   tools: { submit_plan: { onResult: advanceApprovedPlan } },
   github: {
     issueOpened: { onEvent: issueOpened },

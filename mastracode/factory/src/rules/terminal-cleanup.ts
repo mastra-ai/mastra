@@ -3,7 +3,7 @@ import type { FactoryRunBindingRecord, WorkItemsStorage } from '../storage/domai
 export interface TerminalStageCleanupOptions {
   workItems: Pick<
     WorkItemsStorage,
-    'listRunBindings' | 'revokeRunBindingsForWorkItem' | 'supersedeTerminalDecisionsForWorkItem'
+    'listRunBindings' | 'revokeRunBindingsForWorkItem' | 'supersedeTerminalDecisionsForWorkItem' | 'disarmAutonomy'
   >;
   /** Final ingest of trailing tool results before the binding is revoked. */
   reconcileBinding?: (binding: FactoryRunBindingRecord) => Promise<void>;
@@ -21,12 +21,18 @@ export interface TerminalStageCleanupArgs {
  * Terminal-stage cleanup for a work item: ingest any trailing tool results
  * from the item's bound threads, revoke its active run bindings so completed
  * items leave the reconcile walk (the active set otherwise grows forever),
- * dismiss the runs still parked on it, then release its sandboxes. Every step
- * is best-effort — a committed transition never fails on cleanup; leaked
- * bindings are drained by the staleness sweep.
+ * dismiss the runs still parked on it, expire its autonomy (a finished item no
+ * longer answers yes on the person's behalf — re-entry asks again), then
+ * release its sandboxes. Every step is best-effort — a committed transition
+ * never fails on cleanup; leaked bindings are drained by the staleness sweep.
  */
 export function createTerminalStageCleanup(options: TerminalStageCleanupOptions) {
   return async (args: TerminalStageCleanupArgs): Promise<void> => {
+    try {
+      await options.workItems.disarmAutonomy({ orgId: args.orgId, id: args.workItemId });
+    } catch {
+      // Best-effort; the next terminal transition re-runs this.
+    }
     try {
       const bindings = await options.workItems.listRunBindings(args.orgId, args.factoryProjectId, args.workItemId);
       for (const binding of bindings) {

@@ -39,6 +39,11 @@ function createSession(
     endRunAfterDroppedSignal?: boolean;
     /** Once the session is free, a redelivered signal wakes it and lands. */
     acceptRedeliveredSignal?: boolean;
+    /**
+     * The kicked-off run suspends on `submit_plan`: 'auto' ends the run once
+     * someone answers the suspension, 'park' leaves it suspended.
+     */
+    planFlow?: 'auto' | 'park';
   },
 ) {
   let threadId = 'thread-1';
@@ -84,6 +89,7 @@ function createSession(
       },
     }),
     state: { set: vi.fn(async () => {}) },
+    permissions: { setForTool: vi.fn(async () => {}) },
     sendMessage: vi.fn(async () => {}),
     sendSignal: vi.fn((input: { id: string }, _options: { requestContext: { get(key: string): unknown } }) => {
       signalSends += 1;
@@ -91,7 +97,15 @@ function createSession(
       // a redelivery into a session the dispatcher waited for.
       const redelivered = signalSends > 1 && options?.acceptRedeliveredSignal === true;
       if (!options?.dropDeliveredSignal || redelivered) deliveredSignals.add(input.id);
-      if (options?.emitAgentEndDuringSignal || redelivered) {
+      if (options?.planFlow) {
+        // The run reaches its plan and suspends on submit_plan.
+        queueMicrotask(() => {
+          for (const listener of agentEndListeners) {
+            listener({ type: 'tool_suspended', toolName: 'submit_plan', toolCallId: 'call-plan' });
+          }
+          if (options.planFlow === 'park') queueMicrotask(() => emitAgentEnd('suspended'));
+        });
+      } else if (options?.emitAgentEndDuringSignal || redelivered) {
         emitAgentEnd(redelivered ? 'complete' : undefined);
       } else if (options?.endRunAfterDroppedSignal) {
         // The busy run finishes without ever answering the queued prompt, which
@@ -108,6 +122,10 @@ function createSession(
     subscribe: vi.fn((listener: (event: { type: string; reason?: string }) => void) => {
       agentEndListeners.add(listener);
       return () => agentEndListeners.delete(listener);
+    }),
+    respondToToolSuspension: vi.fn(async () => {
+      // Answering the suspension resumes the run, which then finishes.
+      if (options?.planFlow === 'auto') queueMicrotask(() => emitAgentEnd('complete'));
     }),
     sendNotificationSignal,
   };
@@ -1421,6 +1439,62 @@ describe('FactoryDecisionDispatcher', () => {
 
     expect(session.sendSignal).toHaveBeenCalledTimes(1);
     expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('succeeded');
+  });
+
+  it("approves a plan on the project's behalf when plan review is off", async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'understand-issue',
+      idempotencyKey: 'skill-plan-auto-approved',
+    });
+    await bindWorkRun(storage, item.id);
+    const { controller, session } = createSession(undefined, { planFlow: 'auto' });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      isAutoRunEnabled: async () => true,
+      isPlanReviewEnabled: async () => false,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect(session.respondToToolSuspension).toHaveBeenCalledWith({
+      resumeData: { action: 'approved' },
+      toolCallId: 'call-plan',
+    });
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('succeeded');
+  });
+
+  it('fails the run loudly when plan review is on and nobody answers the plan', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'understand-issue',
+      idempotencyKey: 'skill-plan-parked',
+    });
+    await bindWorkRun(storage, item.id);
+    const { controller, session } = createSession(undefined, { planFlow: 'park' });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      isAutoRunEnabled: async () => true,
+      isPlanReviewEnabled: async () => true,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    // The pause is a designed checkpoint, not a crash — but it must be visible:
+    // the decision lands in Needs attention with its reason attached.
+    expect(session.respondToToolSuspension).not.toHaveBeenCalled();
+    const [record] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(record).toMatchObject({ status: 'failed', failureCode: 'plan_awaiting_approval' });
   });
 
   it('arms an item once, so the first commitment is the one that counts', async () => {

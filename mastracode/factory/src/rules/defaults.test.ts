@@ -132,10 +132,10 @@ describe('defaultFactoryRules', () => {
   it('ships ordinary visible default leaves', () => {
     const rules = defaultFactoryRules({ version: 'deployment-7' });
     expect(rules.version).toBe('deployment-7');
-    expect(rules.work.intake?.issue?.onEnter).toBeUndefined();
+    expect(rules.work.intake?.issue?.onEnter).toBeTypeOf('function');
     expect(rules.work.triage?.issue?.onEnter).toBeTypeOf('function');
     expect(rules.work.done?.issue?.onEnter).toBeTypeOf('function');
-    expect(rules.review.intake?.pullRequest?.onEnter).toBeUndefined();
+    expect(rules.review.intake?.pullRequest?.onEnter).toBeTypeOf('function');
     expect(rules.review.review?.pullRequest?.onEnter).toBeTypeOf('function');
     expect(rules.tools.submit_plan?.onResult).toBeTypeOf('function');
     expect(rules.github.issueOpened?.onEvent).toBeTypeOf('function');
@@ -883,10 +883,9 @@ describe('defaultFactoryRules', () => {
   });
 
   it.each(['issueOpened', 'pullRequestOpened'] as const)(
-    'advances trusted %s authors and leaves untrusted authors in Intake',
+    'keeps every %s in Intake and stamps whether it may be picked up on its own',
     async event => {
       const rules = defaultFactoryRules({ version: 'deployment-7' });
-      const trustedStage = event === 'issueOpened' ? 'triage' : 'review';
       const trusted = githubContext(event);
       const untrusted = {
         ...githubContext(event),
@@ -897,26 +896,78 @@ describe('defaultFactoryRules', () => {
         actor: { type: 'github', login: 'factory-bot', trusted: false, factoryAuthored: true } as const,
       };
 
-      expect(await rules.github[event]?.onEvent?.(trusted)).toMatchObject({
-        type: 'upsertLinkedWorkItem',
-        stage: trustedStage,
-      });
-      expect(await rules.github[event]?.onEvent?.(untrusted)).toMatchObject({
-        type: 'upsertLinkedWorkItem',
-        stage: 'intake',
-      });
-      // A pull request Factory opened is the Work leg's own output: its
-      // provenance is known, so it advances to Review even though an App bot can
-      // never hold collaborator permission. An issue Factory opened gets no such
-      // pass — auto-triaging our own issue is a self-loop with no upside.
-      expect(await rules.github[event]?.onEvent?.(factoryAuthored)).toMatchObject({
-        type: 'upsertLinkedWorkItem',
-        stage: event === 'pullRequestOpened' ? 'review' : 'intake',
-      });
+      const expectedEligibility = {
+        issueOpened: { trusted: true, factoryAuthored: false },
+        pullRequestOpened: { trusted: true, factoryAuthored: true },
+      }[event];
+
+      for (const [actor, eligible] of [
+        [trusted, expectedEligibility.trusted],
+        [untrusted, false],
+        [factoryAuthored, expectedEligibility.factoryAuthored],
+      ] as const) {
+        expect(await rules.github[event]?.onEvent?.(actor)).toMatchObject({
+          type: 'upsertLinkedWorkItem',
+          stage: 'intake',
+          metadata: { autoReviewCandidate: eligible },
+        });
+      }
     },
   );
 
-  it('keeps a factory-authored pull request opened before the Factory in Intake', async () => {
+  it('suggests a review from Intake only for stamped pull requests materialized by webhook', async () => {
+    const rules = defaultFactoryRules({ version: 'deployment-7' });
+    const rule = rules.review.intake?.pullRequest?.onEnter;
+
+    expect(
+      await rule?.({
+        ...stageContext({ type: 'system', id: 'factory-rule-dispatcher' }, 'review'),
+        cause: 'linked_item_materialized',
+        item: { ...item, source: 'github-pr' as const, metadata: { autoReviewCandidate: true } },
+      }),
+    ).toMatchObject({ type: 'invokeSkill', role: 'review', skillName: 'factory-review' });
+
+    // An untrusted author's PR gets no suggestion — the card waits for a click.
+    expect(
+      await rule?.({
+        ...stageContext({ type: 'system', id: 'factory-rule-dispatcher' }, 'review'),
+        cause: 'linked_item_materialized',
+        item: { ...item, source: 'github-pr' as const, metadata: { autoReviewCandidate: false } },
+      }),
+    ).toBeUndefined();
+
+    // A candidate filed by hand is not an arrival.
+    expect(
+      await rule?.({
+        ...stageContext({ type: 'human', id: 'user-1' }, 'review'),
+        cause: 'board_drag',
+        item: { ...item, source: 'github-pr' as const, metadata: { autoReviewCandidate: true } },
+      }),
+    ).toBeUndefined();
+  });
+
+  it('suggests an investigation from Intake only for stamped issues materialized by webhook', async () => {
+    const rules = defaultFactoryRules({ version: 'deployment-7' });
+    const rule = rules.work.intake?.issue?.onEnter;
+
+    expect(
+      await rule?.({
+        ...stageContext({ type: 'system', id: 'factory-rule-dispatcher' }, 'work'),
+        cause: 'linked_item_materialized',
+        item: { ...item, metadata: { autoReviewCandidate: true } },
+      }),
+    ).toMatchObject({ type: 'invokeSkill', role: 'triage', skillName: 'factory-triage' });
+
+    expect(
+      await rule?.({
+        ...stageContext({ type: 'system', id: 'factory-rule-dispatcher' }, 'work'),
+        cause: 'linked_item_materialized',
+        item: { ...item, metadata: {} },
+      }),
+    ).toBeUndefined();
+  });
+
+  it('keeps a factory-authored pull request opened before the Factory from being picked up on its own', async () => {
     const rules = defaultFactoryRules({ version: 'deployment-7' });
     const older = {
       ...githubContext('pullRequestOpened', '2026-05-01T00:00:00Z'),
@@ -926,6 +977,7 @@ describe('defaultFactoryRules', () => {
     expect(await rules.github.pullRequestOpened?.onEvent?.(older)).toMatchObject({
       type: 'upsertLinkedWorkItem',
       stage: 'intake',
+      metadata: { autoReviewCandidate: false },
     });
   });
 
@@ -938,6 +990,7 @@ describe('defaultFactoryRules', () => {
       expect(await rules.github[event]?.onEvent?.(olderContext)).toMatchObject({
         type: 'upsertLinkedWorkItem',
         stage: 'intake',
+        metadata: { autoReviewCandidate: false },
       });
     },
   );

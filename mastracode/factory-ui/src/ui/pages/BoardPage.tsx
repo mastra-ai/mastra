@@ -13,7 +13,7 @@ import { INTAKE_SOURCES, stageContentCount } from '../domains/factory/boardCandi
 import type { IntakeSource } from '../domains/factory/boardCandidates';
 import { boardLoadingStages, boardStages, itemAppearsInStage } from '../domains/factory/boardStages';
 import type { BoardKind } from '../domains/factory/boardStages';
-import { BoardAutoRunToggle } from '../domains/factory/components/BoardAutoRunToggle';
+import { BoardAutomationSettings } from '../domains/factory/components/BoardAutomationSettings';
 import { BoardColumn } from '../domains/factory/components/BoardColumn';
 import { BoardColumnEmptyState } from '../domains/factory/components/BoardColumnEmptyState';
 import { BoardRelevanceFilters } from '../domains/factory/components/BoardRelevanceFilters';
@@ -261,7 +261,11 @@ function BoardContent({
           onLabelChange={setLabel}
           onReset={resetFilters}
         />
-        <BoardAutoRunToggle factoryProjectId={factoryProjectId} enabled={factory.autoRunEnabled ?? false} />
+        <BoardAutomationSettings
+          factoryProjectId={factoryProjectId}
+          autoRunEnabled={factory.autoRunEnabled ?? false}
+          planReviewEnabled={factory.planReviewEnabled ?? true}
+        />
       </div>
       <ScrollArea
         viewportRef={scroll.containerRef}
