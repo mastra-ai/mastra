@@ -167,6 +167,38 @@ describe('pruneAgentLoopSnapshot stepResult.request strip', () => {
     expect(countRequestEchoes(originalForeachOutput)).toBe(3);
   });
 
+  it('keeps failed foreach metadata needed for selective time travel', () => {
+    const pruned = pruneAgentLoopSnapshot({
+      snapshot: snapshotWith({
+        foreach: {
+          status: 'failed',
+          suspendPayload: {
+            transient: 'drop me',
+            __workflow_meta: {
+              foreachStepId: 'process-item',
+              foreachOutput: [{ status: 'success', output: { value: 1 } }],
+              resumeLabels: { 'foreach-0': { stepId: 'process-item', foreachIndex: 0 } },
+            },
+          },
+        },
+        failed: {
+          status: 'failed',
+          suspendPayload: { transient: 'drop me' },
+        },
+      }),
+    });
+
+    const context = pruned.context as Record<string, any>;
+    expect(context.foreach.suspendPayload).toEqual({
+      __workflow_meta: {
+        foreachStepId: 'process-item',
+        foreachOutput: [{ status: 'success', output: { value: 1 } }],
+        resumeLabels: { 'foreach-0': { stepId: 'process-item', foreachIndex: 0 } },
+      },
+    });
+    expect(context.failed).not.toHaveProperty('suspendPayload');
+  });
+
   it('strips stream-state mirrors from array-shaped foreach output in snapshot.result', () => {
     const snapshot = {
       context: { input: { some: 'input' } },

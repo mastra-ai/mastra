@@ -202,7 +202,19 @@ function pruneStepResult(result: Record<string, any>): Record<string, any> {
     // Completed steps are never resumed again — their old suspension state is
     // dead weight that would otherwise be re-persisted on every later
     // suspension of the run.
-    delete pruned.suspendPayload;
+    // A failed foreach needs its aggregation metadata for selective time
+    // travel. Keep only the routing/replay metadata; ordinary terminal steps
+    // must continue dropping their suspend payloads.
+    if (result.status === 'failed' && isPlainObject(pruned.suspendPayload)) {
+      const meta = pruned.suspendPayload.__workflow_meta;
+      if (isPlainObject(meta) && Array.isArray(meta.foreachOutput)) {
+        pruned.suspendPayload = { __workflow_meta: meta };
+      } else {
+        delete pruned.suspendPayload;
+      }
+    } else {
+      delete pruned.suspendPayload;
+    }
     delete pruned.suspendOutput;
     delete pruned.resumePayload;
     pruned.payload = stripTerminalPayloadState(pruned.payload);
