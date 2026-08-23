@@ -1356,7 +1356,7 @@ export class MastraTUI {
     const authProviders = allProviders.map(p => ({
       label: p.name,
       value: p.id,
-      loggedIn: this.state.authStorage?.isLoggedIn(p.id) ?? false,
+      loggedIn: (this.state.authStorage?.isLoggedIn(p.id) || this.state.authStorage?.hasStoredApiKey(p.id)) ?? false,
     }));
 
     const access = await this.buildProviderAccess();

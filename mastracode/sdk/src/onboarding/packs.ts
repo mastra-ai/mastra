@@ -4,7 +4,9 @@
  * Each pack assigns a default model to the build, plan, and fast modes,
  * plus an OM (observational memory) model.
  */
-import { DEFAULT_OM_MODEL_ID } from '../constants.js';
+import { DEFAULT_OM_MODEL_ID, OPENCODE_DEFAULT_MODEL_ID } from '../constants.js';
+
+export { OPENCODE_DEFAULT_MODEL_ID };
 
 // ---------------------------------------------------------------------------
 // Types
@@ -52,7 +54,6 @@ export interface ProviderAccess {
 }
 
 /** Default OpenCode Zen model: free tier, works without any credential. */
-export const OPENCODE_DEFAULT_MODEL_ID = 'opencode/x-preview-f-free';
 
 /**
  * OpenCode Zen serves its `-free` models without any credential, so the
