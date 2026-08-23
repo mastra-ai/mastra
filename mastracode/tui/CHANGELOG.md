@@ -1,5 +1,28 @@
 # mastracode
 
+## 0.36.0-alpha.3
+
+### Minor Changes
+
+- Made language-server (LSP) support opt-in in Mastra Code. By default Mastra Code no longer checks for LSP dependencies, starts language servers, or offers the lsp_inspect tool to the agent. Turn it on by adding "lsp": true (or an LSP config object) to your settings.json; "lsp": false is now also accepted and preserved. ([#22126](https://github.com/mastra-ai/mastra/pull/22126))
+
+### Patch Changes
+
+- Improved long-session terminal performance by coalescing background renders, drawing status animations without re-rendering the full component tree, preserving completed component caches, and retaining a smaller rendered scrollback. ([#22073](https://github.com/mastra-ai/mastra/pull/22073))
+
+- Made the slash-command autocomplete dropdown in Mastra Code compact and scannable when many skills are installed. Only the highlighted item now shows its full wrapped description; other items stay on a single line with a truncated description. Fixes https://github.com/mastra-ai/mastra/issues/21967 ([#22101](https://github.com/mastra-ai/mastra/pull/22101))
+
+- Fixed background system messages (such as MCP server connection and authentication logs) pushing an active prompt off-screen during startup. Update prompts and plan approvals now stay anchored at the bottom of the conversation while background output is inserted above them, so the prompt stays visible and usable. ([#22109](https://github.com/mastra-ai/mastra/pull/22109))
+
+- Updated dependencies [[`c5eaec5`](https://github.com/mastra-ai/mastra/commit/c5eaec5a860d80d0e3805e67db0414b87ac8cbed), [`2c85f42`](https://github.com/mastra-ai/mastra/commit/2c85f428e04ccd63ea31a7ec80b5b327afdad555), [`11bbeb9`](https://github.com/mastra-ai/mastra/commit/11bbeb9b108ef2264e05acefc6dafb9cbb342921), [`1a485f3`](https://github.com/mastra-ai/mastra/commit/1a485f3538f5ec64d58bd8b5e1e99de0c695c87b), [`0d37487`](https://github.com/mastra-ai/mastra/commit/0d37487d9f349388a3f1cef6a536cf9dcc4b6273), [`8661d7d`](https://github.com/mastra-ai/mastra/commit/8661d7d7179f0a024456aabdd8679bcecd09ac28), [`575e343`](https://github.com/mastra-ai/mastra/commit/575e343900451021d96110916497d334af7bc252), [`8661d7d`](https://github.com/mastra-ai/mastra/commit/8661d7d7179f0a024456aabdd8679bcecd09ac28), [`cacb839`](https://github.com/mastra-ai/mastra/commit/cacb8392d9e74189b56d857290b0615f98a2683d), [`b47b26e`](https://github.com/mastra-ai/mastra/commit/b47b26e6fe95cb8a3482be2c5e52de157fe59d0b), [`0d37487`](https://github.com/mastra-ai/mastra/commit/0d37487d9f349388a3f1cef6a536cf9dcc4b6273), [`8661d7d`](https://github.com/mastra-ai/mastra/commit/8661d7d7179f0a024456aabdd8679bcecd09ac28), [`13c2f97`](https://github.com/mastra-ai/mastra/commit/13c2f979a63ee441834ad0d947b40a82010afb59), [`9a3d352`](https://github.com/mastra-ai/mastra/commit/9a3d352a5ba0c2a9e4f7a9cc4f028a393bc74306), [`c46eb09`](https://github.com/mastra-ai/mastra/commit/c46eb09ce4987509af57a0ac582c61241a6dd2f1), [`30ed33e`](https://github.com/mastra-ai/mastra/commit/30ed33ee14084a26019aba15fceadda6d6ddefaf), [`91ad69d`](https://github.com/mastra-ai/mastra/commit/91ad69d64994c89199b0c55399e64ed91c61df2f), [`c4e2364`](https://github.com/mastra-ai/mastra/commit/c4e2364742bc37beebfa995db2d42efce6cfc7b8), [`8dc408d`](https://github.com/mastra-ai/mastra/commit/8dc408d34438f9e13297f792c11a5cfd6cf952e1), [`c92def1`](https://github.com/mastra-ai/mastra/commit/c92def10a13c822972c96f0a4ca6ffc1f4258aed), [`c5eaec5`](https://github.com/mastra-ai/mastra/commit/c5eaec5a860d80d0e3805e67db0414b87ac8cbed), [`e66b2ba`](https://github.com/mastra-ai/mastra/commit/e66b2ba100db63eaeab6e21e1ea34b113f2ec781)]:
+  - @mastra/pg@1.22.0-alpha.1
+  - @mastra/libsql@1.22.0-alpha.0
+  - @mastra/core@1.62.0-alpha.3
+  - @mastra/code-sdk@1.5.0-alpha.3
+  - @mastra/observability@1.17.2-alpha.1
+  - @mastra/memory@1.27.1-alpha.0
+  - @mastra/mcp@1.17.2-alpha.0
+
 ## 0.35.1-alpha.2
 
 ### Patch Changes

@@ -48,6 +48,7 @@ import {
 } from '@mastra/core/agent/durable';
 import type { AgentStepFinishEventData, AgentSuspendedEventData } from '@mastra/core/agent/durable';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
+import type { ActorSignal } from '@mastra/core/auth/ee';
 import { InMemoryServerCache } from '@mastra/core/cache';
 import type { MastraServerCache } from '@mastra/core/cache';
 import { CachingPubSub } from '@mastra/core/events';
@@ -58,6 +59,11 @@ import type { Workflow } from '@mastra/core/workflows';
 import { NonRetriableError } from 'inngest';
 import type { Inngest } from 'inngest';
 
+import {
+  buildDurableResumeEventData,
+  buildDurableTriggerEventData,
+  mergeResumeRequestContext,
+} from '../durable-event-payload';
 import { InngestPubSub } from '../pubsub';
 import type { InngestWorkflow } from '../workflow';
 import { createInngestDurableAgenticWorkflow, InngestDurableStepIds } from './create-inngest-agentic-workflow';
@@ -289,6 +295,12 @@ export interface InngestAgentResumeOptions<OUTPUT = undefined> {
    */
   toolCallId?: string;
   requestContext?: AgentExecutionOptions<OUTPUT>['requestContext'];
+  /**
+   * Per-call actor signal forwarded to FGA checks and tool execution. Must be
+   * re-supplied on every resume: it is never rehydrated from the workflow
+   * snapshot, so a membership-bypass signal is never persisted.
+   */
+  actor?: AgentExecutionOptions<OUTPUT>['actor'];
   onChunk?: (chunk: ChunkType<OUTPUT>) => void | Promise<void>;
   onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
   onFinish?: MastraOnFinishCallback<OUTPUT>;
@@ -615,18 +627,20 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     runId: string,
     workflowInput: any,
     tracingOptions?: { traceId: string; parentSpanId: string },
+    actor?: ActorSignal,
   ): Promise<void> {
     const eventName = `workflow.${InngestDurableStepIds.AGENTIC_LOOP}`;
 
     await inngest.send({
       name: eventName,
-      data: {
+      data: buildDurableTriggerEventData({
         inputData: workflowInput,
         runId,
         resourceId: workflowInput.state?.resourceId,
         requestContext: workflowInput.requestContextEntries ?? {},
         tracingOptions,
-      },
+        actor,
+      }),
     });
   }
 
@@ -837,7 +851,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // Track the trigger promise on the registry so generate() can await suspend
       // snapshot persistence before returning.
       const workflowExecution = ready
-        .then(() => triggerWorkflow(runId, workflowInput, tracingOptions))
+        .then(() => triggerWorkflow(runId, workflowInput, tracingOptions, streamOptions?.actor))
         .catch(error => {
           void emitError(runId, error);
         });
@@ -1046,10 +1060,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
           steps = suspendedStepIds[0] ? expandToLeafPath(suspendedStepIds[0]) : [];
         }
 
-        const requestContext = {
-          ...(snapshot?.requestContext ?? {}),
-          ...(resumeOptions?.requestContext?.toJSON() ?? {}),
-        };
+        const requestContext = mergeResumeRequestContext(snapshot?.requestContext, resumeOptions?.requestContext);
         const tracingOptions = snapshot?.tracingContext
           ? {
               traceId: snapshot.tracingContext.traceId,
@@ -1059,18 +1070,19 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
 
         await inngest.send({
           name: eventName,
-          data: {
+          data: buildDurableResumeEventData({
             inputData: resumeData,
             runId,
             resourceId: resumeOptions?.resourceId,
             requestContext,
             tracingOptions,
+            actor: resumeOptions?.actor,
             resume: {
               steps,
               resumePayload: resumeData,
               resumePath: steps[0] ? snapshot?.suspendedPaths?.[steps[0]] : undefined,
             },
-          },
+          }),
         });
       });
 

@@ -13,7 +13,7 @@ import { MastraFGAPermissions, getWorkflowFGAResourceId, requireFGA } from '../a
 import type { ActorSignal } from '../auth/ee';
 import { MastraBase } from '../base';
 import { RequestContext } from '../di';
-import { ErrorCategory, ErrorDomain, MastraError, getErrorFromUnknown } from '../error';
+import { ErrorCategory, ErrorDomain, MastraError, MastraNonRetryableError, getErrorFromUnknown } from '../error';
 import type { MastraScorers } from '../evals';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
@@ -2924,6 +2924,13 @@ export class Workflow<
     }
 
     if (res.status === 'failed') {
+      const isNonRetryable = Object.values(res.steps).some(stepResult => {
+        const result = stepResult as StepResult<any, any, any, any>;
+        return result.status === 'failed' && result.nonRetryable;
+      });
+      if (isNonRetryable) {
+        throw new MastraNonRetryableError(res.error.message, { cause: res.error });
+      }
       throw res.error;
     }
 
