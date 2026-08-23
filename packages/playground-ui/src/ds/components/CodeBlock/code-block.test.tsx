@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import type { ReactElement } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { TooltipProvider } from '../Tooltip';
@@ -102,5 +103,123 @@ describe('CodeBlock', () => {
     await waitFor(() => {
       expect(writeText).toHaveBeenCalledWith('npm install @mastra/core');
     });
+  });
+});
+
+const renderBlock = (element: ReactElement) => render(<TooltipProvider>{element}</TooltipProvider>);
+
+const OPTIONS = [
+  { label: 'npm', value: 'npm' },
+  { label: 'pnpm', value: 'pnpm' },
+];
+
+describe('CodeBlock — its header', () => {
+  it('names the file it is showing', () => {
+    renderBlock(<CodeBlock code="const a = 1" fileName="index.ts" />);
+
+    const caption = screen.getByText('index.ts');
+    expect(caption.tagName).toBe('FIGCAPTION');
+  });
+
+  it('shows no header at all with nothing to put in it', () => {
+    const { container } = renderBlock(<CodeBlock code="const a = 1" />);
+
+    expect(container.querySelector('figcaption')).toBeNull();
+    expect(container.querySelector('[role="tab"], [role="combobox"]')).toBeNull();
+  });
+
+  it('gives lone actions a header of their own', () => {
+    renderBlock(<CodeBlock code="const a = 1" actions={<button type="button">Run</button>} />);
+
+    expect(screen.getByRole('button', { name: 'Run' })).toBeTruthy();
+  });
+
+  it('puts actions beside the file name', () => {
+    renderBlock(<CodeBlock code="const a = 1" fileName="index.ts" actions={<button type="button">Run</button>} />);
+
+    expect(screen.getByText('index.ts')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Run' })).toBeTruthy();
+  });
+});
+
+describe('CodeBlock — choosing between variants', () => {
+  it('offers a select by default', () => {
+    renderBlock(<CodeBlock code="npm i" options={OPTIONS} />);
+
+    expect(screen.getByRole('combobox')).toBeTruthy();
+    expect(screen.queryByRole('tab')).toBeNull();
+  });
+
+  it('offers tabs when the caller asks for them', () => {
+    renderBlock(<CodeBlock code="npm i" options={OPTIONS} selector="tabs" />);
+
+    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['npm', 'pnpm']);
+    expect(screen.queryByRole('combobox')).toBeNull();
+  });
+
+  it('opens on the first option when the caller names none', () => {
+    renderBlock(<CodeBlock code="npm i" options={OPTIONS} selector="tabs" />);
+
+    expect(screen.getByRole('tab', { name: 'npm' }).getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('opens on the option the caller named', () => {
+    renderBlock(<CodeBlock code="pnpm i" options={OPTIONS} selector="tabs" value="pnpm" />);
+
+    expect(screen.getByRole('tab', { name: 'pnpm' }).getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('reports the tab the reader picked', () => {
+    const onValueChange = vi.fn();
+    renderBlock(<CodeBlock code="npm i" options={OPTIONS} selector="tabs" onValueChange={onValueChange} />);
+
+    fireEvent.click(screen.getByRole('tab', { name: 'pnpm' }));
+
+    expect(onValueChange).toHaveBeenCalledWith('pnpm');
+  });
+
+  it('lets a tab be picked even with nowhere to report it', () => {
+    renderBlock(<CodeBlock code="npm i" options={OPTIONS} selector="tabs" />);
+
+    expect(() => fireEvent.click(screen.getByRole('tab', { name: 'pnpm' }))).not.toThrow();
+  });
+
+  it('falls back to the file name when the options list is empty', () => {
+    renderBlock(<CodeBlock code="const a = 1" options={[]} fileName="index.ts" />);
+
+    expect(screen.getByText('index.ts')).toBeTruthy();
+    expect(screen.queryByRole('combobox')).toBeNull();
+  });
+
+  it('puts actions beside the tabs', () => {
+    renderBlock(
+      <CodeBlock code="npm i" options={OPTIONS} selector="tabs" actions={<button type="button">Run</button>} />,
+    );
+
+    expect(screen.getByRole('button', { name: 'Run' })).toBeTruthy();
+    expect(screen.getAllByRole('tab')).toHaveLength(2);
+  });
+
+  it('puts actions beside the select', () => {
+    renderBlock(<CodeBlock code="npm i" options={OPTIONS} actions={<button type="button">Run</button>} />);
+
+    expect(screen.getByRole('button', { name: 'Run' })).toBeTruthy();
+    expect(screen.getByRole('combobox')).toBeTruthy();
+  });
+});
+
+describe('CodeBlock — copying', () => {
+  it('names the copy action the way the caller asked', async () => {
+    renderBlock(<CodeBlock code="npm i" copyTooltip="Copy the install command" />);
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /copy/i })).toBeTruthy());
+  });
+
+  it('keeps a caller class alongside its own', () => {
+    const { container } = renderBlock(<CodeBlock code="npm i" className="my-own-class" />);
+
+    const figure = container.querySelector('figure');
+    expect(figure?.classList.contains('my-own-class')).toBe(true);
+    expect(figure?.classList.contains('rounded-2xl')).toBe(true);
   });
 });
