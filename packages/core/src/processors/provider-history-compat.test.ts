@@ -12,6 +12,7 @@ import {
   isMaybeAzure,
   isMaybeCerebras,
   ProviderHistoryCompat,
+  stripForeignProviderExecutedTools,
 } from './provider-history-compat';
 import type { CompatRule } from './provider-history-compat';
 import { ProcessorRunner } from './runner';
@@ -462,6 +463,101 @@ const mockLogger = {
   trackException: () => {},
 } as any;
 
+describe('stripForeignProviderExecutedTools', () => {
+  const hostedToolPrompt = (provider: 'anthropic' | 'openai', toolCallId: string): LanguageModelV2Prompt => [
+    { role: 'user', content: [{ type: 'text', text: 'search for this' }] },
+    {
+      role: 'assistant',
+      content: [
+        { type: 'text', text: 'I will search.' },
+        {
+          type: 'tool-call',
+          toolCallId,
+          toolName: 'web_search',
+          input: { query: 'Mastra' },
+          providerExecuted: true,
+          providerOptions: { [provider]: { itemId: toolCallId } },
+        } as any,
+        { type: 'text', text: 'Search complete.' },
+      ],
+    },
+    {
+      role: 'tool',
+      content: [
+        {
+          type: 'tool-result',
+          toolCallId,
+          toolName: 'web_search',
+          output: { type: 'text', value: 'result' },
+          providerOptions: { [provider]: { itemId: toolCallId } },
+        } as any,
+      ],
+    },
+    { role: 'user', content: [{ type: 'text', text: 'summarize it' }] },
+  ];
+
+  it('strips Anthropic hosted-tool pairs before an OpenAI Responses request', () => {
+    const result = stripForeignProviderExecutedTools.applyToPrompt!({
+      prompt: hostedToolPrompt('anthropic', 'srvtoolu_abc123'),
+      model: { provider: 'openai.responses', modelId: 'gpt-5' },
+    });
+
+    expect(result).toEqual([
+      { role: 'user', content: [{ type: 'text', text: 'search for this' }] },
+      {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'I will search.' },
+          { type: 'text', text: 'Search complete.' },
+        ],
+      },
+      { role: 'user', content: [{ type: 'text', text: 'summarize it' }] },
+    ]);
+  });
+
+  it('strips OpenAI hosted-tool pairs before an Anthropic request', () => {
+    const result = stripForeignProviderExecutedTools.applyToPrompt!({
+      prompt: hostedToolPrompt('openai', 'ws_abc123'),
+      model: { provider: 'anthropic.messages', modelId: 'claude-sonnet-4-5' },
+    });
+
+    expect(result?.some(message => message.role === 'tool')).toBe(false);
+    expect((result?.[1]?.content as any[]).map(part => part.type)).toEqual(['text', 'text']);
+  });
+
+  it('preserves same-provider hosted-tool history', () => {
+    const prompt = hostedToolPrompt('anthropic', 'srvtoolu_abc123');
+    const result = stripForeignProviderExecutedTools.applyToPrompt!({
+      prompt,
+      model: { provider: 'anthropic.messages', modelId: 'claude-sonnet-4-5' },
+    });
+
+    expect(result).toBeUndefined();
+  });
+
+  it('preserves OpenAI hosted-tool history for OpenAI-compatible destinations', () => {
+    const prompt = hostedToolPrompt('openai', 'ws_abc123');
+    const result = stripForeignProviderExecutedTools.applyToPrompt!({
+      prompt,
+      model: { provider: 'azure-openai.responses', modelId: 'gpt-5' },
+    });
+
+    expect(result).toBeUndefined();
+  });
+
+  it('does not remove client-executed tool pairs', () => {
+    const prompt = hostedToolPrompt('anthropic', 'call_abc123');
+    delete (prompt[1].content as any[])[1].providerExecuted;
+
+    const result = stripForeignProviderExecutedTools.applyToPrompt!({
+      prompt,
+      model: { provider: 'openai.responses', modelId: 'gpt-5' },
+    });
+
+    expect(result).toBeUndefined();
+  });
+});
+
 describe('anthropicStripForeignReasoningContent', () => {
   it('strips foreign reasoning parts from assistant messages when model is Anthropic', () => {
     const result = anthropicStripForeignReasoningContent.applyToPrompt!({
@@ -803,6 +899,55 @@ describe('ProviderHistoryCompat.processLLMRequest', () => {
     expect(result).toEqual({ prompt: expect.any(Array) });
     const assistant = (result as { prompt: LanguageModelV2Prompt }).prompt.find(m => m.role === 'assistant')!;
     expect((assistant.content as any[]).map(p => p.type)).toEqual(['text']);
+  });
+
+  it('strips foreign provider-executed tool pairs through the built-in rule set', async () => {
+    const handler = new ProviderHistoryCompat();
+    const prompt: LanguageModelV2Prompt = [
+      {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'Before' },
+          {
+            type: 'tool-call',
+            toolCallId: 'srvtoolu_123',
+            toolName: 'web_search',
+            input: { query: 'weather' },
+            providerExecuted: true,
+            providerOptions: { anthropic: { type: 'server_tool_use' } },
+          },
+          { type: 'text', text: 'After' },
+        ],
+      },
+      {
+        role: 'tool',
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'srvtoolu_123',
+            toolName: 'web_search',
+            output: { type: 'json', value: { temperature: 72 } },
+            providerOptions: { anthropic: { type: 'web_search_tool_result' } },
+          },
+        ],
+      },
+    ];
+
+    const result = await handler.processLLMRequest(
+      makeRequestArgs(prompt, { provider: 'openai.responses', modelId: 'gpt-5' }),
+    );
+
+    expect(result).toEqual({
+      prompt: [
+        {
+          role: 'assistant',
+          content: [
+            { type: 'text', text: 'Before' },
+            { type: 'text', text: 'After' },
+          ],
+        },
+      ],
+    });
   });
 
   it('returns undefined when nothing needs to change', async () => {
