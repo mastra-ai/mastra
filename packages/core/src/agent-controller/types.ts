@@ -383,6 +383,8 @@ export interface AgentControllerConfig<TState = {}> {
    */
   threadLock?: {
     acquire: (threadId: string) => void | Promise<void>;
+    /** Attempts implicit selection without treating contention as an error. */
+    tryAcquire?: (threadId: string) => boolean | Promise<boolean>;
     release: (threadId: string) => void | Promise<void>;
   };
 

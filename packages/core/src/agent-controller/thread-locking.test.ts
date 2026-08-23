@@ -183,7 +183,7 @@ describe('AgentController thread locking', () => {
   });
 
   describe('createSession thread selection', () => {
-    function freshController(store: InMemoryStore) {
+    function freshController(store: InMemoryStore, tryAcquire?: (id: string) => boolean | Promise<boolean>) {
       const agent = new Agent({
         name: 'test-agent',
         instructions: 'You are a test agent.',
@@ -194,7 +194,7 @@ describe('AgentController thread locking', () => {
         id: 'test-controller',
         storage: store,
         modes: [{ id: 'default', name: 'Default', default: true, agent }],
-        threadLock: { acquire, release },
+        threadLock: { acquire, tryAcquire, release },
       });
     }
 
@@ -226,6 +226,86 @@ describe('AgentController thread locking', () => {
 
       expect(sessionB.thread.getId()).toBe(existing);
       expect(acquire).toHaveBeenCalledWith(existing);
+    });
+
+    it('resumes the next thread when the most recent thread is locked', async () => {
+      const store = new InMemoryStore();
+      const controllerA = freshController(store);
+      await controllerA.init();
+      const sessionA = await controllerA.createSession({
+        id: 'session-a',
+        ownerId: 'test-owner',
+        resourceId: 'user-1',
+      });
+      const olderThreadId = sessionA.thread.getId();
+      const now = Date.now();
+      vi.useFakeTimers();
+      vi.setSystemTime(now + 1000);
+      const newestThread = await sessionA.thread.create();
+      vi.useRealTimers();
+
+      acquire.mockClear();
+      const tryAcquire = vi.fn((id: string) => id !== newestThread.id);
+      const controllerB = freshController(store, tryAcquire);
+      await controllerB.init();
+      const sessionB = await controllerB.createSession({
+        id: 'session-b',
+        ownerId: 'test-owner',
+        resourceId: 'user-1',
+      });
+
+      expect(tryAcquire).toHaveBeenNthCalledWith(1, newestThread.id);
+      expect(tryAcquire).toHaveBeenNthCalledWith(2, olderThreadId);
+      expect(sessionB.thread.getId()).toBe(olderThreadId);
+    });
+
+    it('creates a new thread when every existing thread is locked', async () => {
+      const store = new InMemoryStore();
+      const controllerA = freshController(store);
+      await controllerA.init();
+      const sessionA = await controllerA.createSession({
+        id: 'session-a',
+        ownerId: 'test-owner',
+        resourceId: 'user-1',
+      });
+      const lockedThreadId = sessionA.thread.getId();
+
+      acquire.mockClear();
+      const tryAcquire = vi.fn(() => false);
+      const controllerB = freshController(store, tryAcquire);
+      await controllerB.init();
+      const sessionB = await controllerB.createSession({
+        id: 'session-b',
+        ownerId: 'test-owner',
+        resourceId: 'user-1',
+      });
+
+      expect(tryAcquire).toHaveBeenCalledWith(lockedThreadId);
+      expect(sessionB.thread.getId()).not.toBe(lockedThreadId);
+      expect(acquire).toHaveBeenCalledWith(sessionB.thread.getId());
+    });
+
+    it('surfaces contention when the lock has no non-throwing probe', async () => {
+      const store = new InMemoryStore();
+      const controllerA = freshController(store);
+      await controllerA.init();
+      const sessionA = await controllerA.createSession({
+        id: 'session-a',
+        ownerId: 'test-owner',
+        resourceId: 'user-1',
+      });
+      const lockedThreadId = sessionA.thread.getId()!;
+
+      acquire.mockClear();
+      acquire.mockImplementation((id: string) => {
+        if (id === lockedThreadId) throw new Error('locked by another process');
+      });
+      const controllerB = freshController(store);
+      await controllerB.init();
+
+      await expect(
+        controllerB.createSession({ id: 'session-b', ownerId: 'test-owner', resourceId: 'user-1' }),
+      ).rejects.toThrow('locked by another process');
     });
 
     it('creates a fresh thread for a different resourceId', async () => {
