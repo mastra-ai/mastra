@@ -7,6 +7,8 @@ import {
   anthropicStripForeignReasoningContent,
   azureSystemReminderTransform,
   cerebrasStripReasoningContent,
+  bedrockMantleGptOssStripReasoningContent,
+  isMaybeBedrockMantleGptOss,
   isMaybeAnthropic,
   isMaybeAnthropicWithoutAssistantPrefill,
   isMaybeAzure,
@@ -757,6 +759,46 @@ describe('cerebrasStripReasoningContent', () => {
 });
 
 describe('ProviderHistoryCompat.processLLMRequest', () => {
+  it('matches only Bedrock Mantle Chat GPT-OSS models', () => {
+    expect(isMaybeBedrockMantleGptOss({ provider: 'bedrock-mantle.chat', modelId: 'openai.gpt-oss-20b' })).toBe(true);
+    expect(isMaybeBedrockMantleGptOss([{ model: { provider: 'bedrock-mantle.chat', modelId: 'openai.gpt-oss-120b' } }])).toBe(true);
+    expect(isMaybeBedrockMantleGptOss({ provider: 'bedrock-mantle.responses', modelId: 'openai.gpt-oss-20b' })).toBe(false);
+    expect(isMaybeBedrockMantleGptOss({ provider: 'bedrock-mantle.chat', modelId: 'openai.gpt-4o' })).toBe(false);
+    expect(isMaybeBedrockMantleGptOss({ provider: 'amazon-bedrock', modelId: 'openai.gpt-oss-20b' })).toBe(false);
+    expect(isMaybeBedrockMantleGptOss({ provider: 'bedrock-mantle.chat', modelId: 'vendor/openai.gpt-oss-20b' })).toBe(false);
+    expect(isMaybeBedrockMantleGptOss('bedrock-mantle.chat/openai.gpt-oss-20b')).toBe(false);
+    expect(isMaybeBedrockMantleGptOss(() => undefined)).toBe(false);
+  });
+
+  it('strips only outbound reasoning for Bedrock Mantle Chat GPT-OSS', () => {
+    const prompt = promptWithReasoning();
+    const result = bedrockMantleGptOssStripReasoningContent.applyToPrompt!({
+      prompt,
+      model: { provider: 'bedrock-mantle.chat', modelId: 'openai.gpt-oss-20b' },
+    });
+
+    expect(result).toBeDefined();
+    expect((result!.find(message => message.role === 'assistant')!.content as any[]).map(part => part.type)).toEqual(['text']);
+    expect((prompt.find(message => message.role === 'assistant')!.content as any[]).map(part => part.type)).toEqual([
+      'reasoning',
+      'text',
+    ]);
+  });
+
+  it.each([
+    ['bedrock-mantle.responses', 'openai.gpt-oss-20b'],
+    ['bedrock-mantle.chat', 'anthropic.claude-sonnet-4-5'],
+    ['amazon-bedrock', 'openai.gpt-oss-20b'],
+    ['bedrock-mantle.chat', 'vendor/openai.gpt-oss-20b'],
+  ])('preserves reasoning for %s %s', (provider, modelId) => {
+    expect(
+      bedrockMantleGptOssStripReasoningContent.applyToPrompt!({
+        prompt: promptWithReasoning(),
+        model: { provider, modelId },
+      }),
+    ).toBeUndefined();
+  });
+
   it('rewrites memory reminders in Azure-bound prompts', async () => {
     const handler = new ProviderHistoryCompat();
     const prompt: LanguageModelV2Prompt = [

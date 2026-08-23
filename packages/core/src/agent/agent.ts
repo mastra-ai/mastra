@@ -95,6 +95,7 @@ import type {
 import { ProcessorStepSchema, isProcessorWorkflow } from '../processors/index';
 import { SkillsProcessor } from '../processors/processors/skills';
 import { WorkspaceInstructionsProcessor } from '../processors/processors/workspace-instructions';
+import { providerBoundaryCompat } from '../processors/provider-history-compat';
 import type { ProcessorState } from '../processors/runner';
 import { ProcessorRunner } from '../processors/runner';
 import {
@@ -1930,7 +1931,14 @@ export class Agent<
     requestContext?: RequestContext,
     configuredProcessorOverrides?: InputProcessorOrWorkflow[],
   ): Promise<InputProcessorOrWorkflow[]> {
-    return this.resolveInputProcessors(requestContext, configuredProcessorOverrides);
+    const processors = await this.resolveInputProcessors(requestContext, configuredProcessorOverrides);
+    const hasCompat = processors.some(
+      processor =>
+        !isProcessorWorkflow(processor) &&
+        isProcessor(processor) &&
+        (processor.id === 'provider-boundary-compat' || processor.id === 'provider-history-compat'),
+    );
+    return hasCompat ? processors : [...processors, providerBoundaryCompat];
   }
 
   /**
