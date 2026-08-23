@@ -325,7 +325,7 @@ See [MastraServer](/reference/server/mastra-server) for full configuration optio
 
 ## SSE streams and reconnection
 
-Routes that stream over Server-Sent Events send each chunk as a single `data:` frame containing JSON. Adapters do not emit SSE `id:` fields, and they ignore the `Last-Event-ID` request header. An interrupted SSE stream cannot be resumed at the byte or event level: reconnecting to the same endpoint starts a new run rather than continuing the previous one.
+Routes that stream over Server-Sent Events send each chunk as a single `data:` frame containing JSON. Adapters do not currently emit SSE `id:` fields, and they ignore the `Last-Event-ID` request header. An interrupted SSE stream therefore cannot be resumed at the byte or event level today: reconnecting to the same endpoint starts a new run rather than continuing the previous one.
 
 Clients that parse these streams directly should read frames line by line and use only the `data:` lines, ignoring comments and any other fields. This keeps a client working if a proxy injects heartbeat comments or additional SSE fields. The Mastra clients already do this.
 
