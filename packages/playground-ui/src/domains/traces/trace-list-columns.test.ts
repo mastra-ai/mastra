@@ -19,6 +19,14 @@ describe('trace list columns', () => {
       expect(parseTraceColumnPreferences('{not-json')).toEqual(DEFAULT_TRACE_COLUMN_PREFERENCES);
     });
 
+    it('drops columns that are not strings at all', () => {
+      expect(
+        parseTraceColumnPreferences(
+          JSON.stringify({ version: 1, visibleColumns: ['input', 42, null, { id: 'duration' }] }),
+        ),
+      ).toEqual({ visibleColumns: ['input'], metadataKeys: [] });
+    });
+
     it('drops unknown columns and invalid metadata keys', () => {
       expect(
         parseTraceColumnPreferences(
@@ -181,6 +189,15 @@ describe('trace list columns', () => {
   });
 
   describe('when metadata is displayed', () => {
+    it('renders a plain string as itself, not as JSON', () => {
+      expect(formatTraceMetadataValue({ tenant: 'acme' }, 'tenant')).toBe('acme');
+    });
+
+    it('renders a non-finite number as a number, not as null', () => {
+      expect(formatTraceMetadataValue({ ratio: Number.NaN }, 'ratio')).toBe('NaN');
+      expect(formatTraceMetadataValue({ ratio: Number.POSITIVE_INFINITY }, 'ratio')).toBe('Infinity');
+    });
+
     it('renders a bigint without losing precision', () => {
       expect(formatTraceMetadataValue({ id: 9007199254740993n }, 'id')).toBe('9007199254740993');
     });

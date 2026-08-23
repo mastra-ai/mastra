@@ -275,4 +275,49 @@ ESCAPED="quote \" and slash \\"
       error: 'Could not read the selected file. Please try again.',
     });
   });
+
+  it('strips a byte order mark only at the very start', () => {
+    expect(parseEnvFileText('\uFEFFKEY=value')).toEqual([{ key: 'KEY', value: 'value' }]);
+    // Without a leading mark there is nothing to strip: one inside a value is content.
+    expect(parseEnvFileText('KEY=a\uFEFFb')).toEqual([{ key: 'KEY', value: 'a\uFEFFb' }]);
+  });
+
+  it('only treats a leading hash as a comment', () => {
+    expect(parseEnvFileText('KEY=value#\nOTHER=1')).toEqual([
+      { key: 'KEY', value: 'value#' },
+      { key: 'OTHER', value: '1' },
+    ]);
+  });
+
+  it('ignores a comment even when it contains an assignment', () => {
+    expect(parseEnvFileText('# KEY=commented out\nREAL=1')).toEqual([{ key: 'REAL', value: '1' }]);
+  });
+
+  it('ignores an indented comment that contains an assignment', () => {
+    expect(parseEnvFileText('   # KEY=commented out\nREAL=1')).toEqual([{ key: 'REAL', value: '1' }]);
+  });
+
+  it('only strips an export prefix at the start of the line', () => {
+    expect(parseEnvFileText('KEY=export value')).toEqual([{ key: 'KEY', value: 'export value' }]);
+  });
+
+  it('closes a multi-line value on the first unescaped quote of a later line', () => {
+    // The continuation line opens with an escaped quote, which is content.
+    expect(parseEnvFileText('KEY="first\n\\"still inside"\nAFTER=1')).toEqual([
+      { key: 'KEY', value: 'first\n"still inside' },
+      { key: 'AFTER', value: '1' },
+    ]);
+  });
+
+  it('unescapes a doubled backslash inside a single-quoted value', () => {
+    expect(parseEnvFileText(String.raw`KEY='a\\b'`)).toEqual([{ key: 'KEY', value: String.raw`a\b` }]);
+  });
+
+  it('escapes backslashes when it has to quote a value', () => {
+    expect(rowsToEnvFileText([{ key: 'KEY', value: 'a\\b\nc' }])).toBe('KEY="a\\\\b\nc"');
+  });
+
+  it('leaves a value with only inner spaces unquoted', () => {
+    expect(rowsToEnvFileText([{ key: 'KEY', value: 'a b c' }])).toBe('KEY=a b c');
+  });
 });

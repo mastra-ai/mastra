@@ -141,4 +141,52 @@ describe('useClampedElementCursor', () => {
       });
     }).not.toThrow();
   });
+
+  it('picks up a change of axis, margin or variable name', () => {
+    const element = document.createElement('div');
+    element.getBoundingClientRect = vi.fn(() => makeRect({ left: 0, top: 0, width: 100, height: 100 }));
+
+    const { result, rerender } = renderHook(props => useClampedElementCursor<HTMLDivElement>(props), {
+      initialProps: { axis: 'x' as const, margin: 0, variableName: '--cursor-x' as `--${string}` },
+    });
+
+    result.current.elementRef.current = element;
+
+    act(() => {
+      result.current.beginTracking({ clientX: 40, clientY: 90 });
+    });
+    expect(element.style.getPropertyValue('--cursor-x')).toBe('40px');
+
+    rerender({ axis: 'y' as const, margin: 20, variableName: '--cursor-y' as `--${string}` });
+
+    act(() => {
+      result.current.beginTracking({ clientX: 40, clientY: 90 });
+    });
+    expect(element.style.getPropertyValue('--cursor-y')).toBe('80px');
+  });
+
+  it('re-measures the element each time tracking begins', () => {
+    const element = document.createElement('div');
+    let rect = makeRect({ top: 0, height: 100 });
+    element.getBoundingClientRect = vi.fn(() => rect);
+
+    const { result } = renderHook(() =>
+      useClampedElementCursor<HTMLDivElement>({ axis: 'y', variableName: '--cursor-y' }),
+    );
+
+    result.current.elementRef.current = element;
+
+    act(() => {
+      result.current.beginTracking({ clientX: 0, clientY: 40 });
+    });
+    expect(element.style.getPropertyValue('--cursor-y')).toBe('40px');
+
+    // The panel scrolled between two drags; the stale rect must not be reused.
+    rect = makeRect({ top: 30, height: 100 });
+
+    act(() => {
+      result.current.beginTracking({ clientX: 0, clientY: 40 });
+    });
+    expect(element.style.getPropertyValue('--cursor-y')).toBe('10px');
+  });
 });

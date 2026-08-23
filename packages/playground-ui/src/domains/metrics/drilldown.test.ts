@@ -208,6 +208,11 @@ describe('buildTracesDrilldownUrl', () => {
     expect(parseUrl(url).params.get('status')).toBeNull();
   });
 
+  it('omits the root entity type when neither the card nor the dashboard sets one', () => {
+    const url = buildTracesDrilldownUrl({ preset: '24h', dashboardFilter: {}, scope: {} });
+    expect(parseUrl(url).params.get('rootEntityType')).toBeNull();
+  });
+
   it('emits only the custom bounds that are known', () => {
     const from = new Date('2024-01-01T00:00:00Z');
 

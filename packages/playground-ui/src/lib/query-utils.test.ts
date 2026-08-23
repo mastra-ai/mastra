@@ -50,6 +50,9 @@ describe.each([
 
   it('is false for a non-string message', () => {
     expect(matches({ message: code })).toBe(false);
+    // A message must be read as text, never coerced into it: an object that
+    // stringifies to a matching message is not a matching message.
+    expect(matches({ message: { toString: () => `HTTP error! status: ${code}` } })).toBe(false);
   });
 
   it('is false for an object carrying none of the three shapes', () => {
@@ -162,6 +165,7 @@ describe('isNonRetryableError', () => {
   it('is false for an object carrying none of the three shapes', () => {
     expect(isNonRetryableError({ reason: 404 })).toBe(false);
     expect(isNonRetryableError({ message: 404 })).toBe(false);
+    expect(isNonRetryableError({ message: { toString: () => 'HTTP error! status: 404' } })).toBe(false);
   });
 });
 
