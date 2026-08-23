@@ -261,6 +261,20 @@ describe('E2BSandbox', () => {
       );
     });
 
+    it('forwards a custom lifecycle to Sandbox.create', async () => {
+      const { Sandbox } = await import('e2b');
+      const sandbox = new E2BSandbox({ lifecycle: { onTimeout: 'kill' } });
+
+      await sandbox._start();
+
+      expect(Sandbox.create).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          lifecycle: { onTimeout: 'kill' },
+        }),
+      );
+    });
+
     it('stores mastra-sandbox-id in metadata', async () => {
       const { Sandbox } = await import('e2b');
       const sandbox = new E2BSandbox({ id: 'test-id' });
@@ -722,6 +736,27 @@ describe('E2BSandbox Template Handling', () => {
     expect(Template.build).toHaveBeenCalled();
     // And create should be called twice (retry after rebuild)
     expect(callCount).toBe(2);
+  });
+
+  it('forwards a custom lifecycle on the template rebuild retry', async () => {
+    const { Sandbox, Template } = await import('e2b');
+
+    (Template.exists as any).mockResolvedValue(true);
+
+    let callCount = 0;
+    (Sandbox.create as any).mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) {
+        return Promise.reject(new Error('404 template not found'));
+      }
+      return Promise.resolve(mockSandbox);
+    });
+
+    const sandbox = new E2BSandbox({ lifecycle: { onTimeout: 'kill' } });
+    await sandbox._start();
+
+    expect(callCount).toBe(2);
+    expect((Sandbox.create as any).mock.calls[1][1]).toMatchObject({ lifecycle: { onTimeout: 'kill' } });
   });
 
   it('custom template builder is built', async () => {
@@ -2719,6 +2754,14 @@ describe('E2BSandbox.clone', () => {
     const child = template.clone({ idleTimeoutMinutes: 15 });
 
     expect(child['_constructorOptions']).toMatchObject({ timeout: 900_000 });
+  });
+
+  it('inherits the configured lifecycle', () => {
+    const template = new E2BSandbox({ apiKey: 'e2b-key', lifecycle: { onTimeout: 'kill' } });
+
+    const child = template.clone({ id: 'mc-project-1' });
+
+    expect(child['_constructorOptions']).toMatchObject({ lifecycle: { onTimeout: 'kill' } });
   });
 
   it('inherits template defaults when no overrides are passed', () => {

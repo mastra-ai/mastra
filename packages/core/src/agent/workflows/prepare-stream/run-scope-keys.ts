@@ -1,6 +1,7 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import type { ModelLoopStreamArgs } from '../../../llm/model/model.loop.types';
 import { createRunScopeKey } from '../../../mastra/run-scope';
+import type { MemoryRunState } from '../../../memory/run-state';
 import type { ProcessorState } from '../../../processors/runner';
 import type { MessageList } from '../../message-list';
 import type { CreatedAgentSignal } from '../../signals';
@@ -27,6 +28,8 @@ export const CONVERTED_TOOLS_KEY = createRunScopeKey<Record<string, any>>('prepa
 export const PROCESSOR_STATES_KEY = createRunScopeKey<Map<string, ProcessorState>>('prepare-stream.processorStates');
 
 export const INITIAL_SIGNAL_ECHOES_KEY = createRunScopeKey<CreatedAgentSignal[]>('prepare-stream.initialSignalEchoes');
+
+export const MEMORY_RUN_STATE_KEY = createRunScopeKey<MemoryRunState>('prepare-stream.memoryRunState');
 
 /**
  * Loop options carry the per-call `OUTPUT` generic. We expose a single shared

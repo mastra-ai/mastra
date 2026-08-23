@@ -57,6 +57,14 @@ const agent = new Agent({
     defaultValue: '300000 (5 minutes)',
   },
   {
+    name: 'lifecycle',
+    type: 'SandboxLifecycle',
+    description:
+      "Controls what happens when the sandbox timeout is reached. Defaults to pausing the sandbox so the next start resumes it. Pass `{ onTimeout: 'kill' }` to destroy idle sandboxes instead, which suits stateless workspaces whose data is persisted outside the sandbox. An explicit `stop()` always pauses, regardless of this setting.",
+    isOptional: true,
+    defaultValue: "{ onTimeout: 'pause' }",
+  },
+  {
     name: 'template',
     type: 'string | TemplateBuilder | function',
     description:

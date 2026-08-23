@@ -1,10 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
+const getExistingFiles = vi.hoisted(() => vi.fn((files: string[]) => files));
+
 // Mock dependencies before importing the module
 vi.mock('@mastra/deployer/build', () => ({
-  FileService: vi.fn().mockImplementation(() => ({
-    getFirstExistingFile: vi.fn().mockImplementation((files: string[]) => files[0]),
-  })),
+  FileService: class {
+    getFirstExistingFile = vi.fn((files: string[]) => files[0]);
+    getExistingFiles = getExistingFiles;
+  },
 }));
 
 // Mock the BuildBundler parent class
@@ -37,6 +40,7 @@ describe('MigrateBundler', () => {
   beforeEach(() => {
     originalEnv = { ...process.env };
     delete process.env.MASTRA_SKIP_DOTENV;
+    getExistingFiles.mockImplementation((files: string[]) => files);
   });
 
   afterEach(() => {
@@ -129,18 +133,26 @@ describe('MigrateBundler', () => {
   });
 
   describe('getEnvFiles', () => {
-    it('should return env files when no custom env file specified', async () => {
+    it('layers default dotenv files from base to development override', async () => {
       const bundler = new MigrateBundler();
       const envFiles = await bundler.getEnvFiles();
 
-      expect(Array.isArray(envFiles)).toBe(true);
+      expect(envFiles).toEqual(['.env', '.env.local', '.env.development']);
     });
 
-    it('should accept custom env file', async () => {
-      const bundler = new MigrateBundler('.env.production');
+    it('uses only an explicit env file', async () => {
+      const bundler = new MigrateBundler('.env.custom');
       const envFiles = await bundler.getEnvFiles();
 
-      expect(Array.isArray(envFiles)).toBe(true);
+      expect(envFiles).toEqual(['.env.custom']);
+    });
+
+    it('falls back to layered defaults when an explicit env file does not exist', async () => {
+      getExistingFiles.mockImplementation((files: string[]) => (files[0] === '.env.custom' ? [] : files));
+      const bundler = new MigrateBundler('.env.custom');
+      const envFiles = await bundler.getEnvFiles();
+
+      expect(envFiles).toEqual(['.env', '.env.local', '.env.development']);
     });
 
     it('should return empty array when MASTRA_SKIP_DOTENV is set to "true"', async () => {
