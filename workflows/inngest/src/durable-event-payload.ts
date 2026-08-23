@@ -43,7 +43,10 @@ interface PerCallSignals {
  * Absent context serializes to `{}`, never `undefined`.
  */
 export function serializeRequestContext(requestContext?: RequestContext<any>): Record<string, any> {
-  return requestContext ? Object.fromEntries(requestContext.entries()) : {};
+  // `toJSON()` rather than `entries()`: it drops values that cannot survive the
+  // JSON round trip through `inngest.send()` (functions, RPC proxies, cyclic
+  // references). Passing those through raw makes the send throw.
+  return requestContext ? requestContext.toJSON() : {};
 }
 
 /**

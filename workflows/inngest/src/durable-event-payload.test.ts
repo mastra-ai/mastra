@@ -19,6 +19,34 @@ describe('durable event payload builders', () => {
       rc.set('tenant', 'acme');
       expect(serializeRequestContext(rc)).toEqual({ tenant: 'acme' });
     });
+
+    it('drops values that cannot survive the JSON round trip through inngest.send', () => {
+      // These reach a RequestContext in practice (RPC proxies, callbacks), and
+      // a raw `entries()` copy would make the event send throw on the cycle.
+      const rc = new RequestContext();
+      const cyclic: any = { name: 'cyclic' };
+      cyclic.self = cyclic;
+      rc.set('tenant', 'acme');
+      rc.set('cyclic', cyclic);
+      rc.set('fn', () => 'nope');
+
+      const serialized = serializeRequestContext(rc);
+
+      expect(serialized).toEqual({ tenant: 'acme' });
+      expect(() => JSON.stringify({ data: { requestContext: serialized } })).not.toThrow();
+    });
+
+    it('keeps caller-supplied values off the snapshot base when they are unserializable', () => {
+      const rc = new RequestContext();
+      const cyclic: any = {};
+      cyclic.self = cyclic;
+      rc.set('cyclic', cyclic);
+
+      const merged = mergeResumeRequestContext({ tenant: 'acme' }, rc);
+
+      expect(merged).toEqual({ tenant: 'acme' });
+      expect(() => JSON.stringify({ data: { requestContext: merged } })).not.toThrow();
+    });
   });
 
   describe('mergeResumeRequestContext', () => {
@@ -84,8 +112,9 @@ describe('durable event payload builders', () => {
     });
 
     it('emits the same per-call signal keys on both the trigger and resume payloads', () => {
-      // Regression net for the drift this module exists to prevent: whenever a
-      // new per-call signal is added, it must appear on both payloads.
+      // Guards against a builder dropping one of today's signals. The real net
+      // for a *newly added* signal is the shared `PerCallSignals` type, which
+      // both builders spread from; this list has to be updated alongside it.
       const signalKeys = ['actor', 'perStep', 'requestContext'];
       const trigger = buildDurableTriggerEventData({ inputData: null, runId: 'r', actor, perStep: true });
       const resume = buildDurableResumeEventData({
