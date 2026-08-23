@@ -139,3 +139,28 @@ export function toCombinedRowData(
 
   return combinedData;
 }
+
+/**
+ * Upper bound for an area row's y-axis: tall enough for the data, and for the
+ * threshold line when there is one, so the line never sits off the chart.
+ */
+export function getAreaRowYMax(
+  data: Array<{ [k: string]: unknown }>,
+  dataKey: string,
+  threshold?: number,
+): number | undefined {
+  if (threshold == null) return undefined;
+  const maxValue = Math.max(0, ...data.map(point => Number(point[dataKey]) || 0));
+  return Math.max(maxValue, threshold);
+}
+
+/** A chart click stands for a moment on the timeline only when it carries a readable label. */
+export function toSelectedT(activeLabel: string | number | undefined): number | null {
+  if (activeLabel == null) return null;
+  return Number(activeLabel);
+}
+
+/** Only the points that mark an event get a dot; the rest are just curve samples. */
+export function isEventPoint(payload: unknown): boolean {
+  return Boolean((payload as { event?: number } | undefined)?.event);
+}

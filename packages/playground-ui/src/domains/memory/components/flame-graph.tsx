@@ -20,12 +20,15 @@ import type { TDomain } from '../lib/timeline';
 import { formatTimeDisplay, tToTimestamp } from '../lib/timeline';
 import type { MemoryMessage, OMHistoryRecord } from '../types';
 import {
+  getAreaRowYMax,
+  isEventPoint,
   toActiveObservationData,
   toBufferedObservationData,
   toCombinedRowData,
   toContextData,
   toEventData,
   toMessageData,
+  toSelectedT,
 } from './flame-graph-data';
 
 export interface ZoomRange {
@@ -128,8 +131,7 @@ interface AreaRowProps {
 }
 
 function AreaRow({ label, data, dataKey, color, gradientId, domain, zoomDomain, threshold }: AreaRowProps) {
-  const maxValue = Math.max(0, ...data.map(d => Number(d[dataKey]) || 0));
-  const yMax = threshold != null ? Math.max(maxValue, threshold) : undefined;
+  const yMax = getAreaRowYMax(data, dataKey, threshold);
 
   return (
     <div className="border-border1/50 relative grid grid-cols-[6rem_1fr] items-center border-b hover:z-10">
@@ -251,8 +253,8 @@ function CombinedRow({
           <ComposedChart
             margin={{ top: 0, right: 0, bottom: 0, left: 0 }}
             onClick={(state: RechartsClickState) => {
-              const label = state?.activeLabel;
-              if (label != null && onSelectT) onSelectT(Number(label));
+              const t = toSelectedT(state?.activeLabel);
+              if (t != null && onSelectT) onSelectT(t);
             }}
             className={onSelectT ? 'cursor-pointer' : undefined}
           >
@@ -276,11 +278,13 @@ function CombinedRow({
               fill={`url(#${gradientId})`}
               isAnimationActive={false}
               activeDot={{ r: 5, stroke: color, strokeWidth: 2, fill: '#0a0a0a' }}
-              dot={(props: Record<string, unknown>) => {
-                const dotPayload = props.payload as { event?: number } | undefined;
-                if (!dotPayload?.event) return <></>;
-                return <circle cx={props.cx as number} cy={props.cy as number} r={4} fill={color} />;
-              }}
+              dot={(props: Record<string, unknown>) =>
+                isEventPoint(props.payload) ? (
+                  <circle cx={props.cx as number} cy={props.cy as number} r={4} fill={color} />
+                ) : (
+                  <></>
+                )
+              }
             />
             {threshold != null && (
               <ReferenceLine yAxisId="area" y={threshold} stroke={color} strokeDasharray="4 3" strokeOpacity={0.4} />

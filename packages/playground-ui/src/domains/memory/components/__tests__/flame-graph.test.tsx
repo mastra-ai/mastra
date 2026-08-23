@@ -125,6 +125,23 @@ describe('FlameGraph rows', () => {
     expect(container.innerHTML).toBe('');
   });
 
+  it.each([
+    ['only messages', { omRecords: [], markers: [] as never[], messages: memoryMessages }],
+    ['only observation records', { omRecords: omHistoryRecords, markers: [] as never[], messages: [] }],
+    [
+      'only stream markers',
+      {
+        omRecords: [],
+        markers: [{ type: 'status', timestamp: '2026-06-01T10:02:00.000Z', pendingTokens: 120 }],
+        messages: [],
+      },
+    ],
+  ])('charts a thread carrying %s', (_, props) => {
+    render(<FlameGraph {...props} tDomain={tDomain} />);
+
+    expect(screen.getByText('Messages')).toBeTruthy();
+  });
+
   it('still renders when the only thing it has is messages', () => {
     render(<FlameGraph omRecords={[]} markers={[]} messages={memoryMessages} tDomain={tDomain} />);
 
@@ -162,6 +179,108 @@ describe('FlameGraph zoom track', () => {
 
     const leftShade = trackOf().firstElementChild as HTMLElement;
     expect(leftShade.style.width).toBe('25%');
+  });
+
+  it('draws the selected band and its handles at the zoomed edges', () => {
+    const span = tDomain.tMax - tDomain.tMin;
+    render(
+      <FlameGraph
+        omRecords={omHistoryRecords}
+        markers={markers}
+        messages={memoryMessages}
+        tDomain={tDomain}
+        zoomRange={{ left: tDomain.tMin + span * 0.25, right: tDomain.tMin + span * 0.75 }}
+        onZoomRangeChange={vi.fn()}
+      />,
+    );
+
+    const [leftShade, band, rightShade, leftHandle, rightHandle] = Array.from(trackOf().children) as HTMLElement[];
+
+    expect(leftShade?.style.width).toBe('25%');
+    expect(rightShade?.style.width).toBe('25%');
+    expect(band?.style.left).toBe('25%');
+    expect(band?.style.right).toBe('25%');
+    // Each handle straddles its own edge rather than sitting beside it.
+    expect(leftHandle?.style.left).toBe('25%');
+    expect(leftHandle?.style.transform).toBe('translateX(-50%)');
+    expect(rightHandle?.style.left).toBe('75%');
+    expect(rightHandle?.style.transform).toBe('translateX(-50%)');
+  });
+
+  it('drags whichever handle was grabbed directly, however far away it is', () => {
+    const onZoomRangeChange = vi.fn();
+    render(
+      <FlameGraph
+        omRecords={omHistoryRecords}
+        markers={markers}
+        messages={memoryMessages}
+        tDomain={tDomain}
+        zoomRange={{ left: tDomain.tMin, right: tDomain.tMax }}
+        onZoomRangeChange={onZoomRangeChange}
+      />,
+    );
+
+    const track = trackOf();
+    track.getBoundingClientRect = () => ({ left: 0, width: 100, top: 0, height: 24 }) as DOMRect;
+    const rightHandle = track.children[4] as HTMLElement;
+
+    // Grabbing the right handle near the left edge must still move the right
+    // bound — the handle wins over the nearest-edge guess.
+    fireEvent.mouseDown(rightHandle, { clientX: 5 });
+    fireEvent.mouseMove(window, { clientX: 30 });
+    fireEvent.mouseUp(window);
+
+    const range = onZoomRangeChange.mock.calls.at(-1)?.[0] as { left: number; right: number };
+    expect(range.left).toBe(tDomain.tMin);
+    expect(range.right).toBeLessThan(tDomain.tMax);
+  });
+
+  it('drags the left handle when it is the one grabbed', () => {
+    const onZoomRangeChange = vi.fn();
+    render(
+      <FlameGraph
+        omRecords={omHistoryRecords}
+        markers={markers}
+        messages={memoryMessages}
+        tDomain={tDomain}
+        zoomRange={{ left: tDomain.tMin, right: tDomain.tMax }}
+        onZoomRangeChange={onZoomRangeChange}
+      />,
+    );
+
+    const track = trackOf();
+    track.getBoundingClientRect = () => ({ left: 0, width: 100, top: 0, height: 24 }) as DOMRect;
+    const leftHandle = track.children[3] as HTMLElement;
+
+    fireEvent.mouseDown(leftHandle, { clientX: 95 });
+    fireEvent.mouseMove(window, { clientX: 40 });
+    fireEvent.mouseUp(window);
+
+    const range = onZoomRangeChange.mock.calls.at(-1)?.[0] as { left: number; right: number };
+    expect(range.left).toBeGreaterThan(tDomain.tMin);
+    expect(range.right).toBe(tDomain.tMax);
+  });
+
+  it('grabbing a handle does not also move it to where the mouse went down', () => {
+    const onZoomRangeChange = vi.fn();
+    render(
+      <FlameGraph
+        omRecords={omHistoryRecords}
+        markers={markers}
+        messages={memoryMessages}
+        tDomain={tDomain}
+        zoomRange={{ left: tDomain.tMin, right: tDomain.tMax }}
+        onZoomRangeChange={onZoomRangeChange}
+      />,
+    );
+
+    const track = trackOf();
+    track.getBoundingClientRect = () => ({ left: 0, width: 100, top: 0, height: 24 }) as DOMRect;
+
+    fireEvent.mouseDown(track.children[3] as HTMLElement, { clientX: 50 });
+
+    // The press only picks the handle up; the range moves once the mouse does.
+    expect(onZoomRangeChange).not.toHaveBeenCalled();
   });
 
   it('shows the whole domain as selected when nothing is zoomed', () => {

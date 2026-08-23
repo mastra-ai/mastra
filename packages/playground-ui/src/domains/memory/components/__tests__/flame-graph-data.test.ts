@@ -4,13 +4,16 @@ import type { ExtractedOmMarker } from '../../lib/extract-markers';
 import type { TDomain } from '../../lib/timeline';
 import type { MemoryMessage, OMHistoryRecord } from '../../types';
 import {
+  getAreaRowYMax,
   getObservationTimestamp,
+  isEventPoint,
   toActiveObservationData,
   toBufferedObservationData,
   toCombinedRowData,
   toContextData,
   toEventData,
   toMessageData,
+  toSelectedT,
 } from '../flame-graph-data';
 
 // A ten-minute window, so a timestamp's `t` reads straight off the clock:
@@ -403,5 +406,67 @@ describe('toCombinedRowData', () => {
     const combined = toCombinedRowData([{ t: 0.5, tokens: 400 }], 'tokens', [{ t: 0.5, event: 1 }]);
 
     expect(combined).toEqual([{ t: 0.5, event: 1, tokens: 400 }]);
+  });
+});
+
+describe('getAreaRowYMax', () => {
+  it('leaves the axis to fit the data when there is no threshold', () => {
+    expect(getAreaRowYMax([{ tokens: 500 }], 'tokens')).toBeUndefined();
+  });
+
+  it('reaches the tallest reading when the threshold sits below it', () => {
+    expect(getAreaRowYMax([{ tokens: 500 }, { tokens: 1200 }], 'tokens', 1000)).toBe(1200);
+  });
+
+  it('reaches the threshold when the readings all sit below it', () => {
+    expect(getAreaRowYMax([{ tokens: 200 }, { tokens: 300 }], 'tokens', 1000)).toBe(1000);
+  });
+
+  it('still reaches the threshold with nothing charted', () => {
+    expect(getAreaRowYMax([], 'tokens', 1000)).toBe(1000);
+  });
+
+  it('reads a missing or unreadable value as zero rather than blowing up the axis', () => {
+    expect(getAreaRowYMax([{ other: 5 }, { tokens: 'lots' }], 'tokens', 100)).toBe(100);
+  });
+
+  it('never lets a negative reading pull the axis below zero', () => {
+    expect(getAreaRowYMax([{ tokens: -50 }], 'tokens', 0)).toBe(0);
+  });
+
+  it('reads the key it was asked for', () => {
+    expect(getAreaRowYMax([{ a: 900, b: 100 }], 'b', 0)).toBe(100);
+  });
+});
+
+describe('toSelectedT', () => {
+  it('reads a numeric label as the moment it stands for', () => {
+    expect(toSelectedT(0.5)).toBe(0.5);
+  });
+
+  it('reads a label recharts stringified', () => {
+    expect(toSelectedT('0.25')).toBe(0.25);
+  });
+
+  it('reads the start of the timeline, not as nothing at all', () => {
+    expect(toSelectedT(0)).toBe(0);
+  });
+
+  it('reads a click that landed on no point as no moment', () => {
+    expect(toSelectedT(undefined)).toBeNull();
+  });
+});
+
+describe('isEventPoint', () => {
+  it('marks a point that carries an event', () => {
+    expect(isEventPoint({ event: 1 })).toBe(true);
+  });
+
+  it.each([
+    ['a plain curve sample', { tokens: 500 }],
+    ['a point whose event count is zero', { event: 0 }],
+    ['nothing at all', undefined],
+  ])('leaves %s unmarked', (_, payload) => {
+    expect(isEventPoint(payload)).toBe(false);
   });
 });
