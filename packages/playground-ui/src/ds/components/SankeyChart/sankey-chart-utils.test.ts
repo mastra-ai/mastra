@@ -362,6 +362,15 @@ describe('SankeyChart utilities', () => {
       expect(centered / 2 + centered / 2).toBeLessThan(columnPitch);
     });
 
+    it('budgets a label against the node it hangs off', () => {
+      // Pinned rather than recomputed: the arithmetic is the thing under test.
+      expect(getSankeyLabelWidths(layout)).toEqual({ centered: 227, edge: 117 });
+    });
+
+    it('budgets a two-column chart against its single pitch', () => {
+      expect(getSankeyLabelWidths({ ...layout, columnCount: 2 })).toEqual({ centered: 713, edge: 360 });
+    });
+
     it('keeps an edge label clear of its centered neighbour', () => {
       const { centered, edge } = getSankeyLabelWidths(layout);
 
@@ -407,6 +416,24 @@ describe('SankeyChart utilities', () => {
       const label = 'Repeated command calls without confirmation';
 
       expect(truncateSankeyLabel(label, { fontSize: 11, maxWidth: Number.POSITIVE_INFINITY })).toBe(label);
+    });
+
+    it('leaves a label sitting exactly on the limit untouched', () => {
+      expect(truncateSankeyLabel('abcde', { fontSize: 11, maxWidth: Number.POSITIVE_INFINITY, maxCharacters: 5 })).toBe(
+        'abcde',
+      );
+      expect(
+        truncateSankeyLabel('abcdef', { fontSize: 11, maxWidth: Number.POSITIVE_INFINITY, maxCharacters: 5 }),
+      ).toBe('abcd…');
+    });
+
+    it('shows nothing but an ellipsis when there is room for one character', () => {
+      expect(truncateSankeyLabel('abcde', { fontSize: 11, maxWidth: Number.POSITIVE_INFINITY, maxCharacters: 1 })).toBe(
+        '…',
+      );
+      expect(truncateSankeyLabel('abcde', { fontSize: 11, maxWidth: Number.POSITIVE_INFINITY, maxCharacters: 2 })).toBe(
+        'a…',
+      );
     });
   });
 
@@ -625,6 +652,82 @@ describe('SankeyChart utilities', () => {
 
       // X carries 4 in total; S only 3 of it.
       expect(heightOf(nodeX?.id)).toBeGreaterThan(heightOf(nodeS?.id));
+    });
+  });
+
+  describe('when link and node geometry is measured off the origin', () => {
+    const twoColumns = columns.slice(0, 2);
+    const graph = buildSankeyChartGraph(
+      [
+        { source: 'A', model: 'X', count: 6 },
+        { source: 'A', model: 'Y', count: 2 },
+        { source: 'B', model: 'X', count: 2 },
+        { source: 'B', model: 'Z', count: 1 },
+      ],
+      twoColumns,
+      record => Number(record.count),
+    );
+    const geometry = buildFixedSankeyGeometry(graph, {
+      top: 40,
+      bottom: 240,
+      left: 100,
+      right: 500,
+      nodePadding: 20,
+    });
+    const nodeOf = (name: string) => geometry.nodes.get(graph.nodes.find(node => node.name === name)?.id ?? '');
+    const linkOf = (source: string, target: string) =>
+      geometry.links.get(
+        graph.links.find(link => link.sourceNode.name === source && link.targetNode.name === target)?.id ?? '',
+      );
+
+    it('measures slot heights from the band it was given, not from the origin', () => {
+      // Pinned: a band of 200px starting at y=40, three slots on the widest column.
+      expect(nodeOf('A')?.centerY).toBe(85);
+      expect(nodeOf('A')?.height).toBeCloseTo(23.272727, 5);
+    });
+
+    it('sizes ribbons from their share of each end', () => {
+      expect(linkOf('A', 'X')?.sourceWidth).toBeCloseTo(17.454545, 5);
+      expect(linkOf('A', 'Y')?.sourceWidth).toBeCloseTo(5.818181, 5);
+      // A's two ribbons together fill A's bar exactly.
+      expect((linkOf('A', 'X')?.sourceWidth ?? 0) + (linkOf('A', 'Y')?.sourceWidth ?? 0)).toBeCloseTo(
+        nodeOf('A')?.height ?? 0,
+        5,
+      );
+    });
+
+    it('stacks a node’s ribbons instead of drawing them on top of each other', () => {
+      const first = linkOf('A', 'X');
+      const second = linkOf('A', 'Y');
+
+      expect(second?.sourceY).toBeGreaterThan(first?.sourceY ?? 0);
+      expect((first?.sourceY ?? 0) + (first?.sourceWidth ?? 0) / 2).toBeCloseTo(
+        (second?.sourceY ?? 0) - (second?.sourceWidth ?? 0) / 2,
+        5,
+      );
+    });
+
+    it('scales every column against the tightest one', () => {
+      // The model column packs three nodes into the same band as the source
+      // column's two, so its slot is what caps every bar in the chart.
+      expect(nodeOf('X')?.height).toBeCloseTo(nodeOf('A')?.height ?? 0, 5);
+    });
+  });
+
+  describe('when the same link appears twice', () => {
+    it('adds up both its layout and its current value', () => {
+      const graph = buildSankeyChartGraph(
+        [
+          { source: 'A', model: 'X', count: 3 },
+          { source: 'A', model: 'X', count: 4 },
+        ],
+        columns.slice(0, 2),
+        record => Number(record.count),
+      );
+
+      expect(graph.nodes).toHaveLength(2);
+      expect(graph.links).toHaveLength(1);
+      expect(graph.links[0]).toMatchObject({ value: 7, displayValue: 7 });
     });
   });
 });
