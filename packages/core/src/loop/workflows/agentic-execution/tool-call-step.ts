@@ -81,6 +81,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
   _internal,
   logger,
   agentId,
+  agentVersionId,
   mastra,
   requireToolApproval: requireToolApprovalFromFactory,
   actor,
@@ -629,6 +630,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 },
                 __streamState: streamState.serialize(),
                 __agentId: agentId,
+                ...(agentVersionId ? { __agentVersionId: agentVersionId } : {}),
               },
               {
                 resumeLabel: inputData.toolCallId,
@@ -778,6 +780,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   },
                   __streamState: streamState.serialize(),
                   __agentId: agentId,
+                  ...(agentVersionId ? { __agentVersionId: agentVersionId } : {}),
                   // Persist the inner suspended run id in the workflow snapshot, partitioned per
                   // tool call (resumeLabel = toolCallId). Persisted message metadata exposes the
                   // same id as delegatedRunId for cold reloads, while the snapshot remains the
@@ -827,6 +830,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   toolCallSuspended: suspendPayload,
                   __streamState: streamState.serialize(),
                   __agentId: agentId,
+                  ...(agentVersionId ? { __agentVersionId: agentVersionId } : {}),
                   toolCallId: inputData.toolCallId,
                   toolName: inputData.toolName,
                   resumeLabel: options?.resumeLabel,

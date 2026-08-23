@@ -11,7 +11,11 @@ import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
 const auditEvents: Array<Record<string, unknown>> = [];
 const audit: AuditEmitter = {
   async emit({ input }) {
-    auditEvents.push({ action: input.action, metadata: input.metadata });
+    auditEvents.push({
+      action: input.action,
+      metadata: input.metadata,
+      ...(input.factoryProjectId ? { factoryProjectId: input.factoryProjectId } : {}),
+    });
   },
 };
 
@@ -139,18 +143,30 @@ describe('intake configuration', () => {
       expect(await response.json()).toEqual({ bindings });
       expect(await (await buildApp(orgUser).request('/web/intake/bindings')).json()).toEqual({ bindings });
       expect(auditEvents).toEqual([
-        { action: 'factory.intake.binding_updated', metadata: { factoryProjectId: project.id } },
+        {
+          action: 'factory.intake.binding_updated',
+          factoryProjectId: project.id,
+          metadata: { factoryProjectId: project.id },
+        },
       ]);
     });
 
     it('clears a binding when the project is null', async () => {
       const project = await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'app' } });
       await put({ integrationId: 'linear', sourceId: 'team-1', factoryProjectId: project.id });
+      auditEvents.length = 0;
 
       const response = await put({ integrationId: 'linear', sourceId: 'team-1', factoryProjectId: null });
 
       expect(response.status).toBe(200);
       expect(await response.json()).toEqual({ bindings: [] });
+      expect(auditEvents).toEqual([
+        {
+          action: 'factory.intake.binding_updated',
+          factoryProjectId: project.id,
+          metadata: { factoryProjectId: null },
+        },
+      ]);
     });
 
     it('rejects unknown integrations and malformed bodies', async () => {

@@ -11,6 +11,13 @@ const SANDBOX_POOL = 'source_control_sandbox_pool';
 const WORKTREES = 'source_control_worktrees';
 const SESSIONS = 'source_control_sessions';
 
+export class SourceControlConnectionNotFoundError extends Error {
+  constructor() {
+    super('Project source-control connection not found for this organization and integration.');
+    this.name = 'SourceControlConnectionNotFoundError';
+  }
+}
+
 export const SOURCE_CONTROL_SCHEMAS: CollectionSchema[] = [
   {
     name: INSTALLATIONS,
@@ -848,8 +855,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
 
     const requireConnection = async (args: { orgId: string; id: string }): Promise<ProjectSourceControlConnection> => {
       const connection = await getConnection(args);
-      if (!connection)
-        throw new Error('Project source-control connection not found for this organization and integration.');
+      if (!connection) throw new SourceControlConnectionNotFoundError();
       return connection;
     };
 

@@ -568,6 +568,12 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'tools/parallel',
+          label: 'Parallel',
+          customProps: { icon: '/img/integrations/parallel.svg' },
+        },
+        {
+          type: 'doc',
           id: 'tools/perplexity',
           label: 'Perplexity',
           customProps: { icon: 'https://cdn.simpleicons.org/perplexity?viewbox=auto&size=28' },
