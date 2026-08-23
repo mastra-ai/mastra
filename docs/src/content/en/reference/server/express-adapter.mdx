@@ -228,7 +228,7 @@ await server.init()
 
 Middleware added after `init()` never runs for Mastra's routes. Express dispatches handlers in registration order, so middleware registered after the routes only applies to routes added later.
 
-The [`server.middleware`](/docs/server/middleware) config isn't supported by this adapter: its handlers use Hono's signature, and the adapter logs a warning when it is set. To insert Express middleware between Mastra's context step and its routes, call each initialization method separately as shown in the next section.
+This adapter can't run [`server.middleware`](/docs/server/middleware) handlers because they use Hono's signature, and it logs a warning when that option is set. If you need Express middleware between Mastra's context step and its routes, use the manual initialization flow below.
 
 ## Manual initialization
 
