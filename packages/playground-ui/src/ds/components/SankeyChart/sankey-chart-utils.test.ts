@@ -445,4 +445,186 @@ describe('SankeyChart utilities', () => {
       expect(truncated.length).toBeLessThan(23);
     });
   });
+
+  describe('when a dimension value is not usable', () => {
+    it.each([
+      ['a boolean', true],
+      ['null', null],
+      ['undefined', undefined],
+      ['an array', ['GPT']],
+      ['a blank string', '   '],
+      ['an empty string', ''],
+      ['NaN', Number.NaN],
+      ['Infinity', Number.POSITIVE_INFINITY],
+    ])('rejects %s', (_, value) => {
+      expect(getSankeyChartValue(value)).toBeUndefined();
+    });
+
+    it('keeps a finite number, including zero and negatives', () => {
+      expect(getSankeyChartValue(0)).toBe(0);
+      expect(getSankeyChartValue(-4)).toBe(-4);
+      expect(getSankeyChartValue(4.5)).toBe(4.5);
+    });
+
+    it('trims a string down to its content', () => {
+      expect(getSankeyChartValue('  API  ')).toBe('API');
+    });
+  });
+
+  describe('when a column move cannot be made', () => {
+    it.each([
+      ['the column has not moved', 1, 1],
+      ['the start index is negative', -1, 1],
+      ['the end index is negative', 1, -1],
+      ['the start index is past the last column', 3, 1],
+      ['the end index is past the last column', 1, 3],
+      ['the start index is exactly the column count', 3, 0],
+      ['the end index is exactly the column count', 0, 3],
+    ])('returns the same array when %s', (_, startIndex, endIndex) => {
+      expect(reorderSankeyChartColumns(columns, startIndex, endIndex)).toBe(columns);
+    });
+
+    it('moves a column backwards as well as forwards', () => {
+      expect(reorderSankeyChartColumns(columns, 2, 0).map(column => column.id)).toEqual(['status', 'source', 'model']);
+      expect(reorderSankeyChartColumns(columns, 0, 1).map(column => column.id)).toEqual(['model', 'source', 'status']);
+    });
+  });
+
+  describe('when there is nothing to chart', () => {
+    it('returns the one shared empty graph rather than a new one each time', () => {
+      // The chart re-renders on every stream tick; a fresh object each time
+      // would invalidate every memo downstream.
+      expect(buildSankeyChartGraph([], columns)).toBe(buildSankeyChartGraph([{ source: 'API' }], columns.slice(0, 1)));
+    });
+  });
+
+  describe('when a record weight sits on a boundary', () => {
+    const twoColumns = columns.slice(0, 2);
+    const record = { source: 'API', model: 'GPT' };
+
+    it('keeps a record weighted exactly zero', () => {
+      const graph = buildSankeyChartGraph([record], twoColumns, () => 0);
+
+      expect(graph.links).toHaveLength(1);
+      expect(graph.links[0]).toMatchObject({ value: 0, displayValue: 0 });
+    });
+
+    it('keeps a record whose layout weight is exactly zero', () => {
+      const graph = buildSankeyChartGraph(
+        [record],
+        twoColumns,
+        () => 2,
+        undefined,
+        undefined,
+        undefined,
+        () => 0,
+      );
+
+      expect(graph.links[0]).toMatchObject({ value: 0, displayValue: 2 });
+    });
+
+    it.each([
+      ['a non-finite display weight', () => Number.NaN, () => 1],
+      ['a negative display weight', () => -1, () => 1],
+      ['a non-finite layout weight', () => 1, () => Number.NaN],
+      ['a negative layout weight', () => 1, () => -1],
+    ])('drops a record with %s', (_, getRecordWeight, getRecordLayoutWeight) => {
+      const graph = buildSankeyChartGraph(
+        [record],
+        twoColumns,
+        getRecordWeight,
+        undefined,
+        undefined,
+        undefined,
+        getRecordLayoutWeight,
+      );
+
+      expect(graph.links).toHaveLength(0);
+    });
+  });
+
+  describe('when a custom node identity is unusable', () => {
+    const twoColumns = columns.slice(0, 2);
+    const data = [{ source: 'API', model: 'GPT' }];
+
+    it.each([['source'], ['model']])('drops the record when the %s identity is blank', columnId => {
+      const graph = buildSankeyChartGraph(data, twoColumns, undefined, (record, column) =>
+        column.id === columnId ? '  ' : String(record[column.id]),
+      );
+
+      expect(graph.links).toHaveLength(0);
+    });
+  });
+
+  describe('when a custom node value is unusable', () => {
+    const twoColumns = columns.slice(0, 2);
+    const nodeValues = (sourceCount: unknown, modelCount: unknown) =>
+      buildSankeyChartGraph(
+        [{ source: 'API', model: 'GPT', sourceCount, modelCount }],
+        twoColumns,
+        () => 1,
+        undefined,
+        undefined,
+        (record, column) => record[`${column.id}Count`] as number,
+      ).nodes.map(node => node.displayValue);
+
+    it('keeps a node value of exactly zero on either end', () => {
+      expect(nodeValues(0, 0)).toEqual([0, 0]);
+    });
+
+    it.each([
+      ['non-finite', Number.NaN],
+      ['negative', -5],
+      ['missing', undefined],
+    ])('drops a %s node value on either end', (_, value) => {
+      expect(nodeValues(value, value)).toEqual([undefined, undefined]);
+    });
+  });
+
+  describe('when a graph carries no current value', () => {
+    it('draws nodes and ribbons with no height rather than dividing by zero', () => {
+      const graph = buildSankeyChartGraph([{ source: 'A', model: 'X', count: 0 }], columns.slice(0, 2), record =>
+        Number(record.count),
+      );
+      const geometry = buildFixedSankeyGeometry(graph, {
+        top: 0,
+        bottom: 200,
+        left: 100,
+        right: 500,
+        nodePadding: 20,
+      });
+
+      for (const node of geometry.nodes.values()) expect(node.height).toBe(0);
+      for (const link of geometry.links.values()) {
+        expect(link.sourceWidth).toBe(0);
+        expect(link.targetWidth).toBe(0);
+      }
+    });
+
+    it('sizes a pass-through node by its larger side', () => {
+      // X takes 3 in and passes 1 on: the bar must show the 3 it received.
+      const graph = buildSankeyChartGraph(
+        [
+          { source: 'A', model: 'X', status: 'S', count: 3 },
+          { source: 'A2', model: 'X', status: 'S2', count: 1 },
+        ],
+        columns,
+        record => Number(record.count),
+      );
+      const geometry = buildFixedSankeyGeometry(graph, {
+        top: 0,
+        bottom: 200,
+        left: 100,
+        right: 500,
+        nodePadding: 20,
+      });
+
+      const nodeX = graph.nodes.find(node => node.name === 'X');
+      const nodeS = graph.nodes.find(node => node.name === 'S');
+      const heightOf = (id: string | undefined) => geometry.nodes.get(id ?? '')?.height ?? 0;
+
+      // X carries 4 in total; S only 3 of it.
+      expect(heightOf(nodeX?.id)).toBeGreaterThan(heightOf(nodeS?.id));
+    });
+  });
 });
