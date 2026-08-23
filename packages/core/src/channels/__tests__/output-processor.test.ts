@@ -2116,6 +2116,54 @@ async function driveFallback(
   }
 }
 
+describe('render driver failure', () => {
+  beforeAll(async () => {
+    await getChatModule();
+  });
+
+  // `driverPromise` is only awaited in `processOutputStream`, and only once a
+  // terminal chunk closes the queue. Text posts are defensively wrapped, but the
+  // tool-card post in the static driver is not — so an adapter that rejects
+  // (expired bot token, uninstalled app) while a tool is running rejects the
+  // driver with no terminal chunk in sight. Drive tool chunks ONLY: adding a
+  // `step-finish` would reach the cleanup `await` and the test would pass either
+  // way.
+  it('does not leave the rejection unhandled before a terminal chunk arrives', async () => {
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on('unhandledRejection', onUnhandled);
+
+    try {
+      const { channels, chatThread } = makeChannels({ streaming: false, toolDisplay: 'cards' });
+      chatThread.post = vi.fn().mockRejectedValue(new Error('invalid_auth'));
+
+      const render = (channels as any)._buildRenderContext(chatThread, 'test');
+      const processor = new ChatChannelOutputProcessor();
+      const requestContext = new Map<string, unknown>();
+      requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, render);
+      const state: Record<string, unknown> = {};
+
+      for (const part of [
+        { type: 'tool-call', payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } } },
+      ]) {
+        await processor.processOutputStream({
+          part,
+          state,
+          requestContext: { get: (key: string) => requestContext.get(key) } as any,
+        } as any);
+      }
+
+      // Let the driver reject and the rejection reach the macrotask turn where
+      // Node decides it went unhandled.
+      await new Promise(resolve => setTimeout(resolve, 20));
+
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+    }
+  });
+});
+
 describe('ChatChannelOutputProcessor fallback render context', () => {
   beforeAll(async () => {
     await getChatModule();

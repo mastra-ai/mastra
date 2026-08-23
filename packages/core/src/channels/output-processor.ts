@@ -288,6 +288,13 @@ export class ChatChannelOutputProcessor {
       throw err;
     });
 
+    // `.catch()` returns a NEW promise, and the `throw` above rejects it — so the
+    // rejection the handler means to prevent simply moves to the promise handed
+    // to the caller, which nothing observes until a terminal chunk arrives. Own
+    // it here. The `await session.driverPromise` in processOutputStream still
+    // sees the failure: attaching a handler does not consume a rejection.
+    driverPromise.catch(() => {});
+
     return { queue, driverPromise };
   }
 }
