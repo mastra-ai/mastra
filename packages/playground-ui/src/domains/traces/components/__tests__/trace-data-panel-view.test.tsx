@@ -434,3 +434,199 @@ describe('TraceDataPanelView — downloading the trace', () => {
     await waitFor(() => expect(download.hasAttribute('disabled')).toBe(true));
   });
 });
+
+describe('TraceDataPanelView — what the timeline shows as selected', () => {
+  /** The timeline tints the selected span's own row; nothing else carries it. */
+  const isMarked = (name: string) => {
+    let node: HTMLElement | null = screen.getByText(name);
+    while (node) {
+      if (node.classList.contains('bg-surface4')) return true;
+      node = node.parentElement;
+    }
+    return false;
+  };
+
+  it('marks the span the URL asked for', () => {
+    render(<TraceDataPanelView {...baseProps} spans={nestedSpanFixture} initialSpanId="child" />);
+
+    expect(isMarked('weather tool')).toBe(true);
+    expect(isMarked('agent run')).toBe(false);
+  });
+
+  it('marks nothing when the URL asked for a span the trace does not have', () => {
+    render(<TraceDataPanelView {...baseProps} spans={nestedSpanFixture} initialSpanId="ghost" />);
+
+    expect(isMarked('weather tool')).toBe(false);
+    expect(isMarked('agent run')).toBe(false);
+  });
+
+  it('drops the mark when the URL stops asking for a span', () => {
+    const { rerender } = render(<TraceDataPanelView {...baseProps} spans={nestedSpanFixture} initialSpanId="child" />);
+    expect(isMarked('weather tool')).toBe(true);
+
+    rerender(<TraceDataPanelView {...baseProps} spans={nestedSpanFixture} initialSpanId={undefined} />);
+
+    expect(isMarked('weather tool')).toBe(false);
+  });
+});
+
+describe('TraceDataPanelView — without the optional callbacks', () => {
+  it('clears a missing span without a listener to tell', () => {
+    expect(() =>
+      render(<TraceDataPanelView {...baseProps} spans={nestedSpanFixture} initialSpanId="ghost" />),
+    ).not.toThrow();
+  });
+
+  it('selects a span without a listener to tell', () => {
+    render(<TraceDataPanelView {...baseProps} spans={nestedSpanFixture} />);
+
+    expect(() => fireEvent.click(screen.getByText('weather tool'))).not.toThrow();
+  });
+});
+
+describe('TraceDataPanelView — an anchor the trace does not have', () => {
+  it('shows no trace summary rather than reaching into a span that is not there', () => {
+    render(<TraceDataPanelView {...baseProps} spans={nestedSpanFixture} anchorSpanId="ghost" />);
+
+    // No root span to describe, so the summary rows are left out entirely.
+    expect(screen.queryByText('Status')).toBeNull();
+    expect(screen.getByText('agent run')).toBeTruthy();
+  });
+
+  it('saves a dataset item with no root span rather than failing', () => {
+    const onSaveAsDatasetItem = vi.fn();
+    render(
+      <TraceDataPanelView
+        {...baseProps}
+        spans={nestedSpanFixture}
+        anchorSpanId="ghost"
+        onSaveAsDatasetItem={onSaveAsDatasetItem}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /save as dataset item/i }));
+
+    expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: undefined });
+  });
+
+  it('copes with an anchor while the spans have not arrived', () => {
+    expect(() => render(<TraceDataPanelView {...baseProps} spans={undefined} anchorSpanId="child" />)).not.toThrow();
+    expect(screen.getByText('No spans found for this trace.')).toBeTruthy();
+  });
+});
+
+describe('TraceDataPanelView — following the spans it is given', () => {
+  it('re-reads the root span when the trace changes under it', () => {
+    const onSaveAsDatasetItem = vi.fn();
+    const { rerender } = render(
+      <TraceDataPanelView {...baseProps} spans={rootSpanFixture} onSaveAsDatasetItem={onSaveAsDatasetItem} />,
+    );
+
+    const otherRoot = [{ ...(rootSpanFixture[0] as (typeof rootSpanFixture)[number]), spanId: 'other-root' }];
+    rerender(<TraceDataPanelView {...baseProps} spans={otherRoot} onSaveAsDatasetItem={onSaveAsDatasetItem} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /save as dataset item/i }));
+
+    expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'other-root' });
+  });
+
+  it('re-reads the root span when the anchor changes under it', () => {
+    const onSaveAsDatasetItem = vi.fn();
+    const { rerender } = render(
+      <TraceDataPanelView
+        {...baseProps}
+        spans={nestedSpanFixture}
+        anchorSpanId="root"
+        onSaveAsDatasetItem={onSaveAsDatasetItem}
+      />,
+    );
+
+    rerender(
+      <TraceDataPanelView
+        {...baseProps}
+        spans={nestedSpanFixture}
+        anchorSpanId="child"
+        onSaveAsDatasetItem={onSaveAsDatasetItem}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /save as dataset item/i }));
+
+    expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'child' });
+  });
+
+  it('picks the span with no parent, wherever it sits in the list', () => {
+    const onSaveAsDatasetItem = vi.fn();
+    render(
+      <TraceDataPanelView
+        {...baseProps}
+        spans={[...nestedSpanFixture].reverse()}
+        onSaveAsDatasetItem={onSaveAsDatasetItem}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /save as dataset item/i }));
+
+    expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'root' });
+  });
+});
+
+describe('TraceDataPanelView — the actions row shape', () => {
+  it('leaves out the row entirely when there is no action to put in it', () => {
+    const actionRow = '.mb-6.flex.flex-wrap.items-center.justify-between';
+
+    const withAction = render(<TraceDataPanelView {...baseProps} onEvaluateTrace={vi.fn()} />);
+    expect(withAction.container.querySelector(actionRow)).not.toBeNull();
+
+    cleanup();
+
+    const withoutAction = render(<TraceDataPanelView {...baseProps} />);
+
+    expect(withoutAction.container.querySelector(actionRow)).toBeNull();
+  });
+});
+
+describe('TraceDataPanelView — following the URL to another span', () => {
+  const isMarked = (name: string) => {
+    let node: HTMLElement | null = screen.getByText(name);
+    while (node) {
+      if (node.classList.contains('bg-surface4')) return true;
+      node = node.parentElement;
+    }
+    return false;
+  };
+
+  it('moves the mark when the URL names a different span', () => {
+    const { rerender } = render(<TraceDataPanelView {...baseProps} spans={nestedSpanFixture} initialSpanId="root" />);
+    expect(isMarked('agent run')).toBe(true);
+
+    rerender(<TraceDataPanelView {...baseProps} spans={nestedSpanFixture} initialSpanId="child" />);
+
+    expect(isMarked('weather tool')).toBe(true);
+    expect(isMarked('agent run')).toBe(false);
+  });
+
+  it('clears the mark when the URL names a span the trace lost', () => {
+    const { rerender } = render(<TraceDataPanelView {...baseProps} spans={nestedSpanFixture} initialSpanId="child" />);
+    expect(isMarked('weather tool')).toBe(true);
+
+    rerender(<TraceDataPanelView {...baseProps} spans={nestedSpanFixture} initialSpanId="ghost" />);
+
+    expect(isMarked('weather tool')).toBe(false);
+    expect(isMarked('agent run')).toBe(false);
+  });
+});
+
+describe('TraceDataPanelView — how wide the timing chart sits', () => {
+  it('keeps the narrow chart in the side panel and widens it on request', () => {
+    const narrow = render(<TraceDataPanelView {...baseProps} />);
+    expect(narrow.container.querySelector('.min-w-32')).not.toBeNull();
+    expect(narrow.container.querySelector('.min-w-72')).toBeNull();
+
+    cleanup();
+
+    const wide = render(<TraceDataPanelView {...baseProps} timelineChartWidth="wide" />);
+    expect(wide.container.querySelector('.min-w-72')).not.toBeNull();
+    expect(wide.container.querySelector('.min-w-32')).toBeNull();
+  });
+});
