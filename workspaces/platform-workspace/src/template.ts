@@ -1,5 +1,3 @@
-import { createHash } from 'node:crypto';
-
 export type JsonPrimitive = null | boolean | number | string;
 export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
 
@@ -10,18 +8,8 @@ export interface SandboxTemplateOperation {
   args: JsonValue[];
 }
 
-export interface SandboxTemplateGitSource {
-  type: 'git';
-  familyId: string;
-  commitSha: string;
-  staleWhileRevalidate?: boolean;
-}
-
-export type SandboxTemplateSource = SandboxTemplateGitSource;
-
 export interface SerializedSandboxTemplate {
   schemaVersion: 1;
-  source?: SandboxTemplateSource;
   operations: SandboxTemplateOperation[];
 }
 
@@ -40,7 +28,6 @@ export interface NpmInstallOptions {
 }
 
 export interface SandboxTemplateBuilder {
-  id(): string;
   runCmd(command: string | string[]): SandboxTemplateBuilder;
   setWorkdir(path: string): SandboxTemplateBuilder;
   setEnvs(envs: Record<string, string>): SandboxTemplateBuilder;
@@ -57,17 +44,9 @@ const MAX_COLLECTION_ITEMS = 512;
 
 class SerializableSandboxTemplateBuilder implements SandboxTemplateBuilder {
   readonly #operations: readonly SandboxTemplateOperation[];
-  readonly #source: SandboxTemplateSource | undefined;
 
-  constructor(operations: readonly SandboxTemplateOperation[] = [], source?: SandboxTemplateSource) {
+  constructor(operations: readonly SandboxTemplateOperation[] = []) {
     this.#operations = operations;
-    this.#source = source;
-  }
-
-  id(): string {
-    return createHash('sha256')
-      .update(canonicalizeJson(templateIdentityDefinition(this[SERIALIZE_TEMPLATE]())))
-      .digest('hex');
   }
 
   runCmd(command: string | string[]): SandboxTemplateBuilder {
@@ -109,7 +88,6 @@ class SerializableSandboxTemplateBuilder implements SandboxTemplateBuilder {
   [SERIALIZE_TEMPLATE](): SerializedSandboxTemplate {
     return {
       schemaVersion: 1,
-      ...(this.#source ? { source: { ...this.#source } } : {}),
       operations: this.#operations.map(operation => ({
         method: operation.method,
         args: cloneJson(operation.args),
@@ -139,35 +117,17 @@ class SerializableSandboxTemplateBuilder implements SandboxTemplateBuilder {
 
     const operation = { method, args: cloneJson(args) } satisfies SandboxTemplateOperation;
     const operations = [...this.#operations, operation];
-    const source = this.#source
-      ? {
-          ...this.#source,
-          familyId: deriveSandboxTemplateFamilyId({
-            schemaVersion: 1,
-            source: this.#source,
-            operations,
-          }),
-        }
-      : undefined;
-    const serialized = JSON.stringify({
-      schemaVersion: 1,
-      ...(source ? { source } : {}),
-      operations,
-    });
+    const serialized = JSON.stringify({ schemaVersion: 1, operations });
     if (new TextEncoder().encode(serialized).byteLength > MAX_SERIALIZED_BYTES) {
       throw new RangeError(`Serialized sandbox template cannot exceed ${MAX_SERIALIZED_BYTES} bytes`);
     }
 
-    return new SerializableSandboxTemplateBuilder(operations, source);
+    return new SerializableSandboxTemplateBuilder(operations);
   }
 }
 
 export function Template(): SandboxTemplateBuilder {
   return new SerializableSandboxTemplateBuilder();
-}
-
-export function createSandboxTemplate(source: SandboxTemplateSource): SandboxTemplateBuilder {
-  return new SerializableSandboxTemplateBuilder([], { ...source });
 }
 
 function isSandboxTemplateBuilder(value: unknown): value is SerializableSandboxTemplateBuilder {
@@ -177,55 +137,6 @@ function isSandboxTemplateBuilder(value: unknown): value is SerializableSandboxT
 export function serializeSandboxTemplate(template: SandboxTemplateBuilder): SerializedSandboxTemplate {
   if (!isSandboxTemplateBuilder(template)) throw new TypeError('template must be created with Template()');
   return template[SERIALIZE_TEMPLATE]();
-}
-
-export function deriveSandboxTemplateFamilyId(definition: SerializedSandboxTemplate): string {
-  const source = definition.source;
-  if (!source) throw new TypeError('template source is required');
-  return createHash('sha256')
-    .update(
-      canonicalizeJson({
-        schemaVersion: definition.schemaVersion,
-        source: { type: source.type },
-        operations: normalizeTemplateCommit(definition.operations, source.commitSha),
-      }),
-    )
-    .digest('hex');
-}
-
-function templateIdentityDefinition(definition: SerializedSandboxTemplate): SerializedSandboxTemplate {
-  const source = definition.source;
-  if (!source) return definition;
-  return {
-    ...definition,
-    source: {
-      type: source.type,
-      familyId: source.familyId,
-      commitSha: source.commitSha,
-    },
-  };
-}
-
-function normalizeTemplateCommit(value: unknown, commitSha: string): unknown {
-  if (typeof value === 'string') return value.split(commitSha).join('$MASTRA_COMMIT');
-  if (Array.isArray(value)) return value.map(item => normalizeTemplateCommit(item, commitSha));
-  if (value !== null && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, nested]) => [key, normalizeTemplateCommit(nested, commitSha)]),
-    );
-  }
-  return value;
-}
-
-function canonicalizeJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonicalizeJson).join(',')}]`;
-  if (value !== null && typeof value === 'object') {
-    const entries = Object.entries(value).sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
-    return `{${entries.map(([key, nested]) => `${JSON.stringify(key)}:${canonicalizeJson(nested)}`).join(',')}}`;
-  }
-  const serialized = JSON.stringify(value);
-  if (serialized === undefined) throw new TypeError('template contains a non-JSON value');
-  return serialized;
 }
 
 function validateString(value: unknown, name: string, allowEmpty = false): string {

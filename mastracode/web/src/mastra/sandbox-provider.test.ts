@@ -49,15 +49,9 @@ describe('createRemoteFactorySandbox', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(String(fetchMock.mock.calls[0]![0])).toContain('/v1/e2b/projects/project-1/sandbox');
     const createBody = JSON.parse(fetchMock.mock.calls[0]![1].body as string);
-    expect(createBody.templateId).toMatch(/^[a-f0-9]{64}$/);
+    expect(createBody).not.toHaveProperty('templateId');
     expect(createBody.templateDefinition).toEqual({
       schemaVersion: 1,
-      source: {
-        type: 'git',
-        familyId: expect.stringMatching(/^[a-f0-9]{64}$/),
-        commitSha: '0123456789abcdef0123456789abcdef01234567',
-        staleWhileRevalidate: true,
-      },
       operations: [
         {
           method: 'runCmd',
@@ -107,7 +101,7 @@ describe('createRemoteFactorySandbox', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(String(fetchMock.mock.calls[0]![0])).toContain('/v1/e2b/projects/project-1/sandbox');
-    expect(JSON.parse(fetchMock.mock.calls[0]![1].body as string)).not.toHaveProperty('templateId');
+    expect(JSON.parse(fetchMock.mock.calls[0]![1].body as string)).not.toHaveProperty('templateDefinition');
     expect(getGithubToken).not.toHaveBeenCalled();
   });
 

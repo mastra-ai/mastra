@@ -32,8 +32,7 @@ import { serializeSandboxTemplate } from './template.js';
 export type PlatformSandboxNetworkIsolation = 'ISOLATED' | 'PRIVATE';
 
 export type PlatformSandboxTemplate =
-  | SandboxTemplateBuilder
-  | (() => SandboxTemplateBuilder | undefined | Promise<SandboxTemplateBuilder | undefined>);
+  SandboxTemplateBuilder | (() => SandboxTemplateBuilder | undefined | Promise<SandboxTemplateBuilder | undefined>);
 
 /**
  * In-process `sandboxId → instanceUrl` map that lets
@@ -67,9 +66,9 @@ export interface PlatformSandboxOptions extends Omit<MastraSandboxOptions, 'proc
   seedCheckpointName?: string;
   /**
    * Template builder or a lazy resolver for one. The resolver runs only when
-   * start() must provision a fresh sandbox. Platform derives the template's
-   * immutable identity, builds or reuses it, and retries sandbox creation while
-   * the provider build is pending. Resolver failures fall back to the provider's
+   * start() must provision a fresh sandbox. Platform content-addresses the
+   * serialized definition, builds or reuses it, and retries sandbox creation
+   * while the provider build is pending. Resolver failures fall back to the provider's
    * default template and are retried on the next fresh provision.
    */
   template?: PlatformSandboxTemplate;
@@ -391,7 +390,6 @@ export class PlatformSandbox extends MastraSandbox {
   private readonly _environmentId: string;
   private _sandboxId?: string;
   private readonly _seedCheckpointName?: string;
-  private _templateId?: string;
   private _templateDefinition?: SerializedSandboxTemplate;
   private readonly _template?: PlatformSandboxTemplate;
   private _templateResolutionInFlight?: Promise<void>;
@@ -553,7 +551,6 @@ export class PlatformSandbox extends MastraSandbox {
       // `.scratch/factory-deploy/issue-platform-sandbox-exec-via-private-network.md`.
       ...(this._addressRegistry !== undefined && { addressRegistry: this._addressRegistry }),
     });
-    clone._templateId = this._templateId;
     clone._templateDefinition = this._templateDefinition ? structuredClone(this._templateDefinition) : undefined;
     return clone;
   }
@@ -607,7 +604,6 @@ export class PlatformSandbox extends MastraSandbox {
         // to a fresh sandbox, matching pre-existing behavior.
         id: this.id,
         seedCheckpointName: this._seedCheckpointName,
-        templateId: this._templateId,
         templateDefinition: this._templateDefinition,
         environmentId: this._environmentId,
         idleTimeoutMinutes: this._idleTimeoutMinutes,
@@ -624,7 +620,7 @@ export class PlatformSandbox extends MastraSandbox {
     let response: Response | undefined;
     let transientAttempts = 0;
     const requestStartedAt = Date.now();
-    const templateDeadline = this._templateId ? requestStartedAt + TEMPLATE_BUILD_TIMEOUT_MS : undefined;
+    const templateDeadline = this._templateDefinition ? requestStartedAt + TEMPLATE_BUILD_TIMEOUT_MS : undefined;
     for (;;) {
       try {
         response = await this._request('/sandbox', {
@@ -641,7 +637,6 @@ export class PlatformSandbox extends MastraSandbox {
             continue;
           }
           this.logger.warn('Platform sandbox template build timed out; using provider default template');
-          this._templateId = undefined;
           this._templateDefinition = undefined;
           continue;
         }
@@ -662,7 +657,7 @@ export class PlatformSandbox extends MastraSandbox {
   }
 
   private async _prepareLazyTemplate(): Promise<void> {
-    if (this._templateId !== undefined || this._template === undefined) return;
+    if (this._templateDefinition !== undefined || this._template === undefined) return;
     if (!this._templateResolutionInFlight) {
       const attempt = this._resolveTemplate();
       this._templateResolutionInFlight = attempt.finally(() => {
@@ -676,7 +671,6 @@ export class PlatformSandbox extends MastraSandbox {
     try {
       const resolved = typeof this._template === 'function' ? await this._template() : this._template;
       if (!resolved) return;
-      this._templateId = resolved.id();
       this._templateDefinition = serializeSandboxTemplate(resolved);
     } catch (error) {
       this.logger.warn(

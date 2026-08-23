@@ -14,10 +14,8 @@ export {
   type NpmInstallOptions,
   type PipInstallOptions,
   type SandboxTemplateBuilder,
-  type SandboxTemplateGitSource,
   type SandboxTemplateMethod,
   type SandboxTemplateOperation,
-  type SandboxTemplateSource,
   type SerializedSandboxTemplate,
 } from './template.js';
 export {

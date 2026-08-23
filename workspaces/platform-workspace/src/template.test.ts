@@ -1,5 +1,5 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
-import { createSandboxTemplate, serializeSandboxTemplate } from './template.js';
+import { serializeSandboxTemplate } from './template.js';
 import * as platformWorkspace from './index.js';
 import { Template, type SandboxTemplateBuilder, type SerializedSandboxTemplate } from './index.js';
 
@@ -49,30 +49,6 @@ describe('Template', () => {
 
     (first.operations[0]!.args[0] as Record<string, string>).MODE = 'changed again';
     expect(serializeSandboxTemplate(base).operations).toEqual([{ method: 'setEnvs', args: [{ MODE: 'build' }] }]);
-  });
-
-  it('derives a deterministic SHA-256 identity from the canonical definition', () => {
-    const first = Template().setEnvs({ ZED: 'last', ALPHA: 'first' }).runCmd('pnpm build');
-    const sameDefinition = Template().setEnvs({ ALPHA: 'first', ZED: 'last' }).runCmd('pnpm build');
-    const differentOrder = Template().runCmd('pnpm build').setEnvs({ ALPHA: 'first', ZED: 'last' });
-
-    expect(first.id()).toBe('6c6cbd6b21036a4ed72be2d63ae2674437670d6e927adebd8e9389fb63019a39');
-    expect(first.id()).toBe(sameDefinition.id());
-    expect(first.id()).not.toBe(differentOrder.id());
-  });
-
-  it('keeps stale-while-revalidate policy out of repository template identity', () => {
-    const source = {
-      type: 'git' as const,
-      familyId: 'a'.repeat(64),
-      commitSha: '1'.repeat(40),
-    };
-    const exact = createSandboxTemplate(source).runCmd('pnpm install');
-    const explicitFalse = createSandboxTemplate({ ...source, staleWhileRevalidate: false }).runCmd('pnpm install');
-    const stale = createSandboxTemplate({ ...source, staleWhileRevalidate: true }).runCmd('pnpm install');
-
-    expect(explicitFalse.id()).toBe(exact.id());
-    expect(stale.id()).toBe(exact.id());
   });
 
   it.each([
@@ -144,7 +120,7 @@ describe('Template', () => {
     type Keys = keyof SandboxTemplateBuilder;
     type HasPublicTemplateClient = 'PlatformTemplateClient' extends keyof typeof platformWorkspace ? true : false;
     expectTypeOf<Keys>().toEqualTypeOf<
-      'id' | 'runCmd' | 'setWorkdir' | 'setEnvs' | 'aptInstall' | 'pipInstall' | 'npmInstall'
+      'runCmd' | 'setWorkdir' | 'setEnvs' | 'aptInstall' | 'pipInstall' | 'npmInstall'
     >();
     expectTypeOf<HasPublicTemplateClient>().toEqualTypeOf<false>();
   });

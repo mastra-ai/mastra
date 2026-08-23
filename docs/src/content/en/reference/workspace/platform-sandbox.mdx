@@ -119,7 +119,7 @@ When `sandboxId` is set, `environmentId` isn't required because the sandbox alre
 
 ### Reusable templates
 
-Pass a reusable template builder to `PlatformSandbox`. A fresh sandbox start derives its deterministic ID and starts or reuses the provider build. Sandbox creation retries while the build is pending:
+Pass a reusable template builder to `PlatformSandbox`. A fresh sandbox start sends the serialized definition to Platform, which content-addresses it and starts or reuses the provider build. Sandbox creation retries while the build is pending:
 
 ```typescript
 import { PlatformSandbox, Template } from '@mastra/platform-workspace'
@@ -141,7 +141,7 @@ const sandbox = new PlatformSandbox({
 await sandbox.start()
 ```
 
-`Template()` supports `runCmd`, `setWorkdir`, `setEnvs`, `aptInstall`, `pipInstall`, and `npmInstall`. Its `id()` method returns the SHA-256 digest of the canonical definition. Platform serializes the builder internally. It replays operations for E2B and converts them to equivalent Railway template operations.
+`Template()` supports `runCmd`, `setWorkdir`, `setEnvs`, `aptInstall`, `pipInstall`, and `npmInstall`. Platform serializes the builder internally, computes the content hash, replays operations for E2B, and converts them to equivalent Railway template operations.
 
 For public GitHub repositories, `createRepoTemplate()` can resolve and build the commit-pinned definition lazily when `start()` needs a fresh sandbox:
 
@@ -158,13 +158,9 @@ const sandbox = new PlatformSandbox({
 await sandbox.start()
 ```
 
-The resolver doesn't run when `PlatformSandbox` reattaches to an existing `sandboxId`. It resolves the repository's public default-branch head at fresh-start time, then Platform starts or reuses the corresponding template build. E2B stores repository builds under a tenant-scoped family and tags each build with the exact commit, which avoids client-side provider lookups or duplicate build orchestration.
+The resolver doesn't run when `PlatformSandbox` reattaches to an existing `sandboxId`. It resolves the repository's public default-branch head at fresh-start time, then Platform starts or reuses the corresponding template build. If the repository head can't be resolved or the provider build fails, sandbox creation continues with the provider's default template so runtime setup can perform a cold checkout. The lazy definition never includes credentials. Private-repository template builds require a future secret transport capability.
 
-By default, sandbox creation waits for the resolved commit's build. Set `staleWhileRevalidate: true` only when runtime setup checks out the resolved commit after boot. With that option, Platform can start from the latest ready commit in the same repository family while the new commit builds asynchronously. Mastra Code Factory enables this option because its runtime repository setup reconciles the checkout before use.
-
-If the repository head can't be resolved or the provider build fails, sandbox creation continues with the provider's default template so runtime setup can perform a cold checkout. The lazy definition never includes credentials. Private-repository template builds require a future secret transport capability.
-
-Platform stores build state under the template's deterministic ID and binds it to the authenticated organization, project, environment, and provider.
+Platform stores build state under the definition's server-derived content hash within the selected environment and provider.
 
 :::warning
 

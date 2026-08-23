@@ -141,7 +141,7 @@ describe('PlatformSandbox', () => {
   });
 
   it.each(['railway', 'e2b'] as const)(
-    'submits deterministic template identity with sandbox creation and propagates it to clones for %s',
+    'submits the template definition with sandbox creation and propagates it to clones for %s',
     async sandboxProvider => {
       vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
       const template = Template().setWorkdir('/workspace/repo').runCmd('pnpm build');
@@ -167,9 +167,9 @@ describe('PlatformSandbox', () => {
         expect(String(url)).toBe(`https://proxy.test/v1/${sandboxProvider}/projects/proj_123/sandbox`);
         expect(JSON.parse(options.body as string)).toMatchObject({
           environmentId: 'env_123',
-          templateId: template.id(),
           templateDefinition: definition,
         });
+        expect(JSON.parse(options.body as string)).not.toHaveProperty('templateId');
       }
     },
   );
@@ -231,13 +231,13 @@ describe('PlatformSandbox', () => {
     for (const [url, options] of fetchMock.mock.calls) {
       expect(String(url)).toBe('https://proxy.test/v1/e2b/projects/proj_123/sandbox');
       expect(JSON.parse(options.body as string)).toMatchObject({
-        templateId: template.id(),
         templateDefinition: definition,
       });
+      expect(JSON.parse(options.body as string)).not.toHaveProperty('templateId');
     }
   });
 
-  it('reuses the resolved template identity when a dead provider sandbox requires fresh provisioning', async () => {
+  it('reuses the resolved template definition when a dead provider sandbox requires fresh provisioning', async () => {
     vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
     const template = Template().runCmd('pnpm install');
     const definition = serializeSandboxTemplate(template);
@@ -264,9 +264,9 @@ describe('PlatformSandbox', () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(String(fetchMock.mock.calls[1]![0])).toContain('/sandbox/sbx_1');
     expect(JSON.parse(fetchMock.mock.calls[2]![1].body as string)).toMatchObject({
-      templateId: template.id(),
       templateDefinition: definition,
     });
+    expect(JSON.parse(fetchMock.mock.calls[2]![1].body as string)).not.toHaveProperty('templateId');
   });
 
   it('does not resolve a lazy template when reattaching to an existing sandbox', async () => {
@@ -309,7 +309,7 @@ describe('PlatformSandbox', () => {
 
     expect(resolveTemplate).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(JSON.parse(fetchMock.mock.calls[0]![1].body as string)).not.toHaveProperty('templateId');
+    expect(JSON.parse(fetchMock.mock.calls[0]![1].body as string)).not.toHaveProperty('templateDefinition');
   });
 
   it('falls back to the provider default when the next template retry exceeds the build deadline', async () => {
@@ -342,10 +342,10 @@ describe('PlatformSandbox', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(JSON.parse(fetchMock.mock.calls[0]![1].body as string)).toMatchObject({
-      templateId: template.id(),
       templateDefinition: serializeSandboxTemplate(template),
     });
-    expect(JSON.parse(fetchMock.mock.calls[1]![1].body as string)).not.toHaveProperty('templateId');
+    expect(JSON.parse(fetchMock.mock.calls[0]![1].body as string)).not.toHaveProperty('templateId');
+    expect(JSON.parse(fetchMock.mock.calls[1]![1].body as string)).not.toHaveProperty('templateDefinition');
   });
 
   it('uses E2B direct exec for E2B leases instead of the Railway WebSocket protocol', async () => {
