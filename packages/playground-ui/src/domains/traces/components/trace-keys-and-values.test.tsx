@@ -59,6 +59,94 @@ describe('TraceKeysAndValues', () => {
     expect((await screen.findByRole('tooltip')).textContent).toBe('Jun 1, 2026, 5:09:59.665 PM');
   });
 
+  it('falls back to the entity id when the entity has no name', () => {
+    render(
+      <TraceKeysAndValues
+        rootSpan={{ entityId: 'mastra-docs-agent', entityName: '', startedAt: new Date(2026, 5, 1, 17, 9, 59) }}
+      />,
+    );
+
+    expect(screen.getByText('mastra-docs-agent')).not.toBeNull();
+  });
+
+  it('leaves out the entity rows the span never carried', () => {
+    render(<TraceKeysAndValues rootSpan={{ startedAt: new Date(2026, 5, 1, 17, 9, 59) }} />);
+
+    expect(screen.queryByText('Entity')).toBeNull();
+    expect(screen.queryByText('Entity Type')).toBeNull();
+    // Status is not optional — every trace has one.
+    expect(screen.getByText('Status')).not.toBeNull();
+  });
+
+  it('titles every word of a multi-word entity type', () => {
+    render(
+      <TraceKeysAndValues rootSpan={{ entityType: 'model_generation_run', startedAt: new Date(2026, 5, 1, 17, 9) }} />,
+    );
+
+    expect(screen.getByText('Model Generation Run')).not.toBeNull();
+  });
+
+  it('calls a trace still running when it has no end', () => {
+    render(<TraceKeysAndValues rootSpan={{ startedAt: new Date(2026, 5, 1, 17, 9, 59), endedAt: null }} />);
+
+    expect(screen.getByText('Running')).not.toBeNull();
+    // Nothing to say about a duration or an end that has not happened.
+    expect(screen.queryByText('Duration')).toBeNull();
+    expect(screen.queryByText('Ended at')).toBeNull();
+  });
+
+  it('calls a trace failed even when it did finish', () => {
+    render(
+      <TraceKeysAndValues
+        rootSpan={{
+          startedAt: new Date(2026, 5, 1, 17, 9, 59),
+          endedAt: new Date(2026, 5, 1, 17, 10, 45),
+          error: { message: 'boom' },
+        }}
+      />,
+    );
+
+    expect(screen.getByText('Error')).not.toBeNull();
+    expect(screen.queryByText('Success')).toBeNull();
+  });
+
+  it('leaves out the usage rows entirely when no totals were asked for', () => {
+    render(
+      <TraceKeysAndValues
+        rootSpan={{ startedAt: new Date(2026, 5, 1, 17, 9, 59), endedAt: new Date(2026, 5, 1, 17, 10, 45) }}
+      />,
+    );
+
+    expect(screen.queryByText('Trace input tokens')).toBeNull();
+    expect(screen.queryByText('Trace est. cost')).toBeNull();
+  });
+
+  it('shows token totals compactly and the cost in its own currency', () => {
+    render(
+      <TraceKeysAndValues
+        rootSpan={{ startedAt: new Date(2026, 5, 1, 17, 9, 59), endedAt: new Date(2026, 5, 1, 17, 10, 45) }}
+        usage={{ inputTokens: 12_400, outputTokens: 800, estimatedCost: 0.0123, costUnit: 'eur' }}
+      />,
+    );
+
+    expect(screen.getByText('12.4K')).not.toBeNull();
+    expect(screen.getByText('800')).not.toBeNull();
+    expect(screen.getByText('0.0123 eur')).not.toBeNull();
+  });
+
+  it('shows a dash for each total the metrics store could not produce', () => {
+    render(
+      <TraceKeysAndValues
+        rootSpan={{ startedAt: new Date(2026, 5, 1, 17, 9, 59), endedAt: new Date(2026, 5, 1, 17, 10, 45) }}
+        usage={{ inputTokens: undefined, outputTokens: 0, estimatedCost: undefined, costUnit: undefined }}
+      />,
+    );
+
+    // A zero is a real total and reads as one; a missing total reads as a dash.
+    expect(screen.getAllByText('\u2014')).toHaveLength(2);
+    expect(screen.getByText('0')).not.toBeNull();
+  });
+
   it('uses container breakpoints for responsive columns', () => {
     const { container } = render(
       <TraceKeysAndValues
