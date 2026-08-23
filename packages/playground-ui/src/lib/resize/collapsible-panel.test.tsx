@@ -170,3 +170,177 @@ describe('CollapsiblePanel', () => {
     expect(pill.dataset.edgeHovered).toBe('false');
   });
 });
+
+const collapse = () => fireEvent.click(screen.getByTestId('resize-collapsed'));
+
+// The suite above scopes its own cleanup to its describe block.
+afterEach(cleanup);
+
+describe('CollapsiblePanel — which edge it sits on', () => {
+  it('puts a left panel’s content and controls on the left', () => {
+    renderPanel('left');
+    const content = screen.getByTestId('panel-content').parentElement;
+    expect(content?.classList.contains('left-0')).toBe(true);
+    expect(content?.classList.contains('right-0')).toBe(false);
+
+    collapse();
+
+    expect(screen.getByRole('button', { name: 'Expand panel' }).classList.contains('left-2')).toBe(true);
+  });
+
+  it('puts a right panel’s content and controls on the right', () => {
+    renderPanel('right');
+    const content = screen.getByTestId('panel-content').parentElement;
+    expect(content?.classList.contains('right-0')).toBe(true);
+    expect(content?.classList.contains('left-0')).toBe(false);
+
+    collapse();
+
+    expect(screen.getByRole('button', { name: 'Expand panel' }).classList.contains('right-2')).toBe(true);
+  });
+});
+
+describe('CollapsiblePanel — the panel box', () => {
+  it('clips its content while open and lets the pill out once collapsed', () => {
+    renderPanel();
+    const panel = screen.getByTestId('panel');
+    expect(panel.style.overflow).toBe('hidden');
+
+    collapse();
+
+    expect(screen.getByTestId('panel').style.overflow).toBe('visible');
+  });
+
+  it('opens back up when the panel is dragged past the collapsed size', () => {
+    renderPanel();
+    collapse();
+    expect(screen.getByRole('button', { name: 'Expand panel' })).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('resize-open'));
+
+    expect(screen.queryByRole('button', { name: 'Expand panel' })).toBeNull();
+    expect(screen.getByTestId('panel').style.overflow).toBe('hidden');
+  });
+
+  it('holds the content at its minimum width while the panel narrows', () => {
+    renderPanel();
+
+    expect(screen.getByTestId('panel').style.getPropertyValue('--panel-min-w')).toBe('280px');
+    expect(screen.getByTestId('panel-content').parentElement?.style.minWidth).toBe('var(--panel-min-w)');
+  });
+
+  it('sets no minimum width when the caller gave none in pixels', () => {
+    render(
+      <CollapsiblePanel collapsedSize={0} direction="left">
+        <div data-testid="panel-content">Panel content</div>
+      </CollapsiblePanel>,
+    );
+
+    expect(screen.getByTestId('panel').style.getPropertyValue('--panel-min-w')).toBe('');
+  });
+
+  it('keeps a caller style and class alongside its own', () => {
+    render(
+      <CollapsiblePanel collapsedSize={0} direction="left" className="my-own-class" style={{ zIndex: 5 }}>
+        <div data-testid="panel-content">Panel content</div>
+      </CollapsiblePanel>,
+    );
+
+    const panel = screen.getByTestId('panel');
+    expect(panel.classList.contains('my-own-class')).toBe(true);
+    expect(panel.classList.contains('relative')).toBe(true);
+    expect(panel.style.zIndex).toBe('5');
+  });
+
+  it('hides the content from a screen reader while collapsed', () => {
+    renderPanel();
+    const content = screen.getByTestId('panel-content').parentElement;
+    expect(content?.hasAttribute('hidden')).toBe(false);
+
+    collapse();
+
+    expect(screen.getByTestId('panel-content').parentElement?.hasAttribute('hidden')).toBe(true);
+  });
+});
+
+describe('CollapsiblePanel — collapsing', () => {
+  it('tells the caller about a resize before deciding anything itself', () => {
+    const onResize = vi.fn();
+    render(
+      <CollapsiblePanel collapsedSize={0} direction="left" onResize={onResize}>
+        <div data-testid="panel-content">Panel content</div>
+      </CollapsiblePanel>,
+    );
+
+    collapse();
+
+    expect(onResize).toHaveBeenCalledWith({ inPixels: 0 }, undefined, undefined);
+  });
+
+  it('never collapses when no collapsed size was set', () => {
+    render(
+      <CollapsiblePanel direction="left">
+        <div data-testid="panel-content">Panel content</div>
+      </CollapsiblePanel>,
+    );
+
+    collapse();
+
+    expect(screen.queryByRole('button', { name: 'Expand panel' })).toBeNull();
+  });
+
+  it('collapses at exactly the collapsed size', () => {
+    render(
+      <CollapsiblePanel collapsedSize={0} direction="left">
+        <div data-testid="panel-content">Panel content</div>
+      </CollapsiblePanel>,
+    );
+
+    collapse();
+
+    expect(screen.getByRole('button', { name: 'Expand panel' })).toBeTruthy();
+  });
+});
+
+describe('CollapsiblePanel — the collapsed strip', () => {
+  it('keeps the strip out of the tab order and the accessibility tree', () => {
+    renderPanel();
+    collapse();
+
+    const strip = screen.getByRole('button', { name: 'Expand panel' }).nextElementSibling as HTMLElement;
+    expect(strip.getAttribute('tabindex')).toBe('-1');
+    expect(strip.getAttribute('aria-hidden')).toBe('true');
+  });
+
+  it('opens the panel from the strip as well as the button', () => {
+    renderPanel();
+    collapse();
+
+    const strip = screen.getByRole('button', { name: 'Expand panel' }).nextElementSibling as HTMLElement;
+    fireEvent.click(strip);
+
+    expect(panelMocks.expand).toHaveBeenCalledTimes(1);
+  });
+
+  it('parks the pill mid-strip until the pointer says otherwise', () => {
+    renderPanel();
+    collapse();
+
+    const strip = screen.getByRole('button', { name: 'Expand panel' }).nextElementSibling as HTMLElement;
+    expect(strip.style.getPropertyValue('--pill-y')).toBe('50%');
+  });
+
+  it('points the pill back towards the content it would reveal', () => {
+    renderPanel('left');
+    collapse();
+    const leftPill = screen.getByRole('button', { name: 'Expand panel' }).nextElementSibling?.firstElementChild;
+    expect(leftPill?.classList.contains('left-0.5')).toBe(true);
+
+    cleanup();
+
+    renderPanel('right');
+    collapse();
+    const rightPill = screen.getByRole('button', { name: 'Expand panel' }).nextElementSibling?.firstElementChild;
+    expect(rightPill?.classList.contains('right-0.5')).toBe(true);
+  });
+});
