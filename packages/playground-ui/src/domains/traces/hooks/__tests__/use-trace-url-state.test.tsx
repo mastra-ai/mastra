@@ -15,13 +15,16 @@ const setSpy = vi.fn();
 function Harness({ initial, options }: { initial: string; options?: UseTraceUrlStateOptions }) {
   const [params, setParams] = useState(() => new URLSearchParams(initial));
   currentSearch = params.toString();
-  const setSearchParams = useCallback<SetURLSearchParamsLike>(next => {
-    setSpy(next);
+  const setSearchParams = useCallback<SetURLSearchParamsLike>((next, navigateOptions) => {
+    setSpy(next, navigateOptions);
     setParams(prev => (typeof next === 'function' ? next(new URLSearchParams(prev)) : new URLSearchParams(next)));
   }, []);
   api = useTraceUrlState(params, setSearchParams, options);
   return null;
 }
+
+/** Navigation options of the most recent URL update. */
+const lastNavigation = () => setSpy.mock.calls.at(-1)?.[1] as { replace?: boolean } | undefined;
 
 afterEach(() => {
   cleanup();
@@ -586,5 +589,218 @@ describe('useTraceUrlState pass-through', () => {
     expect(api.searchParams.get('traceId')).toBe('t1');
     api.setSearchParams(new URLSearchParams('traceId=t2'));
     expect(setSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('useTraceUrlState history', () => {
+  it.each([
+    ['selecting a trace', () => api.handleTraceClick('t1')],
+    ['closing a trace', () => api.handleTraceClose()],
+    ['selecting a span', () => api.handleSpanChange('s2')],
+    ['switching a span tab', () => api.handleSpanTabChange('scoring')],
+    ['selecting a span and tab at once', () => api.handleSpanChangeWithTab('s3', 'feedback')],
+    ['selecting a score', () => api.handleScoreChange('sc9')],
+    ['switching list mode', () => api.handleListModeChange('branches')],
+    ['changing the date preset', () => api.handleDatePresetChange('last-7d')],
+    ['applying filter tokens', () => api.applyFilterTokens([{ fieldId: 'traceId', value: 'abc' }])],
+    ['removing every filter', () => api.handleRemoveAll()],
+  ])('replaces the current history entry when %s', (_, action) => {
+    render(<Harness initial="traceId=t1&spanId=s1&tab=details" />);
+
+    act(action);
+
+    // Browsing a list must not fill the back button with every intermediate state.
+    expect(lastNavigation()).toEqual({ replace: true });
+  });
+
+  it('replaces the current history entry when a custom date changes', () => {
+    render(<Harness initial="datePreset=custom" />);
+
+    act(() => api.handleDateChange(new Date('2026-06-05T08:30:00.000Z'), 'from'));
+
+    expect(lastNavigation()).toEqual({ replace: true });
+  });
+});
+
+describe('useTraceUrlState derived state follows the URL', () => {
+  it('re-reads the date preset after the URL changes', () => {
+    render(<Harness initial="" />);
+    expect(api.datePreset).toBe('last-24h');
+
+    act(() => api.handleDatePresetChange('last-7d'));
+
+    expect(api.datePreset).toBe('last-7d');
+    expect(api.datePresetRef.current).toBe('last-7d');
+  });
+
+  it('re-reads the list mode after the URL changes', () => {
+    render(<Harness initial="" />);
+    expect(api.listMode).toBe('traces');
+
+    act(() => api.handleListModeChange('branches'));
+
+    expect(api.listMode).toBe('branches');
+  });
+
+  it('re-reads the filter tokens after the URL changes', () => {
+    render(<Harness initial="" />);
+    expect(api.filterTokens).toHaveLength(0);
+
+    act(() => api.applyFilterTokens([{ fieldId: 'traceId', value: 'abc' }]));
+
+    expect(api.filterTokens.map(token => token.fieldId)).toContain('traceId');
+  });
+
+  it('re-reads the entity option and status after the URL changes', () => {
+    render(<Harness initial="rootEntityType=agent&status=error" />);
+    expect(api.selectedEntityOption?.entityType).toBe('agent');
+    expect(api.selectedStatus).toBe('error');
+
+    act(() => api.handleRemoveAll());
+
+    expect(api.selectedEntityOption).toBeUndefined();
+    expect(api.selectedStatus).toBeUndefined();
+  });
+
+  it('re-reads a custom range after the URL changes', () => {
+    render(<Harness initial="datePreset=custom" />);
+    expect(api.selectedDateFrom).toBeUndefined();
+
+    act(() => api.handleDateChange(new Date('2026-06-05T08:30:00.000Z'), 'from'));
+    expect(api.selectedDateFrom?.toISOString()).toBe('2026-06-05T08:30:00.000Z');
+
+    act(() => api.handleDateChange(new Date('2026-06-06T08:30:00.000Z'), 'to'));
+    expect(api.selectedDateTo?.toISOString()).toBe('2026-06-06T08:30:00.000Z');
+  });
+
+  it('re-reads the selection after the URL changes', () => {
+    render(<Harness initial="" />);
+
+    act(() => api.handleTraceClick('t1', 's1', 'a1'));
+
+    expect(api.traceIdParam).toBe('t1');
+    expect(api.spanIdParam).toBe('s1');
+    expect(api.anchorSpanIdParam).toBe('a1');
+
+    act(() => api.handleSpanTabChange('scoring'));
+    expect(api.spanTabParam).toBe('scoring');
+
+    act(() => api.handleScoreChange('sc1'));
+    expect(api.scoreIdParam).toBe('sc1');
+  });
+
+  it('keeps its no-op guards honest against the URL it just wrote', () => {
+    render(<Harness initial="" />);
+
+    act(() => api.handleSpanChange('s1'));
+    setSpy.mockClear();
+
+    // The span it just selected is the one already showing.
+    act(() => api.handleSpanChange('s1'));
+
+    expect(setSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('useTraceUrlState.handleSpanChangeWithTab, continued', () => {
+  it('drops a tab param that is already there when going back to details', () => {
+    render(<Harness initial="traceId=t1&spanId=s1&tab=scoring" />);
+
+    act(() => api.handleSpanChangeWithTab('s2', 'details'));
+
+    const p = paramsNow();
+    expect(p.get('spanId')).toBe('s2');
+    expect(p.get('tab')).toBeNull();
+  });
+
+  it('still navigates when only the tab differs', () => {
+    render(<Harness initial="traceId=t1&spanId=s1&tab=scoring" />);
+
+    act(() => api.handleSpanChangeWithTab('s1', 'feedback'));
+
+    expect(setSpy).toHaveBeenCalledTimes(1);
+    expect(paramsNow().get('tab')).toBe('feedback');
+  });
+});
+
+describe('useTraceUrlState stale closures', () => {
+  it('checks a repeated tab switch against the tab it just wrote', () => {
+    render(<Harness initial="traceId=t1&spanId=s1" />);
+
+    act(() => api.handleSpanTabChange('scoring'));
+    setSpy.mockClear();
+
+    act(() => api.handleSpanTabChange('scoring'));
+
+    expect(setSpy).not.toHaveBeenCalled();
+  });
+
+  it('checks a repeated score selection against the score it just wrote', () => {
+    render(<Harness initial="traceId=t1&spanId=s1" />);
+
+    act(() => api.handleScoreChange('sc1'));
+    setSpy.mockClear();
+
+    act(() => api.handleScoreChange('sc1'));
+
+    expect(setSpy).not.toHaveBeenCalled();
+  });
+
+  it('checks a repeated span-and-tab jump against what it just wrote', () => {
+    render(<Harness initial="traceId=t1" />);
+
+    act(() => api.handleSpanChangeWithTab('s1', 'scoring'));
+    setSpy.mockClear();
+
+    act(() => api.handleSpanChangeWithTab('s1', 'scoring'));
+
+    expect(setSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('useTraceUrlState with a router that swaps its setter', () => {
+  // react-router hands back a fresh `setSearchParams` on some navigations; the
+  // handlers must reach for whichever one is current, not the first they saw.
+  function SwappingHarness({ initial }: { initial: string }) {
+    const [params, setParams] = useState(() => new URLSearchParams(initial));
+    const [generation, setGeneration] = useState(0);
+    currentSearch = params.toString();
+    // Deliberately not memoized: a new function identity on every render.
+    const setSearchParams: SetURLSearchParamsLike = (next, navigateOptions) => {
+      setSpy(next, navigateOptions, generation);
+      setParams(prev => (typeof next === 'function' ? next(new URLSearchParams(prev)) : new URLSearchParams(next)));
+    };
+    api = useTraceUrlState(params, setSearchParams);
+    bumpGeneration = () => setGeneration(value => value + 1);
+    return null;
+  }
+
+  let bumpGeneration: () => void;
+
+  it.each([
+    ['selecting a trace', () => api.handleTraceClick('t2')],
+    ['closing a trace', () => api.handleTraceClose()],
+    ['closing a span', () => api.handleSpanClose()],
+    ['switching list mode', () => api.handleListModeChange('branches')],
+    ['changing the date preset', () => api.handleDatePresetChange('last-7d')],
+    ['applying filter tokens', () => api.applyFilterTokens([{ fieldId: 'traceId', value: 'abc' }])],
+    ['removing every filter', () => api.handleRemoveAll()],
+  ])('uses the current setter when %s', (_, action) => {
+    render(<SwappingHarness initial="traceId=t1&spanId=s1" />);
+
+    act(() => bumpGeneration());
+    act(action);
+
+    // The generation the setter closed over proves which one was called.
+    expect(setSpy.mock.calls.at(-1)?.[2]).toBe(1);
+  });
+
+  it('uses the current setter when a custom date changes', () => {
+    render(<SwappingHarness initial="datePreset=custom" />);
+
+    act(() => bumpGeneration());
+    act(() => api.handleDateChange(new Date('2026-06-05T08:30:00.000Z'), 'from'));
+
+    expect(setSpy.mock.calls.at(-1)?.[2]).toBe(1);
   });
 });
