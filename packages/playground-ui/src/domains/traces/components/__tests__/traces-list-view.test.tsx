@@ -366,3 +366,133 @@ describe('TracesListView — metadata cells', () => {
     expect(screen.getAllByRole('button')[0]?.textContent).not.toContain('undefined');
   });
 });
+
+describe('TracesListView — scrolling back to the top', () => {
+  it('re-reads the scroll position once a fresh query resolves', () => {
+    const dispatchEvent = vi.spyOn(HTMLElement.prototype, 'dispatchEvent');
+    const { rerender } = render(<TracesListView traces={[]} isLoading onTraceClick={vi.fn()} />);
+    dispatchEvent.mockClear();
+
+    rerender(<TracesListView traces={[makeTrace({ traceId: 'trace-1' })]} onTraceClick={vi.fn()} />);
+
+    // The list swapped its scroll container, so the virtualizer has to be told
+    // to read the new element's scrollTop rather than keep the old offset.
+    expect(dispatchEvent.mock.calls.some(([event]) => event.type === 'scroll')).toBe(true);
+    dispatchEvent.mockRestore();
+  });
+
+  it('leaves the scroll position alone while paginating', () => {
+    const { rerender } = render(<TracesListView traces={[makeTrace({ traceId: 'trace-1' })]} onTraceClick={vi.fn()} />);
+    const dispatchEvent = vi.spyOn(HTMLElement.prototype, 'dispatchEvent');
+
+    rerender(
+      <TracesListView
+        traces={[makeTrace({ traceId: 'trace-1' }), makeTrace({ traceId: 'trace-2' })]}
+        isFetchingNextPage
+        onTraceClick={vi.fn()}
+      />,
+    );
+
+    expect(dispatchEvent.mock.calls.some(([event]) => event.type === 'scroll')).toBe(false);
+    dispatchEvent.mockRestore();
+  });
+
+  it('leaves the scroll position alone when a query starts', () => {
+    const { rerender } = render(<TracesListView traces={[makeTrace({ traceId: 'trace-1' })]} onTraceClick={vi.fn()} />);
+    const dispatchEvent = vi.spyOn(HTMLElement.prototype, 'dispatchEvent');
+
+    rerender(<TracesListView traces={[]} isLoading onTraceClick={vi.fn()} />);
+
+    expect(dispatchEvent.mock.calls.some(([event]) => event.type === 'scroll')).toBe(false);
+    dispatchEvent.mockRestore();
+  });
+});
+
+describe('TracesListView — the virtual window', () => {
+  const spacersIn = (container: HTMLElement) =>
+    Array.from(container.querySelectorAll<HTMLElement>('.col-span-full[style*="height"]')).map(
+      spacer => spacer.style.height,
+    );
+
+  it('reserves no room above or below a list that fits', () => {
+    const { container } = render(
+      <TracesListView
+        traces={[makeTrace({ traceId: 'trace-1' }), makeTrace({ traceId: 'trace-2' })]}
+        onTraceClick={vi.fn()}
+      />,
+    );
+
+    // Every row is on screen, so nothing is scrolled past in either direction.
+    expect(spacersIn(container)).toEqual([]);
+  });
+
+  it('reserves room below for the rows it did not render', () => {
+    const traces = Array.from({ length: 400 }, (_, index) => makeTrace({ traceId: `trace-${index}` }));
+    const { container } = render(<TracesListView traces={traces} onTraceClick={vi.fn()} />);
+
+    expect(screen.getAllByRole('button').length).toBeLessThan(traces.length);
+
+    // The window opens at the top: nothing is scrolled past above it, and the
+    // rows below it still hold their place in the scroll height.
+    const spacers = spacersIn(container);
+    expect(spacers).toHaveLength(1);
+    expect(Number.parseFloat(spacers[0] ?? '0')).toBeGreaterThan(0);
+  });
+});
+
+describe('TracesListView — the duration column', () => {
+  it('shows how long each trace took', () => {
+    render(
+      <TracesListView
+        traces={[
+          makeTrace({
+            traceId: 'trace-1',
+            startedAt: new Date('2026-06-10T00:00:00.000Z'),
+            endedAt: new Date('2026-06-10T00:00:46.301Z'),
+          }),
+        ]}
+        columnPreferences={{ visibleColumns: ['duration'], metadataKeys: [] }}
+        onTraceClick={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('46.3s')).toBeTruthy();
+  });
+
+  it('leaves the duration out when the column is not selected', () => {
+    render(
+      <TracesListView
+        traces={[
+          makeTrace({
+            traceId: 'trace-1',
+            startedAt: new Date('2026-06-10T00:00:00.000Z'),
+            endedAt: new Date('2026-06-10T00:00:46.301Z'),
+          }),
+        ]}
+        columnPreferences={{ visibleColumns: [], metadataKeys: [] }}
+        onTraceClick={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByText('46.3s')).toBeNull();
+  });
+});
+
+describe('TracesListView — featuring by trace alone', () => {
+  it('features a branch row by its trace when no span was named', () => {
+    render(
+      <TracesListView
+        traces={[
+          makeTrace({ traceId: 'trace-1', spanId: 'span-a', name: 'branch a' }),
+          makeTrace({ traceId: 'trace-2', spanId: 'span-b', name: 'branch b' }),
+        ]}
+        featuredTraceId="trace-1"
+        onTraceClick={vi.fn()}
+      />,
+    );
+
+    const rows = screen.getAllByRole('button');
+    expect(rows[0]?.classList.contains('bg-surface4!')).toBe(true);
+    expect(rows[1]?.classList.contains('bg-surface4!')).toBe(false);
+  });
+});
