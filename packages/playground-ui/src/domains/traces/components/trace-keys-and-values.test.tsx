@@ -165,3 +165,66 @@ describe('TraceKeysAndValues', () => {
     expect(grid?.className).toContain('@xl:grid-cols-[auto_auto_auto_auto_auto_1fr]!');
   });
 });
+
+describe('TraceKeysAndValues — column layouts', () => {
+  const gridOf = (numOfCol: 1 | 2 | 3) => {
+    const { container } = render(
+      <TraceKeysAndValues numOfCol={numOfCol} rootSpan={{ startedAt: new Date(2026, 5, 1, 17, 9, 59) }} />,
+    );
+    return container.querySelector('dl')?.className ?? '';
+  };
+
+  it('keeps a single column stacked at every width', () => {
+    const grid = gridOf(1);
+
+    expect(grid).toContain('grid-cols-[auto_1fr]!');
+    expect(grid).not.toContain('@md:grid-cols-');
+  });
+
+  it('opens a second column at the medium container width', () => {
+    const grid = gridOf(2);
+
+    expect(grid).toContain('grid-cols-[auto_1fr]!');
+    expect(grid).toContain('@md:grid-cols-[auto_auto_auto_1fr]!');
+    expect(grid).not.toContain('@xl:grid-cols-');
+  });
+
+  it('lays out two columns by default', () => {
+    const { container } = render(<TraceKeysAndValues rootSpan={{ startedAt: new Date(2026, 5, 1, 17, 9, 59) }} />);
+
+    expect(container.querySelector('dl')?.className).toContain('@md:grid-cols-[auto_auto_auto_1fr]!');
+  });
+});
+
+describe('TraceKeysAndValues — timestamps it cannot read', () => {
+  it('leaves out the start row when the stamp makes no sense', () => {
+    render(<TraceKeysAndValues rootSpan={{ startedAt: 'not a date' }} />);
+
+    expect(screen.queryByText('Started at')).toBeNull();
+    expect(screen.getByText('Status')).not.toBeNull();
+  });
+
+  it('leaves out the end row when the stamp makes no sense', () => {
+    render(<TraceKeysAndValues rootSpan={{ startedAt: new Date(2026, 5, 1, 17, 9, 59), endedAt: 'not a date' }} />);
+
+    expect(screen.queryByText('Ended at')).toBeNull();
+    expect(screen.getByText('Started at')).not.toBeNull();
+  });
+});
+
+describe('TraceKeysAndValues — each total on its own', () => {
+  it.each([
+    ['input tokens', { inputTokens: undefined, outputTokens: 800, estimatedCost: 0.05, costUnit: 'usd' }],
+    ['output tokens', { inputTokens: 12_400, outputTokens: undefined, estimatedCost: 0.05, costUnit: 'usd' }],
+    ['the cost', { inputTokens: 12_400, outputTokens: 800, estimatedCost: undefined, costUnit: undefined }],
+  ])('dashes only the missing %s', (_, usage) => {
+    render(
+      <TraceKeysAndValues
+        rootSpan={{ startedAt: new Date(2026, 5, 1, 17, 9, 59), endedAt: new Date(2026, 5, 1, 17, 10, 45) }}
+        usage={usage}
+      />,
+    );
+
+    expect(screen.getAllByText('—')).toHaveLength(1);
+  });
+});
