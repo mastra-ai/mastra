@@ -288,14 +288,27 @@ https://mastra.ai/en/docs/memory/overview`,
    * Cached promise for the embedding dimension probe.
    * Stored as a promise to deduplicate concurrent calls.
    */
-  private _embeddingDimensionPromise?: Promise<number | undefined>;
+  private _embeddingDimensionPromise?: Promise<number>;
 
   /**
    * Probe the embedder to determine its actual output dimension.
    * The result is cached so subsequent calls are free.
+   *
+   * This is used to compute the vector index name (see getEmbeddingIndexName()), so a
+   * failed probe must never be treated as "this is a default-dimension embedder" -- doing
+   * so silently bakes the wrong index name into the SemanticRecall processor for the life
+   * of this Memory instance, which then either drops every write against a real,
+   * differently-dimensioned index, or silently orphans one. Fail loudly instead.
    */
-  protected async getEmbeddingDimension(): Promise<number | undefined> {
-    if (!this.embedder) return undefined;
+  protected async getEmbeddingDimension(): Promise<number> {
+    if (!this.embedder) {
+      throw new MastraError({
+        id: 'MASTRA_MEMORY_GET_EMBEDDING_DIMENSION_NO_EMBEDDER',
+        domain: ErrorDomain.MASTRA_VECTOR,
+        category: 'USER',
+        text: 'Cannot determine embedding dimension: no embedder is attached to this Memory instance.',
+      });
+    }
     if (!this._embeddingDimensionPromise) {
       this._embeddingDimensionPromise = (async () => {
         try {
@@ -303,13 +316,29 @@ https://mastra.ai/en/docs/memory/overview`,
             values: ['a'],
             ...(this.embedderOptions || {}),
           } as any);
-          return result.embeddings[0]?.length;
+          const dimension = result.embeddings[0]?.length;
+          if (!dimension) {
+            throw new Error('Embedder returned an empty embedding for the dimension probe.');
+          }
+          return dimension;
         } catch (e) {
-          console.warn(
-            `[Mastra Memory] Failed to probe embedder for dimension, falling back to default. ` +
-              `This may cause index name mismatches if the embedder uses non-default dimensions. Error: ${e}`,
+          // Clear the cache so a later call (e.g. after a transient network issue clears)
+          // gets to probe again instead of permanently failing for this Memory instance.
+          this._embeddingDimensionPromise = undefined;
+          throw new MastraError(
+            {
+              id: 'MASTRA_MEMORY_GET_EMBEDDING_DIMENSION_PROBE_FAILED',
+              domain: ErrorDomain.MASTRA_VECTOR,
+              category: 'THIRD_PARTY',
+              text:
+                `Failed to determine the embedder's output dimension by probing it. The semantic recall vector ` +
+                `index name is derived from this dimension, so Memory refuses to guess a default here -- doing so ` +
+                `has previously caused new writes to be silently dropped or an entire index to be silently ` +
+                `orphaned when the guessed dimension didn't match the embedder's real one. Check that the ` +
+                `embedder is reachable and correctly configured.`,
+            },
+            e,
           );
-          return undefined;
         }
       })();
     }
