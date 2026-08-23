@@ -114,7 +114,16 @@ describe('NoticeRoot', () => {
       );
 
       // One action only — the untitled layout has a single slot for it.
-      expect(screen.getAllByRole('button', { name: 'Retry' })).toHaveLength(1);
+      const actions = screen.getAllByRole('button', { name: 'Retry' });
+      expect(actions).toHaveLength(1);
+      // Its own slot, so it can go full width when the row stacks.
+      expect(actions[0]?.parentElement?.className).toContain('[&>button]:w-full');
+    });
+
+    it('leaves no empty action slot behind when there is no action', () => {
+      const { container } = render(<Notice variant="info">A message</Notice>);
+
+      expect(container.querySelector('[class*="[&>button]:w-full"]')).toBeNull();
     });
   });
 
@@ -135,10 +144,12 @@ describe('NoticeRoot', () => {
     });
 
     it('leaves out the body entirely when there is neither message nor action', () => {
-      render(<Notice variant="info" title="Heads up" />);
+      const { container } = render(<Notice variant="info" title="Heads up" />);
 
       expect(screen.getByText('Heads up')).toBeTruthy();
       expect(screen.queryByRole('button')).toBeNull();
+      // No empty body div under the title row, which would add its own gap.
+      expect(container.querySelector('.wrap-anywhere')).toBeNull();
     });
   });
 });

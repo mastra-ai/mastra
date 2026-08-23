@@ -203,6 +203,47 @@ describe('useCopyToClipboard', () => {
     expect(result.current.isCopied).toBe(false);
   });
 
+  it('restores focus without scrolling the page to it', async () => {
+    const input = document.createElement('input');
+    document.body.appendChild(input);
+    input.focus();
+    const focus = vi.spyOn(input, 'focus');
+    mockExecCommand(vi.fn(() => true));
+
+    const { result } = renderHook(() => useCopyToClipboard({ showToast: false }));
+
+    act(() => {
+      result.current.copyToClipboard('focus me back');
+    });
+
+    await waitFor(() => expect(result.current.isCopied).toBe(true));
+    // Refocusing must not yank the viewport back to wherever the element sits.
+    expect(focus).toHaveBeenCalledWith({ preventScroll: true });
+
+    input.remove();
+  });
+
+  it('copies fine while something other than an HTML element holds focus', async () => {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('tabindex', '0');
+    document.body.appendChild(svg);
+    svg.focus();
+    expect(document.activeElement).toBe(svg);
+
+    mockExecCommand(vi.fn(() => true));
+
+    const { result } = renderHook(() => useCopyToClipboard({ showToast: false }));
+
+    act(() => {
+      result.current.copyToClipboard('focus is elsewhere');
+    });
+
+    // There is nothing to hand focus back to, and that is not a failure.
+    await waitFor(() => expect(result.current.isCopied).toBe(true));
+
+    svg.remove();
+  });
+
   it('does nothing when handleCopy has no text configured', () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     mockClipboard(writeText);
@@ -253,6 +294,20 @@ describe('useCopyToClipboard', () => {
 
       await waitFor(() => expect(sonnerMock.error).toHaveBeenCalledWith('Failed to copy to clipboard.', {}));
       expect(result.current.isCopied).toBe(false);
+    });
+
+    it('says nothing at all when there is no configured text to copy', async () => {
+      mockClipboard(vi.fn().mockResolvedValue(undefined));
+
+      const { result } = renderHook(() => useCopyToClipboard({ text: '' }));
+
+      await act(async () => {
+        result.current.handleCopy();
+      });
+
+      // Nothing was attempted, so there is no failure to report either.
+      expect(sonnerMock.error).not.toHaveBeenCalled();
+      expect(sonnerMock.success).not.toHaveBeenCalled();
     });
 
     it('stays silent about a successful copy when the caller asked it to', async () => {
