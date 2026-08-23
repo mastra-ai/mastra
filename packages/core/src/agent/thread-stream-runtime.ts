@@ -870,7 +870,9 @@ export class AgentThreadStreamRuntime {
    * `abort()`, which flips the controller the durable path keeps on its own
    * run registry and publishes an abort request on the run's topic, reaching
    * the process executing it. `abortThread()` does not stop one either, for
-   * the same reason such a run reaches this branch.
+   * the same reason such a run reaches this branch, which is why `DurableAgent`
+   * overrides `abortThreadStream()`/`abortRunStream()` to publish that request
+   * itself.
    *
    * A runId this process has never seen may be executing elsewhere entirely.
    * The intent is still recorded, in case the run starts here later, but it is

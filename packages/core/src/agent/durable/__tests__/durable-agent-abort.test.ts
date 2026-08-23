@@ -286,6 +286,75 @@ describe('DurableAgent abort signal', () => {
     cleanup();
   });
 
+  it('abortThreadStream stops a durable run that is already executing', async () => {
+    // A durable run keeps its controller on the durable run registry, not in
+    // the thread runtime's prepared-run map, so the base implementation reaches
+    // neither: without the durable abort request the run streams on.
+    const baseAgent = new Agent({
+      id: 'abort-thread-stream-agent',
+      name: 'Abort Thread Stream Agent',
+      instructions: 'Test',
+      model: createAbortableModel() as LanguageModelV2,
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    const threadId = 'abort-thread-stream-thread';
+    const resourceId = 'abort-thread-stream-resource';
+
+    let abortPayload: unknown;
+    const { output, cleanup } = await durableAgent.stream('Go', {
+      memory: { thread: threadId, resource: resourceId },
+      onAbort: data => {
+        abortPayload = data;
+      },
+    });
+
+    // Give the workflow a tick to subscribe + call doStream before we abort.
+    await new Promise(r => setTimeout(r, 10));
+    expect(durableAgent.abortThreadStream({ threadId, resourceId })).toBe(true);
+
+    try {
+      await output.consumeStream();
+    } catch {
+      // expected - the run never produced a normal finish
+    }
+
+    expect(abortPayload).toBeDefined();
+
+    cleanup();
+  });
+
+  it('abortRunStream stops a durable run that is already executing', async () => {
+    const baseAgent = new Agent({
+      id: 'abort-run-stream-agent',
+      name: 'Abort Run Stream Agent',
+      instructions: 'Test',
+      model: createAbortableModel() as LanguageModelV2,
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    let abortPayload: unknown;
+    const { output, runId, cleanup } = await durableAgent.stream('Go', {
+      memory: { thread: 'abort-run-stream-thread', resource: 'abort-run-stream-resource' },
+      onAbort: data => {
+        abortPayload = data;
+      },
+    });
+
+    await new Promise(r => setTimeout(r, 10));
+    expect(durableAgent.abortRunStream(runId)).toBe(true);
+
+    try {
+      await output.consumeStream();
+    } catch {
+      // expected - the run never produced a normal finish
+    }
+
+    expect(abortPayload).toBeDefined();
+
+    cleanup();
+  });
+
   it('pre-aborted external abortSignal short-circuits the run', async () => {
     const mockModel = createAbortableModel();
     const baseAgent = new Agent({
