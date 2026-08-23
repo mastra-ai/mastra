@@ -283,19 +283,28 @@ function stripRunningHistoryFields<T>(value: T): T {
  * copies of the conversation per write, times one write per step: the O(N^2)
  * curve behind 135 MB on disk for a 57-step run.
  *
- * Live execution never reads these back — an in-flight run holds its state in
- * memory, and the snapshot is only ever loaded again by recovery, which
- * re-drives the run through `restart()` from `context.input` and the step
- * graph. So a running snapshot keeps its routing and status fields and gives
- * up the conversation entirely, making each running write O(1) in run length
- * rather than O(N).
+ * Live execution never reads historical copies back. Recovery does need the
+ * active step's payload, including after that step has reached a terminal state
+ * but before the next step starts, because `restart()` uses it as `prevResult`.
+ * Keep that one active-path copy and remove conversation state from every older
+ * terminal step, bounding duplication independently of run length.
  *
  * Suspended/paused snapshots are untouched — they are the resume path and keep
  * exactly the bytes they keep today.
  */
-function pruneRunningHistory(context: WorkflowRunState['context']): void {
+function pruneRunningHistory(snapshot: WorkflowRunState, context: WorkflowRunState['context']): void {
+  const activeStepIds = new Set(
+    Object.entries(snapshot.activeStepsPath ?? {})
+      .filter(
+        ([, path]) =>
+          path.length === snapshot.activePaths?.length &&
+          path.every((segment, index) => segment === snapshot.activePaths[index]),
+      )
+      .map(([stepId]) => stepId),
+  );
+
   for (const [key, value] of Object.entries(context ?? {})) {
-    if (key === 'input' || !isPlainObject(value)) continue;
+    if (key === 'input' || activeStepIds.has(key) || !isPlainObject(value)) continue;
     if (!TERMINAL_STEP_STATUSES.has((value as any).status)) continue;
 
     const pruned: Record<string, any> = { ...value };
@@ -341,7 +350,7 @@ export function pruneAgentLoopSnapshot({
 
   // `context` is freshly built above, so this is still copy-on-write with
   // respect to the caller's snapshot.
-  if ((workflowStatus ?? snapshot.status) === 'running') pruneRunningHistory(context);
+  if ((workflowStatus ?? snapshot.status) === 'running') pruneRunningHistory(snapshot, context);
 
   const result =
     isPlainObject(snapshot.result) && typeof snapshot.result.status === 'string'

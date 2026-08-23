@@ -17,6 +17,7 @@ import {
   getResumeLabelsByStepId,
   getStepIds,
   hydrateSerializedStepErrors,
+  waitForSuspendedSnapshot,
 } from './utils';
 
 // ---------------------------------------------------------------------------
@@ -340,6 +341,43 @@ describe('createDeprecationProxy', () => {
     });
 
     expect(proxy.retryCount).toBe(5);
+  });
+});
+
+describe('waitForSuspendedSnapshot', () => {
+  function storeReturning(sequence: (string | null)[]) {
+    return {
+      loadWorkflowSnapshot: vi.fn(async () => {
+        const next = sequence.length > 1 ? sequence.shift()! : sequence[0]!;
+        return next === null ? null : ({ status: next, runId: 'run-1' } as any);
+      }),
+    };
+  }
+
+  it('returns immediately when no snapshot exists', async () => {
+    const workflowsStore = storeReturning([null]);
+
+    await expect(waitForSuspendedSnapshot(workflowsStore, 'workflow', 'run-1')).resolves.toBeNull();
+    expect(workflowsStore.loadWorkflowSnapshot).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['success', 'failed', 'canceled', 'tripwire', 'bailed'])('returns immediately for %s', async status => {
+    const workflowsStore = storeReturning([status]);
+
+    await expect(waitForSuspendedSnapshot(workflowsStore, 'workflow', 'run-1')).resolves.toMatchObject({ status });
+    expect(workflowsStore.loadWorkflowSnapshot).toHaveBeenCalledTimes(1);
+  });
+
+  it('waits while a running snapshot transitions to suspended', async () => {
+    vi.useFakeTimers();
+    const workflowsStore = storeReturning(['running', 'pending', 'suspended']);
+
+    const snapshotPromise = waitForSuspendedSnapshot(workflowsStore, 'workflow', 'run-1');
+    await vi.advanceTimersByTimeAsync(50);
+
+    await expect(snapshotPromise).resolves.toMatchObject({ status: 'suspended' });
+    expect(workflowsStore.loadWorkflowSnapshot).toHaveBeenCalledTimes(3);
+    vi.useRealTimers();
   });
 });
 

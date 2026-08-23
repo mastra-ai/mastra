@@ -797,6 +797,7 @@ export function resolveForeachConcurrency(
 
 const RESUME_SNAPSHOT_POLL_INTERVAL_MS = 25;
 const RESUME_SNAPSHOT_POLL_TIMEOUT_MS = 2000;
+const RESUME_SNAPSHOT_WAIT_STATUSES = new Set(['running', 'pending']);
 
 export async function waitForSuspendedSnapshot(
   workflowsStore:
@@ -804,12 +805,13 @@ export async function waitForSuspendedSnapshot(
     | undefined,
   workflowName: string,
   runId: string,
+  timeoutMs = RESUME_SNAPSHOT_POLL_TIMEOUT_MS,
 ): Promise<WorkflowRunState | null> {
   if (!workflowsStore) return null;
 
-  const deadline = Date.now() + RESUME_SNAPSHOT_POLL_TIMEOUT_MS;
+  const deadline = Date.now() + timeoutMs;
   let snapshot = (await workflowsStore.loadWorkflowSnapshot({ workflowName, runId })) ?? null;
-  while ((!snapshot || snapshot.status !== 'suspended') && Date.now() < deadline) {
+  while (snapshot?.status && RESUME_SNAPSHOT_WAIT_STATUSES.has(snapshot.status) && Date.now() < deadline) {
     await new Promise(resolve => setTimeout(resolve, RESUME_SNAPSHOT_POLL_INTERVAL_MS));
     snapshot = (await workflowsStore.loadWorkflowSnapshot({ workflowName, runId })) ?? null;
   }
