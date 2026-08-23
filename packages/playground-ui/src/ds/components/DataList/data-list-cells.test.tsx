@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   DataListCell,
   DataListDateCell,
@@ -14,6 +14,15 @@ import {
   DataListTextCell,
   DataListTimeCell,
 } from './data-list-cells';
+
+// jsdom ships no PointerEvent; Base UI's Checkbox constructs one to decide
+// whether a click came from a pointer or the keyboard.
+beforeAll(() => {
+  if (typeof window.PointerEvent === 'undefined') {
+    class PointerEventStub extends MouseEvent {}
+    window.PointerEvent = PointerEventStub as unknown as typeof PointerEvent;
+  }
+});
 
 afterEach(cleanup);
 
