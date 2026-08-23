@@ -1,6 +1,9 @@
 import { generateThreadTitle } from '@mastra/code-sdk';
 import type { ThinkingLevel } from '@mastra/code-sdk';
-import type { AgentControllerEvent, MastraDBMessage } from '@mastra/core/agent-controller';
+import type { MastraDBMessage } from '@mastra/core/agent-controller';
+import type { StorageThreadType } from '@mastra/core/memory';
+import type { ProcessInputArgs, Processor, ProcessInputResult } from '@mastra/core/processors';
+import type { RequestContext } from '@mastra/core/request-context';
 
 export interface ThreadTitleGenerationConfig {
   /**
@@ -12,75 +15,101 @@ export interface ThreadTitleGenerationConfig {
   thinkingLevel?: ThinkingLevel;
 }
 
-export interface ThreadTitleSession {
-  readonly thread: {
-    getId(): string | null;
-    getById(input: { threadId: string }): Promise<{ title?: string | null } | null>;
-    firstUserMessage(input: { threadId: string }): Promise<MastraDBMessage | null>;
-    rename(input: { title: string }): Promise<void>;
-  };
-  subscribe(listener: (event: AgentControllerEvent) => void): () => void;
+/** Narrow memory-store surface the processor names threads through. */
+export interface ThreadTitleThreads {
+  getThreadById(input: { threadId: string }): Promise<StorageThreadType | null>;
+  updateThread(input: { id: string; title?: string }): Promise<StorageThreadType>;
 }
-
-export function createThreadTitleGenerator({ model, thinkingLevel }: ThreadTitleGenerationConfig) {
-  return (prompt: string) =>
+export function createThreadTitleGenerator({
+  model,
+  thinkingLevel,
+}: ThreadTitleGenerationConfig): (prompt: string, requestContext?: RequestContext) => Promise<string | undefined> {
+  return (prompt, requestContext) =>
     generateThreadTitle({
       prompt,
+      requestContext,
       ...(model ? { model } : {}),
       ...(thinkingLevel ? { thinkingLevel } : {}),
     });
 }
 
-function firstLineText(message: MastraDBMessage): string {
-  return message.content.parts.flatMap(part => (part.type === 'text' ? [part.text] : [])).join(' ');
-}
-
-async function titleActiveThread(
-  session: ThreadTitleSession,
-  { generateTitle }: { generateTitle: (prompt: string) => Promise<string | undefined> },
-): Promise<void> {
-  const threadId = session.thread.getId();
-  if (!threadId) return;
-
-  const thread = await session.thread.getById({ threadId });
-  if (thread?.title?.trim()) return;
-
-  const message = await session.thread.firstUserMessage({ threadId });
-  if (!message) return;
-  const prompt = firstLineText(message);
-  if (!prompt.trim()) return;
-
-  const title = await generateTitle(prompt);
-  if (!title) return;
-
-  // The user may have named the thread while the request ran — keep theirs.
-  const current = await session.thread.getById({ threadId });
-  if (current?.title?.trim()) return;
-
-  await session.thread.rename({ title });
+function lastUserPrompt(messages: MastraDBMessage[]): { threadId?: string; prompt: string } {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (!message || message.role !== 'user') continue;
+    return {
+      threadId: message.threadId,
+      prompt: message.content.parts
+        .flatMap(part => (part.type === 'text' ? [part.text] : []))
+        .join(' ')
+        .trim(),
+    };
+  }
+  return { prompt: '' };
 }
 
 /**
- * Name an otherwise-untitled thread after its first message reaches the agent.
+ * Names otherwise-untitled threads during their first answer.
  *
- * On the session's first `agent_start` the first user prompt is sent to a cheap
- * side model (fire-and-forget — never blocks or fails the answer) and the
- * resulting noun phrase becomes the thread title. Threads already carrying an
- * explicit title (work items, review sessions, `/name`) are left alone, so the
- * clients' fallback naming keeps covering everything this skips.
+ * An input processor sees the user's message inside the run's own request
+ * context, so the side-model title request resolves credentials exactly like
+ * the answering model does — per-tenant in deployed factories, global
+ * AuthStorage/env locally. Generation runs beside the answer (never awaited by
+ * the pipeline); threads that already carry a title — work items, review
+ * sessions, manual renames — are never touched.
  */
-export function observeSessionThreadTitle(
-  session: ThreadTitleSession,
-  dependencies: { generateTitle: (prompt: string) => Promise<string | undefined> },
-): () => void {
-  let seen = false;
-  const unsubscribe = session.subscribe(event => {
-    if (seen || event.type !== 'agent_start') return;
-    seen = true;
-    unsubscribe();
-    void titleActiveThread(session, dependencies).catch(error =>
-      console.warn('[Factory thread-title] Unable to generate a thread title.', error),
+export class FactoryThreadTitleProcessor implements Processor {
+  readonly id = 'factory-thread-title';
+
+  readonly #generateTitle: (prompt: string, requestContext?: RequestContext) => Promise<string | undefined>;
+  readonly #threads: () => Promise<ThreadTitleThreads | undefined>;
+  /** Threads with a generation running, so one thread never races itself. */
+  readonly #inFlight = new Set<string>();
+
+  constructor(input: {
+    generateTitle: (prompt: string, requestContext?: RequestContext) => Promise<string | undefined>;
+    /** Resolves the memory store per use, matching how the factory reads it elsewhere. */
+    threads: () => Promise<ThreadTitleThreads | undefined>;
+  }) {
+    this.#generateTitle = input.generateTitle;
+    this.#threads = input.threads;
+  }
+
+  async processInput({ messages, requestContext, abortSignal }: ProcessInputArgs): Promise<ProcessInputResult> {
+    const { threadId, prompt } = lastUserPrompt(messages);
+    if (!threadId || !prompt || this.#inFlight.has(threadId)) return messages;
+
+    const threads = await this.#threads();
+    if (!threads) return messages;
+
+    this.#inFlight.add(threadId);
+    void this.#title(threads, threadId, prompt, requestContext, abortSignal).finally(() =>
+      this.#inFlight.delete(threadId),
     );
-  });
-  return unsubscribe;
+    return messages;
+  }
+
+  async #title(
+    threads: ThreadTitleThreads,
+    threadId: string,
+    prompt: string,
+    requestContext: RequestContext | undefined,
+    abortSignal: AbortSignal | undefined,
+  ): Promise<void> {
+    try {
+      const thread = await threads.getThreadById({ threadId });
+      if (!thread || thread.title?.trim()) return;
+
+      const title = await this.#generateTitle(prompt, requestContext);
+      if (!title) return;
+
+      // The user may have named the thread while the request ran — keep theirs.
+      const current = await threads.getThreadById({ threadId });
+      if (!current || current.title?.trim()) return;
+
+      await threads.updateThread({ id: threadId, title });
+    } catch (error) {
+      console.warn('[Factory thread-title] Unable to generate a thread title.', error);
+    }
+  }
 }

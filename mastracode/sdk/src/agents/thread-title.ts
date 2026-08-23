@@ -1,4 +1,5 @@
 import type { GatewayLanguageModel } from '@mastra/core/llm';
+import type { RequestContext } from '@mastra/core/request-context';
 import { generateText, type LanguageModel } from 'ai';
 import type { ThinkingLevel } from '../providers/openai-codex.js';
 import { getAnthropicApiKey, getOpenAIApiKey, reloadAuthStorage } from './mastracode-gateway.js';
@@ -45,6 +46,12 @@ export interface ThreadTitleOptions {
   /** Explicit model id (`provider/model`). Omitted → the provider-aware default applies. */
   model?: string;
   thinkingLevel?: ThinkingLevel;
+  /**
+   * Request context the generation rides on. In deployed (multi-tenant) web,
+   * model credentials resolve per calling tenant through it; omitting it falls
+   * back to the process-global AuthStorage/env.
+   */
+  requestContext?: RequestContext;
   /** Maximum prompt characters sent to the model. Default: 2000. */
   maxPromptChars?: number;
   abortSignal?: AbortSignal;
@@ -76,16 +83,18 @@ function sanitizeTitle(output: string): string | undefined {
  *
  * Resolves `model` through mastracode's gateway (stored OAuth/API keys and env
  * fallbacks), so the call uses the same credential paths as every other model
- * call. Without an explicit `model`, the default for the first provider with
- * credentials applies (`resolveDefaultThreadTitleModel`). Returns `undefined`
- * when there is nothing to title from or the model output is unusable; provider
- * failures throw — this runs beside a live answer, so callers decide how loud
- * to be about it.
+ * call; pass `requestContext` in deployed web so credentials resolve per
+ * calling tenant. Without an explicit `model`, the default for the first
+ * provider with credentials applies (`resolveDefaultThreadTitleModel`). Returns
+ * `undefined` when there is nothing to title from or the model output is
+ * unusable; provider failures throw — this runs beside a live answer, so
+ * callers decide how loud to be about it.
  */
 export async function generateThreadTitle({
   prompt,
   model,
   thinkingLevel,
+  requestContext,
   maxPromptChars = 2000,
   abortSignal,
 }: ThreadTitleOptions): Promise<string | undefined> {
@@ -99,6 +108,7 @@ export async function generateThreadTitle({
 
   const resolved = resolveModel(choice.modelId, {
     ...(choice.thinkingLevel ? { thinkingLevel: choice.thinkingLevel } : {}),
+    ...(requestContext ? { requestContext } : {}),
   });
   if (!supportsGenerateText(resolved)) {
     throw new Error(

@@ -71,6 +71,16 @@ describe('generateThreadTitle', () => {
     expect(resolveModelMock).toHaveBeenCalledWith('google/gemini-2.5-flash', { thinkingLevel: 'off' });
   });
 
+  it('forwards the request context so deployed tenants resolve their own credentials', async () => {
+    getAnthropicApiKeyMock.mockReturnValue(undefined);
+    getOpenAIApiKeyMock.mockReturnValue('sk-oai');
+    const requestContext = { get: vi.fn() };
+
+    await generateThreadTitle({ prompt: 'hello', requestContext });
+
+    expect(resolveModelMock).toHaveBeenCalledWith('openai/gpt-5.6-luna', expect.objectContaining({ requestContext }));
+  });
+
   it('truncates the prompt sent to the model', async () => {
     await generateThreadTitle({ prompt: 'a'.repeat(5000), maxPromptChars: 100 });
     expect(generateTextMock.mock.calls[0][0].prompt).toHaveLength(100);

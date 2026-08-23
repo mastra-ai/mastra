@@ -74,7 +74,7 @@ import { hydrateSessionMemorySettings } from './session/memory-settings-hydratio
 import { hydrateSessionModelPack } from './session/model-pack-hydration.js';
 import {
   createThreadTitleGenerator,
-  observeSessionThreadTitle,
+  FactoryThreadTitleProcessor,
   type ThreadTitleGenerationConfig,
 } from './session/thread-title.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
@@ -675,6 +675,20 @@ export class MastraFactory {
       ({ integration }) => integration.agentTools || integration.sessionTools,
     );
 
+    // Thread naming rides the run pipeline (not a session observer) so the
+    // title request carries the run's request context and resolves model
+    // credentials exactly like the answering model does.
+    const threadTitleProcessor = this.#config.threadTitle
+      ? new FactoryThreadTitleProcessor({
+          generateTitle: createThreadTitleGenerator(this.#config.threadTitle),
+          threads: () => storage.getMastraStorage().getStore('memory'),
+        })
+      : undefined;
+    const inputProcessors = [
+      ...(factoryProcessor ? [factoryProcessor] : []),
+      ...(threadTitleProcessor ? [threadTitleProcessor] : []),
+    ];
+
     // Build the real production controller (agents, modes, tools, memory, OM,
     // MCP, providers) — identical to the terminal app. Agent state lives in
     // the storage backend's Mastra store alongside the Factory app tables —
@@ -699,7 +713,7 @@ export class MastraFactory {
         initialState: { skipGlobalInstructions: true },
         storage: storage.getMastraStorage(),
         ...(mastraStorageBackend ? { storageBackend: mastraStorageBackend } : {}),
-        ...(factoryProcessor ? { inputProcessors: [factoryProcessor] } : {}),
+        ...(inputProcessors.length > 0 ? { inputProcessors } : {}),
         ...(vector ? { vector } : {}),
         ...(toolIntegrations.length > 0 || (workItemsStorage && transitionService)
           ? {
@@ -891,13 +905,6 @@ export class MastraFactory {
         sourceControl: sourceControlStorage.forIntegration('github'),
       });
     });
-
-    if (this.#config.threadTitle) {
-      const generateTitle = createThreadTitleGenerator(this.#config.threadTitle);
-      prepared.base.controller.onSessionCreated(session => {
-        observeSessionThreadTitle(session, { generateTitle });
-      });
-    }
 
     // Blocking: `createSession` awaits this seed, so when hydration succeeds
     // a session's first run starts with the owner's stored OM settings.
