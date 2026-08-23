@@ -169,6 +169,18 @@ describe('MainSidebarSections', () => {
     expect(screen.getByRole('link', { name: 'Workflows' }).className).not.toContain('bg-sidebar-nav-active');
   });
 
+  it('gives a leaf link no nested list to hold children it does not have', () => {
+    const { container } = render(
+      <MainSidebarSections sections={[{ key: 'workspace', links: [{ name: 'Workflows', url: '/workflows' }] }]} />,
+    );
+
+    const item = screen.getByRole('link', { name: 'Workflows' }).closest('li');
+
+    expect(item?.querySelector('ul, ol')).toBeNull();
+    // One list for the section itself, and no empty one nested under the leaf.
+    expect(container.querySelectorAll('ul, ol')).toHaveLength(1);
+  });
+
   it('indents each level of nesting one step further than its parent', () => {
     render(
       <MainSidebarSections

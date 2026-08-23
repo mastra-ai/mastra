@@ -139,6 +139,66 @@ describe('ProcessStepListItem', () => {
     expect(screen.getByText('Fetching updates…').classList.contains('truncate')).toBe(true);
   });
 
+  it.each([
+    ['success', '[&>svg]:text-positive1'],
+    ['failed', '[&>svg]:text-negative1'],
+  ])('tints a plain %s marker on the icon itself', (status, tint) => {
+    render(<ProcessStepListItem step={{ ...step, status }} isActive={false} position={1} variant="plain" />);
+    expect(markerOf('Cloning repository')?.classList.contains(tint)).toBe(true);
+
+    cleanup();
+
+    // A step still under way carries no outcome color yet.
+    render(<ProcessStepListItem step={{ ...step, status: 'running' }} isActive position={1} variant="plain" />);
+    expect(markerOf('Cloning repository')?.classList.contains(tint)).toBe(false);
+  });
+
+  it.each([
+    ['success', '[&>svg]:text-notice-success-fg'],
+    ['failed', '[&>svg]:text-notice-destructive-fg'],
+  ])('tints a default %s marker on the icon itself', (status, tint) => {
+    render(<ProcessStepListItem step={{ ...step, status }} isActive={false} position={1} />);
+    expect(markerOf('Cloning repository')?.classList.contains(tint)).toBe(true);
+
+    cleanup();
+
+    render(<ProcessStepListItem step={{ ...step, status: 'running' }} isActive position={1} />);
+    expect(markerOf('Cloning repository')?.classList.contains(tint)).toBe(false);
+  });
+
+  it('shows the status icon rather than the waiting ring once a plain step has started', () => {
+    render(<ProcessStepListItem step={{ ...step, status: 'success' }} isActive={false} position={1} variant="plain" />);
+
+    const marker = markerOf('Cloning repository');
+    expect(marker?.querySelector('svg')).toBeTruthy();
+    expect(marker?.querySelector('circle[stroke-dasharray]')).toBeNull();
+  });
+
+  it('outlines only the not-yet-started default marker', () => {
+    render(<ProcessStepListItem step={{ ...step, status: 'running' }} isActive position={1} />);
+
+    expect(markerOf('Cloning repository')?.classList.contains('border-dashed')).toBe(false);
+  });
+
+  it('leaves a running default marker unfilled and unglowing', () => {
+    render(<ProcessStepListItem step={{ ...step, status: 'running' }} isActive position={1} />);
+
+    const marker = markerOf('Cloning repository');
+    expect(marker?.classList.contains('bg-accent1Dark')).toBe(false);
+    expect(marker?.classList.contains('shadow-glow-accent1')).toBe(false);
+  });
+
+  it('reserves border space for the card only in the default variant', () => {
+    render(<ProcessStepListItem step={step} isActive={false} position={1} />);
+    // The transparent border keeps the row from shifting when it becomes active.
+    expect(cardOf('Cloning repository')?.classList.contains('border-transparent')).toBe(true);
+
+    cleanup();
+
+    render(<ProcessStepListItem step={step} isActive={false} position={1} variant="plain" />);
+    expect(cardOf('Cloning repository')?.classList.contains('border-transparent')).toBe(false);
+  });
+
   it('ignores the deprecated stepId', () => {
     render(<ProcessStepListItem step={step} stepId="something-else" isActive position={1} />);
 
