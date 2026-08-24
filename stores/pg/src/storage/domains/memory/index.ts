@@ -23,6 +23,7 @@ import {
  * versions that don't export TABLE_OBSERVATIONAL_MEMORY.
  */
 const OM_TABLE = 'mastra_observational_memory' as const;
+const OM_GENERATION_UNIQUE_INDEX = 'idx_om_lookup_key_generation_count_unique';
 const POSTGRES_MAX_BIND_PARAMETERS = 65535;
 // Keep in sync with the message INSERT column list in saveMessages.
 const MESSAGE_INSERT_BIND_PARAMETERS = 8;
@@ -103,6 +104,7 @@ import {
   getTableName as dbGetTableName,
 } from '../../db';
 import type { PgDomainConfig } from '../../db';
+import { isDuplicateRelationError } from '../../db/pg-errors';
 import { runPrune, runBatchedDelete, resolveTargets } from '../../retention';
 
 // Database row type that includes timezone-aware columns
@@ -142,6 +144,20 @@ function inPlaceholders(count: number, startIndex = 1): string {
  */
 function toUtcISOString(date: Date): string {
   return date.toISOString();
+}
+
+function hasPostgresErrorCode(error: unknown, code: string): boolean {
+  const seen = new Set<unknown>();
+  let current = error;
+
+  while (typeof current === 'object' && current !== null && !seen.has(current)) {
+    seen.add(current);
+    const errorLike = current as { code?: string; cause?: unknown };
+    if (errorLike.code === code) return true;
+    current = errorLike.cause;
+  }
+
+  return false;
 }
 
 function dedupeMessagesForSave(messages: MastraDBMessage[]): MastraDBMessage[] {
@@ -238,6 +254,7 @@ export class MemoryPG extends MemoryStorage {
         'idx_om_lookup_key',
         `CREATE INDEX IF NOT EXISTS idx_om_lookup_key ON ${omTableName} ("lookupKey")`,
       );
+      await this.ensureOMGenerationUniqueness(omTableName);
     }
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -326,6 +343,9 @@ export class MemoryPG extends MemoryStorage {
       statements.push(
         `CREATE INDEX IF NOT EXISTS "${idxPrefix}idx_om_lookup_key" ON ${fullOmTableName} ("lookupKey");`,
       );
+      statements.push(
+        `CREATE UNIQUE INDEX IF NOT EXISTS "${idxPrefix}${OM_GENERATION_UNIQUE_INDEX}" ON ${fullOmTableName} ("lookupKey", "generationCount");`,
+      );
     }
 
     // Default indexes
@@ -334,6 +354,70 @@ export class MemoryPG extends MemoryStorage {
     }
 
     return statements;
+  }
+
+  private async ensureOMGenerationUniqueness(tableName: string): Promise<void> {
+    const indexPrefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    const indexName = `${indexPrefix}${OM_GENERATION_UNIQUE_INDEX}`;
+
+    try {
+      await this.#db.createIndexFromStatement(
+        indexName,
+        `CREATE UNIQUE INDEX IF NOT EXISTS "${indexName}" ON ${tableName} ("lookupKey", "generationCount")`,
+      );
+    } catch (error) {
+      // Concurrent cold starts can race while creating the same index. Only
+      // accept the catalog collision after confirming that the other process
+      // actually created the expected index.
+      if (isDuplicateRelationError(error)) {
+        const existingIndex = await this.#db.client.oneOrNone(
+          `SELECT 1 FROM pg_indexes WHERE schemaname = $1 AND indexname = $2`,
+          [this.#schema, indexName],
+        );
+        if (existingIndex) return;
+      }
+
+      // Building a unique index over an upgraded database fails with 23505
+      // when historical duplicates exist. Do not choose a winner here: two
+      // rows can contain different observations, so automatic deletion would
+      // be data loss.
+      if (hasPostgresErrorCode(error, '23505')) {
+        const duplicate = await this.#db.client.oneOrNone<{
+          lookupKey: string;
+          generationCount: number;
+          duplicateCount: string;
+        }>(
+          `SELECT "lookupKey", "generationCount", COUNT(*)::text AS "duplicateCount"
+             FROM ${tableName}
+            GROUP BY "lookupKey", "generationCount"
+           HAVING COUNT(*) > 1
+            ORDER BY COUNT(*) DESC
+            LIMIT 1`,
+        );
+
+        if (duplicate) {
+          throw new MastraError({
+            id: createStorageErrorId('PG', 'MIGRATION_REQUIRED', 'DUPLICATE_OBSERVATIONAL_MEMORY_GENERATIONS'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            text:
+              `Duplicate observational-memory generations prevent a safe storage upgrade. ` +
+              `Found ${duplicate.duplicateCount} rows for lookupKey ${JSON.stringify(duplicate.lookupKey)} ` +
+              `at generation ${duplicate.generationCount}. Review and reconcile every duplicate ` +
+              `(lookupKey, generationCount) group before restarting. Mastra cannot select a winner ` +
+              `without potentially discarding memory.`,
+            details: {
+              tableName: OM_TABLE,
+              lookupKey: duplicate.lookupKey,
+              generationCount: duplicate.generationCount,
+              duplicateCount: duplicate.duplicateCount,
+            },
+          });
+        }
+      }
+
+      throw error;
+    }
   }
 
   /**
@@ -2218,7 +2302,7 @@ export class MemoryPG extends MemoryStorage {
         schemaName: getSchemaName(this.#schema),
       });
       const nowStr = now.toISOString();
-      await this.#db.client.none(
+      const inserted = await this.#db.client.oneOrNone<{ id: string }>(
         `INSERT INTO ${tableName} (
           id, "lookupKey", scope, "resourceId", "threadId",
           "activeObservations", "activeObservationsPendingUpdate",
@@ -2226,7 +2310,9 @@ export class MemoryPG extends MemoryStorage {
           "pendingMessageTokens", "totalTokensObserved", "observationTokenCount",
           "isObserving", "isReflecting", "isBufferingObservation", "isBufferingReflection", "lastBufferedAtTokens", "lastBufferedAtTime",
           "observedTimezone", "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)
+        ON CONFLICT ("lookupKey", "generationCount") DO NOTHING
+        RETURNING id`,
         [
           id,
           lookupKey,
@@ -2259,8 +2345,27 @@ export class MemoryPG extends MemoryStorage {
         ],
       );
 
-      return record;
+      if (inserted) return record;
+
+      // A conflicting insert can wait for another transaction whose row was
+      // not visible to this statement's READ COMMITTED snapshot. Fetch the
+      // winner in a separate statement so PostgreSQL takes a fresh snapshot.
+      const existing = await this.#db.client.oneOrNone(
+        `SELECT * FROM ${tableName} WHERE "lookupKey" = $1 AND "generationCount" = 0 LIMIT 1`,
+        [lookupKey],
+      );
+      if (!existing) {
+        throw new MastraError({
+          id: createStorageErrorId('PG', 'INITIALIZE_OBSERVATIONAL_MEMORY', 'CONFLICT_ROW_NOT_FOUND'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId: input.threadId, resourceId: input.resourceId },
+        });
+      }
+
+      return this.parseOMRow(existing);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'INITIALIZE_OBSERVATIONAL_MEMORY', 'FAILED'),
