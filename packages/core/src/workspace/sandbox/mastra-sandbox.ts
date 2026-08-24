@@ -304,7 +304,7 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
    * {@link setEnv} to change it. The process manager reads this per spawn to
    * merge the overlay into command environments.
    */
-  get runtimeEnv(): Record<string, string | undefined> {
+  getEnv(): Record<string, string | undefined> {
     return { ...this.#env };
   }
 

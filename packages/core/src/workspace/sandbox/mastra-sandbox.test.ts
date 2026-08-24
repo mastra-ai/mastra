@@ -594,8 +594,8 @@ describe('MastraSandbox Base Class', () => {
       });
       retained.INJECTED = 'nope';
 
-      // (b) mutating the snapshot returned by the runtimeEnv getter
-      const snapshot = sandbox.runtimeEnv;
+      // (b) mutating the snapshot returned by getEnv()
+      const snapshot = sandbox.getEnv();
       snapshot.ALSO_INJECTED = 'nope';
 
       await sandbox.processes!.spawn('echo hi');
