@@ -89,6 +89,20 @@ describe('reflector compression retry ladder', () => {
     expect(result.observations).toBe(LONG_OBSERVATIONS);
   });
 
+  it('recovers when a stronger retry succeeds after identical over-threshold attempts', async () => {
+    const scripted = createScriptedModel([
+      observationsPayload(LONG_BODY),
+      observationsPayload(LONG_BODY),
+      observationsPayload('short'),
+    ]);
+    const reflector = createReflectorRunner(scripted.model);
+
+    const result = await reflector.call(SOURCE_OBSERVATIONS);
+
+    expect(scripted.callCount).toBe(3);
+    expect(result.observations).toBe('* short');
+  });
+
   it('keeps escalating while attempts return different over-threshold output', async () => {
     const scripted = createScriptedModel([
       observationsPayload(`first ${LONG_BODY}`),
