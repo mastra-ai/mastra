@@ -354,23 +354,20 @@ describe('waitForSuspendedSnapshot', () => {
     };
   }
 
-  it('uses a short grace period when no snapshot exists', async () => {
-    vi.useFakeTimers();
+  it('returns immediately when no snapshot exists by default', async () => {
     const workflowsStore = storeReturning([null]);
 
-    const snapshotPromise = waitForSuspendedSnapshot(workflowsStore, 'workflow', 'run-1');
-    await vi.advanceTimersByTimeAsync(50);
-
-    await expect(snapshotPromise).resolves.toBeNull();
-    expect(workflowsStore.loadWorkflowSnapshot).toHaveBeenCalledTimes(3);
-    vi.useRealTimers();
+    await expect(waitForSuspendedSnapshot(workflowsStore, 'workflow', 'run-1')).resolves.toBeNull();
+    expect(workflowsStore.loadWorkflowSnapshot).toHaveBeenCalledTimes(1);
   });
 
-  it('retries a temporarily missing snapshot until it becomes suspended', async () => {
+  it('uses a caller-requested grace period for a temporarily missing snapshot', async () => {
     vi.useFakeTimers();
     const workflowsStore = storeReturning([null, null, 'suspended']);
 
-    const snapshotPromise = waitForSuspendedSnapshot(workflowsStore, 'workflow', 'run-1');
+    const snapshotPromise = waitForSuspendedSnapshot(workflowsStore, 'workflow', 'run-1', {
+      missingSnapshotGraceReads: 3,
+    });
     await vi.advanceTimersByTimeAsync(50);
 
     await expect(snapshotPromise).resolves.toMatchObject({ status: 'suspended' });
