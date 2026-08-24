@@ -20,6 +20,7 @@ import { useNavigate, useParams } from 'react-router';
 import { useAvailableModelsQuery } from '../../../../../hooks/useAvailableModels';
 import type { AvailableModelOption } from '../../../../../hooks/useAvailableModels';
 import type { ModelPackInfo } from '../../../../../api/types';
+import { useOverlays } from '../../../../lib/overlays';
 import { settingsSectionPath } from '../../../settings/settingsSections';
 
 import { useChatConnection } from '../../context/useChatConnection';
@@ -96,7 +97,11 @@ export function ModelPicker() {
   const { activeModelId, activeModelPackId, defaultModelPackId, modelPacks, setModel, setModelPack, isLoading, error } =
     useChatModels();
   const modelsQuery = useAvailableModelsQuery();
-  const [open, setOpen] = useState(false);
+  // The picker is a shared overlay so `/models` and this trigger drive the
+  // same open state.
+  const overlays = useOverlays();
+  const open = overlays.isOpen('models');
+  const setOpen = (next: boolean) => (next ? overlays.open('models') : overlays.close('models'));
   const [pendingModelId, setPendingModelId] = useState<string>();
   const [pendingPackId, setPendingPackId] = useState<string>();
 

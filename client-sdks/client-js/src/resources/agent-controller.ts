@@ -606,9 +606,15 @@ export class AgentControllerSession extends BaseResource {
     return this.request(this.url(path));
   }
 
-  /** Merge key-value pairs into the session state. Existing keys not in the payload are preserved. */
-  async setState(updates: Record<string, unknown>): Promise<void> {
-    await this.request(this.url(`${this.base()}/state`), { method: 'PUT', body: { state: updates } });
+  /** Merge key-value pairs into the session state and clear (unset) listed keys in one atomic update. Existing keys not in the payload are preserved. */
+  async setState(updates: Record<string, unknown>, options?: { unset?: string[] }): Promise<void> {
+    await this.request(this.url(`${this.base()}/state`), {
+      method: 'PUT',
+      body: {
+        state: updates,
+        ...(options?.unset?.length ? { unset: options.unset } : {}),
+      },
+    });
   }
 
   /** Switch the active mode (e.g. `build`, `plan`). */
@@ -734,7 +740,7 @@ export class AgentControllerSession extends BaseResource {
   /** Set a new goal objective. The agent's in-loop judge evaluates progress after each turn. */
   async setGoal(
     objective: string,
-    options?: { judgeModelId?: string; maxRuns?: number },
+    options?: { judgeModelId?: string; maxRuns?: number; trigger?: boolean },
   ): Promise<AgentControllerGoalRecord | undefined> {
     const body = await this.request<{ goal?: AgentControllerGoalRecord }>(this.url(`${this.base()}/goal`), {
       method: 'POST',
@@ -748,6 +754,7 @@ export class AgentControllerSession extends BaseResource {
     judgeModelId?: string;
     maxRuns?: number;
     status?: 'active' | 'paused' | 'done';
+    trigger?: boolean;
   }): Promise<AgentControllerGoalRecord | undefined> {
     const body = await this.request<{ goal?: AgentControllerGoalRecord }>(this.url(`${this.base()}/goal`), {
       method: 'PUT',

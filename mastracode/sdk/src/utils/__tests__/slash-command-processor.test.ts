@@ -5,7 +5,11 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import type { SlashCommandMetadata } from '../slash-command-loader.js';
-import { processSlashCommand } from '../slash-command-processor.js';
+import {
+  createNodeSlashCommandProcessingContext,
+  formatSlashCommandActivation,
+  processSlashCommand,
+} from '../slash-command-processor.js';
 
 const createCommand = (template: string): SlashCommandMetadata => ({
   name: 'test',
@@ -19,7 +23,11 @@ describe('slash command processor', () => {
     const dir = await mkdtemp(join(tmpdir(), 'mastracode-command-processor-'));
     await writeFile(join(dir, 'context.md'), 'File context');
 
-    const result = await processSlashCommand(createCommand('Read @context.md'), [], dir);
+    const result = await processSlashCommand(
+      createCommand('Read @context.md'),
+      [],
+      createNodeSlashCommandProcessingContext(dir),
+    );
 
     expect(result).toBe('Read File context');
   });
@@ -30,7 +38,7 @@ describe('slash command processor', () => {
     const result = await processSlashCommand(
       createCommand('gh search prs --involves @me --search "involves:@me sort:updated-asc"'),
       [],
-      dir,
+      createNodeSlashCommandProcessingContext(dir),
     );
 
     expect(result).toBe('gh search prs --involves @me --search "involves:@me sort:updated-asc"');
@@ -42,7 +50,7 @@ describe('slash command processor', () => {
     const result = await processSlashCommand(
       createCommand('Deploy using the standard checklist.'),
       ['prod', 'blue'],
-      dir,
+      createNodeSlashCommandProcessingContext(dir),
     );
 
     expect(result).toBe('Deploy using the standard checklist.\n\nARGUMENTS: prod blue');
@@ -50,16 +58,17 @@ describe('slash command processor', () => {
 
   it('does not append raw arguments when explicit placeholders consume them', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'mastracode-command-processor-'));
+    const context = createNodeSlashCommandProcessingContext(dir);
 
-    await expect(processSlashCommand(createCommand('Review $ARGUMENTS'), ['src/index.ts'], dir)).resolves.toBe(
+    await expect(processSlashCommand(createCommand('Review $ARGUMENTS'), ['src/index.ts'], context)).resolves.toBe(
       'Review src/index.ts',
     );
-    await expect(processSlashCommand(createCommand('Compare $1 with $2'), ['before', 'after'], dir)).resolves.toBe(
+    await expect(processSlashCommand(createCommand('Compare $1 with $2'), ['before', 'after'], context)).resolves.toBe(
       'Compare before with after',
     );
-    await expect(processSlashCommand(createCommand('Review $1+'), ['src/index.ts', 'src/main.ts'], dir)).resolves.toBe(
-      'Review src/index.ts src/main.ts',
-    );
+    await expect(
+      processSlashCommand(createCommand('Review $1+'), ['src/index.ts', 'src/main.ts'], context),
+    ).resolves.toBe('Review src/index.ts src/main.ts');
   });
 
   it('treats $0 as literal shell text instead of a positional placeholder', async () => {
@@ -68,9 +77,42 @@ describe('slash command processor', () => {
     const result = await processSlashCommand(
       createCommand('Explain why `echo $0` prints the shell name.'),
       ['zsh'],
-      dir,
+      createNodeSlashCommandProcessingContext(dir),
     );
 
     expect(result).toBe('Explain why `echo $0` prints the shell name.\n\nARGUMENTS: zsh');
+  });
+
+  it('substitutes successful shell commands through the injected context', async () => {
+    const result = await processSlashCommand(createCommand('Branch: !`echo main`'), [], {
+      readFile: async () => undefined,
+      executeShell: async () => ({ success: true, stdout: 'main\n' }),
+    });
+
+    expect(result).toBe('Branch: main');
+  });
+
+  it('marks failed or throwing shell substitutions without executing them on the host', async () => {
+    const template = 'Out: !`fail-hard` and !`also-fail`';
+
+    const failingContext = {
+      readFile: async () => undefined,
+      executeShell: async (command: string) => {
+        if (command === 'fail-hard') return { success: false, stdout: '' };
+        throw new Error('sandbox gone');
+      },
+    };
+    const result = await processSlashCommand(createCommand(template), [], failingContext);
+
+    expect(result).toBe('Out: [Error: Failed to execute "fail-hard"] and [Error: Failed to execute "also-fail"]');
+  });
+
+  it('formats activation envelopes and escapes literal closing boundaries', () => {
+    expect(formatSlashCommandActivation('deploy', 'Ship it')).toBe(
+      '<slash-command name="deploy">\nShip it\n</slash-command>',
+    );
+    expect(formatSlashCommandActivation('deploy', 'Use </slash-command> carefully')).toBe(
+      '<slash-command name="deploy">\nUse &lt;/slash-command&gt; carefully\n</slash-command>',
+    );
   });
 });

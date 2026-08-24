@@ -6,6 +6,7 @@ import type { RenderHookOptions } from '@testing-library/react';
 import type { ReactElement, ReactNode } from 'react';
 
 import { ApiConfigProvider } from '../../src/api/config';
+import { OverlaysProvider } from '../../src/ui/lib/overlays';
 
 /**
  * Base URL every test stubs against. `src` is platform-agnostic and
@@ -28,7 +29,9 @@ function Wrapper({ client, children }: { client: QueryClient; children: ReactNod
     <ThemeProvider defaultTheme="system" storageKey="mastracode.theme">
       <TooltipProvider delayDuration={0}>
         <QueryClientProvider client={client}>
-          <ApiConfigProvider baseUrl={TEST_BASE_URL}>{children}</ApiConfigProvider>
+          <ApiConfigProvider baseUrl={TEST_BASE_URL}>
+            <OverlaysProvider>{children}</OverlaysProvider>
+          </ApiConfigProvider>
         </QueryClientProvider>
       </TooltipProvider>
     </ThemeProvider>

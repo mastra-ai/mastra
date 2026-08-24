@@ -2,9 +2,62 @@ import { mkdir, mkdtemp, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, sep } from 'node:path';
 
+import type { FileEntry } from '@mastra/core/workspace';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { loadCustomCommands, parseCommandFile, scanCommandDirectory } from '../slash-command-loader.js';
+import {
+  loadCustomCommands,
+  loadGlobalCustomCommands,
+  loadWorkspaceCustomCommands,
+  parseCommandFile,
+  scanCommandDirectory,
+} from '../slash-command-loader.js';
+
+interface FakeWorkspaceFile {
+  content: string;
+}
+
+/** In-memory stand-in for the subset of WorkspaceFilesystem the loader uses. */
+function createFakeWorkspaceFilesystem(files: Record<string, string>, directories: string[] = []) {
+  const dirSet = new Set(directories);
+  for (const filePath of Object.keys(files)) {
+    const segments = filePath.split('/');
+    segments.pop();
+    let current = '';
+    for (const segment of segments) {
+      current = current ? `${current}/${segment}` : segment;
+      dirSet.add(current);
+    }
+  }
+
+  return {
+    exists: async (path: string) => dirSet.has(path) || files[path] !== undefined,
+    readdir: async (path: string): Promise<FileEntry[]> => {
+      const names = new Set<string>();
+      for (const dir of dirSet) {
+        if (!dir.startsWith(`${path}/`) && !(path === '' && !dir.includes('/'))) continue;
+        const rest = path === '' ? dir : dir.slice(path.length + 1);
+        if (!rest) continue;
+        names.add(rest.split('/')[0]!);
+      }
+      for (const file of Object.keys(files)) {
+        if (!file.startsWith(`${path}/`) && !(path === '' && !file.includes('/'))) continue;
+        const rest = path === '' ? file : file.slice(path.length + 1);
+        if (!rest) continue;
+        names.add(rest.split('/')[0]!);
+      }
+      return [...names].map(name => ({
+        name,
+        type: files[`${path}/${name}`] !== undefined ? ('file' as const) : ('directory' as const),
+      }));
+    },
+    readFile: async (path: string): Promise<string> => {
+      const content = files[path];
+      if (content === undefined) throw new Error(`ENOENT: ${path}`);
+      return content;
+    },
+  };
+}
 
 describe('slash command loader', () => {
   beforeEach(async () => {
@@ -172,6 +225,97 @@ describe('slash command loader', () => {
     expect(commands.find(command => command.name === 'alexandria')).toMatchObject({
       description: 'Ask Alexandria',
       sourcePath: join(pluginCommandsDir, 'alexandria.md'),
+    });
+  });
+
+  it('loads global user directories in ascending precedence', async () => {
+    const home = process.env.HOME!;
+    await mkdir(join(home, '.opencode', 'command'), { recursive: true });
+    await mkdir(join(home, '.claude', 'commands'), { recursive: true });
+    await mkdir(join(home, '.mastracode', 'commands'), { recursive: true });
+    await writeFile(join(home, '.opencode', 'command', 'deploy.md'), 'opencode version\n');
+    await writeFile(join(home, '.claude', 'commands', 'deploy.md'), 'claude version\n');
+    await writeFile(join(home, '.mastracode', 'commands', 'review.md'), 'mastra review\n');
+
+    const commands = await loadGlobalCustomCommands('.mastracode');
+
+    expect(commands.find(command => command.name === 'deploy')?.template).toBe('claude version\n');
+    expect(commands.find(command => command.name === 'review')?.template).toBe('mastra review\n');
+  });
+
+  describe('loadWorkspaceCustomCommands', () => {
+    it('merges workspace roots with config-dir precedence and colon namespaces', async () => {
+      const filesystem = createFakeWorkspaceFilesystem({
+        '.opencode/command/deploy.md': 'opencode deploy\n',
+        '.claude/commands/deploy.md': 'claude deploy\n',
+        '.mastracode/commands/deploy.md': 'mastra deploy\n',
+        '.mastracode/commands/presentation/review.md': 'Review the presentation\n',
+      });
+
+      const commands = await loadWorkspaceCustomCommands(filesystem, '.mastracode');
+
+      const deploy = commands.find(command => command.name === 'deploy');
+      expect(deploy).toMatchObject({ template: 'mastra deploy\n', sourcePath: '.mastracode/commands/deploy.md' });
+      expect(commands.find(command => command.name === 'presentation:review')).toMatchObject({
+        sourcePath: '.mastracode/commands/presentation/review.md',
+      });
+    });
+
+    it('parses frontmatter metadata from workspace files', async () => {
+      const filesystem = createFakeWorkspaceFilesystem({
+        '.claude/commands/ship.md': '---\nname: ship\ndescription: Ship work\ngoal: true\n---\nShip $ARGUMENTS\n',
+      });
+
+      const commands = await loadWorkspaceCustomCommands(filesystem);
+
+      expect(commands).toEqual([expect.objectContaining({ name: 'ship', description: 'Ship work', goal: true })]);
+    });
+
+    it('treats missing roots as empty without throwing', async () => {
+      const filesystem = createFakeWorkspaceFilesystem({});
+
+      await expect(loadWorkspaceCustomCommands(filesystem)).resolves.toEqual([]);
+    });
+
+    it('skips node_modules and traversal entry names', async () => {
+      const filesystem = createFakeWorkspaceFilesystem(
+        {
+          '.claude/commands/node_modules/sentinel/README.md': 'DEPENDENCY_SENTINEL\n',
+          '.claude/commands/real.md': 'Real command\n',
+        },
+        ['.claude/commands/node_modules'],
+      );
+
+      const commands = await loadWorkspaceCustomCommands(filesystem);
+
+      expect(commands.map(command => command.name)).toEqual(['real']);
+    });
+
+    it('never reads entries whose names contain traversal segments', async () => {
+      const readFile = vi.fn(async () => 'SECRET\n');
+      const filesystem = {
+        exists: async () => true,
+        readdir: async () =>
+          [
+            { name: '../escape.md', type: 'file' },
+            { name: '..', type: 'directory' },
+          ] as FileEntry[],
+        readFile,
+      };
+
+      await expect(loadWorkspaceCustomCommands(filesystem)).resolves.toEqual([]);
+      expect(readFile).not.toHaveBeenCalled();
+    });
+
+    it('propagates unexpected read errors', async () => {
+      const filesystem = createFakeWorkspaceFilesystem({
+        '.claude/commands/broken.md': '---\nbroken',
+      });
+      filesystem.readFile = async () => {
+        throw new Error('EACCES: permission denied');
+      };
+
+      await expect(loadWorkspaceCustomCommands(filesystem)).rejects.toThrow('EACCES');
     });
   });
 });

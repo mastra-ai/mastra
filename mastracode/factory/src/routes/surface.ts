@@ -47,6 +47,7 @@ import { IntakeRoutes } from './intake.js';
 import { KnowledgeRoutes } from './knowledge.js';
 import { OAuthRoutes } from './oauth.js';
 import type { RouteAuth } from './route.js';
+import { SessionCommandRoutes } from './session-commands.js';
 import { SkillRoutes } from './skills.js';
 import { invalidateTenantCredentialSnapshots } from './tenant-credentials.js';
 import { WorkItemRoutes } from './work-items.js';
@@ -106,6 +107,10 @@ export interface FactoryApiRoutesDeps {
   rules: FactoryRules;
   factoryTransitionService?: FactoryTransitionService;
   sessionRetirement?: import('../sandbox/session-retirement.js').SessionRetirementCoordinator;
+  /** Server-owned active plugin command/skill directories for session commands. */
+  pluginPaths: import('../commands/service.js').TrustedPluginPaths;
+  /** Expose host user-global runtime dirs to sessions (local deploys only). */
+  includeRuntimeGlobals: boolean;
   onFactoryRuntime?: (runtime: {
     transitionService: FactoryTransitionService;
     prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
@@ -481,6 +486,15 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       auth: deps.auth,
       controllerId: deps.controllerId,
       controller: deps.controller,
+      sourceControlStorage: githubStorage,
+      ensureSourceControlReady: githubRegistration?.ensureReady,
+    }).routes(),
+    ...new SessionCommandRoutes({
+      auth: deps.auth,
+      controllerId: deps.controllerId,
+      controller: deps.controller,
+      pluginPaths: deps.pluginPaths,
+      includeRuntimeGlobals: deps.includeRuntimeGlobals,
       sourceControlStorage: githubStorage,
       ensureSourceControlReady: githubRegistration?.ensureReady,
     }).routes(),

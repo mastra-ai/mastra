@@ -21339,6 +21339,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdGoal_Body = {
   objective: string;
   judgeModelId?: string | undefined;
   maxRuns?: number | undefined;
+  trigger?: boolean | undefined;
 };
 
 export type PostAgentControllerControllerIdSessionsResourceIdGoal_Response =
@@ -21382,6 +21383,7 @@ export type PutAgentControllerControllerIdSessionsResourceIdGoal_Body = {
   judgeModelId?: string | undefined;
   maxRuns?: number | undefined;
   status?: ('active' | 'paused' | 'done') | undefined;
+  trigger?: boolean | undefined;
 };
 
 export type PutAgentControllerControllerIdSessionsResourceIdGoal_Response =
@@ -21585,6 +21587,7 @@ export type PutAgentControllerControllerIdSessionsResourceIdState_Body = {
   state: {
     [key: string]: unknown;
   };
+  unset?: string[] | undefined;
 };
 
 export type PutAgentControllerControllerIdSessionsResourceIdState_Response =

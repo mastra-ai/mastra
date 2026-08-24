@@ -768,4 +768,50 @@ describe('AgentController Resource', () => {
     expect(result.notificationId).toBe('n-1');
     expect(result.decision).toBe('deliver');
   });
+
+  describe('session state unset and goal trigger', () => {
+    it('setState sends state only when no unset keys are given', async () => {
+      mockJson({ ok: true });
+      await client.getAgentController('code').session('user-1').setState({ yolo: true });
+
+      const [url, init] = lastCall();
+      expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/state');
+      expect(init.method).toBe('PUT');
+      expect(JSON.parse(init.body as string)).toEqual({ state: { yolo: true } });
+    });
+
+    it('setState pins the exact unset body for clearing keys', async () => {
+      mockJson({ ok: true });
+      await client
+        .getAgentController('code')
+        .session('user-1')
+        .setState({}, { unset: ['thinkingLevel'] });
+
+      const [url, init] = lastCall();
+      expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/state');
+      expect(init.method).toBe('PUT');
+      expect(JSON.parse(init.body as string)).toEqual({ state: {}, unset: ['thinkingLevel'] });
+    });
+
+    it('setGoal forwards the trigger option in the POST body', async () => {
+      mockJson({ goal: { id: 'g-1', objective: 'ship', status: 'active', runsUsed: 0, startedAt: 1, updatedAt: 1 } });
+      const goal = await client.getAgentController('code').session('user-1').setGoal('ship', { trigger: true });
+
+      const [url, init] = lastCall();
+      expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/goal');
+      expect(init.method).toBe('POST');
+      expect(JSON.parse(init.body as string)).toEqual({ objective: 'ship', trigger: true });
+      expect(goal?.status).toBe('active');
+    });
+
+    it('updateGoal forwards the trigger option in the PUT body', async () => {
+      mockJson({ goal: { id: 'g-1', objective: 'ship', status: 'active', runsUsed: 0, startedAt: 1, updatedAt: 1 } });
+      await client.getAgentController('code').session('user-1').updateGoal({ status: 'active', trigger: true });
+
+      const [url, init] = lastCall();
+      expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/goal');
+      expect(init.method).toBe('PUT');
+      expect(JSON.parse(init.body as string)).toEqual({ status: 'active', trigger: true });
+    });
+  });
 });

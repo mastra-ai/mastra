@@ -14,6 +14,10 @@ import {
   ABORT_AGENT_CONTROLLER_SESSION_ROUTE,
   STREAM_AGENT_CONTROLLER_SESSION_ROUTE,
   GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE,
+  SET_AGENT_CONTROLLER_SESSION_STATE_ROUTE,
+  SET_AGENT_CONTROLLER_GOAL_ROUTE,
+  UPDATE_AGENT_CONTROLLER_GOAL_ROUTE,
+  GET_AGENT_CONTROLLER_GOAL_ROUTE,
   LIST_AGENT_CONTROLLER_MODES_ROUTE,
   LIST_AGENT_CONTROLLER_ACTIVE_RUNS_ROUTE,
   LIST_AGENT_CONTROLLER_THREADS_ROUTE,
@@ -1118,5 +1122,199 @@ describe('agent-controller routes', () => {
         } as any),
       ).rejects.toThrow('thread "missing-thread" not found');
     });
+  });
+});
+
+describe('agent-controller session state unset', () => {
+  let mastra: Mastra;
+
+  beforeEach(() => {
+    ({ mastra } = makeMastra());
+  });
+
+  async function getRouteSession(resourceId: string) {
+    const controller = mastra.getAgentController('code')!;
+    await controller.init();
+    return controller.createSession({ resourceId, id: resourceId, ownerId: controller.id });
+  }
+
+  it('rejects a body schema where a key is present in both state and unset', () => {
+    const schema = SET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.bodySchema!;
+    expect(schema.safeParse({ state: { thinkingLevel: 'high' }, unset: ['thinkingLevel'] }).success).toBe(false);
+    expect(schema.safeParse({ state: { thinkingLevel: 'high' } }).success).toBe(true);
+    expect(schema.safeParse({ state: {}, unset: ['thinkingLevel'] }).success).toBe(true);
+  });
+
+  it('rejects more than 32 unset keys and empty keys', () => {
+    const schema = SET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.bodySchema!;
+    expect(schema.safeParse({ state: {}, unset: Array.from({ length: 33 }, (_, i) => `k${i}`) }).success).toBe(false);
+    expect(schema.safeParse({ state: {}, unset: Array.from({ length: 32 }, (_, i) => `k${i}`) }).success).toBe(true);
+    expect(schema.safeParse({ state: {}, unset: [''] }).success).toBe(false);
+  });
+
+  it('clears thinkingLevel in the same atomic update that merges other keys', async () => {
+    const session = await getRouteSession('state-unset-user');
+    await SET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.handler({
+      mastra,
+      controllerId: 'code',
+      resourceId: 'state-unset-user',
+      state: { thinkingLevel: 'high', notifications: 'off' },
+    } as any);
+    expect(session.state.get().thinkingLevel).toBe('high');
+
+    await SET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.handler({
+      mastra,
+      controllerId: 'code',
+      resourceId: 'state-unset-user',
+      state: { smartEditing: true },
+      unset: ['thinkingLevel'],
+    } as any);
+
+    const state = session.state.get() as Record<string, unknown>;
+    expect(state.thinkingLevel).toBeUndefined();
+    expect(state.notifications).toBe('off');
+    expect(state.smartEditing).toBe(true);
+  });
+});
+
+describe('agent-controller goal trigger', () => {
+  let mastra: Mastra;
+
+  beforeEach(() => {
+    ({ mastra } = makeMastra());
+  });
+
+  async function getRouteSession(resourceId: string) {
+    const controller = mastra.getAgentController('code')!;
+    await controller.init();
+    return controller.createSession({ resourceId, id: resourceId, ownerId: controller.id });
+  }
+
+  function mockAcceptedSignal(session: { sendSignal: any }) {
+    return vi.spyOn(session, 'sendSignal').mockReturnValue({
+      accepted: Promise.resolve({ accepted: true as const }),
+    } as any);
+  }
+
+  it('sends the exact goal reminder signal once when trigger is true', async () => {
+    const session = await getRouteSession('goal-trigger-user');
+    const sendSignal = mockAcceptedSignal(session);
+
+    const res = (await SET_AGENT_CONTROLLER_GOAL_ROUTE.handler({
+      mastra,
+      controllerId: 'code',
+      resourceId: 'goal-trigger-user',
+      objective: 'ship the release',
+      maxRuns: 7,
+      trigger: true,
+    } as any)) as { goal?: { id?: string; status: string; objective: string } };
+
+    expect(res.goal?.status).toBe('active');
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+    expect(sendSignal.mock.calls[0]![0]).toMatchObject({
+      type: 'system-reminder',
+      contents: 'ship the release',
+      attributes: { type: 'goal' },
+      metadata: { goalId: res.goal?.id, maxTurns: 7 },
+    });
+  });
+
+  it('returns 409 without sending when update has trigger but no persisted goal', async () => {
+    const session = await getRouteSession('goal-update-no-goal');
+    mockAcceptedSignal(session);
+
+    const promise = UPDATE_AGENT_CONTROLLER_GOAL_ROUTE.handler({
+      mastra,
+      controllerId: 'code',
+      resourceId: 'goal-update-no-goal',
+      status: 'active',
+      trigger: true,
+    } as any);
+
+    await expect(promise).rejects.toMatchObject({ status: 409 });
+    expect(session.sendSignal).not.toHaveBeenCalled();
+  });
+
+  it('pauses the goal and returns the 502 contract when signal acceptance fails', async () => {
+    const session = await getRouteSession('goal-trigger-fail');
+    vi.spyOn(session, 'sendSignal').mockReturnValue({
+      accepted: Promise.reject(new Error('wake failed')),
+    } as any);
+
+    const promise = SET_AGENT_CONTROLLER_GOAL_ROUTE.handler({
+      mastra,
+      controllerId: 'code',
+      resourceId: 'goal-trigger-fail',
+      objective: 'ship the release',
+      trigger: true,
+    } as any);
+
+    let caught: unknown;
+    try {
+      await promise;
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(HTTPException);
+    const exception = caught as InstanceType<typeof HTTPException>;
+    expect(exception.status).toBe(502);
+    const body = JSON.parse(await (exception.res ?? new Response('null')).text());
+    expect(body).toEqual({ error: 'goal_trigger_failed', message: 'Goal was saved but could not be started.' });
+
+    const controller = mastra.getAgentController('code')!;
+    const agent = controller.getCurrentAgent(session);
+    const threadId = session.thread.getId()!;
+    const record = await agent.getObjective({ threadId });
+    expect(record?.status).toBe('paused');
+  });
+
+  it('does not send when trigger is not requested', async () => {
+    const session = await getRouteSession('goal-no-trigger');
+    const sendSignal = mockAcceptedSignal(session);
+
+    await GET_AGENT_CONTROLLER_GOAL_ROUTE.handler({
+      mastra,
+      controllerId: 'code',
+      resourceId: 'goal-no-trigger',
+    } as any);
+    await SET_AGENT_CONTROLLER_GOAL_ROUTE.handler({
+      mastra,
+      controllerId: 'code',
+      resourceId: 'goal-no-trigger',
+      objective: 'quiet objective',
+    } as any);
+
+    expect(sendSignal).not.toHaveBeenCalled();
+  });
+
+  it('keeps scoped sessions isolated when triggering', async () => {
+    const controller = mastra.getAgentController('code')!;
+    await controller.init();
+    const sessionA = await controller.createSession({
+      resourceId: 'goal-scoped',
+      id: 'goal-scoped::scope-a',
+      ownerId: controller.id,
+      scope: 'scope-a',
+    });
+    const sendSignalA = mockAcceptedSignal(sessionA);
+
+    await SET_AGENT_CONTROLLER_GOAL_ROUTE.handler({
+      mastra,
+      controllerId: 'code',
+      resourceId: 'goal-scoped',
+      sessionScope: 'scope-a',
+      objective: 'scoped objective',
+      trigger: true,
+    } as any);
+
+    expect(sendSignalA).toHaveBeenCalledTimes(1);
+    const agentA = mastra.getAgentController('code')!.getCurrentAgent(sessionA);
+    const recordA = await agentA.getObjective({ threadId: sessionA.thread.getId()! });
+    expect(recordA?.objective).toBe('scoped objective');
+
+    const sessionB = await getRouteSession('goal-scoped-b');
+    const agentB = mastra.getAgentController('code')!.getCurrentAgent(sessionB);
+    const recordB = await agentB.getObjective({ threadId: sessionB.thread.getId()! });
+    expect(recordB).toBeUndefined();
   });
 });

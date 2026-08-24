@@ -76,6 +76,9 @@ vi.mock('../display.js', () => ({
 
 vi.mock('@mastra/code-sdk/utils/slash-command-processor', () => ({
   processSlashCommand: mocks.processSlashCommand,
+  createNodeSlashCommandProcessingContext: () => ({ readFile: vi.fn(), executeShell: vi.fn() }),
+  formatSlashCommandActivation: (name: string, content: string) =>
+    `<slash-command name="${name}">\n${content}\n</slash-command>`,
 }));
 
 vi.mock('../commands/goal.js', () => ({
@@ -375,7 +378,7 @@ describe('dispatchSlashCommand models routing', () => {
     expect(mocks.processSlashCommand).toHaveBeenCalledWith(
       state.customSlashCommands[0],
       ['staging', 'now'],
-      process.cwd(),
+      expect.objectContaining({ readFile: expect.any(Function), executeShell: expect.any(Function) }),
     );
     expect(mocks.startGoalWithDefaults).toHaveBeenCalledWith(ctx, 'custom output');
   });
@@ -487,7 +490,11 @@ describe('dispatchSlashCommand models routing', () => {
 
     expect(handled).toBe(true);
     expect(mocks.processSlashCommand).toHaveBeenCalledTimes(1);
-    expect(mocks.processSlashCommand).toHaveBeenCalledWith(state.customSlashCommands[0], [], process.cwd());
+    expect(mocks.processSlashCommand).toHaveBeenCalledWith(
+      state.customSlashCommands[0],
+      [],
+      expect.objectContaining({ readFile: expect.any(Function), executeShell: expect.any(Function) }),
+    );
     expect(state.session.thread.create).not.toHaveBeenCalled();
     expect(state.session.sendMessage).toHaveBeenCalledWith({
       content: '<slash-command name="deploy">\ncustom output\n</slash-command>',
@@ -634,6 +641,10 @@ describe('dispatchSlashCommand models routing', () => {
 
     expect(handled).toBe(true);
     expect(mocks.processSlashCommand).toHaveBeenCalledTimes(1);
-    expect(mocks.processSlashCommand).toHaveBeenCalledWith(state.customSlashCommands[0], [], process.cwd());
+    expect(mocks.processSlashCommand).toHaveBeenCalledWith(
+      state.customSlashCommands[0],
+      [],
+      expect.objectContaining({ readFile: expect.any(Function), executeShell: expect.any(Function) }),
+    );
   });
 });

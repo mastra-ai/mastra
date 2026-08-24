@@ -1,10 +1,10 @@
 import { Target } from 'lucide-react';
 
-import { useChatRuntime } from '../../context/useChatRuntime';
+import { useChatGoal } from '../../context/useChatGoal';
 
 /** Goal lifecycle indicator; hidden when there is no goal or it is done. */
 export function GoalStatus() {
-  const { goal } = useChatRuntime();
+  const { goal } = useChatGoal();
 
   if (!goal || goal.status === 'done') return null;
 

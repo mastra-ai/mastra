@@ -1,7 +1,23 @@
 import { execSync } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
+import type { WorkspaceFilesystem, WorkspaceSandbox } from '@mastra/core/workspace';
 import type { SlashCommandMetadata } from './slash-command-loader.js';
+
+/**
+ * I/O seam for slash-command template expansion. The processor never touches
+ * host node:fs or child_process directly — every read and shell substitution
+ * goes through this context so templates execute where their session lives.
+ */
+export interface SlashCommandProcessingContext {
+  /** Resolve an `@path` file reference relative to the session workspace. */
+  readFile(path: string): Promise<string | undefined>;
+  /** Execute a `!`-backtick shell substitution inside the session workspace. */
+  executeShell(command: string): Promise<{ success: boolean; stdout: string }>;
+}
+
+const SHELL_TIMEOUT_MS = 30_000;
+const MAX_RETAINED_BYTES = 1024 * 1024;
 
 /**
  * Process a slash command by replacing variables and executing shell commands
@@ -9,16 +25,16 @@ import type { SlashCommandMetadata } from './slash-command-loader.js';
 export async function processSlashCommand(
   command: SlashCommandMetadata,
   args: string[],
-  workingDir: string,
+  context: SlashCommandProcessingContext,
 ): Promise<string> {
   const { result: withArgs, shouldAppendRawArgs } = replaceArguments(command.template, args);
   let result = withArgs;
 
   // Replace shell commands
-  result = await replaceShellOutput(result, workingDir);
+  result = await replaceShellOutput(result, context);
 
   // Replace file references
-  result = await replaceFileReferences(result, workingDir);
+  result = await replaceFileReferences(result, context);
 
   // Append raw args after shell/file processing to avoid executing user input
   if (shouldAppendRawArgs) {
@@ -26,6 +42,72 @@ export async function processSlashCommand(
   }
 
   return result;
+}
+
+/** Host-disk processing context for local TUI sessions. */
+export function createNodeSlashCommandProcessingContext(workingDir: string): SlashCommandProcessingContext {
+  return {
+    async readFile(filePath: string) {
+      try {
+        return await fs.readFile(path.resolve(workingDir, filePath), 'utf-8');
+      } catch {
+        return undefined;
+      }
+    },
+    async executeShell(command: string) {
+      try {
+        const stdout = execSync(command, {
+          cwd: workingDir,
+          encoding: 'utf-8',
+          timeout: SHELL_TIMEOUT_MS,
+          maxBuffer: MAX_RETAINED_BYTES,
+        });
+        return { success: true, stdout };
+      } catch {
+        return { success: false, stdout: '' };
+      }
+    },
+  };
+}
+
+interface CommandWorkspace {
+  filesystem: Pick<WorkspaceFilesystem, 'readFile'> & { basePath?: string };
+  sandbox?: { executeCommand?: WorkspaceSandbox['executeCommand'] };
+}
+
+/**
+ * Session-workspace processing context for Factory sessions: `@file` reads go
+ * through the workspace filesystem and `!`-backtick substitutions run inside
+ * the workspace sandbox. There is no host fallback.
+ */
+export function createWorkspaceSlashCommandProcessingContext(
+  workspace: CommandWorkspace,
+): SlashCommandProcessingContext {
+  const cwd = workspace.filesystem.basePath;
+  return {
+    async readFile(filePath: string) {
+      try {
+        const content = await workspace.filesystem.readFile(filePath, { encoding: 'utf-8' });
+        return typeof content === 'string' ? content : content.toString('utf-8');
+      } catch {
+        return undefined;
+      }
+    },
+    async executeShell(command: string) {
+      const executeCommand = workspace.sandbox?.executeCommand?.bind(workspace.sandbox);
+      if (!executeCommand) return { success: false, stdout: '' };
+      try {
+        const result = await executeCommand('sh', ['-c', command], {
+          timeout: SHELL_TIMEOUT_MS,
+          maxRetainedBytes: MAX_RETAINED_BYTES,
+          ...(cwd ? { cwd } : {}),
+        });
+        return { success: result.success, stdout: result.stdout };
+      } catch {
+        return { success: false, stdout: '' };
+      }
+    },
+  };
 }
 
 /**
@@ -69,25 +151,21 @@ function replaceArguments(template: string, args: string[]): { result: string; s
  * Replace shell command references with their output
  * Format: !`command`
  */
-async function replaceShellOutput(template: string, workingDir: string): Promise<string> {
+async function replaceShellOutput(template: string, context: SlashCommandProcessingContext): Promise<string> {
   const shellPattern = /!`([^`]+)`/g;
   const matches = [...template.matchAll(shellPattern)];
 
   let result = template;
   for (const match of matches) {
     const [fullMatch, command] = match;
+    let replacement: string;
     try {
-      const output = execSync(command!, {
-        cwd: workingDir,
-        encoding: 'utf-8',
-        timeout: 30000,
-        maxBuffer: 1024 * 1024, // 1MB buffer
-      });
-      result = result.replace(fullMatch, output.trim());
-    } catch (error) {
-      console.error(`Error executing shell command "${command}":`, error);
-      result = result.replace(fullMatch, `[Error: Failed to execute "${command}"]`);
+      const outcome = await context.executeShell(command!);
+      replacement = outcome.success ? outcome.stdout.trim() : `[Error: Failed to execute "${command}"]`;
+    } catch {
+      replacement = `[Error: Failed to execute "${command}"]`;
     }
+    result = result.replace(fullMatch, replacement);
   }
 
   return result;
@@ -97,7 +175,7 @@ async function replaceShellOutput(template: string, workingDir: string): Promise
  * Replace file references with file content
  * Format: @filename or @path/to/file
  */
-async function replaceFileReferences(template: string, workingDir: string): Promise<string> {
+async function replaceFileReferences(template: string, context: SlashCommandProcessingContext): Promise<string> {
   const filePattern = /@([\w./-]+)/g;
   const matches = [...template.matchAll(filePattern)];
 
@@ -105,8 +183,8 @@ async function replaceFileReferences(template: string, workingDir: string): Prom
   for (const match of matches) {
     const [fullMatch, filePath] = match;
     try {
-      const fullPath = path.resolve(workingDir, filePath!);
-      const content = await fs.readFile(fullPath, 'utf-8');
+      const content = await context.readFile(filePath!);
+      if (content === undefined) continue;
       result = result.replace(fullMatch, content);
     } catch {
       // Leave literal @mentions/search qualifiers such as @me intact when they do not resolve to files.
@@ -114,6 +192,16 @@ async function replaceFileReferences(template: string, workingDir: string): Prom
   }
 
   return result;
+}
+
+/**
+ * Wrap processed command output in the `<slash-command>` envelope the model
+ * receives. Literal closing boundaries in user content are escaped so the
+ * envelope can never terminate early.
+ */
+export function formatSlashCommandActivation(name: string, content: string): string {
+  const escaped = content.replaceAll('</slash-command>', '&lt;/slash-command&gt;');
+  return `<slash-command name="${name}">\n${escaped}\n</slash-command>`;
 }
 
 /**

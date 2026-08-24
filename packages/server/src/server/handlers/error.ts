@@ -90,6 +90,13 @@ export function formatZodError(
 
 // Helper to handle errors consistently
 export function handleError(error: unknown, defaultMessage: string): never {
+  // An already-formed HTTPException carries its final status, message, and (for
+  // routes that need a custom body) response — re-wrapping would downgrade it
+  // to a bare `{ message }` body.
+  if (error instanceof HTTPException) {
+    throw error;
+  }
+
   if (isModelNotAllowedError(error)) {
     const body = {
       error: {

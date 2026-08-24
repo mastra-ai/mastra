@@ -1422,11 +1422,13 @@ const setGoalBodySchema = z.object({
   objective: z.string(),
   judgeModelId: z.string().optional(),
   maxRuns: z.number().optional(),
+  trigger: z.boolean().optional(),
 });
 const updateGoalBodySchema = z.object({
   judgeModelId: z.string().optional(),
   maxRuns: z.number().optional(),
   status: z.enum(['active', 'paused', 'done']).optional(),
+  trigger: z.boolean().optional(),
 });
 const goalRecordSchema = z.object({
   id: z.string().optional(),
@@ -1443,6 +1445,41 @@ const goalResponseSchema = z.object({ goal: goalRecordSchema.optional() });
 
 function getAgentForSession(controller: AgentController<any>, session: Session<any>): Agent {
   return controller.getCurrentAgent(session);
+}
+
+/**
+ * Kick a freshly-persisted active goal off by sending its reminder signal. A
+ * rejected acceptance leaves the goal persisted but unstarted, so it is paused
+ * and a 502 tells the caller to re-fetch the paused record.
+ */
+async function startTriggeredGoal(
+  session: Session<any>,
+  agent: Agent,
+  threadId: string,
+  record: Awaited<ReturnType<Agent['setObjective']>>,
+): Promise<void> {
+  if (!record || record.status !== 'active') {
+    throw new HTTPException(409, { message: 'goal trigger requires an active goal' });
+  }
+  try {
+    await session.sendSignal({
+      type: 'system-reminder',
+      contents: record.objective,
+      attributes: { type: 'goal' },
+      metadata: { goalId: record.id, maxTurns: record.maxRuns, judgeModelId: record.judgeModelId },
+    }).accepted;
+  } catch (error) {
+    await agent.updateObjectiveOptions({ threadId, status: 'paused' });
+    const res = new Response(
+      JSON.stringify({ error: 'goal_trigger_failed', message: 'Goal was saved but could not be started.' }),
+      { status: 502, headers: { 'content-type': 'application/json' } },
+    );
+    throw new HTTPException(502, {
+      res,
+      message: 'Goal was saved but could not be started.',
+      cause: error,
+    });
+  }
 }
 
 export const GET_AGENT_CONTROLLER_GOAL_ROUTE = createRoute({
@@ -1494,6 +1531,7 @@ export const SET_AGENT_CONTROLLER_GOAL_ROUTE = createRoute({
     objective,
     judgeModelId,
     maxRuns,
+    trigger,
     requestContext,
   }) => {
     try {
@@ -1508,6 +1546,9 @@ export const SET_AGENT_CONTROLLER_GOAL_ROUTE = createRoute({
         ...(judgeModelId ? { judgeModelId } : {}),
         ...(maxRuns != null ? { maxRuns } : {}),
       });
+      if (trigger) {
+        await startTriggeredGoal(session, agent, threadId, record);
+      }
       return { goal: record ?? undefined };
     } catch (error) {
       return handleError(error, 'error setting controller goal');
@@ -1536,6 +1577,7 @@ export const UPDATE_AGENT_CONTROLLER_GOAL_ROUTE = createRoute({
     judgeModelId,
     maxRuns,
     status,
+    trigger,
     requestContext,
   }) => {
     try {
@@ -1550,6 +1592,9 @@ export const UPDATE_AGENT_CONTROLLER_GOAL_ROUTE = createRoute({
         ...(maxRuns !== undefined ? { maxRuns } : {}),
         ...(status !== undefined ? { status } : {}),
       });
+      if (trigger) {
+        await startTriggeredGoal(session, agent, threadId, record);
+      }
       return { goal: record ?? undefined };
     } catch (error) {
       return handleError(error, 'error updating controller goal');
@@ -1670,7 +1715,14 @@ export const SET_AGENT_CONTROLLER_TOOL_PERMISSION_ROUTE = createRoute({
 // Session State
 // ---------------------------------------------------------------------------
 
-const setSessionStateBodySchema = z.object({ state: z.record(z.string(), z.unknown()) });
+const setSessionStateBodySchema = z
+  .object({
+    state: z.record(z.string(), z.unknown()),
+    unset: z.array(z.string().min(1)).max(32).optional(),
+  })
+  .refine(data => !(data.unset ?? []).some(key => key in data.state), {
+    error: 'a key cannot be present in both "state" and "unset"',
+  });
 
 export const SET_AGENT_CONTROLLER_SESSION_STATE_ROUTE = createRoute({
   method: 'PUT',
@@ -1682,15 +1734,19 @@ export const SET_AGENT_CONTROLLER_SESSION_STATE_ROUTE = createRoute({
   responseSchema: ackResponseSchema,
   summary: 'Set session state',
   description:
-    'Merges the provided key-value pairs into the session state. Existing keys not in the payload are preserved.',
+    'Merges the provided key-value pairs into the session state and clears (unsets) the listed keys in one atomic update. Existing keys not in the payload are preserved.',
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
-  handler: async ({ mastra, controllerId, resourceId, sessionScope, state, requestContext }) => {
+  handler: async ({ mastra, controllerId, resourceId, sessionScope, state, unset, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
-      await session.state.set(state as Record<string, unknown>);
+      const updates: Record<string, unknown> = { ...state };
+      for (const key of unset ?? []) {
+        updates[key] = undefined;
+      }
+      await session.state.set(updates);
       return { ok: true };
     } catch (error) {
       return handleError(error, 'error setting controller session state');

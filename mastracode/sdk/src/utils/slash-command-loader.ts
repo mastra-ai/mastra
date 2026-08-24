@@ -1,5 +1,6 @@
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
+import type { WorkspaceFilesystem } from '@mastra/core/workspace';
 import { parse as parseYaml } from 'yaml';
 import { DEFAULT_CONFIG_DIR } from '../constants.js';
 import { isPathWithinRoot } from './path-security.js';
@@ -23,58 +24,70 @@ export interface SlashCommandMetadata {
 }
 
 /**
+ * Parse raw command-file content into metadata and template.
+ * Supports both frontmatter-based and plain markdown files.
+ */
+export function parseCommandSource(content: string, sourcePath: string, baseDir?: string): SlashCommandMetadata | null {
+  const trimmedContent = content.trim();
+
+  // Check if file has frontmatter (starts with ---)
+  if (!trimmedContent.startsWith('---')) {
+    // No frontmatter - treat entire file as template
+    // Derive name from file path
+    const name = baseDir ? extractCommandName(sourcePath, baseDir) : path.basename(sourcePath, '.md');
+
+    return {
+      name,
+      description: '',
+      template: content,
+      sourcePath,
+    };
+  }
+
+  // Split frontmatter and template
+  const parts = content.split('---');
+  if (parts.length < 3) {
+    return null;
+  }
+
+  const frontmatter = parts[1]!.trim();
+  const template = parts.slice(2).join('---').trim();
+
+  let metadata: Record<string, unknown>;
+  try {
+    metadata = parseYaml(frontmatter) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+
+  // Derive name from file path if not specified in frontmatter
+  let name: string;
+  if (typeof metadata?.name === 'string' && metadata.name) {
+    name = metadata.name;
+  } else if (baseDir) {
+    name = extractCommandName(sourcePath, baseDir);
+  } else {
+    name = path.basename(sourcePath, '.md');
+  }
+
+  return {
+    name,
+    description: typeof metadata?.description === 'string' ? metadata.description : '',
+    template,
+    sourcePath,
+    namespace: typeof metadata?.namespace === 'string' ? metadata.namespace : undefined,
+    goal: metadata?.goal === true,
+  };
+}
+
+/**
  * Parse a command file and extract metadata and template
  * Supports both frontmatter-based and plain markdown files
  */
 export async function parseCommandFile(filePath: string, baseDir?: string): Promise<SlashCommandMetadata | null> {
   try {
     const content = await fs.readFile(filePath, 'utf-8');
-    const trimmedContent = content.trim();
-
-    // Check if file has frontmatter (starts with ---)
-    if (!trimmedContent.startsWith('---')) {
-      // No frontmatter - treat entire file as template
-      // Derive name from file path
-      const name = baseDir ? extractCommandName(filePath, baseDir) : path.basename(filePath, '.md');
-
-      return {
-        name,
-        description: '',
-        template: content,
-        sourcePath: filePath,
-      };
-    }
-
-    // Split frontmatter and template
-    const parts = content.split('---');
-    if (parts.length < 3) {
-      return null;
-    }
-
-    const frontmatter = parts[1]!.trim();
-    const template = parts.slice(2).join('---').trim();
-
-    // Parse YAML frontmatter
-    const metadata = parseYaml(frontmatter) as Record<string, unknown>;
-
-    // Derive name from file path if not specified in frontmatter
-    let name: string;
-    if (typeof metadata?.name === 'string' && metadata.name) {
-      name = metadata.name;
-    } else if (baseDir) {
-      name = extractCommandName(filePath, baseDir);
-    } else {
-      name = path.basename(filePath, '.md');
-    }
-
-    return {
-      name,
-      description: typeof metadata?.description === 'string' ? metadata.description : '',
-      template,
-      sourcePath: filePath,
-      namespace: typeof metadata?.namespace === 'string' ? metadata.namespace : undefined,
-      goal: metadata?.goal === true,
-    };
+    return parseCommandSource(content, filePath, baseDir);
   } catch (error) {
     console.error(`Error parsing command file ${filePath}:`, error);
     return null;
@@ -108,6 +121,16 @@ export function extractCommandName(filePath: string, baseDir: string): string {
 export interface ScanCommandDirectoryOptions {
   allowedRoot?: string;
   visitedDirectories?: Set<string>;
+}
+
+async function isContainedWithin(fullPath: string, rootDir: string): Promise<boolean> {
+  try {
+    const realPath = await fs.realpath(fullPath);
+    const realRoot = await fs.realpath(rootDir);
+    return isPathWithinRoot(realPath, realRoot);
+  } catch {
+    return false;
+  }
 }
 
 export async function scanCommandDirectory(
@@ -161,80 +184,151 @@ export async function scanCommandDirectory(
 
   return commands;
 }
+
+function mergeByName(groups: SlashCommandMetadata[][]): SlashCommandMetadata[] {
+  const commandMap = new Map<string, SlashCommandMetadata>();
+  for (const group of groups) {
+    for (const command of group) {
+      commandMap.set(command.name, command);
+    }
+  }
+  return Array.from(commandMap.values());
+}
+
 /**
- * Load custom slash commands from all configured directories
- * Priority: mastra project > claude project > opencode project > mastra user > claude user > opencode user
+ * Load runtime-user global custom commands (~/.opencode/command, then
+ * ~/.claude/commands, then ~/<configDir>/commands — later sources win).
+ */
+export async function loadGlobalCustomCommands(configDirName = DEFAULT_CONFIG_DIR): Promise<SlashCommandMetadata[]> {
+  const homeDir = process.env.HOME || process.env.USERPROFILE;
+  if (!homeDir) return [];
+
+  return mergeByName([
+    await scanCommandDirectory(path.join(homeDir, '.opencode', 'command')),
+    await scanCommandDirectory(path.join(homeDir, '.claude', 'commands')),
+    await scanCommandDirectory(path.join(homeDir, configDirName, 'commands')),
+  ]);
+}
+
+/**
+ * Load custom commands from explicit directories in order — later directories
+ * override earlier ones on name collisions. When `allowedRoot` is omitted each
+ * directory contains itself; pass a wider trusted root (e.g. the project dir)
+ * to reject command directories that are themselves symlinks out of it.
+ */
+export async function loadCommandDirectories(
+  directories: string[],
+  options: { allowedRoot?: string } = {},
+): Promise<SlashCommandMetadata[]> {
+  const groups: SlashCommandMetadata[][] = [];
+  for (const directory of directories) {
+    groups.push(await scanCommandDirectory(directory, undefined, { allowedRoot: options.allowedRoot ?? directory }));
+  }
+  return mergeByName(groups);
+}
+
+/**
+ * Load custom slash commands from all configured directories.
+ * Priority: plugin dirs > mastra project > claude project > opencode project > mastra user > claude user > opencode user
  */
 export async function loadCustomCommands(
   projectDir?: string,
   configDirName = DEFAULT_CONFIG_DIR,
   extraCommandDirs: string[] = [],
 ): Promise<SlashCommandMetadata[]> {
-  // Use a Map so later (higher priority) sources override earlier ones with the same name
-  const commandMap = new Map<string, SlashCommandMetadata>();
+  const globalCommands = await loadGlobalCustomCommands(configDirName);
+  const projectCommands = projectDir
+    ? await loadCommandDirectories(
+        [
+          path.join(projectDir, '.opencode', 'command'),
+          path.join(projectDir, '.claude', 'commands'),
+          path.join(projectDir, configDirName, 'commands'),
+        ],
+        { allowedRoot: projectDir },
+      )
+    : [];
+  const pluginCommands = await loadCommandDirectories(extraCommandDirs);
 
-  const addCommands = (newCommands: SlashCommandMetadata[]) => {
-    for (const cmd of newCommands) {
-      commandMap.set(cmd.name, cmd);
+  return mergeByName([globalCommands, projectCommands, pluginCommands]);
+}
+
+/**
+ * Workspace-relative roots scanned for custom commands, in ascending
+ * precedence order (later roots win on name collisions).
+ */
+export function workspaceCommandRoots(configDirName = DEFAULT_CONFIG_DIR): string[] {
+  return ['.opencode/command', '.claude/commands', `${configDirName}/commands`];
+}
+
+function toPosixPath(p: string): string {
+  return p.split(path.sep).join('/');
+}
+
+function posixJoin(...segments: string[]): string {
+  return segments.join('/');
+}
+
+interface WorkspaceEntry {
+  name: string;
+  type: 'file' | 'directory';
+}
+
+/**
+ * Recursively collect command files under a workspace-relative directory.
+ * Missing directories yield no commands; unexpected list/read errors propagate.
+ */
+async function collectWorkspaceCommands(
+  filesystem: Pick<WorkspaceFilesystem, 'exists' | 'readdir' | 'readFile'>,
+  directory: string,
+  baseDir: string,
+): Promise<SlashCommandMetadata[]> {
+  const exists = await filesystem.exists(directory);
+  if (!exists) return [];
+
+  const entries: WorkspaceEntry[] = (await filesystem.readdir(directory, {})).map(entry => ({
+    name: entry.name,
+    type: entry.type,
+  }));
+  const commands: SlashCommandMetadata[] = [];
+
+  for (const entry of entries) {
+    if (entry.name === 'node_modules') continue;
+    // Plain entry names only: the workspace filesystem owns containment for
+    // symlinks, but traversal segments in an entry name must never escape.
+    if (entry.name.includes('/') || entry.name.includes('\\') || entry.name === '.' || entry.name === '..') continue;
+
+    const childPath = posixJoin(directory, entry.name);
+
+    if (entry.type === 'directory') {
+      commands.push(...(await collectWorkspaceCommands(filesystem, childPath, baseDir)));
+    } else if (entry.type === 'file' && entry.name.endsWith('.md')) {
+      const content = await filesystem.readFile(childPath, { encoding: 'utf-8' });
+      const command = parseCommandSource(
+        typeof content === 'string' ? content : content.toString('utf-8'),
+        childPath,
+        baseDir,
+      );
+      if (command) commands.push(command);
     }
-  };
-
-  const homeDir = process.env.HOME || process.env.USERPROFILE;
-
-  // 1. Load from opencode user directory ~/.opencode/command (lowest priority)
-  if (homeDir) {
-    const opencodeUserDir = path.join(homeDir, '.opencode', 'command');
-    const opencodeUserCommands = await scanCommandDirectory(opencodeUserDir);
-    addCommands(opencodeUserCommands);
   }
 
-  // 2. Load from claude user directory ~/.claude/commands (Claude Code compat)
-  if (homeDir) {
-    const claudeUserDir = path.join(homeDir, '.claude', 'commands');
-    const claudeUserCommands = await scanCommandDirectory(claudeUserDir);
-    addCommands(claudeUserCommands);
-  }
+  return commands;
+}
 
-  // 3. Load from mastra user directory ~/<configDirName>/commands
-  if (homeDir) {
-    const mastraUserDir = path.join(homeDir, configDirName, 'commands');
-    const mastraUserCommands = await scanCommandDirectory(mastraUserDir);
-    addCommands(mastraUserCommands);
-  }
-
-  // 4. Load from opencode project directory .opencode/command
-  if (projectDir) {
-    const opencodeProjectDir = path.join(projectDir, '.opencode', 'command');
-    const opencodeProjectCommands = await scanCommandDirectory(opencodeProjectDir, undefined, {
-      allowedRoot: projectDir,
-    });
-    addCommands(opencodeProjectCommands);
-  }
-
-  // 5. Load from claude project directory .claude/commands (Claude Code compat)
-  if (projectDir) {
-    const claudeProjectDir = path.join(projectDir, '.claude', 'commands');
-    const claudeProjectCommands = await scanCommandDirectory(claudeProjectDir, undefined, {
-      allowedRoot: projectDir,
-    });
-    addCommands(claudeProjectCommands);
-  }
-
-  // 6. Load from mastra project directory <configDirName>/commands
-  if (projectDir) {
-    const mastraProjectDir = path.join(projectDir, configDirName, 'commands');
-    const mastraProjectCommands = await scanCommandDirectory(mastraProjectDir, undefined, {
-      allowedRoot: projectDir,
-    });
-    addCommands(mastraProjectCommands);
-  }
-
-  // 7. Load from active plugin command directories (highest priority)
-  for (const commandsDir of extraCommandDirs) {
-    addCommands(await scanCommandDirectory(commandsDir, undefined, { allowedRoot: commandsDir }));
-  }
-
-  return Array.from(commandMap.values());
+/**
+ * Load custom commands from a workspace's project roots (.opencode/command,
+ * .claude/commands, <configDir>/commands — later roots win). All reads go
+ * through the workspace filesystem; nothing touches the host disk.
+ */
+export async function loadWorkspaceCustomCommands(
+  filesystem: Pick<WorkspaceFilesystem, 'exists' | 'readdir' | 'readFile'>,
+  configDirName = DEFAULT_CONFIG_DIR,
+): Promise<SlashCommandMetadata[]> {
+  return mergeByName(
+    await Promise.all(
+      workspaceCommandRoots(configDirName).map(root => collectWorkspaceCommands(filesystem, root, root)),
+    ),
+  );
 }
 
 /**

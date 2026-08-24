@@ -11,7 +11,7 @@ import {
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowUp, ImagePlus, Square } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { useMatch, useNavigate, useParams } from 'react-router';
 
@@ -31,7 +31,7 @@ import { useCreateAgentControllerThreadMutation } from '../../../../hooks/useAge
 import { usePreparingThreadId } from '../hooks/usePreparingThreadId';
 import { useCreateUserSessionFromDraft } from '../hooks/useCreateUserSessionFromDraft';
 import { usePendingPlanFeedback } from '../hooks/usePendingPlanFeedback';
-import { commandRequiresReadySession, matchCommands } from '../services/commands';
+import { matchCommands } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { getModeColorClass } from './mode-colors';
 import { StatusLine } from './StatusLine';
@@ -71,7 +71,14 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const { busy, localUser, failLocalUser, reset, clearPending, pushNotice } = useChatTranscript();
   const { modes, activeModeId, isLoading: modesLoading, error: modesError, setMode } = useChatModes();
   const { activeModelId, isLoading: modelLoading, error: modelError } = useChatModels();
-  const { composerDraft: draft, composerInputRef: inputRef, setComposerDraft, runComposerCommand } = useChatCommands();
+  const {
+    composerDraft: draft,
+    composerInputRef: inputRef,
+    setComposerDraft,
+    executeText,
+    refreshRuntimeCommands,
+    commands,
+  } = useChatCommands();
   const modeColorClass = getModeColorClass(activeModeId ?? modes[0]?.id);
 
   const hookArgs = {
@@ -98,7 +105,19 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   });
   const spotlightRef = useComposerSpotlight();
   const modeSwitchPendingRef = useRef(false);
-  const suggestions = planFeedback.pending ? [] : matchCommands(draft);
+  const suggestions = planFeedback.pending ? [] : matchCommands(commands, draft);
+  const slashTransitionRef = useRef(false);
+  // Discovery is refreshed when a ready/busy draft first turns into a slash
+  // command, so runtime suggestions never lag behind a new custom command or
+  // skill — and an unknown verdict never races a still-loading discovery.
+  useEffect(() => {
+    const isSlash = draft.trimStart().startsWith('/');
+    const wasSlash = slashTransitionRef.current;
+    slashTransitionRef.current = isSlash;
+    if (isSlash && !wasSlash && !chatPreparing && sessionEnabled) {
+      void refreshRuntimeCommands();
+    }
+  }, [draft, chatPreparing, sessionEnabled, refreshRuntimeCommands]);
   const showSuggestions = suggestions.length > 0;
   const [activeSuggestion, setActiveSuggestion] = useState(0);
   const composerDisabled = createDraftSessionMutation.isPending || blocked || planFeedback.isSubmitting;
@@ -118,8 +137,10 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     setActiveSuggestion(0);
   };
 
-  const applyCommand = (name: string) => {
-    updateDraft(`/${name} `);
+  const applyCommand = (command: { invocation: string }) => {
+    // Insertion uses the descriptor's exact invocation verbatim — no extra
+    // slash is prepended to `//custom`, `/skill/name`, or `/goal/name`.
+    updateDraft(`${command.invocation} `);
     inputRef.current?.focus();
   };
 
@@ -221,17 +242,17 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
         return;
       } else if (e.key === 'Tab') {
         e.preventDefault();
-        if (current) applyCommand(current.name);
+        if (current) applyCommand(current);
         return;
       } else if (e.key === 'Enter' && !e.shiftKey) {
-        const exact = !!current && draft.slice(1) === current.name && suggestions.length === 1;
+        const exact = !!current && draft.trim() === current.invocation && suggestions.length === 1;
         if (exact) {
           e.preventDefault();
           onSubmit(e);
           return;
         }
         e.preventDefault();
-        if (current) applyCommand(current.name);
+        if (current) applyCommand(current);
         return;
       } else if (e.key === 'Escape') {
         e.preventDefault();
@@ -251,15 +272,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
       setImages([]);
       return;
     }
-    if (onUserDraft && text.startsWith('/')) {
-      if (commandRequiresReadySession(text)) {
-        updateDraft(text);
-        pushNotice('This command needs a session. Send a prompt to create one first.');
-      } else {
-        await runComposerCommand(text);
-      }
-      return;
-    }
+    if (await executeText(text)) return;
     if (onUserDraft) {
       try {
         await createDraftSessionMutation.mutateAsync(text);
@@ -269,12 +282,6 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
       }
       return;
     }
-    if (preparingThreadId && text.startsWith('/') && commandRequiresReadySession(text)) {
-      updateDraft(text);
-      pushNotice('Commands run once the session is ready.');
-      return;
-    }
-    if (await runComposerCommand(text)) return;
     if (busy && !preparingThreadId) {
       await steer(text);
       return;

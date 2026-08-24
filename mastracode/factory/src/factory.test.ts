@@ -49,7 +49,7 @@ const sessionNotifierStub = {
 };
 
 const prepareMock = vi.fn(async (config: Record<string, unknown>) => ({
-  base: { controller: controllerMock },
+  base: { controller: controllerMock, loadedPlugins: [] },
   mastraArgs: { __capturedConfig: config },
   finalize: vi.fn(async () => {}),
 }));
@@ -998,7 +998,7 @@ describe('MastraFactory.prepare integrations', () => {
     function withController() {
       const setChannels = vi.fn();
       prepareMock.mockResolvedValueOnce({
-        base: { controller: { onSessionCreated: vi.fn(), setChannels } },
+        base: { controller: { onSessionCreated: vi.fn(), setChannels }, loadedPlugins: [] },
         mastraArgs: {},
         finalize: vi.fn(async () => {}),
       } as never);

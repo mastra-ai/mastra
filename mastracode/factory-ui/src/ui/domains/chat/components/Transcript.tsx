@@ -85,6 +85,8 @@ function lastSegment(id: string): string {
 }
 
 import { parseSkillActivation, SkillMessage } from './SkillMessage';
+import { SlashCommandMessage } from './SlashCommandMessage';
+import { parseSlashCommandActivation } from './skill-activation';
 
 function hasProperty<K extends string>(value: object, key: K): value is object & Record<K, unknown> {
   return key in value;
@@ -760,8 +762,11 @@ function renderMessageBubble({
   const renderers = {
     Text: (part: TextPart) => {
       if (entry.message.role === 'user') {
-        const activation = parseSkillActivation(part.text);
-        return activation ? <SkillMessage activation={activation} /> : <MarkdownRenderer>{part.text}</MarkdownRenderer>;
+        const skill = parseSkillActivation(part.text);
+        if (skill) return <SkillMessage activation={skill} />;
+        const command = parseSlashCommandActivation(part.text);
+        if (command) return <SlashCommandMessage activation={command} />;
+        return <MarkdownRenderer>{part.text}</MarkdownRenderer>;
       }
 
       return (
@@ -800,11 +805,12 @@ function renderMessageBubble({
     File: (part: FilePart) => <FileAttachment part={part} />,
   };
 
-  const skillActivation =
-    entry.message.role === 'user' && parts.length === 1 && parts[0].type === 'text'
-      ? parseSkillActivation(parts[0].text)
-      : undefined;
+  const singleText =
+    entry.message.role === 'user' && parts.length === 1 && parts[0].type === 'text' ? parts[0].text : undefined;
+  const skillActivation = singleText !== undefined ? parseSkillActivation(singleText) : undefined;
   if (skillActivation) return <SkillMessage activation={skillActivation} />;
+  const commandActivation = singleText !== undefined ? parseSlashCommandActivation(singleText) : undefined;
+  if (commandActivation) return <SlashCommandMessage activation={commandActivation} />;
   if (isSkillNotificationSignal(entry)) return null;
 
   const notifications = notificationMetadata(entry);

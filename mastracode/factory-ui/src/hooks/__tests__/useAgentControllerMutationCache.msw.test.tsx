@@ -88,7 +88,7 @@ describe('agent-controller mutation hooks cache behavior', () => {
     }));
 
     await waitFor(() => expect(result.current.settingsQuery.data?.smartEditing).toBe(false));
-    await act(async () => result.current.setGoal.mutateAsync('ship refactor'));
+    await act(async () => result.current.setGoal.mutateAsync({ objective: 'ship refactor' }));
     await waitForMutationsIdle(client);
 
     expect(result.current.settingsQuery.data?.smartEditing).toBe(false);

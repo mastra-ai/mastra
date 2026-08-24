@@ -164,6 +164,57 @@ function skillSourceEnoent(skillPath: string): Error {
 }
 
 /**
+ * Routes absolute runtime skill roots (user-global dirs on auth-disabled local
+ * deploys, server-installed plugin skill dirs) to their own contained host
+ * `LocalSkillSource`, leaving every other path — the bundled Factory mount and
+ * the sandbox-relative project roots — to the wrapped fallback.
+ */
+class ExtraRootSkillSource implements SkillSource {
+  readonly #roots: Array<{ root: string; source: InstanceType<typeof LocalSkillSource> }>;
+
+  constructor(
+    readonly fallback: SkillSource,
+    extraRoots: string[],
+  ) {
+    this.#roots = extraRoots.map(root => ({
+      root: path.normalize(root),
+      source: new LocalSkillSource({ basePath: root }),
+    }));
+  }
+
+  #resolve(skillPath: string) {
+    const normalized = path.normalize(skillPath);
+    return this.#roots.find(entry => normalized === entry.root || normalized.startsWith(`${entry.root}${path.sep}`));
+  }
+
+  exists(skillPath: string): Promise<boolean> {
+    const routed = this.#resolve(skillPath);
+    return routed ? routed.source.exists(skillPath) : this.fallback.exists(skillPath);
+  }
+
+  stat(skillPath: string): Promise<SkillSourceStat> {
+    const routed = this.#resolve(skillPath);
+    return routed ? routed.source.stat(skillPath) : this.fallback.stat(skillPath);
+  }
+
+  readFile(skillPath: string): Promise<string | Buffer> {
+    const routed = this.#resolve(skillPath);
+    return routed ? routed.source.readFile(skillPath) : this.fallback.readFile(skillPath);
+  }
+
+  readdir(skillPath: string): Promise<SkillSourceEntry[]> {
+    const routed = this.#resolve(skillPath);
+    return routed ? routed.source.readdir(skillPath) : this.fallback.readdir(skillPath);
+  }
+
+  realpath(skillPath: string): Promise<string> {
+    const routed = this.#resolve(skillPath);
+    if (routed) return Promise.resolve(path.normalize(skillPath));
+    return this.fallback.realpath ? this.fallback.realpath(skillPath) : Promise.resolve(skillPath);
+  }
+}
+
+/**
  * Sandbox-backed skill fallback that stays inert until the session sandbox is
  * actually materialized. Skill discovery runs on latency-sensitive paths (the
  * Factory start coordinator resolves the kickoff skill before the start route
@@ -224,6 +275,17 @@ export interface CreateWorkspaceFactoryOptions {
   workItems?: Pick<WorkItemsStorage, 'findRunBindingBySession'>;
   /** Runtime workspace/token registrations invalidated when a session retires. */
   workspaceRegistry?: FactoryWorkspaceRegistry;
+  /**
+   * Expose the server host's user-global skill directories to sessions. Only
+   * enabled when factory auth is disabled — a single-operator local deploy —
+   * never for multi-tenant authenticated deployments.
+   */
+  includeRuntimeGlobals?: boolean;
+  /**
+   * Server-owned snapshot of active runtime plugin skill directories. Read per
+   * workspace resolution; client-writable session state is never trusted.
+   */
+  trustedPluginSkillPaths?: () => string[];
 }
 
 type WorkspaceUnregister = () => Promise<void> | void;
@@ -265,7 +327,14 @@ export class FactoryWorkspaceRegistry {
 }
 
 export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = {}) {
-  const { sandbox: sandboxConfig, github, fleet, workItems } = options;
+  const {
+    sandbox: sandboxConfig,
+    github,
+    fleet,
+    workItems,
+    includeRuntimeGlobals = false,
+    trustedPluginSkillPaths,
+  } = options;
   const workspaceRegistry = options.workspaceRegistry ?? new FactoryWorkspaceRegistry();
   const isLocalSandbox = sandboxConfig?.machine instanceof LocalSandbox;
   type GithubTokenRegistration = {
@@ -385,7 +454,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     const extensionId = effectiveSkillExtension ? `-${effectiveSkillExtension.id}` : '';
     const workspaceId = `${WORKSPACE_ID_PREFIX}-${projectRepository.id}-${session.id}${extensionId}`;
     const workspaceGeneration = workspaceRegistry.generation(session.sessionId);
-    const configDir = sandboxConfig.workdir ?? DEFAULT_CONFIG_DIR;
+    // The Mastra Code config directory is session state (usually
+    // `.mastracode`); it is a different fact from the sandbox checkout workdir.
+    const configDir = ctx?.getState()?.configDir ?? DEFAULT_CONFIG_DIR;
 
     const getRepositoryToken = async (): Promise<string> => {
       const access = await github.versionControl.getRepositoryAccess({
@@ -798,10 +869,24 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       workdir,
     });
     const projectSkillPaths = [path.join(configDir, 'skills'), '.claude/skills', '.agents/skills'];
+    const homeDir = process.env.HOME || process.env.USERPROFILE;
+    // TUI parity order: project roots, then user-global dirs (local deploys
+    // only), then server-installed plugin skill directories.
+    const globalSkillPaths =
+      includeRuntimeGlobals && homeDir
+        ? [
+            path.join(homeDir, configDir, 'skills'),
+            path.join(homeDir, '.claude', 'skills'),
+            path.join(homeDir, '.agents', 'skills'),
+          ]
+        : [];
+    const extraSkillRoots = [...globalSkillPaths, ...(trustedPluginSkillPaths?.() ?? [])];
     const guardedSkillFallback = new UnmaterializedAwareSkillSource(filesystem, () =>
       materializedSandboxes.has(workspaceId),
     );
-    const skillPaths = [...(effectiveSkillExtension?.paths ?? []), ...projectSkillPaths];
+    const skillPaths = [...(effectiveSkillExtension?.paths ?? []), ...projectSkillPaths, ...extraSkillRoots];
+    const extensionSource =
+      effectiveSkillExtension?.createSource(guardedSkillFallback, projectSkillPaths) ?? guardedSkillFallback;
     const workspace = new Workspace({
       id: workspaceId,
       name: 'Mastra Code Factory Session Workspace',
@@ -813,7 +898,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // discovery before materialization (e.g. kickoff skill resolution in the
       // start coordinator) never forces sandbox provisioning.
       skillSource:
-        effectiveSkillExtension?.createSource(guardedSkillFallback, projectSkillPaths) ?? guardedSkillFallback,
+        extraSkillRoots.length > 0 ? new ExtraRootSkillSource(extensionSource, extraSkillRoots) : extensionSource,
     });
     // Register with the Mastra instance so sync HTTP handlers that resolve
     // the workspace via `mastra.getWorkspaceById(id)` (file tree, permissions

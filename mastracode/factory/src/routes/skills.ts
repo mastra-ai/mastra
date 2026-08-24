@@ -9,6 +9,8 @@ import { resolveSkillInvocation, SkillInvocationError } from '../skills/service.
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { RouteDependencies } from './route.js';
 import { Route } from './route.js';
+import { authorizeSessionAddress } from './session-address.js';
+import type { SessionAuthorizationResult, SessionCommandAddress } from './session-address.js';
 
 const MAX_RESOURCE_ID_LENGTH = 512;
 const MAX_SCOPE_LENGTH = 2048;
@@ -24,22 +26,12 @@ interface SkillInvocationBody {
   arguments?: string;
 }
 
-interface SessionAuthorizationResult {
-  allowed: boolean;
-  status?: 400 | 401 | 403;
-  code?: 'invalid_request' | 'unauthorized' | 'session_forbidden';
-  message?: string;
-}
-
 export interface SkillRoutesDeps extends RouteDependencies {
   controllerId: string;
   controller: Pick<AgentController<MastraCodeState>, 'getSessionByResource'>;
   sourceControlStorage?: SourceControlStorageHandle;
   ensureSourceControlReady?: () => Promise<void>;
-  authorizeSessionAddress?: (
-    context: Context,
-    address: { resourceId: string; projectRepositoryId?: string; scope?: string },
-  ) => Promise<SessionAuthorizationResult>;
+  authorizeSessionAddress?: (context: Context, address: SessionCommandAddress) => Promise<SessionAuthorizationResult>;
 }
 
 function loose(context: unknown): Context {
@@ -74,72 +66,21 @@ function parseBody(value: unknown): SkillInvocationBody | undefined {
 }
 
 export class SkillRoutes extends Route<SkillRoutesDeps> {
-  async #authorizeSessionAddress(
-    context: Context,
-    address: { resourceId: string; projectRepositoryId?: string; scope?: string },
-  ): Promise<SessionAuthorizationResult> {
-    const { auth, sourceControlStorage: storage, ensureSourceControlReady } = this.deps;
-    if (!auth.enabled()) return { allowed: true };
-
-    await auth.ensureUser(context);
-    const tenant = auth.tenant(context);
-    if (!tenant) {
-      return { allowed: false, status: 401, code: 'unauthorized', message: 'Authentication required.' };
-    }
-
-    // Personal sessions are keyed by the authenticated WorkOS user id. Their
-    // scope is a client-managed local/user-session worktree and needs no app DB.
-    if (address.resourceId === tenant.userId) return { allowed: true };
-
-    // Factory sessions are keyed by factoryProjectId and explicitly identify the
-    // linked repository whose user-owned worktree supplies the session scope.
-    if (
-      !UUID_RE.test(address.resourceId) ||
-      !address.projectRepositoryId ||
-      !UUID_RE.test(address.projectRepositoryId)
-    ) {
-      return { allowed: false, status: 400, code: 'invalid_request', message: 'Invalid skill invocation request.' };
-    }
-    if (!tenant.orgId || !address.scope) {
-      return { allowed: false, status: 403, code: 'session_forbidden', message: 'Session access denied.' };
-    }
-    if (!storage) {
-      return { allowed: false, status: 403, code: 'session_forbidden', message: 'Session access denied.' };
-    }
-    if (ensureSourceControlReady) {
-      try {
-        await ensureSourceControlReady();
-      } catch {
-        return { allowed: false, status: 403, code: 'session_forbidden', message: 'Session access denied.' };
-      }
-    }
-    const projectRepository = await storage.projectRepositories.get({
-      orgId: tenant.orgId,
-      id: address.projectRepositoryId,
-    });
-    if (!projectRepository) {
-      return { allowed: false, status: 403, code: 'session_forbidden', message: 'Session access denied.' };
-    }
-    const connection = await storage.connections.get({ orgId: tenant.orgId, id: projectRepository.connectionId });
-    if (!connection || connection.factoryProjectId !== address.resourceId) {
-      return { allowed: false, status: 403, code: 'session_forbidden', message: 'Session access denied.' };
-    }
-    const worktree = await storage.worktrees.findByPath({
-      projectRepositoryId: address.projectRepositoryId,
-      userId: tenant.userId,
-      worktreePath: address.scope,
-    });
-    return worktree
-      ? { allowed: true }
-      : { allowed: false, status: 403, code: 'session_forbidden', message: 'Session access denied.' };
-  }
-
   routes(): ApiRoute[] {
-    const { controllerId, controller, authorizeSessionAddress: customAuthorize } = this.deps;
+    const {
+      controllerId,
+      controller,
+      auth,
+      sourceControlStorage,
+      ensureSourceControlReady,
+      authorizeSessionAddress: customAuthorize,
+    } = this.deps;
     const authorize =
       customAuthorize ??
-      ((context: Context, address: { resourceId: string; projectRepositoryId?: string; scope?: string }) =>
-        this.#authorizeSessionAddress(context, address));
+      ((context: Context, address: SessionCommandAddress) =>
+        authorizeSessionAddress({ auth, sourceControlStorage, ensureSourceControlReady }, context, address, {
+          invalidRequestMessage: 'Invalid skill invocation request.',
+        }));
     const handleSkillRequest = async (context: unknown, dispatch: boolean) => {
       const c = loose(context);
       if (c.req.param('controllerId') !== controllerId) {
@@ -184,7 +125,6 @@ export class SkillRoutes extends Route<SkillRoutesDeps> {
 
     const handleFactorySkillsList = async (context: unknown) => {
       const c = loose(context);
-      const { auth } = this.deps;
       if (auth.enabled()) {
         await auth.ensureUser(c);
         if (!auth.tenant(c)) {

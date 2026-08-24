@@ -45,7 +45,7 @@ describe('agent-controller hook seam forwards session scope on the wire', () => 
       }),
     );
     const { result, client } = renderHookWithProviders(() => useCreateAgentControllerThreadMutation(hookArgs));
-    await act(async () => result.current.mutateAsync('x'));
+    await act(async () => result.current.mutateAsync(undefined));
     await waitForMutationsIdle(client);
     expect(captured).toBe(scope);
   });
@@ -75,7 +75,7 @@ describe('agent-controller hook seam forwards session scope on the wire', () => 
       }),
     );
     const { result, client } = renderHookWithProviders(() => useSetAgentControllerGoalMutation(hookArgs));
-    await act(async () => result.current.mutateAsync('x'));
+    await act(async () => result.current.mutateAsync({ objective: 'x' }));
     await waitForMutationsIdle(client);
     expect(captured).toBe(scope);
   });

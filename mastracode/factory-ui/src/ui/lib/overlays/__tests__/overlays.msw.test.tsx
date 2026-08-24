@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { OverlaysProvider, useOverlays } from '../overlays';
 import type { OverlayName } from '../overlays';
 
-const OVERLAY_NAMES: OverlayName[] = ['search', 'sidebar', 'shortcuts'];
+const OVERLAY_NAMES: OverlayName[] = ['search', 'sidebar', 'shortcuts', 'models'];
 
 function Probe() {
   const overlays = useOverlays();

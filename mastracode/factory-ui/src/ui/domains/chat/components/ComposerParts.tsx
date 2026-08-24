@@ -5,7 +5,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { X } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 
-import type { SlashCommand } from '../services/commands';
+import type { ChatCommandDescriptor } from '../services/commands';
 import type { PendingImage } from './useComposerImages';
 
 export function ComposerSuggestions({
@@ -13,15 +13,15 @@ export function ComposerSuggestions({
   activeIndex,
   onSelect,
 }: {
-  suggestions: SlashCommand[];
+  suggestions: ChatCommandDescriptor[];
   activeIndex: number;
-  onSelect: (name: string) => void;
+  onSelect: (command: ChatCommandDescriptor) => void;
 }) {
   const open = suggestions.length > 0;
   const retainedSuggestionsRef = useRef(suggestions);
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const displayedSuggestions = open ? suggestions : retainedSuggestionsRef.current;
-  const activeCommandName = displayedSuggestions[activeIndex]?.name;
+  const activeInvocation = displayedSuggestions[activeIndex]?.invocation;
 
   useEffect(() => {
     if (open) retainedSuggestionsRef.current = suggestions;
@@ -29,7 +29,7 @@ export function ComposerSuggestions({
 
   useEffect(() => {
     if (open) optionRefs.current[activeIndex]?.scrollIntoView({ block: 'nearest' });
-  }, [activeCommandName, activeIndex, open]);
+  }, [activeInvocation, activeIndex, open]);
 
   return (
     <div
@@ -50,7 +50,7 @@ export function ComposerSuggestions({
                 ref={element => {
                   optionRefs.current[index] = element;
                 }}
-                key={command.name}
+                key={command.invocation}
                 type="button"
                 className={cn(
                   'flex w-full cursor-pointer items-center justify-between gap-4 rounded-2xl px-2 py-1.5 text-left text-ui-sm transition-colors duration-150 ease-out motion-reduce:transition-none',
@@ -58,10 +58,15 @@ export function ComposerSuggestions({
                 )}
                 onMouseDown={event => {
                   event.preventDefault();
-                  onSelect(command.name);
+                  onSelect(command);
                 }}
               >
-                <span className="shrink-0">/{command.name}</span>
+                {/* The exact invocation is rendered verbatim — runtime tokens
+                    may contain `/` or `:` and are inserted as-is. */}
+                <span className="shrink-0">
+                  {command.invocation}
+                  {command.argumentHint ? <span className="text-icon4"> {command.argumentHint}</span> : null}
+                </span>
                 <span className="min-w-0 truncate text-right">{command.description}</span>
               </button>
             ))}

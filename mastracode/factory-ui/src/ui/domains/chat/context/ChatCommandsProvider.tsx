@@ -1,16 +1,20 @@
 import { createContext, useContext, useRef, useState } from 'react';
 import type { ReactNode, RefObject } from 'react';
 
-import type { SlashCommand } from '../services/commands';
-import { useRunPaletteCommand } from './useRunPaletteCommand';
+import type { ResolvedChatCommand } from '../services/commands';
+import { useChatCommandRegistry } from './useChatCommandRegistry';
 
 export interface ChatCommandsApi {
   composerDraft: string;
   composerInputRef: RefObject<HTMLTextAreaElement | null>;
   setComposerDraft: (draft: string) => void;
   prefillComposer: (draft: string) => void;
-  run: (command: SlashCommand) => void;
-  runComposerCommand: (text: string) => Promise<boolean>;
+  /** Built-ins merged with runtime commands; consumed by suggestions and /help. */
+  commands: ResolvedChatCommand[];
+  /** Executes slash input. Returns false when the text is not a command. */
+  executeText: (text: string) => Promise<boolean>;
+  /** Deduplicated discovery refetch, driven by the composer's slash transition. */
+  refreshRuntimeCommands: () => Promise<unknown>;
 }
 
 const ChatCommandsContext = createContext<ChatCommandsApi | null>(null);
@@ -22,15 +26,16 @@ export function ChatCommandsProvider({ children }: { children: ReactNode }) {
     setComposerDraft(draft);
     requestAnimationFrame(() => composerInputRef.current?.focus());
   };
-  const { run, runComposerCommand } = useRunPaletteCommand(prefillComposer);
+  const { commands, executeText, refreshRuntimeCommands } = useChatCommandRegistry(setComposerDraft);
 
   const value: ChatCommandsApi = {
     composerDraft,
     composerInputRef,
     setComposerDraft,
     prefillComposer,
-    run,
-    runComposerCommand,
+    commands,
+    executeText,
+    refreshRuntimeCommands,
   };
 
   return <ChatCommandsContext.Provider value={value}>{children}</ChatCommandsContext.Provider>;

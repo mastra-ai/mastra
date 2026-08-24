@@ -1,7 +1,7 @@
 import { createContext, useContext, useState } from 'react';
 import type { ReactNode } from 'react';
 
-export type OverlayName = 'search' | 'sidebar' | 'shortcuts';
+export type OverlayName = 'search' | 'sidebar' | 'shortcuts' | 'models';
 
 export interface OverlaysApi {
   isOpen: (name: OverlayName) => boolean;
@@ -14,6 +14,7 @@ const CLOSED: Record<OverlayName, boolean> = {
   search: false,
   sidebar: false,
   shortcuts: false,
+  models: false,
 };
 
 const OverlaysContext = createContext<OverlaysApi | null>(null);

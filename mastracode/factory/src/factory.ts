@@ -37,6 +37,7 @@ import {
   getFactoryAuthUserFromContext,
   getFactoryAuthUserId,
 } from './auth.js';
+import type { TrustedPluginPaths } from './commands/service.js';
 import type { FactoryIntegration, IntegrationPostToolContext, IntegrationTools } from './integrations/base.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
 import { recordFactoryPullRequestProvenance } from './integrations/github/provenance.js';
@@ -661,6 +662,18 @@ export class MastraFactory {
       ({ integration }) => integration.agentTools || integration.sessionTools,
     );
 
+    // Server-owned snapshot of active runtime plugin asset directories. Filled
+    // right after the controller mount resolves (from `loadedPlugins`); routes
+    // and workspaces only ever read through these getters, never session state.
+    const pluginPathsSnapshot = { commandPaths: [], skillPaths: [] } as {
+      commandPaths: string[];
+      skillPaths: string[];
+    };
+    const trustedPluginPaths: TrustedPluginPaths = {
+      getCommandPaths: () => pluginPathsSnapshot.commandPaths,
+      getSkillPaths: () => pluginPathsSnapshot.skillPaths,
+    };
+
     // Build the real production controller (agents, modes, tools, memory, OM,
     // MCP, providers) — identical to the terminal app. Agent state lives in
     // the storage backend's Mastra store alongside the Factory app tables —
@@ -674,6 +687,8 @@ export class MastraFactory {
           ...(workItemsStorage ? { workItems: workItemsStorage } : {}),
           fleet,
           workspaceRegistry,
+          includeRuntimeGlobals: !routeAuth.enabled(),
+          trustedPluginSkillPaths: trustedPluginPaths.getSkillPaths,
         }),
         disableGithubSignals: true,
         // Memory settings live in the factory's `memory-settings` app table (per
@@ -790,6 +805,8 @@ export class MastraFactory {
             knowledgeEnabled,
             rules,
             factoryTransitionService: transitionService,
+            pluginPaths: trustedPluginPaths,
+            includeRuntimeGlobals: !routeAuth.enabled(),
             onFactoryRuntime: ({ transitionService: runtimeTransitionService, prepareBinding }) => {
               this.#dispatcher ??= new FactoryDecisionDispatcher({
                 controller,
@@ -863,6 +880,15 @@ export class MastraFactory {
         },
       }),
     );
+
+    // Routes are built during `prepareAgentControllerMount` but only serve
+    // traffic once the host constructs Mastra, so filling the plugin snapshot
+    // immediately after the mount resolves is safely ahead of first use.
+    for (const plugin of prepared.base.loadedPlugins) {
+      if (plugin.status !== 'active') continue;
+      pluginPathsSnapshot.skillPaths.push(...(plugin.skillPaths ?? []));
+      pluginPathsSnapshot.commandPaths.push(...(plugin.commandPaths ?? []));
+    }
 
     prepared.base.controller.onSessionCreated(session => {
       observeSessionFilesystem(session, {

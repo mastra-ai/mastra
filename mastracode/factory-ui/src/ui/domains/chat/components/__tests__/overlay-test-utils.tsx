@@ -120,6 +120,14 @@ export function useOverlayControllerHandlers() {
     http.get(`${API}/sessions/:resourceId/permissions`, () =>
       HttpResponse.json({ categories: { read: 'ask' }, tools: {} }),
     ),
+    http.get(`${API}/sessions/:resourceId/goal`, () => HttpResponse.json({})),
+    http.post(`${API}/commands/discover`, () =>
+      HttpResponse.json({
+        capabilities: { customCommands: 'supported', skills: 'supported' },
+        commands: [],
+      }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => HttpResponse.json({ subscriptions: [] })),
     http.get(`${API}/sessions/:resourceId/threads`, () => HttpResponse.json({ threads: [] })),
     http.get(`${API}/sessions/:resourceId/threads/thread-test/messages`, () => HttpResponse.json({ messages: [] })),
     http.get(

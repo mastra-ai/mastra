@@ -1,7 +1,12 @@
 /**
  * Slash command dispatcher: routes command strings to extracted handlers.
  */
-import { processSlashCommand } from '@mastra/code-sdk/utils/slash-command-processor';
+import type { SlashCommandMetadata } from '@mastra/code-sdk/utils/slash-command-loader';
+import {
+  createNodeSlashCommandProcessingContext,
+  formatSlashCommandActivation,
+  processSlashCommand,
+} from '@mastra/code-sdk/utils/slash-command-processor';
 import { insertChatComponentWithBoundarySpacing } from './chat-boundary-reconciliation.js';
 import { startGoalWithDefaults } from './commands/goal.js';
 import {
@@ -318,7 +323,11 @@ async function handleGoalSourceCommand(
   const customCommand = state.customSlashCommands.find(cmd => cmd.name === sourceName && cmd.goal === true);
   if (customCommand) {
     try {
-      const processedContent = await processSlashCommand(customCommand, args, process.cwd());
+      const processedContent = await processSlashCommand(
+        customCommand,
+        args,
+        createNodeSlashCommandProcessingContext(process.cwd()),
+      );
       const objective = processedContent.trim();
       if (!objective) {
         showInfo(state, `Goal command /goal/${customCommand.name} produced no output.`);
@@ -365,14 +374,18 @@ async function handleGoalSourceCommand(
 
 async function handleCustomSlashCommand(
   state: TUIState,
-  command: { name: string; template: string; description?: string },
+  command: SlashCommandMetadata,
   args: string[],
   ctx: SlashCommandContext,
   displayText: string,
 ): Promise<void> {
   try {
     // Process the command template
-    const processedContent = await processSlashCommand(command as any, args, process.cwd());
+    const processedContent = await processSlashCommand(
+      command,
+      args,
+      createNodeSlashCommandProcessingContext(process.cwd()),
+    );
     // Add the processed content as a system message / context
     if (processedContent.trim()) {
       const commandCtx = { ...ctx, state, controller: ctx.controller ?? state.controller } as SlashCommandContext;
@@ -385,7 +398,7 @@ async function handleCustomSlashCommand(
 
       // Wrap in <slash-command> tags so the assistant sees the full
       // content but addUserMessage won't double-render it.
-      const wrapped = `<slash-command name="${command.name}">\n${processedContent.trim()}\n</slash-command>`;
+      const wrapped = formatSlashCommandActivation(command.name, processedContent.trim());
       await sendSlashCommandMessage(commandCtx, displayText, wrapped, { renderIdleUserMessage: false });
     } else {
       showInfo(state, `Executed //${command.name} (no output)`);

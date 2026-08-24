@@ -11,6 +11,7 @@ import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../
 import { queryKeys } from '../../../../../../api/keys';
 import type { ModelPackInfo } from '../../../../../../api/types';
 import { AGENT_CONTROLLER_ID } from '../../../services/constants';
+import { OverlaysProvider } from '../../../../../lib/overlays';
 import { ChatConnectionContext } from '../../../context/ChatConnectionContext';
 import type { ChatConnectionApi } from '../../../context/ChatConnectionContext';
 import { ChatModelsProvider } from '../../../context/ChatModelsProvider';
@@ -161,10 +162,12 @@ function renderPicker({
           }}
         >
           <ChatModesContext.Provider value={chatModes}>
-            <ChatModelsProvider>
-              <ModelPicker />
-              <Toaster position="bottom-right" />
-            </ChatModelsProvider>
+            <OverlaysProvider>
+              <ChatModelsProvider>
+                <ModelPicker />
+                <Toaster position="bottom-right" />
+              </ChatModelsProvider>
+            </OverlaysProvider>
           </ChatModesContext.Provider>
         </ChatConnectionContext.Provider>
       </ChatSessionContext.Provider>

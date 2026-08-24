@@ -136,6 +136,26 @@ export const queryKeys = {
     resourceId: string | undefined,
     projectPath: string | undefined,
   ) => [...queryKeys.agentControllerSession(agentControllerId, resourceId, projectPath), 'settings'] as const,
+  agentControllerGoal: (
+    agentControllerId: string | undefined,
+    resourceId: string | undefined,
+    projectPath: string | undefined,
+  ) => [...queryKeys.agentControllerSession(agentControllerId, resourceId, projectPath), 'goal'] as const,
+  sessionCommands: (
+    agentControllerId: string | undefined,
+    resourceId: string | undefined,
+    projectRepositoryId: string | undefined,
+    scope: string | undefined,
+  ) =>
+    [
+      'agent-controller',
+      agentControllerId ?? null,
+      'sessions',
+      resourceId ?? null,
+      'commands',
+      projectRepositoryId ?? null,
+      scope ?? null,
+    ] as const,
   agentControllerPermissions: (
     agentControllerId: string | undefined,
     resourceId: string | undefined,

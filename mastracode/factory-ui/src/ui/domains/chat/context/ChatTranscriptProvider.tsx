@@ -1,13 +1,16 @@
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import type { ReactNode } from 'react';
 import { useEffect, useEffectEvent, useReducer } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 
+import { queryKeys } from '../../../../api/keys';
 import { useAgentControllerTranscript } from '../hooks/useAgentControllerTranscript';
 import { initialChatRuntime, runtimeReducer } from '../services/runtime';
 import type { ChatRuntimeState } from '../services/runtime';
 import type { TranscriptState } from '../services/transcript';
 import { SessionFavicon } from '../components/SessionFavicon';
 import type { SessionFaviconState } from '../components/SessionFavicon';
+import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { ChatConnectionProvider } from './ChatConnectionProvider';
 import { ChatRuntimeContext } from './ChatRuntimeContext';
 import { ChatTranscriptContext } from './ChatTranscriptContext';
@@ -34,9 +37,19 @@ export function ChatTranscriptProvider({
 }) {
   const transcriptApi = useAgentControllerTranscript({ initialThreadId: threadId, initialMessages });
   const [runtime, dispatchRuntime] = useReducer(runtimeReducer, initialChatRuntime);
+  const queryClient = useQueryClient();
+  const { resourceId, projectPath } = useChatSessionContext();
   const onEvent = (event: Parameters<typeof transcriptApi.onEvent>[0]) => {
     transcriptApi.onEvent(event);
     dispatchRuntime(event);
+    if (event.type === 'goal_evaluation') {
+      // The streamed snapshot covers the refetch window; the query stays
+      // authoritative once it lands.
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.agentControllerGoal(AGENT_CONTROLLER_ID, resourceId, projectPath),
+        exact: true,
+      });
+    }
   };
 
   // Merge is by id and idempotent — mount seed, grown load-more window and
