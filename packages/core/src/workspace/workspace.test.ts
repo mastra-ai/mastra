@@ -1571,6 +1571,59 @@ Line 3 conclusion`;
       await workspace.destroy();
     });
 
+    it('should build the search index via rebuildSearchIndex without starting the sandbox', async () => {
+      await fs.mkdir(path.join(tempDir, 'docs'), { recursive: true });
+      await fs.writeFile(path.join(tempDir, 'docs', 'readme.txt'), 'Welcome to the project');
+
+      const start = vi.fn();
+      const mockSandbox = {
+        provider: 'test',
+        status: 'stopped',
+        start,
+        executeCommand: vi.fn(),
+      } as any;
+
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+        sandbox: mockSandbox,
+        bm25: true,
+        autoIndexPaths: ['docs'],
+      });
+
+      // Defaults to the configured autoIndexPaths
+      await workspace.rebuildSearchIndex();
+
+      const results = await workspace.search('project');
+      expect(results.some(r => r.id === 'docs/readme.txt')).toBe(true);
+      expect(start).not.toHaveBeenCalled();
+
+      await workspace.destroy();
+    });
+
+    it('should rebuild the search index for explicit paths', async () => {
+      await fs.mkdir(path.join(tempDir, 'docs'), { recursive: true });
+      await fs.mkdir(path.join(tempDir, 'support'), { recursive: true });
+      await fs.writeFile(path.join(tempDir, 'docs', 'api.txt'), 'API reference documentation');
+      await fs.writeFile(path.join(tempDir, 'support', 'faq.txt'), 'Frequently asked questions');
+
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+        bm25: true,
+        autoIndexPaths: ['docs'],
+      });
+
+      await workspace.rebuildSearchIndex(['support']);
+
+      // Explicit paths replace the configured ones for this rebuild
+      const faqResults = await workspace.search('frequently asked');
+      expect(faqResults.some(r => r.id === 'support/faq.txt')).toBe(true);
+
+      const docsResults = await workspace.search('API reference');
+      expect(docsResults.some(r => r.id === 'docs/api.txt')).toBe(false);
+
+      await workspace.destroy();
+    });
+
     it('should skip non-existent autoIndexPaths gracefully', async () => {
       const filesystem = new LocalFilesystem({ basePath: tempDir });
       const workspace = new Workspace({

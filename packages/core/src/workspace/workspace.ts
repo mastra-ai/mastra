@@ -1054,13 +1054,19 @@ export class Workspace<
 
   /**
    * Rebuild the search index from filesystem paths.
-   * Used internally for auto-indexing on init.
    *
-   * Paths can be plain directories, single files, or glob patterns.
-   * Uses resolvePathPattern for unified resolution: file matches are
-   * indexed directly, directory matches are recursed.
+   * Called by `init()` for auto-indexing, and callable directly to build the
+   * index without going through `init()`. Indexing only reads through the
+   * workspace filesystem, so unlike `init()` this never starts the sandbox.
+   * Useful for warming the search index ahead of the first search when the
+   * sandbox is a remote provider that is slow or costly to boot.
+   *
+   * Paths can be plain directories, single files, or glob patterns, and
+   * default to the configured `autoIndexPaths`. Uses resolvePathPattern for
+   * unified resolution: file matches are indexed directly, directory matches
+   * are recursed. No-op when search is not configured or no paths are given.
    */
-  private async rebuildSearchIndex(paths: string[]): Promise<void> {
+  async rebuildSearchIndex(paths: string[] = this._config.autoIndexPaths ?? []): Promise<void> {
     this.assertSearchWritable();
     if (!this._searchEngine || !this._fs || paths.length === 0) {
       return;
