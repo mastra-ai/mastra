@@ -22,12 +22,17 @@ Whether inherited from this conversation or freshly established:
 - Confirm the root cause and contributing areas against the code as it exists now (the branch may have moved since triage).
 - Confirm the affected surface: which files, contracts, and consumers the fix touches.
 - Note existing test coverage for the affected paths and the conventions similar changes followed (`git log` on the touched files; prior PRs solving similar problems).
+- Verify the triage handoff's historical-intent ledger against the current code, introducing diffs, linked issues/PRs/commits, and regression tests. On a fresh thread, construct the same ledger: prior user-visible failure, preserved invariant, evidence, and later overlapping changes for every materially affected behavior.
 
-Record any correction to the inherited understanding as an assumption.
+Record any correction to the inherited understanding as an assumption. Missing historical evidence remains an explicit confidence gap; an assumption cannot clear a demonstrated conflict with a prior invariant.
 
 ## Phase 2: Design
 
-Choose the implementation approach. Ground it in the codebase's established patterns — prefer the approach the file history shows this area already uses over a novel one. Consider: blast radius, backward compatibility, testability, and what the simplest change that fully solves the problem looks like. Record each considered-and-rejected alternative briefly in the plan so the executor knows the reasoning.
+Choose the implementation approach. Ground it in the codebase's established patterns — prefer the approach the file history shows this area already uses over a novel one. Consider: blast radius, backward compatibility, testability, and what the simplest change that fully solves the problem looks like.
+
+Before selecting it, perform an **invariant-impact mapping**: for each planned code change, state which historical invariants it preserves, changes, or intentionally supersedes. An approach that solves the new issue by globally skipping, deleting, or broadening behavior introduced for an earlier issue is suspect by default. Prefer a narrower composition that satisfies both intents. If they truly cannot coexist, identify the explicit product-contract decision that requires human approval rather than silently choosing the newest symptom.
+
+For every overlapping-fix chain, plan regression coverage for both sides: the newly reported failure and each older behavior at overwrite risk. Name the exact existing tests to retain or extend and the new counterexample tests needed. Record each considered-and-rejected alternative, especially overwrite-style alternatives, so the executor knows the reasoning.
 
 ## Phase 3: Write the Plan
 
@@ -35,8 +40,9 @@ Write the full plan into the conversation, structured as:
 
 - **Goal** — the outcome in one paragraph; what "done" means, stated verifiably.
 - **Scope** — what's in, what's explicitly out.
-- **Phases** — each with: the changes (files and shape of the edit), the tests that prove it, and the verification commands to run. Order phases so each lands independently verifiable.
-- **Risks** — what could go wrong, and what to check to catch it early.
+- **Historical intent and invariant impact** — the verified ledger, each planned change's preserve/change/supersede mapping, evidence gaps, and rejected overwrite-style alternatives.
+- **Phases** — each with: the changes (files and shape of the edit), the tests that prove both the new behavior and every older overlapping invariant remain intact, and the verification commands to run. Name exact existing regression tests to retain/extend and new counterexample tests. Order phases so each lands independently verifiable.
+- **Risks** — what could go wrong, especially which prior fix or supported path could be overwritten, and what to check to catch it early.
 - **Assumptions** — every recorded design decision and understanding correction from the run.
 - **Open questions** — only the decisions that genuinely need a human.
 

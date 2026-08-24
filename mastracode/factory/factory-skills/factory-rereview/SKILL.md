@@ -58,6 +58,7 @@ Look for defects that only make sense as a push consequence:
 
 - Regressions: paths that worked in the prior head but no longer do — an assertion loosened, an edge case dropped, an early-return added that skips a case previously handled, a call site removed that other code still needs.
 - Incomplete fixes for prior findings that _create_ new problems (a null-check that swallows the error instead of handling it; a rename that missed a caller; a test hardened at one seam but softened at another).
+- Fixes that address a finding by weakening, deleting, or bypassing another historical invariant or its regression test. Re-read the relevant introducing diff and tests; moving the regression to another path is not resolution.
 - New scope crept in with the fix — unrelated refactors, opportunistic reformatting, dependency bumps unmentioned in the PR body — each is its own finding.
 - New tests that pass without asserting the interesting thing, or removed/skipped tests whose deletion isn't justified by the change.
 - New public API or config surface added by the push that wasn't in the prior review, checked against the same contract, docs, and consumer bars as any Phase 4 finding would apply.
@@ -80,7 +81,11 @@ Gate failures don't stop the re-review — they become findings for the verdict.
 
 Even after reconciling the prior pass and scrutinizing what the push introduced, take a fresh pass over the PR as it now stands — because the previous pass could have missed things and the pushed changes can shift what matters in the untouched code. Do not re-derive the earlier pass from scratch; do sweep for what a first reader would catch that the prior reviewer (you or another) did not.
 
-For each significantly changed file: `git log --oneline -20 -- <file>`, `git blame` on the changed regions' pre-PR state, and linked PRs/issues from commit messages. Confirm the module architecture, the contracts the changed code participates in, callers and data flow, and any AGENTS.md/README conventions in the touched packages haven't shifted since the prior pass. Then judge the approach as a whole: does the PR — with the push folded in — fit the existing design, or fight it? If the history shows a simpler or more consistent approach, flag it.
+For each significantly changed behavior, re-run the **overwritten-fix check** against the current head: identify the issue/PR/commit that introduced the pre-PR behavior, read its introducing diff and regression tests, state the historical contract it protected, follow later overlapping fixes at the same control-flow seam, and verify the whole PR still preserves every established invariant. Do not rely on the prior pass: the push may have changed the relevant branch, gate, status transition, persistence path, or tests.
+
+Treat a broad gate, early return, status rewrite, persistence shortcut, new option, or weakened/deleted/bypassed regression test as potentially overwriting a prior fix until evidence proves otherwise. It is blocking unless the PR explicitly identifies and justifies an intentional product-contract change; an assumption cannot clear a demonstrated regression.
+
+Confirm the module architecture, the contracts the changed code participates in, callers and data flow, and any AGENTS.md/README conventions in the touched packages haven't shifted since the prior pass. Then judge the approach as a whole: does the PR — with the push folded in — fit the existing design and compose its intent with historical contracts, or overwrite one of them? If the history shows a narrower or more consistent approach, flag it.
 
 For behavior-changing code, find the nearest analogous implementation and compare where it lives and how it follows existing abstractions, APIs, and test patterns. Flag deviations that are not justified by the codebase or its history.
 
@@ -101,7 +106,7 @@ Weigh the findings — new ones from this pass and confirmed ones carried forwar
 
 Approval is earned, not the default — the burden of proof is on the PR, and your job is to find what's wrong with it, not to find a reading under which it's fine. If you confirmed a major finding — a correctness, security, or data-loss issue — you cannot downgrade it to a nit to keep an approve verdict; it forces request changes until addressed or refuted with evidence. A prior request-changes verdict is not lightly overturned: overturning it means the push addressed every blocking finding and this pass surfaced none of its own; state that plainly if it holds.
 
-**Adversarial check — required before every approve.** Before committing to approve, argue the strongest case for request changes: take the most damaging reading of your findings, and name the consumer, platform, or configuration most likely to break. If the argument survives contact with the evidence, switch the verdict. If it doesn't, record in one line why it fails — that line goes in the handoff. An approve without a surviving adversarial check is not an approve.
+**Adversarial check — required before every approve.** Before committing to approve, argue the strongest case for request changes: take the most damaging reading of your findings, name the consumer, platform, or configuration most likely to break, and answer: **Which prior fix or supported path could the addressing commits silently undo?** If the argument survives contact with the evidence, switch the verdict. If it doesn't, record in one line why it fails and cite the historical evidence and current-head verification that cleared the overwrite risk — that line goes in the handoff. An approve without a surviving adversarial check is not an approve.
 
 **Approval gates.** Approve only when every gate below is affirmatively demonstrated, with evidence in the handoff — absence of counter-evidence clears nothing, and a gate you could not evaluate is a gate that failed. Missing evidence is itself a finding:
 
@@ -110,7 +115,8 @@ Approval is earned, not the default — the burden of proof is on the PR, and yo
 3. **New signal dispositioned** — every substantive finding surfaced this pass (from the push, the fresh sweep, or reviewers who posted since the prior pass) is confirmed, addressed, or refuted.
 4. **No pending bot** — no review bot is still working on the current head commit. A bot still pending — including one that outlasted the Phase 2 wait — fails this gate regardless of the bot's history: a pending bot can still surface a new blocking issue.
 5. **Behavior is tested** — the change's behavior — including whatever the push added — is covered by meaningful assertions, or the handoff records the affirmative reason none are needed.
-6. **Adversarial check survived** — with its one-line record.
+6. **Historical intent preserved on current head** — the fresh overwritten-fix check identifies prior fixes and regression protections at every changed control-flow seam, and evidence shows both that prior findings were addressed and that the addressing commits preserve those contracts or contain an explicit, justified intentional product-contract change. Unevaluated or unresolved history fails this gate.
+7. **Adversarial check survived** — with its one-line record.
 
 If any gate fails, the verdict is request changes. This is the concrete meaning of "the PR earns the approval": the reviewer never grants what the evidence didn't establish.
 
@@ -122,6 +128,7 @@ First, compose the **re-review handoff** — don't send it to the conversation y
 
 - **Prior pass disposition** — every substantive item from your previous review, classified: addressed, partially addressed, still open, refuted by the push, or invalidated by the push. Cite the commit or `file:line` proving each addressed/refuted/invalidated call. A prior blocking finding still open is called out plainly at the top of this section.
 - **Findings** — new-this-pass findings from the push and from the fresh whole-PR sweep, each labeled as `[push]` or `[fresh]` so the record is honest about where they came from. Distill — this is a handoff, not a transcript.
+- **Historical intent checked** — prior fixes inspected with issue/PR/commit and regression-test evidence, the invariants each protected, and proof that the addressing commits preserve them on the current head; list any conflict or intentional product-contract change and unresolved evidence.
 - **Verification** — every command you executed against the current head (tests, typecheck, repros) with its outcome, or an explicit statement that nothing was executed and why. Verification the prior pass ran is not restated here — only what this pass ran counts.
 - **Other-reviewer disposition** — any substantive finding posted by another reviewer (bot or human) since the prior pass, with its classification: confirmed, addressed, or refuted with evidence. A major bot comment must never be silently dropped. Name each by subject and `file:line`, and remember the body lands as GitHub markdown — `#1` publishes as a link to issue 1.
 - **Adversarial check** (approve only) — the one-line record of why the strongest request-changes case fails.

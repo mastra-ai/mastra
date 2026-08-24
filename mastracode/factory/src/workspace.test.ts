@@ -312,6 +312,37 @@ describe('getFactoryWorkspace', () => {
     expect(rereview).toContain('Review runtime: <model>, reasoning setting: <reasoning>.');
   });
 
+  it('requires historical-intent evidence throughout autonomous Factory work', async () => {
+    const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
+    const read = (skillName: string) => fs.readFile(path.join(assetRoot, skillName, 'SKILL.md'), 'utf8');
+    const [triage, plan, review, rereview] = await Promise.all(
+      ['factory-triage', 'factory-plan', 'factory-review', 'factory-rereview'].map(read),
+    );
+
+    expect(triage).toContain('linked issues/PRs/commits, their introducing diffs, and nearby regression tests');
+    expect(triage).toContain('historical-intent ledger');
+    expect(triage).toContain('### Historical intent and invariants');
+    expect(triage.indexOf('### Historical intent and invariants')).toBeLessThan(triage.indexOf('### Assumptions'));
+
+    expect(plan).toContain('invariant-impact mapping');
+    expect(plan).toContain('regression coverage for both sides');
+    expect(plan).toContain('the newly reported failure and each older behavior at overwrite risk');
+    expect(plan).toContain('rejected overwrite-style alternatives');
+
+    for (const prose of [review, rereview]) {
+      expect(prose).toContain('overwritten-fix check');
+      expect(prose).toContain('intentional product-contract change');
+      expect(prose.toLowerCase()).toContain('an assumption');
+      expect(prose).toContain('Historical intent checked');
+      expect(prose).toContain('Historical intent preserved');
+      expect(prose).toContain('Which prior fix or supported path');
+    }
+    expect(review.toLowerCase()).toContain('read the introducing diff and its regression tests');
+    expect(review).toContain('Unevaluated or unresolved history fails this gate');
+    expect(rereview).toContain('Do not rely on the prior pass');
+    expect(rereview).toContain('moving the regression to another path is not resolution');
+  });
+
   it('keeps the autonomous Factory skills on the terminal-handoff contract', async () => {
     const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
     const read = (skillName: string) => fs.readFile(path.join(assetRoot, skillName, 'SKILL.md'), 'utf8');

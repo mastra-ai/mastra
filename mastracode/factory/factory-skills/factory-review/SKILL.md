@@ -76,9 +76,11 @@ Gate failures don't stop the review — they become findings for the verdict.
 
 ## Phase 4: History & Architecture
 
-For each significantly changed file: `git log --oneline -20 -- <file>`, `git blame` on the changed regions' pre-PR state, and linked PRs/issues from commit messages. Understand why the current code exists before judging the change to it.
+For each significantly changed behavior, identify the issue/PR/commit that introduced the pre-PR behavior. Read the introducing diff and its regression tests — not only commit subjects or blame — and state the prior user-visible failure and behavioral contract the earlier change was protecting. Follow later overlapping fixes at the same control-flow seam and compare the current PR against every established invariant.
 
-Read around the changed lines: the module architecture, the contracts the changed code participates in, callers and data flow, and any AGENTS.md/README conventions in the touched packages. Then judge the approach: does it fit the existing design, or fight it? If the history shows a simpler or more consistent approach, flag it.
+Perform a mandatory **overwritten-fix check**: search history for earlier fixes touching the same branch, gate, status transition, persistence path, or other control-flow seam; identify the tests and invariants they added; and verify this PR preserves them. Treat a broad gate, early return, status rewrite, persistence shortcut, or new option as potentially masking or removing prior behavior until evidence proves otherwise. A deleted, weakened, or bypassed prior regression test or invariant is blocking unless the PR explicitly identifies and justifies an intentional product-contract change. An assumption is not enough to clear a demonstrated regression.
+
+Read around the changed lines: the module architecture, the contracts the changed code participates in, callers and data flow, and any AGENTS.md/README conventions in the touched packages. Then judge the approach: does it fit the existing design and compose the new intent with the historical contracts, or overwrite one of them? If the history shows a narrower or more consistent approach, flag it.
 
 For behavior-changing code, find the nearest analogous implementation and compare where it lives and how it follows existing abstractions, APIs, and test patterns. Flag deviations that are not justified by the codebase or its history.
 
@@ -97,7 +99,7 @@ Weigh the findings — yours and the confirmed ones inherited from existing revi
 
 Approval is earned, not the default — the burden of proof is on the PR, and your job is to find what's wrong with it, not to find a reading under which it's fine. If you confirmed a major finding — a correctness, security, or data-loss issue — you cannot downgrade it to a nit to keep an approve verdict; it forces request changes until addressed or refuted with evidence.
 
-**Adversarial check — required before every approve.** Before committing to approve, argue the strongest case for request changes: take the most damaging reading of your findings, and name the consumer, platform, or configuration most likely to break. If the argument survives contact with the evidence, switch the verdict. If it doesn't, record in one line why it fails — that line goes in the handoff. An approve without a surviving adversarial check is not an approve.
+**Adversarial check — required before every approve.** Before committing to approve, argue the strongest case for request changes: take the most damaging reading of your findings, name the consumer, platform, or configuration most likely to break, and answer: **Which prior fix or supported path could this PR silently undo?** If the argument survives contact with the evidence, switch the verdict. If it doesn't, record in one line why it fails and cite the historical evidence and verification that cleared the overwrite risk — that line goes in the handoff. An approve without a surviving adversarial check is not an approve.
 
 **Approval gates.** Approve only when every gate below is affirmatively demonstrated, with evidence in the handoff — absence of counter-evidence clears nothing, and a gate you could not evaluate is a gate that failed. Missing evidence is itself a finding:
 
@@ -105,7 +107,8 @@ Approval is earned, not the default — the burden of proof is on the PR, and yo
 2. **Existing signal dispositioned** — every substantive prior finding is confirmed, addressed, or refuted; none remains confirmed-unaddressed.
 3. **No pending bot** — no review bot is still working on the head commit. A bot still pending — including one that outlasted the Phase 2 wait — fails this gate regardless of the bot's history: a pending bot can still surface a new blocking issue.
 4. **Behavior is tested** — the change's behavior is covered by meaningful assertions, or the handoff records the affirmative reason none are needed.
-5. **Adversarial check survived** — with its one-line record.
+5. **Historical intent preserved** — the overwritten-fix check identified the prior fixes and regression protections at every changed control-flow seam, and evidence shows the PR preserves them or contains an explicit, justified intentional product-contract change. Unevaluated or unresolved history fails this gate.
+6. **Adversarial check survived** — with its one-line record.
 
 If any gate fails, the verdict is request changes. This is the concrete meaning of "the PR earns the approval": the reviewer never grants what the evidence didn't establish.
 
@@ -116,6 +119,7 @@ Do not hedge between the two — pick the verdict the evidence supports. When ge
 First, compose the **review handoff** — don't send it to the conversation yet; it must be published on the PR and the transition requested before your final message. It **must open with the verdict line**: `Verdict: approve` or `Verdict: request changes`, followed by:
 
 - **Findings** — correctness assessment, test assessment, scope assessment, pattern-consistency notes, each grounded in the history you traced. Distill — this is a handoff, not a transcript.
+- **Historical intent checked** — prior fixes inspected with issue/PR/commit and regression-test evidence, the invariants each protected, how the PR preserves them, and any conflict or intentional product-contract change found. State unresolved evidence plainly.
 - **Verification** — every command you executed (tests, typecheck, repros) with its outcome, or an explicit statement that nothing was executed and why.
 - **Existing review disposition** — every substantive finding from prior reviewers (bots included, your own earlier passes included) with its classification: confirmed, addressed, or refuted with evidence. A major bot comment must never be silently dropped. Name each by subject and `file:line`, and remember the body lands as GitHub markdown — `#1` publishes as a link to issue 1.
 - **Adversarial check** (approve only) — the one-line record of why the strongest request-changes case fails.

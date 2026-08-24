@@ -56,10 +56,14 @@ Trace from the symptom into the codebase: search for error messages, function na
 
 For each contributing area, build real understanding:
 
-1. **Why does this code exist?** `git log --oneline -20 -- <file>`, `git blame` on the relevant lines, linked PRs/issues from commit messages — what problem was it written to solve?
+1. **Why does this code exist?** `git log --oneline -20 -- <file>`, `git blame` on the relevant lines, linked issues/PRs/commits, their introducing diffs, and nearby regression tests — follow the chain far enough to identify the prior user-visible failure and the behavior the change intended to preserve, not merely when the line appeared.
 2. **How does it fit architecturally?** Callers, callees, data flow, contracts, shared primitives.
 3. **How do the areas relate?** Shared state/config, assumptions one area makes about another, what recent change broke which assumption.
-4. **Test coverage.** What tests exercise these paths, and would they have caught the reported behavior?
+4. **Test coverage.** What tests exercise these paths, what historical invariant each regression test protects, and whether they would have caught the reported behavior?
+
+Build a compact **historical-intent ledger** for every materially affected behavior. For each entry record the prior problem and user-visible failure, the invariant the prior change intended to preserve, the files/tests/issue/PR/commit evidence supporting that interpretation, and later changes that overlap or potentially conflict with it. Compare the reported issue and suggested direction against every ledger entry. If fixing the current symptom would remove, globally skip, or bypass a prior invariant, record that as a regression risk and carry both requirements into the suggested direction.
+
+Incomplete history is an investigation task, not a reason to stop for user clarification. If the evidence genuinely cannot be recovered after following the available links and tests, record the gap in the ledger and lower confidence; do not invent intent or treat an assumption as evidence that a demonstrated regression is safe.
 
 When possible try to create a real reproduction using the `https://github.com/mastra-ai/weather-agent` git repository as a base. When you're able to reproduce it please record the actual steps taken for reproduction.
 
@@ -93,6 +97,10 @@ Write one concise **handoff** for whoever plans the fix. It must begin with the 
 ### Understanding
 
 <root cause with evidence, contributing areas with file paths and relevant history, affected surface, suggested direction, related issues/PRs. Distill — this is a handoff artifact, not a transcript.>
+
+### Historical intent and invariants
+
+<compact ledger for each materially affected behavior: prior problem/user-visible failure; preserved invariant; supporting file, regression-test, issue/PR, and commit evidence; later overlapping changes; and whether the suggested direction composes with or risks overwriting that invariant. Include evidence gaps and confidence impact.>
 
 ### Assumptions
 
