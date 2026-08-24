@@ -65,6 +65,7 @@ function createMockEctx(): EventHandlerContext {
     renderClearedTasksInline: vi.fn(),
     renderCompletedTasksInline: vi.fn(),
     renderTaskDeltaInline: vi.fn(),
+    updateStatusLine: vi.fn(),
   } as unknown as EventHandlerContext;
 }
 
@@ -184,6 +185,16 @@ describe('dispatchEvent thread lifecycle', () => {
     );
 
     expect((state.taskProgress as any).updateTasks).toHaveBeenCalledWith([]);
+  });
+
+  it('renames the status line when the thread is titled mid-run', async () => {
+    await dispatchEvent(
+      { type: 'thread_title_updated', threadId: 'thread-1', title: 'Log parser rewrite' },
+      ectx,
+      state,
+    );
+
+    expect(state.currentThreadTitle).toBe('Log parser rewrite');
   });
 
   it('does not clear non-ephemeral state like currentModelId', async () => {

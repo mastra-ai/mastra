@@ -237,6 +237,11 @@ export async function dispatchEvent(
       break;
     }
 
+    case 'thread_title_updated':
+      state.currentThreadTitle = event.title;
+      ectx.updateStatusLine();
+      break;
+
     case 'thread_created': {
       ectx.showInfo(`Created thread: ${event.thread.id}`);
       // Update current thread title for status line display

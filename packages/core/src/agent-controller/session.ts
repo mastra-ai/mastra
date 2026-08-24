@@ -673,6 +673,7 @@ export class SessionThread {
       await store.saveThread({
         thread: { ...thread, title, updatedAt: new Date() },
       });
+      this.#owner.emit({ type: 'thread_title_updated', threadId, title });
     }
   }
 
