@@ -1,6 +1,6 @@
 import type { GatewayLanguageModel } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
-import { generateText, type LanguageModel } from 'ai';
+import { streamText, type LanguageModel } from 'ai';
 import { selectPreferredOMPack } from '../onboarding/packs.js';
 import { computeProviderAccess } from '../onboarding/provider-access.js';
 import type { ThinkingLevel } from '../providers/openai-codex.js';
@@ -89,12 +89,14 @@ export async function generateThreadTitle({
     throw new Error(`Model '${modelId}' does not expose an AI SDK v2/v3 interface and cannot generate thread titles.`);
   }
 
-  const { text } = await generateText({
+  // Some provider endpoints (Codex OAuth) reject non-streaming requests and
+  // unsupported sampling params, so generation streams with no token cap —
+  // the prompt constrains the title to a short noun phrase.
+  const { text } = streamText({
     model: resolved,
     system: TITLE_SYSTEM_PROMPT,
     prompt,
-    maxOutputTokens: 1024,
     ...(abortSignal ? { abortSignal } : {}),
   });
-  return sanitizeTitle(text ?? '');
+  return sanitizeTitle((await text) ?? '');
 }
