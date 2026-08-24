@@ -112,6 +112,12 @@ Use `imessage` as the adapter key. Mastra derives the webhook path and the `plat
 
 `toolDisplay: 'text'` describes tool calls in the message, since iMessage has no interactive cards for Approve and Deny actions. Both adapters need it: Photon has no card rendering, and Linq flattens cards to plain text where buttons show their labels but can't trigger actions.
 
+:::warning
+
+Text rendering can't submit approval decisions. A tool with `requireApproval: true` stays suspended until a UI or API action, such as Studio, submits an explicit approval or decline, so avoid approval-gated tools on iMessage agents unless another surface handles the decision. See [Tool approval](/docs/channels#tool-approval).
+
+:::
+
 ## Adapter setup
 
 <Tabs groupId="imessage-provider">
