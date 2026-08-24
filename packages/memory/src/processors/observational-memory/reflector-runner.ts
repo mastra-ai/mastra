@@ -239,6 +239,14 @@ export class ReflectorRunner {
    */
   private readonly syncReflectionBackoff = new Map<string, { atObservationTokens: number; until: number }>();
 
+  /** Drop expired backoff entries so abandoned lock keys don't accumulate. */
+  private pruneExpiredSyncReflectionBackoff() {
+    const now = Date.now();
+    for (const [key, entry] of this.syncReflectionBackoff) {
+      if (now >= entry.until) this.syncReflectionBackoff.delete(key);
+    }
+  }
+
   constructor(opts: {
     reflectionConfig: ResolvedReflectionConfig;
     observationConfig: ResolvedObservationConfig;
@@ -1242,6 +1250,7 @@ export class ReflectorRunner {
     // provider-change triggers are exempt — they reflect for activation
     // semantics, not to shrink observations.
     if (activationTriggeredBy === 'threshold') {
+      this.pruneExpiredSyncReflectionBackoff();
       const backoff = this.syncReflectionBackoff.get(lockKey);
       if (
         backoff &&
