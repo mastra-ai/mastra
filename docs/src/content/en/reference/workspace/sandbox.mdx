@@ -111,7 +111,8 @@ const result = await sandbox.executeCommand('npm', ['install', 'lodash'])
           {
             name: 'env',
             type: 'Record<string, string>',
-            description: 'Additional environment variables',
+            description:
+              'Additional environment variables for this command. These take precedence over values set with `setEnv()`.',
             isOptional: true,
           },
           {
@@ -132,6 +133,32 @@ const result = await sandbox.executeCommand('npm', ['install', 'lodash'])
   },
 ]}
 />
+
+### `setEnv(update)`
+
+Update the sandbox's runtime environment overlay. Overlay values are merged into every command and process executed through the sandbox, so credentials installed or rotated after the sandbox is created reach every subsequent command. Optional, so check for support or use optional chaining.
+
+```typescript
+sandbox.setEnv?.(env => ({ ...env, GH_TOKEN: token }))
+```
+
+The updater receives a copy of the current overlay and returns the new one, so a single call can set, unset, or batch-update variables. Sandboxes that extend `MastraSandbox` can seed the overlay with the `env` constructor option.
+
+The overlay applies to commands executed through the sandbox rather than the VM's own environment, so it's never written into the VM and survives provider pause and resume. When a command runs, provider defaults are applied first, overlay values override them, and the per-call `env` option on `executeCommand()` wins over both.
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+  {
+    name: 'update',
+    type: '(env: Record<string, string | undefined>) => Record<string, string | undefined>',
+    description: 'Receives a copy of the current overlay and returns the replacement overlay.',
+  },
+]}
+/>
+
+**Returns:** `void`
 
 ### `getInfo()`
 
