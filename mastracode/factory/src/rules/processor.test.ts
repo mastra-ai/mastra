@@ -35,7 +35,7 @@ function requestContext(
   return context;
 }
 
-async function prepare(storage: WorkItemsStorage, role = 'work') {
+async function prepare(storage: WorkItemsStorage, role = 'work', sourceType: 'issue' | 'pull-request' = 'issue') {
   return storage.prepareRunStart({
     orgId: 'org-1',
     userId: 'user-1',
@@ -44,9 +44,9 @@ async function prepare(storage: WorkItemsStorage, role = 'work') {
       input: {
         externalSource: {
           integrationId: 'github',
-          type: 'issue',
-          externalId: 'github-issue:1',
-          url: 'https://example.test/issues/1',
+          type: sourceType,
+          externalId: sourceType === 'issue' ? 'github-issue:1' : 'github-pr:1',
+          url: sourceType === 'issue' ? 'https://example.test/issues/1' : 'https://example.test/pull/1',
         },
         title: 'Improve the settings UI',
         stages: ['planning'],
@@ -378,17 +378,17 @@ describe('FactoryPhaseStateProcessor', () => {
         board: 'work',
         stage: 'planning',
         role: 'work',
-        modelId: 'openai/gpt-5.6-sol',
-        thinkingLevel: 'high',
       },
     });
+    expect(signal?.attributes).not.toHaveProperty('modelId');
+    expect(signal?.attributes).not.toHaveProperty('thinkingLevel');
     expect(signal?.contents).toContain('Revision: 1');
-    expect(signal?.contents).toContain('Runtime: model=openai/gpt-5.6-sol, reasoning=high');
+    expect(signal?.contents).not.toContain('Runtime:');
   });
 
   it('re-emits phase state when the review runtime changes', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    await prepare(storage);
+    await prepare(storage, 'review', 'pull-request');
     const rules = defaultFactoryRules({ version: 'rules-v1' });
     const processor = new FactoryPhaseStateProcessor({ rules, storage });
     const first = await processor.computeStateSignal(stateArgs(requestContext()));

@@ -293,7 +293,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       .filter(candidate => candidate.parentWorkItemId === item.id || item.parentWorkItemId === candidate.id)
       .slice(0, MAX_LINKED_ITEMS);
     const board = boardForItem(item);
-    const runtime = runtimeFromRequestContext(args.requestContext);
+    const runtime = board === 'review' ? runtimeFromRequestContext(args.requestContext) : undefined;
     const value: PhaseSnapshotValue = {
       status: 'active',
       bindingId: binding.id,
