@@ -41,7 +41,11 @@ export function useAgentBuilderTool({
   features,
   availableAgentTools,
   availableWorkspaces = [],
+  // Stryker disable next-line ArrayDeclaration: only the emptiness of these defaults
+  // is observable, and Stryker's replacement is also an array literal — a
+  // non-empty default is not something any caller can distinguish here.
   availableSkills = [],
+  // Stryker disable next-line ArrayDeclaration: as above.
   availableModels = [],
   integrationToolsLoading = false,
 }: UseAgentBuilderToolArgs): Record<string, ClientTool> {

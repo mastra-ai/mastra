@@ -17,6 +17,9 @@ export const useBuilderSettings = (options?: UseBuilderSettingsOptions) => {
   return useQuery({
     queryKey: ['builder-settings'],
     queryFn: () => client.getBuilderSettings(),
+    // Stryker disable next-line LogicalOperator: `??` and `&&` are equivalent here.
+    // They differ only when `options.enabled` is undefined, and react-query treats
+    // `enabled: undefined` exactly like `enabled: true`.
     enabled: options?.enabled ?? true,
   });
 };
