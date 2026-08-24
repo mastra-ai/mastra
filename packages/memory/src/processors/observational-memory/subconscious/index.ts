@@ -6,15 +6,27 @@ import { SubconsciousRemindExtractor } from './remind';
 import type {
   ResolvedSubconsciousAgent,
   ResolvedSubconsciousConfig,
+  ResolvedSubconsciousCuration,
   SubconsciousCaptureConfig,
   SubconsciousConfig,
+  SubconsciousCurateConfig,
+  SubconsciousCurationTrigger,
   SubconsciousCustomObservationConfig,
   SubconsciousObservationEntry,
   SubconsciousReflectionEntry,
 } from './types';
 
-const BUILT_IN_OBSERVATION = new Set(['capture', 'remind']);
+const BUILT_IN_OBSERVATION = new Set(['capture', 'remind', 'curate']);
 const BUILT_IN_REFLECTION = new Set(['curate', 'learn']);
+
+/**
+ * Default trigger for a curate entry in the observation array with no explicit `trigger`:
+ * evaluate after each completed observation and run whenever any uncurated record exists.
+ * This preserves the curator handler's own gating (`curate.ts` no-ops on an empty worklist),
+ * so an omitted trigger is the default policy — never "run unconditionally" and never
+ * "skip the trigger query".
+ */
+const DEFAULT_OBSERVATION_TRIGGER = Object.freeze({ uncuratedRecords: 1 as const, maxAgeMs: false as const });
 const DEFAULT_MAX_STEPS = 50;
 /**
  * Curation walks a worklist that can reach hundreds of records, and its completion marker is
@@ -179,10 +191,16 @@ export class Subconscious {
       throw new Error('Subconscious curationMaxAgeMs must be a positive integer of milliseconds or false.');
     }
 
+    const observationHasCurate = observation.some(entry => entryName(entry) === 'curate');
+    const reflectionHasCurate = reflection.some(entry => entryName(entry) === 'curate');
+    if (observationHasCurate && reflectionHasCurate) {
+      throw new Error('Subconscious curate can be placed in observation or reflection, not both.');
+    }
+
     this.config = Object.freeze({ ...config, observation: [...observation], reflection: [...reflection] });
     this.resolved = Object.freeze({
       observation: observation.map(entry =>
-        entryName(entry) === 'remind'
+        entryName(entry) === 'remind' || entryName(entry) === 'curate'
           ? resolveAgent(entry, BUILT_IN_OBSERVATION, config.model, maxSteps)
           : resolveExtractor(entry),
       ),
@@ -193,11 +211,60 @@ export class Subconscious {
       tools: config.tools !== false,
       activity: recentUpdates === false ? false : { recentUpdates },
       pins,
+      curation: this.#resolveCuration(config, observation, reflection),
       curationCadence: config.curationCadence,
       curationThreshold:
         config.curationThreshold !== undefined ? config.curationThreshold : (config.curationCadence ?? false),
       curationMaxAgeMs: config.curationMaxAgeMs ?? false,
     });
+  }
+
+  /**
+   * Resolve curation placement + trigger. Placement sets cadence: a curate entry in the
+   * observation array is evaluated after each successfully completed observation; in the
+   * reflection array, at reflection commit; absent, `null` — zero curation work.
+   *
+   * Precedence: an explicit `trigger` on the curate entry always wins and the deprecated
+   * top-level `curationThreshold`/`curationCadence`/`curationMaxAgeMs` are ignored. Without an
+   * explicit trigger, the legacy fields (threshold — including explicit `false` = disabled —
+   * beating cadence, as before) translate onto the curate entry's placement. With neither,
+   * the placement default applies: reflection keeps today's commit-time behavior
+   * (`trigger: null`); observation normalizes to {@link DEFAULT_OBSERVATION_TRIGGER}.
+   */
+  #resolveCuration(
+    config: SubconsciousConfig,
+    observation: SubconsciousObservationEntry[],
+    reflection: SubconsciousReflectionEntry[],
+  ): ResolvedSubconsciousCuration | null {
+    const observationEntry = observation.find(entry => entryName(entry) === 'curate');
+    const reflectionEntry = reflection.find(entry => entryName(entry) === 'curate');
+    const entry = observationEntry ?? reflectionEntry;
+    if (!entry) return null;
+    const placement: 'observation' | 'reflection' = observationEntry ? 'observation' : 'reflection';
+
+    const explicit = typeof entry === 'string' ? undefined : (entry as SubconsciousCurateConfig).trigger;
+    if (explicit) {
+      return {
+        placement,
+        trigger: { uncuratedRecords: explicit.uncuratedRecords ?? false, maxAgeMs: explicit.maxAgeMs ?? false },
+      };
+    }
+
+    // Legacy translation: threshold (including explicit `false` = disabled) wins over cadence.
+    const legacyThreshold =
+      config.curationThreshold !== undefined ? config.curationThreshold : (config.curationCadence ?? undefined);
+    const legacyMaxAgeMs = config.curationMaxAgeMs === undefined ? false : config.curationMaxAgeMs;
+    if (legacyThreshold !== undefined || legacyMaxAgeMs !== false) {
+      if (legacyThreshold === false && legacyMaxAgeMs === false) {
+        // Explicitly disabled: no trigger evaluator; reflection commit behavior is unchanged.
+        return { placement, trigger: null };
+      }
+      return { placement, trigger: { uncuratedRecords: legacyThreshold ?? false, maxAgeMs: legacyMaxAgeMs } };
+    }
+
+    return placement === 'observation'
+      ? { placement, trigger: { ...DEFAULT_OBSERVATION_TRIGGER } }
+      : { placement, trigger: null };
   }
 
   createObservationExtractors(omModel?: ObservationalMemoryModel): Extractor<any>[] {
@@ -235,12 +302,32 @@ export class Subconscious {
     return extractors;
   }
 
+  #validateTrigger(entry: { name?: string; trigger?: SubconsciousCurationTrigger } | string): void {
+    if (typeof entry === 'string' || !('trigger' in entry) || entry.trigger === undefined) return;
+    if (entryName(entry as { name: string }) !== 'curate') {
+      throw new Error('Subconscious trigger config is only valid on the curate agent entry.');
+    }
+    const { uncuratedRecords, maxAgeMs } = entry.trigger;
+    if (uncuratedRecords !== undefined && uncuratedRecords !== false) {
+      if (!Number.isInteger(uncuratedRecords) || uncuratedRecords < 1) {
+        throw new Error('Subconscious curate trigger.uncuratedRecords must be a positive integer or false.');
+      }
+    }
+    if (maxAgeMs !== undefined && maxAgeMs !== false) {
+      if (!Number.isInteger(maxAgeMs) || maxAgeMs < 1) {
+        throw new Error('Subconscious curate trigger.maxAgeMs must be a positive integer of milliseconds or false.');
+      }
+    }
+  }
+
   #validateObservationEntry(entry: SubconsciousObservationEntry): void {
     const name = entryName(entry);
+    this.#validateTrigger(entry);
     if (typeof entry === 'string') {
       if (!BUILT_IN_OBSERVATION.has(name)) throw new Error(`Unknown Subconscious observation agent: ${name}`);
       return;
     }
+    if (name === 'curate') return;
     if (BUILT_IN_OBSERVATION.has(name)) {
       if (name === 'capture') {
         if ('model' in entry || 'maxSteps' in entry) {
@@ -268,6 +355,7 @@ export class Subconscious {
 
   #validateReflectionEntry(entry: SubconsciousReflectionEntry): void {
     const name = entryName(entry);
+    this.#validateTrigger(entry);
     if (typeof entry === 'string') {
       if (!BUILT_IN_REFLECTION.has(name)) throw new Error(`Unknown Subconscious reflection agent: ${name}`);
       return;
@@ -313,6 +401,8 @@ export {
   stablePinsCacheKey,
 } from './pinned-state-processor';
 export type { PinDeltaOp, PinEntry, PinnedStateProcessorDeps } from './pinned-state-processor';
+export { createCurationEvaluator } from './curation-runtime';
+export type { CurationEvaluator, CurationEvaluatorDeps, CurationEvaluateOptions } from './curation-runtime';
 export { createKnowledgeWriteTools } from './knowledge-write-tools';
 export type { KnowledgeWriteToolsOptions } from './knowledge-write-tools';
 export { KnowledgeSemanticIndexCoordinator, StaleKnowledgeSemanticIndexError } from './semantic-index';
@@ -321,6 +411,9 @@ export type { CaptureExtractorOptions } from './capture';
 export type {
   ResolvedSubconsciousAgent,
   ResolvedSubconsciousConfig,
+  ResolvedSubconsciousCuration,
+  SubconsciousCurateConfig,
+  SubconsciousCurationTrigger,
   SubconsciousBuiltInObservationAgent,
   SubconsciousBuiltInObservationConfig,
   SubconsciousBuiltInReflectionAgent,

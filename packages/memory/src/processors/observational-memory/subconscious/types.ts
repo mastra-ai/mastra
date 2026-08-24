@@ -49,7 +49,44 @@ export interface SubconsciousRemindConfig {
   maxSteps?: number;
 }
 
-export type SubconsciousBuiltInObservationConfig = SubconsciousCaptureConfig | SubconsciousRemindConfig;
+/**
+ * When the curate agent's trigger evaluation should decide to run the curator.
+ *
+ * Both conditions are consulted only at the curate entry's placement (after a completed
+ * observation, or at reflection commit) — nothing is scheduled and an idle resource never
+ * triggers anything.
+ */
+export interface SubconsciousCurationTrigger {
+  /**
+   * Run the curator once this many uncurated knowledge records have accumulated since the
+   * last curation cursor. `false` disables the volume condition.
+   */
+  uncuratedRecords?: number | false;
+  /**
+   * Opportunistic age threshold: how stale the last curation may get before the next
+   * placement evaluation runs the curator. Requires at least one uncurated record; never a
+   * timer. `false` disables the age condition.
+   */
+  maxAgeMs?: number | false;
+}
+
+/**
+ * The curate agent entry. Valid in the observation array (trigger evaluated after each
+ * successfully completed observation) or the reflection array (evaluated at reflection
+ * commit) — placement sets cadence. Omit `trigger` for the placement's default policy.
+ */
+export interface SubconsciousCurateConfig {
+  name: 'curate';
+  instructions?: string;
+  model?: SubconsciousModel;
+  maxSteps?: number;
+  trigger?: SubconsciousCurationTrigger;
+}
+
+export type SubconsciousBuiltInObservationConfig =
+  | SubconsciousCaptureConfig
+  | SubconsciousRemindConfig
+  | SubconsciousCurateConfig;
 
 export interface SubconsciousCustomObservationConfig<T = unknown> {
   name: string;
@@ -75,12 +112,14 @@ export interface SubconsciousCustomReflectionConfig {
 
 export type SubconsciousObservationEntry =
   | SubconsciousBuiltInObservationAgent
+  | 'curate'
   | SubconsciousBuiltInObservationConfig
   | SubconsciousCustomObservationConfig;
 
 export type SubconsciousReflectionEntry =
   | SubconsciousBuiltInReflectionAgent
   | SubconsciousBuiltInReflectionConfig
+  | SubconsciousCurateConfig
   | SubconsciousCustomReflectionConfig;
 
 /** @experimental This API may change without notice. */
@@ -130,6 +169,17 @@ export interface SubconsciousConfig {
   maxSteps?: number;
 }
 
+/**
+ * Where the curate agent is placed and what makes it run there. `trigger: null` means the
+ * placement's default policy: at reflection commit the curator runs with its own
+ * empty-worklist no-op check (today's behavior); an observation placement is always
+ * normalized to an explicit trigger at resolution, so `null` never reaches it.
+ */
+export interface ResolvedSubconsciousCuration {
+  placement: 'observation' | 'reflection';
+  trigger: { uncuratedRecords: number | false; maxAgeMs: number | false } | null;
+}
+
 export interface ResolvedSubconsciousAgent {
   name: string;
   instructions?: string;
@@ -148,6 +198,13 @@ export interface ResolvedSubconsciousConfig {
   tools: boolean;
   activity: false | { recentUpdates: number };
   pins: false | { maxPins: number; maxCharacters: number; capturePinning: boolean };
+  /**
+   * Resolved curation placement + trigger, or `null` when no curate entry is configured
+   * (zero curation work). The deprecated top-level `curationCadence`/`curationThreshold`/
+   * `curationMaxAgeMs` fields below are inputs to this translation only — nothing
+   * downstream of resolution reads them.
+   */
+  curation: ResolvedSubconsciousCuration | null;
   curationCadence?: number;
   curationThreshold: number | false;
   curationMaxAgeMs: number | false;

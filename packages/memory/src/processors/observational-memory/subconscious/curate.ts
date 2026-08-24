@@ -64,7 +64,10 @@ export function createCuratorHandler(
   curatorMemory = memory,
   options?: { omModel?: ObservationalMemoryModel },
 ): (context: ReflectionCommittedContext) => Promise<'ran' | 'no-op'> {
-  const config = subconscious.reflection.find(agent => agent.name === CURATION_AGENT);
+  // Placement sets cadence, not identity: the curate agent may live in either array.
+  const config =
+    subconscious.reflection.find(agent => agent.name === CURATION_AGENT) ??
+    subconscious.observation.find(agent => agent.name === CURATION_AGENT);
   if (!config) return async () => 'no-op';
 
   return async context => {

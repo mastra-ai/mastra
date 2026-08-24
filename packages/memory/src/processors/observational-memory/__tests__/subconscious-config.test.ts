@@ -268,3 +268,137 @@ describe('curationCadence deprecation', () => {
     expect(subconscious.resolved.curationMaxAgeMs).toBe(false);
   });
 });
+
+describe('curation placement and trigger resolution', () => {
+  it('resolves the default placement: curate in reflection with the commit-time default policy', () => {
+    const subconscious = new Subconscious();
+    expect(subconscious.resolved.curation).toEqual({ placement: 'reflection', trigger: null });
+  });
+
+  it('resolves an explicit observation-array curate entry with its trigger', () => {
+    const subconscious = new Subconscious({
+      observation: ['capture', { name: 'curate', trigger: { uncuratedRecords: 20 } }],
+      reflection: ['learn'],
+    });
+    expect(subconscious.resolved.curation).toEqual({
+      placement: 'observation',
+      trigger: { uncuratedRecords: 20, maxAgeMs: false },
+    });
+    expect(subconscious.resolved.observation.find(agent => agent.name === 'curate')).toMatchObject({
+      name: 'curate',
+      builtIn: true,
+    });
+  });
+
+  it('normalizes a bare observation-array curate to the default any-uncurated-record trigger', () => {
+    const subconscious = new Subconscious({ observation: ['capture', 'curate'], reflection: [] });
+    expect(subconscious.resolved.curation).toEqual({
+      placement: 'observation',
+      trigger: { uncuratedRecords: 1, maxAgeMs: false },
+    });
+  });
+
+  it('does not compile an observation-array curate entry into an extractor', () => {
+    const subconscious = new Subconscious({ observation: ['capture', 'curate'], reflection: [] });
+    expect(subconscious.createObservationExtractors().map(extractor => extractor.slug)).toEqual(['capture']);
+  });
+
+  it('resolves a reflection-array curate trigger evaluated at reflection commit', () => {
+    const subconscious = new Subconscious({
+      reflection: [{ name: 'curate', trigger: { uncuratedRecords: 5, maxAgeMs: 60_000 } }],
+    });
+    expect(subconscious.resolved.curation).toEqual({
+      placement: 'reflection',
+      trigger: { uncuratedRecords: 5, maxAgeMs: 60_000 },
+    });
+  });
+
+  it('resolves no curation at all when curate is absent from both arrays', () => {
+    const subconscious = new Subconscious({ observation: ['capture'], reflection: ['learn'] });
+    expect(subconscious.resolved.curation).toBeNull();
+  });
+
+  it('rejects curate placed in both arrays', () => {
+    expect(() => new Subconscious({ observation: ['curate'], reflection: ['curate'] })).toThrow(
+      'Subconscious curate can be placed in observation or reflection, not both.',
+    );
+  });
+
+  it('rejects trigger config on non-curate entries', () => {
+    expect(
+      () => new Subconscious({ reflection: [{ name: 'learn', trigger: { uncuratedRecords: 5 } } as any] }),
+    ).toThrow('Subconscious trigger config is only valid on the curate agent entry.');
+  });
+
+  it('rejects invalid trigger values', () => {
+    expect(() => new Subconscious({ reflection: [{ name: 'curate', trigger: { uncuratedRecords: 0 } }] })).toThrow(
+      'Subconscious curate trigger.uncuratedRecords must be a positive integer or false.',
+    );
+    expect(() => new Subconscious({ reflection: [{ name: 'curate', trigger: { maxAgeMs: -1 } }] })).toThrow(
+      'Subconscious curate trigger.maxAgeMs must be a positive integer of milliseconds or false.',
+    );
+  });
+
+  it('lets an explicit trigger win over the deprecated top-level options', () => {
+    __resetCurationCadenceWarning();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const subconscious = new Subconscious({
+        reflection: [{ name: 'curate', trigger: { uncuratedRecords: 9 } }],
+        curationThreshold: 3,
+        curationMaxAgeMs: 60_000,
+      });
+      expect(subconscious.resolved.curation).toEqual({
+        placement: 'reflection',
+        trigger: { uncuratedRecords: 9, maxAgeMs: false },
+      });
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('translates legacy curationThreshold/curationMaxAgeMs onto the default reflection placement', () => {
+    const subconscious = new Subconscious({ curationThreshold: 4, curationMaxAgeMs: 120_000 });
+    expect(subconscious.resolved.curation).toEqual({
+      placement: 'reflection',
+      trigger: { uncuratedRecords: 4, maxAgeMs: 120_000 },
+    });
+  });
+
+  it('translates the deprecated curationCadence alias when curationThreshold is unset', () => {
+    __resetCurationCadenceWarning();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const subconscious = new Subconscious({ curationCadence: 7 });
+      expect(subconscious.resolved.curation).toEqual({
+        placement: 'reflection',
+        trigger: { uncuratedRecords: 7, maxAgeMs: false },
+      });
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('lets an explicit false threshold disable the trigger entirely (no evaluator input)', () => {
+    __resetCurationCadenceWarning();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const subconscious = new Subconscious({ curationCadence: 7, curationThreshold: false });
+      expect(subconscious.resolved.curation).toEqual({ placement: 'reflection', trigger: null });
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('applies legacy values onto an explicit curate entry that has no trigger of its own', () => {
+    const subconscious = new Subconscious({
+      observation: ['capture', 'curate'],
+      reflection: [],
+      curationThreshold: 6,
+    });
+    expect(subconscious.resolved.curation).toEqual({
+      placement: 'observation',
+      trigger: { uncuratedRecords: 6, maxAgeMs: false },
+    });
+  });
+});
