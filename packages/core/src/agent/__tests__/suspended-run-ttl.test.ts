@@ -26,15 +26,20 @@ import type { MastraModelOutput } from '../../stream/base/output';
 import type { Agent } from '../agent';
 import { AgentThreadStreamRuntime } from '../thread-stream-runtime';
 
-const { SUSPENDED_RUN_TTL_MS } = vi.hoisted(() => {
+const { SUSPENDED_RUN_TTL_MS, LEASE_RENEW_INTERVAL_MS } = vi.hoisted(() => {
   const ttlMs = 60_000;
   process.env.MASTRA_SUSPENDED_RUN_TTL_MS = String(ttlMs);
-  return { SUSPENDED_RUN_TTL_MS: ttlMs };
+  // Renewal is what keeps an abandoned lease alive; shrink the interval so a test
+  // can watch it tick without waiting the production five seconds for each one.
+  const renewIntervalMs = 20;
+  process.env.MASTRA_AGENT_THREAD_LEASE_RENEW_INTERVAL_MS = String(renewIntervalMs);
+  return { SUSPENDED_RUN_TTL_MS: ttlMs, LEASE_RENEW_INTERVAL_MS: renewIntervalMs };
 });
 // Vitest reuses a worker process across test files, so leave the default TTL in place
 // for whichever file this worker picks up next.
 afterAll(() => {
   delete process.env.MASTRA_SUSPENDED_RUN_TTL_MS;
+  delete process.env.MASTRA_AGENT_THREAD_LEASE_RENEW_INTERVAL_MS;
 });
 
 // Mirrors the runtime's thread key + topic encoding: how a subscriber on another
@@ -115,11 +120,13 @@ describe('suspended run in-memory TTL', () => {
   let runtime: AgentThreadStreamRuntime;
   let pubsub: EventEmitterPubSub;
   let releaseLease: ReturnType<typeof vi.spyOn>;
+  let renewLease: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     runtime = new AgentThreadStreamRuntime();
     pubsub = new EventEmitterPubSub();
     releaseLease = vi.spyOn(pubsub, 'releaseLease');
+    renewLease = vi.spyOn(pubsub, 'renewLease');
   });
 
   afterEach(async () => {
@@ -212,6 +219,23 @@ describe('suspended run in-memory TTL', () => {
     // mid-flight. An abandoned lease expires on its own once renewal stops.
     expect(releaseLease).not.toHaveBeenCalledWith(threadKey(RESOURCE_ID, 'thread-1'), 'run-1');
     expect(watcher.has('run-completed', 'run-1')).toBe(false);
+  });
+
+  it('stops renewing the evicted run’s lease, so an abandoned one expires on its own', async () => {
+    const watcher = await watchThread(pubsub, 'thread-1');
+    await registerSuspendedRun('run-1', 'thread-1', watcher);
+
+    // While the record is warm, the runtime keeps the thread owned: that renewal is
+    // the only reason an abandoned lease could outlive its 15s TTL.
+    await vi.waitFor(() =>
+      expect(renewLease).toHaveBeenCalledWith(threadKey(RESOURCE_ID, 'thread-1'), 'run-1', 15_000),
+    );
+
+    await sweepAfter(SUSPENDED_RUN_TTL_MS + 1);
+
+    renewLease.mockClear();
+    await new Promise(resolve => setTimeout(resolve, LEASE_RENEW_INTERVAL_MS * 4));
+    expect(renewLease).not.toHaveBeenCalled();
   });
 
   it('does not evict anything until a registration triggers the sweep', async () => {
