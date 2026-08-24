@@ -1504,6 +1504,25 @@
       "docUrl": "https://www.alibabacloud.com/help/en/model-studio/token-plan-overview",
       "gateway": "models.dev"
     },
+    "agentrouter": {
+      "url": "https://agentrouter.org/v1",
+      "apiKeyEnvVar": "AGENTROUTER_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "AgentRouter",
+      "models": ["claude-opus-4-8", "claude-opus-5", "gpt-5.6-sol"],
+      "docUrl": "https://agentrouter.org/docs/opencode.html",
+      "gateway": "models.dev",
+      "modelOverrides": {
+        "claude-opus-4-8": {
+          "api": "https://agentrouter.org/v1",
+          "npm": "@ai-sdk/anthropic"
+        },
+        "claude-opus-5": {
+          "api": "https://agentrouter.org/v1",
+          "npm": "@ai-sdk/anthropic"
+        }
+      }
+    },
     "google": {
       "apiKeyEnvVar": ["GOOGLE_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY"],
       "name": "Google",
@@ -10514,6 +10533,7 @@
       "wan2.7-image",
       "wan2.7-image-pro"
     ],
+    "agentrouter": ["claude-opus-4-8", "claude-opus-5", "gpt-5.6-sol"],
     "google": [
       "deep-research-max-preview-04-2026",
       "deep-research-preview-04-2026",

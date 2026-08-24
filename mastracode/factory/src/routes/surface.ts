@@ -40,6 +40,7 @@ import {
   type SourceControlStorage,
 } from '../storage/domains/source-control/base.js';
 import type { FactoryDispatchFailureCode, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { workItemBranch, workItemBranchSource } from '../work-item-branch.js';
 import { ConfigRoutes } from './config.js';
 import { invalidateCustomProvidersSnapshots } from './custom-provider-source.js';
 import { buildFsRoutes } from './fs.js';
@@ -159,33 +160,6 @@ function guardIntegrationRoutes({
   });
 }
 
-export function factoryRuleBranch(item: FactoryBindingPreparationInput['item']): string {
-  const metadata = item.metadata ?? {};
-  const issueNumber = metadata.githubIssueNumber ?? metadata.number;
-  if (
-    item.externalSource?.integrationId === 'github' &&
-    item.externalSource.type === 'issue' &&
-    typeof issueNumber === 'number'
-  ) {
-    return `factory/issue-${issueNumber}`;
-  }
-  const pullRequestNumber = metadata.githubPullRequestNumber ?? metadata.number;
-  if (
-    item.externalSource?.integrationId === 'github' &&
-    item.externalSource.type === 'pull-request' &&
-    typeof pullRequestNumber === 'number'
-  ) {
-    return `factory/pr-${pullRequestNumber}`;
-  }
-  if (item.externalSource?.integrationId === 'linear' && typeof metadata.identifier === 'string') {
-    return `factory/linear-${metadata.identifier.toLowerCase()}`;
-  }
-  throw new FactoryDispatchError(
-    'unsupported_provider_item',
-    'Factory skill invocation requires a supported issue or pull request identifier.',
-  );
-}
-
 /**
  * Start a factory run for a rule binding: ensure the source-control session the
  * coordinator requires, then hand it to `prepare` along with the factory's
@@ -200,7 +174,11 @@ export async function prepareFactoryRuleBinding(
   input: FactoryBindingPreparationInput,
 ): Promise<void> {
   try {
-    const branch = factoryRuleBranch(input.item);
+    const branch = workItemBranch({
+      id: input.item.id,
+      source: workItemBranchSource(input.item.externalSource),
+      metadata: input.item.metadata,
+    });
     const destinationStage = factoryRuleStage(input.item.stages);
     if (!destinationStage) {
       throw new FactoryDispatchError(
