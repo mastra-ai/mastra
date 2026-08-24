@@ -1,5 +1,6 @@
 import { MastraError } from '../../error/index.js';
 import type { MastraScorer } from '../../evals/base';
+import type { TrajectoryExpectation } from '../../evals/types';
 import type { Mastra } from '../../mastra';
 import type { DatasetRecord } from '../../storage/types';
 import { ExperimentEventDispatcher, createItemCompletedEvent, toExperimentJsonValue } from './events';
@@ -29,6 +30,8 @@ type ExperimentItem = {
   datasetVersion: number | null; // null for inline experiments
   input: unknown;
   groundTruth?: unknown;
+  /** Per-item expected trajectory forwarded to trajectory scorers as `run.expectedTrajectory` */
+  expectedTrajectory?: TrajectoryExpectation;
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   /** Resume data for suspended workflow steps, keyed by step ID */
@@ -235,6 +238,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           datasetVersion: null,
           input: dataItem.input,
           groundTruth: dataItem.groundTruth,
+          expectedTrajectory: dataItem.expectedTrajectory,
           requestContext: dataItem.requestContext,
           metadata: dataItem.metadata,
           resumeSteps: dataItem.resumeSteps,
@@ -281,6 +285,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         datasetVersion: v.datasetVersion,
         input: v.input,
         groundTruth: v.groundTruth,
+        expectedTrajectory: v.expectedTrajectory as TrajectoryExpectation | undefined,
         requestContext: v.requestContext,
         metadata: v.metadata,
         toolMocks: v.toolMocks,

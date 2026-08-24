@@ -2116,6 +2116,41 @@ async function driveFallback(
   }
 }
 
+describe('render driver failure', () => {
+  beforeAll(async () => {
+    await getChatModule();
+  });
+
+  it('does not leave the rejection unhandled before a terminal chunk arrives', async () => {
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on('unhandledRejection', onUnhandled);
+
+    try {
+      const { channels, chatThread } = makeChannels({ streaming: false, toolDisplay: 'cards' });
+      chatThread.post = vi.fn().mockRejectedValue(new Error('invalid_auth'));
+
+      const render = (channels as any)._buildRenderContext(chatThread, 'test');
+      const processor = new ChatChannelOutputProcessor();
+      const requestContext = new Map<string, unknown>();
+      requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, render);
+      const state: Record<string, unknown> = {};
+
+      await processor.processOutputStream({
+        part: { type: 'tool-call', payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } } },
+        state,
+        requestContext: { get: (key: string) => requestContext.get(key) } as any,
+      } as any);
+
+      await new Promise(resolve => setTimeout(resolve, 20));
+
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+    }
+  });
+});
+
 describe('ChatChannelOutputProcessor fallback render context', () => {
   beforeAll(async () => {
     await getChatModule();

@@ -198,6 +198,182 @@ describe('MainSidebarNavLink (collapsed) — tooltip regression', () => {
   });
 });
 
+describe('MainSidebarNavLink — what it renders a row as', () => {
+  const renderLink = (element: React.ReactElement) => render(<TooltipProvider>{element}</TooltipProvider>);
+
+  it('refuses to be told twice how to render itself', () => {
+    expect(() =>
+      renderLink(
+        <MainSidebarNavLink asChild render={<a href="/agents">Agents</a>}>
+          <a href="/agents">Agents</a>
+        </MainSidebarNavLink>,
+      ),
+    ).toThrow(/either `render` or `asChild`/);
+  });
+
+  it('hands back what it was given when there is no link to build', () => {
+    const { container } = renderLink(<MainSidebarNavLink>just text</MainSidebarNavLink>);
+
+    expect(container.textContent).toBe('just text');
+    expect(container.querySelector('a')).toBeNull();
+  });
+
+  it.each([
+    ['https://mastra.ai/docs', '_blank'],
+    ['http://mastra.ai/docs', '_blank'],
+    ['//mastra.ai/docs', '_blank'],
+    ['/agents', ''],
+    ['/redirect?to=https://mastra.ai', ''],
+  ])('sends %s to %s', (url, target) => {
+    renderLink(<MainSidebarNavLink link={{ name: 'Docs', url }} />);
+
+    const anchor = screen.getByRole<HTMLAnchorElement>('link', { name: 'Docs' });
+    expect(anchor.target).toBe(target);
+    expect(anchor.rel).toBe(target === '_blank' ? 'noreferrer' : '');
+  });
+
+  it('marks a featured row so it reads apart from the rest', () => {
+    const plain = renderLink(<MainSidebarNavLink link={{ name: 'Agents', url: '/agents' }} />);
+    const plainClass = plain.container.querySelector('a')?.className ?? '';
+
+    cleanup();
+
+    const featured = renderLink(<MainSidebarNavLink link={{ name: 'Agents', url: '/agents', variant: 'featured' }} />);
+
+    expect(featured.container.querySelector('a')?.className).not.toBe(plainClass);
+  });
+
+  it('wraps the row only when it has a trailing action to hold', () => {
+    const plain = renderLink(<MainSidebarNavLink link={{ name: 'Agents', url: '/agents' }} />);
+    expect(plain.container.querySelector('li > a')).toBeTruthy();
+
+    cleanup();
+
+    const withAction = renderLink(
+      <MainSidebarNavLink link={{ name: 'Agents', url: '/agents' }} action={<button type="button">More</button>} />,
+    );
+
+    expect(withAction.container.querySelector('li > a')).toBeNull();
+    expect(withAction.container.querySelector('li > div > a')).toBeTruthy();
+  });
+
+  it('keeps a caller class on the row it was told to render', () => {
+    const { container } = renderLink(
+      <MainSidebarNavLink
+        render={<a href="/agents" className="my-own-class" />}
+        link={{ name: 'Agents', url: '/agents' }}
+      />,
+    );
+
+    const row = container.querySelector('a');
+    expect(row?.classList.contains('my-own-class')).toBe(true);
+    expect((row?.className.split(' ').length ?? 0) > 1).toBe(true);
+  });
+
+  it('keeps a caller class on a slotted row', () => {
+    const { container } = renderLink(
+      <MainSidebarNavLink asChild link={{ name: 'Agents', url: '/agents' }}>
+        <a href="/agents" className="my-own-class">
+          Agents
+        </a>
+      </MainSidebarNavLink>,
+    );
+
+    const row = container.querySelector('a');
+    expect(row?.textContent).toBe('Agents');
+    expect(row?.classList.contains('my-own-class')).toBe(true);
+    expect((row?.className.split(' ').length ?? 0) > 1).toBe(true);
+  });
+
+  it('paints the whole row, action included, when it is the active one', () => {
+    const inactive = renderLink(
+      <MainSidebarNavLink link={{ name: 'Agents', url: '/agents' }} action={<button type="button">More</button>} />,
+    );
+    const inactiveClass = inactive.container.querySelector('li > div')?.className;
+
+    cleanup();
+
+    const active = renderLink(
+      <MainSidebarNavLink
+        isActive
+        link={{ name: 'Agents', url: '/agents' }}
+        action={<button type="button">More</button>}
+      />,
+    );
+
+    expect(active.container.querySelector('li > div')?.className).not.toBe(inactiveClass);
+  });
+
+  it('indents a nested row that carries an action', () => {
+    const flat = renderLink(
+      <MainSidebarNavLink link={{ name: 'Agents', url: '/agents' }} action={<button type="button">More</button>} />,
+    );
+    const flatClass = flat.container.querySelector('li > div > a')?.className;
+
+    cleanup();
+
+    const nested = renderLink(
+      <MainSidebarNavLink
+        link={{ name: 'Agents', url: '/agents', indent: true }}
+        action={<button type="button">More</button>}
+      />,
+    );
+
+    expect(nested.container.querySelector('li > div > a')?.className).not.toBe(flatClass);
+  });
+
+  it('drops the trailing action on a collapsed rail, which has no room for it', () => {
+    renderLink(
+      <MainSidebarNavLink
+        state="collapsed"
+        link={{ name: 'Agents', url: '/agents' }}
+        action={<button type="button">More</button>}
+      />,
+    );
+
+    expect(screen.queryByRole('button', { name: 'More' })).toBeNull();
+  });
+});
+
+describe('MainSidebarNavLink — how a row names itself', () => {
+  const renderLink = (element: React.ReactElement) => render(<TooltipProvider>{element}</TooltipProvider>);
+  const tooltipText = async () => (await screen.findByRole('tooltip')).textContent;
+
+  it('says nothing extra while the label is on screen', () => {
+    renderLink(<MainSidebarNavLink link={{ name: 'Agents', url: '/agents' }} />);
+
+    fireEvent.focus(screen.getByRole('link', { name: 'Agents' }));
+
+    expect(screen.queryByRole('tooltip')).toBeNull();
+  });
+
+  it('names itself while collapsed, since the label is hidden', async () => {
+    renderLink(<MainSidebarNavLink state="collapsed" link={{ name: 'Agents', url: '/agents' }} />);
+
+    fireEvent.focus(screen.getByRole('link'));
+
+    expect(await tooltipText()).toBe('Agents');
+  });
+
+  it('says what the caller wrote while the label is on screen', async () => {
+    renderLink(<MainSidebarNavLink link={{ name: 'Agents', url: '/agents', tooltipMsg: 'Your agents' }} />);
+
+    fireEvent.focus(screen.getByRole('link', { name: 'Agents' }));
+
+    expect(await tooltipText()).toBe('Your agents');
+  });
+
+  it('says both while collapsed', async () => {
+    renderLink(
+      <MainSidebarNavLink state="collapsed" link={{ name: 'Agents', url: '/agents', tooltipMsg: 'Your agents' }} />,
+    );
+
+    fireEvent.focus(screen.getByRole('link'));
+
+    expect(await tooltipText()).toBe('Agents | Your agents');
+  });
+});
+
 describe('MainSidebarNavLink custom rows', () => {
   it('keeps the rendered item and trailing action independently interactive', () => {
     const onOpen = vi.fn();

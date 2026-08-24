@@ -13,7 +13,13 @@ import { resolveModelConfig } from '../llm';
 import type { IMastraLogger } from '../logger';
 import type { MastraMemory } from '../memory/memory';
 import { parseMemoryRequestContext } from '../memory/types';
-import { EntityType, SpanType, createObservabilityContext, resolveObservabilityContext } from '../observability';
+import {
+  EntityType,
+  InternalSpans,
+  SpanType,
+  createObservabilityContext,
+  resolveObservabilityContext,
+} from '../observability';
 import type { ObservabilityContext, Span } from '../observability';
 import type { TracingContext } from '../observability/types';
 import type { RequestContext } from '../request-context';
@@ -536,8 +542,24 @@ export class ProcessorRunner {
     writer?: ProcessorStreamWriter,
     abortSignal?: AbortSignal,
   ): Promise<ProcessorStepOutput> {
+    // The stream phase runs the whole workflow once per streamed chunk, with the full
+    // accumulated `streamParts` as input. Persisting a snapshot (and tracing a public
+    // span) for every one of those transient runs makes a stream of n chunks cost O(n²)
+    // in storage writes and serialized payload (#19605). Internal processor workflows
+    // built by the agent already opt out via their workflow options (#17344); a
+    // user-supplied processor workflow keeps the persisting defaults, so the opt-out is
+    // applied per run here — leaving the same workflow's standalone runs untouched.
+    const isPerChunkPhase = input.phase === 'outputStream';
+
     // Create a run and start the workflow
-    const run = await workflow.createRun();
+    const run = await workflow.createRun(
+      isPerChunkPhase
+        ? {
+            shouldPersistSnapshot: () => false,
+            tracingPolicy: { internal: InternalSpans.WORKFLOW },
+          }
+        : undefined,
+    );
     const result = await run.start({
       // Cast to allow processorStates/abortSignal - passed through to workflow processor steps
       // but not part of the official ProcessorStepOutput schema
@@ -2429,8 +2451,14 @@ export class ProcessorRunner {
       messageList.removeByIds(deletedIds);
     }
 
+    const currentById = new Map(messageList.get.all.db().map(message => [message.id, message]));
+
     // Re-add messages with correct sources
     for (const message of messages) {
+      if (currentById.get(message.id) === message) {
+        continue;
+      }
+
       messageList.removeByIds([message.id]);
       if (message.role === 'system') {
         const systemText =

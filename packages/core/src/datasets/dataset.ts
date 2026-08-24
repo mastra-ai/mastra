@@ -1,6 +1,7 @@
 import { isZodType } from '@mastra/schema-compat';
 import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
 import { MastraError } from '../error/index.js';
+import type { TrajectoryExpectation } from '../evals/types.js';
 import { validateAndSaveScore } from '../mastra/hooks.js';
 import type { Mastra } from '../mastra/index.js';
 import type { DatasetsStorage } from '../storage/domains/datasets/base.js';
@@ -862,6 +863,7 @@ export class Dataset {
         datasetVersion: item.datasetVersion,
         input: item.input,
         groundTruth: item.groundTruth,
+        expectedTrajectory: item.expectedTrajectory as TrajectoryExpectation | undefined,
         requestContext: item.requestContext,
         metadata: item.metadata,
         scorerIds: item.scorerIds,

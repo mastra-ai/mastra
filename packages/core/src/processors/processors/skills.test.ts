@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import type { Skill, SkillMetadata, WorkspaceSkills } from '../../workspace/skills';
 import type { Workspace } from '../../workspace/workspace';
-import { SkillsProcessor } from './skills';
+import { formatSkillsCatalog, SkillsProcessor, type SkillCatalogEntry } from './skills';
 
 // =============================================================================
 // Mock Types and Helpers
@@ -633,5 +633,102 @@ describe('SkillsProcessor', () => {
       // The instruction should be clear enough that the model knows NOT to call skill names directly
       expect(allSystemContent).toMatch(/do not.*call.*skill.*directly|skill.*not.*tool|call the skill tool/i);
     });
+  });
+});
+
+describe('formatSkillsCatalog', () => {
+  const entries: SkillCatalogEntry[] = [
+    {
+      name: 'testing',
+      description: 'A skill for writing tests',
+      location: '/skills/testing/SKILL.md',
+      source: 'external',
+    },
+    {
+      name: 'code-review',
+      description: 'A skill for code review assistance',
+      location: '/skills/code-review/SKILL.md',
+      source: 'local',
+    },
+  ];
+
+  // Skills that are listed but fail to resolve still produce a block, matching
+  // what the processor injected before the formatter was extracted.
+  it('renders an empty block rather than an empty string for an empty catalog', () => {
+    expect(formatSkillsCatalog([])).toBe('<available_skills>\n\n</available_skills>');
+    expect(formatSkillsCatalog([], 'json')).toBe('Available Skills:\n\n[]');
+    expect(formatSkillsCatalog([], 'markdown')).toBe('# Available Skills\n\n');
+  });
+
+  it('renders XML by default, sorted by name for prompt cache stability', () => {
+    expect(formatSkillsCatalog(entries)).toBe(`<available_skills>
+  <skill>
+    <name>code-review</name>
+    <description>A skill for code review assistance</description>
+    <location>/skills/code-review/SKILL.md</location>
+    <source>local</source>
+  </skill>
+  <skill>
+    <name>testing</name>
+    <description>A skill for writing tests</description>
+    <location>/skills/testing/SKILL.md</location>
+    <source>external</source>
+  </skill>
+</available_skills>`);
+  });
+
+  it('does not mutate the caller\u2019s array while sorting', () => {
+    const input = [...entries];
+    formatSkillsCatalog(input);
+    expect(input.map(entry => entry.name)).toEqual(['testing', 'code-review']);
+  });
+
+  it('escapes XML special characters', () => {
+    const output = formatSkillsCatalog([
+      { name: 'a&b', description: '<script>"x"</script>', location: "it's/here", source: 'local' },
+    ]);
+
+    expect(output).toContain('<name>a&amp;b</name>');
+    expect(output).toContain('<description>&lt;script&gt;&quot;x&quot;&lt;/script&gt;</description>');
+    expect(output).toContain('<location>it&apos;s/here</location>');
+  });
+
+  it('renders json and markdown formats', () => {
+    expect(formatSkillsCatalog(entries, 'json')).toBe(`Available Skills:
+
+${JSON.stringify(
+  [
+    {
+      name: 'code-review',
+      description: 'A skill for code review assistance',
+      location: '/skills/code-review/SKILL.md',
+      source: 'local',
+    },
+    {
+      name: 'testing',
+      description: 'A skill for writing tests',
+      location: '/skills/testing/SKILL.md',
+      source: 'external',
+    },
+  ],
+  null,
+  2,
+)}`);
+
+    expect(formatSkillsCatalog(entries, 'markdown')).toBe(`# Available Skills
+
+- **code-review** [local] (/skills/code-review/SKILL.md): A skill for code review assistance
+- **testing** [external] (/skills/testing/SKILL.md): A skill for writing tests`);
+  });
+
+  it('renders exactly what the processor injects, so audits cannot drift from the prompt', async () => {
+    const messageList = createMockMessageList();
+    await new SkillsProcessor({ workspace: createMockWorkspace(createMockWorkspaceSkills()) }).processInputStep({
+      messageList: messageList as any,
+      tools: {},
+    } as any);
+
+    const injected = messageList.addSystem.mock.calls[0]![0].content;
+    expect(injected).toBe(formatSkillsCatalog(entries));
   });
 });

@@ -1,0 +1,97 @@
+---
+title: "Valkey | Database"
+description: Documentation for the GLIDE-backed Valkey storage implementation in Mastra.
+packages:
+  - "@mastra/core"
+  - "@mastra/memory"
+  - "@mastra/valkey"
+---
+
+# Valkey
+
+The Valkey storage implementation provides persistent storage and server-side caching through the [Valkey GLIDE](https://github.com/valkey-io/valkey-glide) client. Use it when your deployment runs Valkey or needs GLIDE features such as native Valkey configuration and authentication.
+
+Use [`@mastra/redis`](/integrations/databases/redis) for Redis deployments that use the official `redis` client. The packages are tested independently against their respective servers.
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/valkey
+```
+
+## Usage
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { ValkeyStore } from '@mastra/valkey'
+
+export const mastra = new Mastra({
+  storage: new ValkeyStore({
+    id: 'valkey-storage',
+    host: 'localhost',
+    port: 6379,
+    password: process.env.VALKEY_PASSWORD,
+  }),
+})
+```
+
+You can also provide a native GLIDE configuration:
+
+```typescript
+import { ValkeyStore } from '@mastra/valkey'
+
+const storage = new ValkeyStore({
+  id: 'valkey-storage',
+  config: {
+    addresses: [{ host: 'localhost', port: 6379 }],
+    useTLS: true,
+  },
+})
+```
+
+For an existing `GlideClient`, connect it before passing it to `ValkeyStore`. The caller remains responsible for closing injected clients.
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  { name: 'id', type: 'string', description: 'Unique identifier for the storage instance.' },
+  {
+    name: 'host',
+    type: 'string',
+    description: 'Valkey host address. Use with the direct connection fields.',
+    isOptional: true,
+  },
+  { name: 'port', type: 'number', description: 'Valkey port.', isOptional: true, defaultValue: '6379' },
+  {
+    name: 'username',
+    type: 'string',
+    description: 'Valkey authentication username.',
+    isOptional: true,
+    defaultValue: 'default',
+  },
+  { name: 'password', type: 'string', description: 'Valkey authentication password.', isOptional: true },
+  { name: 'db', type: 'number', description: 'Valkey database number.', isOptional: true, defaultValue: '0' },
+  { name: 'useTLS', type: 'boolean', description: 'Enables TLS for direct connections.', isOptional: true },
+  {
+    name: 'config',
+    type: 'GlideClientConfiguration',
+    description: 'Native GLIDE standalone client configuration.',
+    isOptional: true,
+  },
+  { name: 'client', type: 'GlideClient', description: 'Preconfigured GLIDE standalone client.', isOptional: true },
+  { name: 'disableInit', type: 'boolean', description: 'Disables automatic storage initialization.', isOptional: true },
+]}
+/>
+
+Provide exactly one connection form: `client`, `config`, or `host` with its optional direct connection fields.
+
+## Closing connections
+
+Close clients created by `ValkeyStore` during graceful shutdown:
+
+```typescript
+await storage.close()
+```
+
+`close()` doesn't close an injected `GlideClient`.
