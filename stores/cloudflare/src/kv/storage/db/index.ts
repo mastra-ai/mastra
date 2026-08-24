@@ -492,7 +492,8 @@ export class CloudflareKVDB extends MastraBase {
         await this.client!.kv.namespaces.values.update(namespaceId, key, {
           account_id: this.accountId!,
           value: serializedValue,
-          metadata: serializedMetadata,
+          // The REST API rejects empty-string metadata as invalid JSON
+          ...(serializedMetadata ? { metadata: serializedMetadata } : {}),
         });
       }
     } catch (error) {
@@ -595,22 +596,40 @@ export class CloudflareKVDB extends MastraBase {
 
   async listNamespaceKeys(tableName: TABLE_NAMES, options?: ListOptions) {
     try {
+      // KV returns at most 1000 keys per page, so keep fetching until the
+      // cursor is exhausted; a single call silently truncates larger tables.
+      const pageSize = options?.limit || 1000;
+      const keys: Array<{ name: string }> = [];
       if (this.bindings) {
         const binding = this.getBinding(tableName);
-        const response = await binding.list({
-          limit: options?.limit || 1000,
-          prefix: options?.prefix,
-        });
-        return response.keys;
+        let cursor: string | undefined;
+        do {
+          const response = await binding.list({
+            limit: pageSize,
+            prefix: options?.prefix,
+            cursor,
+          });
+          keys.push(...response.keys);
+          cursor = response.list_complete ? undefined : response.cursor;
+        } while (cursor);
       } else {
         const namespaceId = await this.getNamespaceId(tableName);
-        const response = await this.client!.kv.namespaces.keys.list(namespaceId, {
-          account_id: this.accountId!,
-          limit: options?.limit || 1000,
-          prefix: options?.prefix,
-        });
-        return response.result;
+        // Manual cursor loop: the SDK's auto-pagination expects
+        // result_info.cursors.after, but this endpoint returns result_info.cursor,
+        // so `for await` stops after the first page.
+        let cursor: string | undefined;
+        do {
+          const page = await this.client!.kv.namespaces.keys.list(namespaceId, {
+            account_id: this.accountId!,
+            limit: pageSize,
+            prefix: options?.prefix,
+            ...(cursor ? { cursor } : {}),
+          });
+          keys.push(...page.result);
+          cursor = (page.result_info as { cursor?: string } | undefined)?.cursor || undefined;
+        } while (cursor);
       }
+      return keys;
     } catch (error: any) {
       throw new MastraError(
         {

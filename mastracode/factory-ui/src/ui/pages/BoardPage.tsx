@@ -247,7 +247,7 @@ function BoardContent({
           {mutationError instanceof Error ? mutationError.message : 'Board action failed'}
         </Notice>
       )}
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex flex-col items-stretch gap-3 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between lg:gap-2">
         <BoardRelevanceFilters
           kind={kind}
           participants={participants}
@@ -261,18 +261,20 @@ function BoardContent({
           onLabelChange={setLabel}
           onReset={resetFilters}
         />
-        <BoardAutoRunToggle factoryProjectId={factoryProjectId} enabled={factory.autoRunEnabled ?? false} />
+        <div className="w-full lg:w-auto [&>div]:w-full [&>div]:justify-between lg:[&>div]:w-auto lg:[&>div]:justify-start">
+          <BoardAutoRunToggle factoryProjectId={factoryProjectId} enabled={factory.autoRunEnabled ?? false} />
+        </div>
       </div>
       <ScrollArea
         viewportRef={scroll.containerRef}
         orientation="horizontal"
         className="min-h-0 flex-1 [&_[data-hovering]:not([data-scrolling])]:opacity-0"
-        viewPortClassName="pb-2 *:h-full"
+        viewPortClassName="overscroll-x-contain pb-2 *:h-full [container-type:inline-size] lg:overscroll-x-auto"
         aria-label="Board columns"
         onPointerDown={scroll.claimForUser}
         onWheel={scroll.claimForUser}
       >
-        <div className="flex h-full min-h-0 gap-3">
+        <div className="flex h-full min-h-0 gap-2 px-3 lg:gap-3 lg:px-0">
           {stages.map(stage => {
             const loading = loadingStages.has(stage.id);
             const stageWorkItems = workItemsForStage(stage.id);
