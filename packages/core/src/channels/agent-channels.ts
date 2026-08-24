@@ -1,4 +1,4 @@
-import type { Chat, Adapter, ChatConfig, Message, StateAdapter, Thread } from 'chat';
+import type { Chat, Adapter, ChatConfig, Message, SlashCommandEvent, StateAdapter, Thread } from 'chat';
 import { z } from 'zod';
 
 import type { Agent } from '../agent/agent';
@@ -41,8 +41,10 @@ import type {
   ChannelAdapterConfig,
   ChannelConfig,
   ChannelContext,
+  ChannelPostTarget,
   ChannelHandlerContext,
   ChannelHandlers,
+  ChannelSlashCommandHandler,
   PostableMessage,
   ResolveResourceId,
   ResolveThreadId,
@@ -424,7 +426,7 @@ export class AgentChannels {
       });
 
       // Register handlers with optional overrides
-      const { onDirectMessage, onMention, onSubscribedMessage } = this.handlerOverrides;
+      const { onDirectMessage, onMention, onSubscribedMessage, onSlashCommand } = this.handlerOverrides;
 
       // Per-message dispatch scope. The request context and the handler context
       // MUST be built per message, never once at initialize() time: a custom
@@ -469,6 +471,20 @@ export class AgentChannels {
             return onSubscribedMessage(thread, message, defaultHandler, handlerContext);
           }
           return defaultHandler(thread, message);
+        });
+      }
+
+      if (onSlashCommand !== false) {
+        chat.onSlashCommand(async event => {
+          const requestContext = new RequestContext();
+          const signalMetadata: Record<string, unknown> = {};
+          const defaultHandler = (slashEvent: SlashCommandEvent) =>
+            this.handleSlashCommand(slashEvent, mastra, requestContext, signalMetadata);
+          const handlerContext: ChannelHandlerContext = { mastra, requestContext, signalMetadata };
+          if (typeof onSlashCommand === 'function') {
+            return (onSlashCommand as ChannelSlashCommandHandler)(event, defaultHandler, handlerContext);
+          }
+          return defaultHandler(event);
         });
       }
 
@@ -949,7 +965,7 @@ export class AgentChannels {
   }
 
   private buildEventContext(params: {
-    chatThread: Thread;
+    chatThread: ChannelPostTarget;
     platform: string;
     eventType: string;
     messageId: string | undefined;
@@ -971,7 +987,7 @@ export class AgentChannels {
       eventType,
       isDM: chatThread.isDM,
       threadId: chatThread.id,
-      channelId: chatThread.channelId,
+      channelId: chatThread.channelId ?? chatThread.id,
       messageId,
       userId: actor.userId,
       userName: actorName,
@@ -1052,6 +1068,70 @@ export class AgentChannels {
         await chatThread.post(errorMessage);
       } catch (postErr) {
         this.log('debug', 'Failed to post error message to thread', postErr);
+      }
+    }
+  }
+
+  private async handleSlashCommand(
+    event: SlashCommandEvent,
+    mastra: Mastra,
+    requestContext: RequestContext,
+    signalMetadata: Record<string, unknown>,
+  ): Promise<void> {
+    const platform = event.adapter.name;
+    const channel = event.channel;
+    try {
+      const mastraThread = await this.getOrCreateThread({
+        externalThreadId: channel.id,
+        channelId: channel.id,
+        platform,
+        resourceId: `${platform}:${event.user.userId}`,
+        mastra,
+      });
+      const { channelContext, attributes, providerOptions } = this.buildEventContext({
+        chatThread: channel,
+        platform,
+        eventType: 'slash_command',
+        messageId: undefined,
+        actor: event.user,
+      });
+      requestContext.set('channel', channelContext);
+      requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, this._buildRenderContext(channel, platform));
+
+      const commandText = [event.command, event.text].filter(Boolean).join(' ');
+      const adapterConfig = this.adapterConfigs[platform];
+      const { resolved: toolDisplay, fn: toolDisplayFn } = this.resolveToolDisplay(
+        platform,
+        adapterConfig?.toolDisplay,
+        this.resolveStreaming(adapterConfig?.streaming).enabled,
+        adapterConfig?.cards,
+        adapterConfig?.formatToolCall,
+      );
+      const canRenderApprovalButtons =
+        toolDisplayFn !== undefined ||
+        toolDisplay === 'cards' ||
+        toolDisplay === 'timeline' ||
+        toolDisplay === 'grouped' ||
+        toolDisplay === 'hidden';
+      await this.dispatchInboundMessage({
+        signalContents: commandText,
+        attributes,
+        signalMetadata,
+        providerOptions,
+        requestContext,
+        thread: mastraThread,
+        memory: { thread: mastraThread.id, resource: mastraThread.resourceId },
+        autoResumeSuspendedTools: canRenderApprovalButtons ? undefined : true,
+      });
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      this.log('error', `[${platform}] Error handling slash command`, { error: String(err) });
+      try {
+        const adapterConfig = this.adapterConfigs[platform];
+        const errorMessage = adapterConfig?.formatError ? adapterConfig.formatError(error) : `❌ Error: ${error.message}`;
+        await channel.post(errorMessage);
+      } catch (postErr) {
+        this.log('debug', 'Failed to post slash command error message', postErr);
       }
     }
   }
@@ -1358,7 +1438,7 @@ export class AgentChannels {
    * @internal Used by `processChatMessage` and the approve/decline paths.
    */
   _buildRenderContext(
-    chatThread: Thread,
+    chatThread: ChannelPostTarget,
     platform: string,
     approvalContext?: { toolCallId: string; messageId: string },
   ): ChatChannelRenderContext {
@@ -1478,7 +1558,7 @@ export class AgentChannels {
    */
   private async *withTypingStatus(
     stream: AsyncIterable<AgentChunkType<any>>,
-    chatThread: Thread,
+    chatThread: ChannelPostTarget,
     platform: string,
     adapterConfig: ChannelAdapterConfig | undefined,
     typingGate: { active: boolean },

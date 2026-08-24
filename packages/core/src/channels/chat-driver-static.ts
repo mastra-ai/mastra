@@ -1,4 +1,4 @@
-import type { Adapter, Thread } from 'chat';
+import type { Adapter } from 'chat';
 
 import type { IMastraLogger } from '../logger/logger';
 import type { AgentChunkType } from '../stream/types';
@@ -12,11 +12,11 @@ import {
   postTripwire,
   renderBuiltInToolEvent,
 } from './stream-helpers';
-import type { PostableMessage, ToolDisplayEvent, ToolDisplayFn } from './types';
+import type { ChannelPostTarget, PostableMessage, ToolDisplayEvent, ToolDisplayFn } from './types';
 
 export interface StaticDriverArgs {
   stream: AsyncIterable<AgentChunkType<any>>;
-  chatThread: Thread;
+  chatThread: ChannelPostTarget;
   adapter: Adapter;
   /** After `resolveToolDisplay`, non-streaming tool display is one of these. */
   toolDisplay: 'cards' | 'text' | 'hidden';

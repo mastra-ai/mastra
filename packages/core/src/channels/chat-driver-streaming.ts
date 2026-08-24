@@ -1,4 +1,4 @@
-import type { Adapter, StreamChunk, Thread } from 'chat';
+import type { Adapter, StreamChunk } from 'chat';
 
 import type { IMastraLogger } from '../logger/logger';
 import type { AgentChunkType } from '../stream/types';
@@ -14,11 +14,11 @@ import {
   postTripwire,
   renderBuiltInToolEvent,
 } from './stream-helpers';
-import type { PostableMessage, ToolDisplayEvent, ToolDisplayFn, ToolDisplayResult } from './types';
+import type { ChannelPostTarget, PostableMessage, ToolDisplayEvent, ToolDisplayFn, ToolDisplayResult } from './types';
 
 export interface StreamingDriverArgs {
   stream: AsyncIterable<AgentChunkType<any>>;
-  chatThread: Thread;
+  chatThread: ChannelPostTarget;
   adapter: Adapter;
   /**
    * Resolved tool display mode. `'timeline'`/`'grouped'`/`'hidden'` render
@@ -186,7 +186,7 @@ export async function runStreamingDriver({
     typingGate.active = true;
     const done = (async () => {
       try {
-        await chatThread.post(postable as Parameters<Thread['post']>[0]);
+        await chatThread.post(postable);
       } catch (e) {
         logger?.warn('[CHANNEL] streaming post failed, falling back to buffered text', { error: e });
         // Drain whatever was queued plus anything pushed after the failure

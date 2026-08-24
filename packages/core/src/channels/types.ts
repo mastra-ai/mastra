@@ -1,4 +1,4 @@
-import type { Adapter, CardElement, ChatConfig, Message, StateAdapter, StreamChunk, Thread } from 'chat';
+import type { Adapter, CardElement, Channel, ChatConfig, Message, StateAdapter, StreamChunk, Thread } from 'chat';
 
 import type { Mastra } from '../mastra';
 import type { RequestContext } from '../request-context';
@@ -24,6 +24,11 @@ export type { InlineLinkEntry } from './inline-media';
  *   convert it to their own dialect.
  */
 export type PostableMessage = string | CardElement | { markdown: string };
+
+/** The common posting surface shared by Chat SDK channels and threads. */
+export type ChannelPostTarget = Pick<Channel, 'adapter' | 'id' | 'isDM' | 'mentionUser' | 'post' | 'startTyping'> & {
+  channelId?: string;
+};
 
 /** Per-adapter configuration shared across all `toolDisplay` modes. */
 export interface ChannelAdapterBaseConfig {
@@ -374,6 +379,16 @@ export type ChannelHandler = (
  */
 export type ChannelHandlerConfig = ChannelHandler | false | undefined;
 
+/** Handler function for Chat SDK slash-command events. */
+export type ChannelSlashCommandHandler = (
+  event: import('chat').SlashCommandEvent,
+  defaultHandler: (event: import('chat').SlashCommandEvent) => Promise<void>,
+  ctx: ChannelHandlerContext,
+) => Promise<void>;
+
+/** Configuration for the built-in slash-command handler. */
+export type ChannelSlashCommandHandlerConfig = ChannelSlashCommandHandler | false | undefined;
+
 /**
  * Context passed to {@link ChannelConfig.resolveResourceId}.
  * Lets an app decide who owns resource-level memory for a channel thread,
@@ -440,6 +455,13 @@ export interface ChannelHandlers {
    * Default: Routes to agent.stream and posts the response.
    */
   onSubscribedMessage?: ChannelHandlerConfig;
+
+  /**
+   * Handler for slash commands delivered by the adapter webhook.
+   * Default: Routes the command and arguments to the agent and posts the response
+   * to the invoking channel.
+   */
+  onSlashCommand?: ChannelSlashCommandHandlerConfig;
 }
 
 /** Configuration for agent chat channels. */

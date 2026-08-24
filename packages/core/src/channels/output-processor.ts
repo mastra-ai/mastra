@@ -1,4 +1,4 @@
-import type { Adapter, Thread } from 'chat';
+import type { Adapter } from 'chat';
 
 import type { IMastraLogger } from '../logger/logger';
 import { parseMemoryRequestContext } from '../memory/types';
@@ -10,6 +10,7 @@ import { runStaticDriver } from './chat-driver-static';
 import { runStreamingDriver } from './chat-driver-streaming';
 import type { PendingApprovalRecord } from './stream-helpers';
 import type { ToolDisplay, ToolDisplayFn } from './types';
+import type { ChannelPostTarget } from './types';
 
 /**
  * Per-run render dependencies stashed onto `requestContext` by
@@ -25,7 +26,7 @@ import type { ToolDisplay, ToolDisplayFn } from './types';
  */
 export interface ChatChannelRenderContext {
   adapter: Adapter;
-  chatThread: Thread;
+  chatThread: ChannelPostTarget;
   platform: string;
   streaming: { enabled: boolean; options?: { updateIntervalMs?: number } };
   toolDisplay: ToolDisplay;

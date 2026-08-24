@@ -57,6 +57,39 @@ function createMockAgent(name = 'test-agent') {
   } as any;
 }
 
+async function createInitializedSlashChannels(options: Record<string, unknown> = {}) {
+  const adapter = createMockAdapter('discord');
+  const channels = new AgentChannels({ adapters: { discord: adapter }, ...options } as any);
+  const agent = createMockAgent();
+  channels.__setAgent(agent);
+  const db = new InMemoryDB();
+  const memoryStore = new InMemoryMemory({ db });
+  const mastra = {
+    getStorage: () => ({ getStore: () => memoryStore }),
+    getServer: () => null,
+  } as any;
+  await channels.initialize(mastra);
+  return { adapter: channels.adapters.discord as any, agent, channels, mastra };
+}
+
+async function processSlashCommand(
+  channels: AgentChannels,
+  overrides: Partial<{ channelId: string; command: string; text: string; userId: string }> = {},
+) {
+  channels.sdk!.processSlashCommand(
+    {
+      adapter: channels.adapters.discord,
+      channelId: overrides.channelId ?? 'discord:C1',
+      command: overrides.command ?? '/ask',
+      text: overrides.text ?? 'hello',
+      user: { userId: overrides.userId ?? 'user-1', userName: 'tyler', fullName: 'Tyler Barnes' },
+      raw: {},
+    } as any,
+    undefined,
+  );
+  await new Promise(resolve => setTimeout(resolve, 10));
+}
+
 describe('AgentChannels', () => {
   let agentChannels: AgentChannels;
   let mockAgent: ReturnType<typeof createMockAgent>;
@@ -352,6 +385,115 @@ describe('AgentChannels', () => {
       expect(typeof agentChannels.sdk!.onNewMention).toBe('function');
       expect(typeof agentChannels.sdk!.onReaction).toBe('function');
       expect(typeof agentChannels.sdk!.onNewMessage).toBe('function');
+    });
+
+    it('routes /ask hello to the agent', async () => {
+      const { agent, channels } = await createInitializedSlashChannels();
+      await processSlashCommand(channels);
+
+      expect(agent.sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ contents: '/ask hello' }),
+        expect.objectContaining({ resourceId: 'discord:user-1' }),
+      );
+    });
+
+    it('supports a custom slash handler that replaces the default', async () => {
+      const onSlashCommand = vi.fn(async () => undefined);
+      const { agent, channels } = await createInitializedSlashChannels({ handlers: { onSlashCommand } });
+
+      await processSlashCommand(channels);
+
+      expect(onSlashCommand).toHaveBeenCalledTimes(1);
+      expect(agent.sendMessage).not.toHaveBeenCalled();
+    });
+
+    it('supports a custom slash handler that wraps the default with context', async () => {
+      const onSlashCommand = vi.fn(async (event, defaultHandler, context) => {
+        context.requestContext.set('tenant', 'tenant-1');
+        context.signalMetadata.source = 'slash-test';
+        await defaultHandler(event);
+      });
+      const { agent, channels } = await createInitializedSlashChannels({ handlers: { onSlashCommand } });
+
+      await processSlashCommand(channels);
+
+      const [, options] = agent.sendMessage.mock.calls[0]!;
+      expect(options.ifIdle.streamOptions.requestContext.get('tenant')).toBe('tenant-1');
+      expect(agent.sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ metadata: { source: 'slash-test' } }),
+        expect.anything(),
+      );
+    });
+
+    it('keeps slash contexts isolated across concurrent events', async () => {
+      const onSlashCommand = async (event: any, defaultHandler: any, context: any) => {
+        context.requestContext.set('tenant', event.command);
+        context.signalMetadata.command = event.command;
+        await defaultHandler(event);
+      };
+      const { agent, channels } = await createInitializedSlashChannels({ handlers: { onSlashCommand } });
+
+      await Promise.all([
+        processSlashCommand(channels, { command: '/one', channelId: 'discord:C1', userId: 'user-1' }),
+        processSlashCommand(channels, { command: '/two', channelId: 'discord:C2', userId: 'user-2' }),
+      ]);
+
+      expect(agent.sendMessage).toHaveBeenCalledTimes(2);
+      const calls = agent.sendMessage.mock.calls.map(([message, options]) => ({
+        command: message.metadata.command,
+        tenant: options.ifIdle.streamOptions.requestContext.get('tenant'),
+      }));
+      expect(calls).toEqual(expect.arrayContaining([{ command: '/one', tenant: '/one' }, { command: '/two', tenant: '/two' }]));
+    });
+
+    it('renders through the invoking channel', async () => {
+      let invokingChannel: unknown;
+      const onSlashCommand = async (event: any, defaultHandler: any) => {
+        invokingChannel = event.channel;
+        await defaultHandler(event);
+      };
+      const { agent, channels } = await createInitializedSlashChannels({ handlers: { onSlashCommand } });
+
+      await processSlashCommand(channels, { channelId: 'discord:render-target' });
+
+      const [, options] = agent.sendMessage.mock.calls[0]!;
+      const renderContext = options.ifIdle.streamOptions.requestContext.get('__mastra_chat_channel_render');
+      expect(renderContext.chatThread).toBe(invokingChannel);
+      expect(renderContext.chatThread.id).toBe('discord:render-target');
+    });
+
+    it('does not register slash handling when disabled, while preserving adjacent handlers', async () => {
+      const { agent, channels } = await createInitializedSlashChannels({ handlers: { onSlashCommand: false } });
+
+      await processSlashCommand(channels);
+
+      expect(agent.sendMessage).not.toHaveBeenCalled();
+      expect(typeof channels.sdk!.onDirectMessage).toBe('function');
+      expect(typeof channels.sdk!.onAction).toBe('function');
+    });
+
+    it('formats slash errors through the adapter configuration', async () => {
+      const formatError = vi.fn(() => 'friendly slash error');
+      const { adapter, agent, channels } = await createInitializedSlashChannels({
+        adapters: { discord: { adapter: createMockAdapter('discord'), formatError } },
+      });
+      agent.sendMessage.mockImplementation(() => {
+        throw new Error('secret failure');
+      });
+
+      await processSlashCommand(channels);
+
+      expect(formatError).toHaveBeenCalledWith(expect.objectContaining({ message: 'secret failure' }));
+      expect(adapter.postMessage).toHaveBeenCalledWith(expect.anything(), 'friendly slash error');
+    });
+
+    it('registers one slash handler across repeated initialization', async () => {
+      const { agent, channels, mastra } = await createInitializedSlashChannels();
+      await channels.initialize(mastra);
+
+      await processSlashCommand(channels);
+
+      expect(agent.sendMessage).toHaveBeenCalledTimes(1);
     });
   });
 
