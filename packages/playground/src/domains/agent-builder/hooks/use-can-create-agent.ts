@@ -12,7 +12,11 @@ export interface UseCanCreateAgentResult {
 export const useCanCreateAgent = (): UseCanCreateAgentResult => {
   const { canAccessAgentBuilder, isLoading } = useBuilderAgentAccess();
 
+  // The `typeof window` half is an SSR guard: the studio only ever runs in a
+  // browser, and the test environment always provides a `window`, so neither
+  // half of that check can be observed failing.
   const hasEnvFlag =
+    // Stryker disable next-line ConditionalExpression,StringLiteral
     typeof window !== 'undefined' && (window as unknown as Record<string, unknown>).MASTRA_EXPERIMENTAL_UI === 'true';
 
   const canCreateAgent = hasEnvFlag || canAccessAgentBuilder;

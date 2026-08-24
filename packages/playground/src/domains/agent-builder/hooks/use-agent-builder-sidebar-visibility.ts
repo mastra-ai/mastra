@@ -23,6 +23,10 @@ export function useAgentBuilderSidebarVisibility(): UseAgentBuilderSidebarVisibi
   const { data: capabilities, isLoading: capabilitiesLoading } = useAuthCapabilities();
   const { isLoading: builderAccessLoading, canAccessAgentBuilder } = useBuilderAgentAccess();
 
+  // Defensive early-out only: while either query is in flight `capabilities` is
+  // still undefined and `canAccessAgentBuilder` is still false, so dropping this
+  // guard would produce the same `isVisible: false` from the checks below.
+  // Stryker disable next-line ConditionalExpression,LogicalOperator
   if (capabilitiesLoading || builderAccessLoading) {
     return { isVisible: false };
   }

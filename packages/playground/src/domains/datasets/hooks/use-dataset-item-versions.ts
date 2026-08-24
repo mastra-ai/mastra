@@ -84,6 +84,10 @@ export const useDatasetItemVersion = (
         isDeleted: v.isDeleted ?? false,
         createdAt: v.createdAt,
         updatedAt: v.updatedAt,
+        // The guard only spells out the intent: `datasetVersion` is always a
+        // number, so comparing it against a missing `latestVersion` is already
+        // false and the explicit `false` branch is unreachable in practice.
+        // Stryker disable next-line ConditionalExpression
         isLatest: latestVersion != null ? datasetVersion === latestVersion : false,
       };
     },

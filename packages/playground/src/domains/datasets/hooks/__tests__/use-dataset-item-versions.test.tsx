@@ -15,11 +15,13 @@ const VERSION_URL = (version: number) => `${BASE_URL}/api/datasets/dataset-1/ite
 
 const createWrapper = () => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return ({ children }: { children: ReactNode }) => (
+  const wrapper = ({ children }: { children: ReactNode }) => (
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     </MastraReactProvider>
   );
+  wrapper.queryClient = queryClient;
+  return wrapper;
 };
 
 /** Let react-query settle so "no request was made" is a real observation. */
@@ -158,6 +160,33 @@ describe('useDatasetItemVersions', () => {
       expect(first.result.current.data?.[0]?.id).toBe('history-item-1');
     });
   });
+  describe('when the server answers with no body at all', () => {
+    it('reports an empty list instead of throwing', async () => {
+      server.use(http.get(HISTORY_URL, () => HttpResponse.json(null)));
+
+      const { result } = renderHook(() => useDatasetItemVersions('dataset-1', 'item-1'), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(result.current.data).toEqual([]);
+      expect(result.current.error).toBeNull();
+    });
+  });
+
+  describe('the cache entry it writes', () => {
+    it('files the history under the key dataset edits invalidate', async () => {
+      server.use(http.get(HISTORY_URL, () => HttpResponse.json(itemHistory([makeDatasetItemVersion({ id: 'v1' })]))));
+      const wrapper = createWrapper();
+
+      const { result } = renderHook(() => useDatasetItemVersions('dataset-1', 'item-1'), { wrapper });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      // `useDatasetMutations` invalidates exactly this key after an item edit,
+      // so the two have to agree on it.
+      expect(wrapper.queryClient.getQueryData(['dataset-item-versions', 'dataset-1', 'item-1'])).toHaveLength(1);
+    });
+  });
 });
 
 describe('useDatasetItemVersion', () => {
@@ -284,6 +313,19 @@ describe('useDatasetItemVersion', () => {
       await waitFor(() => expect(second.result.current.data?.id).toBe('v-3'));
 
       expect(first.result.current.data?.id).toBe('v-2');
+    });
+
+    it('files each version under its own key, separate from the history list', async () => {
+      server.use(http.get(VERSION_URL(3), () => HttpResponse.json(makeDatasetItemVersion({ datasetVersion: 3 }))));
+      const wrapper = createWrapper();
+
+      const { result } = renderHook(() => useDatasetItemVersion('dataset-1', 'item-1', 3, 3), { wrapper });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      expect(wrapper.queryClient.getQueryData(['dataset-item-version', 'dataset-1', 'item-1', 3])).toMatchObject({
+        datasetVersion: 3,
+      });
+      expect(wrapper.queryClient.getQueryData(['dataset-item-versions', 'dataset-1', 'item-1'])).toBeUndefined();
     });
   });
 });

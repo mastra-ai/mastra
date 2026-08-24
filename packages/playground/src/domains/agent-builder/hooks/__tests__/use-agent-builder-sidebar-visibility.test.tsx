@@ -49,7 +49,7 @@ const renderVisibility = ({
     </MastraReactProvider>
   );
 
-  return renderHook(() => useAgentBuilderSidebarVisibility(), { wrapper });
+  return { ...renderHook(() => useAgentBuilderSidebarVisibility(), { wrapper }), queryClient };
 };
 
 describe('useAgentBuilderSidebarVisibility', () => {
@@ -87,10 +87,15 @@ describe('useAgentBuilderSidebarVisibility', () => {
   });
 
   describe('when auth is enabled but nobody is signed in', () => {
-    it('hides the shortcut', async () => {
-      const { result } = renderVisibility({ capabilities: signedOutCapabilities });
+    it('keeps the shortcut hidden even once the builder reports itself enabled', async () => {
+      const { result, queryClient } = renderVisibility({ capabilities: signedOutCapabilities });
 
-      await waitFor(() => expect(result.current.isVisible).toBe(false));
+      // Wait past the loading guard: the interesting decision is the one the
+      // hook makes with both queries resolved and the builder switched on.
+      await waitFor(() => expect(queryClient.getQueryData(['builder-settings'])).toBeDefined());
+      await waitFor(() => expect(queryClient.getQueryData(['auth', 'capabilities'])).toBeDefined());
+
+      expect(result.current.isVisible).toBe(false);
     });
   });
 
