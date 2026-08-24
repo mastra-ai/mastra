@@ -1,11 +1,12 @@
 import type { KVNamespace } from '@cloudflare/workers-types';
 import { TABLE_THREADS } from '@mastra/core/storage';
+import type Cloudflare from 'cloudflare';
 import { Miniflare } from 'miniflare';
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 
 import { CloudflareKVDB } from '.';
 
-describe('CloudflareKVDB listKV pagination', () => {
+describe('CloudflareKVDB listKV pagination (Workers binding)', () => {
   let mf: Miniflare;
   let db: CloudflareKVDB;
 
@@ -40,13 +41,43 @@ describe('CloudflareKVDB listKV pagination', () => {
   });
 
   it('honors prefix while paginating', async () => {
-    const keys = await db.listKV(TABLE_THREADS, { limit: 10, prefix: `${TABLE_THREADS}:thread-01` });
-    expect(keys.map(k => k.name).sort()).toEqual([
-      `${TABLE_THREADS}:thread-010`,
-      `${TABLE_THREADS}:thread-011`,
-      `${TABLE_THREADS}:thread-012`,
-      `${TABLE_THREADS}:thread-013`,
-      `${TABLE_THREADS}:thread-014`,
-    ]);
+    const matching = Array.from({ length: 11 }, (_, i) => `prefixed:item-${String(i).padStart(2, '0')}`);
+    for (const key of matching) {
+      await db.putKV({ tableName: TABLE_THREADS, key, value: { key } });
+    }
+    for (let i = 0; i < 5; i++) {
+      await db.putKV({ tableName: TABLE_THREADS, key: `unrelated:item-${i}`, value: { i } });
+    }
+
+    const keys = await db.listKV(TABLE_THREADS, { limit: 5, prefix: 'prefixed:' });
+    expect(keys.map(k => k.name).sort()).toEqual(matching);
+  });
+});
+
+describe('CloudflareKVDB listKV pagination (REST API)', () => {
+  it('follows result_info.cursor across pages', async () => {
+    const page1 = Array.from({ length: 10 }, (_, i) => ({ name: `${TABLE_THREADS}:thread-${i}` }));
+    const page2 = Array.from({ length: 5 }, (_, i) => ({ name: `${TABLE_THREADS}:thread-${10 + i}` }));
+
+    const keysList = vi
+      .fn()
+      .mockResolvedValueOnce({ result: page1, result_info: { count: 10, cursor: 'cursor-1' } })
+      .mockResolvedValueOnce({ result: page2, result_info: { count: 5 } });
+    const client = {
+      kv: {
+        namespaces: {
+          list: vi.fn().mockResolvedValue({ result: [{ id: 'ns-1', title: TABLE_THREADS }] }),
+          keys: { list: keysList },
+        },
+      },
+    } as unknown as Cloudflare;
+
+    const db = new CloudflareKVDB({ client, accountId: 'acc-1', namespacePrefix: '' });
+    const keys = await db.listKV(TABLE_THREADS, { limit: 10 });
+
+    expect(keys.map(k => k.name)).toEqual([...page1, ...page2].map(k => k.name));
+    expect(keysList).toHaveBeenCalledTimes(2);
+    expect(keysList.mock.calls[0]?.[1]).not.toHaveProperty('cursor');
+    expect(keysList.mock.calls[1]?.[1]).toMatchObject({ cursor: 'cursor-1' });
   });
 });
