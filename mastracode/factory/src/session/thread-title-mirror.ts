@@ -1,6 +1,7 @@
 import type { AgentControllerEvent, AgentControllerThread } from '@mastra/core/agent-controller';
 
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
+import { normalizeSessionTitle } from './session-title.js';
 
 export interface ThreadTitleMirrorSession {
   readonly identity: { getResourceId(): string };
@@ -32,7 +33,7 @@ export function observeSessionThreadTitle(
   const sessionId = session.identity.getResourceId();
 
   const mirror = async (rawTitle: string | undefined): Promise<void> => {
-    const title = rawTitle?.trim();
+    const title = rawTitle ? normalizeSessionTitle(rawTitle) : null;
     if (!title) return;
     const row = await sourceControl.sessions.getBySessionId(sessionId);
     if (!row || row.title === title) return;

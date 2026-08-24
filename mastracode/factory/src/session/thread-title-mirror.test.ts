@@ -69,6 +69,20 @@ function createDependencies(rowTitle: string | null = null): ThreadTitleMirrorDe
 }
 
 describe('observeSessionThreadTitle', () => {
+  it('caps an overlong generated title the way the session row stores it', async () => {
+    const overlong = `Rewrite the log parser ${'so it streams instead of buffering '.repeat(4)}`;
+    const capped = 'Rewrite the log parser so it streams instead of buffering so it streams instead';
+    const { session, emit } = createSession(overlong);
+    const dependencies = createDependencies(capped);
+    observeSessionThreadTitle(session, dependencies);
+
+    emit({ type: 'thread_title_updated', threadId: 'thread-1', title: overlong });
+    emit({ type: 'thread_changed', threadId: 'thread-1' });
+
+    await vi.waitFor(() => expect(dependencies.sourceControl.sessions.getBySessionId).toHaveBeenCalled());
+    expect(dependencies.sourceControl.sessions.rename).not.toHaveBeenCalled();
+  });
+
   it('renames the session row when core names the thread', async () => {
     const { session, emit } = createSession();
     const dependencies = createDependencies('write a parser for the log format');

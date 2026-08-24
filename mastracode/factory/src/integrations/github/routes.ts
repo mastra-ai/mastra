@@ -25,6 +25,7 @@ import type { RouteAuth } from '../../routes/route.js';
 import { baseCheckpointIsStale } from '../../sandbox/base-checkpoint-triggers.js';
 import { SandboxBudgetError } from '../../sandbox/fleet.js';
 import type { MaterializationSandbox, PrepareProgress, ProgressFn, SandboxFleet } from '../../sandbox/fleet.js';
+import { normalizeSessionTitle } from '../../session/session-title.js';
 import type { StateSigner } from '../../state-signing.js';
 import type { AuditEmitter } from '../../storage/domains/audit/domain.js';
 import type { MemorySettingsStorage } from '../../storage/domains/memory-settings/base.js';
@@ -56,7 +57,6 @@ import {
 import type { GitIdentity } from './sandbox.js';
 
 const sessionOperationLocks = new Map<string, Promise<unknown>>();
-const MAX_SESSION_TITLE_LENGTH = 80;
 const USER_SESSION_BRANCH_PREFIX = 'user/session-';
 // lowercase only (crypto.randomUUID output), so casing cannot fork one logical ID into two sessions
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -170,12 +170,6 @@ function isValidGitRef(value: unknown): value is string {
 
 function isJsonObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function normalizeSessionTitle(title: string): string | null {
-  // Cap code points, not UTF-16 units: an emoji straddling the cap would store a lone surrogate.
-  const capped = [...title.replace(/\s+/g, ' ').trim()].slice(0, MAX_SESSION_TITLE_LENGTH).join('');
-  return capped.trimEnd() || null;
 }
 
 /**
