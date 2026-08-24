@@ -1200,6 +1200,21 @@ async function loadOwnedProject(options: {
 }
 
 /**
+ * One naming per session at a time: a second caller joins the run already in
+ * flight instead of paying for another model call and racing its rename.
+ */
+function createSessionNaming() {
+  const inFlight = new Map<string, Promise<string | null>>();
+  return (sessionId: string, run: () => Promise<string | null>) => {
+    const pending = inFlight.get(sessionId);
+    if (pending) return pending;
+    const started = run().finally(() => inFlight.delete(sessionId));
+    inFlight.set(sessionId, started);
+    return started;
+  };
+}
+
+/**
  * Name a thread with a stored model id. Resolution has to go through
  * mastracode's gateway: a bare id handed to core's model router looks for a
  * process env key instead of the caller's stored provider credentials.
@@ -1226,6 +1241,7 @@ function buildProjectGitRoutes({
   emitAudit?: AuditEmitter['emit'];
   sessionRetirement?: MountGithubRoutesOptions['sessionRetirement'];
 }): ApiRoute[] {
+  const nameSession = createSessionNaming();
   return [
     // ── Create / list Factory sessions ──────────────────────────────────────
     registerApiRoute('/web/github/projects/:id/sessions', {
@@ -1430,15 +1446,18 @@ function buildProjectGitRoutes({
         requestContext.set('user', { workosId: row.userId, organizationId: row.orgId });
 
         try {
-          const generated = await controller.generateThreadTitle({
-            threadId: thread.id,
-            resourceId: sessionId,
-            requestContext,
-            ...(stored?.observerModelId ? { model: titleModel(stored.observerModelId) } : {}),
+          const title = await nameSession(sessionId, async () => {
+            const generated = await controller.generateThreadTitle({
+              threadId: thread.id,
+              resourceId: sessionId,
+              requestContext,
+              ...(stored?.observerModelId ? { model: titleModel(stored.observerModelId) } : {}),
+            });
+            const named = generated ? normalizeSessionTitle(generated) : null;
+            if (named) await github.sourceControlStorage.sessions.rename({ sessionId, title: named });
+            return named;
           });
-          const title = generated ? normalizeSessionTitle(generated) : null;
           if (!title) return c.json({ error: 'The model returned an empty title. Try again.' }, 502);
-          await github.sourceControlStorage.sessions.rename({ sessionId, title });
           return c.json({ title });
         } catch (error) {
           return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);

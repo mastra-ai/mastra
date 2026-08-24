@@ -2130,6 +2130,37 @@ describe('Factory session routes', () => {
     expect(tables.sessions.find(row => row.sessionId === sessionId)?.title).toBe('Log parser rewrite');
   });
 
+  it('joins a second naming request to the one already in flight', async () => {
+    seedMaterializedProject();
+    let release = () => {};
+    const naming = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    const controller = {
+      queryThreads: vi.fn(async () => [{ id: 'thread-1', updatedAt: new Date() }]),
+      generateThreadTitle: vi.fn(async () => {
+        await naming;
+        return 'Log parser rewrite';
+      }),
+    } as any;
+    const app = buildApp({ workosId: 'u1' }, { controller });
+    const created = await postJson(app, '/web/github/projects/p1/sessions', { title: 'rewrite the log parser' });
+    const sessionId = (await created.json()).session.sessionId;
+
+    const first = app.request(`/web/user-sessions/${sessionId}/title`, { method: 'POST' });
+    await vi.waitFor(() => expect(controller.generateThreadTitle).toHaveBeenCalledOnce());
+    const second = app.request(`/web/user-sessions/${sessionId}/title`, { method: 'POST' });
+    await vi.waitFor(() => expect(controller.queryThreads).toHaveBeenCalledTimes(2));
+    release();
+    const [a, b] = await Promise.all([first, second]);
+
+    // A second tab or API client cannot pay for a second naming, nor race its rename.
+    expect(controller.generateThreadTitle).toHaveBeenCalledOnce();
+    expect(await a.json()).toEqual({ title: 'Log parser rewrite' });
+    expect(await b.json()).toEqual({ title: 'Log parser rewrite' });
+    expect(tables.sessions.find(row => row.sessionId === sessionId)?.title).toBe('Log parser rewrite');
+  });
+
   it('caps and tidies the title the model returned', async () => {
     seedMaterializedProject();
     const controller = {
