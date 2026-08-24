@@ -34,6 +34,7 @@
     "anthropic/claude-sonnet-5",
     "bytedance/seedance-2.0",
     "bytedance/seedance-2.0-fast",
+    "bytedance/seedance-2.0-mini",
     "deepseek/deepseek-v4-flash-vision-exp",
     "google/gemini-2.5-flash",
     "google/gemini-2.5-flash-lite",

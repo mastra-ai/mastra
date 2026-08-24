@@ -75,26 +75,35 @@ function createReflectorRunner(model: MockLanguageModelV2) {
 
 /** Long enough that countObservations (character length) never clears the 100 threshold. */
 const LONG_BODY = 'this observation is deliberately too long to ever pass the compression threshold '.repeat(3);
+const LONG_OBSERVATIONS = `* ${LONG_BODY.trim()}`;
 const SOURCE_OBSERVATIONS = `* original observation that must be compressed ${'x'.repeat(500)}`;
 
-describe('reflector compression ladder no-progress bail-out', () => {
-  it('stops after the first attempt that repeats the previous output', async () => {
-    // Every attempt returns the same over-threshold output, so escalating the
-    // compression level provably cannot help.
+describe('reflector compression retry ladder', () => {
+  it('keeps escalating when attempts repeat the same over-threshold output', async () => {
     const scripted = createScriptedModel([observationsPayload(LONG_BODY)]);
     const reflector = createReflectorRunner(scripted.model);
 
     const result = await reflector.call(SOURCE_OBSERVATIONS);
 
-    // Attempt #1 establishes the baseline, attempt #2 proves the level knob is
-    // being ignored. Without the bail-out this ran the full 4-attempt ladder.
-    expect(scripted.callCount).toBe(2);
-    expect(result.observations).toContain('deliberately too long');
+    expect(scripted.callCount).toBe(4);
+    expect(result.observations).toBe(LONG_OBSERVATIONS);
   });
 
-  it('keeps escalating while attempts return different output', async () => {
-    // Each attempt is still over threshold but different, so the ladder should
-    // run to exhaustion rather than bailing out early.
+  it('recovers when a stronger retry succeeds after identical over-threshold attempts', async () => {
+    const scripted = createScriptedModel([
+      observationsPayload(LONG_BODY),
+      observationsPayload(LONG_BODY),
+      observationsPayload('short'),
+    ]);
+    const reflector = createReflectorRunner(scripted.model);
+
+    const result = await reflector.call(SOURCE_OBSERVATIONS);
+
+    expect(scripted.callCount).toBe(3);
+    expect(result.observations).toBe('* short');
+  });
+
+  it('keeps escalating while attempts return different over-threshold output', async () => {
     const scripted = createScriptedModel([
       observationsPayload(`first ${LONG_BODY}`),
       observationsPayload(`second ${LONG_BODY}`),
@@ -108,13 +117,13 @@ describe('reflector compression ladder no-progress bail-out', () => {
     expect(scripted.callCount).toBe(4);
   });
 
-  it('still exits on a successful compression before any bail-out applies', async () => {
+  it('exits when a retry successfully compresses below the threshold', async () => {
     const scripted = createScriptedModel([observationsPayload(LONG_BODY), observationsPayload('short')]);
     const reflector = createReflectorRunner(scripted.model);
 
     const result = await reflector.call(SOURCE_OBSERVATIONS);
 
     expect(scripted.callCount).toBe(2);
-    expect(result.observations).toContain('short');
+    expect(result.observations).toBe('* short');
   });
 });
