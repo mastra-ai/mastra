@@ -725,6 +725,72 @@ describe('InngestAgent parity surface', () => {
     }
   });
 
+  it('forwards the per-call actor signal into the workflow trigger event', async () => {
+    // `actor` reaches FGA checks and tool execution by riding on the event
+    // payload the execution engine reads. The durable-agent wrapper used to
+    // accept the option and drop it, unlike InngestRun's start path.
+    const durableAgent = makeIsolatedAgent('parity-actor-trigger');
+    const sendSpy = stubInngestSend();
+    const actor = { actorKind: 'system', sourceWorkflow: 'nightly-workflow' };
+
+    const result = await durableAgent.stream([{ role: 'user', content: 'hi' }], { actor: actor as any });
+    try {
+      const deadline = Date.now() + 1_000;
+      let entry = globalRunRegistry.get(result.runId);
+      while (!entry?.workflowExecution && Date.now() < deadline) {
+        await new Promise(resolve => setTimeout(resolve, 0));
+        entry = globalRunRegistry.get(result.runId);
+      }
+      await expect(entry?.workflowExecution).resolves.toBeUndefined();
+
+      expect(sendSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ actor }),
+        }),
+      );
+    } finally {
+      result.cleanup();
+      sendSpy.mockRestore();
+    }
+  });
+
+  it('forwards a re-supplied actor on resume and never reads one from the snapshot', async () => {
+    // Matches InngestRun._resumeAndSendEvent: `actor` is a per-call trust
+    // signal, so it comes from the caller every time and a value sitting in
+    // the persisted snapshot must not leak into the event.
+    const durableAgent = makeIsolatedAgent('parity-actor-resume');
+    const sendSpy = stubInngestSend();
+    const runId = 'actor-resume-run';
+    const loadWorkflowSnapshot = vi.fn().mockResolvedValue({
+      value: {},
+      context: {},
+      suspendedPaths: { 'agentic-loop': ['agentic-loop'] },
+      // A stale actor persisted in storage must be ignored.
+      actor: { actorKind: 'system', sourceWorkflow: 'stale-workflow' },
+    });
+    (durableAgent as any).__setMastra({
+      getStorage: () => ({ getStore: async () => ({ loadWorkflowSnapshot }) }),
+    });
+
+    const actor = { actorKind: 'system', sourceWorkflow: 'fresh-workflow' };
+    const result = await durableAgent.resume(runId, { answer: 'approved' }, { actor: actor as any });
+    try {
+      const deadline = Date.now() + 1_000;
+      let entry = globalRunRegistry.get(runId);
+      while (!entry?.workflowExecution && Date.now() < deadline) {
+        await new Promise(resolve => setTimeout(resolve, 0));
+        entry = globalRunRegistry.get(runId);
+      }
+      await expect(entry?.workflowExecution).resolves.toBeUndefined();
+
+      const sentEvent = sendSpy.mock.calls[0]?.[0] as any;
+      expect(sentEvent?.data.actor).toEqual(actor);
+    } finally {
+      result.cleanup();
+      sendSpy.mockRestore();
+    }
+  });
+
   // The agentic loop suspends each tool call under `resumeLabels[toolCallId]`.
   // These cover resume() honouring that label instead of guessing a target from
   // the run's suspended paths, which is ambiguous once two tools are parked.

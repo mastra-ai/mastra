@@ -477,17 +477,10 @@ function SignalRow({ kind, label, message }: { kind: string; label: string; mess
 // ---------------------------------------------------------------------------
 // Transcript
 // ---------------------------------------------------------------------------
-const HISTORY_ENTRY_STAGGER_MS = 55;
-const HISTORY_ENTRY_STAGGER_LIMIT = 10;
 
 interface PreparedTranscriptEntry {
   entry: TimelineEntry;
   content: ReactNode;
-}
-
-function createHistoryRevealDelays(entries: PreparedTranscriptEntry[]): Record<string, number> {
-  const visibleEntries = entries.filter(({ content }) => content !== null).slice(-HISTORY_ENTRY_STAGGER_LIMIT);
-  return Object.fromEntries(visibleEntries.map(({ entry }, index) => [entry.id, index * HISTORY_ENTRY_STAGGER_MS]));
 }
 
 export function Transcript({ tail }: { tail?: ReactNode }) {
@@ -515,7 +508,7 @@ export function Transcript({ tail }: { tail?: ReactNode }) {
   return (
     <TranscriptEntries
       entries={transcript.entries}
-      revealInitialEntries
+      restoredHistory
       isSubmitting={approveMutation.isPending || respondMutation.isPending}
       onApprove={onApprove}
       onRespond={onRespond}
@@ -527,7 +520,7 @@ export function Transcript({ tail }: { tail?: ReactNode }) {
 
 export function TranscriptEntries({
   entries,
-  revealInitialEntries = false,
+  restoredHistory = false,
   isSubmitting = false,
   onApprove,
   onRespond,
@@ -535,7 +528,7 @@ export function TranscriptEntries({
   tail,
 }: {
   entries: TimelineEntry[];
-  revealInitialEntries?: boolean;
+  restoredHistory?: boolean;
   isSubmitting?: boolean;
   onApprove: (toolCallId: string, approved: boolean, promptId: string) => void;
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
@@ -556,7 +549,6 @@ export function TranscriptEntries({
         : [],
     ),
   );
-
   const renderEntry = (entry: TimelineEntry): ReactNode => {
     switch (entry.kind) {
       case 'message':
@@ -581,12 +573,8 @@ export function TranscriptEntries({
   };
 
   const preparedEntries = entries.map(entry => ({ entry, content: renderEntry(entry) }));
-  const [historyRevealDelays] = useState(() =>
-    revealInitialEntries ? createHistoryRevealDelays(preparedEntries) : {},
-  );
 
-  // A turn is what you can see: the run echoes the message you sent back as a signal
-  // that draws nothing, and letting that open a turn would take the room off your bubble.
+  // Ignore echoed user signals that render nothing when opening a turn.
   const drawsContent = (entry: MessageEntry): boolean =>
     entry.message.content.parts.some(part => isRenderablePart(part, suspensions, entry.runtimeTools));
   const opensTurn = (entry: TimelineEntry): boolean =>
@@ -609,38 +597,32 @@ export function TranscriptEntries({
       opensTurn: opens,
     });
   }
+  const [restoredTurnKey] = useState(() => (restoredHistory ? turnGroups.at(-1)?.key : undefined));
 
   return (
     <>
       {turnGroups.map((group, index) => {
         const isLiveTurn = index === turnGroups.length - 1;
-        // Every turn keeps `turn-room`: the one handing the room over closes on its curve.
+        // Closing turns keep their room class so reserved space releases through its transition.
         const holdsRoom = isLiveTurn && group.opensTurn && running;
+        const openRoomClass = group.key === restoredTurnKey ? 'turn-room-restored-open' : 'turn-room-open';
+
         return (
           <div
             key={group.key}
-            className={cn('flex flex-col', group.opensTurn && 'turn-room', holdsRoom && 'turn-room-open')}
+            className={cn('flex flex-col', group.opensTurn && 'turn-room', holdsRoom && openRoomClass)}
           >
-            {group.entries.map(({ entry, content }) => {
-              const historyRevealDelay = historyRevealDelays[entry.id];
-
-              return (
-                <MessageScrollerItem
-                  key={entry.id}
-                  messageId={entry.id}
-                  scrollAnchor={opensTurn(entry)}
-                  // Estimated off-screen heights would make the prepend anchor restore
-                  // the wrong offset — measure the real thing.
-                  className={cn(
-                    '[content-visibility:visible]',
-                    historyRevealDelay !== undefined && 'transcript-history-enter',
-                  )}
-                  style={historyRevealDelay === undefined ? undefined : { animationDelay: `${historyRevealDelay}ms` }}
-                >
-                  {content}
-                </MessageScrollerItem>
-              );
-            })}
+            {group.entries.map(({ entry, content }) => (
+              <MessageScrollerItem
+                key={entry.id}
+                messageId={entry.id}
+                scrollAnchor={opensTurn(entry)}
+                // Prepend anchoring needs real item heights, not off-screen estimates.
+                className="[content-visibility:visible]"
+              >
+                {content}
+              </MessageScrollerItem>
+            ))}
             {isLiveTurn && tail}
           </div>
         );
