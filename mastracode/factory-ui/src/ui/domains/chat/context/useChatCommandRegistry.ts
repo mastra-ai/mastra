@@ -185,15 +185,24 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
             pushNotice(`Thinking level set to ${action.level}.`);
             return;
           }
+          if (action.kind === 'clear') {
+            await ensureSettings();
+            await updateSettingsMutation.mutateAsync({ thinkingLevel: null });
+            try {
+              const defaults = await ensureThinkingConfig();
+              const modeId = activeModeId ?? null;
+              const fallback = resolveDefaultThinkingLevel(defaults, modeId);
+              const source = thinkingSourceLabel(fallback.source, modeId);
+              pushNotice(`Thinking level set to default: ${fallback.level} (${source}).`);
+            } catch {
+              pushNotice('Thinking level set to default. Current default is unavailable.');
+            }
+            return;
+          }
           const [settings, defaults] = await Promise.all([ensureSettings(), ensureThinkingConfig()]);
           const modeId = activeModeId ?? null;
           const fallback = resolveDefaultThinkingLevel(defaults, modeId);
           const source = thinkingSourceLabel(fallback.source, modeId);
-          if (action.kind === 'clear') {
-            await updateSettingsMutation.mutateAsync({ thinkingLevel: null });
-            pushNotice(`Thinking level set to default: ${fallback.level} (${source}).`);
-            return;
-          }
           pushNotice(
             settings.thinkingLevel
               ? `Thinking level: ${settings.thinkingLevel} (session override). Default: ${fallback.level} (${source}).`

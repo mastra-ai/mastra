@@ -12,50 +12,63 @@ import { OverlayTestProviders, useOverlayControllerHandlers } from './overlay-te
 const SESSION_API = `${TEST_BASE_URL}/api/agent-controller/code/sessions/:resourceId`;
 const THINKING_CONFIG_API = `${TEST_BASE_URL}/web/config/thinking`;
 
+function useThinkingHandlers({
+  initialThinkingLevel = 'medium',
+  failThinkingConfig = false,
+}: {
+  initialThinkingLevel?: string;
+  failThinkingConfig?: boolean;
+} = {}) {
+  let thinkingLevel: string | undefined = initialThinkingLevel;
+  const stateUpdates: unknown[] = [];
+  server.use(
+    http.get(SESSION_API, ({ params }) =>
+      HttpResponse.json({
+        controllerId: 'code',
+        resourceId: params.resourceId,
+        modeId: 'build',
+        modelId: 'openai/gpt-4o-mini',
+        threadId: 'thread-test',
+        settings: { yolo: false, thinkingLevel, notifications: 'bell', smartEditing: true },
+      }),
+    ),
+    http.get(THINKING_CONFIG_API, () =>
+      failThinkingConfig
+        ? new HttpResponse(null, { status: 503 })
+        : HttpResponse.json({
+            levels: ['off', 'low', 'medium', 'high', 'xhigh', 'max'],
+            globalDefault: 'low',
+            modeDefaults: { build: 'medium' },
+            modes: ['build'],
+          }),
+    ),
+    http.put(`${SESSION_API}/state`, async ({ request }) => {
+      const body: unknown = await request.json();
+      stateUpdates.push(body);
+      if (
+        typeof body === 'object' &&
+        body !== null &&
+        'state' in body &&
+        typeof body.state === 'object' &&
+        body.state !== null &&
+        'thinkingLevel' in body.state
+      ) {
+        const value = body.state.thinkingLevel;
+        if (typeof value === 'string' || value === null) {
+          thinkingLevel = value ?? undefined;
+        }
+      }
+      return HttpResponse.json({ ok: true });
+    }),
+  );
+  return stateUpdates;
+}
+
 beforeEach(useOverlayControllerHandlers);
 
 describe('the /think command', () => {
   it('sets, reports, and clears the session thinking override', async () => {
-    let thinkingLevel: string | undefined = 'medium';
-    const stateUpdates: unknown[] = [];
-    server.use(
-      http.get(SESSION_API, ({ params }) =>
-        HttpResponse.json({
-          controllerId: 'code',
-          resourceId: params.resourceId,
-          modeId: 'build',
-          modelId: 'openai/gpt-4o-mini',
-          threadId: 'thread-test',
-          settings: { yolo: false, thinkingLevel, notifications: 'bell', smartEditing: true },
-        }),
-      ),
-      http.get(THINKING_CONFIG_API, () =>
-        HttpResponse.json({
-          levels: ['off', 'low', 'medium', 'high', 'xhigh', 'max'],
-          globalDefault: 'low',
-          modeDefaults: { build: 'medium' },
-          modes: ['build'],
-        }),
-      ),
-      http.put(`${SESSION_API}/state`, async ({ request }) => {
-        const body: unknown = await request.json();
-        stateUpdates.push(body);
-        if (
-          typeof body === 'object' &&
-          body !== null &&
-          'state' in body &&
-          typeof body.state === 'object' &&
-          body.state !== null &&
-          'thinkingLevel' in body.state
-        ) {
-          const value = body.state.thinkingLevel;
-          if (typeof value === 'string' || value === null) {
-            thinkingLevel = value ?? undefined;
-          }
-        }
-        return HttpResponse.json({ ok: true });
-      }),
-    );
+    const stateUpdates = useThinkingHandlers();
     const user = userEvent.setup();
     const { client } = renderWithProviders(
       <OverlayTestProviders>
@@ -87,6 +100,29 @@ describe('the /think command', () => {
     await waitForMutationsIdle(client);
     expect(stateUpdates).toContainEqual({ state: { thinkingLevel: null } });
     expect(await screen.findByText('Thinking level set to default: medium (build mode default).')).toBeInTheDocument();
+    expect(input).toHaveValue('');
+  });
+
+  it('clears the session override when the defaults request fails', async () => {
+    const stateUpdates = useThinkingHandlers({ initialThinkingLevel: 'high', failThinkingConfig: true });
+    const user = userEvent.setup();
+    const { client } = renderWithProviders(
+      <OverlayTestProviders>
+        <Transcript />
+        <Composer />
+      </OverlayTestProviders>,
+    );
+    const input = await screen.findByRole<HTMLTextAreaElement>('textbox', { name: 'Message' });
+    await waitFor(() => expect(input).toBeEnabled());
+
+    await user.type(input, '/think default');
+    await user.keyboard('{Enter}');
+
+    await waitForMutationsIdle(client);
+    expect(stateUpdates).toContainEqual({ state: { thinkingLevel: null } });
+    expect(
+      await screen.findByText('Thinking level set to default. Current default is unavailable.'),
+    ).toBeInTheDocument();
     expect(input).toHaveValue('');
   });
 });
