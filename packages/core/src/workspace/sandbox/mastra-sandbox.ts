@@ -57,9 +57,12 @@ export interface MastraSandboxOptions {
    * Initial values for the sandbox's runtime environment overlay.
    *
    * These values are made visible to every command and spawned process
-   * executed through this sandbox (merged per spawn). This is an overlay,
-   * not VM-level environment — providers may additionally consume their own
-   * env options for creation-time semantics. Update at runtime with `setEnv`.
+   * routed through the sandbox's process manager (which also backs the
+   * built-in `executeCommand`), merged per spawn. This is an overlay, not
+   * VM-level environment — providers may additionally consume their own
+   * env options for creation-time semantics, and providers with custom
+   * execution transports that bypass the process manager must consume the
+   * overlay themselves. Update at runtime with `setEnv`.
    */
   env?: Record<string, string | undefined>;
 
@@ -280,9 +283,12 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
    * sandbox.setEnv(env => ({ ...env, GH_TOKEN: token }));
    * ```
    *
-   * Changes apply immediately to subsequent commands and spawned processes,
-   * survive provider pause/resume and VM replacement, and are never written
-   * into the VM — the overlay is merged per spawn, not persisted.
+   * Changes apply immediately to subsequent commands and processes routed
+   * through the sandbox's process manager (including the built-in
+   * `executeCommand`), survive provider pause/resume and VM replacement,
+   * and are never written into the VM — the overlay is merged per spawn,
+   * not persisted. Removing a key removes it from the overlay only;
+   * env values a provider supplies on its own still apply.
    */
   setEnv(update: (env: Record<string, string | undefined>) => Record<string, string | undefined>): void {
     // Clone both directions: the updater gets a copy, and its return value is

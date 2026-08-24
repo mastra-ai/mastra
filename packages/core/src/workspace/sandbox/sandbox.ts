@@ -223,8 +223,8 @@ export interface WorkspaceSandbox extends SandboxLifecycle<SandboxInfo> {
    * Update the sandbox's runtime environment overlay.
    *
    * The updater receives a copy of the current overlay and returns the new
-   * one. Values are made visible to subsequent commands and spawned processes
-   * executed through this sandbox; this is not VM-level environment.
+   * one. Values are made visible to subsequent commands and processes routed
+   * through the sandbox's process manager; this is not VM-level environment.
    * Optional - available on sandboxes that support runtime env updates.
    *
    * @example
