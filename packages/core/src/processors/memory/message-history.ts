@@ -235,7 +235,7 @@ export class MessageHistory implements Processor {
       result?: OutputResult;
     } & Partial<ObservabilityContext>,
   ): Promise<MessageList> {
-    const { messageList, requestContext, result: _result, ...observabilityContext } = args;
+    const { messageList, requestContext, result, ...observabilityContext } = args;
 
     // Get memory context from RequestContext or MessageList
     const context = this.getMemoryContext(requestContext, messageList);
@@ -252,11 +252,15 @@ export class MessageHistory implements Processor {
 
     const newInput = messageList.get.input.db();
     const newOutput = messageList.get.response.db();
-    // Failure cannot erase submitted history or completed tool side effects, which may
-    // represent irreversible external actions.
     const messagesToSave = [...newInput, ...newOutput];
 
     if (messagesToSave.length === 0) {
+      return messageList;
+    }
+
+    // Don't persist an input-only failed turn: if the provider errored before
+    // producing any output, saving the user message would orphan it in history.
+    if (result?.finishReason === 'error' && newOutput.length === 0) {
       return messageList;
     }
 

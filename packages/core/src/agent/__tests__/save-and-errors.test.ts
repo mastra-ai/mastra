@@ -315,59 +315,54 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
       });
     }, 500000);
 
-    it('should persist the input when the provider fails before producing output', async () => {
-      if (version === 'v1') return;
-
+    it('should not save any message if interrupted before any part is emitted', async () => {
       const mockMemory = new MockMemory();
-      let outputProcessorCalls = 0;
-      let onFinishCalls = 0;
+      let saveCallCount = 0;
+
+      mockMemory.saveMessages = async function (...args) {
+        saveCallCount++;
+        return MockMemory.prototype.saveMessages.apply(this, args);
+      };
+
       const agent = new Agent({
         id: 'immediate-interrupt-agent-generate',
         name: 'Immediate Interrupt Agent Generate',
         instructions: 'test',
         model: errorResponseModel,
         memory: mockMemory,
-        outputProcessors: [
-          {
-            id: 'failed-run-output-processor',
-            processOutputResult: async ({ messageList }) => {
-              outputProcessorCalls++;
-              return messageList;
-            },
-          },
-        ],
       });
 
-      await expect(
-        agent.generate('interrupt before step', {
-          memory: {
-            thread: 'thread-3-generate',
-            resource: 'resource-3-generate',
-          },
-          onFinish: () => {
-            onFinishCalls++;
-          },
-        }),
-      ).rejects.toThrow('Immediate interruption');
+      try {
+        if (version === 'v1') {
+          await agent.generateLegacy('interrupt before step', {
+            threadId: 'thread-3-generate',
+            resourceId: 'resource-3-generate',
+          });
+        } else {
+          await agent.generate('interrupt before step', {
+            memory: {
+              thread: 'thread-3-generate',
+              resource: 'resource-3-generate',
+            },
+          });
+        }
+      } catch (err: any) {
+        expect(err.message).toBe('Immediate interruption');
+      }
 
       const result = await mockMemory.recall({
         threadId: 'thread-3-generate',
         resourceId: 'resource-3-generate',
       });
-      expect(result.messages).toHaveLength(1);
-      expect(result.messages[0]).toMatchObject({
-        role: 'user',
-        content: { parts: [{ type: 'text', text: 'interrupt before step' }] },
-      });
-      expect(result.messages[0]?.id).toBeTruthy();
-      expect(new Set(result.messages.map(message => message.id)).size).toBe(1);
-      expect(outputProcessorCalls).toBe(1);
-      expect(onFinishCalls).toBe(0);
+
+      // Input-only failed turns remain excluded by MessageHistory's orphan guard.
+      expect(result.messages.length).toBe(0);
+      expect(saveCallCount).toBe(0);
     });
 
-    it('should save the thread and submitted input if error occurs during LLM generation', async () => {
+    it('should save thread but not messages if error occurs during LLM generation', async () => {
       // Threads are created upfront so storage backends that validate thread existence can
-      // persist the submitted input even when the provider fails before producing output.
+      // persist later messages even when the provider fails before producing output.
       const mockMemory = new MockMemory();
       const saveMessagesSpy = vi.spyOn(mockMemory, 'saveMessages');
 
@@ -429,17 +424,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
       expect(thread).not.toBeNull();
       expect(thread?.id).toBe('thread-err');
 
-      if (version === 'v1') {
-        expect(saveMessagesSpy).not.toHaveBeenCalled();
-      } else {
-        const recalled = await mockMemory.recall({ threadId: 'thread-err', resourceId: 'user-err' });
-        expect(recalled.messages).toHaveLength(1);
-        expect(recalled.messages[0]).toMatchObject({
-          role: 'user',
-          content: { parts: [{ type: 'text', text: 'trigger error' }] },
-        });
-        expect(new Set(recalled.messages.map(message => message.id)).size).toBe(1);
-      }
+      expect(saveMessagesSpy).not.toHaveBeenCalled();
     });
   });
 
@@ -1955,6 +1940,101 @@ describe('message persistence across completed steps', () => {
         .filter(part => part.type === 'text')
         .map(part => part.text),
     ).toEqual(['test message', 'Response after tool', 'Response after tool']);
+  });
+
+  it('should preserve savePerStep persistence when aborting after a completed step', async () => {
+    let doStreamCallCount = 0;
+    const toolCallModel = new MockLanguageModelV2({
+      doStream: async () => {
+        doStreamCallCount++;
+        if (doStreamCallCount === 1) {
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              {
+                type: 'tool-call',
+                toolCallId: 'call-1',
+                toolName: 'echo-tool',
+                input: '{"input": "hello"}',
+                providerExecuted: false,
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+              },
+            ]),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+          };
+        }
+
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Response after tool' },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 15, outputTokens: 10, totalTokens: 25 },
+            },
+          ]),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        };
+      },
+    });
+    const mockMemory = new MockMemory();
+    const saveMessagesSpy = vi.spyOn(mockMemory, 'saveMessages');
+    const echoTool = createTool({
+      id: 'echo-tool',
+      description: 'Echoes the input',
+      inputSchema: z.object({ input: z.string() }),
+      execute: async input => ({ output: input.input }),
+    });
+    const agent = new Agent({
+      id: 'save-per-step-abort-regression-agent',
+      name: 'Save Per Step Abort Regression',
+      instructions: 'test',
+      model: toolCallModel,
+      memory: mockMemory,
+      tools: { 'echo-tool': echoTool },
+    });
+    const abortController = new AbortController();
+    let stepFinishCount = 0;
+
+    const result = await agent.stream('test message', {
+      memory: {
+        thread: 'thread-save-per-step-abort-regression',
+        resource: 'resource-save-per-step-abort-regression',
+      },
+      savePerStep: true,
+      abortSignal: abortController.signal,
+      onStepFinish: async () => {
+        stepFinishCount++;
+        if (stepFinishCount === 1) {
+          abortController.abort();
+        }
+      },
+    });
+
+    try {
+      await result.consumeStream();
+    } catch {
+      // Expected: stream may error on abort.
+    }
+
+    expect(stepFinishCount).toBeGreaterThanOrEqual(1);
+    expect(saveMessagesSpy).toHaveBeenCalled();
+    const recalled = await mockMemory.recall({
+      threadId: 'thread-save-per-step-abort-regression',
+      resourceId: 'resource-save-per-step-abort-regression',
+    });
+    expect(recalled.messages.some(message => message.role === 'user')).toBe(true);
   });
 });
 
