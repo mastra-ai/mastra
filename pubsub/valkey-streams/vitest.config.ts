@@ -2,7 +2,7 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
-    name: 'e2e:pubsub/redis-streams',
+    name: 'e2e:pubsub/valkey-streams',
     globals: true,
     include: ['src/**/*.test.ts'],
     pool: 'forks',

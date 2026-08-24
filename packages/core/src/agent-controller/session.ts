@@ -508,6 +508,10 @@ export class SessionThread {
   /** Persist a setting to a specific thread, regardless of the current binding. */
   async setSettingOn({ threadId, key, value }: { threadId: string; key: string; value: unknown }): Promise<void> {
     if (!this.#store) return;
+    if (value === undefined) {
+      await this.#store.deleteMetadata({ threadId, key });
+      return;
+    }
     await this.#store.setMetadata({ threadId, key, value });
   }
 
