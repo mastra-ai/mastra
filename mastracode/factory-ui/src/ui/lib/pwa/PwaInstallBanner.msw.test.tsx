@@ -111,6 +111,19 @@ describe('PwaInstallBanner', () => {
     expect(screen.queryByRole('region', { name: 'Install app' })).not.toBeInTheDocument();
   });
 
+  it('adapts the instructions wording to Chrome on iOS', async () => {
+    setUserAgent(
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/126.0.6478.54 Mobile/15E148 Safari/604.1',
+    );
+    const user = userEvent.setup();
+    render(<PwaInstallBanner />);
+
+    await user.click(screen.getByRole('button', { name: 'Install' }));
+
+    expect(screen.getByText(/Chrome’s address bar/)).toBeInTheDocument();
+    expect(screen.queryByText(/Safari’s toolbar/)).not.toBeInTheDocument();
+  });
+
   it('renders nothing when running standalone', () => {
     setStandalone(true);
     render(<PwaInstallBanner />);

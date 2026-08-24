@@ -73,6 +73,15 @@ describe('usePwaInstall', () => {
     expect(result.current.installationMethod).toBe('manual');
   });
 
+  it('offers the manual method on Chrome iOS too', () => {
+    setUserAgent(
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/126.0.6478.54 Mobile/15E148 Safari/604.1',
+    );
+    const { result } = renderHook(() => usePwaInstall());
+    expect(result.current.state).toBe('manual-install');
+    expect(result.current.installationMethod).toBe('manual');
+  });
+
   it('reports installed when running standalone', () => {
     setStandalone(true);
     const { result } = renderHook(() => usePwaInstall());

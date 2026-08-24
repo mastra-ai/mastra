@@ -7,23 +7,53 @@ import {
   DrawerTitle,
 } from '@mastra/playground-ui/components/Drawer';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Share, Smartphone, SquarePlus } from 'lucide-react';
+import { Menu, Share, Smartphone, SquarePlus } from 'lucide-react';
 import type { ReactNode } from 'react';
+
+import type { IosBrowser } from './platform';
+import { detectIosBrowser } from './platform';
 
 interface PwaInstallInstructionsProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-const steps: Array<{ icon: ReactNode; label: ReactNode }> = [
-  {
-    icon: <Share className="size-4" aria-hidden="true" />,
-    label: (
-      <>
-        Tap the <span className="text-icon6 font-medium">Share</span> button in Safari&rsquo;s toolbar
-      </>
-    ),
-  },
+/** Where the share menu lives differs per iOS browser. */
+function shareStep(browser: IosBrowser): { icon: ReactNode; label: ReactNode } {
+  switch (browser) {
+    case 'chrome':
+      return {
+        icon: <Share className="size-4" aria-hidden="true" />,
+        label: (
+          <>
+            Tap the <span className="text-icon6 font-medium">Share</span> button in Chrome&rsquo;s address bar
+          </>
+        ),
+      };
+    case 'firefox':
+    case 'edge':
+    case 'opera':
+      return {
+        icon: <Menu className="size-4" aria-hidden="true" />,
+        label: (
+          <>
+            Open the browser menu and tap <span className="text-icon6 font-medium">Share</span>
+          </>
+        ),
+      };
+    case 'safari':
+      return {
+        icon: <Share className="size-4" aria-hidden="true" />,
+        label: (
+          <>
+            Tap the <span className="text-icon6 font-medium">Share</span> button in Safari&rsquo;s toolbar
+          </>
+        ),
+      };
+  }
+}
+
+const commonSteps: Array<{ icon: ReactNode; label: ReactNode }> = [
   {
     icon: <SquarePlus className="size-4" aria-hidden="true" />,
     label: (
@@ -42,8 +72,9 @@ const steps: Array<{ icon: ReactNode; label: ReactNode }> = [
   },
 ];
 
-/** iOS/iPadOS Safari has no install prompt; walk the user through Add to Home Screen. */
+/** iOS/iPadOS has no install prompt; walk the user through Add to Home Screen. */
 export function PwaInstallInstructions({ open, onOpenChange }: PwaInstallInstructionsProps) {
+  const steps = [shareStep(detectIosBrowser() ?? 'safari'), ...commonSteps];
   return (
     <Drawer open={open} onOpenChange={onOpenChange} side="bottom">
       <DrawerContent aria-label="Install this app">

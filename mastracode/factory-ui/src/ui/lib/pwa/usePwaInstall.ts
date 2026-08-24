@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { isIosSafariLike } from './platform';
+import { detectIosBrowser } from './platform';
 import {
   getDismissalRemainingMs,
   isManuallyInstalled,
@@ -30,7 +30,7 @@ export interface PwaInstall {
 
 function computeInitialState(): PwaInstallState {
   if (isRunningStandalone() || isManuallyInstalled()) return 'installed';
-  if (isIosSafariLike()) return 'manual-install';
+  if (detectIosBrowser() !== null) return 'manual-install';
   // Chromium signals native installability later via `beforeinstallprompt`.
   return 'unavailable';
 }
@@ -38,7 +38,7 @@ function computeInitialState(): PwaInstallState {
 /**
  * Centralizes PWA install state: captures Chromium's `beforeinstallprompt`
  * for a user-gesture-triggered native prompt, falls back to the manual
- * "Add to Home Screen" method on iOS-like Safari, and tracks dismissal.
+ * "Add to Home Screen" method on iOS browsers, and tracks dismissal.
  */
 export function usePwaInstall(): PwaInstall {
   const [state, setState] = useState<PwaInstallState>(computeInitialState);

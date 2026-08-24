@@ -1,15 +1,21 @@
+export type IosBrowser = 'safari' | 'chrome' | 'firefox' | 'edge' | 'opera';
+
 /**
- * iOS/iPadOS detection for the manual "Add to Home Screen" install path.
- * UA sniffing is unavoidable here: there is no capability check for the iOS
- * share-menu install flow. iPadOS can report a macOS user agent, so touch
- * support disambiguates it from desktop Safari.
+ * Detects iOS/iPadOS browsers for the manual "Add to Home Screen" install
+ * path (no `beforeinstallprompt` on iOS; all browsers support the share-menu
+ * install since iOS 16.4, but the entry point differs per browser). UA
+ * sniffing is unavoidable: there is no capability check for this flow.
+ * iPadOS can report a macOS user agent, so touch support disambiguates it
+ * from desktop Safari. Returns null off iOS.
  */
-export function isIosSafariLike(): boolean {
-  if (typeof navigator === 'undefined') return false;
+export function detectIosBrowser(): IosBrowser | null {
+  if (typeof navigator === 'undefined') return null;
   const { userAgent, maxTouchPoints } = navigator;
-  // Third-party iOS browsers (Chrome, Firefox, Edge, Opera) also report
-  // iPhone/iPad, but our instructions describe Safari's share-menu flow.
-  if (/CriOS|FxiOS|EdgiOS|OPiOS|OPT\//.test(userAgent)) return false;
-  if (/iPhone|iPad|iPod/.test(userAgent)) return true;
-  return /Macintosh/.test(userAgent) && maxTouchPoints > 1;
+  const isIos = /iPhone|iPad|iPod/.test(userAgent) || (/Macintosh/.test(userAgent) && maxTouchPoints > 1);
+  if (!isIos) return null;
+  if (/CriOS/.test(userAgent)) return 'chrome';
+  if (/FxiOS/.test(userAgent)) return 'firefox';
+  if (/EdgiOS/.test(userAgent)) return 'edge';
+  if (/OPiOS|OPT\//.test(userAgent)) return 'opera';
+  return 'safari';
 }
