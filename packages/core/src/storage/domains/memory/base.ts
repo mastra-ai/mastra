@@ -23,8 +23,25 @@ import type {
   SwapBufferedReflectionToActiveInput,
   CreateReflectionGenerationInput,
   UpdateObservationalMemoryConfigInput,
+  AcquireObservationBufferClaimInput,
+  RenewObservationBufferClaimInput,
+  ReleaseObservationBufferClaimInput,
+  CommitBufferedObservationsInput,
+  CommitBufferedObservationsResult,
+  ObservationBufferClaimOutcome,
+  ObservationBufferClaimStatus,
 } from '../../types';
 import { StorageDomain } from '../base';
+
+/**
+ * Internal lease policy for observation-buffer claims.
+ * A two-minute lease renewed every thirty seconds gives a four-to-one margin
+ * that tolerates ordinary scheduling delay while bounding crash recovery.
+ * These are internal, test-injectable (leaseMs is passed per operation) and
+ * intentionally not user-configurable.
+ */
+export const OBSERVATION_BUFFER_CLAIM_LEASE_MS = 120_000;
+export const OBSERVATION_BUFFER_CLAIM_RENEW_INTERVAL_MS = 30_000;
 
 function isPlainObj(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -345,13 +362,117 @@ export abstract class MemoryStorage extends StorageDomain {
   }
 
   /**
+   * @deprecated Compatibility helper only (migrations/tests). This is NOT
+   * ownership authority: it writes the boolean unconditionally, so observation
+   * buffering must use the claim operations below instead.
+   *
    * Set the isBufferingObservation flag and update lastBufferedAtTokens.
-   * Called when async observation buffering starts (true) or ends/fails (false).
    * @param id - Record ID
    * @param isBuffering - Whether buffering is in progress
    * @param lastBufferedAtTokens - The pending token count at which this buffer was triggered (only set when isBuffering=true)
    */
   async setBufferingObservationFlag(_id: string, _isBuffering: boolean, _lastBufferedAtTokens?: number): Promise<void> {
+    throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);
+  }
+
+  /*
+   * Observation-buffer claim contract.
+   *
+   * The persisted claim is the ONLY ownership authority for observation
+   * buffering. Process-local registries may deduplicate promises within one
+   * process but must never clear, steal, or validate a persisted foreign
+   * claim. The storage-owned state machine is:
+   *
+   * - unclaimed: owner token is null → acquirable.
+   * - legacy marker: owner token is null while `isBufferingObservation=true`
+   *   (a row written by a pre-claim binary). Reserved only until
+   *   `updatedAt + leaseMs` (legacy grace = one lease), then atomically
+   *   takeable. Legacy `false` rows are immediately unclaimed.
+   * - live claim: matching token with `expiresAt > authoritativeNow` may
+   *   renew, commit, or release.
+   * - expired claim: `expiresAt <= authoritativeNow` cannot renew, commit, or
+   *   release — even before another owner takes over.
+   * - replaced/released claim: an old token always loses.
+   *
+   * Time contract: every predicate evaluates `authoritativeNow` inside the
+   * same atomic backend operation using the backend's clock
+   * (CURRENT_TIMESTAMP or equivalent; Convex mutation time; an injected clock
+   * for in-memory). `expiresAt == authoritativeNow` is expired. Adapters must
+   * not mix client-created expiry with server-side comparison.
+   *
+   * Protected side effects after acquisition — candidate-message sealing,
+   * buffering start-marker persistence, buffered-chunk append, token-boundary
+   * update, and release — must each be owner-conditioned or harmless/
+   * idempotent. If ownership expires between side effects, the persisted
+   * post-state must never strand sealed messages or leave a marker that
+   * blocks a successor: a takeover re-seals under the new token, and stale
+   * chunks are fenced out of the successor's commit/activation.
+   *
+   * Activation/swap may consume committed chunks but must never clear a
+   * foreign live claim: it owner-conditionally releases the claim it holds,
+   * or leaves a different live claim intact. Reset paths clear only absent,
+   * expired, or owned claims through this contract.
+   *
+   * Result semantics: operations return only the caller's own claim or
+   * `{ ok: false, reason: 'lost' }` — a foreign owner's token is never
+   * exposed. A missing record throws the adapter's established not-found
+   * error.
+   */
+
+  /**
+   * Atomically acquire the observation-buffer claim.
+   * The predicate accepts only unclaimed, expired, or legacy-grace-expired
+   * state, evaluated against the backend's authoritative clock inside one
+   * atomic operation. On success it persists the owner token, acquisition/
+   * renewal timestamps, `expiresAt = now + leaseMs`, sets
+   * `isBufferingObservation = true` for legacy readers, and records
+   * `lastBufferedAtTokens` when provided.
+   */
+  async acquireObservationBufferClaim(
+    _input: AcquireObservationBufferClaimInput,
+  ): Promise<ObservationBufferClaimOutcome> {
+    throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);
+  }
+
+  /**
+   * Renew the lease of an owned, unexpired claim.
+   * Only a matching token with an unexpired lease may renew; an expired owner
+   * returns `lost` even before takeover. Renewal writes a strictly advancing
+   * expiry (`now + leaseMs`).
+   */
+  async renewObservationBufferClaim(_input: RenewObservationBufferClaimInput): Promise<ObservationBufferClaimOutcome> {
+    throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);
+  }
+
+  /**
+   * Release an owned, unexpired claim.
+   * Clears the owner token, claim timestamps, and `isBufferingObservation`.
+   * A foreign or expired owner returns `lost` and mutates nothing.
+   */
+  async releaseObservationBufferClaim(
+    _input: ReleaseObservationBufferClaimInput,
+  ): Promise<ObservationBufferClaimOutcome> {
+    throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);
+  }
+
+  /**
+   * Owner-conditioned buffered-observation commit.
+   * Applies the chunk append and `lastBufferedAtTime` boundary update only
+   * while `ownerToken` matches the persisted claim and the lease is unexpired
+   * per the backend clock, in one atomic operation. A stale or foreign owner
+   * gets `{ committed: false, reason: 'lost' }` and mutates nothing.
+   */
+  async commitBufferedObservations(_input: CommitBufferedObservationsInput): Promise<CommitBufferedObservationsResult> {
+    throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);
+  }
+
+  /**
+   * Backend-evaluated claim liveness for status readers.
+   * `live` is true only when an owner token is present and the lease is
+   * unexpired per the same backend clock the claim operations use. Never
+   * exposes the owner token.
+   */
+  async getObservationBufferClaimStatus(_id: string): Promise<ObservationBufferClaimStatus> {
     throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);
   }
 

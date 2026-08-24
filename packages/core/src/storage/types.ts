@@ -1281,6 +1281,23 @@ export interface ObservationalMemoryRecord {
   isObserving: boolean;
   /** Is async observation buffering currently in progress? */
   isBufferingObservation: boolean;
+  /**
+   * Owner token of the active observation-buffer claim.
+   * A unique random token generated per buffering cycle; never derived from
+   * PID/hostname. Null/undefined means no durable claim is held (a legacy
+   * `isBufferingObservation=true` row with a null token is a "legacy marker",
+   * respected only for a bounded grace period).
+   */
+  observationBufferClaimToken?: string | null;
+  /** When the current observation-buffer claim was first acquired. */
+  observationBufferClaimAcquiredAt?: Date | null;
+  /** When the current observation-buffer claim lease was last renewed. */
+  observationBufferClaimRenewedAt?: Date | null;
+  /**
+   * When the current observation-buffer claim lease expires, evaluated against
+   * the storage backend's authoritative clock. `expiresAt <= now` is expired.
+   */
+  observationBufferClaimExpiresAt?: Date | null;
   /** Is async reflection buffering currently in progress? */
   isBufferingReflection: boolean;
   /**
@@ -1352,6 +1369,75 @@ export interface UpdateBufferedObservationsInput {
   chunk: BufferedObservationChunkInput;
   /** Timestamp cursor for the last buffered message boundary. Set to max message timestamp + 1ms. */
   lastBufferedAtTime?: Date;
+}
+
+/**
+ * A snapshot of the observation-buffer claim held by the calling cycle.
+ * Adapters must never return a foreign owner's token.
+ */
+export interface ObservationBufferClaim {
+  /** The unique random token identifying this buffering cycle. */
+  ownerToken: string;
+  /** When the claim was first acquired. */
+  acquiredAt: Date;
+  /** When the lease was last renewed (equals acquiredAt on acquisition). */
+  renewedAt: Date;
+  /** When the lease expires against the backend's authoritative clock. */
+  expiresAt: Date;
+}
+
+/**
+ * Narrow result for claim acquire/renew/release operations.
+ * A missing record throws the adapter's established not-found error instead.
+ */
+export type ObservationBufferClaimOutcome = { ok: true; claim: ObservationBufferClaim } | { ok: false; reason: 'lost' };
+
+/** Input for atomically acquiring the observation-buffer claim. */
+export interface AcquireObservationBufferClaimInput {
+  /** Record ID */
+  id: string;
+  /** Unique random token generated for this buffering cycle. */
+  ownerToken: string;
+  /**
+   * Lease duration in milliseconds. Also used as the legacy grace window:
+   * a legacy `isBufferingObservation=true` row with no owner token is
+   * respected until `updatedAt + leaseMs`, then becomes atomically claimable.
+   */
+  leaseMs: number;
+  /** The pending token count at which this buffer was triggered. */
+  lastBufferedAtTokens?: number;
+}
+
+/** Input for renewing an owned, unexpired observation-buffer claim. */
+export interface RenewObservationBufferClaimInput {
+  id: string;
+  ownerToken: string;
+  /** New lease duration in milliseconds, measured from the backend's now. */
+  leaseMs: number;
+}
+
+/** Input for releasing an owned, unexpired observation-buffer claim. */
+export interface ReleaseObservationBufferClaimInput {
+  id: string;
+  ownerToken: string;
+}
+
+/**
+ * Input for the owner-conditioned buffered-observation commit.
+ * The append is applied only while `ownerToken` matches the persisted claim
+ * and the lease is unexpired.
+ */
+export interface CommitBufferedObservationsInput extends UpdateBufferedObservationsInput {
+  ownerToken: string;
+}
+
+/** Narrow result for the owner-conditioned buffered-observation commit. */
+export type CommitBufferedObservationsResult = { committed: true } | { committed: false; reason: 'lost' };
+
+/** Backend-evaluated claim liveness for status readers. */
+export interface ObservationBufferClaimStatus {
+  /** True when an owner token is present and the lease is unexpired per the backend clock. */
+  live: boolean;
 }
 
 /**

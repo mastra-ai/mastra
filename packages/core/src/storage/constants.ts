@@ -546,6 +546,11 @@ export const OBSERVATIONAL_MEMORY_SCHEMA: Record<string, StorageColumn> = {
   bufferedObservationChunks: { type: 'jsonb', nullable: true }, // JSON array of BufferedObservationChunk objects
   isBufferingObservation: { type: 'boolean', nullable: false },
   isBufferingReflection: { type: 'boolean', nullable: false },
+  // Observation-buffer claim columns (nullable/backward-compatible; legacy rows stay readable without backfill)
+  observationBufferClaimToken: { type: 'text', nullable: true }, // Unique random token of the owning buffering cycle
+  observationBufferClaimAcquiredAt: { type: 'timestamp', nullable: true }, // When the claim was acquired
+  observationBufferClaimRenewedAt: { type: 'timestamp', nullable: true }, // When the lease was last renewed
+  observationBufferClaimExpiresAt: { type: 'timestamp', nullable: true }, // Lease expiry per the backend clock (expiresAt <= now is expired)
   lastBufferedAtTokens: { type: 'integer', nullable: false },
   lastBufferedAtTime: { type: 'timestamp', nullable: true },
   metadata: { type: 'jsonb', nullable: true },

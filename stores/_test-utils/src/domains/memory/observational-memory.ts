@@ -1063,6 +1063,288 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
       });
     });
 
+    describe('Observation Buffer Claim', () => {
+      // External adapters evaluate expiry against their own backend clock, so
+      // these cases use short leases plus real waits instead of injected clocks.
+      const LEASE_MS = 30_000;
+      const SHORT_LEASE_MS = 250;
+      const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+      const claimChunk = () => createChunk({ observations: 'claimed observation', messageTokens: 100 });
+
+      async function initRecord() {
+        const input = createSampleOMInput();
+        const record = await memoryStorage.initializeObservationalMemory(input);
+        return { input, record };
+      }
+
+      it('first claim succeeds and persists owner, expiry, and legacy boolean', async () => {
+        const { input, record } = await initRecord();
+        const res = await memoryStorage.acquireObservationBufferClaim({
+          id: record.id,
+          ownerToken: 'owner-a',
+          leaseMs: LEASE_MS,
+          lastBufferedAtTokens: 5000,
+        });
+        expect(res.ok).toBe(true);
+        if (res.ok) {
+          expect(res.claim.ownerToken).toBe('owner-a');
+          expect(res.claim.expiresAt.getTime()).toBeGreaterThan(Date.now() - 1000);
+        }
+
+        const updated = await memoryStorage.getObservationalMemory(input.threadId, input.resourceId);
+        expect(updated?.observationBufferClaimToken).toBe('owner-a');
+        expect(updated?.observationBufferClaimExpiresAt).toBeTruthy();
+        expect(updated?.isBufferingObservation).toBe(true);
+        expect(updated?.lastBufferedAtTokens).toBe(5000);
+      });
+
+      it('second claimant loses while the first claim is live', async () => {
+        const { input, record } = await initRecord();
+        await memoryStorage.acquireObservationBufferClaim({ id: record.id, ownerToken: 'owner-a', leaseMs: LEASE_MS });
+        const res = await memoryStorage.acquireObservationBufferClaim({
+          id: record.id,
+          ownerToken: 'owner-b',
+          leaseMs: LEASE_MS,
+        });
+        expect(res).toEqual({ ok: false, reason: 'lost' });
+
+        const updated = await memoryStorage.getObservationalMemory(input.threadId, input.resourceId);
+        expect(updated?.observationBufferClaimToken).toBe('owner-a');
+      });
+
+      it('matching unexpired owner renews; foreign owner cannot renew', async () => {
+        const { record } = await initRecord();
+        await memoryStorage.acquireObservationBufferClaim({ id: record.id, ownerToken: 'owner-a', leaseMs: LEASE_MS });
+
+        const renewed = await memoryStorage.renewObservationBufferClaim({
+          id: record.id,
+          ownerToken: 'owner-a',
+          leaseMs: LEASE_MS,
+        });
+        expect(renewed.ok).toBe(true);
+
+        const foreign = await memoryStorage.renewObservationBufferClaim({
+          id: record.id,
+          ownerToken: 'owner-b',
+          leaseMs: LEASE_MS,
+        });
+        expect(foreign).toEqual({ ok: false, reason: 'lost' });
+      });
+
+      it('renewal writes a strictly advancing expiry', async () => {
+        const { input, record } = await initRecord();
+        await memoryStorage.acquireObservationBufferClaim({ id: record.id, ownerToken: 'owner-a', leaseMs: LEASE_MS });
+        const first = await memoryStorage.getObservationalMemory(input.threadId, input.resourceId);
+        const firstExpiry = first!.observationBufferClaimExpiresAt!.getTime();
+
+        const renewed = await memoryStorage.renewObservationBufferClaim({
+          id: record.id,
+          ownerToken: 'owner-a',
+          leaseMs: LEASE_MS,
+        });
+        expect(renewed.ok).toBe(true);
+        if (renewed.ok) {
+          expect(renewed.claim.expiresAt.getTime()).toBeGreaterThan(firstExpiry - 1);
+        }
+        const second = await memoryStorage.getObservationalMemory(input.threadId, input.resourceId);
+        expect(second!.observationBufferClaimExpiresAt!.getTime()).toBeGreaterThan(firstExpiry - 1);
+      });
+
+      it('an expired owner cannot renew or commit, even before takeover', async () => {
+        const { input, record } = await initRecord();
+        await memoryStorage.acquireObservationBufferClaim({
+          id: record.id,
+          ownerToken: 'owner-a',
+          leaseMs: SHORT_LEASE_MS,
+        });
+        await sleep(SHORT_LEASE_MS * 2);
+
+        const renewed = await memoryStorage.renewObservationBufferClaim({
+          id: record.id,
+          ownerToken: 'owner-a',
+          leaseMs: LEASE_MS,
+        });
+        expect(renewed).toEqual({ ok: false, reason: 'lost' });
+
+        const commit = await memoryStorage.commitBufferedObservations({
+          id: record.id,
+          ownerToken: 'owner-a',
+          chunk: claimChunk(),
+        });
+        expect(commit).toEqual({ committed: false, reason: 'lost' });
+
+        const updated = await memoryStorage.getObservationalMemory(input.threadId, input.resourceId);
+        expect(updated?.bufferedObservationChunks ?? []).toHaveLength(0);
+      });
+
+      it('an expired claim can be atomically replaced', async () => {
+        const { input, record } = await initRecord();
+        await memoryStorage.acquireObservationBufferClaim({
+          id: record.id,
+          ownerToken: 'owner-a',
+          leaseMs: SHORT_LEASE_MS,
+        });
+        await sleep(SHORT_LEASE_MS * 2);
+
+        const res = await memoryStorage.acquireObservationBufferClaim({
+          id: record.id,
+          ownerToken: 'owner-b',
+          leaseMs: LEASE_MS,
+        });
+        expect(res.ok).toBe(true);
+
+        const updated = await memoryStorage.getObservationalMemory(input.threadId, input.resourceId);
+        expect(updated?.observationBufferClaimToken).toBe('owner-b');
+      });
+
+      it('matching owner releases; claim and legacy boolean are cleared', async () => {
+        const { input, record } = await initRecord();
+        await memoryStorage.acquireObservationBufferClaim({ id: record.id, ownerToken: 'owner-a', leaseMs: LEASE_MS });
+        const res = await memoryStorage.releaseObservationBufferClaim({ id: record.id, ownerToken: 'owner-a' });
+        expect(res.ok).toBe(true);
+
+        const updated = await memoryStorage.getObservationalMemory(input.threadId, input.resourceId);
+        expect(updated?.observationBufferClaimToken ?? null).toBeNull();
+        expect(updated?.isBufferingObservation).toBe(false);
+      });
+
+      it('foreign owner cannot release; expired owner release returns lost', async () => {
+        const { input, record } = await initRecord();
+        await memoryStorage.acquireObservationBufferClaim({
+          id: record.id,
+          ownerToken: 'owner-a',
+          leaseMs: SHORT_LEASE_MS,
+        });
+
+        const foreign = await memoryStorage.releaseObservationBufferClaim({ id: record.id, ownerToken: 'owner-b' });
+        expect(foreign).toEqual({ ok: false, reason: 'lost' });
+
+        await sleep(SHORT_LEASE_MS * 2);
+        const expired = await memoryStorage.releaseObservationBufferClaim({ id: record.id, ownerToken: 'owner-a' });
+        expect(expired).toEqual({ ok: false, reason: 'lost' });
+
+        const updated = await memoryStorage.getObservationalMemory(input.threadId, input.resourceId);
+        expect(updated?.observationBufferClaimToken).toBe('owner-a');
+      });
+
+      it('a live owner commits buffered output and the boundary cursor', async () => {
+        const { input, record } = await initRecord();
+        await memoryStorage.acquireObservationBufferClaim({ id: record.id, ownerToken: 'owner-a', leaseMs: LEASE_MS });
+        const lastBufferedAtTime = new Date();
+        const res = await memoryStorage.commitBufferedObservations({
+          id: record.id,
+          ownerToken: 'owner-a',
+          chunk: claimChunk(),
+          lastBufferedAtTime,
+        });
+        expect(res).toEqual({ committed: true });
+
+        const updated = await memoryStorage.getObservationalMemory(input.threadId, input.resourceId);
+        expect(updated?.bufferedObservationChunks).toHaveLength(1);
+      });
+
+      it('a stale owner cannot persist buffered output after takeover; successor state is intact', async () => {
+        const { input, record } = await initRecord();
+        await memoryStorage.acquireObservationBufferClaim({
+          id: record.id,
+          ownerToken: 'owner-a',
+          leaseMs: SHORT_LEASE_MS,
+        });
+        await sleep(SHORT_LEASE_MS * 2);
+
+        const takeover = await memoryStorage.acquireObservationBufferClaim({
+          id: record.id,
+          ownerToken: 'owner-b',
+          leaseMs: LEASE_MS,
+        });
+        expect(takeover.ok).toBe(true);
+
+        const successorCommit = await memoryStorage.commitBufferedObservations({
+          id: record.id,
+          ownerToken: 'owner-b',
+          chunk: claimChunk(),
+        });
+        expect(successorCommit).toEqual({ committed: true });
+
+        const lateCommit = await memoryStorage.commitBufferedObservations({
+          id: record.id,
+          ownerToken: 'owner-a',
+          chunk: claimChunk(),
+        });
+        expect(lateCommit).toEqual({ committed: false, reason: 'lost' });
+
+        const lateRelease = await memoryStorage.releaseObservationBufferClaim({ id: record.id, ownerToken: 'owner-a' });
+        expect(lateRelease).toEqual({ ok: false, reason: 'lost' });
+
+        const updated = await memoryStorage.getObservationalMemory(input.threadId, input.resourceId);
+        expect(updated?.observationBufferClaimToken).toBe('owner-b');
+        expect(updated?.bufferedObservationChunks).toHaveLength(1);
+        expect(updated?.isBufferingObservation).toBe(true);
+      });
+
+      it('legacy true/null-owner rows are respected during the grace window then become claimable', async () => {
+        const { input, record } = await initRecord();
+        // Simulate a pre-claim binary's write: boolean true, no owner metadata.
+        await memoryStorage.setBufferingObservationFlag(record.id, true, 1234);
+
+        const duringGrace = await memoryStorage.acquireObservationBufferClaim({
+          id: record.id,
+          ownerToken: 'owner-b',
+          leaseMs: SHORT_LEASE_MS,
+        });
+        expect(duringGrace).toEqual({ ok: false, reason: 'lost' });
+
+        await sleep(SHORT_LEASE_MS * 2);
+        const afterGrace = await memoryStorage.acquireObservationBufferClaim({
+          id: record.id,
+          ownerToken: 'owner-b',
+          leaseMs: LEASE_MS,
+        });
+        expect(afterGrace.ok).toBe(true);
+
+        const updated = await memoryStorage.getObservationalMemory(input.threadId, input.resourceId);
+        expect(updated?.observationBufferClaimToken).toBe('owner-b');
+      });
+
+      it('reports backend-evaluated claim liveness for status readers', async () => {
+        const { record } = await initRecord();
+        expect(await memoryStorage.getObservationBufferClaimStatus(record.id)).toEqual({ live: false });
+
+        await memoryStorage.acquireObservationBufferClaim({
+          id: record.id,
+          ownerToken: 'owner-a',
+          leaseMs: SHORT_LEASE_MS,
+        });
+        expect(await memoryStorage.getObservationBufferClaimStatus(record.id)).toEqual({ live: true });
+
+        await sleep(SHORT_LEASE_MS * 2);
+        expect(await memoryStorage.getObservationBufferClaimStatus(record.id)).toEqual({ live: false });
+      });
+
+      it('a legacy boolean without an owner token is not a live claim', async () => {
+        const { record } = await initRecord();
+        await memoryStorage.setBufferingObservationFlag(record.id, true, 1234);
+        expect(await memoryStorage.getObservationBufferClaimStatus(record.id)).toEqual({ live: false });
+      });
+
+      it('missing record keeps the established not-found behavior', async () => {
+        await expect(
+          memoryStorage.acquireObservationBufferClaim({ id: 'non-existent-id', ownerToken: 'x', leaseMs: LEASE_MS }),
+        ).rejects.toThrow(/not found/i);
+        await expect(
+          memoryStorage.renewObservationBufferClaim({ id: 'non-existent-id', ownerToken: 'x', leaseMs: LEASE_MS }),
+        ).rejects.toThrow(/not found/i);
+        await expect(
+          memoryStorage.releaseObservationBufferClaim({ id: 'non-existent-id', ownerToken: 'x' }),
+        ).rejects.toThrow(/not found/i);
+        await expect(
+          memoryStorage.commitBufferedObservations({ id: 'non-existent-id', ownerToken: 'x', chunk: claimChunk() }),
+        ).rejects.toThrow(/not found/i);
+        await expect(memoryStorage.getObservationBufferClaimStatus('non-existent-id')).rejects.toThrow(/not found/i);
+      });
+    });
+
     describe('setBufferingReflectionFlag', () => {
       it('should set isBufferingReflection to true', async () => {
         const input = createSampleOMInput();

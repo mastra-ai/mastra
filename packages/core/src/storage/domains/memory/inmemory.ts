@@ -26,6 +26,14 @@ import type {
   SwapBufferedReflectionToActiveInput,
   CreateReflectionGenerationInput,
   UpdateObservationalMemoryConfigInput,
+  AcquireObservationBufferClaimInput,
+  RenewObservationBufferClaimInput,
+  ReleaseObservationBufferClaimInput,
+  CommitBufferedObservationsInput,
+  CommitBufferedObservationsResult,
+  ObservationBufferClaim,
+  ObservationBufferClaimOutcome,
+  ObservationBufferClaimStatus,
 } from '../../types';
 import {
   filterByDateRange,
@@ -1223,6 +1231,157 @@ export class InMemoryMemory extends MemoryStorage {
       record.lastBufferedAtTokens = lastBufferedAtTokens;
     }
     record.updatedAt = new Date();
+  }
+
+  /**
+   * Injectable authoritative clock for observation-buffer claim predicates.
+   * The in-memory adapter has no server clock, so tests may replace this to
+   * exercise exact lease-boundary behavior.
+   * @internal
+   */
+  observationBufferClaimClock: () => Date = () => new Date();
+
+  /**
+   * Whether the claim on `record` is acquirable at `now`:
+   * unclaimed, expired, or a legacy marker past its grace window.
+   * All reads and the caller's subsequent writes happen synchronously in one
+   * JS turn, so the compare-and-mutate is atomic within this store.
+   */
+  #isObservationBufferClaimAcquirable(record: ObservationalMemoryRecord, now: Date, leaseMs: number): boolean {
+    if (record.observationBufferClaimToken) {
+      const expiresAt = record.observationBufferClaimExpiresAt;
+      // A claim with a token but no expiry is malformed; treat as expired.
+      return !expiresAt || expiresAt.getTime() <= now.getTime();
+    }
+    if (record.isBufferingObservation) {
+      // Legacy marker: owner null while the boolean is true. Respect it from
+      // its persisted updatedAt for at most one lease, then allow takeover.
+      return record.updatedAt.getTime() + leaseMs <= now.getTime();
+    }
+    return true;
+  }
+
+  #isObservationBufferClaimOwnedLive(record: ObservationalMemoryRecord, ownerToken: string, now: Date): boolean {
+    return (
+      record.observationBufferClaimToken === ownerToken &&
+      !!record.observationBufferClaimExpiresAt &&
+      record.observationBufferClaimExpiresAt.getTime() > now.getTime()
+    );
+  }
+
+  async acquireObservationBufferClaim(
+    input: AcquireObservationBufferClaimInput,
+  ): Promise<ObservationBufferClaimOutcome> {
+    const record = this.findObservationalMemoryRecordById(input.id);
+    if (!record) {
+      throw new Error(`Observational memory record not found: ${input.id}`);
+    }
+
+    const now = this.observationBufferClaimClock();
+    if (!this.#isObservationBufferClaimAcquirable(record, now, input.leaseMs)) {
+      return { ok: false, reason: 'lost' };
+    }
+
+    const expiresAt = new Date(now.getTime() + input.leaseMs);
+    record.observationBufferClaimToken = input.ownerToken;
+    record.observationBufferClaimAcquiredAt = now;
+    record.observationBufferClaimRenewedAt = now;
+    record.observationBufferClaimExpiresAt = expiresAt;
+    record.isBufferingObservation = true;
+    if (input.lastBufferedAtTokens !== undefined) {
+      record.lastBufferedAtTokens = input.lastBufferedAtTokens;
+    }
+    record.updatedAt = now;
+
+    return { ok: true, claim: { ownerToken: input.ownerToken, acquiredAt: now, renewedAt: now, expiresAt } };
+  }
+
+  async renewObservationBufferClaim(input: RenewObservationBufferClaimInput): Promise<ObservationBufferClaimOutcome> {
+    const record = this.findObservationalMemoryRecordById(input.id);
+    if (!record) {
+      throw new Error(`Observational memory record not found: ${input.id}`);
+    }
+
+    const now = this.observationBufferClaimClock();
+    if (!this.#isObservationBufferClaimOwnedLive(record, input.ownerToken, now)) {
+      return { ok: false, reason: 'lost' };
+    }
+
+    // Strictly advancing expiry: never move the lease backwards.
+    const currentExpiry = record.observationBufferClaimExpiresAt!.getTime();
+    const expiresAt = new Date(Math.max(now.getTime() + input.leaseMs, currentExpiry + 1));
+    record.observationBufferClaimRenewedAt = now;
+    record.observationBufferClaimExpiresAt = expiresAt;
+    record.updatedAt = now;
+
+    return {
+      ok: true,
+      claim: {
+        ownerToken: input.ownerToken,
+        acquiredAt: record.observationBufferClaimAcquiredAt ?? now,
+        renewedAt: now,
+        expiresAt,
+      },
+    };
+  }
+
+  async releaseObservationBufferClaim(
+    input: ReleaseObservationBufferClaimInput,
+  ): Promise<ObservationBufferClaimOutcome> {
+    const record = this.findObservationalMemoryRecordById(input.id);
+    if (!record) {
+      throw new Error(`Observational memory record not found: ${input.id}`);
+    }
+
+    const now = this.observationBufferClaimClock();
+    if (!this.#isObservationBufferClaimOwnedLive(record, input.ownerToken, now)) {
+      return { ok: false, reason: 'lost' };
+    }
+
+    const claim: ObservationBufferClaim = {
+      ownerToken: input.ownerToken,
+      acquiredAt: record.observationBufferClaimAcquiredAt ?? now,
+      renewedAt: record.observationBufferClaimRenewedAt ?? now,
+      expiresAt: record.observationBufferClaimExpiresAt!,
+    };
+
+    record.observationBufferClaimToken = null;
+    record.observationBufferClaimAcquiredAt = null;
+    record.observationBufferClaimRenewedAt = null;
+    record.observationBufferClaimExpiresAt = null;
+    record.isBufferingObservation = false;
+    record.updatedAt = now;
+
+    return { ok: true, claim };
+  }
+
+  async commitBufferedObservations(input: CommitBufferedObservationsInput): Promise<CommitBufferedObservationsResult> {
+    const record = this.findObservationalMemoryRecordById(input.id);
+    if (!record) {
+      throw new Error(`Observational memory record not found: ${input.id}`);
+    }
+
+    const now = this.observationBufferClaimClock();
+    if (!this.#isObservationBufferClaimOwnedLive(record, input.ownerToken, now)) {
+      return { committed: false, reason: 'lost' };
+    }
+
+    await this.updateBufferedObservations(input);
+    return { committed: true };
+  }
+
+  async getObservationBufferClaimStatus(id: string): Promise<ObservationBufferClaimStatus> {
+    const record = this.findObservationalMemoryRecordById(id);
+    if (!record) {
+      throw new Error(`Observational memory record not found: ${id}`);
+    }
+
+    const now = this.observationBufferClaimClock();
+    const live =
+      !!record.observationBufferClaimToken &&
+      !!record.observationBufferClaimExpiresAt &&
+      record.observationBufferClaimExpiresAt.getTime() > now.getTime();
+    return { live };
   }
 
   async setBufferingReflectionFlag(id: string, isBuffering: boolean): Promise<void> {
