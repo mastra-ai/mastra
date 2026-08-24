@@ -156,8 +156,7 @@ export function DataListNumberCell({
 }
 
 function getShortId(id: string | undefined): string {
-  if (!id) return '';
-  return id.length > 8 ? id.slice(0, 8) : id;
+  return id?.slice(0, 8) ?? '';
 }
 
 export interface DataListIdCellProps {
@@ -176,8 +175,8 @@ export interface DataListSelectCellProps {
   checked: boolean;
   /**
    * Called when the checkbox is clicked. Receives the click event's `shiftKey`
-   * so callers can implement range-select. The event's propagation is stopped
-   * before `onToggle` runs, so the host row's `onClick` doesn't fire.
+   * so callers can implement range-select. The cell stops the click from
+   * reaching the host row, so the row's `onClick` doesn't fire.
    */
   onToggle: (shiftKey: boolean) => void;
   /** Disable the checkbox, e.g. while a selection mutation is in flight. */
@@ -200,13 +199,9 @@ export function DataListSelectCell({ checked, onToggle, disabled, ...rest }: Dat
         checked={checked}
         disabled={disabled}
         onCheckedChange={() => {}} // no-op: selection handled by onClick to capture shiftKey
-        onClick={e => {
-          e.stopPropagation();
-          // Base UI's Checkbox.Root is a `<span>`, so clicks still fire while
-          // disabled — guard here instead of relying on `:disabled` semantics.
-          if (disabled) return;
-          onToggle(e.shiftKey);
-        }}
+        // The click still has to bubble to the cell above, which is what keeps it
+        // off the host row. Base UI withholds this handler while disabled.
+        onClick={e => onToggle(e.shiftKey)}
         aria-label={rest['aria-label']}
       />
     </DataListCell>
