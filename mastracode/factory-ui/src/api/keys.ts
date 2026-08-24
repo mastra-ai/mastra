@@ -75,7 +75,6 @@ export const queryKeys = {
     [...queryKeys.modelPacksAll(), resourceId ?? null, scope ?? null] as const,
   om: (resourceId: string | undefined, factoryId?: string) => ['om', resourceId ?? null, factoryId ?? null] as const,
   thinkingConfig: () => ['thinking-config'] as const,
-  titleGeneration: () => ['title-generation'] as const,
   factorySkills: () => ['factory', 'skills'] as const,
   fsList: (path: string | undefined) => ['fs-list', path ?? null] as const,
   artifactsList: (path: string | undefined) => ['artifacts-list', path ?? null] as const,

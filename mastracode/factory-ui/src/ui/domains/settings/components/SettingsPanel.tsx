@@ -37,7 +37,6 @@ import { SettingsCard } from './SettingsCard';
 import { SettingsSubsection } from './SettingsSubsection';
 import { OMSection } from './OMSection';
 import { BaseThinkingSection, ModeThinkingDefaultsSection } from './ThinkingDefaultsSection';
-import { TitleGenerationSection } from './TitleGenerationSection';
 import { ProviderAccessSection } from './ProviderAccessSection';
 import { BehaviorSettings, GeneralSettings, ModelSettings } from './SettingsPanel.parts';
 
@@ -188,7 +187,7 @@ function MemorySettingsSection({ factoryId, models, sessionResourceId, sessionSc
           title="Factory observational memory"
           description="Models and token thresholds used to summarize and retain context in Factory runs."
         >
-          <SettingsCard className="p-4">
+          <SettingsCard>
             <OMSection factoryId={factoryId} models={models} />
           </SettingsCard>
         </SettingsSubsection>
@@ -197,7 +196,7 @@ function MemorySettingsSection({ factoryId, models, sessionResourceId, sessionSc
         title="Your observational memory"
         description="Models and token thresholds used to summarize and retain context in your interactive chats."
       >
-        <SettingsCard className="p-4">
+        <SettingsCard>
           <OMSection resourceId={sessionResourceId} scope={sessionScope} models={models} />
         </SettingsCard>
       </SettingsSubsection>
@@ -226,9 +225,7 @@ function ModelsSettingsSection({ models, settings, updating, onBehaviorChange }:
           anyConnected ? undefined : 'Connect a provider to unlock model selection and observational-memory settings.'
         }
       >
-        <SettingsCard className="p-4">
-          <ProviderAccessSection />
-        </SettingsCard>
+        <ProviderAccessSection />
       </SettingsSubsection>
       <SettingsSubsection title="Custom providers">
         <SettingsCard className="p-4">
@@ -252,7 +249,6 @@ function ModelsSettingsSection({ models, settings, updating, onBehaviorChange }:
         <SettingsCard>
           <FactoryDefaultModelSection models={models} />
           <BaseThinkingSection />
-          <TitleGenerationSection models={models} />
         </SettingsCard>
       </SettingsSubsection>
       <SettingsSubsection id="model-packs" title="Your defaults" description="Applied to your interactive chats.">

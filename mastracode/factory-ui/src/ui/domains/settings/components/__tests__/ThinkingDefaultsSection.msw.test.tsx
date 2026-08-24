@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
@@ -23,8 +23,8 @@ describe('BaseThinkingSection', () => {
 
     renderWithProviders(<BaseThinkingSection />);
 
-    const base = await screen.findByRole('group', { name: 'Base thinking level' });
-    expect(within(base).getByRole('button', { name: 'Off' })).toHaveAttribute('aria-pressed', 'true');
+    const base = await screen.findByRole('combobox', { name: 'Base thinking level' });
+    expect(base).toHaveTextContent('Off');
   });
 
   it('saves a new base level and reflects the server response', async () => {
@@ -40,13 +40,13 @@ describe('BaseThinkingSection', () => {
     const user = userEvent.setup();
     const { client } = renderWithProviders(<BaseThinkingSection />);
 
-    const base = await screen.findByRole('group', { name: 'Base thinking level' });
-    await user.click(within(base).getByRole('button', { name: 'High' }));
+    await user.click(await screen.findByRole('combobox', { name: 'Base thinking level' }));
+    await user.click(await screen.findByRole('option', { name: 'High' }));
 
     await waitForMutationsIdle(client);
     expect(requestBody).toEqual({ globalDefault: 'high' });
     await waitFor(() =>
-      expect(within(base).getByRole('button', { name: 'High' })).toHaveAttribute('aria-pressed', 'true'),
+      expect(screen.getByRole('combobox', { name: 'Base thinking level' })).toHaveTextContent('High'),
     );
   });
 
@@ -61,13 +61,13 @@ describe('BaseThinkingSection', () => {
     const user = userEvent.setup();
     const { client } = renderWithProviders(<BaseThinkingSection />);
 
-    const base = await screen.findByRole('group', { name: 'Base thinking level' });
-    await user.click(within(base).getByRole('button', { name: 'High' }));
+    await user.click(await screen.findByRole('combobox', { name: 'Base thinking level' }));
+    await user.click(await screen.findByRole('option', { name: 'High' }));
 
     await waitForMutationsIdle(client);
     expect(await screen.findByText(/Only organization admins/)).toBeInTheDocument();
     // The selection did not change.
-    expect(within(base).getByRole('button', { name: 'Off' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('combobox', { name: 'Base thinking level' })).toHaveTextContent('Off');
   });
 });
 
@@ -78,11 +78,10 @@ describe('ModeThinkingDefaultsSection', () => {
     renderWithProviders(<ModeThinkingDefaultsSection />);
 
     // plan has an explicit override; build/fast inherit the global default.
-    const plan = await screen.findByRole('group', { name: 'plan mode thinking level' });
-    expect(within(plan).getByRole('button', { name: 'Max' })).toHaveAttribute('aria-pressed', 'true');
-    const build = screen.getByRole('group', { name: 'build mode thinking level' });
-    expect(within(build).getByRole('button', { name: 'Global' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('group', { name: 'fast mode thinking level' })).toBeInTheDocument();
+    const plan = await screen.findByRole('combobox', { name: 'plan mode thinking level' });
+    expect(plan).toHaveTextContent('Max');
+    expect(screen.getByRole('combobox', { name: 'build mode thinking level' })).toHaveTextContent('Global');
+    expect(screen.getByRole('combobox', { name: 'fast mode thinking level' })).toBeInTheDocument();
   });
 
   it('clears a per-mode override back to the global default with null', async () => {
@@ -98,13 +97,13 @@ describe('ModeThinkingDefaultsSection', () => {
     const user = userEvent.setup();
     const { client } = renderWithProviders(<ModeThinkingDefaultsSection />);
 
-    const plan = await screen.findByRole('group', { name: 'plan mode thinking level' });
-    await user.click(within(plan).getByRole('button', { name: 'Global' }));
+    await user.click(await screen.findByRole('combobox', { name: 'plan mode thinking level' }));
+    await user.click(await screen.findByRole('option', { name: 'Global' }));
 
     await waitForMutationsIdle(client);
     expect(requestBody).toEqual({ modeDefaults: { plan: null } });
     await waitFor(() =>
-      expect(within(plan).getByRole('button', { name: 'Global' })).toHaveAttribute('aria-pressed', 'true'),
+      expect(screen.getByRole('combobox', { name: 'plan mode thinking level' })).toHaveTextContent('Global'),
     );
   });
 });

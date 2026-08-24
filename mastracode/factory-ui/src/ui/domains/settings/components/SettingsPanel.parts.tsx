@@ -87,8 +87,8 @@ interface ModelSettingsProps {
 
 export function ModelSettings({ settings, updating, onBehaviorChange }: ModelSettingsProps) {
   return (
-    <SettingsRow label="Thinking level" hint="Extended-reasoning budget for the agent">
-      <Segmented
+    <SettingsRow label="Thinking level" hint="Extended-reasoning budget for the agent" icon={<Brain size={14} />}>
+      <SelectControl
         ariaLabel="Thinking level"
         value={settings?.thinkingLevel ?? 'off'}
         disabled={!settings || updating}
@@ -120,7 +120,11 @@ export function BehaviorSettings({
   return (
     <div className="flex flex-col gap-8">
       <SettingsCard>
-        <SettingsRow label="Auto-approve tools" hint="Run tool calls without asking (YOLO)">
+        <SettingsRow
+          label="Auto-approve tools"
+          hint="Run tool calls without asking (YOLO)"
+          info="Sets every tool permission below to Allow."
+        >
           <Toggle
             ariaLabel="Auto-approve tools"
             checked={!!settings?.yolo}
@@ -180,7 +184,7 @@ function PermissionsSection({
   return (
     <SettingsSubsection
       title="Tool permissions"
-      description="“Allow” runs without asking, “Ask” prompts you, “Deny” blocks it. Auto-approve above sets every category to Allow."
+      description="“Allow” runs without asking, “Ask” prompts you, “Deny” blocks it."
     >
       <SettingsCard>
         {TOOL_CATEGORIES.map(({ value, label, hint }) => (

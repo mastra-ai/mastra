@@ -701,6 +701,17 @@ export async function deleteUserSession(baseUrl: string, sessionId: string): Pro
   if (!res.ok && res.status !== 404) throw new Error(`Failed to delete session (${res.status})`);
 }
 
+/** Ask the title model to re-name a session's conversation. Resolves to the new title. */
+export async function regenerateSessionTitle(baseUrl: string, sessionId: string): Promise<string> {
+  const res = await fetch(`${baseUrl}/web/user-sessions/${encodeURIComponent(sessionId)}/title`, {
+    method: 'POST',
+    credentials: 'include',
+  });
+  const body: { title?: string; error?: string } = await res.json().catch(() => ({}));
+  if (!res.ok || !body.title) throw new Error(body.error ?? `Failed to rename session (${res.status})`);
+  return body.title;
+}
+
 export interface CommitResult {
   committed: boolean;
 }

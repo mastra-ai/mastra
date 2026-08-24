@@ -16,9 +16,7 @@ import type {
   ProviderInfo,
   ProviderOMDefaultsResponse,
   ThinkingConfigInfo,
-  TitleGenerationConfigInfo,
   UpdateThinkingConfigResponse,
-  UpdateTitleGenerationConfigResponse,
 } from '@mastra/factory/routes/config';
 import type {
   ArtifactEntry,
@@ -43,8 +41,6 @@ export type {
   ProviderOMDefaultsResponse,
   ThinkingConfigInfo,
   UpdateThinkingConfigResponse,
-  TitleGenerationConfigInfo,
-  UpdateTitleGenerationConfigResponse,
 };
 export type {
   ArtifactEntry,

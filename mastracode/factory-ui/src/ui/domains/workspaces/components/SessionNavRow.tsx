@@ -36,9 +36,9 @@ export function SessionNavRow({
   owner,
   onSelect,
   onPinChange,
-  onRegenerateTitle,
-  regenerating,
   onDelete,
+  onRegenerateTitle,
+  regeneratingTitle,
 }: {
   name: string;
   /** Hover tooltip, typically the branch name. */
@@ -57,12 +57,12 @@ export function SessionNavRow({
   pinned?: boolean;
   onSelect: () => void;
   onPinChange: (pinned: boolean) => void;
-  /** Regenerate the session's thread title from its first message. Omitted when the viewer cannot. */
-  onRegenerateTitle?: () => void;
-  /** True while the title regeneration request is in flight. */
-  regenerating?: boolean;
   /** Omit on sessions the viewer does not own: the server only lets owners delete. */
   onDelete?: () => void;
+  /** Re-name the session's conversation with the title model. Omitted when the viewer cannot. */
+  onRegenerateTitle?: () => void;
+  /** True while this row's title is being regenerated. */
+  regeneratingTitle?: boolean;
 }) {
   const anchor = useRef<HTMLLIElement>(null);
   const button = (
@@ -97,9 +97,9 @@ export function SessionNavRow({
           disabled={disabled}
           pinned={pinned}
           onPinChange={onPinChange}
-          onRegenerateTitle={onRegenerateTitle}
-          regenerating={regenerating}
           onDelete={onDelete}
+          onRegenerateTitle={onRegenerateTitle}
+          regeneratingTitle={regeneratingTitle}
         />
       )}
     </span>
@@ -161,18 +161,18 @@ function SessionActionsMenu({
   disabled,
   pinned,
   onPinChange,
-  onRegenerateTitle,
-  regenerating,
   onDelete,
+  onRegenerateTitle,
+  regeneratingTitle,
 }: {
   name: string;
   anchor: RefObject<HTMLElement | null>;
   disabled: boolean;
   pinned: boolean;
   onPinChange: (pinned: boolean) => void;
-  onRegenerateTitle?: () => void;
-  regenerating?: boolean;
   onDelete?: () => void;
+  onRegenerateTitle?: () => void;
+  regeneratingTitle?: boolean;
 }) {
   return (
     <DropdownMenu>
@@ -196,8 +196,8 @@ function SessionActionsMenu({
           {pinned ? 'Unpin' : 'Pin session'}
         </DropdownMenu.Item>
         {onRegenerateTitle ? (
-          <DropdownMenu.Item disabled={regenerating} onClick={onRegenerateTitle}>
-            <RefreshCw className={cn(regenerating && 'animate-spin')} />
+          <DropdownMenu.Item disabled={regeneratingTitle} onClick={onRegenerateTitle}>
+            <RefreshCw className={cn(regeneratingTitle && 'animate-spin')} />
             Regenerate title
           </DropdownMenu.Item>
         ) : null}
