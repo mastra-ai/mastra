@@ -423,6 +423,27 @@ describe('E2BSandbox', () => {
         }),
       );
     });
+
+    it('setEnv after construction reaches subsequent commands', async () => {
+      const sandbox = new E2BSandbox();
+      await sandbox._start();
+
+      sandbox.setEnv(env => ({ ...env, GH_TOKEN: 'tok_1' }));
+      await sandbox.executeCommand('echo', ['test']);
+
+      expect(mockSandbox.commands.run).toHaveBeenLastCalledWith(
+        expect.any(String),
+        expect.objectContaining({ envs: expect.objectContaining({ GH_TOKEN: 'tok_1' }) }),
+      );
+
+      sandbox.setEnv(env => ({ ...env, GH_TOKEN: 'tok_2' }));
+      await sandbox.executeCommand('echo', ['test']);
+
+      expect(mockSandbox.commands.run).toHaveBeenLastCalledWith(
+        expect.any(String),
+        expect.objectContaining({ envs: expect.objectContaining({ GH_TOKEN: 'tok_2' }) }),
+      );
+    });
   });
 
   describe('Stop/Destroy', () => {

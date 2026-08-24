@@ -398,6 +398,20 @@ describe('ModalProcessManager', () => {
     );
   });
 
+  it('setEnv after construction reaches subsequent spawns', async () => {
+    const proc = makeProcess(0);
+    mockSandbox.exec = vi.fn().mockResolvedValue(proc);
+
+    const sandbox = await startedSandbox();
+    sandbox.setEnv(env => ({ ...env, GH_TOKEN: 'tok_1' }));
+    await sandbox.processes.spawn('true');
+
+    expect(mockSandbox.exec).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ env: { GH_TOKEN: 'tok_1' } }),
+    );
+  });
+
   it('spawn() filters undefined values from env', async () => {
     const proc = makeProcess(0);
     mockSandbox.exec = vi.fn().mockResolvedValue(proc);
