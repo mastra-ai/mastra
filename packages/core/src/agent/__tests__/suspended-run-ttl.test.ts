@@ -8,10 +8,11 @@
  * another instance — retained the full in-memory transcript until the process exited.
  *
  * These tests cover the lifetime bound: the lazy sweep on registration evicts records
- * parked longer than `MASTRA_SUSPENDED_RUN_TTL_MS`, completes the teardown an
- * abandoned suspend never got (lease, active slot, `run-completed` for remote
- * subscribers), and leaves everything else alone — fresh suspensions, long-running
- * runs, and the newer stream of a run that was already resumed.
+ * parked longer than `MASTRA_SUSPENDED_RUN_TTL_MS`, frees the local state that record
+ * held (active slot, resumable marker, lease renewal), and leaves everything else
+ * alone — fresh suspensions, long-running runs, the newer stream of a run that was
+ * already resumed, and the cross-process lease itself, which another instance may
+ * have taken over by resuming the same run.
  *
  * The runtime reads its TTL once at module load, so the knob is set in a hoisted block
  * (before the module graph is imported) — a short TTL lets these tests pin the sweep's
@@ -107,6 +108,9 @@ async function watchThread(pubsub: EventEmitterPubSub, threadId: string) {
 
 type ThreadWatcher = Awaited<ReturnType<typeof watchThread>>;
 
+/** Let anything the sweep publishes reach its subscribers before asserting it did not. */
+const flushPublishes = () => new Promise(resolve => setTimeout(resolve, 0));
+
 describe('suspended run in-memory TTL', () => {
   let runtime: AgentThreadStreamRuntime;
   let pubsub: EventEmitterPubSub;
@@ -195,18 +199,19 @@ describe('suspended run in-memory TTL', () => {
     expect(watcher.has('run-completed', 'run-1')).toBe(false);
   });
 
-  it('finishes the teardown an abandoned suspend never got: lease released, subscribers told', async () => {
+  it('evicts without releasing the lease or announcing the run finished', async () => {
     const watcher = await watchThread(pubsub, 'thread-1');
     await registerSuspendedRun('run-1', 'thread-1', watcher);
 
     await sweepAfter(SUSPENDED_RUN_TTL_MS + 1);
+    await flushPublishes();
 
-    // Without releasing, the run's lease-renewal timer would keep this instance
-    // owning the thread forever as far as every other instance can tell.
-    expect(releaseLease).toHaveBeenCalledWith(threadKey(RESOURCE_ID, 'thread-1'), 'run-1');
-    // `run-completed` has to land on the *suspended* run's thread topic — remote
-    // subscribers watch that topic to learn the thread is no longer blocked.
-    await watcher.waitFor('run-completed', 'run-1');
+    // An expiring record only proves this instance dropped its warm state. Another
+    // instance may have resumed the same run and taken the lease, so releasing it
+    // here — or telling subscribers the run completed — would cut that resume off
+    // mid-flight. An abandoned lease expires on its own once renewal stops.
+    expect(releaseLease).not.toHaveBeenCalledWith(threadKey(RESOURCE_ID, 'thread-1'), 'run-1');
+    expect(watcher.has('run-completed', 'run-1')).toBe(false);
   });
 
   it('does not evict anything until a registration triggers the sweep', async () => {
@@ -259,11 +264,13 @@ describe('suspended run in-memory TTL', () => {
 
     await sweepAfter(SUSPENDED_RUN_TTL_MS + 1);
 
+    await flushPublishes();
+
     for (const [index, threadId] of ['thread-a', 'thread-b', 'thread-c'].entries()) {
       const runId = `run-${threadId.slice(-1)}`;
       expect(runtime.getResumableThreadRun({ threadId, resourceId: RESOURCE_ID, runId }, pubsub)).toBeUndefined();
       expect(runtime.getThreadState({ threadId, resourceId: RESOURCE_ID }, pubsub)).toBe('idle');
-      await watchers[index]!.waitFor('run-completed', runId);
+      expect(watchers[index]!.has('run-completed', runId)).toBe(false);
     }
   });
 
