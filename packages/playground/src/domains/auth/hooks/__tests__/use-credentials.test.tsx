@@ -33,15 +33,17 @@ type CapturedRequest = {
   url: string;
   headers: Headers;
   count: number;
+  body?: unknown;
 };
 
 const captureSignIn = (responseBody: unknown, ok = true): CapturedRequest => {
   const captured: CapturedRequest = { url: '', headers: new Headers(), count: 0 };
   server.use(
-    http.post('*/auth/credentials/sign-in', ({ request }) => {
+    http.post('*/auth/credentials/sign-in', async ({ request }) => {
       captured.url = request.url;
       captured.headers = request.headers;
       captured.count += 1;
+      captured.body = await request.clone().json();
       return HttpResponse.json(responseBody as Record<string, unknown>, { status: ok ? 200 : 400 });
     }),
   );
@@ -51,26 +53,30 @@ const captureSignIn = (responseBody: unknown, ok = true): CapturedRequest => {
 const captureSignUp = (responseBody: unknown, ok = true): CapturedRequest => {
   const captured: CapturedRequest = { url: '', headers: new Headers(), count: 0 };
   server.use(
-    http.post('*/auth/credentials/sign-up', ({ request }) => {
+    http.post('*/auth/credentials/sign-up', async ({ request }) => {
       captured.url = request.url;
       captured.headers = request.headers;
       captured.count += 1;
+      captured.body = await request.clone().json();
       return HttpResponse.json(responseBody as Record<string, unknown>, { status: ok ? 200 : 400 });
     }),
   );
   return captured;
 };
 
-const makeWrapper = ({ baseUrl = BASE_URL, apiPrefix, headers }: ProviderProps) => {
+const makeHarness = ({ baseUrl = BASE_URL, apiPrefix, headers }: ProviderProps) => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  return ({ children }: { children: React.ReactNode }) => (
+  const wrapper = ({ children }: { children: React.ReactNode }) => (
     <MastraReactProvider baseUrl={baseUrl} apiPrefix={apiPrefix} headers={headers}>
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     </MastraReactProvider>
   );
+  return { wrapper, queryClient };
 };
+
+const makeWrapper = (props: ProviderProps) => makeHarness(props).wrapper;
 
 const signIn = async (providerProps: ProviderProps) => {
   const { result } = renderHook(() => useCredentialsLogin(), { wrapper: makeWrapper(providerProps) });
@@ -170,6 +176,80 @@ describe('useCredentialsLogin', () => {
       expect(result.current.error?.message).toBe('Invalid email or password');
     });
   });
+  describe('the request it sends', () => {
+    it('posts the credentials the caller supplied', async () => {
+      const captured = captureSignIn({ user: { id: '1', email: 'a@b.c' } });
+
+      await signIn({});
+
+      expect(captured.body).toEqual({ email: 'a@b.c', password: 'pw' });
+    });
+
+    it('strips whitespace around a hand-typed apiPrefix', async () => {
+      const captured = captureSignIn({ user: { id: '1', email: 'a@b.c' } });
+
+      await signIn({ apiPrefix: '  /mastra  ' });
+
+      expect(captured.url).toBe('http://localhost:4000/mastra/auth/credentials/sign-in');
+    });
+
+    it('strips repeated trailing slashes from the apiPrefix', async () => {
+      const captured = captureSignIn({ user: { id: '1', email: 'a@b.c' } });
+
+      await signIn({ apiPrefix: '/mastra//' });
+
+      expect(captured.url).toBe('http://localhost:4000/mastra/auth/credentials/sign-in');
+    });
+  });
+
+  describe('when the server rejects the sign-in without a message', () => {
+    it('falls back to the error field', async () => {
+      captureSignIn({ error: 'account locked' }, false);
+
+      const result = await signIn({});
+
+      expect(result.current.error?.message).toBe('account locked');
+    });
+
+    it('falls back to a generic message when the body says nothing', async () => {
+      captureSignIn({}, false);
+
+      const result = await signIn({});
+
+      expect(result.current.error?.message).toBe('Invalid email or password');
+    });
+  });
+
+  describe('when the sign-in succeeds', () => {
+    it('invalidates the auth caches so the user state refetches', async () => {
+      captureSignIn({ user: { id: '1', email: 'a@b.c' } });
+      const { wrapper, queryClient } = makeHarness({});
+      queryClient.setQueryData(['auth', 'capabilities'], { enabled: true });
+      queryClient.setQueryData(['stored-agents'], { agents: [] });
+
+      const { result } = renderHook(() => useCredentialsLogin(), { wrapper });
+      await act(async () => {
+        result.current.mutate({ email: 'a@b.c', password: 'pw' });
+      });
+
+      await waitFor(() => expect(queryClient.getQueryState(['auth', 'capabilities'])?.isInvalidated).toBe(true));
+      expect(queryClient.getQueryState(['stored-agents'])?.isInvalidated).toBe(false);
+    });
+
+    it('leaves the auth caches alone when the sign-in fails', async () => {
+      captureSignIn({ message: 'nope' }, false);
+      const { wrapper, queryClient } = makeHarness({});
+      queryClient.setQueryData(['auth', 'capabilities'], { enabled: true });
+
+      const { result } = renderHook(() => useCredentialsLogin(), { wrapper });
+      await act(async () => {
+        result.current.mutate({ email: 'a@b.c', password: 'pw' });
+      });
+
+      await waitFor(() => expect(result.current.isError).toBe(true));
+      expect(queryClient.getQueryState(['auth', 'capabilities'])?.isInvalidated).toBe(false);
+    });
+  });
 });
 
 describe('useCredentialsSignUp', () => {
@@ -240,6 +320,74 @@ describe('useCredentialsSignUp', () => {
       const result = await signUp({});
 
       expect(result.current.error?.message).toBe('Email already in use');
+    });
+  });
+  describe('the request it sends', () => {
+    it('posts the credentials and display name the caller supplied', async () => {
+      const captured = captureSignUp({ user: { id: '1', email: 'a@b.c' } });
+
+      await signUp({});
+
+      expect(captured.body).toEqual({ email: 'a@b.c', password: 'pw', name: 'A' });
+    });
+
+    it('strips whitespace around a hand-typed apiPrefix', async () => {
+      const captured = captureSignUp({ user: { id: '1', email: 'a@b.c' } });
+
+      await signUp({ apiPrefix: '  /mastra  ' });
+
+      expect(captured.url).toBe('http://localhost:4000/mastra/auth/credentials/sign-up');
+    });
+
+    it('strips repeated trailing slashes from the apiPrefix', async () => {
+      const captured = captureSignUp({ user: { id: '1', email: 'a@b.c' } });
+
+      await signUp({ apiPrefix: '/mastra//' });
+
+      expect(captured.url).toBe('http://localhost:4000/mastra/auth/credentials/sign-up');
+    });
+  });
+
+  describe('when the server rejects the sign-up', () => {
+    it('surfaces the server message', async () => {
+      captureSignUp({ message: 'email already registered' }, false);
+
+      const result = await signUp({});
+
+      expect(result.current.error?.message).toBe('email already registered');
+    });
+
+    it('falls back to the error field', async () => {
+      captureSignUp({ error: 'weak password' }, false);
+
+      const result = await signUp({});
+
+      expect(result.current.error?.message).toBe('weak password');
+    });
+
+    it('falls back to a generic message when the body says nothing', async () => {
+      captureSignUp({}, false);
+
+      const result = await signUp({});
+
+      expect(result.current.error?.message).toBe('Failed to create account');
+    });
+  });
+
+  describe('when the sign-up succeeds', () => {
+    it('invalidates the auth caches so the user state refetches', async () => {
+      captureSignUp({ user: { id: '1', email: 'a@b.c' } });
+      const { wrapper, queryClient } = makeHarness({});
+      queryClient.setQueryData(['auth', 'capabilities'], { enabled: true });
+      queryClient.setQueryData(['stored-agents'], { agents: [] });
+
+      const { result } = renderHook(() => useCredentialsSignUp(), { wrapper });
+      await act(async () => {
+        result.current.mutate({ email: 'a@b.c', password: 'pw', name: 'A' });
+      });
+
+      await waitFor(() => expect(queryClient.getQueryState(['auth', 'capabilities'])?.isInvalidated).toBe(true));
+      expect(queryClient.getQueryState(['stored-agents'])?.isInvalidated).toBe(false);
     });
   });
 });

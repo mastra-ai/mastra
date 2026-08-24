@@ -27,6 +27,9 @@ export function useSetAgentModelTool({ availableModels }: UseSetAgentModelToolAr
     let modelSchema: z.ZodType;
     if (modelSchemas.length === 0) {
       modelSchema = z.object({ provider: z.string().min(1), name: z.string().min(1) });
+      // Stryker disable next-line ConditionalExpression: a single-member union parses
+      // exactly like the member itself, so routing one model down either branch is
+      // indistinguishable from the outside.
     } else if (modelSchemas.length === 1) {
       modelSchema = modelSchemas[0];
     } else {

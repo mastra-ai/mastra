@@ -150,11 +150,14 @@ describe('useSetAgentSkillsTool', () => {
     expect(tool.description).toContain('- skill-1: first\n- skill-2: second');
   });
 
-  it('omits the colon for a skill with no description', () => {
+  it('lists a skill with no description as its bare id', () => {
     const { tool } = renderTool([{ id: 'skill-3', name: 'Skill Three' }] as unknown as StoredSkillResponse[]);
 
-    expect(tool.description).toContain('- skill-3');
-    expect(tool.description).not.toContain('- skill-3:');
+    expect(tool.description).toBe(
+      'Attach existing skills to the agent. Each entry MUST include both `id` (from the available skills list) and ' +
+        '`name` (a concise Title Case display label). Use the separate `createSkillTool` tool to create NEW skills.' +
+        '\n\nAvailable skills (use these ids in the "skills" field):\n- skill-3',
+    );
   });
 
   it('says nothing about skills when none are available', () => {
@@ -191,6 +194,39 @@ describe('useSetAgentSkillsTool', () => {
     const { tool } = renderTool();
 
     expect(fieldDescription(tool.inputSchema, 'skills')).toContain('Skills to enable on the agent');
+  });
+
+  it('documents the id and name of each entry', () => {
+    const { tool } = renderTool();
+    const entry = (tool.inputSchema as { shape: { skills: { element: unknown } } }).shape.skills.element;
+
+    expect(fieldDescription(entry, 'id')).toContain('available skills list');
+    expect(fieldDescription(entry, 'name')).toContain('Title Case');
+  });
+
+  it('picks up skills that appear after the first render', async () => {
+    const formRef: { current: ReturnType<typeof useForm<AgentBuilderEditFormValues>> | null } = { current: null };
+    const Wrapper = ({ children }: { children: React.ReactNode }) => {
+      const methods = useForm<AgentBuilderEditFormValues>({
+        defaultValues: { name: '', description: '', instructions: '', skills: {} },
+      });
+      formRef.current = methods;
+      void methods.formState.dirtyFields;
+      return React.createElement(FormProvider, methods, children);
+    };
+
+    const { result, rerender } = renderHook(
+      ({ skills }: { skills: StoredSkillResponse[] }) => useSetAgentSkillsTool({ availableSkills: skills }),
+      {
+        wrapper: Wrapper,
+        initialProps: { skills: [] as StoredSkillResponse[] },
+      },
+    );
+
+    rerender({ skills: availableSkills });
+
+    await runTool(result.current, { skills: [{ id: 'skill-1', name: 'Skill One' }] });
+    expect(formRef.current!.getValues('skills')).toEqual({ 'skill-1': true });
   });
 
   it('declares a boolean success in its output schema', () => {

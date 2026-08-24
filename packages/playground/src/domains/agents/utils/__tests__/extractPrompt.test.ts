@@ -21,6 +21,11 @@ describe('extractPrompt', () => {
       expect(extractPrompt(input)).toBe('You are a helpful assistant');
     });
 
+    it('should trim whitespace around object content', () => {
+      const input: AgentInstructions = { content: '  You are a helpful assistant\n', role: 'system' };
+      expect(extractPrompt(input)).toBe('You are a helpful assistant');
+    });
+
     it('should return trimmed string for object input with multiple parts', () => {
       const input: AgentInstructions = {
         content: 'You are a helpful assistant\nYou should be polite and professional',

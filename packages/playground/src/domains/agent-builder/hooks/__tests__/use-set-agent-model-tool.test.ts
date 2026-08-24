@@ -167,6 +167,30 @@ describe('useSetAgentModelTool', () => {
     expect(fieldDescription(tool.inputSchema, 'model')).toContain('available provider/name pairs');
   });
 
+  it('documents the provider and name of each offered pair', () => {
+    const { tool } = renderTool([{ provider: 'openai', providerName: 'OpenAI', model: 'gpt-4o' }]);
+    const pair = (tool.inputSchema as { shape: { model: unknown } }).shape.model;
+
+    expect(fieldDescription(pair, 'provider')).toContain('available models list');
+    expect(fieldDescription(pair, 'name')).toContain('available models list');
+  });
+
+  it('ignores a name that is array-shaped rather than a string', async () => {
+    const { tool, form } = renderTool();
+
+    await runTool(tool, { model: { provider: 'openai', name: ['gpt-4o'] } });
+
+    expect(form().getValues('model')).toBeUndefined();
+  });
+
+  it('ignores a provider that is array-shaped rather than a string', async () => {
+    const { tool, form } = renderTool();
+
+    await runTool(tool, { model: { provider: ['openai'], name: 'gpt-4o' } });
+
+    expect(form().getValues('model')).toBeUndefined();
+  });
+
   it('declares a boolean success in its output schema', () => {
     const { tool } = renderTool();
 

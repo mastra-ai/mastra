@@ -54,6 +54,8 @@ export function useSetAgentSkillsTool({ availableSkills }: UseSetAgentSkillsTool
           const validSkillIds = new Set(availableSkills.map(s => s.id));
           const skills: Record<string, true> = {};
           for (const entry of inputData.skills) {
+            // Stryker disable next-line ConditionalExpression: redundant guard. The id set
+            // only ever holds strings, so a non-string id can never satisfy `has` either way.
             if (entry && typeof entry.id === 'string' && validSkillIds.has(entry.id)) {
               skills[entry.id] = true;
             }
