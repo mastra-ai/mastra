@@ -1,5 +1,19 @@
 # @mastra/core
 
+## 1.62.0-alpha.4
+
+### Patch Changes
+
+- Fixed DurableAgent runs losing live models and tools while waiting on long-running tool or model calls. ([#22141](https://github.com/mastra-ai/mastra/pull/22141))
+
+- Fixed the Mastra gateway so custom request headers can no longer replace the internal gateway authorization header (#21780). ([#22134](https://github.com/mastra-ai/mastra/pull/22134))
+
+- Fixed background tasks restarting after reaching a terminal or suspended state. ([#22140](https://github.com/mastra-ai/mastra/pull/22140))
+
+- Fixed background tasks failing to resume suspended sub-agent runs. ([#22139](https://github.com/mastra-ai/mastra/pull/22139))
+
+- Fixed nested workflows to preserve non-retryable failures across parent retry boundaries. ([#22138](https://github.com/mastra-ai/mastra/pull/22138))
+
 ## 1.62.0-alpha.3
 
 ### Minor Changes

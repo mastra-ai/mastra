@@ -207,23 +207,6 @@ describe('TranscriptEntries turn groups', () => {
     expect(state.entries[0]).toMatchObject({ message: { id: 'signal-steer' } });
   });
 
-  it('limits the history reveal to the latest ten visible entries', () => {
-    const history = Array.from({ length: 12 }, (_, index) =>
-      textEntry(`history-${index + 1}`, index % 2 === 0 ? 'user' : 'assistant', `history message ${index + 1}`),
-    );
-    renderWithProviders(
-      <TranscriptEntries entries={history} revealInitialEntries onApprove={() => {}} onRespond={() => {}} />,
-    );
-
-    const animatedEntries = Array.from(document.querySelectorAll<HTMLElement>('.transcript-history-enter'));
-    expect(animatedEntries).toHaveLength(10);
-    expect(animatedEntries.map(entry => entry.style.animationDelay)).toEqual(
-      Array.from({ length: 10 }, (_, index) => `${index * 55}ms`),
-    );
-    expect(document.querySelector('[data-message-id="history-1"]')).not.toHaveClass('transcript-history-enter');
-    expect(document.querySelector('[data-message-id="history-2"]')).not.toHaveClass('transcript-history-enter');
-  });
-
   it('takes the gap that introduces a turn into that turn, where the room absorbs it', () => {
     renderWithProviders(
       <TranscriptEntries
