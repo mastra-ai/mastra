@@ -42,6 +42,27 @@ export function getLatestStepParts(parts: MastraDBMessage['content']['parts']): 
  * content (text, tool-invocation, reasoning, image, file).  Messages that only carry
  * internal `data-*` parts (buffering markers, observation markers, etc.) return false.
  */
+function isWorkingMemoryStateSignal(message: MastraDBMessage): boolean {
+  if (message.role !== 'signal') return false;
+
+  const signal = message.content.metadata?.signal;
+  if (!signal || typeof signal !== 'object' || Array.isArray(signal)) return false;
+
+  const signalRecord = signal as Record<string, unknown>;
+  if (signalRecord.type !== 'state') return false;
+
+  const metadata = signalRecord.metadata;
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return false;
+
+  const state = (metadata as Record<string, unknown>).state;
+  return (
+    !!state &&
+    typeof state === 'object' &&
+    !Array.isArray(state) &&
+    (state as Record<string, unknown>).id === 'working-memory'
+  );
+}
+
 function messageHasVisibleContent(msg: MastraDBMessage): boolean {
   const content = msg.content as { parts?: Array<{ type?: string }>; content?: string };
   if (content?.parts && Array.isArray(content.parts)) {
@@ -1442,7 +1463,7 @@ export class ObservationalMemory {
     const result: MastraDBMessage[] = [];
 
     for (const msg of allMessages) {
-      if (msg.role === 'system') {
+      if (msg.role === 'system' || isWorkingMemoryStateSignal(msg)) {
         continue;
       }
 
@@ -2702,7 +2723,9 @@ ${formattedMessages}
         filter: startDate ? { dateRange: { start: startDate } } : undefined,
       });
 
-      const filtered = result.messages.filter(m => !this.observedMessageIds.has(m.id));
+      const filtered = result.messages.filter(
+        message => !this.observedMessageIds.has(message.id) && !isWorkingMemoryStateSignal(message),
+      );
 
       if (filtered.length > 0) {
         messagesByThread.set(thread.id, filtered);
