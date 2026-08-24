@@ -267,6 +267,73 @@ describe('PropertyFilterCreator — choosing a multi-select value', () => {
     expect(onTokensChange).not.toHaveBeenCalled();
   });
 
+  it('adds the filter once a value has been chosen', async () => {
+    const onTokensChange = vi.fn();
+    render(<PropertyFilterCreator fields={MULTI_FIELDS} tokens={[]} onTokensChange={onTokensChange} />);
+
+    openMenu();
+    fireEvent.click(screen.getByRole('menuitem', { name: /Tags/i }));
+    fireEvent.click(screen.getByRole('combobox'));
+    fireEvent.click(await screen.findByRole('option', { name: 'Prod' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add filter' }));
+
+    expect(onTokensChange).toHaveBeenCalledWith([{ fieldId: 'tags', value: ['prod'] }]);
+    await waitFor(() => expect(screen.queryByText('Tags · is')).toBeNull());
+  });
+
+  it('forgets an earlier complaint as soon as a value is chosen', async () => {
+    render(<PropertyFilterCreator fields={MULTI_FIELDS} tokens={[]} onTokensChange={vi.fn()} />);
+
+    openMenu();
+    fireEvent.click(screen.getByRole('menuitem', { name: /Tags/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add filter' }));
+    expect(screen.getByText('Choose at least one tags value.')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('combobox'));
+    fireEvent.click(await screen.findByRole('option', { name: 'Prod' }));
+
+    expect(screen.queryByText('Choose at least one tags value.')).toBeNull();
+  });
+
+  it('gives focus back to its own button when it closes', async () => {
+    render(<PropertyFilterCreator fields={MULTI_FIELDS} tokens={[]} onTokensChange={vi.fn()} />);
+    const trigger = screen.getByRole('button', { name: /Add Filter/i });
+
+    openMenu();
+    fireEvent.click(screen.getByRole('menuitem', { name: /Tags/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+  });
+
+  it('leaves focus alone when it hands the typing to a new pill', async () => {
+    render(<PropertyFilterCreator fields={FIELDS} tokens={[]} onTokensChange={vi.fn()} onStartTextFilter={vi.fn()} />);
+    const trigger = screen.getByRole('button', { name: /Add Filter/i });
+
+    openMenu();
+    fireEvent.click(screen.getByRole('menuitem', { name: /Primitive ID/i }));
+
+    await waitFor(() => expect(screen.queryByRole('menuitem')).toBeNull());
+    expect(document.activeElement).not.toBe(trigger);
+  });
+
+  it('goes back to giving focus once the hand-off is done', async () => {
+    render(
+      <PropertyFilterCreator fields={MULTI_FIELDS} tokens={[]} onTokensChange={vi.fn()} onStartTextFilter={vi.fn()} />,
+    );
+    const trigger = screen.getByRole('button', { name: /Add Filter/i });
+
+    openMenu();
+    fireEvent.click(screen.getByRole('menuitem', { name: /Primitive ID/i }));
+    await waitFor(() => expect(screen.queryByRole('menuitem')).toBeNull());
+
+    openMenu();
+    fireEvent.click(screen.getByRole('menuitem', { name: /Tags/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+  });
+
   it('starts over the next time it is opened', async () => {
     render(<PropertyFilterCreator fields={MULTI_FIELDS} tokens={[]} onTokensChange={vi.fn()} />);
 
@@ -367,6 +434,32 @@ describe('PropertyFilterCreator — a pick-multi property', () => {
     fireEvent.click(await screen.findByRole('checkbox', { name: /Alpha/i }));
 
     expect(onTokensChange).toHaveBeenCalledWith([{ fieldId: 'entityId', value: 'kept' }]);
+  });
+
+  it('adds the first value that is ticked', async () => {
+    const onTokensChange = vi.fn();
+    render(<PropertyFilterCreator fields={PICK_MULTI_FIELDS} tokens={[]} onTokensChange={onTokensChange} />);
+
+    openMenu();
+    fireEvent.click(screen.getByRole('menuitem', { name: /Tags/i }));
+    fireEvent.click(await screen.findByRole('checkbox', { name: /Alpha/i }));
+
+    expect(onTokensChange).toHaveBeenCalledWith([{ fieldId: 'tags', value: ['alpha'] }]);
+  });
+
+  it('closes its panel along with the property list', async () => {
+    render(<PropertyFilterCreator fields={FIELDS} tokens={[]} onTokensChange={vi.fn()} />);
+
+    openPanel();
+    await screen.findByRole('radio', { name: /Agent/i });
+
+    // Closing the property list takes its side panel with it.
+    openMenu();
+    await waitFor(() => expect(screen.queryByRole('menuitem', { name: /Primitive Type/i })).toBeNull());
+
+    openMenu();
+
+    expect(screen.queryByRole('radio', { name: /Agent/i })).toBeNull();
   });
 
   it('opens the panel and steps into it with the right arrow', async () => {
