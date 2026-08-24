@@ -2241,24 +2241,16 @@ describe('E2BSandbox Internal Methods', () => {
   });
 
   describe('isSandboxDeadError()', () => {
-    it('returns true for "sandbox was not found"', () => {
+    it.each([
+      'sandbox was not found',
+      'Sandbox not found',
+      'Sandbox sbx_123 not found',
+      'Paused sandbox sbx_123 not found',
+      'Sandbox is probably not running',
+      'sandbox has been killed',
+    ])('returns true for "%s"', errorMessage => {
       const sandbox = new E2BSandbox();
-      expect((sandbox as any).isSandboxDeadError(new Error('sandbox was not found'))).toBe(true);
-    });
-
-    it('returns true for "Sandbox is probably not running"', () => {
-      const sandbox = new E2BSandbox();
-      expect((sandbox as any).isSandboxDeadError(new Error('Sandbox is probably not running'))).toBe(true);
-    });
-
-    it('returns true for "Sandbox not found"', () => {
-      const sandbox = new E2BSandbox();
-      expect((sandbox as any).isSandboxDeadError(new Error('Sandbox not found'))).toBe(true);
-    });
-
-    it('returns true for "sandbox has been killed"', () => {
-      const sandbox = new E2BSandbox();
-      expect((sandbox as any).isSandboxDeadError(new Error('sandbox has been killed'))).toBe(true);
+      expect((sandbox as any).isSandboxDeadError(new Error(errorMessage))).toBe(true);
     });
 
     it('returns false for regular errors', () => {
@@ -2347,7 +2339,7 @@ describe('E2BSandbox Internal Methods', () => {
       mockSandbox.commands.run.mockImplementation((_cmd: string, opts?: any) => {
         callCount++;
         if (callCount === 1) {
-          throw new Error('sandbox was not found');
+          throw new Error('Sandbox sbx_123 not found');
         }
         const result = { exitCode: 0, stdout: 'ok', stderr: '' };
         if (opts?.background) {

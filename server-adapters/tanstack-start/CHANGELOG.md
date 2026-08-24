@@ -1,5 +1,22 @@
 # @mastra/tanstack-start
 
+## 0.2.18-alpha.6
+
+### Patch Changes
+
+- Fixed `server.middleware` and middleware added via `mastra.setServerMiddleware()` being silently ignored when Mastra is served through a server adapter instead of `mastra dev` / `mastra build`. ([#22161](https://github.com/mastra-ai/mastra/pull/22161))
+
+  Hono-based adapters (`@mastra/hono`, and `@mastra/next` / `@mastra/tanstack-start` which build on it) now register the configured middleware during `init()`, with the same guarantee as the built-in server: user middleware never runs on routes declared public with `requiresAuth: false`. Adapters for other frameworks (Express, Fastify, Koa) cannot run Hono middleware handlers and now log a warning at startup instead of silently ignoring the configuration.
+
+  Also fixed custom routes with `requiresAuth: false` not being treated as framework-public when the adapter derives its route auth configuration from the Mastra instance instead of receiving it in the constructor.
+
+  Fixes https://github.com/mastra-ai/mastra/issues/21869
+
+- Updated dependencies [[`63041eb`](https://github.com/mastra-ai/mastra/commit/63041eb4c50b520a0a80e03d4cd6ea99f67715a0), [`c8e4cea`](https://github.com/mastra-ai/mastra/commit/c8e4ceac9a390d78c8327dff3cdb2861dd71957f), [`ed01e9a`](https://github.com/mastra-ai/mastra/commit/ed01e9a807514a904374bf687a7b8f18750f6f78), [`4e9a228`](https://github.com/mastra-ai/mastra/commit/4e9a2283d5fd6ed1b70a2751eb3dc2cbf82ada20), [`63041eb`](https://github.com/mastra-ai/mastra/commit/63041eb4c50b520a0a80e03d4cd6ea99f67715a0)]:
+  - @mastra/hono@1.7.2-alpha.6
+  - @mastra/server@1.62.0-alpha.6
+  - @mastra/core@1.62.0-alpha.6
+
 ## 0.2.18-alpha.5
 
 ### Patch Changes
