@@ -15,14 +15,15 @@ export interface ThreadTitleMirrorDependencies {
 }
 
 /**
- * Copy a thread's title onto its source-control session row.
+ * Copy a thread's title onto its source-control session row, from whichever
+ * namer produced it — core on the first turn, the observational-memory observer
+ * as the thread grows, or an explicit rename.
  *
- * A thread is named on its first turn and then only by hand, so the row never
- * moves under the reader. The factory sidebar reads the session row, which
- * otherwise keeps the raw first prompt (chat sessions) or nothing at all (work
- * sessions, which then show their branch). Binding a thread reconciles the row
- * against the stored title, so a session started before this ran — or one whose
- * rename event was missed — is named the next time it is opened.
+ * The factory sidebar reads the session row, which otherwise keeps the raw first
+ * prompt (chat sessions) or nothing at all (work sessions, which then show their
+ * branch). Binding a thread reconciles the row against the stored title, so a
+ * session started before this ran — or one whose rename event was missed — is
+ * named the next time it is opened.
  */
 export function observeSessionThreadTitle(
   session: ThreadTitleMirrorSession,
@@ -45,6 +46,8 @@ export function observeSessionThreadTitle(
     switch (event.type) {
       case 'thread_title_updated':
         return safely(mirror(event.title));
+      case 'om_thread_title_updated':
+        return safely(mirror(event.newTitle));
       case 'thread_changed':
         return safely(session.thread.getById({ threadId: event.threadId }).then(thread => mirror(thread?.title)));
     }

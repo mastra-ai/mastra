@@ -146,7 +146,7 @@ describe('getDynamicMemory', () => {
         messageTokens: 30_000,
         blockAfter: 2,
         previousObserverTokens: 1000,
-        threadTitle: false,
+        threadTitle: true,
         observeAttachments: undefined,
       },
       reflection: {
