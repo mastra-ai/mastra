@@ -89,6 +89,9 @@ export const buildAgentTools = ({ tools, agents, workflows = {}, selected }: Bui
       );
       continue;
     }
+    // Stryker disable next-line CallExpression: bookkeeping only. This is the
+    // last loop, so nothing reads `seen` afterwards; object keys are unique, so
+    // a tool can never collide with another tool either.
     seen.add(id);
     result.push({
       id,

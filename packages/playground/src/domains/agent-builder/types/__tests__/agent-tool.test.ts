@@ -171,3 +171,115 @@ describe('splitAgentTools', () => {
     });
   });
 });
+
+describe('buildAgentTools, on entries the server may leave sparse', () => {
+  it('falls back to the id when an agent entry carries no name', () => {
+    const [entry] = buildAgentTools({ tools: {}, agents: { 'agent-x': {} } });
+
+    expect(entry).toMatchObject({ id: 'agent-x', name: 'agent-x', description: undefined });
+  });
+
+  it('falls back to the id when an agent entry is missing entirely', () => {
+    const [entry] = buildAgentTools({
+      tools: {},
+      agents: { 'agent-x': undefined as unknown as Record<string, never> },
+    });
+
+    expect(entry).toMatchObject({ id: 'agent-x', name: 'agent-x', type: 'agent' });
+  });
+
+  it('falls back to the id when a workflow entry is missing entirely', () => {
+    const [entry] = buildAgentTools({
+      tools: {},
+      agents: {},
+      workflows: { 'wf-1': undefined as unknown as Record<string, never> },
+    });
+
+    expect(entry).toMatchObject({ id: 'wf-1', name: 'wf-1', description: undefined, type: 'workflow' });
+  });
+
+  it('survives a tool entry that is missing entirely', () => {
+    const [entry] = buildAgentTools({
+      tools: { 'tool-a': undefined as unknown as Record<string, never> },
+      agents: {},
+    });
+
+    expect(entry).toMatchObject({ id: 'tool-a', name: 'tool-a', description: undefined, type: 'tool' });
+  });
+
+  it('prefers the declared name over the id when an agent has one', () => {
+    const [entry] = buildAgentTools({ tools: {}, agents: { 'agent-x': { name: 'Researcher' } } });
+
+    expect(entry.name).toBe('Researcher');
+  });
+
+  it('prefers the declared name over the id when a workflow has one', () => {
+    const [entry] = buildAgentTools({ tools: {}, agents: {}, workflows: { 'wf-1': { name: 'Nightly sync' } } });
+
+    expect(entry.name).toBe('Nightly sync');
+  });
+});
+
+describe('the collision warnings buildAgentTools emits', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('names the colliding id and who won when a workflow shadows an agent', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    buildAgentTools({ tools: {}, agents: { shared: {} }, workflows: { shared: {} } });
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toContain('"shared"');
+    expect(warn.mock.calls[0][0]).toContain('agent and workflow share the same id');
+    expect(warn.mock.calls[0][0]).toContain('agent takes precedence');
+  });
+
+  it('names the colliding id and who won when a tool shadows an agent', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    buildAgentTools({ tools: { shared: {} }, agents: { shared: {} } });
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toContain('"shared"');
+    expect(warn.mock.calls[0][0]).toContain('agent or workflow and tool share the same id');
+    expect(warn.mock.calls[0][0]).toContain('agent/workflow takes precedence');
+  });
+
+  it('stays quiet when no id collides', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    buildAgentTools({ tools: { 'tool-a': {} }, agents: { 'agent-x': {} }, workflows: { 'wf-1': {} } });
+
+    expect(warn).not.toHaveBeenCalled();
+  });
+});
+
+describe('splitAgentTools, on integration rows', () => {
+  it('keeps a checked integration out of the native tool allowlist', () => {
+    const result = splitAgentTools([
+      {
+        id: 'GMAIL_FETCH_EMAILS',
+        name: 'GMAIL_FETCH_EMAILS',
+        isChecked: true,
+        type: 'integration',
+        providerId: 'composio',
+        toolkit: 'gmail',
+      },
+      { id: 'tool-a', name: 'tool-a', isChecked: true, type: 'tool' },
+    ]);
+
+    expect(result).toEqual({ tools: { 'tool-a': true }, agents: {}, workflows: {} });
+  });
+
+  it('drops unchecked rows of every type', () => {
+    const result = splitAgentTools([
+      { id: 'tool-a', name: 'tool-a', isChecked: false, type: 'tool' },
+      { id: 'agent-x', name: 'agent-x', isChecked: false, type: 'agent' },
+      { id: 'wf-1', name: 'wf-1', isChecked: false, type: 'workflow' },
+    ]);
+
+    expect(result).toEqual({ tools: {}, agents: {}, workflows: {} });
+  });
+});

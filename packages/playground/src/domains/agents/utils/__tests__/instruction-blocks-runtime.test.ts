@@ -6,6 +6,7 @@ import {
 } from '../../components/agent-edit-page/utils/form-validation';
 import {
   formatUnknownPromptBlocksMessage,
+  formatUnpublishedPromptBlocksMessage,
   formatUnresolvedPromptBlocksMessage,
   instructionsResolveEmptyDueToDrafts,
 } from '../instruction-blocks-runtime';
@@ -172,5 +173,80 @@ describe('formatUnresolvedPromptBlocksMessage', () => {
     expect(result).toBe(
       'Unable to verify referenced prompt block: block-1. Resolve these references or try again before continuing.',
     );
+  });
+});
+
+describe('instructionsResolveEmptyDueToDrafts, on input the caller may not have normalised', () => {
+  it('reports published when the agent has no instruction blocks at all', () => {
+    expect(instructionsResolveEmptyDueToDrafts(undefined, allDrafts)).toEqual({ type: 'published' });
+  });
+
+  it('does not count a whitespace-only inline block as runtime content', () => {
+    const blocks = [createInstructionBlock('   \n  '), createRefInstructionBlock('draft-a')];
+
+    expect(instructionsResolveEmptyDueToDrafts(blocks, allDrafts)).toEqual({ type: 'empty' });
+  });
+
+  it('counts an inline block that is only padded as runtime content', () => {
+    const blocks = [createInstructionBlock('  real text  '), createRefInstructionBlock('draft-a')];
+
+    expect(instructionsResolveEmptyDueToDrafts(blocks, allDrafts)).toEqual({ type: 'published' });
+  });
+
+  it('ignores a reference whose id is only whitespace', () => {
+    expect(instructionsResolveEmptyDueToDrafts([createRefInstructionBlock('   ')], allDrafts)).toEqual({
+      type: 'published',
+    });
+  });
+
+  it('ignores a reference that carries no id at all', () => {
+    const orphan = [{ id: 'b-1', type: 'prompt_block_ref' }] as unknown as Parameters<
+      typeof instructionsResolveEmptyDueToDrafts
+    >[0];
+
+    expect(instructionsResolveEmptyDueToDrafts(orphan, allDrafts)).toEqual({ type: 'published' });
+  });
+
+  it('trims a padded reference id before looking up its status', () => {
+    expect(instructionsResolveEmptyDueToDrafts([createRefInstructionBlock('  draft-a  ')], allDrafts)).toEqual({
+      type: 'empty',
+    });
+  });
+});
+
+describe('formatUnpublishedPromptBlocksMessage', () => {
+  it('names one unpublished block in the singular', () => {
+    expect(formatUnpublishedPromptBlocksMessage(['block-1'])).toBe(
+      'Unable to use unpublished referenced prompt block: block-1. Publish these prompt blocks and try again.',
+    );
+  });
+
+  it('names several unpublished blocks in the plural', () => {
+    expect(formatUnpublishedPromptBlocksMessage(['block-1', 'block-2'])).toBe(
+      'Unable to use unpublished referenced prompt blocks: block-1, block-2. Publish these prompt blocks and try again.',
+    );
+  });
+});
+
+describe('the plural forms the prompt-block messages use', () => {
+  it('keeps the unresolved message singular for exactly one block', () => {
+    expect(formatUnresolvedPromptBlocksMessage([{ id: 'b-1', reason: 'not_found' }])).toContain('prompt block:');
+  });
+
+  it('pluralises the unresolved message for more than one block', () => {
+    expect(
+      formatUnresolvedPromptBlocksMessage([
+        { id: 'b-1', reason: 'not_found' },
+        { id: 'b-2', reason: 'forbidden' },
+      ]),
+    ).toContain('prompt blocks:');
+  });
+
+  it('keeps the unknown message singular for exactly one block', () => {
+    expect(formatUnknownPromptBlocksMessage(['b-1'])).toContain('prompt block:');
+  });
+
+  it('pluralises the unknown message for more than one block', () => {
+    expect(formatUnknownPromptBlocksMessage(['b-1', 'b-2'])).toContain('prompt blocks:');
   });
 });
