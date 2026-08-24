@@ -337,7 +337,7 @@ describe('ChatChannelOutputProcessor', () => {
       expect(calls.filter(c => c.kind === 'post')).toEqual([]);
     });
 
-    it('opens a StreamingPlan on meaningful text and preserves later whitespace chunks', async () => {
+    it('opens a StreamingPlan on meaningful text and preserves surrounding whitespace chunks', async () => {
       const { channels, calls, chatThread } = makeChannels({ streaming: true });
       await drive(
         channels,
@@ -355,7 +355,7 @@ describe('ChatChannelOutputProcessor', () => {
       const posts = calls.filter(c => c.kind === 'post');
       expect(posts).toHaveLength(1);
       const plan = (posts[0] as Extract<Call, { kind: 'post' }>).arg as any;
-      expect(await drainStreamingPlan(plan)).toEqual(['Hello', ' ', 'world']);
+      expect(await drainStreamingPlan(plan)).toEqual([' \u200B ', 'Hello', ' ', 'world']);
     });
 
     it('forwards updateIntervalMs onto the StreamingPlan options', async () => {
