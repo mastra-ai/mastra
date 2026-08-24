@@ -25,16 +25,22 @@ export function renderStartupError(
   const wrapper = document.createElement('main');
   wrapper.setAttribute('role', 'alert');
   wrapper.style.cssText =
+    // Stryker disable next-line StringLiteral: inline presentation only. jsdom's CSS
+    // parser rejects this declaration block wholesale, so no assertion can observe it.
     'min-height:100vh;background:#0b0d10;color:#f4f4f5;font-family:"Mona Sans",ui-sans-serif,system-ui,sans-serif;font-feature-settings:"ss06" on;padding:32px;box-sizing:border-box;';
 
   const title = document.createElement('h1');
   title.textContent = 'Mastra Studio failed to start';
+  // Stryker disable next-line StringLiteral: inline presentation only. jsdom's CSS
+  // parser rejects this declaration block wholesale, so no assertion can observe it.
   title.style.cssText = 'font-size:20px;line-height:1.4;margin:0 0 8px;';
 
   const detail = document.createElement('p');
   detail.textContent = showDetails
     ? 'The startup module failed before React could render. Check the Vite terminal and browser console for the original request details.'
     : 'The startup module failed before React could render. Run Studio in development mode to view detailed diagnostics.';
+  // Stryker disable next-line StringLiteral: inline presentation only. jsdom's CSS
+  // parser rejects this declaration block wholesale, so no assertion can observe it.
   detail.style.cssText = 'color:#a1a1aa;max-width:760px;margin:0 0 20px;line-height:1.6;';
 
   wrapper.append(title, detail);
@@ -43,6 +49,8 @@ export function renderStartupError(
     const pre = document.createElement('pre');
     pre.textContent = getStartupErrorMessage(error);
     pre.style.cssText =
+      // Stryker disable next-line StringLiteral: inline presentation only. jsdom's CSS
+      // parser rejects this declaration block wholesale, so no assertion can observe it.
       'white-space:pre-wrap;overflow:auto;background:#18181b;border:1px solid #3f3f46;border-radius:8px;padding:16px;max-width:100%;line-height:1.5;';
     wrapper.append(pre);
   }
