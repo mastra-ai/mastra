@@ -125,6 +125,69 @@ describe('observeSessionFirstExec', () => {
     expect(dependencies.sourceControl.sessions.markFirstMeaningfulExec).toHaveBeenCalledTimes(1);
   });
 
+  it('drops in-flight tool_start entries on agent_end so aborted runs do not leak state', () => {
+    const { session, emit } = createSession();
+    const dependencies = createDependencies();
+    observeSessionFirstExec(session, dependencies);
+
+    // Simulate several runs that abort before their tool calls complete.
+    for (let i = 0; i < 3; i++) {
+      emit(toolStart(`aborted-${i}`, 'view'));
+      emit({ type: 'agent_end', reason: 'aborted' });
+    }
+
+    // A stray, delayed tool_end for one of the aborted call IDs must not
+    // resurrect a meaningful-exec stamp: the toolName lookup should be gone.
+    emit({ type: 'tool_end', toolCallId: 'aborted-0', result: null, isError: false });
+    expect(dependencies.sourceControl.sessions.markFirstMeaningfulExec).not.toHaveBeenCalled();
+
+    // A fresh, real run with a matching start/end pair still stamps.
+    emit(toolStart('call-live', 'search_content'));
+    emit(toolEnd('call-live'));
+    expect(dependencies.sourceControl.sessions.markFirstMeaningfulExec).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves genuinely suspended tool calls across agent_end and clears cancelled suspensions', () => {
+    const { session, emit } = createSession();
+    const dependencies = createDependencies();
+    observeSessionFirstExec(session, dependencies);
+
+    // A tool that suspends mid-run: agent_end fires with reason 'suspended',
+    // and the eventual resumed tool_end must still resolve its tool name.
+    emit(toolStart('call-suspended', 'execute_command'));
+    emit({
+      type: 'tool_suspended',
+      toolCallId: 'call-suspended',
+      toolName: 'execute_command',
+      args: {},
+      suspendPayload: null,
+    });
+    emit({ type: 'agent_end', reason: 'suspended' });
+
+    // A cancelled suspension must be evicted so it doesn't linger forever.
+    emit(toolStart('call-cancelled', 'view'));
+    emit({
+      type: 'tool_suspended',
+      toolCallId: 'call-cancelled',
+      toolName: 'view',
+      args: {},
+      suspendPayload: null,
+    });
+    emit({
+      type: 'tool_suspension_cancelled',
+      toolCallId: 'call-cancelled',
+      toolName: 'view',
+      reason: 'user cancelled',
+    });
+    // Late stray tool_end for the cancelled ID must not stamp.
+    emit(toolEnd('call-cancelled'));
+    expect(dependencies.sourceControl.sessions.markFirstMeaningfulExec).not.toHaveBeenCalled();
+
+    // Resumed suspended call still stamps because its toolName was preserved.
+    emit(toolEnd('call-suspended'));
+    expect(dependencies.sourceControl.sessions.markFirstMeaningfulExec).toHaveBeenCalledTimes(1);
+  });
+
   it('warns instead of throwing when the storage write fails', async () => {
     const { session, emit } = createSession();
     const dependencies = createDependencies();

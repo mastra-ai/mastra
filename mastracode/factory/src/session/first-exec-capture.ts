@@ -74,24 +74,53 @@ export function observeSessionFirstExec(
   { sourceControl }: FirstExecCaptureDependencies,
 ): () => void {
   let seen = false;
+  // toolCallId -> toolName. Populated on `tool_start`, consumed on `tool_end`.
+  // Suspended entries survive `agent_end` so the resumed run can still resolve
+  // its tool name when the eventual `tool_end` arrives.
   const toolNames = new Map<string, string>();
+  const suspended = new Set<string>();
   const unsubscribe = session.subscribe(event => {
     if (seen) return;
-    if (event.type === 'tool_start') {
-      toolNames.set(event.toolCallId, event.toolName);
-      return;
-    }
-    if (event.type === 'tool_end') {
-      const toolName = toolNames.get(event.toolCallId);
-      toolNames.delete(event.toolCallId);
-      if (event.isError) return;
-      if (event.denied) return;
-      if (!isMeaningfulToolName(toolName)) return;
-      seen = true;
-      unsubscribe();
-      void sourceControl.sessions
-        .markFirstMeaningfulExec({ sessionId: session.identity.getResourceId() })
-        .catch(error => console.warn('[Factory first-exec capture] Unable to persist first exec time.', error));
+    switch (event.type) {
+      case 'tool_start': {
+        toolNames.set(event.toolCallId, event.toolName);
+        return;
+      }
+      case 'tool_suspended': {
+        suspended.add(event.toolCallId);
+        return;
+      }
+      case 'tool_suspension_cancelled': {
+        toolNames.delete(event.toolCallId);
+        suspended.delete(event.toolCallId);
+        return;
+      }
+      case 'agent_end': {
+        // Drop any in-flight starts that will never see a matching `tool_end`
+        // on this run. Genuinely suspended calls stay so their eventual
+        // resume-time `tool_end` can still map back to a tool name. Without
+        // this, sessions that repeatedly abort or error before a qualifying
+        // completion would accumulate stale entries for the entire lifetime
+        // of the subscription.
+        for (const id of toolNames.keys()) {
+          if (!suspended.has(id)) toolNames.delete(id);
+        }
+        return;
+      }
+      case 'tool_end': {
+        const toolName = toolNames.get(event.toolCallId);
+        toolNames.delete(event.toolCallId);
+        suspended.delete(event.toolCallId);
+        if (event.isError) return;
+        if (event.denied) return;
+        if (!isMeaningfulToolName(toolName)) return;
+        seen = true;
+        unsubscribe();
+        void sourceControl.sessions
+          .markFirstMeaningfulExec({ sessionId: session.identity.getResourceId() })
+          .catch(error => console.warn('[Factory first-exec capture] Unable to persist first exec time.', error));
+        return;
+      }
     }
   });
   return unsubscribe;
