@@ -35,7 +35,11 @@ export function SlackNotConfigured() {
           </span>
         }
       >
-        <Txt as="span" variant="ui-sm" className="text-icon3 flex items-start gap-1.5 pl-10 text-left lg:block lg:pl-0 lg:text-right">
+        <Txt
+          as="span"
+          variant="ui-sm"
+          className="text-icon3 flex items-start gap-1.5 pl-10 text-left lg:block lg:pl-0 lg:text-right"
+        >
           <InfoIcon aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 lg:hidden" />
           Slack is not set up for this factory.
         </Txt>

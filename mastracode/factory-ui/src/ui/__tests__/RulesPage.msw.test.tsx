@@ -62,7 +62,9 @@ describe('Rules page filters', () => {
     await user.click(screen.getByRole('combobox', { name: 'Rule decision filter' }));
     await user.click(await screen.findByRole('option', { name: 'Awaiting approval' }));
 
-    expect(await screen.findByRole('combobox', { name: 'Rule decision filter' })).toHaveTextContent('Awaiting approval');
+    expect(await screen.findByRole('combobox', { name: 'Rule decision filter' })).toHaveTextContent(
+      'Awaiting approval',
+    );
     expect(onDecisionRequest).toHaveBeenCalled();
     expect(statuses).toContain('proposed');
   });

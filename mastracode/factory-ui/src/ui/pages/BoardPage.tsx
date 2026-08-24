@@ -261,7 +261,7 @@ function BoardContent({
           onLabelChange={setLabel}
           onReset={resetFilters}
         />
-        <div className="w-full [&>div]:w-full [&>div]:justify-between lg:w-auto lg:[&>div]:w-auto lg:[&>div]:justify-start">
+        <div className="w-full lg:w-auto [&>div]:w-full [&>div]:justify-between lg:[&>div]:w-auto lg:[&>div]:justify-start">
           <BoardAutoRunToggle factoryProjectId={factoryProjectId} enabled={factory.autoRunEnabled ?? false} />
         </div>
       </div>
