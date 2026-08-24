@@ -39,6 +39,11 @@ test that clicks one. Base UI opens a popover on `fireEvent.click`, but React
 turns a `pointerover` into the `onPointerEnter` a component listens for, so fire
 that rather than `fireEvent.pointerEnter` (which drops the coordinates).
 
+`code-editor.tsx` is mostly CodeMirror theme objects, and its tests mock
+`@uiw/react-codemirror` — so nothing inside those themes is observable and their
+survivors are expected. What is worth pinning there is which extensions the
+editor builds, and the frame it draws around them.
+
 Base UI's `ScrollArea.Scrollbar` and `Corner` also render nothing under jsdom —
 they need real layout to know there is any overflow — so the scrollbars a
 ScrollArea asks for, and their own styling, cannot be reached from a rendered
