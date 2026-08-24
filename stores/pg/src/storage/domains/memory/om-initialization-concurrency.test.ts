@@ -153,6 +153,23 @@ describe('MemoryPG observational-memory generation invariants', () => {
     expect(history.map((record: ObservationalMemoryRecord) => record.generationCount)).toEqual([1, 0]);
   });
 
+  it('reports an actionable migration error when externally managed schema omits the unique index', async () => {
+    const indexName = buildConstraintName({ baseName: UNIQUE_INDEX, schemaName });
+    await pool.query(`DROP INDEX "${schemaName}"."${indexName}"`);
+
+    await expect(
+      memory.initializeObservationalMemory({
+        threadId: 'thread-missing-index',
+        resourceId: 'resource-1',
+        scope: 'thread',
+        config: {},
+      }),
+    ).rejects.toMatchObject({
+      id: expect.stringContaining('MIGRATION_REQUIRED'),
+      message: expect.stringContaining('externally managed migration'),
+    });
+  });
+
   it('rejects an invalid index left by a failed concurrent build', async () => {
     await memory.initializeObservationalMemory({
       threadId: 'thread-invalid-index',

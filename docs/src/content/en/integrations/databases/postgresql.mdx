@@ -210,7 +210,9 @@ HAVING COUNT(*) > 1;
 
 Initialization also validates the required index through the PostgreSQL catalog. If an incompatible relation already occupies its name, Mastra fails closed instead of assuming that `CREATE UNIQUE INDEX IF NOT EXISTS` produced the expected invariant. Review and replace the conflicting relation described by the error before restarting.
 
-If you set `disableInit: true`, include the unique `(lookupKey, generationCount)` index from the current `@mastra/pg` schema in your externally managed migration before deploying the package update.
+If you set `disableInit: true`, include the unique `(lookupKey, generationCount)` index from the current `@mastra/pg` schema in your externally managed migration before deploying the package update. Calls that encounter a missing index fail with an actionable `MIGRATION_REQUIRED` error.
+
+Automatic upgrades use a regular `CREATE UNIQUE INDEX`, which takes a `SHARE` lock and can block writes to a large observational-memory table until the build finishes. For large production tables, pre-create the exported index with `CREATE UNIQUE INDEX CONCURRENTLY` before deploying this version; run that statement outside a transaction. Initialization validates and reuses a compatible pre-created index. The duplicate-generation `GROUP BY` scan runs only when index creation fails with a uniqueness violation.
 
 ### Observability
 

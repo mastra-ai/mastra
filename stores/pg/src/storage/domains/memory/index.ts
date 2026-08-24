@@ -2469,6 +2469,23 @@ export class MemoryPG extends MemoryStorage {
       return this.parseOMRow(existing);
     } catch (error) {
       if (error instanceof MastraError) throw error;
+      if (hasPostgresErrorCode(error, '42P10')) {
+        const indexName = getOMGenerationUniqueIndexName(this.#schema);
+        throw new MastraError(
+          {
+            id: createStorageErrorId('PG', 'MIGRATION_REQUIRED', 'MISSING_OBSERVATIONAL_MEMORY_GENERATION_INDEX'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            text:
+              `Observational-memory initialization requires a valid unique index on ` +
+              `("lookupKey", "generationCount") for ${JSON.stringify(`${this.#schema}.${OM_TABLE}`)}. ` +
+              `Add ${JSON.stringify(indexName)} to the externally managed migration, or enable automatic ` +
+              `storage initialization before retrying.`,
+            details: { schemaName: this.#schema, tableName: OM_TABLE, indexName },
+          },
+          error,
+        );
+      }
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'INITIALIZE_OBSERVATIONAL_MEMORY', 'FAILED'),
