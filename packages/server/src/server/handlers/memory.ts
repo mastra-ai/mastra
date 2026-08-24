@@ -2,8 +2,12 @@ import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import type { RequestContext } from '@mastra/core/di';
 import type { MastraMemory, StorageThreadType } from '@mastra/core/memory';
-import type { MastraStorage, MemoryStorage, StorageListThreadsOutput } from '@mastra/core/storage';
-import { isObservationBufferClaimLive } from '@mastra/core/storage';
+import type {
+  MastraStorage,
+  MemoryStorage,
+  ObservationalMemoryRecord,
+  StorageListThreadsOutput,
+} from '@mastra/core/storage';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
 import { MastraFGAPermissions } from '../fga-permissions';
 import { HTTPException } from '../http-exception';
@@ -754,6 +758,32 @@ export const AWAIT_BUFFER_STATUS_ROUTE = createRoute({
       if (!agent) {
         throw new HTTPException(404, { message: 'Agent not found' });
       }
+
+      // Local advisory mirror of `isObservationBufferClaimLive` from
+      // `@mastra/core/storage`. Kept local because this package's `@mastra/core`
+      // peer dependency floor predates that export, and the core-imports check
+      // forbids value imports newer than the floor. Rendering-only; storage
+      // adapters remain the fencing authority. Keep in sync with core.
+      const OBSERVATION_BUFFER_CLAIM_LEASE_MS = 120_000;
+      const isObservationBufferClaimLive = (
+        record: Pick<
+          ObservationalMemoryRecord,
+          'isBufferingObservation' | 'observationBufferClaimToken' | 'observationBufferClaimExpiresAt' | 'updatedAt'
+        >,
+        now: number = Date.now(),
+      ): boolean => {
+        const token = record.observationBufferClaimToken ?? null;
+        if (token) {
+          const expiresAt = record.observationBufferClaimExpiresAt;
+          const expiresMs = expiresAt ? new Date(expiresAt).getTime() : Number.NaN;
+          return Number.isFinite(expiresMs) && expiresMs > now;
+        }
+        if (record.isBufferingObservation) {
+          const updatedMs = record.updatedAt ? new Date(record.updatedAt).getTime() : Number.NaN;
+          return Number.isFinite(updatedMs) && now < updatedMs + OBSERVATION_BUFFER_CLAIM_LEASE_MS;
+        }
+        return false;
+      };
 
       // Gateway proxy: poll the gateway OM record until buffering flags clear
       if (await isGatewayAgentAsync(agent)) {
