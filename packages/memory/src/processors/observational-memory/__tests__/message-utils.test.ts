@@ -1,7 +1,7 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { MessageList } from '@mastra/core/agent';
 import { describe, it, expect } from 'vitest';
-import { getObservableMessages, stripThreadTags } from '../message-utils';
+import { getObservableMessages, isWorkingMemoryStateSignalMessage, stripThreadTags } from '../message-utils';
 
 const THREAD_ID = 'thread-1';
 const RESOURCE_ID = 'resource-1';
@@ -37,6 +37,44 @@ describe('getObservableMessages', () => {
     messageList.add(createMessage('response-1', 'hi', 'assistant'), 'response');
 
     expect(getObservableMessages(messageList).map(m => m.id)).toEqual(messageList.get.all.db().map(m => m.id));
+  });
+});
+
+describe('isWorkingMemoryStateSignalMessage', () => {
+  const signal = (stateId: string, type = 'state', mode = 'snapshot'): MastraDBMessage =>
+    ({
+      ...createMessage('signal-1', 'working-memory', 'user'),
+      role: 'signal',
+      content: {
+        format: 2,
+        parts: [{ type: 'text', text: 'format-a; format-b' }],
+        metadata: { signal: { type, metadata: { state: { id: stateId, mode } } } },
+      },
+    }) as MastraDBMessage;
+
+  it('matches snapshot and delta working-memory state signals by provenance', () => {
+    expect(isWorkingMemoryStateSignalMessage(signal('working-memory', 'state', 'snapshot'))).toBe(true);
+    expect(isWorkingMemoryStateSignalMessage(signal('working-memory', 'state', 'delta'))).toBe(true);
+  });
+
+  it('preserves other state, lookalike, ordinary, and malformed messages', () => {
+    expect(isWorkingMemoryStateSignalMessage(signal('browser-context'))).toBe(false);
+    expect(
+      isWorkingMemoryStateSignalMessage({
+        ...signal('working-memory'),
+        content: {
+          ...signal('working-memory').content,
+          metadata: { signal: { type: 'text', metadata: { state: { id: 'working-memory' } } } },
+        },
+      } as MastraDBMessage),
+    ).toBe(false);
+    expect(isWorkingMemoryStateSignalMessage(createMessage('ordinary', 'hello'))).toBe(false);
+    expect(
+      isWorkingMemoryStateSignalMessage({
+        ...signal('working-memory'),
+        content: { format: 2, parts: [] },
+      } as MastraDBMessage),
+    ).toBe(false);
   });
 });
 

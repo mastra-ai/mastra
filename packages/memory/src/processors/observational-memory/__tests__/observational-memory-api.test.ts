@@ -45,6 +45,19 @@ function createTestMessage(
   };
 }
 
+function createWorkingMemorySignal(id: string, stateId = 'working-memory'): MastraDBMessage {
+  return {
+    ...createTestMessage('format-a; format-b', 'user', id),
+    role: 'signal',
+    type: 'working-memory',
+    content: {
+      format: 2,
+      parts: [{ type: 'text', text: 'format-a; format-b' }],
+      metadata: { signal: { type: 'state', metadata: { state: { id: stateId } } } },
+    } as MastraMessageContentV2,
+  };
+}
+
 /** Generate N messages with padding to exceed token thresholds. */
 function createBulkMessages(count: number, threadId: string, startTime?: number): MastraDBMessage[] {
   const base = startTime ?? Date.now() - count * 1000;
@@ -3020,6 +3033,27 @@ describe('getUnobservedMessages filtering', () => {
     const unobserved = om.getUnobservedMessages(messages, record);
     // Messages at base+3000 and base+4000 should pass the > check
     expect(unobserved.length).toBe(2);
+  });
+
+  it('excludes working-memory state signals while retaining ordinary and other state messages', async () => {
+    const om = createOM(storage);
+    const record = await om.getOrCreateRecord(threadId);
+    const ordinary = createTestMessage('Summarize the current project status.', 'user', 'ordinary');
+    const workingMemory = createWorkingMemorySignal('working-memory');
+    const browserContext = createWorkingMemorySignal('browser-context', 'browser-context');
+
+    expect(
+      om.getUnobservedMessages([workingMemory, ordinary, browserContext], record).map(message => message.id),
+    ).toEqual(['ordinary', 'browser-context']);
+    expect(
+      om
+        .getUnobservedMessages([workingMemory], record, { includeWorkingMemoryStateSignals: true })
+        .map(message => message.id),
+    ).toEqual(['working-memory']);
+
+    (record as any).bufferedObservationChunks = [{ messageIds: ['ordinary'] }];
+    expect(om.getUnobservedMessages([workingMemory, ordinary], record, { excludeBuffered: true })).toEqual([]);
+    await expect(om.pruneObserved({ threadId, messages: [workingMemory] })).resolves.toEqual([workingMemory]);
   });
 });
 

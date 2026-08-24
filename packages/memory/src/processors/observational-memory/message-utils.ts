@@ -1,5 +1,27 @@
 import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
 import type { BufferedObservationChunk, ObservationalMemoryRecord } from '@mastra/core/storage';
+import { WORKING_MEMORY_STATE_ID } from '../working-memory-state';
+
+/** Return true only for the canonical persisted Working Memory state signal. */
+export function isWorkingMemoryStateSignalMessage(message: MastraDBMessage): boolean {
+  if (!message || typeof message !== 'object' || message.role !== 'signal') return false;
+
+  const metadata = message.content?.metadata;
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return false;
+  const signal = (metadata as { signal?: unknown }).signal;
+  if (!signal || typeof signal !== 'object' || Array.isArray(signal)) return false;
+  if ((signal as { type?: unknown }).type !== 'state') return false;
+
+  const signalMetadata = (signal as { metadata?: unknown }).metadata;
+  if (!signalMetadata || typeof signalMetadata !== 'object' || Array.isArray(signalMetadata)) return false;
+  const state = (signalMetadata as { state?: unknown }).state;
+  return (
+    !!state &&
+    typeof state === 'object' &&
+    !Array.isArray(state) &&
+    (state as { id?: unknown }).id === WORKING_MEMORY_STATE_ID
+  );
+}
 
 /**
  * Find the index of the last completed observation boundary (end marker) in a message's parts.

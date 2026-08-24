@@ -203,6 +203,7 @@ import {
   getUnobservedParts,
   getBufferedChunks,
   getObservableMessages,
+  isWorkingMemoryStateSignalMessage,
   stripThreadTags,
 } from './message-utils';
 import { ModelByInputTokens } from './model-by-input-tokens';
@@ -1417,7 +1418,7 @@ export class ObservationalMemory {
   getUnobservedMessages(
     allMessages: MastraDBMessage[],
     record: ObservationalMemoryRecord,
-    opts?: { excludeBuffered?: boolean },
+    opts?: { excludeBuffered?: boolean; includeWorkingMemoryStateSignals?: boolean },
   ): MastraDBMessage[] {
     const lastObservedAt = record.lastObservedAt;
     // Safeguard: track message IDs that were already observed to prevent re-observation
@@ -1443,6 +1444,9 @@ export class ObservationalMemory {
 
     for (const msg of allMessages) {
       if (msg.role === 'system') {
+        continue;
+      }
+      if (!opts?.includeWorkingMemoryStateSignals && isWorkingMemoryStateSignalMessage(msg)) {
         continue;
       }
 
@@ -1888,7 +1892,7 @@ export class ObservationalMemory {
       });
     }
 
-    return result.messages.filter(msg => msg.role !== 'system');
+    return result.messages.filter(msg => msg.role !== 'system' && !isWorkingMemoryStateSignalMessage(msg));
   }
 
   /**
@@ -3016,7 +3020,7 @@ ${formattedMessages}
   }): Promise<MastraDBMessage[]> {
     const { threadId, resourceId, messages } = opts;
     const record = await this.getOrCreateRecord(threadId, resourceId);
-    return this.getUnobservedMessages(messages, record);
+    return this.getUnobservedMessages(messages, record, { includeWorkingMemoryStateSignals: true });
   }
 
   /**

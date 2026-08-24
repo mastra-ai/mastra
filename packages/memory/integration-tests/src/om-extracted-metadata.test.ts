@@ -261,6 +261,99 @@ describe('Observational Memory extracted metadata persistence', () => {
     );
   });
 
+  it('does not re-observe resource-scoped working memory state on an unrelated new-thread task', async () => {
+    const resourceId = randomUUID();
+    const seededThreadId = randomUUID();
+    const secondThreadId = randomUUID();
+    const seededValue = 'format-a; format-b';
+    let observerInput = '';
+    const model = new MockLanguageModelV2({
+      doStream: async ({ prompt }) => {
+        observerInput = JSON.stringify(prompt);
+        const observerSawSeed = observerInput.includes(seededValue);
+        const observerOutput = observerSawSeed
+          ? `<observations>\n- unrelated task\n</observations>\n<working-memory>rewritten-by-observer</working-memory>`
+          : '<observations>\n- unrelated task\n</observations>';
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'obs-wm-cross-thread', modelId: 'mock-observer', timestamp: new Date() },
+            { type: 'text-start', id: 'text-wm-cross-thread' },
+            {
+              type: 'text-delta',
+              id: 'text-wm-cross-thread',
+              delta: observerOutput,
+            },
+            { type: 'text-end', id: 'text-wm-cross-thread' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 100, outputTokens: 20, totalTokens: 120 } },
+          ]),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        };
+      },
+    });
+    const workingMemory = new Memory({
+      storage: memory.storage,
+      options: {
+        workingMemory: { enabled: true, agentManaged: false, template: '# User Profile\n- Value:' },
+        observationalMemory: {
+          enabled: true,
+          scope: 'resource',
+          observation: {
+            model,
+            manageWorkingMemory: true,
+            messageTokens: 1,
+            bufferTokens: false,
+            previousObserverTokens: 1000,
+          },
+        },
+      },
+    });
+
+    await workingMemory.createThread({ threadId: seededThreadId, resourceId, title: 'Seeded state' });
+    await workingMemory.createThread({ threadId: secondThreadId, resourceId, title: 'Unrelated task' });
+    await workingMemory.updateWorkingMemory({ threadId: seededThreadId, resourceId, workingMemory: seededValue });
+    await workingMemory.saveMessages({
+      messages: [
+        {
+          id: randomUUID(),
+          threadId: seededThreadId,
+          resourceId,
+          role: 'signal',
+          type: 'working-memory',
+          createdAt: new Date('2026-06-24T18:00:00.000Z'),
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: seededValue }],
+            metadata: { signal: { type: 'state', metadata: { state: { id: 'working-memory', mode: 'snapshot' } } } },
+          },
+        } as MastraDBMessage,
+        createMessage(
+          secondThreadId,
+          resourceId,
+          'user',
+          'Summarize the current project status.',
+          '2026-06-24T18:01:00.000Z',
+        ),
+      ],
+    });
+
+    const omEngine = await workingMemory.omEngine;
+    await omEngine!.observe({ threadId: secondThreadId, resourceId });
+    expect(observerInput).toContain('## New Message History to Observe');
+    expect(observerInput).toContain('Summarize the current project status.');
+    expect(observerInput).not.toContain(seededValue);
+    await expect(workingMemory.getWorkingMemory({ threadId: seededThreadId, resourceId })).resolves.toBe(seededValue);
+    expect((await memory.storage.listMessagesByResourceId({ resourceId, perPage: false })).messages).toHaveLength(2);
+    await expect(
+      omEngine!.pruneObserved({
+        threadId: secondThreadId,
+        resourceId,
+        messages: (await memory.storage.listMessagesByResourceId({ resourceId, perPage: false })).messages,
+      }),
+    ).resolves.toEqual(expect.arrayContaining([expect.objectContaining({ role: 'signal', type: 'working-memory' })]));
+  });
+
   it('persists extracted values from an end-to-end LibSQL observation run', async () => {
     const threadId = randomUUID();
     const resourceId = randomUUID();
