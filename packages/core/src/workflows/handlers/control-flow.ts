@@ -991,6 +991,7 @@ export async function executeForeach(
 
   const prevForeachOutput = (prevPayload?.suspendPayload?.__workflow_meta?.foreachOutput ||
     []) as PersistedForeachStepResult[];
+  const nestedRunIds: string[] = [];
   const prevResumeLabels = prevPayload?.suspendPayload?.__workflow_meta?.resumeLabels || {};
   const resumeLabels = getResumeLabelsByStepId(prevResumeLabels, stepId);
 
@@ -1156,6 +1157,9 @@ export async function executeForeach(
       if (result.status === 'success' && result.output !== undefined) {
         results[k] = result.output;
       }
+      if (typeof result.metadata?.nestedRunId === 'string') {
+        nestedRunIds[k] = result.metadata.nestedRunId;
+      }
 
       // Preserve `suspendPayload` for iterations that are still suspended so
       // their resume context (e.g. an agent's `__streamState`) survives the
@@ -1207,6 +1211,9 @@ export async function executeForeach(
 
       if (prevItemResult.status === 'success' && prevItemResult.output !== undefined) {
         results[k] = prevItemResult.output;
+      }
+      if (typeof prevItemResult.metadata?.nestedRunId === 'string') {
+        nestedRunIds[k] = prevItemResult.metadata.nestedRunId;
       }
       // Preserve suspendPayload for still-suspended items (same as worker logic)
       prevForeachOutput[k] =
@@ -1440,6 +1447,7 @@ export async function executeForeach(
     ...stepInfo,
     status: 'success',
     output: results,
+    ...(nestedRunIds.length > 0 ? { metadata: { nestedRunId: nestedRunIds } } : {}),
     endedAt: Date.now(),
   } as StepSuccess<any, any, any, any>;
 }

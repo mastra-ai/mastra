@@ -288,6 +288,9 @@ export class ChatChannelOutputProcessor {
       throw err;
     });
 
+    // Own an early rejection while preserving it for the cleanup await.
+    driverPromise.catch(() => {});
+
     return { queue, driverPromise };
   }
 }
