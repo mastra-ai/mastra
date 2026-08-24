@@ -435,8 +435,8 @@ async function readOwnedClaim(
     asBindParameters({ id, ownerToken }),
     executeOptions(),
   );
-  const row = rows(result)[0] as
-    { acquiredAt?: Date | string; renewedAt?: Date | string; expiresAt?: Date | string } | undefined;
+  type ClaimTimestampRow = { acquiredAt?: Date | string; renewedAt?: Date | string; expiresAt?: Date | string };
+  const row = rows(result)[0] as ClaimTimestampRow | undefined;
   if (!row) return null;
   return {
     ownerToken,
