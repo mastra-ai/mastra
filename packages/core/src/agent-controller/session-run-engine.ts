@@ -45,6 +45,8 @@ type StreamIgnoredChunk =
   | StreamPayloadChunk<'redacted-reasoning'>
   | StreamPayloadChunk<'source'>
   | StreamPayloadChunk<'file'>
+  | StreamPayloadChunk<'reasoning-file'>
+  | StreamPayloadChunk<'custom'>
   | StreamPayloadChunk<'raw'>
   | StreamPayloadChunk<'step-start'>
   | StreamPayloadChunk<'tool-output'>
@@ -662,7 +664,7 @@ export class SessionRunEngine {
           state.currentMessage.content.parts.push({ type: 'tool-invocation', toolInvocation });
         }
 
-        this.#session.emit({ type: 'tool_end', toolCallId, result: reason, isError: false });
+        this.#session.emit({ type: 'tool_end', toolCallId, result: reason, isError: false, denied: true });
         this.#session.emit({ type: 'message_update', message: state.currentMessage });
         break;
       }
@@ -1181,7 +1183,7 @@ export class SessionRunEngine {
       state.currentMessage.content.parts.push({ type: 'tool-invocation', toolInvocation });
     }
 
-    this.#session.emit({ type: 'tool_end', toolCallId, result: ABORTED_BY_USER_REASON, isError: false });
+    this.#session.emit({ type: 'tool_end', toolCallId, result: ABORTED_BY_USER_REASON, isError: false, denied: true });
     this.#session.emit({ type: 'message_update', message: state.currentMessage });
   }
 

@@ -440,6 +440,12 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'databases/valkey',
+          label: 'Valkey',
+          customProps: { icon: '/img/integrations/valkey.svg' },
+        },
+        {
+          type: 'doc',
           id: 'databases/upstash',
           label: 'Upstash',
           customProps: { icon: 'https://cdn.simpleicons.org/upstash?viewbox=auto&size=28' },
@@ -565,6 +571,12 @@ const sidebars = {
           id: 'tools/firecrawl',
           label: 'Firecrawl',
           customProps: { icon: '/img/integrations/firecrawl.svg' },
+        },
+        {
+          type: 'doc',
+          id: 'tools/parallel',
+          label: 'Parallel',
+          customProps: { icon: '/img/integrations/parallel.svg' },
         },
         {
           type: 'doc',

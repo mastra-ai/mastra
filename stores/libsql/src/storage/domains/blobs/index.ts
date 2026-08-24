@@ -1,9 +1,9 @@
-import type { Client } from '@libsql/client';
 import { BlobStore, TABLE_SKILL_BLOBS, SKILL_BLOBS_SCHEMA } from '@mastra/core/storage';
 import type { StorageBlobEntry } from '@mastra/core/storage';
 
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
+import type { SqliteClient as Client } from '../../db/client';
 import { buildSelectColumns } from '../../db/utils';
 
 export class BlobsLibSQL extends BlobStore {

@@ -321,6 +321,43 @@ describe('ChatChannelOutputProcessor', () => {
       expect(await drainStreamingPlan(plan)).toEqual(['Hel', 'lo!']);
     });
 
+    it('does not open a StreamingPlan for whitespace and zero-width-only text', async () => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: true });
+      await drive(
+        channels,
+        [
+          { type: 'text-delta', payload: { text: ' \n\t' } },
+          { type: 'text-delta', payload: { text: '\u200B\u200C\u200D\uFEFF' } },
+          { type: 'step-finish', payload: {} },
+          { type: 'finish', payload: {} },
+        ],
+        chatThread,
+      );
+
+      expect(calls.filter(c => c.kind === 'post')).toEqual([]);
+    });
+
+    it('opens a StreamingPlan on meaningful text and preserves surrounding whitespace chunks', async () => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: true });
+      await drive(
+        channels,
+        [
+          { type: 'text-delta', payload: { text: ' \u200B ' } },
+          { type: 'text-delta', payload: { text: 'Hello' } },
+          { type: 'text-delta', payload: { text: ' ' } },
+          { type: 'text-delta', payload: { text: 'world' } },
+          { type: 'step-finish', payload: {} },
+          { type: 'finish', payload: {} },
+        ],
+        chatThread,
+      );
+
+      const posts = calls.filter(c => c.kind === 'post');
+      expect(posts).toHaveLength(1);
+      const plan = (posts[0] as Extract<Call, { kind: 'post' }>).arg as any;
+      expect(await drainStreamingPlan(plan)).toEqual([' \u200B ', 'Hello', ' ', 'world']);
+    });
+
     it('forwards updateIntervalMs onto the StreamingPlan options', async () => {
       const { channels, calls, chatThread } = makeChannels({ streaming: { updateIntervalMs: 250 } });
       await drive(
@@ -2115,6 +2152,41 @@ async function driveFallback(
     } as any);
   }
 }
+
+describe('render driver failure', () => {
+  beforeAll(async () => {
+    await getChatModule();
+  });
+
+  it('does not leave the rejection unhandled before a terminal chunk arrives', async () => {
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on('unhandledRejection', onUnhandled);
+
+    try {
+      const { channels, chatThread } = makeChannels({ streaming: false, toolDisplay: 'cards' });
+      chatThread.post = vi.fn().mockRejectedValue(new Error('invalid_auth'));
+
+      const render = (channels as any)._buildRenderContext(chatThread, 'test');
+      const processor = new ChatChannelOutputProcessor();
+      const requestContext = new Map<string, unknown>();
+      requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, render);
+      const state: Record<string, unknown> = {};
+
+      await processor.processOutputStream({
+        part: { type: 'tool-call', payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } } },
+        state,
+        requestContext: { get: (key: string) => requestContext.get(key) } as any,
+      } as any);
+
+      await new Promise(resolve => setTimeout(resolve, 20));
+
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+    }
+  });
+});
 
 describe('ChatChannelOutputProcessor fallback render context', () => {
   beforeAll(async () => {

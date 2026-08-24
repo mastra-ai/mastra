@@ -1,5 +1,28 @@
 # @mastra/inngest
 
+## 1.8.8-alpha.0
+
+### Patch Changes
+
+- Fix durable agent resume targeting and dispatch error handling on Inngest. ([#21742](https://github.com/mastra-ai/mastra/pull/21742))
+
+  Resume labels (the `toolCallId` a suspended tool call registers) were dropped when a suspension crossed a nested workflow boundary, so `createInngestAgent().resume()` had nothing to target with. It also addressed only the outer step, leaving the engine to guess which suspension inside that step to resume — a guess that fails with `Multiple suspended steps found` when several are parked.
+
+  Nested suspensions now carry their resume labels up to the parent snapshot, `resume()` accepts a `toolCallId` naming which suspended tool call to resume, and the resume event now addresses the full path down to the suspended leaf instead of just the outer step. If the supplied `toolCallId` is unknown, or if it is omitted while more than one suspension is parked, `resume()` throws immediately and lists the available `toolCallId`s instead of silently resuming the wrong one.
+
+  `resume()` also awaits acknowledgement of the resume event dispatch before returning, so a failed send rejects the call instead of only surfacing later as a terminal stream error.
+
+- Fixed Inngest durable agent runs writing two separate traces. Spans created before the run starts — input processors and memory recall — now nest under the single agent run span instead of being dropped or landing on a second trace, and the agent run span input shows the messages you passed in rather than internal message-list state. (#19841) ([#22118](https://github.com/mastra-ai/mastra/pull/22118))
+
+- Fix durable agent dropping the per-call `actor` signal, and centralize durable trigger/resume event construction. ([#22129](https://github.com/mastra-ai/mastra/pull/22129))
+
+  `createInngestAgent()` accepted an `actor` option on `stream()` but never forwarded it into the workflow trigger event, so authorization checks downstream saw no actor. `resume()` did not accept an `actor` at all. Both now match `InngestRun`: `actor` is supplied per call and is never read back from the persisted snapshot.
+
+  The trigger and resume event payloads were previously built independently in `run.ts` and in the durable agent wrapper, which is how the two paths drifted apart. Both now build their events through shared helpers so a new per-call signal cannot be added to one path alone.
+
+- Updated dependencies [[`2c85f42`](https://github.com/mastra-ai/mastra/commit/2c85f428e04ccd63ea31a7ec80b5b327afdad555), [`11bbeb9`](https://github.com/mastra-ai/mastra/commit/11bbeb9b108ef2264e05acefc6dafb9cbb342921), [`1a485f3`](https://github.com/mastra-ai/mastra/commit/1a485f3538f5ec64d58bd8b5e1e99de0c695c87b), [`0d37487`](https://github.com/mastra-ai/mastra/commit/0d37487d9f349388a3f1cef6a536cf9dcc4b6273), [`8661d7d`](https://github.com/mastra-ai/mastra/commit/8661d7d7179f0a024456aabdd8679bcecd09ac28), [`575e343`](https://github.com/mastra-ai/mastra/commit/575e343900451021d96110916497d334af7bc252), [`cacb839`](https://github.com/mastra-ai/mastra/commit/cacb8392d9e74189b56d857290b0615f98a2683d), [`b47b26e`](https://github.com/mastra-ai/mastra/commit/b47b26e6fe95cb8a3482be2c5e52de157fe59d0b), [`0d37487`](https://github.com/mastra-ai/mastra/commit/0d37487d9f349388a3f1cef6a536cf9dcc4b6273), [`c46eb09`](https://github.com/mastra-ai/mastra/commit/c46eb09ce4987509af57a0ac582c61241a6dd2f1), [`30ed33e`](https://github.com/mastra-ai/mastra/commit/30ed33ee14084a26019aba15fceadda6d6ddefaf), [`91ad69d`](https://github.com/mastra-ai/mastra/commit/91ad69d64994c89199b0c55399e64ed91c61df2f), [`8dc408d`](https://github.com/mastra-ai/mastra/commit/8dc408d34438f9e13297f792c11a5cfd6cf952e1), [`c92def1`](https://github.com/mastra-ai/mastra/commit/c92def10a13c822972c96f0a4ca6ffc1f4258aed), [`c5eaec5`](https://github.com/mastra-ai/mastra/commit/c5eaec5a860d80d0e3805e67db0414b87ac8cbed), [`e66b2ba`](https://github.com/mastra-ai/mastra/commit/e66b2ba100db63eaeab6e21e1ea34b113f2ec781)]:
+  - @mastra/core@1.62.0-alpha.3
+
 ## 1.8.7
 
 ### Patch Changes

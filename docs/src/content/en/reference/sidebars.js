@@ -95,6 +95,7 @@ const sidebars = {
         { type: 'doc', id: 'ai-sdk/to-ai-sdk-v4-messages', label: 'toAISdkV4Messages()' },
         { type: 'doc', id: 'ai-sdk/to-ai-sdk-v5-messages', label: 'toAISdkV5Messages()' },
         { type: 'doc', id: 'ai-sdk/with-mastra', label: 'withMastra()' },
+        { type: 'doc', id: 'ai-sdk/with-sse-heartbeat', label: 'withSseHeartbeat()' },
         { type: 'doc', id: 'ai-sdk/workflow-route', label: 'workflowRoute()' },
         {
           type: 'doc',
@@ -705,6 +706,7 @@ const sidebars = {
         { type: 'doc', id: 'pubsub/base', label: 'PubSub' },
         { type: 'doc', id: 'pubsub/redis-streams', label: 'RedisStreamsPubSub' },
         { type: 'doc', id: 'pubsub/unix-socket-pubsub', label: 'UnixSocketPubSub' },
+        { type: 'doc', id: 'pubsub/valkey-streams', label: 'ValkeyStreamsPubSub' },
       ],
     },
     {
@@ -785,6 +787,7 @@ const sidebars = {
         { type: 'doc', id: 'storage/overview', label: 'Overview' },
         { type: 'doc', id: 'storage/composite', label: 'Composite Storage' },
         { type: 'doc', id: 'storage/retention', label: 'Retention (prune)' },
+        { type: 'doc', id: 'storage/turso', label: 'Turso Storage' },
       ],
     },
     {

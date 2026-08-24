@@ -52,6 +52,17 @@ export interface EnsuredFactorySourceSession {
   baseBranch: string;
 }
 
+export class FactorySourceSessionResolutionError extends Error {
+  constructor(readonly reason: 'connection' | 'repository') {
+    super(
+      reason === 'connection'
+        ? 'Factory source-control connection not found.'
+        : 'Factory source-control repository not found.',
+    );
+    this.name = 'FactorySourceSessionResolutionError';
+  }
+}
+
 export interface ResolvedFactorySourceRepository {
   projectRepositoryId: string;
   /** The repository's pinned branch, else its default branch. */
@@ -172,13 +183,7 @@ export async function ensureFactorySourceSession(
   const { sourceControl, orgId, factoryProjectId, branch, repositorySlug } = args;
 
   const resolved = await resolveFactorySourceRepository({ sourceControl, orgId, factoryProjectId, repositorySlug });
-  if (!resolved.found) {
-    throw new Error(
-      resolved.reason === 'connection'
-        ? 'Factory source-control connection not found.'
-        : 'Factory source-control repository not found.',
-    );
-  }
+  if (!resolved.found) throw new FactorySourceSessionResolutionError(resolved.reason);
 
   const userId = resolved.connectedByUserId;
   const session = await sourceControl.sessions.create({

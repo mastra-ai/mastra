@@ -1,8 +1,9 @@
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent, MessageList } from '@mastra/core/agent';
+import { MemoryRunState } from '@mastra/core/memory';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 
 import { Memory } from '../../../index';
@@ -177,7 +178,17 @@ describe('repro #15367 — cross-thread messages with resource-scoped OM', () =>
 
     // Guard against the scenario silently going vacuous: thread B's context must actually
     // contain the thread-A message, otherwise the threadId guard is never exercised below.
-    const context = await memory.getContext({ threadId: 'thread-B', resourceId: resource });
+    const runState = new MemoryRunState({ memory, threadId: 'thread-B', resourceId: resource });
+    const listMessagesByResourceId = vi.spyOn(memoryStore!, 'listMessagesByResourceId');
+    const getObservationalMemory = vi.spyOn(memoryStore!, 'getObservationalMemory');
+    const context = await memory.getContext({ threadId: 'thread-B', resourceId: resource, runState });
+    const storageReadsAfterFirstContext = {
+      messages: listMessagesByResourceId.mock.calls.length,
+      record: getObservationalMemory.mock.calls.length,
+    };
+    await memory.getContext({ threadId: 'thread-B', resourceId: resource, runState });
+    expect(listMessagesByResourceId).toHaveBeenCalledTimes(storageReadsAfterFirstContext.messages);
+    expect(getObservationalMemory).toHaveBeenCalledTimes(storageReadsAfterFirstContext.record);
     const crossThread = context.messages.find(m => m.id === 'cross-thread-user-1');
     expect(crossThread).toBeTruthy();
     expect(crossThread!.threadId).toBe('thread-A');
@@ -192,7 +203,10 @@ describe('repro #15367 — cross-thread messages with resource-scoped OM', () =>
       messageList,
       threadId: 'thread-B',
       resourceId: resource,
+      runState,
     });
+    expect(listMessagesByResourceId).toHaveBeenCalledTimes(storageReadsAfterFirstContext.messages);
+    expect(getObservationalMemory).toHaveBeenCalledTimes(storageReadsAfterFirstContext.record);
 
     const loaded = messageList.get.all.db().find(m => m.id === 'cross-thread-user-1');
     expect(loaded).toBeTruthy();

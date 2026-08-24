@@ -3,6 +3,7 @@ import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import {
@@ -18,7 +19,8 @@ import {
   Repeat,
   type LucideIcon,
 } from 'lucide-react';
-import { Fragment, useState } from 'react';
+import { Fragment } from 'react';
+import { useSearchParams } from 'react-router';
 
 import { useFactoryDecisionAction, useFactoryDecisionHistory } from '../../hooks/useFactoryDecisions';
 import { relativeTime } from '../../lib/date/relativeTime';
@@ -43,6 +45,7 @@ const STATUS_ICON: Record<FactoryDecisionStatus, { icon: LucideIcon; className: 
   pending: { icon: CircleDashed, className: 'text-accent1' },
   proposed: { icon: CirclePause, className: 'text-accent6' },
   dismissed: { icon: CircleSlash, className: 'text-icon3' },
+  superseded: { icon: CircleSlash, className: 'text-icon3' },
   leased: { icon: CircleDashed, className: 'text-accent1' },
   retry: { icon: CircleDashed, className: 'text-accent1' },
   succeeded: { icon: CircleCheck, className: 'text-green' },
@@ -53,6 +56,7 @@ const STATUS_LABEL: Record<FactoryDecisionStatus, string> = {
   pending: 'queued',
   proposed: 'awaiting approval',
   dismissed: 'dismissed',
+  superseded: 'superseded',
   leased: 'running',
   retry: 'retrying',
   succeeded: 'done',
@@ -65,7 +69,9 @@ export function RulesPage() {
 }
 
 function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefined }) {
-  const [decisionGroup, setDecisionGroup] = useState('all');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedGroup = searchParams.get('group');
+  const decisionGroup = DECISION_GROUPS.find(entry => entry.key === requestedGroup)?.key ?? 'all';
   const decisionFilter = DECISION_GROUPS.find(entry => entry.key === decisionGroup);
   const decisionStatuses = decisionFilter?.statuses;
   const decisionsQuery = useFactoryDecisionHistory(factoryProjectId, decisionGroup, decisionStatuses);
@@ -85,11 +91,28 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
 
   return (
     <section className="flex min-h-0 flex-1 flex-col gap-2" aria-labelledby="rule-decisions-heading">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between">
         <Txt as="h2" variant="ui-sm" className="text-icon6 m-0" id="rule-decisions-heading">
           Rule decisions
         </Txt>
-        <ButtonsGroup spacing="close" role="group" aria-label="Rule decision filter">
+        <div className="w-full lg:hidden">
+          <Select
+            value={decisionGroup}
+            onValueChange={group => setSearchParams(group === 'all' ? {} : { group }, { replace: true })}
+          >
+            <SelectTrigger variant="outline" size="sm" aria-label="Rule decision filter" className="w-full">
+              {decisionFilter?.label ?? 'All effects'}
+            </SelectTrigger>
+            <SelectContent>
+              {DECISION_GROUPS.map(entry => (
+                <SelectItem key={entry.key} value={entry.key}>
+                  {entry.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <ButtonsGroup className="hidden lg:flex" spacing="close" role="group" aria-label="Rule decision filter">
           {DECISION_GROUPS.map(entry => {
             const Icon = entry.icon;
             return (
@@ -98,7 +121,7 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
                 variant={decisionGroup === entry.key ? 'primary' : 'outline'}
                 size="sm"
                 aria-pressed={decisionGroup === entry.key}
-                onClick={() => setDecisionGroup(entry.key)}
+                onClick={() => setSearchParams(entry.key === 'all' ? {} : { group: entry.key }, { replace: true })}
               >
                 <Icon aria-hidden />
                 {entry.label}
@@ -129,7 +152,7 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
           }
           actionSlot={
             hasDecisionFilter ? (
-              <Button variant="outline" size="sm" onClick={() => setDecisionGroup('all')}>
+              <Button variant="outline" size="sm" onClick={() => setSearchParams({}, { replace: true })}>
                 Show all effects
               </Button>
             ) : undefined
@@ -196,16 +219,31 @@ function DecisionRow({
     decision.status === 'proposed';
   const { icon: StatusIcon, className: statusIconClass } = STATUS_ICON[decision.status];
   const metrics: ReadonlyArray<{ icon: LucideIcon; label: string; value: string }> = [
-    { icon: Repeat, label: 'attempts', value: String(decision.attempts) },
-    { icon: Clock, label: 'created', value: relativeTime(decision.createdAt) },
+    { icon: Repeat, label: 'Attempts', value: String(decision.attempts) },
+    { icon: Clock, label: 'Created', value: relativeTime(decision.createdAt) },
     decision.completedAt
-      ? { icon: Check, label: 'completed', value: relativeTime(decision.completedAt) }
-      : { icon: RefreshCw, label: 'updated', value: relativeTime(decision.updatedAt) },
+      ? { icon: Check, label: 'Completed', value: relativeTime(decision.completedAt) }
+      : { icon: RefreshCw, label: 'Updated', value: relativeTime(decision.updatedAt) },
   ];
+  const actions =
+    decision.status === 'proposed' ? (
+      <div className="flex items-center gap-2">
+        <Button variant="ghost" size="sm" disabled={approving || dismissing} onClick={onDismiss}>
+          {dismissing ? 'Dismissing…' : 'Dismiss'}
+        </Button>
+        <Button size="sm" disabled={approving || dismissing} onClick={onApprove}>
+          {approving ? 'Starting…' : 'Run'}
+        </Button>
+      </div>
+    ) : decision.status === 'failed' && decision.canRetry ? (
+      <Button variant="outline" size="sm" disabled={retrying} onClick={onRetry}>
+        {retrying ? 'Retrying…' : 'Retry'}
+      </Button>
+    ) : null;
 
   return (
     <li className="hover:bg-neutral6/5 rounded-lg px-3 py-2 transition-colors">
-      <div className="flex items-start gap-3">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start">
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <div className="flex items-center gap-2">
             <StatusIcon className={cn('size-3 shrink-0', statusIconClass)} aria-hidden />
@@ -221,35 +259,23 @@ function DecisionRow({
               {STATUS_LABEL[decision.status]}
             </span>
           </div>
-          <div className="text-ui-xs leading-ui-xs text-icon3 flex flex-wrap items-center gap-x-3 gap-y-0.5">
+          <div className="text-ui-sm leading-ui-sm lg:text-ui-xs lg:leading-ui-xs text-icon3 flex flex-wrap items-center gap-x-3 gap-y-0.5 pt-1.5 lg:pt-0">
             {metrics.map(({ icon: MetricIcon, label, value }) => (
-              <span key={label} className="inline-flex items-center gap-1" title={`${label} ${value}`}>
+              <span key={label} className="inline-flex items-center gap-1" title={`${label}: ${value}`}>
                 <MetricIcon className="size-3 shrink-0" aria-hidden />
-                {value}
+                <span>{label}:</span>
+                <span className="text-icon5">{value}</span>
               </span>
             ))}
           </div>
+          {actions ? <div className="flex justify-start lg:hidden">{actions}</div> : null}
           {decision.lastError ? (
             <Txt as="span" variant="ui-xs" className="text-icon3 break-words">
               {decision.lastError}
             </Txt>
           ) : null}
         </div>
-        {decision.status === 'proposed' ? (
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" disabled={approving || dismissing} onClick={onDismiss}>
-              {dismissing ? 'Dismissing…' : 'Dismiss'}
-            </Button>
-            <Button size="sm" disabled={approving || dismissing} onClick={onApprove}>
-              {approving ? 'Starting…' : 'Run'}
-            </Button>
-          </div>
-        ) : null}
-        {decision.status === 'failed' ? (
-          <Button variant="outline" size="sm" disabled={retrying} onClick={onRetry}>
-            {retrying ? 'Retrying…' : 'Retry'}
-          </Button>
-        ) : null}
+        <div className="hidden shrink-0 lg:block">{actions}</div>
       </div>
     </li>
   );
