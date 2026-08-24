@@ -294,6 +294,16 @@ class PgFactoryStorageOps implements FactoryStorageOps {
     return this.#select<T>(this.#queryable, collection, where, opts);
   }
 
+  async count(collection: string, where: CollectionWhere): Promise<number> {
+    const schema = this.#schema(collection);
+    const filter = this.#buildWhere(schema, where);
+    const result = await this.#queryable.query(
+      `SELECT COUNT(*) AS count FROM "${schema.name}" WHERE ${filter.sql}`,
+      filter.args,
+    );
+    return Number(result.rows[0]?.count ?? 0);
+  }
+
   async insertOne<T extends Record<string, unknown>>(collection: string, row: Partial<T>): Promise<T> {
     const schema = this.#schema(collection);
     const pk = primaryKeyOf(schema);

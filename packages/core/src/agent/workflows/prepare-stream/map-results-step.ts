@@ -37,6 +37,7 @@ interface MapResultsStepOptions<OUTPUT = undefined> {
   memoryConfig?: MemoryConfigInternal;
   agentSpan?: Span<SpanType.AGENT_RUN>;
   agentId: string;
+  agentVersionId?: string;
   methodType: AgentMethodType;
   saveQueueManager?: SaveQueueManager;
   runScope: PrepareStreamRunScope<OUTPUT>;
@@ -53,6 +54,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
   memoryConfig,
   agentSpan,
   agentId,
+  agentVersionId,
   methodType,
   saveQueueManager,
   runScope,
@@ -78,6 +80,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
     const result = {
       ...options,
       agentId,
+      agentVersionId,
       tools: convertedTools,
       runId,
       temperature: options.modelSettings?.temperature,
@@ -244,6 +247,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
     const loopOptions = {
       methodType: modelMethodType,
       agentId,
+      agentVersionId,
       requestContext: result.requestContext!,
       actor: options.actor,
       mcp: options.mcp,

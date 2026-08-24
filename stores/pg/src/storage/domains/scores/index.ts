@@ -362,10 +362,15 @@ export class ScoresPG extends ScoresStorage {
     }
 
     try {
-      const id = crypto.randomUUID();
+      // Caller-supplied ids give scores a stable identity: retried writes for
+      // the same id replace the previous row (latest wins) instead of
+      // accumulating duplicates.
+      const suppliedId = parsedScore.id;
+      const id = suppliedId ?? crypto.randomUUID();
       const now = new Date();
 
       const {
+        id: _suppliedId,
         scorer,
         preprocessStepResult,
         analyzeStepResult,
@@ -377,6 +382,13 @@ export class ScoresPG extends ScoresStorage {
         entity,
         ...rest
       } = parsedScore;
+
+      if (suppliedId) {
+        await this.#db.client.none(
+          `DELETE FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.#schema) })} WHERE id = $1`,
+          [suppliedId],
+        );
+      }
 
       await this.#db.insert({
         tableName: TABLE_SCORERS,

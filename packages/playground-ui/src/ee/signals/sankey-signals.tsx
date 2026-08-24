@@ -28,13 +28,14 @@ import {
   findNoiseSelection,
   findSelectionStats,
   findThemeSelection,
+  findThemeSelectionById,
   mergeVisibleSignalOrder,
 } from './theme-drilldown-data';
 import type { SelectedTheme, ThemeSelection } from './theme-drilldown-data';
 import { ThemeFilterBanner } from './theme-filter-banner';
 import { ThemeLifelines } from './theme-lifelines';
 import { TraceIntelligenceExplainer } from './trace-intelligence-explainer';
-import type { TraceSignalName } from './types';
+import type { ThemeFlowResponse, TraceSignalName } from './types';
 import { useTraceIntelligence } from './use-trace-intelligence';
 import { ViewModeTab } from './view-mode-tab';
 import type { SignalsViewMode } from './view-mode-tab';
@@ -48,6 +49,11 @@ export interface SankeySignalsProps {
   dateFrom?: Date;
   dateTo?: Date;
   height?: number;
+  selectedThemeId: string | undefined;
+  onSelectedThemeIdChange: (themeId: string | undefined) => void;
+  /** Snapshot id of the timeline frame currently displayed. The parent owns this state. */
+  selectedFrameId: string;
+  onFrameIdChange: (frameId: string) => void;
   /** Date range control rendered in line with the view mode tabs. */
   dateRangePicker?: React.ReactNode;
 }
@@ -69,6 +75,10 @@ export function SankeySignals({
   dateFrom,
   dateTo,
   height,
+  selectedThemeId,
+  onSelectedThemeIdChange,
+  selectedFrameId,
+  onFrameIdChange,
   dateRangePicker,
 }: SankeySignalsProps) {
   const queryClient = useQueryClient();
@@ -77,17 +87,20 @@ export function SankeySignals({
   const [pendingSignalNames, setPendingSignalNames] = useState<TraceSignalName[]>();
   const snapshotsQuery = useThemeSnapshots(entityId, entityType, signalNames, dateFrom, dateTo);
   const snapshots = [...(snapshotsQuery.data?.snapshots ?? [])].sort((left, right) => left.ordinal - right.ordinal);
-  const [selectedSnapshotOrdinal, setSelectedSnapshotOrdinal] = useState<number>();
   const [isPlaying, setIsPlaying] = useState(false);
   const [viewMode, setViewMode] = useState<SignalsViewMode>('flow');
   const [drillStack, setDrillStack] = useState<ThemeSelection[]>([]);
-  const [detailSelection, setDetailSelection] = useState<SelectedTheme>();
   const [noiseSignalName, setNoiseSignalName] = useState<TraceSignalName>();
-  const matchedSnapshotIndex = snapshots.findIndex(snapshot => snapshot.ordinal === selectedSnapshotOrdinal);
+  // Pure derivation: the parent owns the frame. The index-0 fallback only covers
+  // the transient render where a perspective change swapped the snapshot list.
+  const matchedSnapshotIndex = snapshots.findIndex(snapshot => snapshot.snapshotId === selectedFrameId);
   const selectedSnapshotIndex = matchedSnapshotIndex >= 0 ? matchedSnapshotIndex : 0;
   const snapshot = snapshots[selectedSnapshotIndex];
   const totalSnapshots = snapshotsQuery.data?.totalSnapshots ?? snapshot?.total ?? 0;
-  const selectSnapshot = (index: number) => setSelectedSnapshotOrdinal(snapshots[index]?.ordinal);
+  const selectSnapshot = (index: number) => {
+    const id = snapshots[index]?.snapshotId;
+    if (id) onFrameIdChange(id);
+  };
   const handleViewModeChange = (nextViewMode: SignalsViewMode) => {
     if (nextViewMode !== 'flow') setIsPlaying(false);
     setViewMode(nextViewMode);
@@ -97,17 +110,20 @@ export function SankeySignals({
     if (nextIsPlaying && selectedSnapshotIndex === snapshots.length - 1) selectSnapshot(0);
     setIsPlaying(nextIsPlaying);
   };
+  const setThemeDetails = (selection: SelectedTheme | undefined) => {
+    onSelectedThemeIdChange(selection?.themeId);
+  };
   // Compare cards and lifeline points open details for the theme at the
   // landmark they were clicked on, so the panel's snapshot follows the click.
   const openThemeDetailsAt = (selection: ThemeSelection, snapshotIndex: number) => {
     if (selection.kind !== 'theme') return;
     selectSnapshot(snapshotIndex);
     setNoiseSignalName(undefined);
-    setDetailSelection(selection);
+    setThemeDetails(selection);
   };
 
   // Undefined at the last landmark so playback stops instead of looping.
-  const nextSnapshotOrdinal = snapshots[selectedSnapshotIndex + 1]?.ordinal;
+  const nextSnapshotId = snapshots[selectedSnapshotIndex + 1]?.snapshotId;
   const flowSnapshotIds = selectFlowSnapshotIds(snapshots, selectedSnapshotIndex);
   const flowQueries = useThemeFlows(entityId, entityType, signalNames, flowSnapshotIds);
   const flowQuery = flowQueries[flowSnapshotIds.indexOf(snapshot?.snapshotId ?? '')];
@@ -139,6 +155,8 @@ export function SankeySignals({
     return stabilizeThemeFlow(drilledFlow, [stableUnfilteredFlow, drilledFlow]);
   }, [drillStack, pathsQuery.data, stableUnfilteredFlow]);
   const graphSummary = useMemo(() => (flow ? buildSignalGraphSummary(flow) : undefined), [flow]);
+  const detailSelection =
+    stableUnfilteredFlow && selectedThemeId ? findThemeSelectionById(stableUnfilteredFlow, selectedThemeId) : undefined;
   const populatedStageCount = currentFlow?.stages.filter(stage => stage.nodes.length > 0).length ?? 0;
   const shouldLoadProgress =
     snapshotsQuery.isSuccess &&
@@ -151,13 +169,13 @@ export function SankeySignals({
   useSnapshotPlayback({
     isPlaying,
     isPlaybackBlocked: isFlowWindowBusy || isPlaybackBlockedByDrillIn,
-    nextSnapshot: nextSnapshotOrdinal,
-    onAdvance: ordinal => {
-      if (ordinal === undefined) {
+    nextSnapshot: nextSnapshotId,
+    onAdvance: frameId => {
+      if (frameId === undefined) {
         setIsPlaying(false);
         return;
       }
-      setSelectedSnapshotOrdinal(ordinal);
+      onFrameIdChange(frameId);
     },
     snapshotCount: snapshots.length,
   });
@@ -203,11 +221,13 @@ export function SankeySignals({
           queryFn: () => fetchThemePaths(request, entityId, entityType, nextSignalNames, nextSnapshot.snapshotId),
         });
       }
-      return nextSignalNames;
+      return { nextSignalNames, nextFrameId: nextSnapshot?.snapshotId };
     },
-    onSuccess: nextSignalNames => {
+    onSuccess: ({ nextSignalNames, nextFrameId }) => {
       setSignalNames(nextSignalNames);
       setPendingSignalNames(undefined);
+      // Keep the parent-owned frame pointing at a snapshot that exists in the new perspective.
+      if (nextFrameId && nextFrameId !== selectedFrameId) onFrameIdChange(nextFrameId);
     },
     onError: () => setPendingSignalNames(undefined),
   });
@@ -286,10 +306,10 @@ export function SankeySignals({
     if (!nextSelection || drillStack.some(filter => filter.signalName === nextSelection.signalName)) return;
     if (nextSelection.kind === 'theme') {
       setNoiseSignalName(undefined);
-      setDetailSelection(nextSelection);
+      setThemeDetails(nextSelection);
       if (drillInAvailable) setDrillStack(current => [...current, nextSelection]);
     } else {
-      setDetailSelection(undefined);
+      setThemeDetails(undefined);
       setNoiseSignalName(nextSelection.signalName);
     }
   };
@@ -300,7 +320,7 @@ export function SankeySignals({
   const handleSignalOrderChange = (nextSignalNames: TraceSignalName[]) => {
     if (perspectiveMutation.isPending) return;
     setIsPlaying(false);
-    setDetailSelection(undefined);
+    setThemeDetails(undefined);
     setNoiseSignalName(undefined);
     const mergedSignalNames = mergeVisibleSignalOrder(signalNames, nextSignalNames);
     setPendingSignalNames(mergedSignalNames);
@@ -374,9 +394,9 @@ export function SankeySignals({
               onViewDetails={selection => {
                 if (selection.kind === 'theme') {
                   setNoiseSignalName(undefined);
-                  setDetailSelection(selection);
+                  setThemeDetails(selection);
                 } else {
-                  setDetailSelection(undefined);
+                  setThemeDetails(undefined);
                   setNoiseSignalName(selection.signalName);
                 }
               }}
@@ -431,7 +451,7 @@ export function SankeySignals({
         selection={detailSelection}
         filters={drillStack}
         filteredStats={detailStats}
-        onClose={() => setDetailSelection(undefined)}
+        onClose={() => setThemeDetails(undefined)}
       />
       <NoiseDetailPanel
         key={`${snapshot.snapshotId}:${noiseSignalName ?? ''}:${filterKey}`}

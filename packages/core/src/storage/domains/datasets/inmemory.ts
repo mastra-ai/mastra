@@ -401,8 +401,12 @@ export class DatasetsInMemory extends DatasetsStorage {
     if (!rows || rows.length === 0) return null;
 
     if (args.datasetVersion !== undefined) {
-      // T3.13 — exact version match, exclude deleted
-      const row = rows.find(r => r.datasetVersion === args.datasetVersion && !r.isDeleted);
+      const datasetVersion = args.datasetVersion;
+      const row = rows
+        .filter(
+          r => r.datasetVersion <= datasetVersion && (r.validTo === null || r.validTo > datasetVersion) && !r.isDeleted,
+        )
+        .sort((a, b) => b.datasetVersion - a.datasetVersion)[0];
       return row ? toDatasetItem(row) : null;
     }
 

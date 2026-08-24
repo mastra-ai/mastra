@@ -119,6 +119,70 @@ describe('AskUser', () => {
     });
   });
 
+  describe('when a multiple selection is unticked', () => {
+    it('submits only what is left ticked', () => {
+      const { onSubmit } = renderAskUser({
+        question: 'Pick toppings',
+        options: [{ label: 'Cheese' }, { label: 'Olives' }],
+        selectionMode: 'multi_select',
+      });
+
+      fireEvent.click(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Cheese' }));
+      fireEvent.click(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Olives' }));
+      fireEvent.click(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Cheese' }));
+
+      expect(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Cheese' }).checked).toBe(false);
+      expect(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Olives' }).checked).toBe(true);
+
+      fireEvent.click(screen.getByRole('button', { name: /confirm|submit/i }));
+
+      expect(onSubmit).toHaveBeenCalledWith(['Olives']);
+    });
+  });
+
+  describe('when a single selection is chosen', () => {
+    it('shows the choice as made', () => {
+      renderAskUser({ question: 'Pick a fruit', options: [{ label: 'Apple' }, { label: 'Pear' }] });
+
+      fireEvent.click(screen.getByRole<HTMLInputElement>('radio', { name: /Apple/ }));
+
+      expect(screen.getByRole<HTMLInputElement>('radio', { name: /Apple/ }).checked).toBe(true);
+    });
+  });
+
+  describe('when the options change under the same question', () => {
+    it('starts the choice over', () => {
+      const { rerender } = render(
+        <AskUser
+          payload={{ question: 'Pick a fruit', options: [{ label: 'Apple' }], selectionMode: 'multi_select' }}
+          onSubmit={vi.fn()}
+        />,
+      );
+      fireEvent.click(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Apple' }));
+      expect(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Apple' }).checked).toBe(true);
+
+      rerender(
+        <AskUser
+          payload={{ question: 'Pick a fruit', options: [{ label: 'Pear' }], selectionMode: 'multi_select' }}
+          onSubmit={vi.fn()}
+        />,
+      );
+
+      expect(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Pear' }).checked).toBe(false);
+    });
+  });
+
+  describe('when free text holds nothing but spaces', () => {
+    it('keeps the submit button out of reach', () => {
+      renderAskUser({ question: 'What is your name?' });
+      const input = screen.getByRole<HTMLInputElement>('textbox', { name: 'What is your name?' });
+
+      fireEvent.change(input, { target: { value: '   ' } });
+
+      expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Submit answer' }).disabled).toBe(true);
+    });
+  });
+
   describe('when multiple selections are confirmed', () => {
     it('submits the selected labels', () => {
       const { onSubmit } = renderAskUser({
@@ -173,6 +237,76 @@ describe('AskUser', () => {
       renderAskUser({ question: 'Pick a fruit' }, { result: { content: 'Unable to resume', isError: true } });
 
       expect(screen.getByRole('alert').textContent).toContain('Unable to resume');
+    });
+  });
+
+  describe('when a result comes back', () => {
+    it('says it was answered, in the calm tone', () => {
+      const { container } = renderAskUser(
+        { question: 'Pick a fruit' },
+        { result: { content: 'User answered: Apple', isError: false } },
+      );
+
+      const status = screen.getByRole('status');
+      const badge = within(status).getByText('Answered');
+      expect(badge.classList.contains('bg-notice-success/20')).toBe(true);
+      expect(status.classList.contains('text-error')).toBe(false);
+      expect(container.textContent).not.toContain('Error');
+    });
+
+    it('says it failed, in the alarmed tone', () => {
+      renderAskUser({ question: 'Pick a fruit' }, { result: { content: 'Unable to resume', isError: true } });
+
+      const alert = screen.getByRole('alert');
+      expect(within(alert).getByText('Error').classList.contains('bg-notice-destructive/20')).toBe(true);
+      expect(alert.classList.contains('text-error')).toBe(true);
+    });
+  });
+
+  describe('when an option is malformed', () => {
+    it('keeps the ones that are usable and falls back when none are', () => {
+      renderAskUser({
+        question: 'Pick a fruit',
+        options: [null as unknown as { label: string }, { label: 'Apple' }, { label: 42 as unknown as string }],
+      });
+
+      expect(screen.getAllByRole('radio')).toHaveLength(1);
+      expect(screen.getByRole('radio', { name: /Apple/ })).toBeTruthy();
+    });
+  });
+
+  describe('when a key other than Enter is pressed in free text', () => {
+    it('leaves it to the input', () => {
+      const { onSubmit } = renderAskUser({ question: 'What is your name?' });
+      const input = screen.getByRole<HTMLInputElement>('textbox', { name: 'What is your name?' });
+
+      fireEvent.change(input, { target: { value: 'Ada' } });
+      expect(fireEvent.keyDown(input, { key: 'a' })).toBe(true);
+
+      expect(onSubmit).not.toHaveBeenCalled();
+    });
+
+    it('takes Enter for itself', () => {
+      const { onSubmit } = renderAskUser({ question: 'What is your name?' });
+      const input = screen.getByRole<HTMLInputElement>('textbox', { name: 'What is your name?' });
+
+      fireEvent.change(input, { target: { value: 'Ada' } });
+
+      expect(fireEvent.keyDown(input, { key: 'Enter' })).toBe(false);
+      expect(onSubmit).toHaveBeenCalledWith('Ada');
+    });
+  });
+
+  describe('when a single selection is chosen while a submission is pending', () => {
+    it('says nothing more', () => {
+      const { onSubmit } = renderAskUser(
+        { question: 'Pick a fruit', options: [{ label: 'Apple' }, { label: 'Pear' }] },
+        { isSubmitting: true },
+      );
+
+      fireEvent.click(screen.getByRole('radio', { name: /Apple/ }));
+
+      expect(onSubmit).not.toHaveBeenCalled();
     });
   });
 

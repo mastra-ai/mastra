@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Agent } from '../../agent/agent';
 import { DEFAULT_GOAL_JUDGE_PROMPT } from '../../agent/goal/objective';
+import { signalToXmlMarkup } from '../../agent/signals';
 import { LocalFilesystem, LocalSandbox, Workspace } from '../../workspace';
 import type { PromptContext } from '../index';
 import { buildBasePrompt, createCodingAgent } from '../index';
@@ -160,5 +161,20 @@ describe('buildBasePrompt', () => {
   it('parameterizes the Co-Authored-By email', () => {
     const prompt = buildBasePrompt(promptContext({ coAuthorName: 'Acme Bot', coAuthorEmail: 'bot@acme.dev' }));
     expect(prompt).toContain('Co-Authored-By: Acme Bot <bot@acme.dev>');
+  });
+
+  it('names the delivery wrapper the runtime emits, and no other', () => {
+    const wrapped = signalToXmlMarkup({
+      type: 'user',
+      attributes: { delivery: 'while-active' },
+      contents: 'fix the bug',
+    });
+    const openingTag = wrapped.slice(0, wrapped.indexOf('>') + 1);
+    const emittedTagName = openingTag.slice(1, openingTag.indexOf(' '));
+    const prompt = buildBasePrompt(promptContext());
+    const namedTagNames = new Set([...prompt.matchAll(/<([a-zA-Z][\w-]*) delivery="/g)].map(([, name]) => name));
+
+    expect(prompt).toContain(openingTag);
+    expect(namedTagNames).toEqual(new Set([emittedTagName]));
   });
 });

@@ -1,4 +1,4 @@
-import type { Client } from '@libsql/client';
+import type { SqliteClient } from './client';
 
 /**
  * Per-client write serialization.
@@ -22,14 +22,14 @@ import type { Client } from '@libsql/client';
  * gated; WAL readers never observe a partial write and must not queue behind a
  * long-running writer.
  */
-const clientWriteChains = new WeakMap<Client, Promise<unknown>>();
+const clientWriteChains = new WeakMap<SqliteClient, Promise<unknown>>();
 
 /**
  * Runs `fn` after every previously-enqueued write on `client` has settled, and
  * returns its result. The chain advances regardless of whether `fn` resolves or
  * rejects, so one failed write never wedges the queue.
  */
-export function withClientWriteLock<T>(client: Client, fn: () => Promise<T>): Promise<T> {
+export function withClientWriteLock<T>(client: SqliteClient, fn: () => Promise<T>): Promise<T> {
   const previous = clientWriteChains.get(client) ?? Promise.resolve();
   const result = previous.then(fn, fn);
   // Tail that never rejects so a failed write doesn't poison the chain.

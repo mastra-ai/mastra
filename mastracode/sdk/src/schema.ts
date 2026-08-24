@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import { DEFAULT_CONFIG_DIR, DEFAULT_OM_MODEL_ID } from './constants.js';
+import { THINKING_LEVEL_VALUES } from './thinking.js';
+import type { ThinkingLevelSetting } from './thinking.js';
 
 export type PermissionPolicy = 'allow' | 'ask' | 'deny';
 
@@ -65,7 +67,7 @@ export interface MastraCodeState {
    * resolved at request time from settings (`models.modeThinkingDefaults[mode]`
    * falling back to `preferences.thinkingLevel`).
    */
-  thinkingLevel?: 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+  thinkingLevel?: ThinkingLevelSetting;
   yolo: boolean;
   permissionRules: {
     categories: Record<string, PermissionPolicy>;
@@ -148,7 +150,7 @@ export const stateSchema = z.object({
   // Thinking level for model reasoning effort. Optional: absent means "no
   // session override" — the effective level is resolved from settings
   // (per-mode defaults, then the global preference) at request time.
-  thinkingLevel: z.enum(['off', 'low', 'medium', 'high', 'xhigh', 'max']).optional(),
+  thinkingLevel: z.preprocess(value => (value === null ? undefined : value), z.enum(THINKING_LEVEL_VALUES).optional()),
   // YOLO mode — auto-approve all tool calls
   yolo: z.boolean().default(false),
   // Permission rules — per-category and per-tool approval policies

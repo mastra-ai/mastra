@@ -16,6 +16,7 @@ import {
   groupBySchema,
   deltaCursorSchema,
   listModeSchema,
+  metadataField,
   normalizeObservabilityListArgs,
   paginationArgsSchema,
   paginationInfoSchema,
@@ -173,6 +174,7 @@ export const scoresFilterSchema = z
       .optional()
       .describe('Filter by scorer ID(s)'),
     scoreSource: scoreSourceField.optional().describe('Filter by how the score was produced'),
+    metadata: metadataField.nullish().describe('Filter by metadata key-value pairs (exact match per key)'),
     /**
      * @deprecated Use `scoreSource` instead.
      */

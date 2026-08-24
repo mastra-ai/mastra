@@ -6,7 +6,6 @@ import type { ActiveThreadRun } from '../agent/thread-stream-runtime';
 import type { AgentInstructions, ToolsInput, ToolsetsInput } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
 import { AgentControllerChannels } from '../channels/agent-controller-channels';
-import { getErrorFromUnknown } from '../error';
 import { GatewayManager } from '../llm/model/gateways';
 import { defaultGateways } from '../llm/model/gateways/defaults';
 import { Mastra } from '../mastra';
@@ -19,7 +18,6 @@ import type { MemoryStorage } from '../storage/domains/memory/base';
 import type { ObservationalMemoryRecord } from '../storage/types';
 import type { DynamicArgument } from '../types';
 import { Workspace } from '../workspace/workspace';
-import type { WorkspaceConfig } from '../workspace/workspace';
 
 import { Session } from './session';
 import type { ThreadDataStore } from './session';
@@ -178,7 +176,6 @@ export class AgentController<TState = {}> {
   readonly id: string;
 
   private config: AgentControllerConfig<TState>;
-  private workspaceInitialized = false;
   private initPromise: Promise<void> | undefined = undefined;
   private browser: DynamicArgument<MastraBrowser | undefined> = undefined;
   private workspace: DynamicArgument<Workspace | undefined> = undefined;
@@ -685,22 +682,6 @@ export class AgentController<TState = {}> {
       }),
     );
 
-    if (workspaceToConnect && workspaceToConnect instanceof Workspace) {
-      try {
-        await workspaceToConnect.init();
-        session.emit({ type: 'workspace_status_changed', status: 'ready' });
-        session.emit({
-          type: 'workspace_ready',
-          workspaceId: workspaceToConnect.id,
-          workspaceName: workspaceToConnect.name,
-        });
-      } catch (error) {
-        const initError = getErrorFromUnknown(error);
-        session.emit({ type: 'workspace_status_changed', status: 'error', error: initError });
-        session.emit({ type: 'workspace_error', error: initError });
-      }
-    }
-
     if (overrides?.threadId) {
       const existingThread = await session.thread.getById({ threadId: overrides.threadId });
       if (existingThread) {
@@ -830,14 +811,12 @@ export class AgentController<TState = {}> {
   }
 
   /**
-   * Whether the AgentController-level static workspace has been initialized. Dynamic
-   * factory workspaces are resolved and initialized per-session during
-   * `createSession`, so this returns `false` for factory configs until a
-   * session is created.
+   * Whether the AgentController-level static workspace has been explicitly initialized.
+   * Dynamic factory workspaces have no controller-level readiness state.
    */
   isWorkspaceReady(): boolean {
     if (typeof this.workspace === 'function') return true;
-    return this.workspaceInitialized && this.workspace !== undefined;
+    return this.workspace?.status === 'ready';
   }
 
   /**
@@ -918,8 +897,8 @@ export class AgentController<TState = {}> {
   // ===========================================================================
 
   /**
-   * Initialize the harness — loads storage and workspace.
-   * Must be called before using the harness. Idempotent: repeated calls
+   * Initialize the harness by loading storage and propagating runtime services.
+   * Workspaces initialize lazily when used. Must be called before using the harness. Idempotent: repeated calls
    * return the same in-flight/completed initialization instead of rebuilding
    * the internal Mastra instance (which would orphan registered agents).
    */
@@ -975,30 +954,10 @@ export class AgentController<TState = {}> {
   }
 
   private async runInit(): Promise<void> {
-    // Storage init is a prerequisite for both reads and writes; share the same
-    // promise so a concurrent read that already triggered storage init doesn't
-    // race with the workspace init we're about to do.
     await this.initStorage();
 
-    // Initialize workspace if configured (skip for dynamic factory — resolved per-request)
-    if (this.config.workspace && !this.workspaceInitialized && typeof this.workspace !== 'function') {
-      try {
-        if (!this.workspace) {
-          this.workspace = new Workspace(this.config.workspace as WorkspaceConfig);
-        }
-
-        await (this.workspace as Workspace).init();
-        this.workspaceInitialized = true;
-      } catch {
-        this.workspace = undefined;
-        this.workspaceInitialized = false;
-        // Sessions created later will call workspace.init() themselves and
-        // surface the error through workspace_error events on the session.
-      }
-    }
-
     // Propagate harness-level Mastra, memory, workspace, browser, and pubsub
-    // to the agent(s) that back each mode (after workspace init).
+    // to the agent(s) that back each mode. Workspaces initialize lazily when used.
     for (const agent of this.backingAgents()) {
       this.propagateRuntimeServicesToAgent(agent);
     }
@@ -1864,6 +1823,12 @@ export class AgentController<TState = {}> {
     }
 
     session.run.clearAbortRequested();
+    // Reconcile the in-memory model selection with the persisted per-mode model
+    // before snapshotting it into the request context. In multiplayer
+    // deployments another process (or a freshly-created Session for an existing
+    // thread) may have persisted a different model; the per-instance cache would
+    // otherwise run with a stale selection. No-op in the single-player TUI.
+    await session.model.syncFromPersisted({ modeId: session.mode.get() });
     const requestContext = await this.buildRequestContext(session, requestContextInput);
     // Resolve mode-aware instructions at call time so the agent's own
     // instructions are never mutated by the harness.

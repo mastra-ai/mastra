@@ -12,7 +12,7 @@
       "chunkSize": 1,
       "streamingProfile": {
         "ttft": 100,
-        "tps": 80
+        "tps": 20
       }
     },
     {

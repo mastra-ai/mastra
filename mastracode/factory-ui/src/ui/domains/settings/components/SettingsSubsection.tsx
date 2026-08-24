@@ -16,7 +16,7 @@ export function SettingsSubsection({
   children?: ReactNode;
 }) {
   return (
-    <section id={id} className="flex scroll-mt-4 flex-col gap-2">
+    <section id={id} className="flex min-w-0 scroll-mt-4 flex-col gap-2">
       <div className="flex flex-col gap-1">
         <Txt as="h2" variant="ui-sm" className="text-icon6 leading-ui-md font-semibold">
           {title}

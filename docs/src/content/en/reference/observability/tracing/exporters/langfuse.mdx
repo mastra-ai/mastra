@@ -25,6 +25,7 @@ interface LangfuseExporterConfig extends BaseExporterConfig {
   publicKey?: string
   secretKey?: string
   baseUrl?: string
+  additionalHeaders?: Record<string, string>
   realtime?: boolean
   flushAt?: number
   flushInterval?: number
@@ -56,6 +57,12 @@ Extends `BaseExporterConfig`, which includes:
     name: 'baseUrl',
     type: 'string',
     description: 'Langfuse host URL. Falls back to LANGFUSE_BASE_URL env var. Default: https://cloud.langfuse.com',
+    required: false,
+  },
+  {
+    name: 'additionalHeaders',
+    type: 'Record<string, string>',
+    description: 'Additional headers sent with requests to Langfuse.',
     required: false,
   },
   {
@@ -146,6 +153,7 @@ const exporter = new LangfuseExporter({
   publicKey: process.env.LANGFUSE_PUBLIC_KEY,
   secretKey: process.env.LANGFUSE_SECRET_KEY,
   baseUrl: 'https://cloud.langfuse.com',
+  additionalHeaders: { 'x-custom-header': 'custom-value' },
   realtime: true,
 })
 ```

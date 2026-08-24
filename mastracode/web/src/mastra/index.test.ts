@@ -42,6 +42,7 @@ describe('platform entry (src/mastra/index.ts)', () => {
       'WORKOS_COOKIE_PASSWORD',
       'MASTRA_SHARED_API_URL',
       'MASTRA_PLATFORM_SECRET_KEY',
+      'MASTRA_PLATFORM_ACCESS_TOKEN',
       'MASTRACODE_DISPATCH_MAX_IN_FLIGHT',
     ]) {
       vi.stubEnv(name, '');

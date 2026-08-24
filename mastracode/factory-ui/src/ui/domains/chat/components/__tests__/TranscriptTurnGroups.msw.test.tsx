@@ -3,6 +3,7 @@ import { screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import { renderWithProviders } from '../../../../../../e2e/ui/render';
+import { createInitialTranscript, transcriptReducer } from '../../services/transcript';
 import type { TimelineEntry } from '../../services/transcript';
 import { TranscriptEntries } from '../Transcript';
 
@@ -51,6 +52,28 @@ function echoEntry(id: string, text: string): TimelineEntry {
     content: { format: 2, parts: [{ type: 'data-user-message', data: { contents: text } }] },
   };
   return { kind: 'message', id, message };
+}
+
+function steerSignal(id: string, text: string): MastraDBMessage {
+  return {
+    id,
+    role: 'signal',
+    createdAt: CREATED_AT,
+    content: {
+      format: 2,
+      parts: [{ type: 'text', text }],
+      metadata: {
+        signal: {
+          id,
+          type: 'user',
+          tagName: 'user',
+          contents: text,
+          createdAt: CREATED_AT.toISOString(),
+          attributes: { delivery: 'while-active' },
+        },
+      },
+    },
+  };
 }
 
 const entries = [
@@ -145,6 +168,43 @@ describe('TranscriptEntries turn groups', () => {
     expect(screen.getByText('first question').closest(ROOM_SELECTOR)).toBe(room);
     expect(screen.getByText('first answer').closest(ROOM_SELECTOR)).toBe(room);
     expect(document.querySelectorAll(ROOM_SELECTOR)).toHaveLength(1);
+  });
+
+  it('keeps the same room node when a pending steer is confirmed', () => {
+    let state = createInitialTranscript({ messages: [], threadId: 'thread-1' });
+    state = transcriptReducer(state, {
+      type: 'localUser',
+      text: 'change direction',
+      steer: true,
+    });
+    const { rerender } = renderWithProviders(
+      <TranscriptEntries
+        entries={state.entries}
+        onApprove={() => {}}
+        onRespond={() => {}}
+        running
+        tail={<div data-testid="steering-tail" />}
+      />,
+    );
+    const room = screen.getByTestId('steering-tail').parentElement;
+    expect(room).toBeInstanceOf(HTMLElement);
+
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: { type: 'message_start', message: steerSignal('signal-steer', 'change direction') },
+    });
+    rerender(
+      <TranscriptEntries
+        entries={state.entries}
+        onApprove={() => {}}
+        onRespond={() => {}}
+        running
+        tail={<div data-testid="steering-tail" />}
+      />,
+    );
+
+    expect(screen.getByTestId('steering-tail').parentElement).toBe(room);
+    expect(state.entries[0]).toMatchObject({ message: { id: 'signal-steer' } });
   });
 
   it('takes the gap that introduces a turn into that turn, where the room absorbs it', () => {

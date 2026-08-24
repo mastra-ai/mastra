@@ -182,6 +182,9 @@ describe('LangfuseExporter', () => {
         publicKey: 'pk-test',
         secretKey: 'sk-test',
         baseUrl: 'https://custom.langfuse.com',
+        additionalHeaders: {
+          'x-custom-header': 'custom-value',
+        },
         environment: 'production',
         release: '1.0.0',
       });
@@ -191,6 +194,9 @@ describe('LangfuseExporter', () => {
           publicKey: 'pk-test',
           secretKey: 'sk-test',
           baseUrl: 'https://custom.langfuse.com',
+          additionalHeaders: {
+            'x-custom-header': 'custom-value',
+          },
           environment: 'production',
           release: '1.0.0',
           exportMode: 'batched',
@@ -233,6 +239,9 @@ describe('LangfuseExporter', () => {
         publicKey: 'pk-test',
         secretKey: 'sk-test',
         baseUrl: 'https://custom.langfuse.com',
+        additionalHeaders: {
+          'x-custom-header': 'custom-value',
+        },
       });
 
       expect(clientConstructorArgs[0]).toEqual(
@@ -240,6 +249,9 @@ describe('LangfuseExporter', () => {
           publicKey: 'pk-test',
           secretKey: 'sk-test',
           baseUrl: 'https://custom.langfuse.com',
+          additionalHeaders: {
+            'x-custom-header': 'custom-value',
+          },
         }),
       );
     });
