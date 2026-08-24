@@ -130,6 +130,7 @@ const KNOWN_AGENT_CONTROLLER_EVENT_TYPES = new Set<string>(
     thread_changed: true,
     thread_created: true,
     thread_deleted: true,
+    thread_title_updated: true,
     subagent_start: true,
     subagent_text_delta: true,
     subagent_tool_start: true,

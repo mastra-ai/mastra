@@ -1,5 +1,14 @@
 # @mastra/e2b
 
+## 0.10.0-alpha.2
+
+### Patch Changes
+
+- Fixed automatic sandbox recovery when E2B reports an ID-specific missing sandbox. ([#22215](https://github.com/mastra-ai/mastra/pull/22215))
+
+- Updated dependencies [[`ae8790c`](https://github.com/mastra-ai/mastra/commit/ae8790c4bfaa088d2ab279d1dcc06f326b9fd109), [`04a815f`](https://github.com/mastra-ai/mastra/commit/04a815fc8971d29e97fcdcc5008a1eb472fc00ff), [`cced745`](https://github.com/mastra-ai/mastra/commit/cced745a056ec2225c5bc702e32d848847aa8b65)]:
+  - @mastra/core@1.62.0-alpha.7
+
 ## 0.10.0-alpha.1
 
 ### Patch Changes
