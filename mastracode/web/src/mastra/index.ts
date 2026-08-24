@@ -284,7 +284,9 @@ export const factory = new MastraFactory({
   integrations,
   rules: factoryRules,
   sandbox: ctx => {
-    if (process.env.E2B_API_KEY?.trim()) {
+    const provider = process.env.E2B_API_KEY?.trim() ? 'e2b' : hasPlatformSandboxEnv ? 'platform' : 'local';
+    console.info(`[sandbox] session ${ctx.sessionId} -> ${provider} sandbox`);
+    if (provider === 'e2b') {
       // Lazy-built repo template pinned to the repo's current default-branch
       // head at resolution time (one template per repo + setup command; a
       // moved head builds fresh on the next new session; build failure ->
@@ -307,7 +309,7 @@ export const factory = new MastraFactory({
           : {}),
         ...(ctx.onStart ? { onStart: ctx.onStart } : {}),
       });
-    } else if (hasPlatformSandboxEnv) {
+    } else if (provider === 'platform') {
       return new PlatformSandbox({
         id: ctx.sessionId,
         accessToken: platformSandboxToken,
