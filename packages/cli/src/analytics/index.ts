@@ -288,6 +288,30 @@ export class PosthogAnalytics {
     }
   }
 
+  /**
+   * Evaluate a PostHog feature flag for this CLI session.
+   *
+   * Fail-CLOSED: returns `false` when telemetry is disabled, the client isn't
+   * initialized, or PostHog throws. This matters for rollout flags gating
+   * new-feature emission (e.g. `platform-workers`) — a network hiccup must
+   * NEVER cause a user to accidentally opt into a feature they weren't rolled
+   * into.
+   *
+   * `options.groups.organization` is the auth-session org id; PostHog uses
+   * it to evaluate org-scoped flag rules.
+   */
+  async isFeatureEnabled(flag: string, options?: { groups?: Record<string, string> }): Promise<boolean> {
+    if (!this.client) return false;
+    try {
+      const result = await this.client.isFeatureEnabled(flag, this.distinctId, {
+        groups: options?.groups,
+      });
+      return result === true;
+    } catch {
+      return false;
+    }
+  }
+
   // Ensure PostHog client is shutdown properly
   async shutdown(timeoutMs?: number): Promise<void> {
     if (!this.client) {

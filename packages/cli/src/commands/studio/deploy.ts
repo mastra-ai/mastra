@@ -23,6 +23,80 @@ function elapsed(ms: number): string {
   return ms < 1000 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(1)}s`;
 }
 
+/**
+ * Platform-workers rollout gate.
+ *
+ * On every deploy where the built `workers.json` declares a non-null worker
+ * manifest, consult PostHog for the `platform-workers` flag scoped to the
+ * user's org. When OFF: overwrite the emitted `workers.json` with `null` so
+ * the platform receives no manifest and provisions no dedicated worker
+ * service — the app still runs in single-process mode (BackgroundTaskWorker
+ * co-located in the API replica).
+ *
+ * Fail-CLOSED: any PostHog error, disabled telemetry, or missing analytics
+ * client falls through to "flag off" → downgrade. A user must NEVER accidentally
+ * get workers because a flag lookup failed.
+ *
+ * Returns a report so `runStudioDeploy` can print the correct one-line notice.
+ */
+export async function applyWorkersFlagGuard(deps: {
+  outputDir: string;
+  orgId: string;
+  analytics: {
+    isFeatureEnabled(flag: string, options?: { groups?: Record<string, string> }): Promise<boolean>;
+  } | null;
+  fs?: {
+    readFile: (path: string) => Promise<string>;
+    writeFile: (path: string, content: string) => Promise<void>;
+  };
+}): Promise<{ status: 'no-manifest' | 'already-null' | 'preserved' | 'downgraded' }> {
+  const { readFile: readFn, writeFile: writeFn } = deps.fs ?? {
+    readFile: async (p: string) => readFile(p, 'utf-8'),
+    // Use fs/promises writeFile signature the deployer already relies on
+    writeFile: async (p: string, content: string) => {
+      const { writeFile: fsWriteFile } = await import('node:fs/promises');
+      await fsWriteFile(p, content);
+    },
+  };
+
+  const manifestPath = join(deps.outputDir, 'workers.json');
+
+  let raw: string;
+  try {
+    raw = await readFn(manifestPath);
+  } catch {
+    return { status: 'no-manifest' };
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    // A malformed manifest is upstream's problem — don't try to fix it here.
+    return { status: 'no-manifest' };
+  }
+
+  if (parsed === null || parsed === undefined) {
+    return { status: 'already-null' };
+  }
+
+  // Fail-closed: no analytics → treat as flag-off → downgrade. Users on
+  // MASTRA_TELEMETRY_DISABLED=1 will emit no manifest until we build a proper
+  // out-of-band flag transport. That's the conservative rollout stance.
+  const flagOn = deps.analytics
+    ? await deps.analytics.isFeatureEnabled('platform-workers', {
+        groups: { organization: deps.orgId },
+      })
+    : false;
+
+  if (flagOn) {
+    return { status: 'preserved' };
+  }
+
+  await writeFn(manifestPath, JSON.stringify(null));
+  return { status: 'downgraded' };
+}
+
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                           */
 /* ------------------------------------------------------------------ */
@@ -554,6 +628,21 @@ async function runStudioDeploy(dir: string | undefined, opts: StudioDeployOption
     await access(outputEntry);
   } catch {
     throw new Error('.mastra/output/index.mjs not found — did the build succeed?');
+  }
+
+  // Platform-workers rollout gate. If the user's org is not opted into the
+  // `platform-workers` PostHog flag, overwrite `.mastra/output/workers.json`
+  // with `null` so the platform receives no manifest and provisions no
+  // dedicated worker service. The app still runs its BackgroundTaskWorker
+  // in-process (mode: 'full' default), so background tasks execute — just
+  // co-located with the API replica.
+  const workersGuard = await applyWorkersFlagGuard({
+    outputDir: join(targetDir, '.mastra', 'output'),
+    orgId,
+    analytics: getAnalytics(),
+  });
+  if (workersGuard.status === 'downgraded') {
+    p.log.warn('Background workers not yet enabled for your org — deploy will run in single-process mode.');
   }
 
   // If the user didn't pass --env-file and no ambient .env* file exists,
