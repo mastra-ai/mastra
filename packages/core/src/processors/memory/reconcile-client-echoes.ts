@@ -7,6 +7,20 @@ type ClientTerminalTransition =
   | { state: 'output-error'; errorText: string };
 
 /**
+ * The exhaustive set of fields a client echo may contribute when it advances a
+ * stored tool `call` to a terminal state, keyed by that terminal state. This is
+ * the single source of truth for the client-contributable surface: every other
+ * field on a tool invocation (`toolName`, `toolCallId`, `args`, `rawInput`,
+ * `approval`, ...) is server-authored and is always taken from the stored
+ * record. `pickClientTerminalTransition` copies only these keys, so a client
+ * cannot smuggle server-authored fields through a terminal transition.
+ */
+export const CLIENT_CONTRIBUTABLE_TERMINAL_FIELDS = {
+  result: ['result', 'isError', 'errorText'],
+  'output-error': ['errorText'],
+} as const satisfies Record<ClientTerminalTransition['state'], readonly (keyof MastraToolInvocation)[]>;
+
+/**
  * Pick the fields for a supported client-authored terminal transition.
  *
  * A stored `call` may become either:
@@ -24,12 +38,19 @@ function pickClientTerminalTransition(
   if (stored.state !== 'call') return undefined;
 
   if (incoming.state === 'result') {
-    return {
-      state: 'result',
-      result: incoming.result,
-      ...(incoming.isError !== undefined ? { isError: incoming.isError } : {}),
-      ...(incoming.errorText !== undefined ? { errorText: incoming.errorText } : {}),
-    };
+    // `result` is the defining payload of the transition and is always carried
+    // (even when explicitly undefined); the remaining whitelisted markers are
+    // only carried when the client actually set them. No field outside
+    // CLIENT_CONTRIBUTABLE_TERMINAL_FIELDS can ever be copied from the client.
+    const transition: ClientTerminalTransition = { state: 'result', result: incoming.result };
+    for (const field of CLIENT_CONTRIBUTABLE_TERMINAL_FIELDS.result) {
+      if (field === 'result') continue;
+      const value = incoming[field];
+      if (value !== undefined) {
+        (transition as Record<string, unknown>)[field] = value;
+      }
+    }
+    return transition;
   }
 
   if (incoming.state === 'output-error' && incoming.errorText !== undefined) {

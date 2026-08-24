@@ -9,6 +9,7 @@ import { MemoryStorage } from '../../storage';
 import type { StorageListThreadsInput, StorageListThreadsOutput } from '../../storage/types';
 
 import { MessageHistory } from './message-history.js';
+import { CLIENT_CONTRIBUTABLE_TERMINAL_FIELDS } from './reconcile-client-echoes.js';
 
 // Helper to create RequestContext with memory context
 function createRuntimeContextWithMemory(threadId: string, resourceId?: string): RequestContext {
@@ -1950,6 +1951,92 @@ describe('MessageHistory', () => {
       });
 
       saveSpy.mockRestore();
+    });
+
+    it('should not adopt tool-invocation fields outside the terminal whitelist', async () => {
+      const stored = assistantMessage({
+        content: {
+          format: 2,
+          content: 'Let me look that up',
+          parts: [
+            { type: 'text', text: 'Let me look that up' },
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'call-1',
+                toolName: 'search',
+                args: { query: 'mastra' },
+              },
+            },
+          ],
+        },
+      });
+      mockStorage.setMessages([stored]);
+
+      processor = new MessageHistory({ storage: mockStorage });
+      const saveSpy = vi.spyOn(mockStorage, 'saveMessages');
+
+      // The client echo advances the call to a result but also smuggles a
+      // server-authored-only field (`rawInput`) and an `approval` object the
+      // server never stored. Neither is part of the client-contributable
+      // whitelist, so neither may reach the persisted record.
+      const echoWithResult = assistantMessage({
+        content: {
+          format: 2,
+          content: 'Let me look that up',
+          parts: [
+            { type: 'text', text: 'Let me look that up' },
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'call-1',
+                toolName: 'search',
+                args: { query: 'mastra' },
+                result: 'result-from-client',
+                rawInput: { query: 'client-injected-raw-input' },
+                approval: { id: 'client-approval', approved: true },
+              },
+            },
+          ],
+        },
+      });
+
+      const messageList = new MessageList().add([echoWithResult], 'input');
+
+      await processor.processOutputResult({
+        messageList,
+        messages: [],
+        abort: mockAbort,
+        requestContext: createRuntimeContextWithMemory('thread-1'),
+      });
+
+      const savedMessages = (saveSpy.mock.calls[0]![0] as any).messages as MastraDBMessage[];
+      const savedMsg1 = savedMessages.find(m => m.id === 'msg-1');
+      const toolPart = savedMsg1!.content.parts.find((pp: any) => pp.type === 'tool-invocation')!;
+
+      // Only the whitelisted terminal field (`result`) is taken from the client;
+      // `rawInput` and `approval` are dropped.
+      expect(toolPart.toolInvocation).toEqual({
+        state: 'result',
+        toolCallId: 'call-1',
+        toolName: 'search',
+        args: { query: 'mastra' },
+        result: 'result-from-client',
+      });
+
+      saveSpy.mockRestore();
+    });
+
+    it('codifies the client-contributable terminal-field whitelist as an explicit constant', () => {
+      // This guard fails loudly if the client-contributable surface is ever
+      // widened silently: any new key here is a new field a client echo could
+      // overwrite on a server-authored tool call.
+      expect(CLIENT_CONTRIBUTABLE_TERMINAL_FIELDS).toEqual({
+        result: ['result', 'isError', 'errorText'],
+        'output-error': ['errorText'],
+      });
     });
   });
 });
