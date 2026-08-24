@@ -1,7 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { HoverCard, HoverCardTrigger } from '@mastra/playground-ui/components/HoverCard';
-import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
+import { MainSidebar, useMaybeSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -59,13 +59,18 @@ export function SessionNavRow({
   onDelete?: () => void;
 }) {
   const anchor = useRef<HTMLLIElement>(null);
+  // Selecting a session navigates away, so the mobile nav drawer must close.
+  const sidebar = useMaybeSidebar();
   const button = (
     <button
       type="button"
       aria-current={active ? 'page' : undefined}
       aria-label={owner ? `${name}, started by ${owner}` : name}
       disabled={disabled || loading}
-      onClick={onSelect}
+      onClick={() => {
+        sidebar?.setOpenMobile(false);
+        onSelect();
+      }}
       title={preview ? undefined : title}
     >
       <GitBranch />
