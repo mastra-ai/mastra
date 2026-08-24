@@ -1,0 +1,211 @@
+---
+title: "Kubernetes (Helm) values reference | Deploy"
+description: "All configuration values for the mastra-projects Helm chart and its mastra-server and mastra-studio components."
+---
+
+# Helm chart values reference
+
+All configurable values for the `mastra-projects` umbrella chart and its
+`mastra-server` and `mastra-studio` component charts. Set component values
+under the `mastra-server:` / `mastra-studio:` keys in your values file.
+
+:::note
+This reference matches the latest chart release. The chart is also
+self-describing — with registry access you can inspect the exact defaults of
+the version you're installing:
+
+```bash
+helm show values oci://us-central1-docker.pkg.dev/mastra-cloud/mastra-helm-ee/mastra-projects
+helm show readme oci://us-central1-docker.pkg.dev/mastra-cloud/mastra-helm-ee/mastra-projects
+```
+
+:::
+
+## Umbrella chart (`mastra-projects`)
+
+| Key | Type | Default | Description |
+| - | - | - | - |
+| global.cloud | string | `"generic"` | Target platform: one of `gke`, `eks`, `aks`, `generic`, `local`. Selects the LoadBalancer/Ingress annotations emitted per cloud. |
+| global.exposure.mode | string | `"loadBalancer"` | Exposure mode: one of `loadBalancer`, `ingress`, `gateway`. loadBalancer: each component gets a Service type=LoadBalancer with   per-cloud annotations. ingress: components stay ClusterIP and get an Ingress each (set   mastra-server.ingress.host / mastra-studio.ingress.host). gateway: Gateway API — components stay ClusterIP and get an HTTPRoute   each (set mastra-server.httpRoute.host / mastra-studio.httpRoute.host);   a shared Gateway is created below (gateway.create) or bring your own   via global.gateway.name. |
+| global.gateway.name | string | `""` | BYO Gateway name. When set, no Gateway is created; HTTPRoutes attach to this one (same-namespace unless gateway.namespace is set — cross-ns attachment needs a ReferenceGrant on the Gateway side). |
+| global.gateway.namespace | string | `""` | Namespace of the BYO Gateway (default: release namespace). |
+| global.gateway.className | string | `""` | GatewayClass. Empty = auto: gke -> gke-l7-global-external-managed (gke-l7-rilb when internal). Other clouds require an explicit class. |
+| global.gateway.internal | bool | `false` | Use an internal (private) gateway class where the cloud supports it. |
+| global.tls.clusterIssuer | string | `""` | cert-manager ClusterIssuer name used to annotate Ingresses and issue certificates. When tls.letsEncrypt.email is set below, a ClusterIssuer with this name is rendered for you. |
+| global.database.url | string | `""` | BYO Postgres/libSQL connection string -> DATABASE\_URL for BOTH components. For production prefer per-component existingSecret. |
+| global.license.url | string | `""` | License server -> MASTRA\_LICENSE\_URL (default [https://license.mastra.ai](https://license.mastra.ai)). |
+| global.license.key | string | `""` | Mastra-issued EE license JWT -> MASTRA\_EE\_LICENSE for BOTH components. |
+| ingressController.install | bool | `false` | Install the bundled ingress-nginx (only useful with exposure.mode=ingress on clusters that don't already run an ingress controller). NOTE: ingress-nginx is retired upstream — prefer exposure.mode=gateway where a Gateway API controller is available (e.g. GKE's managed Gateway). |
+| gateway.create | bool | `true` | Create the shared Gateway when exposure.mode=gateway (skipped automatically when global.gateway.name points at a BYO Gateway). Listeners: http:80 always; https-server/https-studio:443 per component host when global.tls.clusterIssuer is set (certs issued by cert-manager's gateway-shim — cert-manager must run with Gateway API support enabled). |
+| gateway.httpsRedirect | bool | `true` | Redirect component hostnames HTTP->HTTPS (only rendered with TLS on). |
+| gateway.annotations | object | `{}` | Extra Gateway annotations. |
+| gateway.addresses | list | `[]` | Optional spec.addresses (e.g. a reserved named address on GKE: `[{type: networking.gke.io/addresses, value: my-static-ip}]`). |
+| tls.certManager.install | bool | `false` | Install the bundled cert-manager (CRDs included). Skip if the cluster already runs cert-manager. |
+| tls.letsEncrypt.email | string | `""` | When set, renders an ACME ClusterIssuer named after global.tls.clusterIssuer (default name: letsencrypt) using HTTP-01. |
+| tls.letsEncrypt.staging | bool | `false` | Use the Let's Encrypt staging endpoint (untrusted certs, high rate limits) — recommended for testing. |
+| tls.letsEncrypt.ingressClassName | string | `"nginx"` | Ingress class used by the HTTP-01 solver. |
+| mastra-server.enabled | bool | `true` | Deploy the Mastra Server component. |
+| mastra-server.image.repository | string | `""` | REQUIRED. Your prebuilt Mastra server image. |
+| mastra-server.image.tag | string | `"latest"` | Server image tag. |
+| mastra-studio.enabled | bool | `true` | Deploy the Mastra Studio component. |
+| mastra-studio.image.repository | string | `""` | REQUIRED. Your prebuilt Mastra Studio image. |
+| mastra-studio.image.tag | string | `"latest"` | Studio image tag. |
+| ingress-nginx | object | `{}` | Passthrough values for the bundled ingress-nginx subchart (only used when ingressController.install=true). |
+| cert-manager.crds.enabled | bool | `true` | Manage cert-manager CRDs when the bundled cert-manager is installed. |
+
+## Server component (`mastra-server`)
+
+| Key | Type | Default | Description |
+| - | - | - | - |
+| global.cloud | string | `"generic"` | Target platform: one of `gke`, `eks`, `aks`, `generic`, `local`. Selects the LoadBalancer/Ingress annotations emitted by mastra-common. |
+| global.exposure.mode | string | `"loadBalancer"` | Exposure mode: `loadBalancer`, `ingress`, or `gateway`. Drives the "auto" defaults for service.type and ingress.enabled (usually set once on the mastra-projects umbrella). |
+| global.tls.clusterIssuer | string | `""` | cert-manager ClusterIssuer name. When set, Ingresses get the cert-manager.io/cluster-issuer annotation and an auto TLS block. |
+| global.database.url | string | `""` | Shared DATABASE\_URL fallback (component database.url wins). |
+| global.license.url | string | `""` | Shared MASTRA\_LICENSE\_URL fallback (component license.url wins). |
+| global.license.key | string | `""` | Shared MASTRA\_EE\_LICENSE fallback (component license.key wins). |
+| nameOverride | string | `""` | Override the chart name used in resource names. |
+| fullnameOverride | string | `""` | Override the fully-qualified release name used in resource names. |
+| image.repository | string | `""` | REQUIRED. Your prebuilt Mastra server image (e.g. ghcr.io/acme/my-agent). |
+| image.tag | string | `"latest"` | Image tag. "Deploy a new version" = push a new tag + helm upgrade. |
+| image.pullPolicy | string | `"IfNotPresent"` | Image pull policy. |
+| imagePullSecrets | list | `[]` | Names of Secrets holding registry credentials for private images. |
+| replicaCount | int | `1` | Number of server replicas (ignored when autoscaling.enabled=true). |
+| containerPort | int | `4111` | Port the server listens on. Exported as PORT; the Service targets it. |
+| bindHost | string | `"0.0.0.0"` | Bind address -> MASTRA\_HOST. Must stay 0.0.0.0 in-cluster (the Mastra server binds localhost by default, which breaks probes and Services). |
+| database.url | string | `""` | Postgres/libSQL connection string -> DATABASE\_URL (stored in the chart Secret). For production prefer existingSecret instead of plaintext values. |
+| license.url | string | `""` | License server -> MASTRA\_LICENSE\_URL. Empty = global.license.url, then [https://license.mastra.ai](https://license.mastra.ai). |
+| license.key | string | `""` | Mastra-issued EE license JWT -> MASTRA\_EE\_LICENSE (stored in the chart Secret). Empty = global.license.key. For production prefer existingSecret. |
+| corsOrigin | string | `""` | Allowed browser origin (your Studio/UI host) -> MASTRA\_CORS\_ORIGIN. |
+| externalServices.objectStore.endpoint | string | `""` | S3-compatible endpoint URL -> S3\_ENDPOINT. |
+| externalServices.objectStore.bucket | string | `""` | Bucket name -> S3\_BUCKET. |
+| externalServices.objectStore.region | string | `""` | Bucket region -> S3\_REGION. |
+| externalServices.objectStore.accessKeyId | string | `""` | Access key ID -> S3\_ACCESS\_KEY\_ID (stored in the chart Secret). |
+| externalServices.objectStore.secretAccessKey | string | `""` | Secret access key -> S3\_SECRET\_ACCESS\_KEY (stored in the chart Secret). |
+| existingSecret | string | `""` | Name of an existing Secret mounted via envFrom (expected to carry DATABASE\_URL, MASTRA\_EE\_LICENSE, ...). Replaces the chart-rendered Secret. |
+| extraEnvVars | object | `{}` | Extra non-secret env vars merged into the ConfigMap (map of KEY: value). Must not repeat keys the chart already sets (PORT, MASTRA\_LICENSE\_URL, ...). |
+| extraSecretVars | object | `{}` | Extra secret env vars merged into the chart Secret (map of KEY: value). Avoid in production; use existingSecret. |
+| extraEnv | list | `[]` | Raw container env entries (supports valueFrom, fieldRef, ...). |
+| service.type | string | `""` | Service type (`ClusterIP`, `LoadBalancer`, `NodePort`). Empty = auto from global.exposure.mode (loadBalancer -> LoadBalancer, ingress -> ClusterIP). LoadBalancer gets per-cloud annotations based on global.cloud. |
+| service.port | int | `4111` | Service port. |
+| service.internal | bool | `false` | Provision an internal (private) LB where the cloud supports it. |
+| service.annotations | object | `{}` | Extra Service annotations; merged OVER the per-cloud defaults. |
+| ingress.enabled | string | `"auto"` | `true`, `false`, or `auto`. auto = enabled when global.exposure.mode=ingress AND host is set. |
+| ingress.host | string | `""` | Required when the Ingress is enabled. |
+| ingress.path | string | `"/"` | HTTP path prefix routed to the server. |
+| ingress.pathType | string | `"Prefix"` | Ingress pathType. |
+| ingress.internal | bool | `false` | Use an internal ingress class where the cloud supports it (GKE). |
+| ingress.className | string | `""` | Explicit ingressClassName; overrides the per-cloud default (gke: gce, eks: alb, aks/local: nginx). On generic the field is omitted entirely so the cluster's default IngressClass applies. |
+| ingress.annotations | object | `{}` | Extra Ingress annotations; merged OVER the per-cloud defaults. |
+| ingress.tls | list | `[]` | Explicit TLS blocks. When empty and global.tls.clusterIssuer is set, a TLS block for .host is generated automatically. |
+| httpRoute.enabled | string | `"auto"` | `true`, `false`, or `auto`. auto = enabled when global.exposure.mode=gateway AND host is set. (Gateway API; successor to Ingress — GKE managed Gateway, ingress-nginx retirement.) |
+| httpRoute.host | string | `""` | Public hostname routed to the server (required when enabled). |
+| httpRoute.path | string | `"/"` | HTTP path prefix routed to the server. |
+| httpRoute.parentRefs | list | `[]` | Explicit parentRefs (BYO Gateway/listener). Empty = the shared platform Gateway (`<release>-gateway`), targeting its https-server listener when global.tls.clusterIssuer is set, else its http listener. |
+| httpRoute.annotations | object | `{}` | Extra HTTPRoute annotations. |
+| livenessProbe | object | httpGet /health with sane thresholds | Liveness probe (hits GET /health). |
+| readinessProbe | object | httpGet /health with sane thresholds | Readiness probe (hits GET /health). |
+| resources | object | `{}` | Container resource requests/limits (recommended in production, e.g. `requests: {cpu: 250m, memory: 512Mi}`). |
+| autoscaling.enabled | bool | `false` | Create a HorizontalPodAutoscaler for the server Deployment. |
+| autoscaling.minReplicas | int | `1` | Minimum replicas. |
+| autoscaling.maxReplicas | int | `5` | Maximum replicas. |
+| autoscaling.targetCPUUtilizationPercentage | int | `80` | Target average CPU utilization (%). |
+| autoscaling.targetMemoryUtilizationPercentage | string | `""` | Target average memory utilization (%). Empty = no memory metric. |
+| podDisruptionBudget.enabled | bool | `false` | Create a PodDisruptionBudget. |
+| podDisruptionBudget.minAvailable | int | `1` | Minimum pods that must stay available during disruptions. |
+| networkPolicy.enabled | bool | `false` | Create a NetworkPolicy restricting ingress to the server port. |
+| networkPolicy.allowedFrom | list | `[]` | `from` peers allowed to reach the server port. Empty = all sources. |
+| serviceAccount.create | bool | `true` | Create a dedicated ServiceAccount for the server. |
+| serviceAccount.name | string | `""` | Existing ServiceAccount name to use (when create=false). |
+| serviceAccount.annotations | object | `{}` | IRSA / Workload Identity hook (e.g. eks.amazonaws.com/role-arn). |
+| serviceAccount.automountServiceAccountToken | bool | `false` | Mount the SA token into the pod (not needed by Mastra itself). |
+| podSecurityContext | object | `{}` | Replaces the hardened pod-level defaults (runAsNonRoot, uid/gid 1000, seccomp RuntimeDefault) wholesale when set. |
+| containerSecurityContext | object | `{}` | Replaces the hardened container-level defaults (readOnlyRootFilesystem, drop ALL capabilities) wholesale when set. |
+| podAnnotations | object | `{}` | Extra pod annotations. |
+| podLabels | object | `{}` | Extra pod labels. |
+| nodeSelector | object | `{}` | Pod nodeSelector. |
+| tolerations | list | `[]` | Pod tolerations. |
+| affinity | object | `{}` | Pod affinity rules. |
+| topologySpreadConstraints | list | `[]` | Pod topologySpreadConstraints. |
+| priorityClassName | string | `""` | Pod priorityClassName. |
+| extraVolumes | list | `[]` | Extra volumes. A writable emptyDir is always mounted at /tmp because the root filesystem is read-only by default. |
+| extraVolumeMounts | list | `[]` | Extra volume mounts for the server container. |
+
+## Studio component (`mastra-studio`)
+
+| Key | Type | Default | Description |
+| - | - | - | - |
+| global.cloud | string | `"generic"` | Target platform: one of `gke`, `eks`, `aks`, `generic`, `local`. |
+| global.exposure.mode | string | `"loadBalancer"` | Exposure mode: `loadBalancer`, `ingress`, or `gateway`. Drives the "auto" defaults for service.type and ingress.enabled (usually set once on the mastra-projects umbrella). |
+| global.tls.clusterIssuer | string | `""` | cert-manager ClusterIssuer name. When set, Ingresses get the cert-manager.io/cluster-issuer annotation and an auto TLS block. |
+| global.database.url | string | `""` | Shared DATABASE\_URL fallback (component database.url wins). |
+| global.license.url | string | `""` | Shared MASTRA\_LICENSE\_URL fallback (component license.url wins). |
+| global.license.key | string | `""` | Shared MASTRA\_EE\_LICENSE fallback (component license.key wins). |
+| nameOverride | string | `""` | Override the chart name used in resource names. |
+| fullnameOverride | string | `""` | Override the fully-qualified release name used in resource names. |
+| image.repository | string | `""` | REQUIRED. Your prebuilt Mastra Studio image. |
+| image.tag | string | `"latest"` | Image tag. "Deploy a new version" = push a new tag + helm upgrade. |
+| image.pullPolicy | string | `"IfNotPresent"` | Image pull policy. |
+| imagePullSecrets | list | `[]` | Names of Secrets holding registry credentials for private images. |
+| replicaCount | int | `1` | Number of Studio replicas (ignored when autoscaling.enabled=true). |
+| containerPort | int | `3000` | Port Studio listens on. Exported as PORT; the Service targets it. |
+| bindHost | string | `"0.0.0.0"` | Bind address -> MASTRA\_HOST. Must stay 0.0.0.0 in-cluster (the Mastra server binds localhost by default, which breaks probes and Services). |
+| database.url | string | `""` | Postgres/libSQL connection string -> DATABASE\_URL (chart Secret). For production prefer existingSecret instead of plaintext values. |
+| license.url | string | `""` | License server -> MASTRA\_LICENSE\_URL. Empty = global.license.url, then [https://license.mastra.ai](https://license.mastra.ai). |
+| license.key | string | `""` | Mastra-issued EE license JWT -> MASTRA\_EE\_LICENSE (chart Secret). Empty = global.license.key. |
+| cookieDomain | string | `""` | Auth cookie domain -> MASTRA\_COOKIE\_DOMAIN (e.g. your apex domain). |
+| server.host | string | `""` | Public Server hostname -> MASTRA\_SERVER\_HOST. |
+| server.port | string | `""` | Public Server port -> MASTRA\_SERVER\_PORT. |
+| server.protocol | string | `""` | `http` or `https` -> MASTRA\_SERVER\_PROTOCOL. |
+| autoDetectUrl | bool | `true` | Public-URL auto-detection -> MASTRA\_AUTO\_DETECT\_URL. |
+| existingSecret | string | `""` | Name of an existing Secret mounted via envFrom (expected to carry DATABASE\_URL, MASTRA\_EE\_LICENSE, ...). Replaces the chart-rendered Secret. |
+| extraEnvVars | object | `{}` | Extra non-secret env vars merged into the ConfigMap (map of KEY: value). Must not repeat keys the chart already sets (PORT, NODE\_ENV, ...). |
+| extraSecretVars | object | `{}` | Extra secret env vars merged into the chart Secret (map of KEY: value). Avoid in production; use existingSecret. |
+| extraEnv | list | `[]` | Raw container env entries (supports valueFrom, fieldRef, ...). |
+| service.type | string | `""` | Service type (`ClusterIP`, `LoadBalancer`, `NodePort`). Empty = auto from global.exposure.mode (loadBalancer -> LoadBalancer, ingress -> ClusterIP). LoadBalancer gets per-cloud annotations based on global.cloud. |
+| service.port | int | `3000` | Service port. |
+| service.internal | bool | `false` | Provision an internal (private) LB where the cloud supports it. |
+| service.annotations | object | `{}` | Extra Service annotations; merged OVER the per-cloud defaults. |
+| ingress.enabled | string | `"auto"` | `true`, `false`, or `auto`. auto = enabled when global.exposure.mode=ingress AND host is set. |
+| ingress.host | string | `""` | Required when the Ingress is enabled. |
+| ingress.path | string | `"/"` | HTTP path prefix routed to Studio. |
+| ingress.pathType | string | `"Prefix"` | Ingress pathType. |
+| ingress.internal | bool | `false` | Use an internal ingress class where the cloud supports it (GKE). |
+| ingress.className | string | `""` | Explicit ingressClassName; overrides the per-cloud default (gke: gce, eks: alb, aks/local: nginx). On generic the field is omitted entirely so the cluster's default IngressClass applies. |
+| ingress.annotations | object | `{}` | Extra Ingress annotations; merged OVER the per-cloud defaults. |
+| ingress.tls | list | `[]` | Explicit TLS blocks. When empty and global.tls.clusterIssuer is set, a TLS block for .host is generated automatically. |
+| httpRoute.enabled | string | `"auto"` | `true`, `false`, or `auto`. auto = enabled when global.exposure.mode=gateway AND host is set. (Gateway API; successor to Ingress — GKE managed Gateway, ingress-nginx retirement.) |
+| httpRoute.host | string | `""` | Public hostname routed to Studio (required when enabled). |
+| httpRoute.path | string | `"/"` | HTTP path prefix routed to Studio. |
+| httpRoute.parentRefs | list | `[]` | Explicit parentRefs (BYO Gateway/listener). Empty = the shared platform Gateway (`<release>-gateway`), targeting its https-studio listener when global.tls.clusterIssuer is set, else its http listener. |
+| httpRoute.annotations | object | `{}` | Extra HTTPRoute annotations. |
+| livenessProbe | object | httpGet /health with sane thresholds | Liveness probe (hits GET /health). |
+| readinessProbe | object | httpGet /health with sane thresholds | Readiness probe (hits GET /health). |
+| resources | object | `{}` | Container resource requests/limits (recommended in production). |
+| autoscaling.enabled | bool | `false` | Create a HorizontalPodAutoscaler for the Studio Deployment. |
+| autoscaling.minReplicas | int | `1` | Minimum replicas. |
+| autoscaling.maxReplicas | int | `5` | Maximum replicas. |
+| autoscaling.targetCPUUtilizationPercentage | int | `80` | Target average CPU utilization (%). |
+| autoscaling.targetMemoryUtilizationPercentage | string | `""` | Target average memory utilization (%). Empty = no memory metric. |
+| podDisruptionBudget.enabled | bool | `false` | Create a PodDisruptionBudget. |
+| podDisruptionBudget.minAvailable | int | `1` | Minimum pods that must stay available during disruptions. |
+| networkPolicy.enabled | bool | `false` | Create a NetworkPolicy restricting ingress to the Studio port. |
+| networkPolicy.allowedFrom | list | `[]` | `from` peers allowed to reach the studio port. Empty = all sources. |
+| serviceAccount.create | bool | `true` | Create a dedicated ServiceAccount for Studio. |
+| serviceAccount.name | string | `""` | Existing ServiceAccount name to use (when create=false). |
+| serviceAccount.annotations | object | `{}` | IRSA / Workload Identity hook (e.g. eks.amazonaws.com/role-arn). |
+| serviceAccount.automountServiceAccountToken | bool | `false` | Mount the SA token into the pod (not needed by Mastra itself). |
+| podSecurityContext | object | `{}` | Replaces the hardened pod-level defaults wholesale when set. |
+| containerSecurityContext | object | `{}` | Replaces the hardened container-level defaults wholesale when set. |
+| podAnnotations | object | `{}` | Extra pod annotations. |
+| podLabels | object | `{}` | Extra pod labels. |
+| nodeSelector | object | `{}` | Pod nodeSelector. |
+| tolerations | list | `[]` | Pod tolerations. |
+| affinity | object | `{}` | Pod affinity rules. |
+| topologySpreadConstraints | list | `[]` | Pod topologySpreadConstraints. |
+| priorityClassName | string | `""` | Pod priorityClassName. |
+| extraVolumes | list | `[]` | Extra volumes. A writable emptyDir is always mounted at /tmp because the root filesystem is read-only by default. |
+| extraVolumeMounts | list | `[]` | Extra volume mounts for the Studio container. |
+
+## Related
+
+- [Kubernetes (Helm)](/integrations/deploy/kubernetes-helm): Deployment guide for the chart
