@@ -1,9 +1,17 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { PropertyFilterCreator } from './property-filter-creator';
 import type { PropertyFilterField, PropertyFilterToken } from './types';
+
+beforeAll(() => {
+  // jsdom ships no PointerEvent, and Base UI constructs one when a choice is clicked.
+  if (typeof window.PointerEvent === 'undefined') {
+    class PointerEventStub extends MouseEvent {}
+    window.PointerEvent = PointerEventStub as unknown as typeof PointerEvent;
+  }
+});
 
 afterEach(() => {
   cleanup();
@@ -86,6 +94,20 @@ const MULTI_FIELDS: PropertyFilterField[] = [
     options: [
       { label: 'Prod', value: 'prod' },
       { label: 'Staging', value: 'staging' },
+    ],
+  },
+];
+
+const PICK_MULTI_FIELDS: PropertyFilterField[] = [
+  { id: 'entityId', label: 'Primitive ID', kind: 'text' },
+  {
+    id: 'tags',
+    label: 'Tags',
+    kind: 'pick-multi',
+    multi: true,
+    options: [
+      { label: 'Alpha', value: 'alpha' },
+      { label: 'Beta', value: 'beta' },
     ],
   },
 ];
@@ -261,6 +283,145 @@ describe('PropertyFilterCreator — choosing a multi-select value', () => {
     // Back at the property list, with last time's complaint forgotten.
     expect(screen.getByRole('menuitem', { name: /Tags/i })).toBeTruthy();
     expect(screen.queryByText('Choose at least one tags value.')).toBeNull();
+  });
+});
+
+describe('PropertyFilterCreator — a pick-multi property', () => {
+  const openPanel = () => {
+    openMenu();
+    fireEvent.click(screen.getByRole('menuitem', { name: /Primitive Type/i }));
+  };
+
+  it('opens its own panel beside the property list, and closes it again', async () => {
+    render(<PropertyFilterCreator fields={FIELDS} tokens={[]} onTokensChange={vi.fn()} />);
+
+    openPanel();
+    expect(await screen.findByRole('radio', { name: /Agent/i })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('menuitem', { name: /Primitive Type/i }));
+
+    await waitFor(() => expect(screen.queryByRole('radio', { name: /Agent/i })).toBeNull());
+  });
+
+  it('turns its chevron to the front while the panel is open', async () => {
+    render(<PropertyFilterCreator fields={FIELDS} tokens={[]} onTokensChange={vi.fn()} />);
+    openMenu();
+
+    const item = screen.getByRole('menuitem', { name: /Primitive Type/i });
+    // Closed, the chevron trails the label as an invitation to open it.
+    expect(item.lastElementChild?.tagName).toBe('svg');
+
+    fireEvent.click(item);
+    await screen.findByRole('radio', { name: /Agent/i });
+
+    expect(item.firstElementChild?.tagName).toBe('svg');
+  });
+
+  it('adds the value that was chosen', async () => {
+    const onTokensChange = vi.fn();
+    render(<PropertyFilterCreator fields={FIELDS} tokens={[]} onTokensChange={onTokensChange} />);
+
+    openPanel();
+    fireEvent.click(await screen.findByRole('radio', { name: /Workflow/i }));
+
+    expect(onTokensChange).toHaveBeenCalledWith([{ fieldId: 'rootEntityType', value: 'workflow_run' }]);
+  });
+
+  it('replaces the value it already had', async () => {
+    const onTokensChange = vi.fn();
+    render(
+      <PropertyFilterCreator
+        fields={FIELDS}
+        tokens={[
+          { fieldId: 'entityId', value: 'kept' },
+          { fieldId: 'rootEntityType', value: 'agent' },
+        ]}
+        onTokensChange={onTokensChange}
+      />,
+    );
+
+    openPanel();
+    fireEvent.click(await screen.findByRole('radio', { name: /Workflow/i }));
+
+    expect(onTokensChange).toHaveBeenCalledWith([
+      { fieldId: 'entityId', value: 'kept' },
+      { fieldId: 'rootEntityType', value: 'workflow_run' },
+    ]);
+  });
+
+  it('drops the filter when the last value is unpicked', async () => {
+    const onTokensChange = vi.fn();
+    render(
+      <PropertyFilterCreator
+        fields={PICK_MULTI_FIELDS}
+        tokens={[
+          { fieldId: 'entityId', value: 'kept' },
+          { fieldId: 'tags', value: ['alpha'] },
+        ]}
+        onTokensChange={onTokensChange}
+      />,
+    );
+
+    openMenu();
+    fireEvent.click(screen.getByRole('menuitem', { name: /Tags/i }));
+    fireEvent.click(await screen.findByRole('checkbox', { name: /Alpha/i }));
+
+    expect(onTokensChange).toHaveBeenCalledWith([{ fieldId: 'entityId', value: 'kept' }]);
+  });
+
+  it('opens the panel and steps into it with the right arrow', async () => {
+    render(<PropertyFilterCreator fields={FIELDS} tokens={[]} onTokensChange={vi.fn()} />);
+    openMenu();
+
+    fireEvent.keyDown(screen.getByRole('menuitem', { name: /Primitive Type/i }), { key: 'ArrowRight' });
+
+    const search = await screen.findByPlaceholderText('Search primitive type...');
+    await waitFor(() => expect(document.activeElement).toBe(search));
+  });
+
+  it('leaves other keys on the property row alone', () => {
+    render(<PropertyFilterCreator fields={FIELDS} tokens={[]} onTokensChange={vi.fn()} />);
+    openMenu();
+
+    fireEvent.keyDown(screen.getByRole('menuitem', { name: /Primitive Type/i }), { key: 'a' });
+
+    expect(screen.queryByRole('radio', { name: /Agent/i })).toBeNull();
+  });
+
+  it('walks through the values with the arrow keys', async () => {
+    render(<PropertyFilterCreator fields={FIELDS} tokens={[]} onTokensChange={vi.fn()} />);
+    openPanel();
+
+    const panel = (await screen.findByRole('radio', { name: /Agent/i })).closest('[data-pick-multi-panel]');
+    if (!(panel instanceof HTMLElement)) throw new Error('pick-multi panel not rendered');
+
+    fireEvent.keyDown(panel, { key: 'End' });
+    expect((document.activeElement as HTMLElement | null)?.closest('label')?.textContent).toContain('Any');
+
+    fireEvent.keyDown(panel, { key: 'Home' });
+    expect((document.activeElement as HTMLElement | null)?.closest('label')?.textContent).toContain('Agent');
+
+    fireEvent.keyDown(panel, { key: 'ArrowDown' });
+    expect((document.activeElement as HTMLElement | null)?.closest('label')?.textContent).toContain('Workflow');
+
+    fireEvent.keyDown(panel, { key: 'ArrowUp' });
+    expect((document.activeElement as HTMLElement | null)?.closest('label')?.textContent).toContain('Agent');
+
+    fireEvent.keyDown(panel, { key: 'ArrowUp' });
+    expect((document.activeElement as HTMLElement | null)?.closest('label')?.textContent).toContain('Any');
+  });
+
+  it('leaves other keys in the panel alone', async () => {
+    render(<PropertyFilterCreator fields={FIELDS} tokens={[]} onTokensChange={vi.fn()} />);
+    openPanel();
+
+    const agent = await screen.findByRole('radio', { name: /Agent/i });
+    const panel = agent.closest('[data-pick-multi-panel]');
+    if (!(panel instanceof HTMLElement)) throw new Error('pick-multi panel not rendered');
+
+    fireEvent.keyDown(panel, { key: 'a' });
+
+    expect(document.activeElement).not.toBe(agent);
   });
 });
 
