@@ -3314,6 +3314,11 @@ User asked about </current-task> parsing and how it works
       ).join('\n');
       const text = `${uniquePrefix}\n${Array(62).fill(block).join('\n')}`;
       expect(detectDegenerateRepetition(text)).toBe(true);
+
+      const description = describeDegenerateOutput(text);
+      expect(description).toContain('duplicateRatio=0.00');
+      expect(description).toContain('duplicateLineRatio=0.96');
+      expect(description).toContain('countedLines=1332');
     });
 
     it('should detect a short-period multi-line repetition loop (8-line block x 140)', () => {
@@ -3323,6 +3328,22 @@ User asked about </current-task> parsing and how it works
           `* 🟡 (14:0${i}) Verified \`verifier-runner.ts\` line ${100 + i}: baseline replay hook number ${i} registered against the lifecycle map.`,
       ).join('\n');
       const text = Array(140).fill(block).join('\n');
+      expect(detectDegenerateRepetition(text)).toBe(true);
+    });
+
+    it('should detect duplicate substantial lines just over the ratio threshold', () => {
+      const repeatedConstraint =
+        '- 🔴 User requires every production change to preserve backwards compatibility and include documented rollback instructions.';
+      const uniqueObservations = Array.from(
+        { length: 8 },
+        (_, i) =>
+          `- 🟡 Distinct reflected project fact ${i}: ${String.fromCharCode(65 + i).repeat(150 + i * 17)} terminal-${i}`,
+      );
+      const lines = uniqueObservations.flatMap(unique => [repeatedConstraint, unique]);
+      lines.push(repeatedConstraint, repeatedConstraint, repeatedConstraint, repeatedConstraint);
+      const text = lines.join('\n');
+
+      expect(text.length).toBeGreaterThan(2000);
       expect(detectDegenerateRepetition(text)).toBe(true);
     });
 
@@ -3622,6 +3643,26 @@ _range: \`ignored-by-reconciler\`_
       const result = parseReflectorOutput(output);
       expect(result.observations).toContain('Project Context');
       expect(result.observations).toContain('Completed auth implementation');
+    });
+
+    it('should preserve substantial repeated lines at the duplicate ratio boundary', () => {
+      const repeatedConstraint =
+        '- 🔴 User requires every production change to preserve backwards compatibility and include documented rollback instructions.';
+      const uniqueObservations = Array.from(
+        { length: 9 },
+        (_, i) =>
+          `- 🟡 Distinct reflected project fact ${i}: ${String.fromCharCode(65 + i).repeat(150 + i * 17)} terminal-${i}`,
+      );
+      const lines = uniqueObservations.flatMap(unique => [repeatedConstraint, unique]);
+      lines.push(repeatedConstraint, repeatedConstraint);
+      const output = lines.join('\n');
+
+      expect(output.length).toBeGreaterThan(2000);
+      const result = parseReflectorOutput(output);
+
+      expect(result.degenerate).not.toBe(true);
+      expect(result.observations).toContain(repeatedConstraint);
+      expect(result.observations).toContain('Distinct reflected project fact 8');
     });
 
     it('should strip ephemeral anchor IDs from reflector output', () => {
