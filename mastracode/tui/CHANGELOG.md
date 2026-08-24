@@ -1,5 +1,17 @@
 # mastracode
 
+## 0.36.0-alpha.6
+
+### Patch Changes
+
+- Improved the provider device-code sign-in dialog. The code is now the main element with an inline copy button, and copy failures show an error instead of failing silently. ([#22186](https://github.com/mastra-ai/mastra/pull/22186))
+
+- Updated dependencies [[`c8e4cea`](https://github.com/mastra-ai/mastra/commit/c8e4ceac9a390d78c8327dff3cdb2861dd71957f), [`ed01e9a`](https://github.com/mastra-ai/mastra/commit/ed01e9a807514a904374bf687a7b8f18750f6f78), [`a981e66`](https://github.com/mastra-ai/mastra/commit/a981e662ed8fc476292375d135cb14a2681efedf), [`ae2dc20`](https://github.com/mastra-ai/mastra/commit/ae2dc201dbb48466c3cf77e3d4ef04826132b2db), [`4e9a228`](https://github.com/mastra-ai/mastra/commit/4e9a2283d5fd6ed1b70a2751eb3dc2cbf82ada20), [`997cf5b`](https://github.com/mastra-ai/mastra/commit/997cf5bb3fc600b30aa20e048b663e48e0e1305a), [`63041eb`](https://github.com/mastra-ai/mastra/commit/63041eb4c50b520a0a80e03d4cd6ea99f67715a0)]:
+  - @mastra/core@1.62.0-alpha.6
+  - @mastra/pg@1.22.0-alpha.3
+  - @mastra/mcp@1.17.2-alpha.1
+  - @mastra/code-sdk@1.5.0-alpha.6
+
 ## 0.36.0-alpha.5
 
 ### Patch Changes
