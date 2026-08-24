@@ -19,11 +19,13 @@ import { nextPulseSeq } from './seq';
  * PulseBridge — the span-side producer of the pulse pipeline (experimental).
  *
  * An {@link ObservabilityExporter} Mastra registers on the default
- * observability instance when `pulse` is configured. It translates every
- * ObservabilityBus event family (spans, logs, metrics, scores, feedback, drop
- * meta-events) into pre-shaped pulse/relationship records and emits them onto
- * the {@link PulseBus}. Nothing derived is emitted: flows, trees, durations
- * and status are reconstructed at read time by the storage domain.
+ * observability instance when `pulse` is configured. It translates span
+ * lifecycle events, logs (a log is a pulse), and drop meta-events into
+ * pre-shaped pulse/relationship records and emits them onto the
+ * {@link PulseBus}. Metric/score/feedback lanes are deliberately NOT
+ * translated (metrics are items in a pulse's data; feedback is skipped for
+ * now). Nothing derived is emitted: flows, trees, durations and status are
+ * reconstructed at read time by the storage domain.
  *
  * The enrichment switch (actions stay verbs): auto-extracted
  * `mastra_model_*_tokens` metrics are never emitted as their own pulses.

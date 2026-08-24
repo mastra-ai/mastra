@@ -65,9 +65,9 @@ export const mastra = new Mastra({
 })
 ```
 
-Without `pulse` configured, nothing is constructed — stock behavior. Registering the `pulse` domain also enables the read model: the server exposes `/api/pulse/*` endpoints and `client.pulse` in the client SDK reads derived flows from the same store.
+Without `pulse` configured, nothing is constructed — stock behavior. The read model (derived flows, trees, timelines) is available today through the pulse storage domain's reader methods (`listFlows`, `getFlow`, `getFlowTimeline`); HTTP endpoints and a client SDK surface are deliberately not part of this prototype and will be designed after the data model is settled.
 
-Token and cost metrics are folded into the semantic model pulses' `data` (`total_input_tokens`, `cost_usd`, …) inside the bridge — actions stay verbs; no metric-name actions are ever written.
+Token usage is recorded first-hand on model end facts (`total_input_tokens`, `total_output_tokens`); cost is never stored — readers derive it at read time from the versioned `model_prices` table, so price corrections apply retroactively.
 
 ### Standalone ClickHouse writer (no composite store)
 

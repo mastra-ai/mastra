@@ -19,9 +19,9 @@ export { withPulseRun, activePulseRun } from './run-context';
  * readers (in-memory id sets, ClickHouse `LIMIT 1 BY id`), and turning
  * the bridge off for agent scope changes nothing the readers see.
  *
- * Not mirrored here (deliberate): the token/cost metric fold (cost
- * estimation lives in the observability package's pricing tables — the
- * documented residual on the bridge), and MODEL_CHUNK progress facts
+ * Not mirrored here (deliberate): stored cost (cost is DERIVED at read
+ * time from usage on model end facts x pulse's own versioned model_prices
+ * table — see pricing.ts), and MODEL_CHUNK progress facts
  * (high volume, low reconstruction value).
  */
 

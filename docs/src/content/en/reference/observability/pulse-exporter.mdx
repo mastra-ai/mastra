@@ -217,14 +217,14 @@ Removes every pulse and relationship row. Test and development helper only.
 await pulseStore.dangerouslyClearAll()
 ```
 
-## Client methods
+## Read model
 
-`@mastra/client-js` exposes the read model as `client.pulse`. Endpoints return `501` unless the server has a pulse store configured and a core version with `pulse:v0` support.
+The derived read model is exposed by the pulse storage domain itself — call the reader methods on your pulse store instance. There are no HTTP endpoints and no client SDK surface in this prototype; that API is designed after the data model is settled.
 
 #### `listFlows(params?)`
 
 ```typescript
-const { flows, total } = await client.pulse.listFlows({ status: 'running', page: 0, perPage: 40 })
+const { flows, total } = await pulseStore.listFlows({ status: 'running', page: 0, perPage: 40 })
 ```
 
 Accepts `status`, `threadId`, `entityName`, `page`, and `perPage`.
@@ -232,13 +232,13 @@ Accepts `status`, `threadId`, `entityName`, `page`, and `perPage`.
 #### `getFlow(flowId)`
 
 ```typescript
-const { flow } = await client.pulse.getFlow('trace-id')
+const flow = await pulseStore.getFlow('flow-id')
 ```
 
 #### `getFlowTimeline(flowId)`
 
 ```typescript
-const { timeline } = await client.pulse.getFlowTimeline('trace-id')
+const timeline = await pulseStore.getFlowTimeline('flow-id')
 ```
 
 ## Helper functions
