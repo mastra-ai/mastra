@@ -89,4 +89,12 @@ describe('storedAgentToAgentConfig', () => {
 
     expect(result.authorId).toBeNull();
   });
+
+  it('leaves avatarUrl undefined when metadata is a non-object value', () => {
+    // The server types metadata loosely, so the mapper guards against a truthy
+    // non-object before using the `in` operator (which throws on primitives).
+    const result = storedAgentToAgentConfig({ id: 'a', name: 'N', metadata: 'avatarUrl' } as never, 'fallback-id');
+
+    expect(result.avatarUrl).toBeUndefined();
+  });
 });
