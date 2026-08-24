@@ -16,6 +16,18 @@ const validator = (schema: JSONSchema7) => {
   return (value: unknown) => zodSchema.safeParse(value).success;
 };
 
+/** Parses a payload through the schema and hands back what survived. */
+const parser = (schema: JSONSchema7) => {
+  const zodSchema = jsonSchemaToZodRuntime(schema as Parameters<typeof jsonSchemaToZodRuntime>[0]);
+  return (value: unknown) => zodSchema.parse(value);
+};
+
+/** Every `anyOf` branch / property must stay self-describing in the schema editor. */
+const describedEntries = (schema: JSONSchema7) => [
+  ...((schema.anyOf ?? []) as JSONSchema7[]),
+  ...Object.values((schema.properties ?? {}) as Record<string, JSONSchema7>),
+];
+
 const schemas = () => renderHook(() => useAgentSchema()).result.current;
 
 describe('useAgentSchema', () => {
@@ -79,6 +91,43 @@ describe('useAgentSchema', () => {
     it('rejects a bare number', () => {
       expect(accepts()(42)).toBe(false);
     });
+
+    it('rejects an array of non-strings in the text-message branch', () => {
+      expect(accepts()([1, 2])).toBe(false);
+    });
+
+    it('rejects content parts that are not objects', () => {
+      expect(accepts()({ role: 'user', content: ['not-a-part'] })).toBe(false);
+    });
+
+    it('keeps every field of a multi-part content entry', () => {
+      const parsed = parser(schemas().inputSchema)({
+        role: 'user',
+        content: [{ type: 'image', image: 'https://example.com/a.png', mimeType: 'image/png' }],
+      }) as { content: Array<Record<string, unknown>> };
+
+      expect(parsed.content[0]).toEqual({
+        type: 'image',
+        image: 'https://example.com/a.png',
+        mimeType: 'image/png',
+      });
+    });
+
+    it('documents every accepted input shape', () => {
+      const branches = describedEntries(schemas().inputSchema);
+
+      expect(branches.length).toBeGreaterThan(0);
+      for (const branch of branches) {
+        expect(branch.description ?? '').not.toBe('');
+      }
+    });
+
+    it('declares the JSON Schema dialect it is written against', () => {
+      const { inputSchema } = schemas();
+
+      expect(inputSchema.$schema ?? '').not.toBe('');
+      expect(inputSchema.description ?? '').not.toBe('');
+    });
   });
 
   describe('when validating agent output against the output schema', () => {
@@ -129,6 +178,42 @@ describe('useAgentSchema', () => {
 
     it('rejects a top-level value that is not an object', () => {
       expect(accepts()('just text')).toBe(false);
+    });
+
+    it.each(['toolCalls', 'toolResults', 'sources', 'files'])('rejects non-object entries in %s', key => {
+      expect(accepts()({ [key]: ['not-an-object'] })).toBe(false);
+    });
+
+    it.each(['toolCalls', 'toolResults', 'sources', 'files'])('keeps every field of a %s entry', key => {
+      const parsed = parser(schemas().outputSchema)({
+        [key]: [{ id: 'entry-1', nested: { deep: true } }],
+      }) as Record<string, Array<Record<string, unknown>>>;
+
+      expect(parsed[key]?.[0]).toEqual({ id: 'entry-1', nested: { deep: true } });
+    });
+
+    it('keeps a structured object output of any shape', () => {
+      const parsed = parser(schemas().outputSchema)({ object: { answer: 'yes', score: 0.9 } }) as {
+        object: Record<string, unknown>;
+      };
+
+      expect(parsed.object).toEqual({ answer: 'yes', score: 0.9 });
+    });
+
+    it('documents every output field', () => {
+      const fields = describedEntries(schemas().outputSchema);
+
+      expect(fields.length).toBeGreaterThan(0);
+      for (const field of fields) {
+        expect(field.description ?? '').not.toBe('');
+      }
+    });
+
+    it('declares the JSON Schema dialect it is written against', () => {
+      const { outputSchema } = schemas();
+
+      expect(outputSchema.$schema ?? '').not.toBe('');
+      expect(outputSchema.description ?? '').not.toBe('');
     });
   });
 });

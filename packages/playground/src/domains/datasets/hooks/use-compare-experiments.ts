@@ -19,6 +19,8 @@ export const useCompareExperiments = (
 ) => {
   const client = useMastraClient();
   return useQuery<CompareExperimentsResponse>({
+    // Stryker disable next-line StringLiteral: a private cache identity — no other
+    // module reads, seeds or invalidates this key, so renaming it is unobservable.
     queryKey: ['compare-experiments', datasetId, experimentIdA, experimentIdB, options],
     queryFn: () => client.compareExperiments({ datasetId, experimentIdA, experimentIdB, ...options }),
     enabled: Boolean(datasetId) && Boolean(experimentIdA) && Boolean(experimentIdB),

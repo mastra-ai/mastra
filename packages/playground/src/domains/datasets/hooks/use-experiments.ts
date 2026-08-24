@@ -7,6 +7,8 @@ import { useQuery } from '@tanstack/react-query';
 export const useExperiments = (pagination?: { page?: number; perPage?: number }) => {
   const client = useMastraClient();
   return useQuery({
+    // Stryker disable next-line StringLiteral: a private cache identity — no other
+    // module reads, seeds or invalidates this key, so renaming it is unobservable.
     queryKey: ['experiments', pagination],
     queryFn: () => client.listExperiments(pagination),
   });

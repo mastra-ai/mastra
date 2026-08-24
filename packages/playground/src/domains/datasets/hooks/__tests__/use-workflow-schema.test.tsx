@@ -23,6 +23,13 @@ const createWrapper = () => {
 /** Let react-query settle so "no request was made" is a real observation. */
 const settle = () => new Promise(resolve => setTimeout(resolve, 50));
 
+/**
+ * Waited out *before* the second mount: any stale window measured in
+ * milliseconds would have expired by then, so a remount would refetch. The
+ * five-minute window must still serve from cache.
+ */
+const waitOutAShortStaleWindow = () => new Promise(resolve => setTimeout(resolve, 250));
+
 describe('useWorkflowSchema', () => {
   describe('when the workflow declares both schemas', () => {
     it('exposes the parsed input and output schemas', async () => {
@@ -111,6 +118,8 @@ describe('useWorkflowSchema', () => {
 
       const first = renderHook(() => useWorkflowSchema('summarize'), { wrapper });
       await waitFor(() => expect(first.result.current.isSuccess).toBe(true));
+
+      await waitOutAShortStaleWindow();
 
       const second = renderHook(() => useWorkflowSchema('summarize'), { wrapper });
       await settle();

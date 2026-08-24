@@ -21,6 +21,9 @@ const messageContentSchema: JSONSchema7 = {
 const messageObjectSchema: JSONSchema7 = {
   type: 'object',
   properties: {
+    // Stryker disable next-line StringLiteral: `enum` already pins the accepted values,
+    // so `type` is redundant here — Studio's JSON-Schema-to-Zod converter reads `enum`
+    // first and never looks at it. Kept because the schema is also read by the server.
     role: { type: 'string', enum: ['user', 'assistant', 'system', 'tool'] },
     content: messageContentSchema,
   },
