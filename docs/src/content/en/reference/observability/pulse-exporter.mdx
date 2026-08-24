@@ -1,10 +1,9 @@
 ---
 title: 'Reference: @mastra/pulse | Observability'
-description: 'API reference for the experimental @mastra/pulse package — the ClickHouseHttpPulseExporter, the pulse storage domain, and client methods.'
+description: 'API reference for the experimental @mastra/pulse package — the ClickHouseHttpPulseExporter and the pulse storage domain.'
 packages:
   - '@mastra/pulse'
   - '@mastra/core'
-  - '@mastra/client-js'
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -17,7 +16,7 @@ DRAFT — experimental research preview; API subject to spec review. Interfaces,
 
 :::
 
-The pulse pipeline lives in `@mastra/core` (bus, span bridge, storage writer) and is enabled with `new Mastra({ pulse })`. This package ships the standalone ClickHouse HTTP exporter, table helpers, and backfill; it also re-exports the core pipeline pieces (`PulseBus`, `PulseBridge`, `PulseStorageExporter`). Flows, trees, durations, and status are derived at read time. See [Pulse](/docs/observability/pulse) for the concept.
+The pulse pipeline lives in `@mastra/core` (bus, emitter, storage writer) and is enabled with `new Mastra({ pulse })`. This package ships the standalone ClickHouse HTTP exporter and table helpers; it also re-exports the core pipeline pieces (`PulseBus`, `PulseStorageExporter`). Pulse is fully independent of the span system: it never ingests spans and has no historic-trace import. Flows, trees, durations, and status are derived at read time. See [Pulse](/docs/observability/pulse) for the concept.
 
 ## Usage example
 
@@ -217,30 +216,6 @@ Removes every pulse and relationship row. Test and development helper only.
 await pulseStore.dangerouslyClearAll()
 ```
 
-## Read model
-
-The derived read model is exposed by the pulse storage domain itself — call the reader methods on your pulse store instance. There are no HTTP endpoints and no client SDK surface in this prototype; that API is designed after the data model is settled.
-
-#### `listFlows(params?)`
-
-```typescript
-const { flows, total } = await pulseStore.listFlows({ status: 'running', page: 0, perPage: 40 })
-```
-
-Accepts `status`, `threadId`, `entityName`, `page`, and `perPage`.
-
-#### `getFlow(flowId)`
-
-```typescript
-const flow = await pulseStore.getFlow('flow-id')
-```
-
-#### `getFlowTimeline(flowId)`
-
-```typescript
-const timeline = await pulseStore.getFlowTimeline('flow-id')
-```
-
 ## Helper functions
 
 #### `ensurePulseTables(options)`
@@ -284,57 +259,3 @@ await ensurePulseTables({
   },
 ]}
 />
-
-#### `backfillFromObservability(options)`
-
-Replays spans already persisted by the observability storage domain onto a pulse bus (or directly through a pulse storage domain), so historical traces gain a pulse read model.
-
-```typescript
-import { backfillFromObservability } from '@mastra/pulse'
-
-const result = await backfillFromObservability({
-  observability: observabilityStore,
-  storage: pulseStorage, // or: bus (an existing PulseBus) — one of the two is required
-  pageSize: 50,
-  maxTraces: 500,
-})
-// { traces: number, spans: number }
-```
-
-<PropertiesTable
-  content={[
-  {
-    name: 'observability',
-    type: 'ObservabilityReadLike',
-    description: 'Object exposing `listTraces` and `getTrace`, such as the observability storage domain.',
-  },
-  {
-    name: 'bus',
-    type: 'PulseBus',
-    description: 'Existing pulse bus to emit onto. Mutually exclusive with `storage`; one of the two is required.',
-    isOptional: true,
-  },
-  {
-    name: 'storage',
-    type: 'PulseStorage',
-    description: 'Pulse storage domain to write through (an internal bus and writer are managed for you).',
-    isOptional: true,
-  },
-  {
-    name: 'pageSize',
-    type: 'number',
-    description: 'Traces fetched per page.',
-    isOptional: true,
-    defaultValue: '50',
-  },
-  {
-    name: 'maxTraces',
-    type: 'number',
-    description: 'Upper bound on traces to backfill.',
-    isOptional: true,
-    defaultValue: 'Infinity',
-  },
-]}
-/>
-
-Returns: `Promise<BackfillResult>` (`{ traces: number; spans: number }`).

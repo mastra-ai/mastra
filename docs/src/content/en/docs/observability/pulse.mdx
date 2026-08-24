@@ -35,7 +35,7 @@ npm install @mastra/pulse
 
 ## Configure
 
-The whole pipeline lives in `@mastra/core` behind one config key. Configuring `pulse` on Mastra constructs a dedicated PulseBus, a bridge over the observability pipeline, native AgentController session forwarding, and a batching writer into the `pulse` storage domain:
+The whole pipeline lives in `@mastra/core` behind one config key, fully independent of the observability system (hard split — pulse never reads spans). Configuring `pulse` on Mastra constructs a dedicated PulseBus, native AgentController session forwarding, and a batching writer into the `pulse` storage domain:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -60,7 +60,7 @@ export const mastra = new Mastra({
       pulse: pulseStore,
     },
   }),
-  // One switch: bridge + session forwarding + writer over the pulse domain.
+  // One switch: emitter sink + session forwarding + writer over the pulse domain.
   pulse: {},
 })
 ```
@@ -114,18 +114,19 @@ Two rules matter here:
 
 ## What gets captured
 
-Agent-scope facts are recorded FIRST-HAND at the source call sites (run,
-model, steps, tools, memory, processors, signals, approvals, content) —
-pulse works with observability fully disabled. The bridge translates only
-what the native lane does not cover:
+Every fact is recorded FIRST-HAND at the source call sites (run, model,
+steps, tools, memory, processors, signals, approvals, content). Pulse
+never ingests spans: it works identically with observability enabled or
+disabled — the two systems are independent recorders.
 
 | Event family | What Pulse records |
 | - | - |
-| Workflow spans | Start, end, and error facts with capped payloads. Structure edges (`origin_of`, `parent_of`) at start; `resume_of` and `uses_*` at end. |
-| Logs | Log messages as pulse rows. Only levels at or above the observability logger's `minLevel` reach the bus; the default is `warn`. |
+| Agent lifecycle | Run/model/step/tool/memory/processor starts and ends, with computed ids and parentage; abort and suspend are honest terminals. |
+| Semantics | Signal routing/drain, exact model-input membership (`included_in_model_input` with position), request freeze/execution, approval decisions, content changes. |
 | Metrics | Not a lane: a metric is just an item in the `data` field of a pulse. Model facts carry token usage first-hand; cost is derived at read time from the versioned `model_prices` table. |
+| Logs | Not yet in the prototype ("a log is a pulse" is planned as a native hook; the old span-bridge translation was removed with the hard split). |
 | Scores / Feedback | Skipped for the prototype (maintainer direction). |
-| Drops | Meta-events counting observability events dropped upstream |
+| Workflow / durable engines | Out of prototype scope (agent-only, maintainer direction). |
 
 Session-layer facts (tool approvals, the true abort outcome with its run id, follow-up queueing, mode and model switches) aren't spans. They are forwarded natively: when `pulse` is configured on `Mastra`, every AgentController session gets an internal subscriber — no wiring required.
 
@@ -133,10 +134,10 @@ Session-layer facts (tool approvals, the true abort outcome with its run id, fol
 
 Pulse is a research preview. Known gaps:
 
-- Payloads are capped (4 KB by default, `payloadCapBytes`). Full message arrays are never exported.
-- `SPAN_UPDATED` events are counted but not translated. Start/end pairs cover the model; update semantics are an open spec question.
-- Content identity (`included_in_model_input`) and definition identity (file-hash based `uses_definition`) require deeper emit sites and aren't produced yet.
-- Write buffers are in-memory. A hard crash loses the unflushed tail, and the affected flows surface as `stale`. Durable engines are covered: `observability.flush()` transitively drains the pulse writers, so a freeze after a flush loses nothing. One poison record no longer discards its batch — failed batches fall back to per-record writes, and dropped rows surface as `events_dropped` pulses once storage recovers.
+- Facts are bounded per run (record count and byte caps); when a cap trips, the flow is stamped `native_capture_incomplete` — never a silent drop.
+- No span ingestion and no historic backfill: pulse records only what happens after it is enabled (deliberate hard split; migration tooling is future work).
+- The emitter sink is process-global: multiple Mastra instances in one process are not yet supported (instance-owned runtime is a pending design decision).
+- Write buffers are in-memory. A hard crash loses the unflushed tail, and the affected flows surface as `stale`. `mastra.pulseBus.flush()` drains the writers; one poison record does not discard its batch — failed batches fall back to per-record writes, and dropped rows surface as `events_dropped` pulses once storage recovers.
 
 ## Related
 
