@@ -1335,6 +1335,12 @@ export class ReflectorRunner {
       }
       omError('[OM] Reflection failed', error);
     } finally {
+      try {
+        await this.storage.setReflectingFlag(record.id, false);
+      } finally {
+        unregisterOp(record.id, 'reflecting');
+      }
+
       let endHookError: unknown;
       try {
         await reflectionHooks?.onReflectionEnd?.({
@@ -1344,12 +1350,6 @@ export class ReflectorRunner {
         });
       } catch (error) {
         endHookError = error;
-      }
-
-      try {
-        await this.storage.setReflectingFlag(record.id, false);
-      } finally {
-        unregisterOp(record.id, 'reflecting');
       }
 
       if (endHookError !== undefined) {

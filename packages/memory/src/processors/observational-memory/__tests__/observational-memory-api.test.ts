@@ -499,6 +499,22 @@ name: Tyler
       expect(record).toContain('User discussed various topics');
     });
 
+    it('releases the observation lock before invoking an awaited end hook', async () => {
+      const messages = createBulkMessages(10, threadId);
+      let awaitedOm: ObservationalMemory;
+      const reentrantObserve = vi.fn(async () => {
+        await awaitedOm.observe({ threadId, messages });
+      });
+      awaitedOm = createOM(storage, {
+        hookExecution: 'await',
+        hooks: { onObservationEnd: reentrantObserve },
+      });
+
+      await awaitedOm.observe({ threadId, messages });
+
+      expect(reentrantObserve).toHaveBeenCalledOnce();
+    });
+
     it('keeps config hook promises non-blocking by default', async () => {
       const onObservationEnd = vi.fn();
       const nonBlockingOm = createOM(storage, {
@@ -590,6 +606,27 @@ name: Tyler
       expect(onReflectionEnd).toHaveBeenCalledWith(
         expect.objectContaining({ usage: undefined, error: hookError, threadId, trigger: 'manual' }),
       );
+    });
+
+    it('cleans up reflection state before invoking an awaited end hook', async () => {
+      let omReflect: ObservationalMemory;
+      let nestedResult: Awaited<ReturnType<ObservationalMemory['reflect']>> | undefined;
+      let reentered = false;
+      const onReflectionEnd = vi.fn(async () => {
+        if (reentered) return;
+        reentered = true;
+        nestedResult = await omReflect.reflect(threadId);
+      });
+      omReflect = createOM(storage, {
+        observationTokens: 5,
+        hookExecution: 'await',
+        hooks: { onReflectionEnd },
+      });
+
+      await omReflect.observe({ threadId, messages: createBulkMessages(10, threadId) });
+
+      expect(nestedResult?.reflected).toBe(true);
+      expect(onReflectionEnd).toHaveBeenCalledTimes(2);
     });
 
     it('should call reflection hooks when reflection triggers', async () => {

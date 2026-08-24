@@ -3686,32 +3686,34 @@ ${formattedMessages}
     let observed = false;
     let observationUsage: ObserveHookUsage | undefined;
     let observationProviderMetadata: ProviderMetadata | undefined;
+    let observationError: Error | undefined;
+    let lifecycleError: unknown;
+    let observationStarted = false;
     let generationBefore = -1;
 
-    await this.withLock(lockKey, async () => {
-      const freshRecord = await this.getOrCreateRecord(threadId, resourceId);
-      generationBefore = freshRecord.generationCount;
+    try {
+      await this.withLock(lockKey, async () => {
+        const freshRecord = await this.getOrCreateRecord(threadId, resourceId);
+        generationBefore = freshRecord.generationCount;
 
-      const unobservedMessages = messages
-        ? this.getUnobservedMessages(messages, freshRecord)
-        : await this.loadMessagesFromStorage(
-            threadId,
-            resourceId,
-            freshRecord.lastObservedAt ? new Date(freshRecord.lastObservedAt) : undefined,
-          );
+        const unobservedMessages = messages
+          ? this.getUnobservedMessages(messages, freshRecord)
+          : await this.loadMessagesFromStorage(
+              threadId,
+              resourceId,
+              freshRecord.lastObservedAt ? new Date(freshRecord.lastObservedAt) : undefined,
+            );
 
-      if (
-        !this.meetsObservationThreshold({
-          record: freshRecord,
-          unobservedTokens: await this.tokenCounter.countMessagesAsync(unobservedMessages),
-        })
-      ) {
-        return;
-      }
+        if (
+          !this.meetsObservationThreshold({
+            record: freshRecord,
+            unobservedTokens: await this.tokenCounter.countMessagesAsync(unobservedMessages),
+          })
+        ) {
+          return;
+        }
 
-      let observationError: Error | undefined;
-      let lifecycleError: unknown;
-      try {
+        observationStarted = true;
         await hooks?.onObservationStart?.();
         const result = await ObservationStrategy.create(this, {
           record: freshRecord,
@@ -3730,25 +3732,28 @@ ${formattedMessages}
         observed = result.observed;
         observationUsage = result.usage;
         observationProviderMetadata = result.providerMetadata;
-      } catch (error) {
-        lifecycleError = error;
-        observationError = error instanceof Error ? error : new Error(String(error));
-        throw error;
-      } finally {
-        try {
-          await hooks?.onObservationEnd?.({
-            usage: observationUsage,
-            error: observationError,
-            ...(observationProviderMetadata ? { providerMetadata: observationProviderMetadata } : {}),
-          });
-        } catch (endHookError) {
-          if (lifecycleError === undefined) throw endHookError;
-          omDebug(
-            `[OM:hooks] onObservationEnd hook failed after cycle failure: ${endHookError instanceof Error ? endHookError.message : String(endHookError)}`,
-          );
-        }
+      });
+    } catch (error) {
+      lifecycleError = error;
+      observationError = error instanceof Error ? error : new Error(String(error));
+    }
+
+    if (observationStarted) {
+      try {
+        await hooks?.onObservationEnd?.({
+          usage: observationUsage,
+          error: observationError,
+          ...(observationProviderMetadata ? { providerMetadata: observationProviderMetadata } : {}),
+        });
+      } catch (endHookError) {
+        if (lifecycleError === undefined) throw endHookError;
+        omDebug(
+          `[OM:hooks] onObservationEnd hook failed after cycle failure: ${endHookError instanceof Error ? endHookError.message : String(endHookError)}`,
+        );
       }
-    });
+    }
+
+    if (lifecycleError !== undefined) throw lifecycleError;
 
     // Fetch the latest record after lock release
     const record = await this.getOrCreateRecord(threadId, resourceId);
@@ -3910,6 +3915,12 @@ ${formattedMessages}
       const latestRecord = await this.getOrCreateRecord(threadId, resourceId);
       return { reflected: false, record: latestRecord, usage: undefined };
     } finally {
+      try {
+        await this.storage.setReflectingFlag(record.id, false);
+      } finally {
+        unregisterOp(record.id, 'reflecting');
+      }
+
       let endHookError: unknown;
       try {
         await hooks?.onReflectionEnd?.({
@@ -3919,12 +3930,6 @@ ${formattedMessages}
         });
       } catch (error) {
         endHookError = error;
-      }
-
-      try {
-        await this.storage.setReflectingFlag(record.id, false);
-      } finally {
-        unregisterOp(record.id, 'reflecting');
       }
 
       if (endHookError !== undefined) {
