@@ -158,9 +158,7 @@ function DeviceCodeDialog({ provider, session, onClose, onComplete }: ProviderOA
         <DialogBody className="flex flex-col items-center gap-4 text-center">
           {session.userCode && (
             <div className="flex items-center justify-center gap-2">
-              <span className="font-mono text-header-lg tracking-widest break-all select-all">
-                {session.userCode}
-              </span>
+              <span className="text-header-lg font-mono tracking-widest break-all select-all">{session.userCode}</span>
               <CopyButton content={session.userCode} variant="ghost" size="icon-sm" tooltip="Copy code" />
             </div>
           )}
