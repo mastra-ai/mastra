@@ -42,13 +42,15 @@ describe('TitleGenerationSection', () => {
     expect(screen.queryByRole('combobox', { name: 'Thread title model' })).not.toBeInTheDocument();
   });
 
-  it('saves the toggle and reflects the server response', async () => {
+  it('saves the toggle optimistically and re-syncs with the server', async () => {
     let requestBody: unknown;
+    let stored: TitleGenerationConfigInfo = enabledConfig;
     server.use(
-      http.get(TITLE_URL, () => HttpResponse.json(enabledConfig)),
+      http.get(TITLE_URL, () => HttpResponse.json(stored)),
       http.put(TITLE_URL, async ({ request }) => {
         requestBody = await request.json();
-        return HttpResponse.json({ ok: true, config: { ...enabledConfig, enabled: false } });
+        stored = { ...stored, ...(requestBody as Partial<TitleGenerationConfigInfo>) };
+        return HttpResponse.json({ ok: true, config: stored });
       }),
     );
 
@@ -56,7 +58,10 @@ describe('TitleGenerationSection', () => {
     const { client } = renderWithProviders(<TitleGenerationSection models={MODELS} />);
 
     const toggle = await screen.findByRole('group', { name: 'Automatic thread titles' });
-    await user.click(within(toggle).getByRole('button', { name: 'Off' }));
+    const offButton = within(toggle).getByRole('button', { name: 'Off' });
+    await user.click(offButton);
+    // Optimistic: the toggle flips before the write settles.
+    expect(within(toggle).getByRole('button', { name: 'Off' })).toHaveAttribute('aria-pressed', 'true');
 
     await waitForMutationsIdle(client);
     expect(requestBody).toEqual({ enabled: false });
@@ -66,14 +71,32 @@ describe('TitleGenerationSection', () => {
     });
   });
 
-  it('pins a writer model and resets it back to the default', async () => {
-    let lastBody: unknown;
+  it('rolls the toggle back and reports the error when the write fails', async () => {
     server.use(
       http.get(TITLE_URL, () => HttpResponse.json(enabledConfig)),
+      http.put(TITLE_URL, () => HttpResponse.json({ error: 'title_settings_unavailable' }, { status: 503 })),
+    );
+
+    const user = userEvent.setup();
+    const { client } = renderWithProviders(<TitleGenerationSection models={MODELS} />);
+
+    const toggle = await screen.findByRole('group', { name: 'Automatic thread titles' });
+    await user.click(within(toggle).getByRole('button', { name: 'Off' }));
+
+    await waitForMutationsIdle(client);
+    expect(await screen.findByText(/title_settings_unavailable/)).toBeInTheDocument();
+    expect(within(toggle).getByRole('button', { name: 'On' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('pins a writer model and resets it back to the default', async () => {
+    let lastBody: unknown;
+    let stored: TitleGenerationConfigInfo = enabledConfig;
+    server.use(
+      http.get(TITLE_URL, () => HttpResponse.json(stored)),
       http.put(TITLE_URL, async ({ request }) => {
         lastBody = await request.json();
-        const body = lastBody as { modelId?: string | null };
-        return HttpResponse.json({ ok: true, config: { ...enabledConfig, modelId: body.modelId ?? null } });
+        stored = { ...stored, ...(lastBody as Partial<TitleGenerationConfigInfo>) };
+        return HttpResponse.json({ ok: true, config: stored });
       }),
     );
 
@@ -99,12 +122,13 @@ describe('TitleGenerationSection', () => {
 
   it('pins a thinking level and resets it back to the default', async () => {
     let lastBody: unknown;
+    let stored: TitleGenerationConfigInfo = enabledConfig;
     server.use(
-      http.get(TITLE_URL, () => HttpResponse.json(enabledConfig)),
+      http.get(TITLE_URL, () => HttpResponse.json(stored)),
       http.put(TITLE_URL, async ({ request }) => {
         lastBody = await request.json();
-        const body = lastBody as { thinkingLevel?: string | null };
-        return HttpResponse.json({ ok: true, config: { ...enabledConfig, thinkingLevel: body.thinkingLevel ?? null } });
+        stored = { ...stored, ...(lastBody as Partial<TitleGenerationConfigInfo>) };
+        return HttpResponse.json({ ok: true, config: stored });
       }),
     );
 
@@ -127,23 +151,6 @@ describe('TitleGenerationSection', () => {
     expect(lastBody).toEqual({ thinkingLevel: null });
   });
 
-  it('surfaces a write failure and keeps the previous state', async () => {
-    server.use(
-      http.get(TITLE_URL, () => HttpResponse.json(enabledConfig)),
-      http.put(TITLE_URL, () => HttpResponse.json({ error: 'title_settings_unavailable' }, { status: 503 })),
-    );
-
-    const user = userEvent.setup();
-    const { client } = renderWithProviders(<TitleGenerationSection models={MODELS} />);
-
-    const toggle = await screen.findByRole('group', { name: 'Automatic thread titles' });
-    await user.click(within(toggle).getByRole('button', { name: 'Off' }));
-
-    await waitForMutationsIdle(client);
-    expect(await screen.findByText(/title_settings_unavailable/)).toBeInTheDocument();
-    expect(within(toggle).getByRole('button', { name: 'On' })).toHaveAttribute('aria-pressed', 'true');
-  });
-
   it('stays usable with the server defaults when the config cannot be loaded', async () => {
     server.use(http.get(TITLE_URL, () => HttpResponse.text('<!doctype html>', { status: 200 })));
 
@@ -159,6 +166,7 @@ describe('TitleGenerationSection', () => {
     await user.click(within(toggle).getByRole('button', { name: 'Off' }));
 
     await waitForMutationsIdle(client);
-    expect(within(toggle).getByRole('button', { name: 'Off' })).toHaveAttribute('aria-pressed', 'true');
+    // The write landed but no config is loadable, so the fallback default wins again.
+    expect(within(toggle).getByRole('button', { name: 'On' })).toHaveAttribute('aria-pressed', 'true');
   });
 });

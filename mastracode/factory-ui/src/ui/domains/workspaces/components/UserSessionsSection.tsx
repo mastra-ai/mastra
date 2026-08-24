@@ -13,6 +13,7 @@ import { queryKeys } from '../../../../api/keys';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useActiveRunResources } from '../../../../hooks/useActiveRunResources';
+import { useRegenerateTitleMutation } from '../../../../hooks/use-title-generation';
 import { useWorkspaceAttentionState } from '../../../../hooks/useWorkspaceAttention';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { removeCachedSession, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
@@ -58,6 +59,22 @@ export function UserSessionsSection() {
   const sessionsQuery = useWorkspacesQuery(repository?.projectRepositoryId);
   const auth = useFactoryAuth();
   const viewerUserId = auth.data?.user?.userId;
+  const regenerateTitle = useRegenerateTitleMutation();
+  const [regeneratingTitleSessionId, setRegeneratingTitleSessionId] = useState<string | null>(null);
+  const onRegenerateTitle = (session: FactoryUserSession) => {
+    setRegeneratingTitleSessionId(session.sessionId);
+    regenerateTitle.mutate(
+      { resourceId: session.sessionId },
+      {
+        onSuccess: res => {
+          void queryClient.invalidateQueries({ queryKey: queryKeys.sessions(repository?.projectRepositoryId) });
+          toast.success(`Thread renamed to “${res.title}”`);
+        },
+        onError: error => toast.error(error instanceof Error ? error.message : 'Failed to regenerate title'),
+        onSettled: () => setRegeneratingTitleSessionId(null),
+      },
+    );
+  };
   // Pinned rows stay on top; within each pin group the viewer's own sessions
   // sort before sessions started by other org members.
   const isOwn = (session: FactoryUserSession) => Boolean(viewerUserId) && session.userId === viewerUserId;
@@ -152,6 +169,10 @@ export function UserSessionsSection() {
                   void navigate(url);
                 }}
                 onPinChange={pinned => setPinned(session.sessionId, pinned)}
+                onRegenerateTitle={
+                  viewerUserId && !isOwn(session) ? undefined : () => onRegenerateTitle(session)
+                }
+                regenerating={regeneratingTitleSessionId === session.sessionId}
                 // The DELETE route is owner-only and 404s for non-owners, which
                 // deleteUserSession treats as an idempotent success; offering
                 // delete on a known non-owned row would fake-succeed and the

@@ -5,7 +5,7 @@ import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { GitBranch, MoreHorizontal, Pin, PinOff, Trash2 } from 'lucide-react';
+import { GitBranch, MoreHorizontal, Pin, PinOff, RefreshCw, Trash2 } from 'lucide-react';
 import { useRef } from 'react';
 import type { RefObject } from 'react';
 
@@ -36,6 +36,8 @@ export function SessionNavRow({
   owner,
   onSelect,
   onPinChange,
+  onRegenerateTitle,
+  regenerating,
   onDelete,
 }: {
   name: string;
@@ -55,6 +57,10 @@ export function SessionNavRow({
   pinned?: boolean;
   onSelect: () => void;
   onPinChange: (pinned: boolean) => void;
+  /** Regenerate the session's thread title from its first message. Omitted when the viewer cannot. */
+  onRegenerateTitle?: () => void;
+  /** True while the title regeneration request is in flight. */
+  regenerating?: boolean;
   /** Omit on sessions the viewer does not own: the server only lets owners delete. */
   onDelete?: () => void;
 }) {
@@ -91,6 +97,8 @@ export function SessionNavRow({
           disabled={disabled}
           pinned={pinned}
           onPinChange={onPinChange}
+          onRegenerateTitle={onRegenerateTitle}
+          regenerating={regenerating}
           onDelete={onDelete}
         />
       )}
@@ -153,6 +161,8 @@ function SessionActionsMenu({
   disabled,
   pinned,
   onPinChange,
+  onRegenerateTitle,
+  regenerating,
   onDelete,
 }: {
   name: string;
@@ -160,6 +170,8 @@ function SessionActionsMenu({
   disabled: boolean;
   pinned: boolean;
   onPinChange: (pinned: boolean) => void;
+  onRegenerateTitle?: () => void;
+  regenerating?: boolean;
   onDelete?: () => void;
 }) {
   return (
@@ -178,11 +190,17 @@ function SessionActionsMenu({
           </Button>
         }
       />
-      <DropdownMenu.Content anchor={anchor} align="end" className="min-w-28">
+      <DropdownMenu.Content anchor={anchor} align="end">
         <DropdownMenu.Item onClick={() => onPinChange(!pinned)}>
           {pinned ? <PinOff /> : <Pin />}
           {pinned ? 'Unpin' : 'Pin session'}
         </DropdownMenu.Item>
+        {onRegenerateTitle ? (
+          <DropdownMenu.Item disabled={regenerating} onClick={onRegenerateTitle}>
+            <RefreshCw className={cn(regenerating && 'animate-spin')} />
+            Regenerate title
+          </DropdownMenu.Item>
+        ) : null}
         {onDelete ? (
           <DropdownMenu.Item variant="destructive" onClick={onDelete}>
             <Trash2 />

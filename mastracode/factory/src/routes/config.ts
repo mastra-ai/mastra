@@ -1,3 +1,4 @@
+import { generateThreadTitle } from '@mastra/code-sdk';
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { DEFAULT_OM_MODEL_ID } from '@mastra/code-sdk/constants';
 import { getAvailableModePacks, resolveProviderOMDefault } from '@mastra/code-sdk/onboarding/packs';
@@ -10,10 +11,13 @@ import {
   THINKING_LEVEL_VALUES,
 } from '@mastra/code-sdk/onboarding/settings';
 import type { CustomProviderSetting, ThinkingLevelSetting } from '@mastra/code-sdk/onboarding/settings';
+import { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 
 import type { Context } from 'hono';
+import { getFactoryAuthUser } from '../auth.js';
+
 import {
   applyStoredMemorySettings,
   DEFAULT_OBSERVATION_THRESHOLD,
@@ -116,7 +120,14 @@ interface PackSession {
     getId: () => string | null;
     getSetting: (args: { key: string }) => Promise<unknown>;
     setSetting: (args: { key: string; value: unknown }) => Promise<void>;
+    firstUserMessage: (args: { threadId: string }) => Promise<SessionThreadMessage | null>;
+    rename: (args: { title: string }) => Promise<void>;
   };
+}
+
+/** The one message field title generation reads. */
+export interface SessionThreadMessage {
+  content: { parts: Array<{ type: string; text?: string }> };
 }
 
 /** One observational-memory role's read/switch surface. */
@@ -699,7 +710,7 @@ export interface ConfigRoutesDeps extends RouteDependencies {
   /** Tenant model-packs domain handle; absent in local (no-DB) mode. */
   modelPacks?: ModelPacksStorage;
   /** Source-control sessions used to authorize session-scoped model-pack access. */
-  sourceControlSessions?: Pick<SourceControlStorageHandle['sessions'], 'getBySessionId'>;
+  sourceControlSessions?: Pick<SourceControlStorageHandle['sessions'], 'getBySessionId' | 'rename'>;
   /** Tenant memory-settings domain handle; absent in local (no-DB) mode. */
   memorySettings?: MemorySettingsStorage;
   /** Tenant title-settings domain handle; absent in local (no-DB) mode. */
@@ -1657,6 +1668,71 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               },
             });
             return c.json({ ok: true, config: resolveTitleGenerationSetting(record) });
+          } catch (error) {
+            return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+          }
+        },
+      }),
+
+      // ── Manual title regeneration ────────────────────────────────────────────
+      // Explicit per-session retry: names the session's active thread from its
+      // first user message regardless of the auto toggle — the click is the
+      // consent. The title is also mirrored onto the source-control session
+      // row, which is what sidebar labels read.
+      registerApiRoute('/web/config/title-generation/regenerate', {
+        method: 'POST',
+        requiresAuth: false,
+        handler: async c => {
+          const lc = loose(c);
+          await auth.ensureUser(lc);
+          const tenant = auth.tenant(lc);
+          if (!tenant && auth.enabled()) return c.json({ error: 'unauthorized' }, 401);
+          let body: { resourceId?: unknown; scope?: unknown };
+          try {
+            body = await c.req.json();
+          } catch {
+            return c.json({ error: 'Invalid JSON body' }, 400);
+          }
+          const resourceId = typeof body.resourceId === 'string' ? body.resourceId : '';
+          const scope = typeof body.scope === 'string' && body.scope ? body.scope : undefined;
+          if (!resourceId) return c.json({ error: 'Missing required field: resourceId' }, 400);
+          if (!options.sourceControlSessions) return c.json({ error: 'title_settings_unavailable' }, 503);
+          try {
+            const session = await controller.getSessionByResource?.(resourceId, scope);
+            if (!session) return c.json({ error: 'session_unavailable' }, 404);
+            const threadId = session.thread.getId();
+            if (!threadId) return c.json({ error: 'session_has_no_thread' }, 409);
+            const message = await session.thread.firstUserMessage({ threadId });
+            const prompt = message
+              ? message.content.parts
+                  .flatMap(part => (part.type === 'text' ? [part.text ?? ''] : []))
+                  .join(' ')
+                  .trim()
+                  .slice(0, 2000)
+              : '';
+            if (!prompt) return c.json({ error: 'no_user_message' }, 409);
+
+            const requestContext = new RequestContext();
+            requestContext.set('user', getFactoryAuthUser(lc));
+            const setting = options.titleSettings
+              ? resolveTitleGenerationSetting(
+                  await options.titleSettings.get({
+                    orgId: tenant ? tenantOrgId(tenant) : LOCAL_TITLE_SETTINGS_ORG_ID,
+                  }),
+                )
+              : { enabled: true, modelId: null, thinkingLevel: null };
+
+            const title = await generateThreadTitle({
+              prompt,
+              requestContext,
+              ...(setting.modelId ? { model: setting.modelId } : {}),
+              ...(setting.thinkingLevel ? { thinkingLevel: setting.thinkingLevel } : {}),
+            });
+            if (!title) return c.json({ error: 'title_generation_failed' }, 502);
+
+            await session.thread.rename({ title });
+            await options.sourceControlSessions.rename({ sessionId: resourceId, title });
+            return c.json({ ok: true, title, threadId });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }
