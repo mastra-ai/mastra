@@ -4,6 +4,7 @@ import { createStorageErrorId, MastraCompositeStore } from '@mastra/core/storage
 import type { StorageDomains } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { Pool } from 'pg';
+import { connectWithClientErrorHandler } from '../shared/client-error-guard';
 import {
   validateConfig,
   isCloudSqlConfig,
@@ -346,7 +347,7 @@ export class PostgresStore extends MastraCompositeStore {
     let pinnedClient: PoolClient | undefined;
 
     try {
-      pinnedClient = await this.#pool.connect();
+      pinnedClient = await connectWithClientErrorHandler(this.#pool, this.logger);
       const pinned = new PinnedClientAdapter(this.#pool, pinnedClient);
       this.#db.pin(pinned);
       // Read the schema's catalog once, up front, so the domains below can

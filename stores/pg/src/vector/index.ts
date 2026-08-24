@@ -18,6 +18,7 @@ import { Mutex } from 'async-mutex';
 import * as pg from 'pg';
 import xxhash from 'xxhash-wasm';
 
+import { connectWithClientErrorHandler } from '../shared/client-error-guard';
 import { validateConfig, isCloudSqlConfig, isConnectionStringConfig, isHostConfig } from '../shared/config';
 import type { PgVectorConfig } from '../shared/config';
 import { buildConnectionStringPoolConfig } from '../shared/pool-config';
@@ -548,7 +549,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
     // Metadata-only query: filter without vector similarity
     if (queryVector === undefined) {
-      const client = await this.pool.connect();
+      const client = await connectWithClientErrorHandler(this.pool, this.logger);
       try {
         const translatedFilter = this.transformFilter(filter);
         const { sql: filterQuery, values: filterValues } = buildDeleteFilterQuery(translatedFilter);
@@ -594,7 +595,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     }
 
     // Vector similarity query
-    const client = await this.pool.connect();
+    const client = await connectWithClientErrorHandler(this.pool, this.logger);
     try {
       // Set search path so vector operators (e.g. <=>) resolve correctly
       await this.ensureSearchPath(client);
@@ -719,7 +720,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     const { tableName } = this.getTableName(indexName);
 
     // Start a transaction
-    const client = await this.pool.connect();
+    const client = await connectWithClientErrorHandler(this.pool, this.logger);
     try {
       // Set search path so vector type casts (e.g. ::vector, ::halfvec) resolve correctly
       await this.ensureSearchPath(client);
@@ -1016,7 +1017,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
           return;
         }
 
-        const client = await this.pool.connect();
+        const client = await connectWithClientErrorHandler(this.pool, this.logger);
 
         try {
           // Setup schema if needed
@@ -1128,7 +1129,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
   }
 
   async buildIndex({ indexName, metric = 'cosine', indexConfig, vectorType }: PgDefineIndexParams): Promise<void> {
-    const client = await this.pool.connect();
+    const client = await connectWithClientErrorHandler(this.pool, this.logger);
     try {
       await this.setupIndex({ indexName, metric, indexConfig, vectorType }, client);
     } catch (error: any) {
@@ -1413,7 +1414,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
   }
 
   async listIndexes(): Promise<string[]> {
-    const client = await this.pool.connect();
+    const client = await connectWithClientErrorHandler(this.pool, this.logger);
     try {
       // Query for tables that match the exact Mastra PgVector table structure:
       // Must have: vector_id (TEXT), embedding (vector or halfvec), metadata (JSONB)
@@ -1471,7 +1472,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
    * @returns A promise that resolves to the index statistics including dimension, count and metric
    */
   async describeIndex({ indexName }: DescribeIndexParams): Promise<PGIndexStats> {
-    const client = await this.pool.connect();
+    const client = await connectWithClientErrorHandler(this.pool, this.logger);
     try {
       const { tableName } = this.getTableName(indexName);
 
@@ -1593,7 +1594,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
   }
 
   async deleteIndex({ indexName }: DeleteIndexParams): Promise<void> {
-    const client = await this.pool.connect();
+    const client = await connectWithClientErrorHandler(this.pool, this.logger);
     try {
       const { tableName } = this.getTableName(indexName);
       // Drop the table
@@ -1623,7 +1624,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
   }
 
   async truncateIndex({ indexName }: DeleteIndexParams): Promise<void> {
-    const client = await this.pool.connect();
+    const client = await connectWithClientErrorHandler(this.pool, this.logger);
     try {
       const { tableName } = this.getTableName(indexName);
       await client.query(`TRUNCATE ${tableName}`);
@@ -1705,7 +1706,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         });
       }
 
-      client = await this.pool.connect();
+      client = await connectWithClientErrorHandler(this.pool, this.logger);
       // Set search path so vector type casts (e.g. ::vector, ::halfvec) resolve correctly
       await this.ensureSearchPath(client);
 
@@ -1833,7 +1834,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
   async deleteVector({ indexName, id, namespace = DEFAULT_NAMESPACE }: PgDeleteVectorParams): Promise<void> {
     let client;
     try {
-      client = await this.pool.connect();
+      client = await connectWithClientErrorHandler(this.pool, this.logger);
       const { tableName } = this.getTableName(indexName);
       const query = `
         DELETE FROM ${tableName}
@@ -1871,7 +1872,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     let client;
     const effectiveNamespace = namespace ?? DEFAULT_NAMESPACE;
     try {
-      client = await this.pool.connect();
+      client = await connectWithClientErrorHandler(this.pool, this.logger);
       const { tableName } = this.getTableName(indexName);
 
       // Validate that exactly one of filter or ids is provided
