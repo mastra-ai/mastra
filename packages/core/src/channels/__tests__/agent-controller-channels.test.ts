@@ -226,6 +226,22 @@ async function simulateAction(channels: AgentControllerChannels, adapter: any, t
   });
 }
 
+async function simulateSlashCommand(channels: AgentControllerChannels, adapter: any, channelId: string) {
+  let task: Promise<void> | undefined;
+  (channels.sdk as any).processSlashCommand(
+    {
+      adapter,
+      channelId,
+      command: '/ask',
+      text: 'hello controller',
+      user: { userId: 'user-1', userName: 'caleb', fullName: 'Caleb Barnes' },
+      raw: {},
+    },
+    { waitUntil: (pending: Promise<void>) => (task = pending) },
+  );
+  await task;
+}
+
 /** Text posted anywhere: the inbound mock thread or SDK-built action threads. */
 function allPostedText(adapter: any, chatThread: any): string {
   return JSON.stringify([...chatThread.post.mock.calls, ...adapter.postMessage.mock.calls]);
@@ -241,6 +257,31 @@ async function getChannelThreads(mastra: any, externalThreadId: string) {
 }
 
 describe('AgentControllerChannels', () => {
+  it('routes a slash command through the controller channel resource mapping', async () => {
+    const { adapter, controller, mastra, channels } = await createSetup();
+
+    await simulateSlashCommand(channels, adapter, 'discord:slash-1');
+
+    const session = await controller.getSessionByResource('channel:discord:slash-1');
+    expect(session).toBeDefined();
+    const threads = await getChannelThreads(mastra, 'discord:slash-1');
+    expect(threads).toHaveLength(1);
+    expect(threads[0]!.resourceId).toBe('channel:discord:slash-1');
+    await waitFor(() => adapter.postMessage.mock.calls.length >= 1, { what: 'slash reply' });
+  }, 30_000);
+
+  it('does not post a slash-command response when session resolution rejects it', async () => {
+    const resolveSession = vi.fn(async () => {
+      throw new Error('forbidden');
+    });
+    const { adapter, channels } = await createSetup({ resolveSession });
+
+    await simulateSlashCommand(channels, adapter, 'discord:rejected');
+
+    expect(resolveSession).toHaveBeenCalledTimes(1);
+    expect(adapter.postMessage).not.toHaveBeenCalled();
+  }, 30_000);
+
   it('routes an inbound message into a controller session and renders the reply through the output processor', async () => {
     const { adapter, controller, mastra, channels } = await createSetup();
     const chatThread = createChatThread(adapter, 'chan-1:t-1');

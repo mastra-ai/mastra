@@ -1,4 +1,4 @@
-import type { Message, Thread } from 'chat';
+import type { Message, SlashCommandEvent, Thread } from 'chat';
 
 import type { Agent } from '../agent/agent';
 import type { MastraProviderMetadata } from '../agent/message-list/state/types';
@@ -248,6 +248,10 @@ export class AgentControllerChannels extends AgentChannels {
     // so don't prepend the platform again or the key double-prefixes.
     if (typeof base === 'function') return base;
     return `channel:${args.chatThread.id}`;
+  }
+
+  protected override resolveSlashCommandResourceId(event: SlashCommandEvent): string {
+    return 'channel:' + event.channel.id;
   }
 
   /**

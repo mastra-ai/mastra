@@ -1071,6 +1071,10 @@ export class AgentChannels {
     }
   }
 
+  protected resolveSlashCommandResourceId(event: SlashCommandEvent): string {
+    return event.adapter.name + ':' + event.user.userId;
+  }
+
   private async handleSlashCommand(
     event: SlashCommandEvent,
     mastra: Mastra,
@@ -1084,7 +1088,7 @@ export class AgentChannels {
         externalThreadId: channel.id,
         channelId: channel.id,
         platform,
-        resourceId: `${platform}:${event.user.userId}`,
+        resourceId: this.resolveSlashCommandResourceId(event),
         mastra,
       });
       const { channelContext, attributes, providerOptions } = this.buildEventContext({
@@ -1111,6 +1115,13 @@ export class AgentChannels {
       });
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
+      if (err instanceof ChannelSessionRejectedError) {
+        this.log('info', `[${platform}] Session resolver refused slash command`, {
+          authorId: event.user.userId,
+          reason: error.message,
+        });
+        return;
+      }
       this.log('error', `[${platform}] Error handling slash command`, { error: String(err) });
       try {
         const adapterConfig = this.adapterConfigs[platform];
