@@ -17,6 +17,13 @@ import type {
 import type { InMemoryDB } from '../inmemory-db';
 import { ExperimentsStorage } from './base';
 
+function cloneExperimentResultMetadata(result: ExperimentResult): ExperimentResult {
+  return {
+    ...result,
+    metadata: result.metadata === null ? null : structuredClone(result.metadata),
+  };
+}
+
 export class ExperimentsInMemory extends ExperimentsStorage {
   private db: InMemoryDB;
 
@@ -205,8 +212,8 @@ export class ExperimentsInMemory extends ExperimentsStorage {
       projectId: input.projectId ?? null,
       createdAt: now,
     };
-    this.db.experimentResults.set(result.id, result);
-    return result;
+    this.db.experimentResults.set(result.id, cloneExperimentResultMetadata(result));
+    return cloneExperimentResultMetadata(result);
   }
 
   async upsertExperimentResult(input: UpsertExperimentResultInput): Promise<ExperimentResult> {
@@ -241,8 +248,8 @@ export class ExperimentsInMemory extends ExperimentsStorage {
       projectId: input.projectId ?? null,
       createdAt: existing.createdAt,
     };
-    this.db.experimentResults.set(existing.id, replaced);
-    return replaced;
+    this.db.experimentResults.set(existing.id, cloneExperimentResultMetadata(replaced));
+    return cloneExperimentResultMetadata(replaced);
   }
 
   async updateExperimentResult(input: UpdateExperimentResultInput): Promise<ExperimentResult> {
@@ -259,8 +266,8 @@ export class ExperimentsInMemory extends ExperimentsStorage {
       tags: input.tags !== undefined ? input.tags : existing.tags,
       comment: input.comment !== undefined ? input.comment : existing.comment,
     };
-    this.db.experimentResults.set(input.id, updated);
-    return updated;
+    this.db.experimentResults.set(input.id, cloneExperimentResultMetadata(updated));
+    return cloneExperimentResultMetadata(updated);
   }
 
   async getExperimentResultById(args: {
@@ -275,7 +282,7 @@ export class ExperimentsInMemory extends ExperimentsStorage {
     if (args.filters?.projectId !== undefined && (row.projectId ?? null) !== args.filters.projectId) {
       return null;
     }
-    return row;
+    return cloneExperimentResultMetadata(row);
   }
 
   async listExperimentResults(args: ListExperimentResultsInput): Promise<ListExperimentResultsOutput> {
@@ -304,7 +311,7 @@ export class ExperimentsInMemory extends ExperimentsStorage {
     const end = perPageInput === false ? results.length : start + perPage;
 
     return {
-      results: results.slice(start, end),
+      results: results.slice(start, end).map(cloneExperimentResultMetadata),
       pagination: {
         total: results.length,
         page,

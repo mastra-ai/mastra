@@ -69,6 +69,8 @@ import { BaseCheckpointBuilder } from './sandbox/base-checkpoint.js';
 import { SandboxFleet } from './sandbox/fleet.js';
 import { registerSandboxReattach } from './sandbox/reattach.js';
 import { SessionRetirementCoordinator } from './sandbox/session-retirement.js';
+import { createPlaintextFactorySecretEncryption } from './secret-encryption.js';
+import type { FactorySecretEncryption } from './secret-encryption.js';
 import { handleServerError } from './server-error.js';
 import { observeSessionCheckpoint } from './session/checkpoint-capture.js';
 import { observeSessionFilesystem } from './session/filesystem-capture.js';
@@ -165,6 +167,13 @@ export interface MastraFactoryConfig {
    * `requiresStableStateSigner`.
    */
   stateSecret?: string;
+  /**
+   * Encryption boundary for persisted model credentials, custom-provider API
+   * keys, integration connections, and integration settings. Required whenever
+   * auth is enabled. Local no-auth mode (`auth: null`) defaults to explicit
+   * plaintext compatibility when omitted.
+   */
+  secretEncryption?: FactorySecretEncryption;
   /**
    * Registered capability providers. The factory registers the pieces each
    * `FactoryIntegration` instance provides — HTTP routes, storage domains,
@@ -353,6 +362,10 @@ export class MastraFactory {
     const configuredAuth = this.#config.auth;
     const auth: IMastraAuthProvider | undefined =
       configuredAuth === null ? undefined : (configuredAuth ?? buildDefaultStudioAuth(publicOrigin));
+    if (auth && !this.#config.secretEncryption) {
+      throw new Error("MastraFactory: 'secretEncryption' is required when auth is enabled.");
+    }
+    const secretEncryption = this.#config.secretEncryption ?? createPlaintextFactorySecretEncryption();
     // One RouteAuth seam per boot, closed over the resolved provider. Every
     // factory route module receives this handle — no service locator.
     const routeAuth = createFactoryRouteAuth(auth);
@@ -386,14 +399,14 @@ export class MastraFactory {
     const intakeStorage = storage.registerDomain(new IntakeStorage());
     const auditStorage = storage.registerDomain(new AuditStorage());
     const workItemsStorage = storage.registerDomain(new WorkItemsStorage());
-    const modelCredentialsStorage = storage.registerDomain(new ModelCredentialsStorage());
+    const modelCredentialsStorage = storage.registerDomain(new ModelCredentialsStorage(secretEncryption));
     const modelPacksStorage = storage.registerDomain(new ModelPacksStorage());
     const memorySettingsStorage = storage.registerDomain(new MemorySettingsStorage());
-    const customProvidersStorage = storage.registerDomain(new CustomProvidersStorage());
+    const customProvidersStorage = storage.registerDomain(new CustomProvidersStorage(secretEncryption));
     const queueHealthStorage = storage.registerDomain(new QueueHealthStorage());
     // Generic integration storage (connections/subscriptions/settings) — the
     // default persistence surface for integrations without a bespoke domain.
-    const integrationStorage = storage.registerDomain(new IntegrationStorage());
+    const integrationStorage = storage.registerDomain(new IntegrationStorage(secretEncryption));
     const factoryProjectsStorage = storage.registerDomain(new FactoryProjectsStorage());
     const filesystemStorage = storage.registerDomain(new FilesystemStorage());
     const sourceControlStorage = storage.registerDomain(new SourceControlStorage());
