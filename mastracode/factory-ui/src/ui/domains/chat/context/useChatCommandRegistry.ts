@@ -5,7 +5,7 @@ import {
   resolveDefaultThinkingLevel,
   THINK_COMMAND_DESCRIPTOR,
 } from '@mastra/code-sdk/thinking';
-import type { ThinkingLevelSource } from '@mastra/code-sdk/thinking';
+import type { ThinkingLevelSetting, ThinkingLevelSource } from '@mastra/code-sdk/thinking';
 import { useLocation, useNavigate, useParams } from 'react-router';
 import type { ThinkingConfigInfo } from '../../../../api/types';
 
@@ -24,7 +24,7 @@ import { useThinkingConfigQuery } from '../../../../hooks/use-thinking';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useUpdateAgentControllerSettingsMutation } from '../../../../hooks/useUpdateAgentControllerSettingsMutation';
 import { settingsSectionPath } from '../../settings/settingsSections';
-import type { SlashCommand } from '../services/commands';
+import type { SlashCommand, SlashCommandOption } from '../services/commands';
 import { findCommand, parseSlashCommand } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { useChatModels } from './useChatModels';
@@ -34,6 +34,14 @@ import { useChatSessionContext } from './useChatSessionContext';
 import { useChatTranscript } from './useChatTranscript';
 
 const TOOL_CATEGORIES: ToolCategory[] = ['read', 'edit', 'execute', 'mcp', 'other'];
+const THINKING_LEVEL_LABELS: Record<ThinkingLevelSetting, string> = {
+  off: 'Off',
+  low: 'Low',
+  medium: 'Medium',
+  high: 'High',
+  xhigh: 'Extra high',
+  max: 'Max',
+};
 function thinkingSourceLabel(source: ThinkingLevelSource, modeId: string | null): string {
   return source === 'mode-default' && modeId ? `${modeId} mode default` : 'global default';
 }
@@ -65,6 +73,21 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
   const thinkingConfigQuery = useThinkingConfigQuery({ enabled: false });
   const updateSettingsMutation = useUpdateAgentControllerSettingsMutation(hookArgs);
   const { permissions, permissionsLoading, setPermissionForCategory } = useChatPermissions();
+
+  const currentThinkingLevel = settingsQuery.data?.thinkingLevel;
+  const thinkingLevelOptions: SlashCommandOption[] = [
+    {
+      value: 'default',
+      label: 'Default',
+      description: 'Mode or global default',
+      active: settingsQuery.data !== undefined && currentThinkingLevel === undefined,
+    },
+    ...getAvailableThinkingLevelsForModel(activeModelId ?? '').map(level => ({
+      value: level,
+      label: THINKING_LEVEL_LABELS[level],
+      active: currentThinkingLevel === level,
+    })),
+  ];
 
   const ensureSettings = async (): Promise<AgentControllerSessionSettings> => {
     if (settingsQuery.data) return settingsQuery.data;
@@ -167,6 +190,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
     {
       ...THINK_COMMAND_DESCRIPTOR,
       requiresSession: true,
+      options: thinkingLevelOptions,
       execute: async (rawArguments, originalText) => {
         const levels = getAvailableThinkingLevelsForModel(activeModelId ?? '');
         const action = parseThinkCommand(rawArguments, levels);

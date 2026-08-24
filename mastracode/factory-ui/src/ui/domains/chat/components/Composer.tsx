@@ -31,11 +31,13 @@ import { useCreateAgentControllerThreadMutation } from '../../../../hooks/useAge
 import { usePreparingThreadId } from '../hooks/usePreparingThreadId';
 import { useCreateUserSessionFromDraft } from '../hooks/useCreateUserSessionFromDraft';
 import { usePendingPlanFeedback } from '../hooks/usePendingPlanFeedback';
-import { commandRequiresReadySession, matchCommands } from '../services/commands';
+import type { SlashCommand, SlashCommandOption } from '../services/commands';
+import { commandRequiresReadySession, matchCommandOptions, matchCommands } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { getModeColorClass } from './mode-colors';
 import { StatusLine } from './StatusLine';
 import { ComposerImageAttachments, ComposerSuggestions } from './ComposerParts';
+import type { ComposerSuggestionItem } from './ComposerParts';
 import { useComposerSpotlight } from './useComposerSpotlight';
 import { useComposerImages } from './useComposerImages';
 import type { PendingImage } from './useComposerImages';
@@ -56,6 +58,26 @@ const composerVariantMaxHeight: Record<ComposerVariant, string> = {
 type ComposerProps = {
   variant?: ComposerVariant;
 };
+
+type ComposerSuggestion =
+  | { kind: 'command'; command: SlashCommand }
+  | { kind: 'option'; command: SlashCommand; option: SlashCommandOption };
+
+function toComposerSuggestionItem(suggestion: ComposerSuggestion): ComposerSuggestionItem {
+  if (suggestion.kind === 'command') {
+    return {
+      id: `command:${suggestion.command.name}`,
+      label: `/${suggestion.command.name}`,
+      description: suggestion.command.description,
+    };
+  }
+  return {
+    id: `option:${suggestion.command.name}:${suggestion.option.value}`,
+    label: suggestion.option.label,
+    description: suggestion.option.description,
+    active: suggestion.option.active,
+  };
+}
 
 export function Composer({ variant = 'inline' }: ComposerProps) {
   const { kind, resourceId, sessionEnabled, sandboxPreparing, projectPath, baseUrl, factorySessionState } =
@@ -104,7 +126,12 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   });
   const spotlightRef = useComposerSpotlight();
   const modeSwitchPendingRef = useRef(false);
-  const suggestions = planFeedback.pending ? [] : matchCommands(commands, draft);
+  const optionMatch = planFeedback.pending ? undefined : matchCommandOptions(commands, draft);
+  const matchingCommands = planFeedback.pending || optionMatch ? [] : matchCommands(commands, draft);
+  const suggestions: ComposerSuggestion[] = optionMatch
+    ? optionMatch.options.map(option => ({ kind: 'option', command: optionMatch.command, option }))
+    : matchingCommands.map(command => ({ kind: 'command', command }));
+  const suggestionItems = suggestions.map(toComposerSuggestionItem);
   const showSuggestions = suggestions.length > 0;
   const [activeSuggestion, setActiveSuggestion] = useState(0);
   const composerDisabled = createDraftSessionMutation.isPending || blocked || planFeedback.isSubmitting;
@@ -124,8 +151,8 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     setActiveSuggestion(0);
   };
 
-  const applyCommand = (name: string) => {
-    updateDraft(`/${name} `);
+  const applyCommand = (command: SlashCommand) => {
+    updateDraft(`/${command.name} `);
     inputRef.current?.focus();
   };
 
@@ -180,17 +207,30 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     }
   };
 
-  const onSubmit = (e: { preventDefault: () => void }) => {
-    e.preventDefault();
-    if (sendDisabled) return;
-    const text = draft.trim();
-    if ((!text && images.length === 0) || (planFeedback.pending && !text)) return;
+  const submitInput = (text: string) => {
     updateDraft('');
     void handleInput(text).catch(error => {
       if (planFeedback.pending) updateDraft(text);
       clearPending();
       pushNotice(error instanceof Error ? error.message : 'The message could not be sent.', 'error');
     });
+  };
+
+  const onSubmit = (e: { preventDefault: () => void }) => {
+    e.preventDefault();
+    if (sendDisabled) return;
+    const text = draft.trim();
+    if ((!text && images.length === 0) || (planFeedback.pending && !text)) return;
+    submitInput(text);
+  };
+
+  const selectSuggestion = (suggestion: ComposerSuggestion) => {
+    if (suggestion.kind === 'command') {
+      applyCommand(suggestion.command);
+      return;
+    }
+    if (sendDisabled) return;
+    submitInput(`/${suggestion.command.name} ${suggestion.option.value}`);
   };
 
   const onComposerKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -214,6 +254,11 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
       );
       return;
     }
+    if (e.key === 'Escape' && optionMatch) {
+      e.preventDefault();
+      updateDraft(`/${optionMatch.command.name}`);
+      return;
+    }
     if (showSuggestions) {
       const safeIndex = Math.min(activeSuggestion, suggestions.length - 1);
       const current = suggestions[safeIndex];
@@ -227,17 +272,21 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
         return;
       } else if (e.key === 'Tab') {
         e.preventDefault();
-        if (current) applyCommand(current.name);
+        if (current) selectSuggestion(current);
         return;
       } else if (e.key === 'Enter' && !e.shiftKey) {
-        const exact = !!current && draft.slice(1) === current.name && suggestions.length === 1;
-        if (exact) {
-          e.preventDefault();
+        e.preventDefault();
+        if (!current) return;
+        if (current.kind === 'option') {
+          selectSuggestion(current);
+          return;
+        }
+        const exact = draft.toLowerCase() === `/${current.command.name}` && suggestions.length === 1;
+        if (exact && !current.command.options?.length) {
           onSubmit(e);
           return;
         }
-        e.preventDefault();
-        if (current) applyCommand(current.name);
+        applyCommand(current.command);
         return;
       } else if (e.key === 'Escape') {
         e.preventDefault();
@@ -300,7 +349,16 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
       <ComposerRing busy={busy || chatPreparing} className={modeColorClass}>
         <ComposerBox ref={spotlightRef} className={cn('composer-spotlight', modeColorClass)}>
           <div aria-hidden="true" className="composer-spotlight-surface" />
-          <ComposerSuggestions suggestions={suggestions} activeIndex={activeSuggestion} onSelect={applyCommand} />
+          <ComposerSuggestions
+            items={suggestionItems}
+            activeIndex={activeSuggestion}
+            contextLabel={optionMatch ? `/${optionMatch.command.name}` : undefined}
+            onBack={optionMatch ? () => updateDraft(`/${optionMatch.command.name}`) : undefined}
+            onSelect={index => {
+              const suggestion = suggestions[index];
+              if (suggestion) selectSuggestion(suggestion);
+            }}
+          />
           <ComposerImageAttachments images={images} onRemove={removeImage} />
           <ComposerInput
             ref={inputRef}

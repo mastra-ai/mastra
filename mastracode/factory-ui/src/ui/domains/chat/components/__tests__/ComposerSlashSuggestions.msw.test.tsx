@@ -32,7 +32,6 @@ function renderComposer() {
   );
 }
 
-/** The input stays disabled until the controller connection is ready. */
 async function findReadyInput(): Promise<HTMLTextAreaElement> {
   const input = await screen.findByRole<HTMLTextAreaElement>('textbox', { name: 'Message' });
   await waitFor(() => expect(input).toBeEnabled());
@@ -69,8 +68,37 @@ describe('Composer slash-command suggestions', () => {
 
       await user.keyboard('{Tab}');
       expect(input).toHaveValue('/goal ');
-      // Args phase: suggestions close once the command is complete.
       expect(screen.queryByRole('button', { name: /^\/goal\s/ })).not.toBeInTheDocument();
+    });
+
+    it('opens command options as a second step and returns with Escape', async () => {
+      const user = userEvent.setup();
+      renderComposer();
+
+      const input = await findReadyInput();
+      await user.type(input, '/think');
+      await user.keyboard('{Enter}');
+
+      expect(await screen.findByRole('region', { name: '/think options' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Back to slash commands' })).toBeInTheDocument();
+      expect(input).toHaveValue('/think ');
+
+      await user.keyboard('{Escape}');
+
+      expect(input).toHaveValue('/think');
+      expect(await screen.findByRole('region', { name: 'Slash commands' })).toBeInTheDocument();
+    });
+
+    it('leaves direct command arguments untouched when no option matches', async () => {
+      const user = userEvent.setup();
+      renderComposer();
+
+      const input = await findReadyInput();
+      await user.type(input, '/think status');
+      await user.keyboard('{Escape}');
+
+      expect(input).toHaveValue('/think status');
+      expect(screen.queryByRole('region', { name: '/think options' })).not.toBeInTheDocument();
     });
   });
 });

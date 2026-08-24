@@ -5,7 +5,15 @@ export interface SlashCommandDescriptor {
   requiresSession: boolean;
 }
 
+export interface SlashCommandOption {
+  value: string;
+  label: string;
+  description?: string;
+  active?: boolean;
+}
+
 export interface SlashCommand extends SlashCommandDescriptor {
+  options?: readonly SlashCommandOption[];
   execute: (rawArguments: string, originalText: string) => Promise<void>;
 }
 
@@ -41,4 +49,19 @@ export function matchCommands<T extends SlashCommandDescriptor>(commands: readon
   if (/\s/.test(rest)) return [];
   const query = rest.toLowerCase();
   return commands.filter(command => command.name.toLowerCase().startsWith(query));
+}
+
+export function matchCommandOptions(
+  commands: readonly SlashCommand[],
+  draft: string,
+): { command: SlashCommand; options: SlashCommandOption[] } | undefined {
+  if (!draft.startsWith('/')) return undefined;
+  const firstWhitespace = draft.search(/\s/);
+  if (firstWhitespace === -1) return undefined;
+  const command = commands.find(candidate => candidate.name === draft.slice(1, firstWhitespace));
+  if (!command?.options) return undefined;
+  const query = draft.slice(firstWhitespace).trim().toLowerCase();
+  if (/\s/.test(query)) return undefined;
+  const options = command.options.filter(option => option.value.toLowerCase().startsWith(query));
+  return options.length > 0 ? { command, options } : undefined;
 }

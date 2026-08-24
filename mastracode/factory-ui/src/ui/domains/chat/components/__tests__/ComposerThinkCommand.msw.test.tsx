@@ -79,8 +79,12 @@ describe('the /think command', () => {
     const input = await screen.findByRole<HTMLTextAreaElement>('textbox', { name: 'Message' });
     await waitFor(() => expect(input).toBeEnabled());
 
-    await user.type(input, '/think high');
+    await user.type(input, '/think');
     await user.keyboard('{Enter}');
+
+    expect(await screen.findByRole('region', { name: '/think options' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Medium Current' })).toHaveAttribute('aria-current', 'true');
+    await user.click(screen.getByRole('button', { name: 'High' }));
 
     await waitForMutationsIdle(client);
     expect(stateUpdates).toContainEqual({ state: { thinkingLevel: 'high' } });
@@ -94,7 +98,9 @@ describe('the /think command', () => {
       await screen.findByText('Thinking level: high (session override). Default: medium (build mode default).'),
     ).toBeInTheDocument();
 
-    await user.type(input, '/think default');
+    await user.type(input, '/think');
+    await user.keyboard('{Enter}');
+    await screen.findByRole('region', { name: '/think options' });
     await user.keyboard('{Enter}');
 
     await waitForMutationsIdle(client);
