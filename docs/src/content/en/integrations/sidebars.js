@@ -442,7 +442,7 @@ const sidebars = {
           type: 'doc',
           id: 'databases/valkey',
           label: 'Valkey',
-          customProps: { icon: 'https://cdn.simpleicons.org/valkey?viewbox=auto&size=28' },
+          customProps: { icon: '/img/integrations/valkey.svg' },
         },
         {
           type: 'doc',

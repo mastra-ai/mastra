@@ -10,7 +10,7 @@ packages:
 
 `ValkeyStreamsPubSub` is a [`PubSub`](/reference/pubsub/base) and [`LeaseProvider`](/reference/pubsub/lease-provider) implementation backed by Valkey Streams through [Valkey GLIDE](https://github.com/valkey-io/valkey-glide). It provides persistent cross-process delivery, consumer groups, redelivery, topic cleanup, and distributed leasing.
 
-Use it for Valkey deployments. Use [`RedisStreamsPubSub`](/reference/pubsub/redis-streams) for Redis deployments that use the official `redis` client. Both integrations implement the same Mastra behavior and are tested independently against their respective servers.
+Use it for Valkey deployments. Use [`RedisStreamsPubSub`](/reference/pubsub/redis-streams) for Redis deployments that use the official `redis` client. Both integrations implement the same Mastra behavior, with independent tests running against Valkey and Redis.
 
 ## Installation
 
