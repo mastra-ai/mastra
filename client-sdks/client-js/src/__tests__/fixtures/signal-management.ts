@@ -1,10 +1,42 @@
-import type {
-  CreateTraceSignalDefinitionInput,
-  ProjectTraceSignalSetting,
-  TraceSignalDefinition,
-  TraceSignalManagementListResponse,
-  UpdateTraceSignalDefinitionInput,
-} from '../../agent-learning';
+type TraceSignalArtifact =
+  | 'latestUserInput'
+  | 'minifiedTrace'
+  | 'summary'
+  | 'tags'
+  | 'entityIntent'
+  | 'entityIntentSummary';
+
+type TraceSignalDefinitionFixture = {
+  id: string;
+  name: string;
+  displayLabel: string;
+  description: string;
+  taskPrompt: string;
+  artifactAllowlist: TraceSignalArtifact[];
+  version: number;
+  status: 'active' | 'archived';
+  enabled: boolean | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type TraceSignalManagementListFixture = {
+  definitions: TraceSignalDefinitionFixture[];
+  limits: { maxDefinitionsPerOrganization: number };
+};
+
+type CreateTraceSignalDefinitionInputFixture = Pick<
+  TraceSignalDefinitionFixture,
+  'name' | 'displayLabel' | 'description' | 'taskPrompt' | 'artifactAllowlist'
+>;
+
+type UpdateTraceSignalDefinitionInputFixture = Omit<CreateTraceSignalDefinitionInputFixture, 'name'>;
+
+type ProjectTraceSignalSettingFixture = {
+  projectId: string;
+  signalDefinitionId: string;
+  enabled: boolean;
+};
 
 export const customSignalDefinitionFixture = {
   id: '11111111-1111-4111-8111-111111111111',
@@ -18,7 +50,7 @@ export const customSignalDefinitionFixture = {
   enabled: false,
   createdAt: '2026-08-18T12:00:00.000Z',
   updatedAt: '2026-08-18T12:00:00.000Z',
-} satisfies TraceSignalDefinition;
+} satisfies TraceSignalDefinitionFixture;
 
 export const archivedSignalDefinitionFixture = {
   ...customSignalDefinitionFixture,
@@ -26,12 +58,12 @@ export const archivedSignalDefinitionFixture = {
   name: 'resolution_detail',
   displayLabel: 'Resolution Detail',
   status: 'archived',
-} satisfies TraceSignalDefinition;
+} satisfies TraceSignalDefinitionFixture;
 
 export const signalManagementListFixture = {
   definitions: [customSignalDefinitionFixture, archivedSignalDefinitionFixture],
   limits: { maxDefinitionsPerOrganization: 7 },
-} satisfies TraceSignalManagementListResponse;
+} satisfies TraceSignalManagementListFixture;
 
 export const createSignalDefinitionInputFixture = {
   name: 'tool_usage',
@@ -39,17 +71,17 @@ export const createSignalDefinitionInputFixture = {
   description: 'How the agent used tools.',
   taskPrompt: 'Describe how the agent used tools in one sentence.',
   artifactAllowlist: ['latestUserInput', 'minifiedTrace'],
-} satisfies CreateTraceSignalDefinitionInput;
+} satisfies CreateTraceSignalDefinitionInputFixture;
 
 export const updateSignalDefinitionInputFixture = {
   displayLabel: 'Handoff Clarity',
   description: customSignalDefinitionFixture.description,
   taskPrompt: customSignalDefinitionFixture.taskPrompt,
   artifactAllowlist: ['latestUserInput', 'minifiedTrace'],
-} satisfies UpdateTraceSignalDefinitionInput;
+} satisfies UpdateTraceSignalDefinitionInputFixture;
 
 export const projectSignalSettingFixture = {
   projectId: 'project-1',
   signalDefinitionId: customSignalDefinitionFixture.id,
   enabled: true,
-} satisfies ProjectTraceSignalSetting;
+} satisfies ProjectTraceSignalSettingFixture;
