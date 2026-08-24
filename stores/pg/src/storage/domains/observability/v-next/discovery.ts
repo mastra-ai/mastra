@@ -172,11 +172,6 @@ async function readWithRefresh(
     [cacheKey],
   );
 
-  const refreshedAtMs = row ? new Date(row.refreshedAt).getTime() : 0;
-  const stale = !row || Date.now() - refreshedAtMs > ttlSeconds * 1000;
-
-  if (!stale) return row!.values;
-
   const dedupeKey = `${schema}:${cacheKey}`;
   const startRefresh = () =>
     startOrJoinRefresh(dedupeKey, cacheKey, refresh, values => upsertCache(client, schema, cacheKey, values), logger);
@@ -184,9 +179,8 @@ async function readWithRefresh(
   // Force-refresh path: `ttlSeconds <= 0` is the contract used by
   // `refreshAllDiscoveryCaches()` (and the future `mastra observability
   // discovery refresh` CLI) to mean "block until the cache is rewritten".
-  // Without this branch a stale-but-existing row would serve immediately and
-  // resolve before the background refresh writes the new values, defeating
-  // the whole point of a manual refresh.
+  // Check this before cache freshness because consecutive forced refreshes can
+  // occur in the same millisecond.
   if (ttlSeconds <= 0) {
     try {
       return await startRefresh();
@@ -196,6 +190,11 @@ async function readWithRefresh(
       return row?.values ?? [];
     }
   }
+
+  const refreshedAtMs = row ? new Date(row.refreshedAt).getTime() : 0;
+  const stale = !row || Date.now() - refreshedAtMs > ttlSeconds * 1000;
+
+  if (!stale) return row!.values;
 
   if (!row) {
     // Cold path: no cached values to serve. Block on (or join) the refresh.
