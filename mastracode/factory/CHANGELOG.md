@@ -1,5 +1,47 @@
 # @mastra/factory
 
+## 0.10.0-alpha.7
+
+### Patch Changes
+
+- Factory pull request review reports now show their selected model and reasoning setting: ([#22238](https://github.com/mastra-ai/mastra/pull/22238))
+
+  ```text
+  Review runtime: openai/gpt-5.6-sol, reasoning setting: high.
+  ```
+
+- Fixed retried Factory skill runs so they deliver a fresh kickoff after execution errors while preserving duplicate protection during lease recovery. ([#21926](https://github.com/mastra-ai/mastra/pull/21926))
+
+- Fixed session timing measurements that started too early or missed workspace tool activity. ([#22213](https://github.com/mastra-ai/mastra/pull/22213))
+
+  **First interaction time**
+  Starts on the first user or assistant message. Signal-only messages (skill loads, phase markers, memory reminders) and sessions that fail before a message no longer affect this metric.
+
+  **First meaningful tool time**
+  Starts when the first workspace tool completes successfully. File operations and workspace searches count even when no shell command runs. Approval-denied and abort-while-parked tool completions are excluded because the tool never actually ran.
+
+- Updated dependencies [[`ae8790c`](https://github.com/mastra-ai/mastra/commit/ae8790c4bfaa088d2ab279d1dcc06f326b9fd109), [`04a815f`](https://github.com/mastra-ai/mastra/commit/04a815fc8971d29e97fcdcc5008a1eb472fc00ff), [`04a815f`](https://github.com/mastra-ai/mastra/commit/04a815fc8971d29e97fcdcc5008a1eb472fc00ff), [`cced745`](https://github.com/mastra-ai/mastra/commit/cced745a056ec2225c5bc702e32d848847aa8b65)]:
+  - @mastra/core@1.62.0-alpha.7
+  - @mastra/code-sdk@1.5.0-alpha.7
+
+## 0.10.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`c8e4cea`](https://github.com/mastra-ai/mastra/commit/c8e4ceac9a390d78c8327dff3cdb2861dd71957f), [`ed01e9a`](https://github.com/mastra-ai/mastra/commit/ed01e9a807514a904374bf687a7b8f18750f6f78), [`4e9a228`](https://github.com/mastra-ai/mastra/commit/4e9a2283d5fd6ed1b70a2751eb3dc2cbf82ada20), [`63041eb`](https://github.com/mastra-ai/mastra/commit/63041eb4c50b520a0a80e03d4cd6ea99f67715a0)]:
+  - @mastra/core@1.62.0-alpha.6
+  - @mastra/code-sdk@1.5.0-alpha.6
+
+## 0.10.0-alpha.5
+
+### Patch Changes
+
+- Fixed automated runs for manually created board cards. Moving a manual card into Planning or Building no longer fails with 'Factory skill invocation requires a supported issue or pull request identifier'. Manual cards now start on a stable `factory/item-<id>` branch, even without a provider identity. ([#22114](https://github.com/mastra-ai/mastra/pull/22114))
+
+- Updated dependencies [[`65edab1`](https://github.com/mastra-ai/mastra/commit/65edab1c233d17b8f163bad12fca410d0e6f16b1), [`ab20a38`](https://github.com/mastra-ai/mastra/commit/ab20a38d0275f8d85e0f3833bd87ef487bcc609f), [`dbbfeb8`](https://github.com/mastra-ai/mastra/commit/dbbfeb85ec949dc9ebc0755e1ad262e4f5eba8db), [`3cc9d00`](https://github.com/mastra-ai/mastra/commit/3cc9d00b2b4333e0377a5e9df5eff92c17ce7630), [`733a537`](https://github.com/mastra-ai/mastra/commit/733a537489a858b5880b2e98809334fba895a221), [`9207dfa`](https://github.com/mastra-ai/mastra/commit/9207dfab8062e5fc68b751684797ff86fe0b4e70), [`12c61d2`](https://github.com/mastra-ai/mastra/commit/12c61d280c8cb208bc3c8dbcbe5dcc60cf9d1cd0), [`9a12ef3`](https://github.com/mastra-ai/mastra/commit/9a12ef3fccf3f4186db0f294f4ee1f02cf4d8db2)]:
+  - @mastra/core@1.62.0-alpha.5
+  - @mastra/code-sdk@1.5.0-alpha.5
+
 ## 0.10.0-alpha.4
 
 ### Patch Changes

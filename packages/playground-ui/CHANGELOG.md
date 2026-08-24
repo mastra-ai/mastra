@@ -1,5 +1,49 @@
 # @mastra/playground-ui
 
+## 51.1.0-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [[`ae8790c`](https://github.com/mastra-ai/mastra/commit/ae8790c4bfaa088d2ab279d1dcc06f326b9fd109), [`ee0c1a0`](https://github.com/mastra-ai/mastra/commit/ee0c1a097de3acebe7dfc8c136479d4cb5b5b451), [`befbfc2`](https://github.com/mastra-ai/mastra/commit/befbfc260d5ec5ece7cdb65a80e94292f428d4c9), [`04a815f`](https://github.com/mastra-ai/mastra/commit/04a815fc8971d29e97fcdcc5008a1eb472fc00ff), [`cced745`](https://github.com/mastra-ai/mastra/commit/cced745a056ec2225c5bc702e32d848847aa8b65)]:
+  - @mastra/core@1.62.0-alpha.7
+  - @mastra/memory@1.28.0-alpha.2
+  - @mastra/client-js@1.42.1-alpha.7
+  - @mastra/react@1.4.6-alpha.7
+
+## 51.1.0-alpha.6
+
+### Minor Changes
+
+- Added a composable tool-call component for building accessible, collapsible tool activity rows with custom icons, details, status content, and expanded results. ([#22183](https://github.com/mastra-ai/mastra/pull/22183))
+
+  ```tsx
+  import { ToolCall, ToolCallContent, ToolCallTrigger } from '@mastra/playground-ui/components/ai/tool-call';
+
+  <ToolCall status="running">
+    <ToolCallTrigger>Running command</ToolCallTrigger>
+    <ToolCallContent>Command output</ToolCallContent>
+  </ToolCall>;
+  ```
+
+### Patch Changes
+
+- Added controlled snapshot frame selection to SankeySignals. The component now requires selectedFrameId and onFrameIdChange props, so the host application owns which timeline snapshot is displayed (for example to persist and restore it). Timeline clicks, snapshot playback, and perspective changes all report the new frame through onFrameIdChange. The playground signals overview page resolves the initial frame from the snapshot list and passes it down. ([#22187](https://github.com/mastra-ai/mastra/pull/22187))
+
+- Updated dependencies [[`c8e4cea`](https://github.com/mastra-ai/mastra/commit/c8e4ceac9a390d78c8327dff3cdb2861dd71957f), [`ed01e9a`](https://github.com/mastra-ai/mastra/commit/ed01e9a807514a904374bf687a7b8f18750f6f78), [`4e9a228`](https://github.com/mastra-ai/mastra/commit/4e9a2283d5fd6ed1b70a2751eb3dc2cbf82ada20), [`63041eb`](https://github.com/mastra-ai/mastra/commit/63041eb4c50b520a0a80e03d4cd6ea99f67715a0)]:
+  - @mastra/core@1.62.0-alpha.6
+  - @mastra/client-js@1.42.1-alpha.6
+  - @mastra/react@1.4.6-alpha.6
+
+## 51.0.1-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`65edab1`](https://github.com/mastra-ai/mastra/commit/65edab1c233d17b8f163bad12fca410d0e6f16b1), [`ab20a38`](https://github.com/mastra-ai/mastra/commit/ab20a38d0275f8d85e0f3833bd87ef487bcc609f), [`dbbfeb8`](https://github.com/mastra-ai/mastra/commit/dbbfeb85ec949dc9ebc0755e1ad262e4f5eba8db), [`3cc9d00`](https://github.com/mastra-ai/mastra/commit/3cc9d00b2b4333e0377a5e9df5eff92c17ce7630), [`733a537`](https://github.com/mastra-ai/mastra/commit/733a537489a858b5880b2e98809334fba895a221), [`d55807c`](https://github.com/mastra-ai/mastra/commit/d55807cb9f080f3f5d1db06aca02b8fe0992507e), [`9207dfa`](https://github.com/mastra-ai/mastra/commit/9207dfab8062e5fc68b751684797ff86fe0b4e70), [`12c61d2`](https://github.com/mastra-ai/mastra/commit/12c61d280c8cb208bc3c8dbcbe5dcc60cf9d1cd0), [`9a12ef3`](https://github.com/mastra-ai/mastra/commit/9a12ef3fccf3f4186db0f294f4ee1f02cf4d8db2)]:
+  - @mastra/core@1.62.0-alpha.5
+  - @mastra/memory@1.28.0-alpha.1
+  - @mastra/client-js@1.42.1-alpha.5
+  - @mastra/react@1.4.6-alpha.5
+
 ## 51.0.1-alpha.4
 
 ### Patch Changes

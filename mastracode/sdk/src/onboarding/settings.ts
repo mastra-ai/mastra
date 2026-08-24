@@ -10,6 +10,14 @@ import type { MastraBrowser } from '@mastra/core/browser';
 import type { LSPConfig } from '@mastra/core/workspace';
 import { AuthStorage } from '../auth/storage.js';
 import { buildCodexStagehandFetch, createCodexMiddleware } from '../providers/openai-codex.js';
+import {
+  isThinkingLevelSetting,
+  resolveDefaultThinkingLevel as resolveThinkingDefault,
+  THINKING_LEVEL_VALUES,
+} from '../thinking.js';
+import type { ThinkingLevelSetting, ThinkingLevelSource } from '../thinking.js';
+export { isThinkingLevelSetting, THINKING_LEVEL_VALUES } from '../thinking.js';
+export type { ThinkingLevelSetting, ThinkingLevelSource } from '../thinking.js';
 import { getAppDataDir } from '../utils/project.js';
 import { DEFAULT_STT_PROVIDER, resolveSTTModel } from '../voice/stt-registry.js';
 
@@ -71,9 +79,6 @@ export const MEMORY_GATEWAY_PROVIDER = MASTRA_GATEWAY_PROVIDER;
 
 /** @deprecated Renamed to {@link MASTRA_GATEWAY_DEFAULT_URL}. */
 export const MEMORY_GATEWAY_DEFAULT_URL = MASTRA_GATEWAY_DEFAULT_URL;
-
-/** Valid persisted thinking level values. */
-export type ThinkingLevelSetting = 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
 /** Browser provider type. */
 export type BrowserProvider = 'stagehand' | 'agent-browser';
@@ -414,7 +419,6 @@ const DEFAULTS: GlobalSettings = {
   observability: { resources: {}, localTracing: false },
 };
 
-export const THINKING_LEVEL_VALUES: ThinkingLevelSetting[] = ['off', 'low', 'medium', 'high', 'xhigh', 'max'];
 const QUIET_MODE_MAX_TOOL_PREVIEW_LINES_MAX = 8;
 const loadedSignalSettings = new WeakMap<GlobalSettings, SignalSettings>();
 
@@ -435,13 +439,7 @@ function signalSettingsEqual(left: SignalSettings, right: SignalSettings): boole
 }
 
 function parseThinkingLevel(value: unknown): ThinkingLevelSetting {
-  return typeof value === 'string' && THINKING_LEVEL_VALUES.includes(value as ThinkingLevelSetting)
-    ? (value as ThinkingLevelSetting)
-    : DEFAULTS.preferences.thinkingLevel;
-}
-
-export function isThinkingLevelSetting(value: unknown): value is ThinkingLevelSetting {
-  return typeof value === 'string' && THINKING_LEVEL_VALUES.includes(value as ThinkingLevelSetting);
+  return isThinkingLevelSetting(value) ? value : DEFAULTS.preferences.thinkingLevel;
 }
 
 function parseModeThinkingDefaults(value: unknown): Record<string, ThinkingLevelSetting> {
@@ -1077,9 +1075,6 @@ export function resolveModelDefaults(
   return modeDefaults;
 }
 
-/** Where a resolved default thinking level came from. */
-export type ThinkingLevelSource = 'mode-default' | 'global';
-
 /**
  * Resolve the default reasoning-effort level for a mode.
  *
@@ -1094,9 +1089,13 @@ export function resolveDefaultThinkingLevel(
   settings: GlobalSettings,
   mode?: string | null,
 ): { level: ThinkingLevelSetting; source: ThinkingLevelSource } {
-  const modeLevel = mode ? settings.models.modeThinkingDefaults[mode] : undefined;
-  if (modeLevel) return { level: modeLevel, source: 'mode-default' };
-  return { level: settings.preferences.thinkingLevel, source: 'global' };
+  return resolveThinkingDefault(
+    {
+      globalDefault: settings.preferences.thinkingLevel,
+      modeDefaults: settings.models.modeThinkingDefaults,
+    },
+    mode,
+  );
 }
 
 /**

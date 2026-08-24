@@ -1,5 +1,39 @@
 # mastra
 
+## 1.26.1-alpha.7
+
+### Patch Changes
+
+- Fixed Factory chat `/think` so selecting the command opens an inline thinking-level picker with the active choice marked. Direct commands can still set, inspect, and clear session reasoning overrides with the same semantics as the Mastra Code TUI. ([#22198](https://github.com/mastra-ai/mastra/pull/22198))
+
+  ```text
+  /think high
+  /think status
+  /think default
+  ```
+
+- Updated dependencies [[`ae8790c`](https://github.com/mastra-ai/mastra/commit/ae8790c4bfaa088d2ab279d1dcc06f326b9fd109), [`04a815f`](https://github.com/mastra-ai/mastra/commit/04a815fc8971d29e97fcdcc5008a1eb472fc00ff), [`cced745`](https://github.com/mastra-ai/mastra/commit/cced745a056ec2225c5bc702e32d848847aa8b65)]:
+  - @mastra/core@1.62.0-alpha.7
+  - @mastra/deployer@1.62.0-alpha.7
+
+## 1.26.1-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`c8e4cea`](https://github.com/mastra-ai/mastra/commit/c8e4ceac9a390d78c8327dff3cdb2861dd71957f), [`ed01e9a`](https://github.com/mastra-ai/mastra/commit/ed01e9a807514a904374bf687a7b8f18750f6f78), [`4e9a228`](https://github.com/mastra-ai/mastra/commit/4e9a2283d5fd6ed1b70a2751eb3dc2cbf82ada20), [`63041eb`](https://github.com/mastra-ai/mastra/commit/63041eb4c50b520a0a80e03d4cd6ea99f67715a0)]:
+  - @mastra/core@1.62.0-alpha.6
+  - @mastra/deployer@1.62.0-alpha.6
+
+## 1.26.1-alpha.5
+
+### Patch Changes
+
+- Fixed restored MastraCode threads revealing message fragments out of order during startup. ([#22160](https://github.com/mastra-ai/mastra/pull/22160))
+
+- Updated dependencies [[`65edab1`](https://github.com/mastra-ai/mastra/commit/65edab1c233d17b8f163bad12fca410d0e6f16b1), [`ab20a38`](https://github.com/mastra-ai/mastra/commit/ab20a38d0275f8d85e0f3833bd87ef487bcc609f), [`dbbfeb8`](https://github.com/mastra-ai/mastra/commit/dbbfeb85ec949dc9ebc0755e1ad262e4f5eba8db), [`3cc9d00`](https://github.com/mastra-ai/mastra/commit/3cc9d00b2b4333e0377a5e9df5eff92c17ce7630), [`733a537`](https://github.com/mastra-ai/mastra/commit/733a537489a858b5880b2e98809334fba895a221), [`9207dfa`](https://github.com/mastra-ai/mastra/commit/9207dfab8062e5fc68b751684797ff86fe0b4e70), [`12c61d2`](https://github.com/mastra-ai/mastra/commit/12c61d280c8cb208bc3c8dbcbe5dcc60cf9d1cd0), [`9a12ef3`](https://github.com/mastra-ai/mastra/commit/9a12ef3fccf3f4186db0f294f4ee1f02cf4d8db2)]:
+  - @mastra/core@1.62.0-alpha.5
+  - @mastra/deployer@1.62.0-alpha.5
+
 ## 1.26.1-alpha.4
 
 ### Patch Changes

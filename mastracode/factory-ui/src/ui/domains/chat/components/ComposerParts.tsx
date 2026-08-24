@@ -2,40 +2,50 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { ComposerAttachments } from '@mastra/playground-ui/components/Composer';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { X } from 'lucide-react';
+import { ArrowLeft, Check, X } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 
-import type { SlashCommand } from '../services/commands';
 import type { PendingImage } from './useComposerImages';
 
+export interface ComposerSuggestionItem {
+  id: string;
+  label: string;
+  description?: string;
+  active?: boolean;
+}
+
 export function ComposerSuggestions({
-  suggestions,
+  items,
   activeIndex,
+  contextLabel,
+  onBack,
   onSelect,
 }: {
-  suggestions: SlashCommand[];
+  items: ComposerSuggestionItem[];
   activeIndex: number;
-  onSelect: (name: string) => void;
+  contextLabel?: string;
+  onBack?: () => void;
+  onSelect: (index: number) => void;
 }) {
-  const open = suggestions.length > 0;
-  const retainedSuggestionsRef = useRef(suggestions);
+  const open = items.length > 0;
+  const retainedItemsRef = useRef(items);
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
-  const displayedSuggestions = open ? suggestions : retainedSuggestionsRef.current;
-  const activeCommandName = displayedSuggestions[activeIndex]?.name;
+  const displayedItems = open ? items : retainedItemsRef.current;
+  const activeItemId = displayedItems[activeIndex]?.id;
 
   useEffect(() => {
-    if (open) retainedSuggestionsRef.current = suggestions;
-  }, [open, suggestions]);
+    if (open) retainedItemsRef.current = items;
+  }, [items, open]);
 
   useEffect(() => {
     if (open) optionRefs.current[activeIndex]?.scrollIntoView({ block: 'nearest' });
-  }, [activeCommandName, activeIndex, open]);
+  }, [activeIndex, activeItemId, open]);
 
   return (
     <div
       inert={!open}
       role="region"
-      aria-label="Slash commands"
+      aria-label={contextLabel ? `${contextLabel} options` : 'Slash commands'}
       aria-hidden={!open}
       className={cn(
         "after:bg-border1/60 relative grid overflow-hidden transition-[grid-template-rows,opacity] after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-px after:content-[''] ease-out-custom motion-reduce:transition-none",
@@ -43,26 +53,53 @@ export function ComposerSuggestions({
       )}
     >
       <div className="min-h-0 overflow-hidden">
+        {contextLabel && onBack && (
+          <div className="border-border1/60 border-b px-1.5 py-1">
+            <button
+              type="button"
+              className="text-icon3 hover:bg-surface4 hover:text-icon6 text-ui-sm flex items-center gap-1.5 rounded-xl px-2 py-1.5 transition-colors duration-150 ease-out motion-reduce:transition-none"
+              aria-label="Back to slash commands"
+              onMouseDown={event => {
+                event.preventDefault();
+                onBack();
+              }}
+            >
+              <ArrowLeft size={14} aria-hidden="true" />
+              <span>{contextLabel}</span>
+            </button>
+          </div>
+        )}
         <ScrollArea maxHeight="min(22rem, 50dvh)" viewPortClassName="overscroll-contain">
           <div className="flex flex-col gap-px p-1.5">
-            {displayedSuggestions.map((command, index) => (
+            {displayedItems.map((item, index) => (
               <button
                 ref={element => {
                   optionRefs.current[index] = element;
                 }}
-                key={command.name}
+                key={item.id}
                 type="button"
+                aria-current={item.active ? 'true' : undefined}
                 className={cn(
                   'flex w-full cursor-pointer items-center justify-between gap-4 rounded-2xl px-2 py-1.5 text-left text-ui-sm transition-colors duration-150 ease-out motion-reduce:transition-none',
                   index === activeIndex ? 'bg-surface4 text-icon6' : 'text-icon3 hover:bg-surface4 hover:text-icon6',
                 )}
                 onMouseDown={event => {
                   event.preventDefault();
-                  onSelect(command.name);
+                  onSelect(index);
                 }}
               >
-                <span className="shrink-0">/{command.name}</span>
-                <span className="min-w-0 truncate text-right">{command.description}</span>
+                <span className="shrink-0">{item.label}</span>
+                {(item.description || item.active) && (
+                  <span className="flex min-w-0 items-center gap-1.5 text-right">
+                    {item.description && <span className="truncate">{item.description}</span>}
+                    {item.active && (
+                      <span className="flex shrink-0 items-center gap-1">
+                        <Check size={13} aria-hidden="true" />
+                        Current
+                      </span>
+                    )}
+                  </span>
+                )}
               </button>
             ))}
           </div>

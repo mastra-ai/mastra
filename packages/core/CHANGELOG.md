@@ -1,5 +1,84 @@
 # @mastra/core
 
+## 1.62.0-alpha.7
+
+### Patch Changes
+
+- Route channel slash commands through AgentChannels handlers ([#22223](https://github.com/mastra-ai/mastra/pull/22223))
+
+- Fixed cleared AgentController session preferences so they are removed from thread metadata and stay cleared after restart. ([#22198](https://github.com/mastra-ai/mastra/pull/22198))
+
+- Added a `denied` flag to the agent controller `tool_end` event. Approval-denied tool calls and tools aborted while parked at an approval gate already emit `tool_end` with `isError: false` (the tool didn't fail — it never ran), which made them indistinguishable from a real successful completion. Subscribers that need to know whether the tool actually did work can now gate on `denied !== true`. ([#22213](https://github.com/mastra-ai/mastra/pull/22213))
+
+  ```ts
+  session.subscribe(event => {
+    if (event.type !== 'tool_end') return;
+    if (event.isError) return; // tool ran and failed
+    if (event.denied) return; // tool was approval-denied or aborted before it ran
+    // ...tool actually executed successfully
+  });
+  ```
+
+## 1.62.0-alpha.6
+
+### Patch Changes
+
+- Fixed semantic recall initialization to fail instead of silently selecting the default vector index when embedding dimensions cannot be determined. ([#22171](https://github.com/mastra-ai/mastra/pull/22171))
+
+- Fixed `timeTravel()` on a failed `.foreach()` step re-running iterations that had already succeeded, which duplicated their side effects (publishing, billing, uploads, notifications). ([#22133](https://github.com/mastra-ai/mastra/pull/22133))
+
+  A failed foreach now records which iterations completed, so re-entering the step only runs the ones that did not.
+
+  ```ts
+  const run = await workflow.createRunAsync();
+  await run.start({ inputData: { items: [1, 2] } }); // item 2 fails
+
+  // Previously both items ran again. Now only item 2 runs.
+  await run.timeTravel({ step: 'process-item' });
+  ```
+
+  Fixes #21749
+
+- Prevent stale-build instances from executing scheduled workflow runs. ([#22125](https://github.com/mastra-ai/mastra/pull/22125))
+
+  A scheduled fire carries only a workflow id, so whichever process consumes it resolves the step graph from its _own_ registry. During a rollout a not-yet-cycled instance from the previous deploy could therefore run an outdated step graph — skipping steps the current build had added, including gates meant to stop the workflow from running at all — while HTTP runs of the same workflow on the same deployment executed the current graph (#19169).
+
+  This is now fenced on both sides:
+
+  - Declarative schedule rows record a hash of the workflow's serialized step graph. The scheduler refuses to claim a due fire when its local definition doesn't match the row, leaving the fire for an instance running the current build. If no instance claims it for several consecutive ticks, the scheduler escalates to an error and records a failed trigger rather than stalling silently — it never forces a stale fire through.
+  - When the claiming process also runs workflow execution, the fire is published `localOnly` so the instance that verified the definition is the instance that runs it. Scheduler-only deployments, where pinning locally would strand the fire, keep publishing to the shared topic.
+  - Fires that do reach the shared topic now carry the schedule's definition hash, and a consumer whose locally registered workflow hashes differently refuses the run and records a failed trigger instead of executing an outdated graph.
+
+  Rows without a hash (legacy or imperatively created schedules) and agent schedules fail open and are unaffected.
+
+- Documented that `server.middleware` handlers use Hono's signature and which serving paths run them. ([#22161](https://github.com/mastra-ai/mastra/pull/22161))
+
+## 1.62.0-alpha.5
+
+### Patch Changes
+
+- Fixed channel render failures crashing the host process before stream cleanup. ([#22165](https://github.com/mastra-ai/mastra/pull/22165))
+
+- Fixed nested workflow steps being omitted from foreach run details. ([#22144](https://github.com/mastra-ai/mastra/pull/22144))
+
+- Fixed cross-provider agent conversations leaking provider-hosted tool IDs into incompatible model requests. ([#22148](https://github.com/mastra-ai/mastra/pull/22148))
+
+- Preserve response message source tracking when processors return unchanged messages in multi-step agent runs ([#22146](https://github.com/mastra-ai/mastra/pull/22146))
+
+- Fixed durable agent runs ignoring aborts requested before execution starts. ([#22145](https://github.com/mastra-ai/mastra/pull/22145))
+
+- Add a `/context` command (alias `/ctx`) to Mastra Code that reports what is occupying the context window. ([#22131](https://github.com/mastra-ai/mastra/pull/22131))
+
+  The report separates the startup context — system prompt, AGENTS.md/CLAUDE.md instructions with their source paths, the skills catalog, and MCP tool definitions rolled up per server — from context that accumulates during the session, namely the conversation itself and any observation memory injected into it. Each line carries an estimated token count and its share of the audited total, so it is possible to see which server, instruction file, or skill set is worth pruning.
+
+  The audit reports only sizes and labels, never the audited content, and is printed to the terminal without being added to the conversation, so running it does not enlarge the context it describes.
+
+  To support exact measurement, `@mastra/core` now exports `formatSkillsCatalog`, the pure formatter behind the skills processor's `<available_skills>` block, and `@mastra/code-sdk` exposes the assembled system prompt as labeled sections.
+
+- Fixed suspended run cleanup so cross-instance resumes keep their active thread lease. ([#22150](https://github.com/mastra-ai/mastra/pull/22150))
+
+- Fixed agent model calls to honor `modelSettings.maxRetries` when no retry count is explicitly configured on the agent or fallback model. Agents with no retry configuration continue to make a single attempt by default, while explicit agent or fallback settings—including `maxRetries: 0`—continue to override call-time settings. ([#21947](https://github.com/mastra-ai/mastra/pull/21947))
+
 ## 1.62.0-alpha.4
 
 ### Patch Changes

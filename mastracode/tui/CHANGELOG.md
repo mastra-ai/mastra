@@ -1,5 +1,54 @@
 # mastracode
 
+## 0.36.0-alpha.7
+
+### Patch Changes
+
+- Added browser-safe thinking command helpers so Mastra Code interfaces can share command parsing, model capabilities, and default resolution. ([#22198](https://github.com/mastra-ai/mastra/pull/22198))
+
+  ```ts
+  import { parseThinkCommand, resolveDefaultThinkingLevel } from '@mastra/code-sdk/thinking';
+
+  const action = parseThinkCommand('high');
+  const fallback = resolveDefaultThinkingLevel({ globalDefault: 'medium', modeDefaults: { plan: 'high' } }, 'plan');
+  ```
+
+- Updated dependencies [[`db6940e`](https://github.com/mastra-ai/mastra/commit/db6940ea63b76df2bc0a7c105a493342b9eaf0ec), [`ae8790c`](https://github.com/mastra-ai/mastra/commit/ae8790c4bfaa088d2ab279d1dcc06f326b9fd109), [`04a815f`](https://github.com/mastra-ai/mastra/commit/04a815fc8971d29e97fcdcc5008a1eb472fc00ff), [`dfb7efa`](https://github.com/mastra-ai/mastra/commit/dfb7efa19e348b5a788be2d954362cbae12379d6), [`ee0c1a0`](https://github.com/mastra-ai/mastra/commit/ee0c1a097de3acebe7dfc8c136479d4cb5b5b451), [`befbfc2`](https://github.com/mastra-ai/mastra/commit/befbfc260d5ec5ece7cdb65a80e94292f428d4c9), [`04a815f`](https://github.com/mastra-ai/mastra/commit/04a815fc8971d29e97fcdcc5008a1eb472fc00ff), [`db6940e`](https://github.com/mastra-ai/mastra/commit/db6940ea63b76df2bc0a7c105a493342b9eaf0ec), [`cced745`](https://github.com/mastra-ai/mastra/commit/cced745a056ec2225c5bc702e32d848847aa8b65)]:
+  - @mastra/libsql@1.22.0-alpha.1
+  - @mastra/core@1.62.0-alpha.7
+  - @mastra/code-sdk@1.5.0-alpha.7
+  - @mastra/mcp@1.17.2-alpha.2
+  - @mastra/memory@1.28.0-alpha.2
+
+## 0.36.0-alpha.6
+
+### Patch Changes
+
+- Improved the provider device-code sign-in dialog. The code is now the main element with an inline copy button, and copy failures show an error instead of failing silently. ([#22186](https://github.com/mastra-ai/mastra/pull/22186))
+
+- Updated dependencies [[`c8e4cea`](https://github.com/mastra-ai/mastra/commit/c8e4ceac9a390d78c8327dff3cdb2861dd71957f), [`ed01e9a`](https://github.com/mastra-ai/mastra/commit/ed01e9a807514a904374bf687a7b8f18750f6f78), [`a981e66`](https://github.com/mastra-ai/mastra/commit/a981e662ed8fc476292375d135cb14a2681efedf), [`ae2dc20`](https://github.com/mastra-ai/mastra/commit/ae2dc201dbb48466c3cf77e3d4ef04826132b2db), [`4e9a228`](https://github.com/mastra-ai/mastra/commit/4e9a2283d5fd6ed1b70a2751eb3dc2cbf82ada20), [`997cf5b`](https://github.com/mastra-ai/mastra/commit/997cf5bb3fc600b30aa20e048b663e48e0e1305a), [`63041eb`](https://github.com/mastra-ai/mastra/commit/63041eb4c50b520a0a80e03d4cd6ea99f67715a0)]:
+  - @mastra/core@1.62.0-alpha.6
+  - @mastra/pg@1.22.0-alpha.3
+  - @mastra/mcp@1.17.2-alpha.1
+  - @mastra/code-sdk@1.5.0-alpha.6
+
+## 0.36.0-alpha.5
+
+### Patch Changes
+
+- Add a `/context` command (alias `/ctx`) to Mastra Code that reports what is occupying the context window. ([#22131](https://github.com/mastra-ai/mastra/pull/22131))
+
+  The report separates the startup context — system prompt, AGENTS.md/CLAUDE.md instructions with their source paths, the skills catalog, and MCP tool definitions rolled up per server — from context that accumulates during the session, namely the conversation itself and any observation memory injected into it. Each line carries an estimated token count and its share of the audited total, so it is possible to see which server, instruction file, or skill set is worth pruning.
+
+  The audit reports only sizes and labels, never the audited content, and is printed to the terminal without being added to the conversation, so running it does not enlarge the context it describes.
+
+  To support exact measurement, `@mastra/core` now exports `formatSkillsCatalog`, the pure formatter behind the skills processor's `<available_skills>` block, and `@mastra/code-sdk` exposes the assembled system prompt as labeled sections.
+
+- Updated dependencies [[`65edab1`](https://github.com/mastra-ai/mastra/commit/65edab1c233d17b8f163bad12fca410d0e6f16b1), [`ab20a38`](https://github.com/mastra-ai/mastra/commit/ab20a38d0275f8d85e0f3833bd87ef487bcc609f), [`dbbfeb8`](https://github.com/mastra-ai/mastra/commit/dbbfeb85ec949dc9ebc0755e1ad262e4f5eba8db), [`3cc9d00`](https://github.com/mastra-ai/mastra/commit/3cc9d00b2b4333e0377a5e9df5eff92c17ce7630), [`733a537`](https://github.com/mastra-ai/mastra/commit/733a537489a858b5880b2e98809334fba895a221), [`d55807c`](https://github.com/mastra-ai/mastra/commit/d55807cb9f080f3f5d1db06aca02b8fe0992507e), [`9207dfa`](https://github.com/mastra-ai/mastra/commit/9207dfab8062e5fc68b751684797ff86fe0b4e70), [`12c61d2`](https://github.com/mastra-ai/mastra/commit/12c61d280c8cb208bc3c8dbcbe5dcc60cf9d1cd0), [`9a12ef3`](https://github.com/mastra-ai/mastra/commit/9a12ef3fccf3f4186db0f294f4ee1f02cf4d8db2)]:
+  - @mastra/core@1.62.0-alpha.5
+  - @mastra/memory@1.28.0-alpha.1
+  - @mastra/code-sdk@1.5.0-alpha.5
+
 ## 0.36.0-alpha.4
 
 ### Patch Changes

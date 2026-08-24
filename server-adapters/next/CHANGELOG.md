@@ -1,5 +1,40 @@
 # @mastra/next
 
+## 0.2.18-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [[`ae8790c`](https://github.com/mastra-ai/mastra/commit/ae8790c4bfaa088d2ab279d1dcc06f326b9fd109), [`04a815f`](https://github.com/mastra-ai/mastra/commit/04a815fc8971d29e97fcdcc5008a1eb472fc00ff), [`cced745`](https://github.com/mastra-ai/mastra/commit/cced745a056ec2225c5bc702e32d848847aa8b65)]:
+  - @mastra/core@1.62.0-alpha.7
+  - @mastra/hono@1.7.2-alpha.7
+  - @mastra/server@1.62.0-alpha.7
+
+## 0.2.18-alpha.6
+
+### Patch Changes
+
+- Fixed `server.middleware` and middleware added via `mastra.setServerMiddleware()` being silently ignored when Mastra is served through a server adapter instead of `mastra dev` / `mastra build`. ([#22161](https://github.com/mastra-ai/mastra/pull/22161))
+
+  Hono-based adapters (`@mastra/hono`, and `@mastra/next` / `@mastra/tanstack-start` which build on it) now register the configured middleware during `init()`, with the same guarantee as the built-in server: user middleware never runs on routes declared public with `requiresAuth: false`. Adapters for other frameworks (Express, Fastify, Koa) cannot run Hono middleware handlers and now log a warning at startup instead of silently ignoring the configuration.
+
+  Also fixed custom routes with `requiresAuth: false` not being treated as framework-public when the adapter derives its route auth configuration from the Mastra instance instead of receiving it in the constructor.
+
+  Fixes https://github.com/mastra-ai/mastra/issues/21869
+
+- Updated dependencies [[`63041eb`](https://github.com/mastra-ai/mastra/commit/63041eb4c50b520a0a80e03d4cd6ea99f67715a0), [`c8e4cea`](https://github.com/mastra-ai/mastra/commit/c8e4ceac9a390d78c8327dff3cdb2861dd71957f), [`ed01e9a`](https://github.com/mastra-ai/mastra/commit/ed01e9a807514a904374bf687a7b8f18750f6f78), [`4e9a228`](https://github.com/mastra-ai/mastra/commit/4e9a2283d5fd6ed1b70a2751eb3dc2cbf82ada20), [`63041eb`](https://github.com/mastra-ai/mastra/commit/63041eb4c50b520a0a80e03d4cd6ea99f67715a0)]:
+  - @mastra/hono@1.7.2-alpha.6
+  - @mastra/server@1.62.0-alpha.6
+  - @mastra/core@1.62.0-alpha.6
+
+## 0.2.18-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`65edab1`](https://github.com/mastra-ai/mastra/commit/65edab1c233d17b8f163bad12fca410d0e6f16b1), [`ab20a38`](https://github.com/mastra-ai/mastra/commit/ab20a38d0275f8d85e0f3833bd87ef487bcc609f), [`dbbfeb8`](https://github.com/mastra-ai/mastra/commit/dbbfeb85ec949dc9ebc0755e1ad262e4f5eba8db), [`3cc9d00`](https://github.com/mastra-ai/mastra/commit/3cc9d00b2b4333e0377a5e9df5eff92c17ce7630), [`733a537`](https://github.com/mastra-ai/mastra/commit/733a537489a858b5880b2e98809334fba895a221), [`9207dfa`](https://github.com/mastra-ai/mastra/commit/9207dfab8062e5fc68b751684797ff86fe0b4e70), [`12c61d2`](https://github.com/mastra-ai/mastra/commit/12c61d280c8cb208bc3c8dbcbe5dcc60cf9d1cd0), [`9a12ef3`](https://github.com/mastra-ai/mastra/commit/9a12ef3fccf3f4186db0f294f4ee1f02cf4d8db2)]:
+  - @mastra/core@1.62.0-alpha.5
+  - @mastra/hono@1.7.2-alpha.5
+  - @mastra/server@1.62.0-alpha.5
+
 ## 0.2.18-alpha.4
 
 ### Patch Changes

@@ -2,14 +2,14 @@ import { createContext, useContext, useRef, useState } from 'react';
 import type { ReactNode, RefObject } from 'react';
 
 import type { SlashCommand } from '../services/commands';
-import { useRunPaletteCommand } from './useRunPaletteCommand';
+import { useChatCommandRegistry } from './useChatCommandRegistry';
 
 export interface ChatCommandsApi {
   composerDraft: string;
   composerInputRef: RefObject<HTMLTextAreaElement | null>;
   setComposerDraft: (draft: string) => void;
   prefillComposer: (draft: string) => void;
-  run: (command: SlashCommand) => void;
+  commands: SlashCommand[];
   runComposerCommand: (text: string) => Promise<boolean>;
 }
 
@@ -22,14 +22,14 @@ export function ChatCommandsProvider({ children }: { children: ReactNode }) {
     setComposerDraft(draft);
     requestAnimationFrame(() => composerInputRef.current?.focus());
   };
-  const { run, runComposerCommand } = useRunPaletteCommand(prefillComposer);
+  const { commands, runComposerCommand } = useChatCommandRegistry(prefillComposer);
 
   const value: ChatCommandsApi = {
     composerDraft,
     composerInputRef,
     setComposerDraft,
     prefillComposer,
-    run,
+    commands,
     runComposerCommand,
   };
 
