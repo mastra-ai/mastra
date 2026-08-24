@@ -84,7 +84,7 @@ describe('observeSessionThreadTitle', () => {
     );
   });
 
-  it('renames the session row when observational memory refines the title', async () => {
+  it('leaves the row alone when observational memory refines the thread title', async () => {
     const { session, emit } = createSession();
     const dependencies = createDependencies('Log format parser');
     observeSessionThreadTitle(session, dependencies);
@@ -97,12 +97,8 @@ describe('observeSessionThreadTitle', () => {
       newTitle: 'Log parser rewrite',
     });
 
-    await vi.waitFor(() =>
-      expect(dependencies.sourceControl.sessions.rename).toHaveBeenCalledExactlyOnceWith({
-        sessionId: 'resource-1',
-        title: 'Log parser rewrite',
-      }),
-    );
+    await vi.waitFor(() => expect(dependencies.sourceControl.sessions.getBySessionId).not.toHaveBeenCalled());
+    expect(dependencies.sourceControl.sessions.rename).not.toHaveBeenCalled();
   });
 
   it('backfills a session row that never saw a rename event, on the next thread bind', async () => {
