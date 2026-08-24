@@ -21,6 +21,7 @@
     "@mastra/loggers": "latest",
     "@mastra/memory": "latest",
     "@mastra/observability": "latest",
+    "gray-matter": "^4.0.3",
     "zod": "^4.3.6"
   },
   "devDependencies": {

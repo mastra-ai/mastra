@@ -7,6 +7,8 @@ import { LocalFilesystem, LocalSandbox, WORKSPACE_TOOLS, Workspace } from '@mast
 import { Memory } from '@mastra/memory';
 
 import { installsSkillsElsewhere, requiresApproval, requiresUserTerminal } from '../approval';
+import { circleDocFetched, readCircleDoc } from '../circle-docs';
+import { ClampedSkillSource } from '../skill-source';
 
 // The skills registry's global install directory, which `~/.claude/skills` and its equivalents
 // symlink into. Mastra reads the same files Claude Code and Codex do, so a skill is installed once
@@ -84,13 +86,21 @@ const workspace = new Workspace({
   // carry, so the agent redirects it to a file and goes back for the part it needs. Uncontained
   // because the sandbox already reaches the whole filesystem, so this grants nothing new.
   filesystem: new LocalFilesystem({ basePath: homedir(), contained: false }),
+  // Read from disk, so a skill appears here once the agent has installed it and not before. The
+  // skills live on the workspace rather than on the agent because only the workspace takes a
+  // source, and a source is what lets Circle's over-long descriptions through — see
+  // `../skill-source`.
+  skills: [SKILLS_DIR],
+  skillSource: new ClampedSkillSource(),
   tools: {
     // Commands the user has to run themselves never reach the shell, and neither does the install
     // that would strand the skills off to one side. Returning the refusal as the tool's own result
     // — rather than suspending for an approval the user cannot usefully grant — tells the model
-    // what to do next in the place it is already reading.
+    // what to do next in the place it is already reading. The same door answers a fetch of one of
+    // Circle's documents with the document itself, because the shell would hand back only its
+    // last page.
     hooks: {
-      beforeToolCall: ({ workspaceToolName, input }) => {
+      beforeToolCall: async ({ workspaceToolName, input }) => {
         if (workspaceToolName !== WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND) return;
         const command = String((input as { command?: unknown })?.command ?? '');
         if (requiresUserTerminal(command)) {
@@ -114,7 +124,29 @@ const workspace = new Workspace({
               'output is expected. Then carry on with the setup.',
           };
         }
+        const docUrl = circleDocFetched(command);
+        if (docUrl) {
+          const doc = await readCircleDoc(docUrl);
+          // A failed fetch falls through to the shell rather than reporting an error: `curl` may
+          // succeed where this did not, and a truncated document beats none at all.
+          if (doc) return { proceed: false, output: doc };
+        }
         return;
+      },
+      // A catalogue built before the install does not contain what the install just wrote, and
+      // Mastra only re-reads the directory every 30 seconds — a window the agent crosses in one
+      // step, so the skill it installed is missing from the tool that would activate it. Rather
+      // than guess how the install was spelled, this asks the cheaper question: the skill is on
+      // disk and it is not in the catalogue, so the catalogue is stale. `refresh()` rebuilds it
+      // now, where `maybeRefresh()` would decline until the window expired.
+      afterToolCall: async ({ workspaceToolName }) => {
+        if (workspaceToolName !== WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND) return;
+        if (!(await hasSkills())) return;
+        const skills = workspace.skills;
+        if (!skills) return;
+        const known = await skills.list();
+        if (known.some(skill => skill.name === CIRCLE_SKILL)) return;
+        await skills.refresh();
       },
     },
     // The shell, plus reading. Writing, editing and deleting stay off — the shell does those, under
@@ -162,8 +194,6 @@ export const circlePaymentAgent = new Agent({
   },
   model: 'openai/gpt-5.6-sol',
   workspace,
-  // Read from disk, so a skill appears here once the agent has installed it and not before.
-  skills: [SKILLS_DIR],
   memory: new Memory({
     options: {
       generateTitle: true,
