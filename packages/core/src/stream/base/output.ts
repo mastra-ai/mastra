@@ -1045,9 +1045,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     steps: [...self.#bufferedSteps] as LLMStepResult[],
                   };
 
-                  // Canceled runs still pass through the normal output-processor pipeline so
-                  // MessageHistory can persist submitted input, completed tool side effects,
-                  // and any nonblank response that reached this terminal output.
+                  // Canceled output bypasses the normal LLM-step response assembly. Add its
+                  // nonblank in-flight text to MessageList so every output processor receives
+                  // the same terminal transcript shape; persistence remains processor-owned.
                   if (self.#status === 'canceled' && self.#bufferedByStep.text.trim().length > 0) {
                     self.messageList.add(
                       {
