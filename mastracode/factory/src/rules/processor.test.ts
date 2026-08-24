@@ -386,22 +386,51 @@ describe('FactoryPhaseStateProcessor', () => {
     expect(signal?.contents).not.toContain('Runtime:');
   });
 
-  it('re-emits phase state when the review runtime changes', async () => {
+  it('re-emits phase state when either review runtime field changes', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     await prepare(storage, 'review', 'pull-request');
     const rules = defaultFactoryRules({ version: 'rules-v1' });
     const processor = new FactoryPhaseStateProcessor({ rules, storage });
     const first = await processor.computeStateSignal(stateArgs(requestContext()));
-    const changed = await processor.computeStateSignal(
-      stateArgs(requestContext({ modelId: 'openai/gpt-5.5', thinkingLevel: 'xhigh' }), {
-        contextWindow: { hasSnapshot: true },
-        lastSnapshot: { metadata: { value: first?.metadata?.value } },
-        tracking: { currentCacheKey: first?.cacheKey },
-      }),
+    const priorState = {
+      contextWindow: { hasSnapshot: true },
+      lastSnapshot: { metadata: { value: first?.metadata?.value } },
+      tracking: { currentCacheKey: first?.cacheKey },
+    };
+    const modelChanged = await processor.computeStateSignal(
+      stateArgs(requestContext({ modelId: 'openai/gpt-5.5' }), priorState),
+    );
+    const reasoningChanged = await processor.computeStateSignal(
+      stateArgs(requestContext({ thinkingLevel: 'xhigh' }), priorState),
     );
 
-    expect(changed?.cacheKey).not.toBe(first?.cacheKey);
-    expect(changed?.contents).toContain('Runtime: model=openai/gpt-5.5, reasoning=xhigh');
+    expect(modelChanged?.cacheKey).not.toBe(first?.cacheKey);
+    expect(modelChanged).toMatchObject({
+      value: {
+        phase: { modelId: 'openai/gpt-5.5', thinkingLevel: 'high' },
+      },
+      attributes: { modelId: 'openai/gpt-5.5', thinkingLevel: 'high' },
+    });
+    expect(modelChanged?.contents).toContain('Runtime: model=openai/gpt-5.5, reasoning-setting=high');
+    expect(reasoningChanged?.cacheKey).not.toBe(first?.cacheKey);
+    expect(reasoningChanged).toMatchObject({
+      value: {
+        phase: { modelId: 'openai/gpt-5.6-sol', thinkingLevel: 'xhigh' },
+      },
+      attributes: { modelId: 'openai/gpt-5.6-sol', thinkingLevel: 'xhigh' },
+    });
+    expect(reasoningChanged?.contents).toContain('Runtime: model=openai/gpt-5.6-sol, reasoning-setting=xhigh');
+  });
+
+  it('rejects review phase state without a selected model', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    await prepare(storage, 'review', 'pull-request');
+    const rules = defaultFactoryRules({ version: 'rules-v1' });
+    const processor = new FactoryPhaseStateProcessor({ rules, storage });
+
+    await expect(processor.computeStateSignal(stateArgs(requestContext({ modelId: '' })))).rejects.toThrow(
+      'Factory review phase requires a selected session model.',
+    );
   });
 
   it('emits, suppresses, re-emits after compaction, and retracts a revoked phase snapshot', async () => {
