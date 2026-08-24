@@ -370,8 +370,6 @@ export class ReflectorRunner {
     let parsed: ReturnType<typeof parseReflectorOutput> = { observations: '', suggestedContinuation: undefined };
     let reflectedTokens = 0;
     let attemptNumber = 0;
-    /** Observations from the previous attempt, used to detect a no-progress ladder. */
-    let previousObservations: string | undefined;
 
     while (currentLevel <= maxLevel) {
       attemptNumber++;
@@ -494,18 +492,6 @@ export class ReflectorRunner {
         omDebug(`[OM:callReflector] degenerate output persists at maxLevel=${maxLevel}, breaking`);
         break;
       }
-
-      // Escalating the level changes the prompt. If a changed prompt still produced
-      // byte-identical output, the model is not responding to the level knob and further
-      // attempts cannot improve the result — stop instead of burning the rest of the ladder
-      // on model calls, marker writes and nested runs that are known to be wasted.
-      if (!parsed.degenerate && previousObservations !== undefined && parsed.observations === previousObservations) {
-        omDebug(
-          `[OM:callReflector] attempt #${attemptNumber} returned output identical to the previous attempt; escalating cannot help, stopping the ladder`,
-        );
-        break;
-      }
-      previousObservations = parsed.observations;
 
       // Emit failed marker and start marker for next retry
       if (streamContext?.writer) {
