@@ -212,4 +212,185 @@ describe('useCreateSkillTool', () => {
       expect(form().getValues('skills')).toEqual({});
     });
   });
+  describe('its schema and description', () => {
+    it('requires a name, description and instructions', () => {
+      const { result } = renderCreateSkillTool({ availableWorkspaces: [{ id: 'ws-1', name: 'One' }] });
+      const schema = result.current.tool.inputSchema!;
+
+      expect(schema.safeParse({ name: 'S', description: 'D', instructions: 'I' }).success).toBe(true);
+      expect(schema.safeParse({ name: '', description: 'D', instructions: 'I' }).success).toBe(false);
+      expect(schema.safeParse({ name: 'S', description: '', instructions: 'I' }).success).toBe(false);
+      expect(schema.safeParse({ name: 'S', description: 'D', instructions: '' }).success).toBe(false);
+      expect(schema.safeParse({ description: 'D', instructions: 'I' }).success).toBe(false);
+    });
+
+    it('accepts only the two visibilities', () => {
+      const { result } = renderCreateSkillTool({ availableWorkspaces: [{ id: 'ws-1', name: 'One' }] });
+      const base = { name: 'S', description: 'D', instructions: 'I' };
+      const schema = result.current.tool.inputSchema!;
+
+      expect(schema.safeParse({ ...base, visibility: 'private' }).success).toBe(true);
+      expect(schema.safeParse({ ...base, visibility: 'public' }).success).toBe(true);
+      expect(schema.safeParse({ ...base, visibility: 'unlisted' }).success).toBe(false);
+    });
+
+    it('leaves the workspace optional when only one is available', () => {
+      const { result } = renderCreateSkillTool({ availableWorkspaces: [{ id: 'ws-1', name: 'One' }] });
+      const base = { name: 'S', description: 'D', instructions: 'I' };
+      const schema = result.current.tool.inputSchema!;
+
+      expect(schema.safeParse(base).success).toBe(true);
+      expect(schema.safeParse({ ...base, workspaceId: 'ws-1' }).success).toBe(true);
+      expect(schema.safeParse({ ...base, workspaceId: 'ws-unknown' }).success).toBe(false);
+    });
+
+    it('requires the workspace once there is more than one', () => {
+      const { result } = renderCreateSkillTool({
+        availableWorkspaces: [
+          { id: 'ws-1', name: 'One' },
+          { id: 'ws-2', name: 'Two' },
+        ],
+      });
+      const base = { name: 'S', description: 'D', instructions: 'I' };
+      const schema = result.current.tool.inputSchema!;
+
+      expect(schema.safeParse(base).success).toBe(false);
+      expect(schema.safeParse({ ...base, workspaceId: 'ws-2' }).success).toBe(true);
+      expect(schema.safeParse({ ...base, workspaceId: 'ws-unknown' }).success).toBe(false);
+    });
+
+    it('accepts any workspace id when none are known', () => {
+      const { result } = renderCreateSkillTool();
+      const base = { name: 'S', description: 'D', instructions: 'I' };
+      const schema = result.current.tool.inputSchema!;
+
+      expect(schema.safeParse(base).success).toBe(true);
+      expect(schema.safeParse({ ...base, workspaceId: 'anything' }).success).toBe(true);
+    });
+
+    it('lists the available workspaces for the model', () => {
+      const { result } = renderCreateSkillTool({
+        availableWorkspaces: [
+          { id: 'ws-1', name: 'One' },
+          { id: 'ws-2', name: 'Two' },
+        ],
+      });
+
+      expect(result.current.tool.description).toContain('- ws-1: One\n- ws-2: Two');
+    });
+
+    it('says nothing about workspaces when none are available', () => {
+      const { result } = renderCreateSkillTool();
+
+      expect(result.current.tool.description).not.toContain('Available workspaces');
+      expect(result.current.tool.description).toContain('Create a new stored skill');
+    });
+
+    it('declares the success envelope it reports back', () => {
+      const { result } = renderCreateSkillTool();
+      const schema = result.current.tool.outputSchema!;
+
+      expect(schema.safeParse({ success: true, skillId: 'skill-1' }).success).toBe(true);
+      expect(schema.safeParse({ success: false, error: 'nope' }).success).toBe(true);
+      expect(schema.safeParse({ success: 'yes' }).success).toBe(false);
+      expect(schema.safeParse({ success: true, skillId: 42 }).success).toBe(false);
+      expect(schema.safeParse({}).success).toBe(false);
+    });
+  });
+
+  describe('when the caller names a workspace explicitly', () => {
+    it('uses it rather than the sole available one', async () => {
+      seedWritableAuth();
+      const writes = seedWorkspaceWrite();
+      const calls = seedSkillCreate();
+      const { result } = renderCreateSkillTool({
+        availableWorkspaces: [
+          { id: 'ws-1', name: 'One' },
+          { id: 'ws-2', name: 'Two' },
+        ],
+      });
+
+      await waitFor(() => expect(result.current.visibility).toBe('private'));
+      await runTool(result.current.tool, {
+        name: 'S',
+        description: 'D',
+        instructions: 'I',
+        workspaceId: 'ws-2',
+      });
+
+      await waitFor(() => expect(calls).toHaveLength(1));
+      // `workspaceId` is not part of the create body — it selects which workspace
+      // filesystem the skill files are written to.
+      expect(writes.length).toBeGreaterThan(0);
+      expect(writes.every(id => id === 'ws-2')).toBe(true);
+    });
+
+    it('ignores an empty workspace id and falls back to the sole workspace', async () => {
+      seedWritableAuth();
+      const writes = seedWorkspaceWrite();
+      const calls = seedSkillCreate();
+      const { result } = renderCreateSkillTool({ availableWorkspaces: [{ id: 'ws-1', name: 'One' }] });
+
+      await waitFor(() => expect(result.current.visibility).toBe('private'));
+      await runTool(result.current.tool, { name: 'S', description: 'D', instructions: 'I', workspaceId: '' });
+
+      await waitFor(() => expect(calls).toHaveLength(1));
+      expect(writes.length).toBeGreaterThan(0);
+      expect(writes.every(id => id === 'ws-1')).toBe(true);
+    });
+  });
+
+  describe('when the caller asks for a public skill', () => {
+    it('creates it public rather than falling back to the default', async () => {
+      seedWritableAuth();
+      seedWorkspaceWrite();
+      const calls = seedSkillCreate();
+      const { result } = renderCreateSkillTool({ availableWorkspaces: [{ id: 'ws-1', name: 'One' }] });
+
+      await waitFor(() => expect(result.current.visibility).toBe('private'));
+      await runTool(result.current.tool, {
+        name: 'S',
+        description: 'D',
+        instructions: 'I',
+        visibility: 'public',
+      });
+
+      await waitFor(() => expect(calls).toHaveLength(1));
+      expect(calls[0]?.visibility).toBe('public');
+    });
+  });
+
+  describe('when the server rejects the creation', () => {
+    it('reports the failure instead of throwing at the model', async () => {
+      seedWritableAuth();
+      seedWorkspaceWrite();
+      server.use(
+        http.post(`${BASE_URL}/api/stored/skills`, () => HttpResponse.json({ message: 'boom' }, { status: 500 })),
+      );
+      const { result } = renderCreateSkillTool({ availableWorkspaces: [{ id: 'ws-1', name: 'One' }] });
+
+      await waitFor(() => expect(result.current.visibility).toBe('private'));
+      const output = (await runTool(result.current.tool, {
+        name: 'S',
+        description: 'D',
+        instructions: 'I',
+      })) as { success: boolean; error?: string; skillId?: string };
+
+      expect(output.success).toBe(false);
+      expect(output.error).toBeTruthy();
+      expect(output.skillId).toBeUndefined();
+    });
+
+    it('leaves the form skills untouched', async () => {
+      seedWritableAuth();
+      seedWorkspaceWrite();
+      server.use(http.post(`${BASE_URL}/api/stored/skills`, () => new HttpResponse(null, { status: 500 })));
+      const { result, form } = renderCreateSkillTool({ availableWorkspaces: [{ id: 'ws-1', name: 'One' }] });
+
+      await waitFor(() => expect(result.current.visibility).toBe('private'));
+      await runTool(result.current.tool, { name: 'S', description: 'D', instructions: 'I' });
+
+      expect(form().getValues('skills')).toEqual({});
+    });
+  });
 });
