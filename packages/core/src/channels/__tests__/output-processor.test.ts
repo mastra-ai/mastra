@@ -342,10 +342,11 @@ describe('ChatChannelOutputProcessor', () => {
         channels,
         [
           { type: 'text-delta', payload: { text: 'first' } },
+          { type: 'finish', payload: {} },
           { type: 'step-finish', payload: { stepResult: { isContinued: true } } },
           { type: 'text-delta', payload: { text: 'second' } },
-          { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
           { type: 'finish', payload: {} },
+          { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
         ],
         chatThread,
       );
@@ -478,6 +479,48 @@ describe('ChatChannelOutputProcessor', () => {
       // 2 tools × 2 updates each (in_progress + complete) → 4 chunks total.
       expect(taskUpdates).toHaveLength(4);
       expect(new Set(taskUpdates.map(t => t.id))).toEqual(new Set(['t1', 't2']));
+    });
+
+    it("'grouped': keeps one plan open across per-step finish chunks", async () => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: true, toolDisplay: 'grouped' });
+      await drive(
+        channels,
+        [
+          { type: 'text-delta', payload: { text: 'first ' } },
+          {
+            type: 'tool-call',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } },
+          },
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' }, result: 'rainy' },
+          },
+          { type: 'finish', payload: {} },
+          { type: 'step-finish', payload: { stepResult: { isContinued: true } } },
+          { type: 'text-delta', payload: { text: 'second' } },
+          {
+            type: 'tool-call',
+            payload: { toolCallId: 't2', toolName: 'weather', args: { city: 'LA' } },
+          },
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't2', toolName: 'weather', args: { city: 'LA' }, result: 'sunny' },
+          },
+          { type: 'finish', payload: {} },
+          { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+        ],
+        chatThread,
+      );
+
+      const posts = calls.filter(c => c.kind === 'post');
+      expect(posts).toHaveLength(1);
+      const drained = await drainStreamingPlan((posts[0] as Extract<Call, { kind: 'post' }>).arg);
+      expect(drained.filter((piece): piece is string => typeof piece === 'string').join('')).toBe('first second');
+      const taskUpdates = drained.filter(
+        (piece): piece is { type: 'task_update'; id: string } =>
+          typeof piece === 'object' && (piece as any).type === 'task_update',
+      );
+      expect(new Set(taskUpdates.map(update => update.id))).toEqual(new Set(['t1', 't2']));
     });
 
     it("flushes pending OM tasks as 'complete' before closing the session", async () => {
