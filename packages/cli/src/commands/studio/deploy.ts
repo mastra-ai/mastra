@@ -83,11 +83,20 @@ export async function applyWorkersFlagGuard(deps: {
   // Fail-closed: no analytics → treat as flag-off → downgrade. Users on
   // MASTRA_TELEMETRY_DISABLED=1 will emit no manifest until we build a proper
   // out-of-band flag transport. That's the conservative rollout stance.
-  const flagOn = deps.analytics
-    ? await deps.analytics.isFeatureEnabled('platform-workers', {
+  //
+  // Defensive try/catch: `PosthogAnalytics.isFeatureEnabled` catches internally
+  // today, but we do not want this guard to break the deploy if a future
+  // refactor (or a custom analytics stub) violates the contract.
+  let flagOn = false;
+  if (deps.analytics) {
+    try {
+      flagOn = await deps.analytics.isFeatureEnabled('platform-workers', {
         groups: { organization: deps.orgId },
-      })
-    : false;
+      });
+    } catch {
+      flagOn = false;
+    }
+  }
 
   if (flagOn) {
     return { status: 'preserved' };

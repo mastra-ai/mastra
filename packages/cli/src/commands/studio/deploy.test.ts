@@ -977,14 +977,17 @@ describe('applyWorkersFlagGuard', () => {
     expect(fs.files[MANIFEST_PATH]).toBe('null');
   });
 
-  it('analytics.isFeatureEnabled throws → fail-CLOSED via the analytics contract (returns false → downgraded)', async () => {
-    // The real PosthogAnalytics.isFeatureEnabled catches internal errors and
-    // returns false; this test simulates that same contract.
+  it('analytics.isFeatureEnabled rejects → fail-CLOSED (guard swallows and downgrades)', async () => {
+    // Defensive test: even if a future analytics stub violates the contract by
+    // throwing/rejecting instead of returning false, the guard MUST NOT propagate
+    // the error and MUST default to flag-off (downgrade).
     const applyWorkersFlagGuard = await loadHelper();
     const fs = inMemoryFs({
       [MANIFEST_PATH]: JSON.stringify({ enabled: true }),
     });
-    const analytics = { isFeatureEnabled: vi.fn().mockResolvedValue(false) };
+    const analytics = {
+      isFeatureEnabled: vi.fn().mockRejectedValue(new Error('posthog down')),
+    };
 
     const result = await applyWorkersFlagGuard({
       outputDir: OUTPUT_DIR,
