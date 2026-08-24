@@ -175,7 +175,10 @@ describe('PlatformSandbox', () => {
   );
 
   it('uses provider-prefixed Railway routes for a template-backed sandbox when SANDBOX_PROVIDER is unset', async () => {
-    vi.unstubAllEnvs();
+    // Stub to empty rather than unstubbing: `vi.unstubAllEnvs()` restores the
+    // host environment, and CI runners can carry their own (unrelated)
+    // SANDBOX_PROVIDER value. Empty trims to falsy — same as unset.
+    vi.stubEnv('SANDBOX_PROVIDER', '');
     vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
     const fetchMock = vi
       .fn()
@@ -2647,7 +2650,8 @@ describe('PlatformSandbox', () => {
     });
 
     it('keeps provider-prefixed routes when cloning an unresolved lazy template', async () => {
-      vi.unstubAllEnvs();
+      // Empty, not unstubbed — see the SANDBOX_PROVIDER-unset test above.
+      vi.stubEnv('SANDBOX_PROVIDER', '');
       vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
       const resolveTemplate = vi.fn().mockResolvedValue(undefined);
       const fetchMock = vi
