@@ -24,6 +24,7 @@ import {
   combineObservationsForBuffering,
 } from '../message-utils';
 import { ModelByInputTokens } from '../model-by-input-tokens';
+import { ObservationBufferLease } from '../observation-buffer-lease';
 import {
   deriveObservationGroupProvenance,
   parseObservationGroups,
@@ -18499,6 +18500,139 @@ describe('Observation buffer claim ownership', () => {
     expect(after.observationBufferClaimToken).toBe('owner-b');
     const status = await storage.getObservationBufferClaimStatus(record.id);
     expect(status.live).toBe(true);
+  });
+
+  it('a commit rejected by takeover marks the lease lost, persists no end marker, and does not advance the local buffer cursor', async () => {
+    const storage = createInMemoryStorage();
+    await seedClaimThread(storage);
+
+    let releaseObserver: () => void = () => {};
+    const observerGate = new Promise<void>(r => (releaseObserver = r));
+    const { om, observerCalls } = createClaimOM(storage, { onObserve: () => observerGate });
+    // Renewal never fires: the fence must come from the commit outcome alone.
+    (om as any).observationBufferLeasePolicy = { leaseMs: 100, renewalIntervalMs: 3_600_000 };
+
+    let nowMs = Date.now();
+    storage.observationBufferClaimClock = () => new Date(nowMs);
+
+    const record = await om.getOrCreateRecord(claimThreadId, claimResourceId);
+    const bufferPromise = om.buffer({ threadId: claimThreadId, resourceId: claimResourceId });
+    await vi.waitFor(() => expect(observerCalls.length).toBe(1), { timeout: 2000 });
+
+    // A's lease expires while the model call is stuck; successor B takes over.
+    nowMs += 60_000;
+    const foreignB = await storage.acquireObservationBufferClaim({
+      id: record.id,
+      ownerToken: 'owner-b',
+      leaseMs: 300_000,
+    });
+    expect(foreignB.ok).toBe(true);
+
+    releaseObserver();
+    const result = await bufferPromise;
+
+    // The rejected commit, not the renewal loop, must fence the cycle.
+    expect(result.buffered).toBe(false);
+    const after = await om.getOrCreateRecord(claimThreadId, claimResourceId);
+    expect((after.bufferedObservationChunks ?? []).length).toBe(0);
+    expect(after.observationBufferClaimToken).toBe('owner-b');
+
+    // No successful buffering-end marker may be persisted for the fenced cycle.
+    const persisted = await storage.listMessages({
+      threadId: claimThreadId,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+      perPage: false,
+    });
+    const endMarkers = persisted.messages.filter(message =>
+      message.content.parts?.some((part: any) => part.type === 'data-om-buffering-end'),
+    );
+    expect(endMarkers).toHaveLength(0);
+
+    // The process-local cursor must not advance past messages that were never
+    // persisted, and the boundary must not advance to the success-path value.
+    const buffering = (om as any).buffering;
+    const bufferKey = buffering.getObservationBufferKey(buffering.getLockKey(claimThreadId, claimResourceId));
+    expect(BufferingCoordinator.lastBufferedAtTime.get(bufferKey)).toBeUndefined();
+    expect(BufferingCoordinator.lastBufferedBoundary.get(bufferKey) ?? 0).toBe(0);
+  });
+
+  it('release waits for an in-flight lease renewal and never releases after the renewal reports loss', async () => {
+    const events: string[] = [];
+    let resolveRenew: ((outcome: any) => void) | undefined;
+    const storage = {
+      acquireObservationBufferClaim: async () => ({
+        ok: true,
+        claim: {
+          ownerToken: 'x',
+          acquiredAt: new Date(),
+          renewedAt: new Date(),
+          expiresAt: new Date(Date.now() + 60_000),
+        },
+      }),
+      renewObservationBufferClaim: async () => {
+        events.push('renew-start');
+        return new Promise<any>(r => (resolveRenew = r));
+      },
+      releaseObservationBufferClaim: async () => {
+        events.push('release');
+        return { ok: true, claim: {} as any };
+      },
+    };
+    const lease = await ObservationBufferLease.acquire({
+      storage: storage as any,
+      recordId: 'rec-1',
+      policy: { leaseMs: 60_000, renewalIntervalMs: 10 },
+    });
+    expect(lease).not.toBeNull();
+
+    // Let the renewal timer fire and block mid-flight.
+    await vi.waitFor(() => expect(events).toContain('renew-start'), { timeout: 2000 });
+
+    const releasePromise = lease!.release();
+    // Release must not reach storage while the renewal is still in flight.
+    await new Promise(r => setTimeout(r, 20));
+    expect(events).not.toContain('release');
+
+    // The in-flight renewal reports a confirmed loss: release must be skipped entirely.
+    resolveRenew!({ ok: false, reason: 'lost' });
+    await releasePromise;
+    expect(events).not.toContain('release');
+    expect(lease!.lost).toBe(true);
+  });
+
+  it('release runs after an in-flight renewal that succeeds, in order', async () => {
+    const events: string[] = [];
+    let resolveRenew: ((outcome: any) => void) | undefined;
+    const claim = {
+      ownerToken: 'x',
+      acquiredAt: new Date(),
+      renewedAt: new Date(),
+      expiresAt: new Date(Date.now() + 60_000),
+    };
+    const storage = {
+      acquireObservationBufferClaim: async () => ({ ok: true, claim }),
+      renewObservationBufferClaim: async () => {
+        events.push('renew-start');
+        return new Promise<any>(r => (resolveRenew = r));
+      },
+      releaseObservationBufferClaim: async () => {
+        events.push('release');
+        return { ok: true, claim };
+      },
+    };
+    const lease = await ObservationBufferLease.acquire({
+      storage: storage as any,
+      recordId: 'rec-1',
+      policy: { leaseMs: 60_000, renewalIntervalMs: 10 },
+    });
+    await vi.waitFor(() => expect(events).toContain('renew-start'), { timeout: 2000 });
+
+    const releasePromise = lease!.release();
+    resolveRenew!({ ok: true, claim });
+    await releasePromise;
+
+    expect(events).toEqual(['renew-start', 'release']);
+    expect(lease!.lost).toBe(false);
   });
 
   it('same-process duplicate buffer() requests join the in-flight buffer claim cycle', async () => {

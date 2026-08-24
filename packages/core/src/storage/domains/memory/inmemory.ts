@@ -1366,11 +1366,16 @@ export class InMemoryMemory extends MemoryStorage {
       return { committed: false, reason: 'lost' };
     }
 
-    await this.updateBufferedObservations(input);
+    // updateBufferedObservations has no internal awaits, so invoking it runs
+    // the mutation synchronously in this same turn as the ownership predicate
+    // above; the boundary write below stays in that turn too, so no other
+    // claim operation can interleave between check and mutate.
+    const appended = this.updateBufferedObservations(input);
     if (input.lastBufferedAtTokens !== undefined) {
       record.lastBufferedAtTokens = input.lastBufferedAtTokens;
       record.updatedAt = now;
     }
+    await appended;
     return { committed: true };
   }
 

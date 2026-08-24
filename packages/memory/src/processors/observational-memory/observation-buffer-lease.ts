@@ -63,6 +63,8 @@ export class ObservationBufferLease {
   #lost = false;
   #released = false;
   #timer: ReturnType<typeof setTimeout> | undefined;
+  /** In-flight renewal, awaited by release() so teardown is ordered after it. */
+  #inFlightRenewal: Promise<void> | undefined;
   /** Client-side estimate of the last storage-confirmed expiry. */
   #lastConfirmedExpiresAtMs: number;
 
@@ -109,10 +111,25 @@ export class ObservationBufferLease {
     return this.#lost;
   }
 
+  /**
+   * Record a storage-confirmed ownership loss observed outside the renewal
+   * loop (e.g. an owner-conditioned commit returning `committed:false`).
+   * Stops renewal; a lost lease never attempts release.
+   */
+  markLost(): void {
+    this.#lost = true;
+    this.#stopRenewal();
+  }
+
   #scheduleRenewal() {
     if (this.#lost || this.#released) return;
     this.#timer = setTimeout(() => {
-      void this.#renewOnce().finally(() => this.#scheduleRenewal());
+      const renewal = this.#renewOnce();
+      this.#inFlightRenewal = renewal;
+      void renewal.finally(() => {
+        if (this.#inFlightRenewal === renewal) this.#inFlightRenewal = undefined;
+        this.#scheduleRenewal();
+      });
     }, this.#policy.renewalIntervalMs);
     // Renewal must never keep the process or memory.settled() alive; the
     // cycle's finally tears the loop down.
@@ -171,6 +188,12 @@ export class ObservationBufferLease {
     this.#stopRenewal();
     if (this.#released) return;
     this.#released = true;
+    // Order teardown after any renewal already in flight: a renewal racing
+    // release could otherwise interleave its storage write with the release,
+    // or report a loss we would miss.
+    if (this.#inFlightRenewal) {
+      await this.#inFlightRenewal.catch(() => {});
+    }
     if (this.#lost) return;
     try {
       await this.#storage.releaseObservationBufferClaim({ id: this.recordId, ownerToken: this.ownerToken });

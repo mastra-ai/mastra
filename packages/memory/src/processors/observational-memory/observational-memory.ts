@@ -2352,6 +2352,7 @@ ${formattedMessages}
           requestContext,
           observabilityContext,
           claimOwnerToken: lease.ownerToken,
+          onClaimLost: () => lease.markLost(),
         }).run(),
     );
 
@@ -3400,6 +3401,7 @@ ${formattedMessages}
             observabilityContext,
             claimOwnerToken: activeLease.ownerToken,
             claimBoundaryTokens: newTokens,
+            onClaimLost: () => activeLease.markLost(),
           }).run(),
       );
 

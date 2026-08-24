@@ -67,6 +67,11 @@ export abstract class ObservationStrategy {
   protected readonly reflectionConfig: ResolvedReflectionConfig;
   protected readonly scope: 'thread' | 'resource';
   protected readonly retrieval: boolean;
+  /**
+   * Set by `persist()` when the owner-conditioned commit was rejected by a
+   * takeover. `run()` then skips end markers and all post-commit effects.
+   */
+  protected commitRejected = false;
 
   /** Select the right strategy based on scope and mode. Wired up by index.ts. */
   static create: (om: unknown, opts: ObservationRunOpts) => ObservationStrategy;
@@ -107,6 +112,12 @@ export abstract class ObservationStrategy {
       const output = await this.observe(existingObservations, observationMessages);
       const processed = await this.process(output, existingObservations);
       await this.persist(processed);
+      if (this.commitRejected) {
+        // The owner-conditioned commit was fenced out by a takeover: the
+        // output was discarded, so no end markers, reflection, or other
+        // post-commit side effects may run for this cycle.
+        return { observed: false };
+      }
       await this.emitEndMarkers(cycleId, processed);
 
       if (this.needsReflection) {

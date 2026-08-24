@@ -39,6 +39,12 @@ export interface ObservationRunOpts {
    * update is fenced too.
    */
   claimBoundaryTokens?: number;
+  /**
+   * Invoked when the owner-conditioned commit is rejected because the claim
+   * was lost (async buffer only). Lets the owning lease mark itself lost so
+   * the caller's cursor/boundary/result handling treats the cycle as fenced.
+   */
+  onClaimLost?: () => void;
 
   writer?: ProcessorStreamWriter;
   abortSignal?: AbortSignal;

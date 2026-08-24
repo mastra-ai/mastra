@@ -170,6 +170,11 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
         omDebug(
           `[OM:asyncBuffer] buffer claim lost for record ${record.id} (cycle ${this.cycleId}); discarding buffered output`,
         );
+        // Propagate the fence: mark the run rejected so the base strategy
+        // skips end markers/reflection, and let the owning lease record loss
+        // so callers do not advance cursors or report success.
+        this.commitRejected = true;
+        this.opts.onClaimLost?.();
         return;
       }
     } else {
