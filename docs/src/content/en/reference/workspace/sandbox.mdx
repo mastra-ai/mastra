@@ -112,7 +112,7 @@ const result = await sandbox.executeCommand('npm', ['install', 'lodash'])
             name: 'env',
             type: 'Record<string, string>',
             description:
-              'Additional environment variables for this command. These take precedence over values set with `setEnv()`.',
+              'Additional environment variables for this command. These take precedence over the sandbox environment for this command execution only.',
             isOptional: true,
           },
           {
