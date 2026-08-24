@@ -1,6 +1,9 @@
 import type { CrumbDef } from './types';
 
 function nodeHeading(def: CrumbDef) {
+  // The guard only spells out the intent: a crumb with no `node` reads as
+  // `undefined`, which the string check below already rejects.
+  // Stryker disable next-line ConditionalExpression
   if (!('node' in def)) return undefined;
   return typeof def.node === 'string' ? def.node : undefined;
 }

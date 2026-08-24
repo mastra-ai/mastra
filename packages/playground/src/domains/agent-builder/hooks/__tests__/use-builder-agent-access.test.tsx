@@ -41,7 +41,7 @@ const renderAccess = ({
     </MastraReactProvider>
   );
 
-  return renderHook(() => useBuilderAgentAccess(), { wrapper });
+  return { ...renderHook(() => useBuilderAgentAccess(), { wrapper }), queryClient };
 };
 
 describe('useBuilderAgentAccess', () => {
@@ -322,5 +322,56 @@ describe('useBuilderAgentAccess', () => {
       expect(result.current.hasAgentFeature).toBe(false);
       expect(result.current.denialReason).toBe('not-configured');
     });
+  });
+});
+
+describe('useBuilderAgentAccess, the settings read it gates', () => {
+  const withSettingsCounter = (capabilities: AuthCapabilities) => {
+    let settingsCalls = 0;
+    server.use(
+      http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(capabilities)),
+      http.get(`${BASE_URL}/api/editor/builder/settings`, () => {
+        settingsCalls += 1;
+        return HttpResponse.json({ enabled: true, features: { agent: {} } });
+      }),
+    );
+
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    // Seed the capabilities so RBAC is known on the very first render. Until
+    // they resolve the hook cannot tell whether RBAC applies and lets the read
+    // through, which would mask the gate this asserts.
+    queryClient.setQueryData(['auth', 'capabilities'], capabilities);
+
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <MastraReactProvider baseUrl={BASE_URL}>
+        <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      </MastraReactProvider>
+    );
+
+    return { ...renderHook(() => useBuilderAgentAccess(), { wrapper }), queryClient, calls: () => settingsCalls };
+  };
+
+  it('never asks the server for settings the caller may not read', async () => {
+    const { result, calls } = withSettingsCounter(rbacCapabilities(['agents:read']));
+
+    await new Promise(resolve => setTimeout(resolve, 80));
+
+    expect(calls()).toBe(0);
+    expect(result.current.canAccessAgentBuilder).toBe(false);
+    expect(result.current.denialReason).toBe('permission-denied');
+  });
+
+  it('asks for them once the caller has read access', async () => {
+    const { result, calls } = withSettingsCounter(rbacCapabilities(['stored-agents:read']));
+
+    await waitFor(() => expect(result.current.canAccessAgentBuilder).toBe(true));
+    expect(calls()).toBe(1);
+  });
+
+  it('asks for them when RBAC is switched off entirely', async () => {
+    const { result, calls } = withSettingsCounter(authDisabledCapabilities);
+
+    await waitFor(() => expect(result.current.canAccessAgentBuilder).toBe(true));
+    expect(calls()).toBe(1);
   });
 });

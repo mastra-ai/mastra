@@ -13,11 +13,13 @@ const VERSIONS_URL = `${BASE_URL}/api/datasets/dataset-1/versions`;
 
 const createWrapper = () => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return ({ children }: { children: ReactNode }) => (
+  const wrapper = ({ children }: { children: ReactNode }) => (
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     </MastraReactProvider>
   );
+  wrapper.queryClient = queryClient;
+  return wrapper;
 };
 
 const settle = () => new Promise(resolve => setTimeout(resolve, 50));
@@ -180,5 +182,29 @@ describe('useDatasetVersions', () => {
 
       expect(first.result.current.data?.[0]?.id).toBe('version-dataset-a');
     });
+  });
+});
+
+describe('useDatasetVersions, on a response the server left empty', () => {
+  it('reports no versions when a page comes back with no body at all', async () => {
+    server.use(http.get(VERSIONS_URL, () => HttpResponse.json(null)));
+
+    const { result } = renderHook(() => useDatasetVersions('dataset-1'), { wrapper: createWrapper() });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toEqual([]);
+    expect(result.current.hasNextPage).toBe(false);
+    expect(result.current.error).toBeNull();
+  });
+
+  it('files the versions under the key the dataset views read', async () => {
+    server.use(http.get(VERSIONS_URL, () => HttpResponse.json(pageOf([1], false, 0))));
+    const wrapper = createWrapper();
+
+    const { result } = renderHook(() => useDatasetVersions('dataset-1'), { wrapper });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(wrapper.queryClient.getQueryData(['dataset-versions', 'dataset-1'])).toBeDefined();
+    expect(wrapper.queryClient.getQueryData(['dataset-versions', 'dataset-2'])).toBeUndefined();
   });
 });

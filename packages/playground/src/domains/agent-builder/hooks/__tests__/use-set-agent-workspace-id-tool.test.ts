@@ -139,4 +139,29 @@ describe('useSetAgentWorkspaceIdTool', () => {
     expect(tool.outputSchema!.safeParse({ success: 'yes' }).success).toBe(false);
     expect(tool.outputSchema!.safeParse({}).success).toBe(false);
   });
+
+  it('rebuilds itself when the workspace list changes', async () => {
+    const formRef: { current: ReturnType<typeof useForm<AgentBuilderEditFormValues>> | null } = { current: null };
+
+    const Wrapper = ({ children }: { children: React.ReactNode }) => {
+      const methods = useForm<AgentBuilderEditFormValues>({ defaultValues: { name: '' } });
+      formRef.current = methods;
+      return React.createElement(FormProvider, methods, children);
+    };
+
+    const { result, rerender } = renderHook(
+      ({ workspaces }: { workspaces: Array<{ id: string; name: string }> }) =>
+        useSetAgentWorkspaceIdTool({ availableWorkspaces: workspaces }),
+      { wrapper: Wrapper, initialProps: { workspaces: availableWorkspaces } },
+    );
+
+    expect(result.current.description).toContain('- ws-1: Workspace One');
+
+    rerender({ workspaces: [{ id: 'ws-9', name: 'Workspace Nine' }] });
+
+    expect(result.current.description).toContain('- ws-9: Workspace Nine');
+    expect(result.current.description).not.toContain('ws-1');
+    expect(result.current.inputSchema!.safeParse({ workspaceId: 'ws-9' }).success).toBe(true);
+    expect(result.current.inputSchema!.safeParse({ workspaceId: 'ws-1' }).success).toBe(false);
+  });
 });

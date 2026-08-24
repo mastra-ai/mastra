@@ -1,4 +1,4 @@
-import { render as renderComponent } from '@testing-library/react';
+import { act, render as renderComponent } from '@testing-library/react';
 import { createMemoryRouter, RouterProvider, Outlet } from 'react-router';
 import type { RouteObject } from 'react-router';
 import { describe, expect, it } from 'vitest';
@@ -123,6 +123,32 @@ describe('useRouteHeader', () => {
       const read = render({ crumbs: [agentsCrumb] }, { crumbs: [agentCrumb] });
 
       expect(read().docs).toBeUndefined();
+    });
+  });
+
+  describe('when the route changes under it', () => {
+    it('recomputes the header for the new match', () => {
+      let captured: ReturnType<typeof useRouteHeader> | undefined;
+
+      const Leaf = () => {
+        captured = useRouteHeader();
+        return null;
+      };
+
+      const routes: RouteObject[] = [
+        { path: '/agents', handle: { crumbs: [agentsCrumb] }, element: <Leaf /> },
+        { path: '/workflows', handle: { crumbs: [{ id: 'workflows', label: 'Workflows' }] }, element: <Leaf /> },
+      ];
+
+      const router = createMemoryRouter(routes, { initialEntries: ['/agents'] });
+      renderComponent(<RouterProvider router={router} />);
+      expect(captured!.crumbs.map(crumb => crumb.id)).toEqual(['agents']);
+
+      act(() => {
+        void router.navigate('/workflows');
+      });
+
+      expect(captured!.crumbs.map(crumb => crumb.id)).toEqual(['workflows']);
     });
   });
 });

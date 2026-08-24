@@ -23,6 +23,9 @@ export function useRouteHeader(): RouteHeaderData {
       if (!handle) continue;
       const ctx = { params: m.params, pathname: m.pathname };
 
+      // The guard only spells out the intent: with no `crumbs`, `resolved` is
+      // `undefined` and the length check below already skips the route.
+      // Stryker disable next-line ConditionalExpression
       if (handle.crumbs) {
         const resolved = typeof handle.crumbs === 'function' ? handle.crumbs(ctx) : handle.crumbs;
         if (resolved?.length) crumbs.push(...resolved);

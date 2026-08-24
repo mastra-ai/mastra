@@ -30,6 +30,9 @@ export interface BuilderPaneGates {
 export const useBuilderPaneGates = ({ hasAgentTools, hasSkills }: BuilderPaneGatesInput): BuilderPaneGates => {
   const features = useBuilderAgentFeatures();
   const policy = useBuilderModelPolicy();
+  // The default only stands in while the platforms load; either way no entry
+  // matches the Slack lookup below, so the gate stays closed.
+  // Stryker disable next-line ArrayDeclaration
   const { data: channelPlatforms = [] } = useChannelPlatforms();
 
   const model = features.model || policy.active;
