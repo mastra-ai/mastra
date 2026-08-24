@@ -39,6 +39,10 @@ function toolEnd(toolCallId: string, isError = false): AgentControllerEvent {
   return { type: 'tool_end', toolCallId, result: null, isError };
 }
 
+function toolEndDenied(toolCallId: string, reason = 'user declined'): AgentControllerEvent {
+  return { type: 'tool_end', toolCallId, result: reason, isError: false, denied: true };
+}
+
 describe('observeSessionFirstExec', () => {
   it('marks the first exec on the first successful workspace tool_end and unsubscribes', () => {
     const { session, listeners, emit } = createSession();
@@ -96,6 +100,28 @@ describe('observeSessionFirstExec', () => {
     emit(toolEnd('call-3'));
     emit(toolStart('call-4', 'view'));
     emit(toolEnd('call-4'));
+    expect(dependencies.sourceControl.sessions.markFirstMeaningfulExec).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores approval-denied and abort-while-parked tool_end events (denied: true)', () => {
+    const { session, emit } = createSession();
+    const dependencies = createDependencies();
+    observeSessionFirstExec(session, dependencies);
+
+    // Mirrors SessionRunEngine's tool-output-denied path: tool_start, then a
+    // tool_end with isError=false but denied=true and the denial reason as result.
+    emit(toolStart('call-1', 'execute_command'));
+    emit(toolEndDenied('call-1', 'user declined the shell command'));
+
+    // And the abort-while-parked path (settleToolCallAsDenied): same shape.
+    emit(toolStart('call-2', 'write_file'));
+    emit(toolEndDenied('call-2', 'ABORTED_BY_USER'));
+
+    expect(dependencies.sourceControl.sessions.markFirstMeaningfulExec).not.toHaveBeenCalled();
+
+    // A subsequent real successful workspace tool still stamps.
+    emit(toolStart('call-3', 'view'));
+    emit(toolEnd('call-3'));
     expect(dependencies.sourceControl.sessions.markFirstMeaningfulExec).toHaveBeenCalledTimes(1);
   });
 

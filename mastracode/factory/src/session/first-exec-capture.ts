@@ -59,11 +59,15 @@ function isMeaningfulToolName(name: string | undefined): boolean {
  * materializer `sandbox.executeCommand()` calls that never flow through the
  * tool layer are intentionally excluded.
  *
- * Failed tool calls (`isError === true`) don't count; the listener stays
- * subscribed until a successful qualifying end, then unsubscribes. The
- * storage write is guarded (`first_meaningful_exec_at IS NULL`), so
- * restarts, re-materialized sessions, and sessions without a source-control
- * row are no-ops.
+ * Failed tool calls (`isError === true`) don't count. Approval-denied and
+ * abort-while-parked tool completions (`denied === true`) also don't count:
+ * the run-engine emits `tool_end` with `isError: false` for those paths
+ * because the tool didn't fail, but it also never ran, so treating them as
+ * "meaningful exec" would re-introduce the same contamination this fix is
+ * removing on the message side. The listener stays subscribed until a
+ * successful qualifying end, then unsubscribes. The storage write is guarded
+ * (`first_meaningful_exec_at IS NULL`), so restarts, re-materialized
+ * sessions, and sessions without a source-control row are no-ops.
  */
 export function observeSessionFirstExec(
   session: FirstExecCaptureSession,
@@ -81,6 +85,7 @@ export function observeSessionFirstExec(
       const toolName = toolNames.get(event.toolCallId);
       toolNames.delete(event.toolCallId);
       if (event.isError) return;
+      if (event.denied) return;
       if (!isMeaningfulToolName(toolName)) return;
       seen = true;
       unsubscribe();
