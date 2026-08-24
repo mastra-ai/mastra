@@ -13,7 +13,7 @@
  * still reaches the Mastra server — same pattern as the shared API client.
  */
 
-export const USER_SESSION_BRANCH_PREFIX = 'user/';
+import { postRepositoryGitOp, readJsonOrThrow } from './http';
 
 export interface GithubInstallation {
   installationId: number;
@@ -236,15 +236,6 @@ export interface FactoryProjectSnapshot extends FactoryProjectPayload {
 }
 
 export type FactoryProject = FactoryProjectSnapshot;
-
-async function readJsonOrThrow<T>(res: Response, failure: string): Promise<T> {
-  if (!res.ok) {
-    const error = new Error(`${failure} (${res.status})`) as Error & { status?: number };
-    error.status = res.status;
-    throw error;
-  }
-  return (await res.json()) as T;
-}
 
 function toLinkedRepositoryPayload(
   project: FactoryProjectPayload,
@@ -579,126 +570,6 @@ async function readSSE(
       if (dataLines.length > 0) onEvent(event, dataLines.join('\n'));
     }
   }
-}
-
-/**
- * An error from a git write operation (worktree/commit/push/pr) that carries the
- * server's error code so the UI can distinguish actionable failures (e.g.
- * `authRequired` for a 401, `Invalid branch` for a 400) from generic failures.
- */
-export interface GitOpError extends Error {
-  code?: string;
-  status?: number;
-  authRequired?: boolean;
-}
-
-/**
- * POST helper for the per-project git endpoints. Parses the server's JSON body,
- * surfacing `error`/`message` codes on failure (and `authRequired` for 401) so
- * callers can react without re-implementing the parsing dance each time.
- */
-async function postRepositoryGitOp<T>(
-  baseUrl: string,
-  projectRepositoryId: string,
-  action: string,
-  payload: unknown,
-): Promise<T> {
-  const res = await fetch(`${baseUrl}/web/github/projects/${encodeURIComponent(projectRepositoryId)}/${action}`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'content-type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify(payload ?? {}),
-  });
-  if (!res.ok) {
-    let code = `http_${res.status}`;
-    let message = `Request failed (${res.status})`;
-    try {
-      const body = (await res.json()) as { error?: string; message?: string };
-      if (body.error) code = body.error;
-      if (body.message) message = body.message;
-      else if (body.error) message = body.error;
-    } catch {
-      /* ignore non-JSON */
-    }
-    const err = new Error(message) as GitOpError;
-    err.code = code;
-    err.status = res.status;
-    if (res.status === 401) err.authRequired = true;
-    throw err;
-  }
-  return (await res.json()) as T;
-}
-
-export interface FactoryUserSession {
-  id: string;
-  sessionId: string;
-  projectRepositoryId: string;
-  orgId: string;
-  userId: string;
-  visibility: 'org' | 'private';
-  title?: string;
-  branch: string;
-  baseBranch: string;
-  sandboxId: string | null;
-  sandboxWorkdir: string | null;
-  materializedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-type FactoryUserSessionPayload = Omit<FactoryUserSession, 'title'> & { title?: string | null };
-
-function normalizeUserSession({ title, ...session }: FactoryUserSessionPayload): FactoryUserSession {
-  return { ...session, title: title ?? undefined };
-}
-
-export async function listUserSessions(
-  baseUrl: string,
-  projectRepositoryId: string,
-  signal?: AbortSignal,
-): Promise<FactoryUserSession[]> {
-  const res = await fetch(`${baseUrl}/web/github/projects/${encodeURIComponent(projectRepositoryId)}/sessions`, {
-    headers: { Accept: 'application/json' },
-    credentials: 'include',
-    signal,
-  });
-  const body = await readJsonOrThrow<{ sessions: FactoryUserSessionPayload[] }>(res, 'Failed to list sessions');
-  return body.sessions.map(normalizeUserSession);
-}
-
-export type CreateUserSessionOptions =
-  | { branch: string; baseBranch?: string; sessionId?: never; title?: never }
-  | { sessionId: string; title: string; branch?: never; baseBranch?: never };
-
-export async function createUserSession(
-  baseUrl: string,
-  projectRepositoryId: string,
-  options: CreateUserSessionOptions,
-): Promise<FactoryUserSession> {
-  const result = await postRepositoryGitOp<{ session: FactoryUserSessionPayload }>(
-    baseUrl,
-    projectRepositoryId,
-    'sessions',
-    options,
-  );
-  return normalizeUserSession(result.session);
-}
-
-export async function getUserSession(baseUrl: string, sessionId: string): Promise<FactoryUserSession> {
-  const res = await fetch(`${baseUrl}/web/user-sessions/${encodeURIComponent(sessionId)}`, {
-    headers: { Accept: 'application/json' },
-    credentials: 'include',
-  });
-  const body = await readJsonOrThrow<{ session: FactoryUserSessionPayload }>(res, 'Failed to load session');
-  return normalizeUserSession(body.session);
-}
-
-export async function deleteUserSession(baseUrl: string, sessionId: string): Promise<void> {
-  const res = await fetch(`${baseUrl}/web/user-sessions/${encodeURIComponent(sessionId)}`, {
-    method: 'DELETE',
-    credentials: 'include',
-  });
-  if (!res.ok && res.status !== 404) throw new Error(`Failed to delete session (${res.status})`);
 }
 
 export interface CommitResult {

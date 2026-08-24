@@ -17,7 +17,15 @@ function useActivityAttention({ workspaceIds }: { workspaceIds: string[] }) {
     agentControllerId: controllerId,
     resourceIds: workspaceIds,
   });
-  return { runningByPath, ...useWorkspaceAttention(runningByPath) };
+  return {
+    runningByPath,
+    ...useWorkspaceAttention({
+      projectRepositoryId: 'repository-1',
+      sessionKind: 'factory',
+      runningByPath,
+      ready: true,
+    }),
+  };
 }
 
 describe('workspace completion state', () => {

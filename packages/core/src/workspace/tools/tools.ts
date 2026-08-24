@@ -552,10 +552,12 @@ export async function createWorkspaceTools(
     await addTool(WORKSPACE_TOOLS.SANDBOX.KILL_PROCESS, killProcessTool, { targets: { sandbox: true } });
   }
 
-  // LSP tools — always available (tool handles case when LSP not configured).
+  // LSP tools — only when LSP is configured and initialized on this workspace.
   // Needs the filesystem resolved so lsp_inspect can map paths via the
   // request's filesystem (resolveAbsolutePath) on dynamic-filesystem workspaces.
-  await addTool(WORKSPACE_TOOLS.LSP.LSP_INSPECT, lspInspectTool, { targets: { filesystem: true } });
+  if (workspace.lsp) {
+    await addTool(WORKSPACE_TOOLS.LSP.LSP_INSPECT, lspInspectTool, { targets: { filesystem: true } });
+  }
 
   return tools;
 }

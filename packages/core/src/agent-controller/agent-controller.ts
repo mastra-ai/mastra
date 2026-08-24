@@ -1,13 +1,16 @@
 import { randomUUID } from 'node:crypto';
 
 import { Agent } from '../agent';
+import { MessageList } from '../agent/message-list';
 import type { MastraDBMessage, MastraMessageContentV2 } from '../agent/message-list/state/types';
+import { isUserAuthoredMessage } from '../agent/signals';
 import type { ActiveThreadRun } from '../agent/thread-stream-runtime';
 import type { AgentInstructions, ToolsInput, ToolsetsInput } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
 import { AgentControllerChannels } from '../channels/agent-controller-channels';
 import { GatewayManager } from '../llm/model/gateways';
 import { defaultGateways } from '../llm/model/gateways/defaults';
+import type { MastraModelConfig } from '../llm/model/shared.types';
 import { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { StorageThreadType } from '../memory/types';
@@ -146,6 +149,10 @@ export function buildFableFallbackProviderOptions(
  * Without a notice the user has no way to tell that the response did not come
  * from the model they selected.
  */
+
+/** How much of the tail a rename reads: enough to say where the thread went, bounded so a long thread costs no more than a short one. */
+const TITLE_WINDOW_MESSAGES = 20;
+
 /**
  * The AgentController orchestrates multiple agent modes, shared state, memory, and storage.
  * It's the core abstraction that a TUI (or other UI) controls.
@@ -1229,7 +1236,7 @@ export class AgentController<TState = {}> {
 
     const firstUserMessages = new Map<string, MastraDBMessage>();
     for (const message of result.messages) {
-      if (message.role !== 'user' || !message.threadId || firstUserMessages.has(message.threadId)) continue;
+      if (!isUserAuthoredMessage(message) || !message.threadId || firstUserMessages.has(message.threadId)) continue;
       firstUserMessages.set(message.threadId, this.convertToControllerMessage(message));
 
       if (firstUserMessages.size === threadIds.length) {
@@ -1238,6 +1245,69 @@ export class AgentController<TState = {}> {
     }
 
     return firstUserMessages;
+  }
+
+  /**
+   * Name a thread from where its conversation went, with the model and
+   * instructions `generateTitle` gives the first-turn namer — so a title asked
+   * for by hand reads like one the thread would have been given on its own.
+   *
+   * Runs without constructing a {@link Session}: naming reads a window of recent
+   * messages and writes the thread row, so asking for a title never spins up a
+   * workspace or sandbox. A session already live for the resource lends its agent, request
+   * context and event stream; otherwise the default mode answers — and with no
+   * session state to read, a `generateTitle.model` that resolves from it falls
+   * back to its own default, which is why hosts that store the choice elsewhere
+   * pass `model`. Resolves to the new title, or `undefined` when the model
+   * returns nothing and the current title stands.
+   */
+  async generateThreadTitle({
+    threadId,
+    resourceId,
+    scope,
+    model,
+    requestContext: callerContext,
+  }: {
+    threadId: string;
+    resourceId?: string;
+    scope?: string;
+    /** Overrides the memory-configured title model — for hosts that resolve it themselves. */
+    model?: DynamicArgument<MastraModelConfig>;
+    /** The caller's context — carries the identity model resolution bills to. */
+    requestContext?: RequestContext;
+  }): Promise<string | undefined> {
+    const thread = await this.queryThreadById({ threadId });
+    if (!thread) throw new Error(`Thread not found: ${threadId}`);
+
+    const recent = await this.queryThreadMessages({ threadId, limit: TITLE_WINDOW_MESSAGES });
+    const messages = new MessageList().add(recent, 'memory').get.all.ui();
+    if (!messages.some(message => message.role === 'user')) {
+      throw new Error('This conversation has no message to name it from yet.');
+    }
+
+    const session = resourceId ? await this.getSessionByResource(resourceId, scope) : undefined;
+    const agent = session
+      ? this.getCurrentAgent(session)
+      : this.propagateRuntimeServicesToAgent(this.getAgentForMode(this.#defaultMode));
+    const requestContext = session
+      ? await this.buildRequestContext(session, callerContext)
+      : (callerContext ?? new RequestContext());
+    const configured = (await agent.getMemory({ requestContext }))?.getMergedThreadConfig().generateTitle;
+    const titleConfig = typeof configured === 'object' ? configured : undefined;
+
+    const title = (
+      await agent.generateTitleFromUserMessage({
+        messages,
+        requestContext,
+        model: model ?? titleConfig?.model,
+        instructions: titleConfig?.instructions,
+      })
+    )?.trim();
+    if (!title) return undefined;
+
+    await this.persistThreadRow({ ...thread, title, updatedAt: new Date() });
+    session?.emit({ type: 'thread_title_updated', threadId, title });
+    return title;
   }
 
   // ===========================================================================
@@ -1818,7 +1888,8 @@ export class AgentController<TState = {}> {
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
   }): Promise<Record<string, unknown>> {
-    if (!session.thread.getId()) {
+    const runThreadId = session.thread.getId();
+    if (!runThreadId) {
       throw new Error('Cannot build stream options without a current thread');
     }
 
@@ -1851,7 +1922,14 @@ export class AgentController<TState = {}> {
 
     const streamOptions: Record<string, unknown> = {
       ...this.buildSharedRunOptions(session),
-      memory: { thread: session.thread.getId(), resource: session.identity.getResourceId() },
+      memory: {
+        thread: runThreadId,
+        resource: session.identity.getResourceId(),
+        // Titling outlives the run, so the thread it named is the one captured here,
+        // not whichever thread the session happens to hold when the model answers.
+        onTitleGenerated: (title: string) =>
+          session.emit({ type: 'thread_title_updated', threadId: runThreadId, title }),
+      },
       abortSignal: session.run.ensureAbortController().signal,
       requestContext,
       outputWriter: async (chunk: { type?: string; data?: unknown }) => {

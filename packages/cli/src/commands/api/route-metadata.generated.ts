@@ -2079,6 +2079,7 @@ export const API_ROUTE_METADATA = {
       "experimentId",
       "field",
       "limit",
+      "metadata",
       "mode",
       "organizationId",
       "page",

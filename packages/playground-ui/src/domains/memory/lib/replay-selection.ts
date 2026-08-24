@@ -22,20 +22,12 @@ export function getObservationTimestampMs(record: OMHistoryRecord): number {
  * the replay cursor (ms epoch). Returns null when there is no such record.
  */
 export function findRecordIdAtOrBefore(records: OMHistoryRecord[], cursorMs: number | null): string | null {
-  if (cursorMs == null || records.length === 0) return null;
+  if (cursorMs == null) return null;
 
   const sorted = records
     .map(record => ({ id: record.id, t: parseUTC(getObservationTimestamp(record)) }))
     .toSorted((a, b) => a.t - b.t);
 
-  let matchId: string | null = null;
-  for (const entry of sorted) {
-    if (entry.t <= cursorMs) {
-      matchId = entry.id;
-    } else {
-      break;
-    }
-  }
-
-  return matchId;
+  const match = sorted.findLast(entry => entry.t <= cursorMs);
+  return match ? match.id : null;
 }

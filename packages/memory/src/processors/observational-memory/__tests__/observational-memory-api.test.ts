@@ -159,6 +159,7 @@ function createOM(
     reflectionContinuationHints?: ContinuationHintsConfig;
     activateAfterIdle?: number | string;
     hooks?: ObserveHooks;
+    hookExecution?: 'non-blocking' | 'await';
   },
 ) {
   return new ObservationalMemory({
@@ -166,6 +167,7 @@ function createOM(
     scope: opts?.scope ?? 'thread',
     activateAfterIdle: opts?.activateAfterIdle,
     hooks: opts?.hooks,
+    hookExecution: opts?.hookExecution,
     observation: {
       model: opts?.observerModel ?? createMockObserverModel(),
       messageTokens: opts?.messageTokens ?? 100,
@@ -451,6 +453,88 @@ name: Tyler
       });
     });
 
+    it('awaits config hooks and gates the observer when hookExecution is await', async () => {
+      const observerModel = createMockObserverModel();
+      const doGenerate = vi.spyOn(observerModel, 'doGenerate');
+      const doStream = vi.spyOn(observerModel, 'doStream');
+      const hookError = new Error('start hook failed');
+      const onObservationEnd = vi.fn();
+      const awaitedOm = createOM(storage, {
+        observerModel,
+        hookExecution: 'await',
+        hooks: {
+          onObservationStart: async () => {
+            await Promise.resolve();
+            throw hookError;
+          },
+          onObservationEnd,
+        },
+      });
+
+      await expect(awaitedOm.observe({ threadId, messages: createBulkMessages(10, threadId) })).rejects.toBe(hookError);
+
+      expect(doGenerate).not.toHaveBeenCalled();
+      expect(doStream).not.toHaveBeenCalled();
+      expect(onObservationEnd).toHaveBeenCalledOnce();
+      expect(onObservationEnd).toHaveBeenCalledWith(
+        expect.objectContaining({ usage: undefined, error: hookError, threadId, trigger: 'manual' }),
+      );
+    });
+
+    it('rejects an awaited end-hook failure after the observation completes', async () => {
+      const hookError = new Error('end hook failed');
+      const awaitedOm = createOM(storage, {
+        hookExecution: 'await',
+        hooks: {
+          onObservationEnd: async () => {
+            await Promise.resolve();
+            throw hookError;
+          },
+        },
+      });
+
+      await expect(awaitedOm.observe({ threadId, messages: createBulkMessages(10, threadId) })).rejects.toBe(hookError);
+
+      const record = await awaitedOm.getObservations(threadId);
+      expect(record).toContain('User discussed various topics');
+    });
+
+    it('releases the observation lock before invoking an awaited end hook', async () => {
+      const messages = createBulkMessages(10, threadId);
+      let awaitedOm: ObservationalMemory;
+      const reentrantObserve = vi.fn(async () => {
+        await awaitedOm.observe({ threadId, messages });
+      });
+      awaitedOm = createOM(storage, {
+        hookExecution: 'await',
+        hooks: { onObservationEnd: reentrantObserve },
+      });
+
+      await awaitedOm.observe({ threadId, messages });
+
+      expect(reentrantObserve).toHaveBeenCalledOnce();
+    });
+
+    it('keeps config hook promises non-blocking by default', async () => {
+      const onObservationEnd = vi.fn();
+      const nonBlockingOm = createOM(storage, {
+        hooks: {
+          onObservationStart: async () => {
+            await Promise.resolve();
+            throw new Error('ignored hook failure');
+          },
+          onObservationEnd,
+        },
+      });
+
+      await expect(
+        nonBlockingOm.observe({ threadId, messages: createBulkMessages(10, threadId) }),
+      ).resolves.toMatchObject({
+        observed: true,
+      });
+      expect(onObservationEnd).toHaveBeenCalledOnce();
+    });
+
     it('should not call hooks when below threshold', async () => {
       const hooks = {
         onObservationStart: vi.fn(),
@@ -493,6 +577,56 @@ name: Tyler
       // Observer failed before producing usage, so usage should be undefined and error should be present
       expect(hooks.onObservationEnd).toHaveBeenCalledWith({ usage: undefined, error: expect.any(Error) });
       expect(hooks.onObservationEnd.mock.calls[0]![0].error.message).toMatch(/Observer failed/);
+    });
+
+    it('gates reflection and pairs the end hook when an awaited reflection start hook fails', async () => {
+      const reflectorModel = createMockReflectorModel();
+      const doGenerate = vi.spyOn(reflectorModel, 'doGenerate');
+      const doStream = vi.spyOn(reflectorModel, 'doStream');
+      const hookError = new Error('reflection start hook failed');
+      const onReflectionEnd = vi.fn();
+      const omReflect = createOM(storage, {
+        observationTokens: 5,
+        reflectorModel,
+        hookExecution: 'await',
+        hooks: {
+          onReflectionStart: async () => {
+            await Promise.resolve();
+            throw hookError;
+          },
+          onReflectionEnd,
+        },
+      });
+
+      await expect(omReflect.observe({ threadId, messages: createBulkMessages(10, threadId) })).rejects.toBe(hookError);
+
+      expect(doGenerate).not.toHaveBeenCalled();
+      expect(doStream).not.toHaveBeenCalled();
+      expect(onReflectionEnd).toHaveBeenCalledOnce();
+      expect(onReflectionEnd).toHaveBeenCalledWith(
+        expect.objectContaining({ usage: undefined, error: hookError, threadId, trigger: 'manual' }),
+      );
+    });
+
+    it('cleans up reflection state before invoking an awaited end hook', async () => {
+      let omReflect: ObservationalMemory;
+      let nestedResult: Awaited<ReturnType<ObservationalMemory['reflect']>> | undefined;
+      let reentered = false;
+      const onReflectionEnd = vi.fn(async () => {
+        if (reentered) return;
+        reentered = true;
+        nestedResult = await omReflect.reflect(threadId);
+      });
+      omReflect = createOM(storage, {
+        observationTokens: 5,
+        hookExecution: 'await',
+        hooks: { onReflectionEnd },
+      });
+
+      await omReflect.observe({ threadId, messages: createBulkMessages(10, threadId) });
+
+      expect(nestedResult?.reflected).toBe(true);
+      expect(onReflectionEnd).toHaveBeenCalledTimes(2);
     });
 
     it('should call reflection hooks when reflection triggers', async () => {
@@ -3571,6 +3705,32 @@ describe('config-level hooks', () => {
         providerMetadata: gatewayMetadata,
       }),
     );
+  });
+
+  it('keeps async-buffer hooks fire-and-forget when hookExecution is await', async () => {
+    const observerModel = createMockObserverModel();
+    const doStream = vi.spyOn(observerModel, 'doStream');
+    const hooks = {
+      onObservationStart: vi.fn(async () => {
+        await Promise.resolve();
+        throw new Error('ignored async-buffer hook failure');
+      }),
+      onObservationEnd: vi.fn(),
+    };
+    const om = createOM(storage, {
+      messageTokens: 500,
+      bufferTokens: 0.2,
+      observerModel,
+      hooks,
+      hookExecution: 'await',
+    });
+    await storage.saveMessages({ messages: createBulkMessages(5, threadId) });
+
+    await expect(om.buffer({ threadId })).resolves.toMatchObject({ buffered: true });
+
+    expect(doStream).toHaveBeenCalledOnce();
+    expect(hooks.onObservationEnd).toHaveBeenCalledOnce();
+    await new Promise(resolve => setTimeout(resolve, 0));
   });
 
   it('reports failed async-buffered cycles through onObservationEnd.error instead of swallowing them', async () => {
