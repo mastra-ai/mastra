@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { chatRoute } from '../chat-route';
+import * as publicEntry from '../index';
 import { withSseHeartbeat } from '../sse-heartbeat';
+import * as uiEntry from '../ui';
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -279,6 +281,36 @@ describe('withSseHeartbeat', () => {
     await expect(pendingRead).resolves.toEqual({ done: true, value: undefined });
     expect(cancel).toHaveBeenCalledWith('consumer disconnected');
     expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
+describe('heartbeat public exports', () => {
+  it('exposes the heartbeat helpers from the package entry point', () => {
+    expect(typeof publicEntry.withSseHeartbeat).toBe('function');
+    expect(typeof publicEntry.assertValidHeartbeatMs).toBe('function');
+  });
+
+  it('keeps the heartbeat helpers out of the browser-safe ui entry point', () => {
+    expect('withSseHeartbeat' in uiEntry).toBe(false);
+    expect('assertValidHeartbeatMs' in uiEntry).toBe(false);
+  });
+
+  it('adds heartbeats to a caller-built response through the package entry point', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    const { controller, response } = createControlledResponse({
+      headers: { 'content-type': 'text/event-stream' },
+    });
+    const reader = publicEntry.withSseHeartbeat(response, 1_000).body!.getReader();
+
+    controller.enqueue(encoder.encode('data: one\n\n'));
+    expect(decoder.decode((await reader.read()).value)).toBe('data: one\n\n');
+
+    const heartbeat = reader.read();
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(decoder.decode((await heartbeat).value)).toBe(': heartbeat\n\n');
+
+    await reader.cancel();
   });
 });
 

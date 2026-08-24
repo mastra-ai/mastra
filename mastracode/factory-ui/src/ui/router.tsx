@@ -17,6 +17,7 @@ import type { RouteObject } from 'react-router';
 import Chat from './domains/chat/Chat';
 import { RootGuards } from './domains/auth/components/RootGuards';
 import { AuditPage } from './pages/AuditPage';
+import { AttentionPage } from './pages/AttentionPage';
 import { KnowledgePage } from './pages/KnowledgePage';
 import { ReviewBoardPage, WorkBoardPage } from './pages/BoardPage';
 import { CreateFactoryPage } from './pages/CreateFactoryPage';
@@ -168,6 +169,7 @@ export function createAppRoutes(): RouteObject[] {
                 { path: 'work', element: <WorkBoardPage /> },
                 { path: 'review', element: <ReviewBoardPage /> },
                 { path: 'overview', element: <OverviewPage /> },
+                { path: 'attention', element: <AttentionPage /> },
                 { path: 'metrics', element: <MetricsRedirect /> },
                 { path: 'rules', element: <RulesPage /> },
                 { path: 'audit', element: <AuditPage /> },

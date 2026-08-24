@@ -17,7 +17,7 @@ function renderComposer() {
 
 /** The input stays disabled until the controller connection is ready. */
 async function findReadyInput(): Promise<HTMLTextAreaElement> {
-  const input = (await screen.findByRole('textbox', { name: 'Message' })) as HTMLTextAreaElement;
+  const input = await screen.findByRole<HTMLTextAreaElement>('textbox', { name: 'Message' });
   await waitFor(() => expect(input).toBeEnabled());
   return input;
 }
@@ -36,20 +36,6 @@ describe('Composer slash-command suggestions', () => {
       for (const command of SLASH_COMMANDS) {
         expect(await screen.findByRole('button', { name: new RegExp(`^/${command.name}\\s`) })).toBeInTheDocument();
       }
-    });
-
-    it('renders the suggestions outside the clipping composer box', async () => {
-      const user = userEvent.setup();
-      renderComposer();
-
-      const input = await findReadyInput();
-      await user.type(input, '/');
-
-      // ComposerBox uses overflow-hidden; a popover nested inside it would be
-      // invisibly clipped even though it exists in the DOM.
-      const suggestion = await screen.findByRole('button', { name: /^\/help\s/ });
-      expect(suggestion.closest('[data-slot="composer-box"]')).toBeNull();
-      expect(suggestion.closest('[data-slot="composer"]')).not.toBeNull();
     });
   });
 

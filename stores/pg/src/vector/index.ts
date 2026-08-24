@@ -55,6 +55,7 @@ export interface PGIndexStats extends IndexStats {
 type PGIndexMetadata = Omit<PGIndexStats, 'count'>;
 
 interface PgQueryVectorParams extends QueryVectorParams<PGVectorFilter> {
+  namespace?: string;
   minScore?: number;
   /**
    * HNSW search parameter. Controls the size of the dynamic candidate
@@ -111,8 +112,26 @@ interface PgDefineIndexParams {
   vectorType?: VectorType;
 }
 
-// Postgres allows at most 65535 bind parameters per statement; upserts bind 3 per row.
-const MAX_UPSERT_ROWS_PER_STATEMENT = Math.floor(65535 / 3);
+type PgUpsertVectorParams = UpsertVectorParams<PGVectorFilter> & {
+  namespace?: string;
+};
+
+type PgUpdateVectorParams = UpdateVectorParams<PGVectorFilter> & {
+  namespace?: string;
+};
+
+type PgDeleteVectorParams = DeleteVectorParams & {
+  namespace?: string;
+};
+
+type PgDeleteVectorsParams = DeleteVectorsParams<PGVectorFilter> & {
+  namespace?: string;
+};
+
+const DEFAULT_NAMESPACE = 'default';
+
+// Postgres allows at most 65535 bind parameters per statement; upserts bind 4 per row.
+const MAX_UPSERT_ROWS_PER_STATEMENT = Math.floor(65535 / 4);
 
 export class PgVector extends MastraVector<PGVectorFilter> {
   public pool: pg.Pool;
@@ -127,6 +146,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
    */
   private indexMetadataCache: Map<string, Promise<PGIndexMetadata>> = new Map();
   private createdIndexes = new Map<string, number>();
+  private namespaceReadyIndexes = new Set<string>();
   private indexVectorTypes = new Map<string, VectorType>();
   private mutexesByName = new Map<string, Mutex>();
   private schema?: string;
@@ -447,11 +467,52 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     return {
       tableName: quotedSchemaName ? `${quotedSchemaName}.${quotedIndexName}` : quotedIndexName,
       vectorIndexName: quotedVectorName,
+      parsedIndexName,
     };
   }
 
   private getSchemaName() {
     return this.schema ? `"${parseSqlIdentifier(this.schema, 'schema name')}"` : undefined;
+  }
+
+  private async ensureNamespaceSchema(indexName: string, client: pg.PoolClient): Promise<void> {
+    const { tableName, parsedIndexName } = this.getTableName(indexName);
+    const schemaName = this.schema ? parseSqlIdentifier(this.schema, 'schema name') : 'public';
+    const vectorIdColumn = await client.query(
+      `SELECT 1
+       FROM information_schema.columns
+       WHERE table_schema = $1 AND table_name = $2 AND column_name = 'vector_id'`,
+      [schemaName, parsedIndexName],
+    );
+    if (vectorIdColumn.rowCount === 0) {
+      return;
+    }
+
+    await client.query(
+      `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS namespace VARCHAR(255) NOT NULL DEFAULT '${DEFAULT_NAMESPACE}'`,
+    );
+
+    const legacyConstraints = await client.query<{ conname: string }>(
+      `SELECT c.conname
+       FROM pg_constraint c
+       JOIN pg_class t ON t.oid = c.conrelid
+       JOIN pg_namespace n ON n.oid = t.relnamespace
+       WHERE n.nspname = $1
+         AND t.relname = $2
+         AND c.contype = 'u'
+         AND pg_get_constraintdef(c.oid) = 'UNIQUE (vector_id)'`,
+      [schemaName, parsedIndexName],
+    );
+
+    for (const { conname } of legacyConstraints.rows) {
+      const parsedConstraintName = parseSqlIdentifier(conname, 'constraint name');
+      await client.query(`ALTER TABLE ${tableName} DROP CONSTRAINT "${parsedConstraintName}"`);
+    }
+
+    const namespaceIndexName = parseSqlIdentifier(`${parsedIndexName}_namespace_vector_id_idx`, 'index name');
+    await client.query(
+      `CREATE UNIQUE INDEX IF NOT EXISTS "${namespaceIndexName}" ON ${tableName} (namespace, vector_id)`,
+    );
   }
 
   transformFilter(filter?: PGVectorFilter) {
@@ -513,6 +574,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     minScore = -1,
     ef,
     probes,
+    namespace = DEFAULT_NAMESPACE,
   }: PgQueryVectorParams): Promise<QueryResult[]> {
     try {
       // Validate topK parameter
@@ -548,16 +610,19 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         const { sql: filterQuery, values: filterValues } = buildDeleteFilterQuery(translatedFilter);
         const { tableName } = this.getTableName(indexName);
 
+        const filterClause = filterQuery.trim().replace(/^WHERE\s+/i, '');
+        const namespaceParam = filterValues.length + 1;
         const query = `
           SELECT
             vector_id as id,
             metadata
             ${includeVector ? ', embedding' : ''}
           FROM ${tableName}
-          ${filterQuery}
+          WHERE namespace = $${namespaceParam}
+          ${filterClause ? `AND (${filterClause})` : ''}
           ORDER BY vector_id
-          LIMIT $${filterValues.length + 1}`;
-        const result = await client.query(query, [...filterValues, topK]);
+          LIMIT $${namespaceParam + 1}`;
+        const result = await client.query(query, [...filterValues, namespace, topK]);
 
         return result.rows.map(({ id, metadata, embedding }: { id: string; metadata: any; embedding?: string }) => ({
           id,
@@ -608,6 +673,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         const calculatedEf = ef ?? Math.max(topK, (indexInfo?.config?.m ?? 16) * topK);
         const searchEf = Math.min(1000, Math.max(1, calculatedEf));
         await client.query(`SET LOCAL hnsw.ef_search = ${searchEf}`);
+        await client.query(`SET LOCAL hnsw.iterative_scan = strict_order`);
       }
 
       if (indexInfo.type === 'ivfflat' && probes) {
@@ -628,8 +694,10 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       // cuts off the candidate set before the score threshold is applied, potentially returning fewer rows.
       // IVFFlat is excluded because with default probes=1, it only searches one cluster and can miss
       // vectors in other clusters, returning fewer results than expected.
-      const hasFilter = filterQuery.trim().length > 0;
+      const filterClause = filterQuery.trim().replace(/^WHERE\s+/i, '');
+      const hasFilter = filterClause.length > 0;
       const useIndexedOrder = indexInfo.type === 'hnsw' && !hasFilter && minScore <= 0;
+      const namespaceParam = filterValues.length + 1;
 
       const query = useIndexedOrder
         ? `
@@ -640,6 +708,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
             metadata
             ${includeVector ? ', embedding' : ''}
           FROM ${tableName}
+          WHERE namespace = $${namespaceParam}
           ORDER BY ${distanceExpr}
           LIMIT $2
         )
@@ -655,14 +724,15 @@ export class PgVector extends MastraVector<PGVectorFilter> {
             metadata
             ${includeVector ? ', embedding' : ''}
           FROM ${tableName}
-          ${filterQuery}
+          WHERE namespace = $${namespaceParam}
+          ${filterClause ? `AND (${filterClause})` : ''}
         )
         SELECT *
         FROM vector_scores
         WHERE score > $1
         ORDER BY score DESC
         LIMIT $2`;
-      const result = await client.query(query, filterValues);
+      const result = await client.query(query, [...filterValues, namespace]);
       await client.query('COMMIT');
 
       return result.rows.map(({ id, score, metadata, embedding }) => ({
@@ -697,7 +767,8 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     metadata,
     ids,
     deleteFilter,
-  }: UpsertVectorParams<PGVectorFilter>): Promise<string[]> {
+    namespace = DEFAULT_NAMESPACE,
+  }: PgUpsertVectorParams): Promise<string[]> {
     // Validate input parameters
     validateUpsertInput('PG', vectors, metadata, ids);
 
@@ -721,8 +792,8 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
         const whereClause = filterQuery.trim().replace(/^WHERE\s+/i, '');
         if (whereClause) {
-          const deleteQuery = `DELETE FROM ${tableName} WHERE ${whereClause}`;
-          const result = await client.query(deleteQuery, filterValues);
+          const deleteQuery = `DELETE FROM ${tableName} WHERE namespace = $${filterValues.length + 1} AND (${whereClause})`;
+          const result = await client.query(deleteQuery, [...filterValues, namespace]);
           this.logger?.debug(`Deleted ${result.rowCount || 0} vectors before upsert`, {
             indexName,
             deletedCount: result.rowCount || 0,
@@ -746,15 +817,15 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         for (let i = 0; i < vectors.length; i++) {
           const vectorStr = ops.formatVector(vectors[i]!, indexInfo.dimension);
           const query = `
-            INSERT INTO ${tableName} (vector_id, embedding, metadata)
-            VALUES ($1, $2::${qualifiedVectorType}, $3::jsonb)
-            ON CONFLICT (vector_id)
+            INSERT INTO ${tableName} (vector_id, embedding, metadata, namespace)
+            VALUES ($1, $2::${qualifiedVectorType}, $3::jsonb, $4)
+            ON CONFLICT (namespace, vector_id)
             DO UPDATE SET
               embedding = $2::${qualifiedVectorType},
               metadata = $3::jsonb
           `;
 
-          await client.query(query, [vectorIds[i], vectorStr, JSON.stringify(metadata?.[i] || {})]);
+          await client.query(query, [vectorIds[i], vectorStr, JSON.stringify(metadata?.[i] || {}), namespace]);
         }
       } else {
         for (let start = 0; start < vectors.length; start += MAX_UPSERT_ROWS_PER_STATEMENT) {
@@ -764,18 +835,19 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
           for (let i = start; i < end; i++) {
             const base = values.length;
-            rows.push(`($${base + 1}, $${base + 2}::${qualifiedVectorType}, $${base + 3}::jsonb)`);
+            rows.push(`($${base + 1}, $${base + 2}::${qualifiedVectorType}, $${base + 3}::jsonb, $${base + 4})`);
             values.push(
               vectorIds[i],
               ops.formatVector(vectors[i]!, indexInfo.dimension),
               JSON.stringify(metadata?.[i] || {}),
+              namespace,
             );
           }
 
           const query = `
-            INSERT INTO ${tableName} (vector_id, embedding, metadata)
+            INSERT INTO ${tableName} (vector_id, embedding, metadata, namespace)
             VALUES ${rows.join(', ')}
-            ON CONFLICT (vector_id)
+            ON CONFLICT (namespace, vector_id)
             DO UPDATE SET
               embedding = EXCLUDED.embedding,
               metadata = EXCLUDED.metadata
@@ -986,8 +1058,8 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       vectorType,
       metadataIndexes,
     });
-    if (this.cachedIndexExists(indexName, indexCacheKey)) {
-      // we already saw this index get created since the process started, no need to recreate it
+    if (this.cachedIndexExists(indexName, indexCacheKey) && this.namespaceReadyIndexes.has(indexName)) {
+      // we already saw this index get created and reconciled since the process started
       return;
     }
 
@@ -995,8 +1067,8 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     // Use async-mutex instead of advisory lock for perf (over 2x as fast)
     await mutex
       .runExclusive(async () => {
-        if (this.cachedIndexExists(indexName, indexCacheKey)) {
-          // this may have been created while we were waiting to acquire a lock
+        if (this.cachedIndexExists(indexName, indexCacheKey) && this.namespaceReadyIndexes.has(indexName)) {
+          // this may have been created and reconciled while we were waiting to acquire a lock
           return;
         }
 
@@ -1067,12 +1139,15 @@ export class PgVector extends MastraVector<PGVectorFilter> {
           await client.query(`
           CREATE TABLE IF NOT EXISTS ${tableName} (
             id SERIAL PRIMARY KEY,
-            vector_id TEXT UNIQUE NOT NULL,
+            vector_id TEXT NOT NULL,
             embedding ${qualifiedVectorType}(${dimension}),
-            metadata JSONB DEFAULT '{}'::jsonb
+            metadata JSONB DEFAULT '{}'::jsonb,
+            namespace VARCHAR(255) NOT NULL DEFAULT '${DEFAULT_NAMESPACE}'
           );
         `);
+          await this.ensureNamespaceSchema(indexName, client);
           this.createdIndexes.set(indexName, indexCacheKey);
+          this.namespaceReadyIndexes.add(indexName);
           this.indexVectorTypes.set(indexName, vectorType);
 
           if (buildIndex) {
@@ -1084,6 +1159,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
           }
         } catch (error: any) {
           this.createdIndexes.delete(indexName);
+          this.namespaceReadyIndexes.delete(indexName);
           this.indexVectorTypes.delete(indexName);
           throw error;
         } finally {
@@ -1614,6 +1690,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       // Drop the table
       await client.query(`DROP TABLE IF EXISTS ${tableName} CASCADE`);
       this.createdIndexes.delete(indexName);
+      this.namespaceReadyIndexes.delete(indexName);
       this.indexVectorTypes.delete(indexName);
       this.invalidateIndexCaches(indexName);
     } catch (error: any) {
@@ -1685,7 +1762,13 @@ export class PgVector extends MastraVector<PGVectorFilter> {
    * @returns A promise that resolves when the update is complete.
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
-  async updateVector({ indexName, id, filter, update }: UpdateVectorParams<PGVectorFilter>): Promise<void> {
+  async updateVector({
+    indexName,
+    id,
+    filter,
+    update,
+    namespace = DEFAULT_NAMESPACE,
+  }: PgUpdateVectorParams): Promise<void> {
     let client;
     try {
       if (!update.vector && !update.metadata) {
@@ -1747,10 +1830,13 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
       let whereClause: string;
       let whereValues: any[];
+      const namespaceIndex = valueIndex;
+      values.push(namespace);
+      valueIndex++;
 
       if (id) {
         // Update by ID
-        whereClause = `vector_id = $${valueIndex}`;
+        whereClause = `namespace = $${namespaceIndex} AND vector_id = $${valueIndex}`;
         whereValues = [id];
       } else {
         // Update by filter
@@ -1785,6 +1871,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
           const newIndex = parseInt(num) + valueIndex - 1;
           return `$${newIndex}`;
         });
+        whereClause = `namespace = $${namespaceIndex} AND (${whereClause})`;
         whereValues = filterValues;
       }
 
@@ -1834,16 +1921,16 @@ export class PgVector extends MastraVector<PGVectorFilter> {
    * @returns A promise that resolves when the deletion is complete.
    * @throws Will throw an error if the deletion operation fails.
    */
-  async deleteVector({ indexName, id }: DeleteVectorParams): Promise<void> {
+  async deleteVector({ indexName, id, namespace = DEFAULT_NAMESPACE }: PgDeleteVectorParams): Promise<void> {
     let client;
     try {
       client = await this.pool.connect();
       const { tableName } = this.getTableName(indexName);
       const query = `
         DELETE FROM ${tableName}
-        WHERE vector_id = $1
+        WHERE vector_id = $1 AND namespace = $2
       `;
-      await client.query(query, [id]);
+      await client.query(query, [id, namespace]);
     } catch (error: any) {
       const mastraError = new MastraError(
         {
@@ -1871,17 +1958,18 @@ export class PgVector extends MastraVector<PGVectorFilter> {
    * @returns A promise that resolves when the deletion is complete.
    * @throws Will throw an error if the deletion operation fails.
    */
-  async deleteVectors({ indexName, filter, ids }: DeleteVectorsParams<PGVectorFilter>): Promise<void> {
+  async deleteVectors({ indexName, filter, ids, namespace }: PgDeleteVectorsParams): Promise<void> {
     let client;
+    const effectiveNamespace = namespace ?? DEFAULT_NAMESPACE;
     try {
       client = await this.pool.connect();
       const { tableName } = this.getTableName(indexName);
 
       // Validate that exactly one of filter or ids is provided
-      if (!filter && !ids) {
+      if (!filter && !ids && namespace === undefined) {
         throw new MastraError({
           id: createVectorErrorId('PG', 'DELETE_VECTORS', 'NO_TARGET'),
-          text: 'Either filter or ids must be provided',
+          text: 'Either filter or ids must be provided, unless an explicit namespace is used',
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.USER,
           details: { indexName },
@@ -1914,9 +2002,9 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         }
 
         const placeholders = ids.map((_: string, i: number) => `$${i + 1}`).join(', ');
-        query = `DELETE FROM ${tableName} WHERE vector_id IN (${placeholders})`;
-        values = ids;
-      } else {
+        query = `DELETE FROM ${tableName} WHERE vector_id IN (${placeholders}) AND namespace = $${ids.length + 1}`;
+        values = [...ids, effectiveNamespace];
+      } else if (filter) {
         // Delete by filter
         // Safety check: Don't allow empty filters to prevent accidental deletion of all vectors
         if (!filter || Object.keys(filter).length === 0) {
@@ -1946,8 +2034,11 @@ export class PgVector extends MastraVector<PGVectorFilter> {
           });
         }
 
-        query = `DELETE FROM ${tableName} WHERE ${whereClause}`;
-        values = filterValues;
+        query = `DELETE FROM ${tableName} WHERE namespace = $${filterValues.length + 1} AND (${whereClause})`;
+        values = [...filterValues, effectiveNamespace];
+      } else {
+        query = `DELETE FROM ${tableName} WHERE namespace = $1`;
+        values = [effectiveNamespace];
       }
 
       // Execute the delete query

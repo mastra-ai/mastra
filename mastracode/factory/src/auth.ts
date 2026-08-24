@@ -776,6 +776,9 @@ export function createFactoryAuthGate(provider: IMastraAuthProvider) {
       path.startsWith('/assets/') ||
       path === '/manifest.webmanifest' ||
       path === '/mastra.svg' ||
+      path === '/pwa-192.png' ||
+      path === '/pwa-512.png' ||
+      path === '/apple-touch-icon.png' ||
       (c.req.method === 'GET' && SESSION_FAVICON_PATHS.has(path))
     ) {
       return next();

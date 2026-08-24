@@ -13,7 +13,7 @@ import { queryKeys } from '../../../../api/keys';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useActiveRunResources } from '../../../../hooks/useActiveRunResources';
-import { useWorkspaceAttention } from '../../../../hooks/useWorkspaceAttention';
+import { useWorkspaceAttentionState } from '../../../../hooks/useWorkspaceAttention';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { removeCachedSession, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { usePinnedSessions } from '../hooks/usePinnedSessions';
@@ -70,8 +70,10 @@ export function UserSessionsSection() {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceIds: sessions.map(session => session.sessionId),
   });
-  const { attentionByPath: attentionBySessionId, clearAttention } = useWorkspaceAttention(runningBySessionId);
-
+  const { attentionByPath: attentionBySessionId, clearAttention } = useWorkspaceAttentionState({
+    projectRepositoryId: repository?.projectRepositoryId,
+    sessionKind: 'user',
+  });
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.sessions(repository?.projectRepositoryId) });
   };

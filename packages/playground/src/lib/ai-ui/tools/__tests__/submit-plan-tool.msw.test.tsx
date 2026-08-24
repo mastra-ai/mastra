@@ -13,6 +13,13 @@ import { server } from '@/test/msw-server';
 const BASE_URL = 'http://localhost:4111';
 const toolCallId = 'submit-plan-call';
 
+const stubContentHeight = (height: number) => {
+  Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
+    configurable: true,
+    get: () => height,
+  });
+};
+
 const pendingProps: SubmitPlanToolProps = {
   agentId: 'plan-agent',
   toolName: 'submit_plan',
@@ -54,19 +61,22 @@ function renderSubmitPlan(props: SubmitPlanToolProps) {
   return { approveToolcall };
 }
 
-function usePlanFileHandler() {
+function usePlanFileHandler(planFile = submittedPlanFile) {
   server.use(
     http.get(`${BASE_URL}/api/agents/:agentId/plans/file`, ({ params, request }) => {
       const path = new URL(request.url).searchParams.get('path');
       if (params.agentId !== 'plan-agent' || path !== submittedPlanPath) {
         return HttpResponse.json({ message: 'Plan not found' }, { status: 404 });
       }
-      return HttpResponse.json(submittedPlanFile);
+      return HttpResponse.json(planFile);
     }),
   );
 }
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  Reflect.deleteProperty(HTMLElement.prototype, 'scrollHeight');
+});
 
 describe('SubmitPlanTool', () => {
   describe('when submit_plan is suspended with a plan path', () => {
@@ -127,23 +137,20 @@ describe('SubmitPlanTool', () => {
       expect(approveButton.classList.contains('whitespace-nowrap')).toBe(true);
     });
 
-    it('hides the expand action when the plan body is 500 characters or shorter', async () => {
-      server.use(
-        http.get(`${BASE_URL}/api/agents/:agentId/plans/file`, () =>
-          HttpResponse.json({
-            path: submittedPlanPath,
-            content: `# Short plan\n\n${'x'.repeat(500)}`,
-          }),
-        ),
-      );
+    it('offers expansion when a short plan overflows the collapsed height', async () => {
+      stubContentHeight(221);
+      const overflowingPlanFile = {
+        ...submittedPlanFile,
+        content: '# Short plan\n\nA tall rendered block.',
+      };
+      usePlanFileHandler(overflowingPlanFile);
 
       renderSubmitPlan(pendingProps);
 
-      expect(await screen.findByRole('heading', { name: 'Short plan' })).not.toBeNull();
-      expect(screen.queryByRole('button', { name: 'Expand plan' })).toBeNull();
+      expect(await screen.findByRole('button', { name: 'Expand plan' })).not.toBeNull();
     });
 
-    it('shows a secondary expand action when the plan body exceeds 500 characters', async () => {
+    it('keeps three control cells when a long plan does not overflow', async () => {
       server.use(
         http.get(`${BASE_URL}/api/agents/:agentId/plans/file`, () =>
           HttpResponse.json({
@@ -155,12 +162,11 @@ describe('SubmitPlanTool', () => {
 
       renderSubmitPlan(pendingProps);
 
-      const expandButton = await screen.findByRole('button', { name: 'Expand plan' });
-      expect(expandButton.getAttribute('data-variant')).toBe('default');
+      await screen.findByRole('heading', { name: 'Long plan' });
+      expect(screen.queryByRole('button', { name: 'Expand plan' })).toBeNull();
 
-      const primaryButtons = document.querySelectorAll('button[data-variant="primary"]');
-      expect(primaryButtons).toHaveLength(1);
-      expect(primaryButtons[0]?.getAttribute('aria-label')).toBe('Approve the plan and switch to build');
+      const controls = document.querySelector('[data-slot="plan-controls"] > div');
+      expect(controls?.children).toHaveLength(3);
     });
 
     it('resumes the tool with the displayed plan when approved', async () => {
@@ -222,6 +228,27 @@ describe('SubmitPlanTool', () => {
       expect(await screen.findByRole('heading', { name: 'Persisted plan' })).not.toBeNull();
       expect(screen.getByText('This content came from the transcript.')).not.toBeNull();
       expect(onPlanRequest).not.toHaveBeenCalled();
+    });
+
+    it('offers expansion when short persisted content overflows the collapsed height', async () => {
+      stubContentHeight(221);
+
+      renderSubmitPlan({
+        agentId: 'plan-agent',
+        toolName: 'submit_plan',
+        toolCallId,
+        output: {
+          content: 'Plan approved.',
+          isError: false,
+          submittedPlan: {
+            title: 'Short persisted plan',
+            path: submittedPlanPath,
+            plan: 'A tall rendered block.',
+          },
+        },
+      });
+
+      expect(await screen.findByRole('button', { name: 'Expand plan' })).not.toBeNull();
     });
   });
 

@@ -1,7 +1,7 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "50.0.1-alpha.1",
+  "version": "51.0.1-alpha.5",
   "description": "Mastra Playground components",
   "sideEffects": [
     "**/*.css"

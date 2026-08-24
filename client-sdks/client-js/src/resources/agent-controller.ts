@@ -204,10 +204,20 @@ function hydrateEventTimestamps(event: ParsedEvent): AgentControllerEvent {
   return isKnownParsedEvent(event) ? hydrateKnownEvent(event) : event;
 }
 
-/** Resume payload for the built-in `submit_plan` suspension. */
+/**
+ * Resume payload for the built-in `submit_plan` suspension.
+ *
+ * The tool suspends with only the plan file `path`; hosts read that file to render
+ * the approval. `path`/`title`/`plan` let the host back-fill what it rendered so the
+ * persisted tool result (`submittedPlan`) replays the plan durably in history even
+ * after the plan file changes or disappears.
+ */
 export interface PlanResume {
   action: 'approved' | 'rejected';
   feedback?: string;
+  path?: string;
+  title?: string;
+  plan?: string;
 }
 
 /**

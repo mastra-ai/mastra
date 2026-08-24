@@ -1,6 +1,8 @@
 import { isZodType } from '@mastra/schema-compat';
 import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
 import { MastraError } from '../error/index.js';
+import type { TrajectoryExpectation } from '../evals/types.js';
+import { validateAndSaveScore } from '../mastra/hooks.js';
 import type { Mastra } from '../mastra/index.js';
 import type { DatasetsStorage } from '../storage/domains/datasets/base.js';
 import type { ExperimentsStorage } from '../storage/domains/experiments/base.js';
@@ -11,6 +13,9 @@ import type {
   DatasetItemRow,
   DatasetTenancyFilters,
   DatasetVersion,
+  Experiment,
+  ExperimentProvenance,
+  ExperimentResult,
   ExperimentResultStatus,
   ExperimentStatus,
   ExperimentTenancyFilters,
@@ -22,7 +27,8 @@ import type {
   UpdateDatasetItemInput,
   UpdateExperimentResultInput,
 } from '../storage/types.js';
-import { runExperiment } from './experiment/index.js';
+import { runExperiment, resolveTarget, executeExperimentItem } from './experiment/index.js';
+import { experimentScoreId } from './experiment/scorer.js';
 import type { ExperimentConfig, StartExperimentConfig, ExperimentSummary } from './experiment/types.js';
 
 /**
@@ -570,6 +576,494 @@ export class Dataset {
     await this.#assertExperimentOwnership(input.experimentId);
     const experimentsStore = await this.#getExperimentsStore();
     return experimentsStore.updateExperimentResult(input);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Caller-driven experiments (caller owns the loop)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Load an experiment owned by this dataset (tenancy + dataset ownership).
+   * Used by the caller-driven methods so a caller cannot mutate another
+   * dataset's (or tenant's) experiment.
+   */
+  async #getOwnedExperiment(experimentId: string): Promise<Experiment> {
+    await this.#assertScope();
+    const experimentsStore = await this.#getExperimentsStore();
+    const experiment = await experimentsStore.getExperimentById({
+      id: experimentId,
+      filters: this.#scope,
+    });
+    if (!experiment || experiment.datasetId !== this.id) {
+      throw new MastraError({
+        id: 'EXPERIMENT_NOT_FOUND',
+        text: `Experiment not found: ${experimentId}`,
+        domain: 'STORAGE',
+        category: 'USER',
+      });
+    }
+    return experiment;
+  }
+
+  /**
+   * Create an experiment whose execution loop is owned by the caller
+   * (e.g. a Temporal workflow). No runner is spawned. Two shapes:
+   *
+   * - With `targetType`/`targetId`: the caller drives the loop and Mastra
+   *   executes each item on demand via {@link Dataset.runExperimentItem}.
+   *   Optional `scorers` are pinned on the experiment as the run-level
+   *   scorer source.
+   * - Without a target: pure ingestion — the caller executes and scores
+   *   everything itself and upserts rows via
+   *   {@link Dataset.submitExperimentResult}.
+   *
+   * Either way the caller closes the run with
+   * {@link Dataset.finalizeExperiment}.
+   *
+   * Idempotent on `id`: passing a caller-supplied id (e.g. a workflow run id)
+   * and retrying the create converges on the same experiment instead of
+   * creating duplicates.
+   */
+  async createExperiment(args?: {
+    /** Caller-supplied experiment id (e.g. a workflow run id) for idempotent creates. */
+    id?: string;
+    /** Target to execute per item via {@link Dataset.runExperimentItem}. Both or neither of targetType/targetId. */
+    targetType?: TargetType;
+    targetId?: string;
+    /** Run-level scorer IDs, resolved server-side by {@link Dataset.runExperimentItem}. Requires a target. */
+    scorers?: string[];
+    name?: string;
+    description?: string;
+    metadata?: Record<string, unknown>;
+    provenance?: ExperimentProvenance;
+    grouping?: { experimentSetId?: string; comparisonId?: string; variantId?: string; trialIndex?: number };
+    /** Dataset version to pin. Defaults to the dataset's current version. */
+    version?: number;
+  }): Promise<{
+    experimentId: string;
+    status: ExperimentStatus;
+    totalItems: number;
+    datasetVersion: number;
+    /** The persisted start timestamp — stable across retried creates with the same `id`. */
+    startedAt: Date | null;
+  }> {
+    const experimentsStore = await this.#getExperimentsStore();
+    const datasetsStore = await this.#getDatasetsStore();
+
+    const hasTargetType = args?.targetType !== undefined;
+    const hasTargetId = args?.targetId !== undefined;
+    if (hasTargetType !== hasTargetId) {
+      throw new MastraError({
+        id: 'EXPERIMENT_INVALID_TARGET',
+        text: `targetType and targetId must be provided together (got targetType: ${args?.targetType ?? 'none'}, targetId: ${args?.targetId ?? 'none'})`,
+        domain: 'STORAGE',
+        category: 'USER',
+      });
+    }
+    if (args?.scorers?.length && !hasTargetType) {
+      throw new MastraError({
+        id: 'EXPERIMENT_INVALID_TARGET',
+        text: 'scorers require a target: without a target Mastra never executes or scores items; submit flat scores via submitExperimentResult instead',
+        domain: 'STORAGE',
+        category: 'USER',
+      });
+    }
+    // Validate the target exists in this Mastra registry at create time so a
+    // typo fails fast instead of failing on the first runExperimentItem call.
+    if (hasTargetType) {
+      const resolved = await resolveTarget(this.#mastra, args!.targetType!, args!.targetId!);
+      if (!resolved) {
+        throw new MastraError({
+          id: 'EXPERIMENT_TARGET_NOT_FOUND',
+          text: `Target not found: ${args!.targetType} "${args!.targetId}"`,
+          domain: 'STORAGE',
+          category: 'USER',
+        });
+      }
+    }
+
+    const dataset = await datasetsStore.getDatasetById({ id: this.id, filters: this.#scope });
+    if (!dataset) {
+      throw new MastraError({
+        id: 'DATASET_NOT_FOUND',
+        text: `Dataset not found: ${this.id}`,
+        domain: 'STORAGE',
+        category: 'USER',
+      });
+    }
+
+    // Idempotent create: a retried create with the same id returns the
+    // existing experiment instead of failing or duplicating.
+    if (args?.id) {
+      const existing = await experimentsStore.getExperimentById({ id: args.id, filters: this.#scope });
+      if (existing) {
+        const sameShape =
+          existing.datasetId === this.id &&
+          existing.targetType === (args.targetType ?? null) &&
+          existing.targetId === (args.targetId ?? null);
+        if (!sameShape) {
+          throw new MastraError({
+            id: 'EXPERIMENT_ID_CONFLICT',
+            text: `Experiment id ${args.id} already exists and does not match this experiment's dataset or target`,
+            domain: 'STORAGE',
+            category: 'USER',
+          });
+        }
+        // Repair a half-created record: a prior create that crashed between
+        // createExperiment and the status update leaves the row 'pending'.
+        // A retried create finishes the job so the caller never observes a
+        // permanently-pending experiment.
+        let status = existing.status;
+        let startedAt = existing.startedAt ?? null;
+        if (existing.status === 'pending') {
+          startedAt = new Date();
+          await experimentsStore.updateExperiment({ id: existing.id, status: 'running', startedAt });
+          status = 'running';
+        }
+        return {
+          experimentId: existing.id,
+          status,
+          totalItems: existing.totalItems,
+          datasetVersion: existing.datasetVersion ?? dataset.version,
+          startedAt,
+        };
+      }
+    }
+
+    const targetVersion = args?.version ?? dataset.version;
+    const items = await datasetsStore.getItemsByVersion({ datasetId: this.id, version: targetVersion });
+    if (items.length === 0) {
+      throw new MastraError({
+        id: 'EXPERIMENT_NO_ITEMS',
+        text: `Cannot create experiment: dataset "${this.id}" has no items at version ${targetVersion}`,
+        domain: 'STORAGE',
+        category: 'USER',
+      });
+    }
+
+    const experimentId = args?.id ?? crypto.randomUUID();
+
+    try {
+      await experimentsStore.createExperiment({
+        id: experimentId,
+        datasetId: this.id,
+        datasetVersion: targetVersion,
+        targetType: args?.targetType ?? null,
+        targetId: args?.targetId ?? null,
+        scorerIds: args?.scorers?.length ? args.scorers : null,
+        totalItems: items.length,
+        name: args?.name,
+        description: args?.description,
+        metadata: args?.metadata,
+        provenance: args?.provenance,
+        experimentSetId: args?.grouping?.experimentSetId,
+        comparisonId: args?.grouping?.comparisonId,
+        variantId: args?.grouping?.variantId,
+        trialIndex: args?.grouping?.trialIndex,
+        organizationId: dataset.organizationId ?? null,
+        projectId: dataset.projectId ?? null,
+      });
+    } catch (createError) {
+      // Concurrent creates with the same caller-supplied id can both miss the
+      // idempotency read and race into createExperiment; the loser hits a
+      // duplicate-id failure. Converge by re-reading the winner's record.
+      if (!args?.id) throw createError;
+      const existing = await experimentsStore.getExperimentById({ id: args.id, filters: this.#scope });
+      if (!existing) throw createError;
+      const sameShape =
+        existing.datasetId === this.id &&
+        existing.targetType === (args.targetType ?? null) &&
+        existing.targetId === (args.targetId ?? null);
+      if (!sameShape) {
+        throw new MastraError({
+          id: 'EXPERIMENT_ID_CONFLICT',
+          text: `Experiment id ${args.id} already exists and does not match this experiment's dataset or target`,
+          domain: 'STORAGE',
+          category: 'USER',
+        });
+      }
+      return {
+        experimentId: existing.id,
+        status: existing.status,
+        totalItems: existing.totalItems,
+        datasetVersion: existing.datasetVersion ?? dataset.version,
+        startedAt: existing.startedAt ?? null,
+      };
+    }
+
+    // Caller-driven experiments are "running" from creation: the caller
+    // owns the loop and there is no queued/pending phase inside Mastra.
+    // If this update fails after a successful create, a retried create with
+    // the same id repairs the 'pending' status (see the idempotency branch).
+    const startedAt = new Date();
+    await experimentsStore.updateExperiment({ id: experimentId, status: 'running', startedAt });
+
+    return { experimentId, status: 'running', totalItems: items.length, datasetVersion: targetVersion, startedAt };
+  }
+
+  /**
+   * Execute one experiment item server-side: run the experiment's target
+   * against the item, run the resolved scorers, and upsert the result row
+   * keyed by `(experimentId, itemId, attempt)`.
+   *
+   * Built for caller-driven loops (mode 2): a durable orchestrator (e.g. a
+   * Temporal workflow) fans out one call per item and owns retries/timeouts —
+   * a retried call converges on the same row. Requires an experiment created
+   * with a target via {@link Dataset.createExperiment}.
+   *
+   * Scorer precedence: experiment `scorers` → item `scorerIds` → dataset
+   * `scorerIds` → none.
+   */
+  async runExperimentItem(args: {
+    experimentId: string;
+    itemId: string;
+    /** Zero-based repetition index for repeated trials. Defaults to `0`. */
+    attempt?: number;
+    /** Request context merged with the item's own request context (item wins). */
+    requestContext?: Record<string, unknown>;
+  }): Promise<{ result: ExperimentResult; scores: Awaited<ReturnType<typeof executeExperimentItem>>['scores'] }> {
+    const experiment = await this.#getOwnedExperiment(args.experimentId);
+    if (experiment.targetType === null) {
+      throw new MastraError({
+        id: 'EXPERIMENT_HAS_NO_TARGET',
+        text: `Experiment ${args.experimentId} has no target; ingest results via submitExperimentResult instead`,
+        domain: 'STORAGE',
+        category: 'USER',
+      });
+    }
+    if (experiment.status === 'completed' || experiment.status === 'failed') {
+      throw new MastraError({
+        id: 'EXPERIMENT_ALREADY_FINALIZED',
+        text: `Experiment ${args.experimentId} is already ${experiment.status}; no further items can be run`,
+        domain: 'STORAGE',
+        category: 'USER',
+      });
+    }
+
+    const datasetsStore = await this.#getDatasetsStore();
+    const dataset = await datasetsStore.getDatasetById({ id: this.id, filters: this.#scope });
+    const item = await datasetsStore.getItemById({
+      id: args.itemId,
+      datasetVersion: experiment.datasetVersion ?? undefined,
+    });
+    if (!item || item.datasetId !== this.id) {
+      throw new MastraError({
+        id: 'DATASET_ITEM_NOT_FOUND',
+        text: `Item ${args.itemId} not found in dataset ${this.id} at version ${experiment.datasetVersion}`,
+        domain: 'STORAGE',
+        category: 'USER',
+      });
+    }
+
+    return executeExperimentItem({
+      mastra: this.#mastra,
+      experiment,
+      item: {
+        id: item.id,
+        datasetVersion: item.datasetVersion,
+        input: item.input,
+        groundTruth: item.groundTruth,
+        expectedTrajectory: item.expectedTrajectory as TrajectoryExpectation | undefined,
+        requestContext: item.requestContext,
+        metadata: item.metadata,
+        scorerIds: item.scorerIds,
+      },
+      datasetScorerIds: dataset?.scorerIds ?? null,
+      attempt: args.attempt ?? 0,
+      requestContext: args.requestContext,
+      organizationId: experiment.organizationId ?? dataset?.organizationId ?? null,
+      projectId: experiment.projectId ?? dataset?.projectId ?? null,
+    });
+  }
+
+  /**
+   * Submit (or re-submit) one item result for a target-less (pure-ingestion)
+   * experiment created with {@link Dataset.createExperiment}.
+   *
+   * Upsert semantics: the row is identified by the natural key
+   * `(experimentId, itemId, attempt)`, so a retried submission (e.g. a
+   * retried Temporal activity) converges on a single row instead of
+   * duplicating. `attempt` defaults to `0`; use it only for intentional
+   * repeated trials of the same item.
+   *
+   * `input` / `groundTruth` default to the dataset item's values at the
+   * experiment's pinned dataset version when omitted.
+   *
+   * Inline `scores` are persisted to the scores store keyed by
+   * `runId = experimentId`, the same shape the native runner writes, so
+   * comparisons and Studio aggregation work unchanged. Score persistence is
+   * best-effort and never fails the submission.
+   */
+  async submitExperimentResult(args: {
+    experimentId: string;
+    itemId: string;
+    /** Zero-based repetition index for repeated trials. Defaults to `0`. */
+    attempt?: number;
+    input?: unknown;
+    output?: unknown;
+    groundTruth?: unknown;
+    error?: { message: string; stack?: string; code?: string } | null;
+    startedAt?: Date;
+    completedAt?: Date;
+    traceId?: string;
+    scores?: {
+      scorerId: string;
+      scorerName?: string;
+      score: number;
+      reason?: string;
+      metadata?: Record<string, unknown>;
+    }[];
+  }): Promise<ExperimentResult> {
+    const experiment = await this.#getOwnedExperiment(args.experimentId);
+    if (experiment.targetType !== null) {
+      throw new MastraError({
+        id: 'EXPERIMENT_HAS_TARGET',
+        text: `Experiment ${args.experimentId} has a target (${experiment.targetType} "${experiment.targetId}"); results are produced by Mastra, not ingested. Use runExperimentItem instead.`,
+        domain: 'STORAGE',
+        category: 'USER',
+      });
+    }
+    if (experiment.status === 'completed' || experiment.status === 'failed') {
+      throw new MastraError({
+        id: 'EXPERIMENT_ALREADY_FINALIZED',
+        text: `Experiment ${args.experimentId} is already ${experiment.status}; no further results can be submitted`,
+        domain: 'STORAGE',
+        category: 'USER',
+      });
+    }
+
+    const datasetsStore = await this.#getDatasetsStore();
+    const item = await datasetsStore.getItemById({
+      id: args.itemId,
+      datasetVersion: experiment.datasetVersion ?? undefined,
+    });
+    if (!item || item.datasetId !== this.id) {
+      throw new MastraError({
+        id: 'DATASET_ITEM_NOT_FOUND',
+        text: `Item ${args.itemId} not found in dataset ${this.id} at version ${experiment.datasetVersion}`,
+        domain: 'STORAGE',
+        category: 'USER',
+      });
+    }
+
+    const experimentsStore = await this.#getExperimentsStore();
+    const now = new Date();
+    const result = await experimentsStore.upsertExperimentResult({
+      experimentId: args.experimentId,
+      itemId: args.itemId,
+      attempt: args.attempt ?? 0,
+      itemDatasetVersion: experiment.datasetVersion,
+      input: args.input !== undefined ? args.input : item.input,
+      output: args.output ?? null,
+      groundTruth: args.groundTruth !== undefined ? args.groundTruth : (item.groundTruth ?? null),
+      error: args.error ?? null,
+      startedAt: args.startedAt ?? now,
+      completedAt: args.completedAt ?? now,
+      retryCount: 0,
+      traceId: args.traceId ?? null,
+      organizationId: experiment.organizationId ?? null,
+      projectId: experiment.projectId ?? null,
+    });
+
+    if (args.scores?.length) {
+      const storage = this.#mastra.getStorage();
+      if (storage) {
+        // Retry convergence: the result row upserts on (experimentId, itemId,
+        // attempt); score rows use a deterministic id derived from the same
+        // natural key plus the scorer, so a retried submission replaces the
+        // previous score (latest wins) instead of accumulating duplicates.
+        for (const score of args.scores) {
+          try {
+            await validateAndSaveScore(storage, {
+              id: experimentScoreId(args.experimentId, args.itemId, args.attempt ?? 0, score.scorerId),
+              scorerId: score.scorerId,
+              score: score.score,
+              reason: score.reason,
+              input: result.input,
+              output: result.output,
+              additionalContext: score.metadata,
+              entityType: 'EXTERNAL',
+              entityId: args.itemId,
+              source: 'TEST',
+              runId: args.experimentId,
+              traceId: args.traceId,
+              scorer: {
+                id: score.scorerId,
+                name: score.scorerName ?? score.scorerId,
+                description: '',
+                hasJudge: false,
+              },
+              entity: { id: 'external', name: 'external' },
+            });
+          } catch (saveError) {
+            this.#mastra.getLogger()?.warn(`Failed to save external score for scorer ${score.scorerId}: ${saveError}`);
+          }
+        }
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Finalize a caller-driven experiment: compute per-item
+   * succeeded/failed/skipped counts from the persisted result rows and mark
+   * the experiment completed. The caller sends no bookkeeping — the server is
+   * the source of truth. Works for both targeted (runExperimentItem) and
+   * target-less (submitExperimentResult) experiments.
+   *
+   * Idempotent: finalizing an already-completed experiment recomputes nothing
+   * and returns the stored record.
+   */
+  async finalizeExperiment(args: { experimentId: string }): Promise<Experiment> {
+    const experiment = await this.#getOwnedExperiment(args.experimentId);
+    if (experiment.status === 'completed' || experiment.status === 'failed') {
+      return experiment;
+    }
+
+    const experimentsStore = await this.#getExperimentsStore();
+
+    // Page through all results and compute per-item counts server-side.
+    // With repeated trials an item can have several rows (one per attempt);
+    // the top-line counts roll attempts up so that
+    // succeeded + failed + skipped === totalItems:
+    //   succeeded — at least one attempt completed without an error
+    //   failed    — submitted, but every attempt errored
+    //   skipped   — never submitted (any attempt)
+    // Attempt-level detail stays available via listExperimentResults.
+    const itemSucceeded = new Map<string, boolean>();
+    let page = 0;
+    const perPage = 100;
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const { results, pagination } = await experimentsStore.listExperimentResults({
+        experimentId: args.experimentId,
+        pagination: { page, perPage },
+      });
+      for (const result of results) {
+        const succeeded = !result.error;
+        itemSucceeded.set(result.itemId, (itemSucceeded.get(result.itemId) ?? false) || succeeded);
+      }
+      if (!pagination.hasMore || results.length === 0) break;
+      page++;
+    }
+
+    let succeededCount = 0;
+    let failedCount = 0;
+    for (const succeeded of itemSucceeded.values()) {
+      if (succeeded) succeededCount++;
+      else failedCount++;
+    }
+    const skippedCount = Math.max(0, experiment.totalItems - itemSucceeded.size);
+
+    return experimentsStore.updateExperiment({
+      id: args.experimentId,
+      status: 'completed',
+      succeededCount,
+      failedCount,
+      skippedCount,
+      completedAt: new Date(),
+    });
   }
 
   /**

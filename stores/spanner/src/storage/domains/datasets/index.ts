@@ -980,8 +980,11 @@ export class DatasetsSpanner extends DatasetsStorage {
       if (args.datasetVersion !== undefined) {
         sql = `SELECT * FROM ${tableName}
                WHERE ${quoteIdent('id', 'column name')} = @id
-                 AND ${quoteIdent('datasetVersion', 'column name')} = @datasetVersion
-                 AND ${quoteIdent('isDeleted', 'column name')} = FALSE LIMIT 1`;
+                 AND ${quoteIdent('datasetVersion', 'column name')} <= @datasetVersion
+                 AND (${quoteIdent('validTo', 'column name')} IS NULL OR ${quoteIdent('validTo', 'column name')} > @datasetVersion)
+                 AND ${quoteIdent('isDeleted', 'column name')} = FALSE
+               ORDER BY ${quoteIdent('datasetVersion', 'column name')} DESC
+               LIMIT 1`;
         params.datasetVersion = args.datasetVersion;
       } else {
         sql = `SELECT * FROM ${tableName}

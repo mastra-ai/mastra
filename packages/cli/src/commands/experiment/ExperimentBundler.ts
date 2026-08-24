@@ -47,11 +47,7 @@ export class ExperimentBundler extends Bundler {
 
   getEnvFiles(): Promise<string[]> {
     if (shouldSkipDotenvLoading()) return Promise.resolve([]);
-    try {
-      return Promise.resolve([new FileService().getFirstExistingFile(['.env.production', '.env.local', '.env'])]);
-    } catch {
-      return Promise.resolve([]);
-    }
+    return Promise.resolve(new FileService().getExistingFiles(['.env', '.env.local', '.env.production']));
   }
 
   protected async getUserBundlerOptions(

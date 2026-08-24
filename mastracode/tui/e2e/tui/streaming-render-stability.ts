@@ -11,6 +11,7 @@ const MARKERS = [
   'STREAM_LIST_TWO',
   'STREAM_EMPHASIS',
 ] as const;
+const EDITOR_TEXT = 'footer-animation-editor-stability';
 
 function assertStableOutput(view: string): void {
   const output = stripAnsi(view);
@@ -28,8 +29,8 @@ function assertStableOutput(view: string): void {
 export const streamingRenderStabilityScenario: McE2eScenario = {
   name: 'streaming-render-stability',
   description:
-    'Preserve streamed Markdown and tool ordering through coalesced rendering, resize, and theme invalidation.',
-  testName: 'renders tiny Markdown deltas once in order across a tool boundary, resize, and theme change',
+    'Preserve streamed Markdown, editor input, and overlays while footer animation uses coalesced and direct rendering.',
+  testName: 'keeps streaming output, editor input, and overlays stable through footer animation and resize',
   projectFixture: 'long-branch',
   useOpenAIModel: true,
   aimockFixture: 'streaming-render-stability.json',
@@ -43,13 +44,38 @@ export const streamingRenderStabilityScenario: McE2eScenario = {
     await runtime.waitForScreenText(/Project:/i, terminal);
 
     terminal.submit('Exercise streaming render stability.');
-    await runtime.waitForScreenText(/STREAM_EMPHASIS/, terminal, 15_000);
-    assertStableOutput(terminal.serialize().view);
+    await runtime.waitForScreenText(/Streaming stability complete\./, terminal, 15_000);
 
+    // Opening an overlay forces footer animation frames onto the normal-render
+    // fallback while the response continues streaming.
+    terminal.submit('/models');
+    await runtime.waitForScreenText(/Switch model pack/i, terminal, 8_000);
     terminal.resize(96, 40);
     await runtime.sleep(150);
-    assertStableOutput(terminal.serialize().view);
+    await runtime.waitForScreenText(/Switch model pack/i, terminal, 8_000);
+    terminal.write('\x1b');
+    await runtime.waitForScreenTextAbsent(/Switch model pack/i, terminal, 8_000);
 
+    // Exercise the direct footer path with a live editor cursor, then ensure a
+    // subsequent resize and full render preserve both input and stream output.
+    terminal.write(EDITOR_TEXT);
+    await terminal.flushInput?.();
+    await runtime.waitForScreenText(new RegExp(EDITOR_TEXT), terminal, 8_000);
+    await runtime.waitForScreenText(/STREAM_EMPHASIS/, terminal, 15_000);
+    assertStableOutput(terminal.serialize().view);
+    if (!terminal.serialize().view.includes(EDITOR_TEXT)) {
+      throw new Error('Expected editor input to survive footer animation and resize');
+    }
+
+    terminal.resize(72, 40);
+    await runtime.sleep(150);
+    assertStableOutput(terminal.serialize().view);
+    if (!terminal.serialize().view.includes(EDITOR_TEXT)) {
+      throw new Error('Expected editor input to survive the post-animation full render');
+    }
+
+    terminal.write('\x15');
+    await terminal.flushInput?.();
     terminal.submit('/theme light');
     await runtime.waitForScreenText(/Theme set to light/i, terminal);
     assertStableOutput(terminal.serialize().view);

@@ -17,6 +17,9 @@ vi.mock('@mastra/deployer/build', () => ({
     getFirstExistingFile() {
       return '.env';
     }
+    getExistingFiles(files: string[]) {
+      return files;
+    }
   },
 }));
 vi.mock('../utils.js', () => ({ shouldSkipDotenvLoading: vi.fn().mockReturnValue(false) }));
@@ -42,6 +45,12 @@ describe('ExperimentBundler', () => {
   afterEach(async () => {
     vi.restoreAllMocks();
     await Promise.all(temporaryDirectories.splice(0).map(directory => rm(directory, { recursive: true, force: true })));
+  });
+
+  it('layers default dotenv files from base to production override', async () => {
+    const { ExperimentBundler } = await import('./ExperimentBundler');
+
+    await expect(new ExperimentBundler().getEnvFiles()).resolves.toEqual(['.env', '.env.local', '.env.production']);
   });
 
   it('generates an isolated NDJSON experiment worker entry', async () => {

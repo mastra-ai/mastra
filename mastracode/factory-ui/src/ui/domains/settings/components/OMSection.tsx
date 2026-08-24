@@ -81,21 +81,28 @@ function ThresholdInput({
   );
 }
 
-/** Persisted observational-memory settings, optionally synchronized to an active session. */
+/**
+ * Persisted observational-memory settings, optionally synchronized to an
+ * active session. With `factoryId` set, the section edits the factory
+ * project's shared settings (used by board runs and channel sessions) instead
+ * of the caller's personal row.
+ */
 export function OMSection({
   resourceId,
   scope,
+  factoryId,
   models,
 }: {
   resourceId?: string;
   scope?: string;
+  factoryId?: string;
   models: AvailableModelOption[];
 }) {
-  const omQuery = useOMQuery(resourceId, scope);
-  const observerMutation = useUpdateOMModel(resourceId, 'observer', scope);
-  const reflectorMutation = useUpdateOMModel(resourceId, 'reflector', scope);
-  const thresholdsMutation = useUpdateOMThresholds(resourceId, scope);
-  const attachmentsMutation = useUpdateOMObserveAttachments(resourceId, scope);
+  const omQuery = useOMQuery(resourceId, scope, factoryId);
+  const observerMutation = useUpdateOMModel(resourceId, 'observer', scope, factoryId);
+  const reflectorMutation = useUpdateOMModel(resourceId, 'reflector', scope, factoryId);
+  const thresholdsMutation = useUpdateOMThresholds(resourceId, scope, factoryId);
+  const attachmentsMutation = useUpdateOMObserveAttachments(resourceId, scope, factoryId);
 
   const config = omQuery.data?.config;
   const configuredModelIds = new Set(models.map(model => model.id));

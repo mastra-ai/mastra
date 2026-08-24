@@ -29,13 +29,13 @@ function createRateLimitedModel(headers: Record<string, string>, isRetryable = t
   };
 }
 
-function createAgent(model: MockLanguageModelV2, maxRetries: number) {
+function createAgent(model: MockLanguageModelV2, maxRetries?: number) {
   return new Agent({
     id: 'model-retry-after',
     name: 'model-retry-after',
     instructions: 'You are a test agent',
     model,
-    maxRetries,
+    ...(maxRetries === undefined ? {} : { maxRetries }),
   });
 }
 
@@ -51,6 +51,66 @@ describe('agent model-call retry honors Retry-After', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it('honors call-time modelSettings.maxRetries when the agent retry count is implicit', async () => {
+    vi.useFakeTimers();
+    const provider = createRateLimitedModel({});
+    const settled = createAgent(provider.model)
+      .generate('hi', { modelSettings: { maxRetries: 2 } })
+      .catch(() => {});
+
+    await vi.advanceTimersByTimeAsync(4_000);
+    expect(provider.getCallCount()).toBe(3);
+
+    await settled;
+  });
+
+  it('does not retry when neither the agent nor the call configures retries', async () => {
+    const provider = createRateLimitedModel({});
+
+    await createAgent(provider.model)
+      .generate('hi')
+      .catch(() => {});
+
+    expect(provider.getCallCount()).toBe(1);
+  });
+
+  it('keeps a non-zero explicit agent maxRetries over call-time modelSettings', async () => {
+    vi.useFakeTimers();
+    const provider = createRateLimitedModel({});
+    const settled = createAgent(provider.model, 1)
+      .generate('hi', { modelSettings: { maxRetries: 5 } })
+      .catch(() => {});
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(provider.getCallCount()).toBe(2);
+
+    await settled;
+  });
+
+  it('keeps an explicit agent maxRetries over call-time modelSettings', async () => {
+    const provider = createRateLimitedModel({});
+
+    await createAgent(provider.model, 0)
+      .generate('hi', { modelSettings: { maxRetries: 2 } })
+      .catch(() => {});
+
+    expect(provider.getCallCount()).toBe(1);
+  });
+
+  it('keeps an explicit fallback maxRetries over call-time modelSettings', async () => {
+    const provider = createRateLimitedModel({});
+    const agent = new Agent({
+      id: 'fallback-model-retry-after',
+      name: 'fallback-model-retry-after',
+      instructions: 'You are a test agent',
+      model: [{ model: provider.model, maxRetries: 0 }],
+    });
+
+    await agent.generate('hi', { modelSettings: { maxRetries: 2 } }).catch(() => {});
+
+    expect(provider.getCallCount()).toBe(1);
   });
 
   it('waits for a numeric Retry-After instead of the shorter exponential backoff', async () => {
