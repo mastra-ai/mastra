@@ -34,10 +34,6 @@ export interface MaterializationSandbox {
   setEnvironmentVariable?(name: string, value: string): void;
   /** Tear down the underlying VM. Optional: providers without it are no-ops. */
   stop?(): Promise<void>;
-  /** True when the provider persists real checkpoints (snapshot is not a no-op). */
-  readonly supportsCheckpoints?: boolean;
-  /** Persist the sandbox's current state under its bound checkpoint name. */
-  snapshot?(): Promise<void>;
 }
 
 /**

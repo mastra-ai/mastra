@@ -241,16 +241,20 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
   private _resolvedNamedSpec?: NamedTemplateSpec;
 
   constructor(options: E2BSandboxOptions = {}) {
+    // One shared object: `setEnvironmentVariable` mutates it and the process
+    // manager reads it per spawn, so runtime env changes reach every
+    // subsequent command.
+    const env = options.env ?? {};
     super({
       ...options,
       name: 'E2BSandbox',
-      processes: new E2BProcessManager({ env: options.env ?? {} }),
+      processes: new E2BProcessManager({ env }),
     });
 
     this.id = options.id ?? this.generateId();
     this.timeout = options.timeout ?? 300_000; // 5 minutes;
     this.templateSpec = options.template;
-    this.env = options.env ?? {};
+    this.env = env;
     this.metadata = options.metadata ?? {};
     this.network = options.network;
     // Always sent explicitly: the E2B API defaults to 'kill' when lifecycle is omitted.
@@ -536,6 +540,16 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
     }
 
     this.mounts.clear();
+  }
+
+  /**
+   * Set an environment variable for all subsequent commands and spawned
+   * processes. Merged into each exec's env (never written into the VM), so
+   * it applies immediately, survives pause/resume, and a replacement VM gets
+   * it too. Used by hosts to install rotating credentials (e.g. `GH_TOKEN`).
+   */
+  setEnvironmentVariable(name: string, value: string): void {
+    this.env[name] = value;
   }
 
   async getInfo(): Promise<SandboxInfo> {

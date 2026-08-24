@@ -398,6 +398,14 @@ export class PlatformSandbox extends MastraSandbox {
   private readonly _idleTimeoutMinutes?: number;
   private readonly _networkIsolation?: PlatformSandboxNetworkIsolation;
   private readonly _env: Record<string, string>;
+  /**
+   * Environment variables set at runtime via `setEnvironmentVariable`.
+   * Overlaid onto every exec's env (the remote VM's own environment cannot be
+   * mutated after creation), so values apply immediately and reach a
+   * replacement VM too. Used by hosts to install rotating credentials
+   * (e.g. `GH_TOKEN`).
+   */
+  private readonly _runtimeEnv: Record<string, string> = {};
   private readonly _timeout?: number;
   private readonly _instructionsOverride?: InstructionsOption;
   private _createdAt: Date | null = null;
@@ -1210,19 +1218,38 @@ export class PlatformSandbox extends MastraSandbox {
    * Returns a result with a real `exitCode` OR `timedOut: true`. Never
    * returns `{ exitCode: null, timedOut: false }` — that case throws.
    */
+  /**
+   * Set an environment variable for all subsequent commands. Overlaid onto
+   * each exec's env rather than written into the VM, so it applies
+   * immediately and survives VM replacement.
+   */
+  setEnvironmentVariable(name: string, value: string): void {
+    this._runtimeEnv[name] = value;
+  }
+
+  /**
+   * Merge the runtime env overlay with a call's own env, filtering undefined
+   * values so the result matches the Record<string, string> shape the exec
+   * transports expect (`ExecuteCommandOptions.env` is NodeJS.ProcessEnv).
+   * Per-call env wins over the runtime overlay. Returns undefined when there
+   * is nothing to send.
+   */
+  private _execEnvOverlay(options: ExecuteCommandOptions | undefined): Record<string, string> | undefined {
+    const fromOptions = options?.env
+      ? Object.fromEntries(
+          Object.entries(options.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
+        )
+      : undefined;
+    const merged = { ...this._runtimeEnv, ...fromOptions };
+    return Object.keys(merged).length > 0 ? merged : undefined;
+  }
+
   private async _runDirectExec(
     fullCommand: string,
     effectiveTimeout: number | undefined,
     options: ExecuteCommandOptions | undefined,
   ): Promise<{ exitCode: number | null; stdout: string; stderr: string; timedOut: boolean }> {
-    // Filter undefined values out of the env overlay so we match the
-    // Record<string, string> shape execViaLease expects. `ExecuteCommandOptions.env`
-    // is NodeJS.ProcessEnv (string | undefined).
-    const filteredEnv = options?.env
-      ? Object.fromEntries(
-          Object.entries(options.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
-        )
-      : undefined;
+    const filteredEnv = this._execEnvOverlay(options);
 
     let lastResult: Awaited<ReturnType<typeof execViaLease>> | undefined;
     let lastLease: CachedExecLease | undefined;
@@ -1332,14 +1359,7 @@ export class PlatformSandbox extends MastraSandbox {
     effectiveTimeout: number | undefined,
     options: ExecuteCommandOptions | undefined,
   ): Promise<PrivateNetExecResult | undefined> {
-    // Match the env-filter dance in `_runDirectExec`: ExecuteCommandOptions.env
-    // is NodeJS.ProcessEnv (string | undefined) but the wire body wants a
-    // Record<string, string>.
-    const filteredEnv = options?.env
-      ? Object.fromEntries(
-          Object.entries(options.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
-        )
-      : undefined;
+    const filteredEnv = this._execEnvOverlay(options);
 
     const execOptions: PrivateNetExecOptions = {
       command: fullCommand,

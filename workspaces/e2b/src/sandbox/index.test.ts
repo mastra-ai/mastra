@@ -673,6 +673,35 @@ describe('E2BSandbox', () => {
         }),
       );
     });
+
+    it('setEnvironmentVariable reaches subsequent commands (rotating credential seam)', async () => {
+      // Regression: hosts install rotating credentials (e.g. GH_TOKEN) at
+      // runtime; the value must reach every later exec, including when no
+      // constructor env was passed (the env object must be shared with the
+      // process manager, not a second `?? {}` copy).
+      const sandbox = new E2BSandbox();
+      await sandbox._start();
+
+      sandbox.setEnvironmentVariable('GH_TOKEN', 'ghs_fresh');
+      await sandbox.executeCommand('gh', ['auth', 'status']);
+
+      expect(mockSandbox.commands.run).toHaveBeenLastCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          envs: expect.objectContaining({ GH_TOKEN: 'ghs_fresh' }),
+        }),
+      );
+
+      sandbox.setEnvironmentVariable('GH_TOKEN', 'ghs_rotated');
+      await sandbox.executeCommand('gh', ['auth', 'status']);
+
+      expect(mockSandbox.commands.run).toHaveBeenLastCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          envs: expect.objectContaining({ GH_TOKEN: 'ghs_rotated' }),
+        }),
+      );
+    });
   });
 
   describe('Stop/Destroy', () => {

@@ -140,6 +140,37 @@ describe('PlatformSandbox', () => {
     expect(init.data).toEqual({ command: 'echo ok', cwd: '/workspace', env: { A: '1' } });
   });
 
+  it('setEnvironmentVariable overlays every subsequent exec (rotating credential seam)', async () => {
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+      .mockResolvedValueOnce(leaseResponse());
+    const { factory, sockets } = fakeExecSocket({ exitCode: 0, stdout: 'ok' });
+
+    const sandbox = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      fetch: fetchMock,
+      webSocketFactory: factory,
+    });
+    await sandbox._start();
+
+    // Hosts install rotating credentials (e.g. GH_TOKEN) at runtime; the
+    // value must reach every later exec without touching the VM's own env.
+    sandbox.setEnvironmentVariable('GH_TOKEN', 'ghs_fresh');
+    await sandbox.executeCommand('gh', ['auth', 'status']);
+    const first = JSON.parse(sockets[0]!.sent[0]!) as { data: { env?: Record<string, string> } };
+    expect(first.data.env).toEqual({ GH_TOKEN: 'ghs_fresh' });
+
+    // Per-call env wins over the overlay; other overlay keys still ride along.
+    sandbox.setEnvironmentVariable('GH_TOKEN', 'ghs_rotated');
+    await sandbox.executeCommand('echo', ['ok'], { env: { A: '1' } });
+    const second = JSON.parse(sockets[1]!.sent[0]!) as { data: { env?: Record<string, string> } };
+    expect(second.data.env).toEqual({ GH_TOKEN: 'ghs_rotated', A: '1' });
+  });
+
   it.each(['railway', 'e2b'] as const)(
     'submits deterministic template identity with sandbox creation and propagates it to clones for %s',
     async sandboxProvider => {
