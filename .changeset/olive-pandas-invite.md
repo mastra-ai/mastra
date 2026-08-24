@@ -2,46 +2,7 @@
 '@mastra/memory': minor
 ---
 
-Trigger subconscious curation from volume and staleness, at every point in the turn that can leave knowledge uncurated.
-
-Previously the curator only ran on a count of committed observation runs, and only from the
-synchronous observe path. A short conversation — one that captured knowledge and ended without ever
-crossing an observation threshold again — could leave that knowledge uncurated indefinitely.
-
-Two new options on `Subconscious`, both **off by default**:
-
-```ts
-new Subconscious({
-  curationThreshold: 25, // run once 25 uncurated knowledge records have accumulated
-  curationMaxAgeMs: 30 * 60_000, // ...or once it is stale and new uncurated knowledge exists
-});
-```
-
-Curation is now evaluated at step-0 activation, later-step activation, the synchronous observe
-path, and the end of the turn.
-
-**Nothing is scheduled.** `curationMaxAgeMs` is an opportunistic age threshold, not a timer and not
-a background job: it is only consulted when the lifecycle is already evaluating, and it additionally
-requires at least one uncurated record. An idle resource never triggers curation, and configuring
-`curationMaxAgeMs` alone does nothing until new knowledge arrives — if you want curation to happen
-on a quiet resource, call `Memory.runCuration` yourself.
-
-Retry state is persisted on the observational memory record, so a curator that fails backs off
-(1 minute, doubling, capped at 1 hour) and **stays backed off across a restart** instead of being
-retried once per turn. A curator that reports `skipped` leaves the backoff untouched.
-
-Known limitation: two live instances sharing one storage can still both decide to curate. There is
-no atomic claim for this state today. The curation cursor keeps acknowledged input out of later
-worklists, but it does not serialize concurrent model calls or guarantee conflict-free mutations.
-
-**Migrating from `curationCadence`**
-
-`curationCadence` is deprecated but still honoured as the volume trigger, and it warns once per
-process. `curationThreshold` takes precedence when both are set.
-
-**The unit changed.** `curationCadence` counted *committed observation runs*; `curationThreshold`
-counts *uncurated knowledge records* since the last curation. One observation run can commit
-several knowledge records or none at all, so carrying the same number across is not the same
-cadence — a deployment that ran the curator every 5 observation runs will generally curate
-*more* often at `curationThreshold: 5`. Start by raising the number, then tune against how much
-knowledge your capture agent actually commits per run.
+Internal restructuring of experimental subconscious curation: the curate agent entry now owns its
+own trigger configuration, and curation is evaluated from pipeline completion rather than the
+memory engine's lifecycle. Deprecated top-level curation options are still honoured via
+translation at config resolution.
