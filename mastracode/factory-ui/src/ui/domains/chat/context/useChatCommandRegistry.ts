@@ -1,5 +1,13 @@
 import type { AgentControllerSessionSettings, ToolCategory } from '@mastra/client-js';
+import {
+  getAvailableThinkingLevelsForModel,
+  parseThinkCommand,
+  resolveDefaultThinkingLevel,
+  THINK_COMMAND_DESCRIPTOR,
+} from '@mastra/code-sdk/thinking';
+import type { ThinkingLevelSource } from '@mastra/code-sdk/thinking';
 import { useLocation, useNavigate, useParams } from 'react-router';
+import type { ThinkingConfigInfo } from '../../../../api/types';
 
 import {
   useClearAgentControllerGoalMutation,
@@ -12,6 +20,7 @@ import {
   useFollowUpAgentControllerMutation,
 } from '../../../../hooks/useAgentControllerRunMutations';
 import { useAgentControllerSettings } from '../../../../hooks/useAgentControllerSettings';
+import { useThinkingConfigQuery } from '../../../../hooks/use-thinking';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useUpdateAgentControllerSettingsMutation } from '../../../../hooks/useUpdateAgentControllerSettingsMutation';
 import { settingsSectionPath } from '../../settings/settingsSections';
@@ -25,11 +34,8 @@ import { useChatSessionContext } from './useChatSessionContext';
 import { useChatTranscript } from './useChatTranscript';
 
 const TOOL_CATEGORIES: ToolCategory[] = ['read', 'edit', 'execute', 'mcp', 'other'];
-type ThinkingLevel = NonNullable<AgentControllerSessionSettings['thinkingLevel']>;
-const THINKING_LEVELS: ThinkingLevel[] = ['off', 'low', 'medium', 'high', 'xhigh', 'max'];
-
-function isThinkingLevel(value: string): value is ThinkingLevel {
-  return THINKING_LEVELS.some(level => level === value);
+function thinkingSourceLabel(source: ThinkingLevelSource, modeId: string | null): string {
+  return source === 'mode-default' && modeId ? `${modeId} mode default` : 'global default';
 }
 
 export function useChatCommandRegistry(prefillComposer: (draft: string) => void) {
@@ -56,6 +62,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
   const abortMutation = useAbortAgentControllerMutation(hookArgs);
   const followUpMutation = useFollowUpAgentControllerMutation(hookArgs);
   const settingsQuery = useAgentControllerSettings(hookArgs);
+  const thinkingConfigQuery = useThinkingConfigQuery({ enabled: false });
   const updateSettingsMutation = useUpdateAgentControllerSettingsMutation(hookArgs);
   const { permissions, permissionsLoading, setPermissionForCategory } = useChatPermissions();
 
@@ -63,6 +70,12 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
     if (settingsQuery.data) return settingsQuery.data;
     const result = await settingsQuery.refetch();
     if (!result.data) throw new Error('Session settings are unavailable');
+    return result.data;
+  };
+  const ensureThinkingConfig = async (): Promise<ThinkingConfigInfo> => {
+    if (thinkingConfigQuery.data) return thinkingConfigQuery.data;
+    const result = await thinkingConfigQuery.refetch();
+    if (!result.data) throw new Error('Thinking defaults are unavailable');
     return result.data;
   };
 
@@ -152,29 +165,40 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
       },
     },
     {
-      name: 'think',
-      args: '[status|off|low|medium|high|xhigh|max]',
-      description: 'Show or set session thinking level',
+      ...THINK_COMMAND_DESCRIPTOR,
       requiresSession: true,
       execute: async (rawArguments, originalText) => {
-        const value = rawArguments.trim().toLowerCase() || 'status';
+        const levels = getAvailableThinkingLevelsForModel(activeModelId ?? '');
+        const action = parseThinkCommand(rawArguments, levels);
         try {
-          const settings = await ensureSettings();
-          if (value === 'status') {
+          if (action.kind === 'invalid') {
+            prefillComposer(originalText);
             pushNotice(
-              settings.thinkingLevel
-                ? `Thinking level: ${settings.thinkingLevel}`
-                : 'Thinking level: default (no session override)',
+              `Unknown thinking level: ${action.value}. Use: ${action.levels.join(', ')}, default, status`,
+              'error',
             );
             return;
           }
-          if (!isThinkingLevel(value)) {
-            prefillComposer(originalText);
-            pushNotice(`Unknown thinking level: ${value}. Use: ${THINKING_LEVELS.join(', ')}`, 'error');
+          if (action.kind === 'set') {
+            await ensureSettings();
+            await updateSettingsMutation.mutateAsync({ thinkingLevel: action.level });
+            pushNotice(`Thinking level set to ${action.level}.`);
             return;
           }
-          await updateSettingsMutation.mutateAsync({ thinkingLevel: value });
-          pushNotice(`Thinking level set to ${value}.`);
+          const [settings, defaults] = await Promise.all([ensureSettings(), ensureThinkingConfig()]);
+          const modeId = activeModeId ?? null;
+          const fallback = resolveDefaultThinkingLevel(defaults, modeId);
+          const source = thinkingSourceLabel(fallback.source, modeId);
+          if (action.kind === 'clear') {
+            await updateSettingsMutation.mutateAsync({ thinkingLevel: null });
+            pushNotice(`Thinking level set to default: ${fallback.level} (${source}).`);
+            return;
+          }
+          pushNotice(
+            settings.thinkingLevel
+              ? `Thinking level: ${settings.thinkingLevel} (session override). Default: ${fallback.level} (${source}).`
+              : `Thinking level: ${fallback.level} (${source}).`,
+          );
         } catch (error) {
           prefillComposer(originalText);
           throw error;

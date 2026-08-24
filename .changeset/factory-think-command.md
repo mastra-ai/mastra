@@ -2,4 +2,4 @@
 'mastra': patch
 ---
 
-Fixed Factory chat slash commands so `/think` can update the active session through the same registry used by autocomplete and help.
+Fixed Factory chat `/think` so it can set, inspect, and clear session reasoning overrides with the same command semantics as the Mastra Code TUI.

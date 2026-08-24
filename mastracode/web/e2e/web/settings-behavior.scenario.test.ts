@@ -17,6 +17,7 @@ describe('web scenario: settings-behavior', () => {
       description: 'Behavior settings round-trip via session-state read + setState routes.',
       aimockFixture: 'automated-chat.json',
       resourceId,
+      server: { useMastraCodeStateSchema: true },
       // yolo:true is the scenario default; assert it surfaces, then flip it off.
       run: async ({ driver, baseUrl, fetch: rawFetch }) => {
         // Drive one chat so the session is fully live (and to satisfy the
@@ -33,14 +34,14 @@ describe('web scenario: settings-behavior', () => {
         const before = (await (await rawFetch(readUrl)).json()) as {
           settings?: {
             yolo: boolean;
-            thinkingLevel: string;
+            thinkingLevel?: string;
             notifications: string;
             smartEditing: boolean;
           };
         };
         expect(before.settings).toBeDefined();
         expect(before.settings!.yolo).toBe(true);
-        expect(['off', 'low', 'medium', 'high', 'xhigh', 'max']).toContain(before.settings!.thinkingLevel);
+        expect(before.settings!.thinkingLevel).toBeUndefined();
         expect(['off', 'bell', 'system', 'both']).toContain(before.settings!.notifications);
 
         // Write new values via the setState route (what the modal calls).
@@ -57,7 +58,7 @@ describe('web scenario: settings-behavior', () => {
         const after = (await (await rawFetch(readUrl)).json()) as {
           settings?: {
             yolo: boolean;
-            thinkingLevel: string;
+            thinkingLevel?: string;
             notifications: string;
             smartEditing: boolean;
           };
@@ -68,6 +69,23 @@ describe('web scenario: settings-behavior', () => {
           notifications: 'both',
           smartEditing: false,
         });
+
+        const clear = await rawFetch(writeUrl, {
+          method: 'PUT',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ state: { thinkingLevel: null } }),
+        });
+        expect(clear.ok).toBe(true);
+
+        const cleared: unknown = await (await rawFetch(readUrl)).json();
+        if (!cleared || typeof cleared !== 'object' || !('settings' in cleared)) {
+          throw new Error('Session settings are missing');
+        }
+        const { settings } = cleared;
+        if (!settings || typeof settings !== 'object') {
+          throw new Error('Session settings are invalid');
+        }
+        expect('thinkingLevel' in settings).toBe(false);
       },
     });
   });

@@ -10,12 +10,13 @@ import { Transcript } from '../Transcript';
 import { OverlayTestProviders, useOverlayControllerHandlers } from './overlay-test-utils';
 
 const SESSION_API = `${TEST_BASE_URL}/api/agent-controller/code/sessions/:resourceId`;
+const THINKING_CONFIG_API = `${TEST_BASE_URL}/web/config/thinking`;
 
 beforeEach(useOverlayControllerHandlers);
 
 describe('the /think command', () => {
-  it('changes the thinking level for the current session', async () => {
-    let thinkingLevel = 'medium';
+  it('sets, reports, and clears the session thinking override', async () => {
+    let thinkingLevel: string | undefined = 'medium';
     const stateUpdates: unknown[] = [];
     server.use(
       http.get(SESSION_API, ({ params }) =>
@@ -28,6 +29,14 @@ describe('the /think command', () => {
           settings: { yolo: false, thinkingLevel, notifications: 'bell', smartEditing: true },
         }),
       ),
+      http.get(THINKING_CONFIG_API, () =>
+        HttpResponse.json({
+          levels: ['off', 'low', 'medium', 'high', 'xhigh', 'max'],
+          globalDefault: 'low',
+          modeDefaults: { build: 'medium' },
+          modes: ['build'],
+        }),
+      ),
       http.put(`${SESSION_API}/state`, async ({ request }) => {
         const body: unknown = await request.json();
         stateUpdates.push(body);
@@ -37,10 +46,12 @@ describe('the /think command', () => {
           'state' in body &&
           typeof body.state === 'object' &&
           body.state !== null &&
-          'thinkingLevel' in body.state &&
-          typeof body.state.thinkingLevel === 'string'
+          'thinkingLevel' in body.state
         ) {
-          thinkingLevel = body.state.thinkingLevel;
+          const value = body.state.thinkingLevel;
+          if (typeof value === 'string' || value === null) {
+            thinkingLevel = value ?? undefined;
+          }
         }
         return HttpResponse.json({ ok: true });
       }),
@@ -61,6 +72,21 @@ describe('the /think command', () => {
     await waitForMutationsIdle(client);
     expect(stateUpdates).toContainEqual({ state: { thinkingLevel: 'high' } });
     expect(await screen.findByText('Thinking level set to high.')).toBeInTheDocument();
+    expect(input).toHaveValue('');
+
+    await user.type(input, '/think status');
+    await user.keyboard('{Enter}');
+
+    expect(
+      await screen.findByText('Thinking level: high (session override). Default: medium (build mode default).'),
+    ).toBeInTheDocument();
+
+    await user.type(input, '/think default');
+    await user.keyboard('{Enter}');
+
+    await waitForMutationsIdle(client);
+    expect(stateUpdates).toContainEqual({ state: { thinkingLevel: null } });
+    expect(await screen.findByText('Thinking level set to default: medium (build mode default).')).toBeInTheDocument();
     expect(input).toHaveValue('');
   });
 });
