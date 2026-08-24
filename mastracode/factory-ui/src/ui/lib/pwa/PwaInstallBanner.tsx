@@ -43,7 +43,7 @@ export function PwaInstallBanner() {
             <button
               type="button"
               onClick={dismiss}
-              className="text-icon4 hover:text-icon6 focus-visible:ring-accent1 shrink-0 rounded-md px-3 py-1.5 text-ui-sm focus-visible:ring-2 focus-visible:outline-none"
+              className="text-icon4 hover:text-icon6 focus-visible:ring-accent1 text-ui-sm shrink-0 rounded-md px-3 py-1.5 focus-visible:ring-2 focus-visible:outline-none"
             >
               Not now
             </button>
