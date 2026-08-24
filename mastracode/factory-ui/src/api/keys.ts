@@ -27,7 +27,11 @@ export const queryKeys = {
   githubRepos: (query: string | undefined) => ['github', 'repos', query ?? null] as const,
   githubIssues: (githubProjectId: string | undefined, label?: string) =>
     ['github', 'issues', githubProjectId ?? null, label ?? null] as const,
+  githubIssue: (githubProjectId: string | undefined, number: number | undefined) =>
+    ['github', 'issue', githubProjectId ?? null, number ?? null] as const,
   githubPulls: (githubProjectId: string | undefined) => ['github', 'prs', githubProjectId ?? null] as const,
+  githubPull: (githubProjectId: string | undefined, number: number | undefined) =>
+    ['github', 'pr', githubProjectId ?? null, number ?? null] as const,
   githubRepositorySettings: (githubProjectId: string | undefined) =>
     ['github', 'repository-settings', githubProjectId ?? null] as const,
   linearStatus: () => ['linear', 'status'] as const,

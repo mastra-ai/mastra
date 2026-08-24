@@ -40,6 +40,29 @@ html.light {
   --pr-merged: oklch(0.496 0.265 302);
 }
 
+/* Card → detail-dialog morph. The card carries the view-transition name while
+ * closed and the dialog takes it over while open, so startViewTransition
+ * animates one into the other. The stock dialog keyframes stay off for the
+ * morphed popup — the transition itself supplies the motion. */
+.board-details-dialog[data-slot='dialog-content'][data-open],
+.board-details-dialog[data-slot='dialog-content'][data-closed] {
+  animation: none;
+}
+
+::view-transition-group(*) {
+  animation-duration: 280ms;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-image-pair(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}
+
 /* Keyframes must live inside @theme so Tailwind emits them alongside the
  * `--animate-*` utility that references them. */
 @theme inline {

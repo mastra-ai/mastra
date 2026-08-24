@@ -6,11 +6,11 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/c
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Bot, Check, ChevronDown, CircleCheck, Clock3, Layers3 } from 'lucide-react';
 import { useId, useMemo, useState, type ReactNode } from 'react';
-import { flushSync } from 'react-dom';
 
 import { useFactoryMetrics } from '../../hooks/useFactoryMetrics';
 import { useRunningSessions } from '../../hooks/useWorkItems';
 import { formatDuration } from '../../lib/date';
+import { morph } from '../lib/morphTransition';
 import { DocumentFactoryPageShell } from '../domains/factory/components/FactoryPageShell';
 import { QueueHealthPanel } from '../domains/factory/components/QueueHealthPanel';
 import { ShareBar } from '../domains/factory/components/ShareBar';
@@ -198,19 +198,6 @@ function Flow({ metrics }: { metrics: FactoryMetrics }) {
       />
     </dl>
   );
-}
-
-// flushSync required — the transition captures the DOM synchronously after the callback
-function morph(update: () => void) {
-  const view = document as Document & {
-    startViewTransition?: (callback: () => void) => { ready: Promise<void> };
-  };
-  if (typeof view.startViewTransition !== 'function') {
-    update();
-    return;
-  }
-  // hidden tab or overlapping transition rejects `ready` — DOM update still lands
-  view.startViewTransition(() => flushSync(update)).ready.catch(() => {});
 }
 
 function ThroughputCard({ metrics, completed }: { metrics: FactoryMetrics; completed: number }) {

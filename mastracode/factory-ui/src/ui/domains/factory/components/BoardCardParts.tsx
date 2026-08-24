@@ -2,7 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { MessageSquare, Play, Sparkles, TriangleAlert } from 'lucide-react';
+import { Maximize2, Sparkles, TriangleAlert } from 'lucide-react';
 import type { ReactElement } from 'react';
 
 import type { BoardCardStatus } from '../boardCardStatus';
@@ -41,34 +41,20 @@ export function CardTitleTooltip({ title, children }: { title: string; children:
 export const REVEAL_ON_CARD_HOVER =
   'transition-opacity duration-200 ease-out motion-reduce:transition-none pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:group-focus-within:opacity-100 pointer-fine:aria-expanded:opacity-100';
 
-type IdleBoardCardStatus = Extract<BoardCardStatus, { kind: 'idle' }>;
-
-function IdleCardStatus({ status, className }: { status: IdleBoardCardStatus; className?: string }) {
+/** Hover hint that a card opens its details instead of acting on it. */
+export function CardDetailsHint({ className }: { className?: string }) {
   return (
     <span
       aria-hidden
-      className={cn(
-        'text-ui-xs text-icon4 ml-auto flex shrink-0 items-center gap-1.5',
-        className,
-        REVEAL_ON_CARD_HOVER,
-      )}
+      className={cn('text-ui-xs text-icon4 ml-auto flex shrink-0 items-center gap-1.5', REVEAL_ON_CARD_HOVER, className)}
     >
-      {status.affordance === 'open' ? <MessageSquare size={11} aria-hidden /> : <Play size={11} aria-hidden />}
-      {status.label}
+      <Maximize2 size={11} aria-hidden />
+      Details
     </span>
   );
 }
 
-export function CardIdleOverlay({ status }: { status: IdleBoardCardStatus }) {
-  return (
-    <IdleCardStatus
-      status={status}
-      className="pointer-events-none pointer-fine:absolute pointer-fine:right-3 pointer-fine:bottom-3 pointer-fine:z-20 pointer-fine:ml-0"
-    />
-  );
-}
-
-/** The card's one status row: a hover hint when idle, a live region once something is happening. */
+/** The card's one status row: a live region once something is happening. */
 export function CardStatus({
   status,
   onApprove,
@@ -84,7 +70,7 @@ export function CardStatus({
   onRetry?: () => void;
   retrying?: boolean;
 }) {
-  if (status.kind === 'idle') return <IdleCardStatus status={status} />;
+  if (status.kind === 'idle') return null;
 
   // A parked run is the one idle state the card cannot whisper: it needs the
   // user, so it stays lit without a hover and carries its own button. The

@@ -337,6 +337,7 @@ function BoardContent({
                     highlighted={targetItemId === item.id}
                     columnStage={stage.id}
                     allItems={items.all}
+                    projectRepositoryId={repository.projectRepositoryId}
                     activityPage={activityPage}
                     liveWorktreePaths={runs.liveWorktreePaths}
                     sessionLivenessResolved={runs.sessionLivenessResolved}
@@ -365,6 +366,7 @@ function BoardContent({
                     <CandidateCard
                       key={candidate.sourceKey}
                       candidate={candidate}
+                      projectRepositoryId={repository.projectRepositoryId}
                       pendingRunRoles={runs.pendingRolesForSource(candidate.sourceKey)}
                       preparing={runs.preparingForSource(candidate.sourceKey)}
                       disabled={!runs.enabled}

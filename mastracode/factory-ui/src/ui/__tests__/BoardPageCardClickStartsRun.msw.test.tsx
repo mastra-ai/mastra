@@ -1,11 +1,11 @@
 /**
- * Clicking a board card is a commitment to work, not a blank chat: the card's
- * click target starts its default run (with an invocation) so the resulting
- * thread gets a kickoff message instead of an empty "What can I help you
- * build?" session. Only cards with no run spec fall back to a plain session.
+ * Clicking a board card opens its details; committing to work happens through
+ * the dialog's run button. The run still starts with its invocation so the
+ * resulting thread gets a kickoff message instead of an empty "What can I help
+ * you build?" session. Only items with no run spec fall back to a plain session.
  */
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -112,6 +112,22 @@ function stubBoardEndpoints({ issues = [] as object[], workItems = [issueWorkIte
 
       return HttpResponse.json({ issues: label ? [] : issues, nextPage: null });
     }),
+    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues/:number`, ({ params }) =>
+      HttpResponse.json({
+        number: Number(params.number),
+        title: 'Crash on logout',
+        url: `https://github.com/acme/app/issues/${String(params.number)}`,
+        author: 'octocat',
+        labels: [],
+        comments: 0,
+        createdAt: '2026-07-18T00:00:00.000Z',
+        updatedAt: '2026-07-18T00:00:00.000Z',
+        description: 'The app crashes when logging out.',
+      }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/prs/:number`, () =>
+      HttpResponse.json({ error: 'pull_request_not_found' }, { status: 404 }),
+    ),
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () => HttpResponse.json({ sessions: [] })),
     http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/ensure`, () => HttpResponse.json({ ok: true })),
     http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () =>
@@ -132,16 +148,21 @@ function renderWorkBoard() {
   return renderWithProviders(<RouterProvider router={router} />);
 }
 
-describe('Board card click starts the default run', () => {
-  it('starts the default run with its invocation when a sessionless work-item card is clicked', async () => {
+/** Opens a card's detail dialog and starts its primary run from the footer. */
+async function startRunFromCardDetails(cardTitle: string) {
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole('button', { name: `Details for ${cardTitle}` }));
+
+  const dialog = await screen.findByRole('dialog', { name: cardTitle });
+  await user.click(within(dialog).getByRole('button', { name: 'Investigate' }));
+}
+
+describe('Board card details open the default run', () => {
+  it('starts the default run with its invocation from a sessionless work-item card details', async () => {
     const { startRequests } = stubBoardEndpoints();
-    const user = userEvent.setup();
     renderWorkBoard();
 
-    // The click target announces the default run, not a blank thread.
-    const cardButton = await screen.findByRole('button', { name: 'Investigate Fix login bug' });
-    expect(screen.queryByRole('button', { name: 'Start session for Fix login bug' })).not.toBeInTheDocument();
-    await user.click(cardButton);
+    await startRunFromCardDetails('Fix login bug');
 
     await waitFor(() => expect(startRequests).toHaveLength(1));
     expect(startRequests[0]).toMatchObject({
@@ -153,10 +174,12 @@ describe('Board card click starts the default run', () => {
 
   it('starts a persisted Linear Triage item with the Linear kickoff invocation', async () => {
     const { startRequests } = stubBoardEndpoints({ workItems: [linearWorkItem] });
-    const user = userEvent.setup();
     renderWorkBoard();
 
-    await user.click(await screen.findByRole('button', { name: 'Investigate ENG-42: Fix intake sync' }));
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Details for ENG-42: Fix intake sync' }));
+    const dialog = await screen.findByRole('dialog', { name: 'ENG-42: Fix intake sync' });
+    await user.click(within(dialog).getByRole('button', { name: 'Investigate' }));
 
     await waitFor(() => expect(startRequests).toHaveLength(1));
     expect(startRequests[0]).toMatchObject({
@@ -173,7 +196,7 @@ describe('Board card click starts the default run', () => {
     });
   });
 
-  it('starts the default run with its invocation when a candidate card is clicked', async () => {
+  it('shows the source description in the dialog and runs a candidate card from it', async () => {
     const { startRequests } = stubBoardEndpoints({
       issues: [
         {
@@ -188,12 +211,14 @@ describe('Board card click starts the default run', () => {
         },
       ],
     });
-    const user = userEvent.setup();
     renderWorkBoard();
 
-    // Same click target and same wording as a filed card: the candidate names
-    // the run it starts, not the record it happens to create.
-    await user.click(await screen.findByRole('button', { name: 'Investigate Crash on logout' }));
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Details for Crash on logout' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Crash on logout' });
+    expect(await within(dialog).findByText('The app crashes when logging out.')).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole('button', { name: 'Investigate' }));
 
     await waitFor(() => expect(startRequests).toHaveLength(1));
     expect(startRequests[0]).toMatchObject({
@@ -203,7 +228,7 @@ describe('Board card click starts the default run', () => {
     });
   });
 
-  // Card clicks refetch worktrees before deciding what to do. When that
+  // Run clicks refetch worktrees before deciding what to do. When that
   // refetch fails (e.g. the auth cookie expired overnight), the click used to
   // die silently — no run, no toast, nothing. It must surface an error.
   it('shows an error toast instead of failing silently when the pre-start refetch fails', async () => {
@@ -218,7 +243,6 @@ describe('Board card click starts the default run', () => {
         return HttpResponse.json({ error: 'unauthorized' }, { status: 401 });
       }),
     );
-    const user = userEvent.setup();
     // The Toaster normally mounts in main.tsx, above the router.
     const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}/work`] });
     renderWithProviders(
@@ -228,7 +252,7 @@ describe('Board card click starts the default run', () => {
       </>,
     );
 
-    await user.click(await screen.findByRole('button', { name: 'Investigate Fix login bug' }));
+    await startRunFromCardDetails('Fix login bug');
 
     await waitFor(() => expect(screen.getByText(/failed to (list sessions|refresh)/i)).toBeInTheDocument());
     expect(startRequests).toHaveLength(0);

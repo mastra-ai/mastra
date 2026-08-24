@@ -212,9 +212,14 @@ async function resolveOrgTenant(
  */
 function parseListPage(raw: string | undefined): number | null {
   if (raw === undefined) return 1;
-  if (!/^\d{1,5}$/.test(raw)) return null;
   const page = Number(raw);
-  return page >= 1 ? page : null;
+  return Number.isInteger(page) && page > 0 ? page : null;
+}
+
+function parseResourceNumber(raw: string | undefined): number | null {
+  if (raw === undefined || !/^\d+$/.test(raw)) return null;
+  const parsed = Number(raw);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
 const VALID_ISSUE_LABEL_FILTERS = new Set(['status: auto-triaged', 'status: needs approval']);
@@ -777,6 +782,48 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
     }),
   );
 
+  // ── Fetch one issue's description (board card details) ───────────────────
+  routes.push(
+    registerApiRoute('/web/github/projects/:id/issues/:number', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const loaded = await loadOrgProject({ github, auth, c: loose(c) });
+        if ('response' in loaded) return loaded.response;
+        const number = parseResourceNumber(c.req.param('number'));
+        if (number === null) return c.json({ error: 'invalid_number' }, 400);
+        try {
+          const detail = await github.intake.getIssue({
+            connection: {
+              type: 'app-installation',
+              installationId: Number(loaded.project.installation.externalId),
+            },
+            sourceId: loaded.project.repository.slug,
+            issueId: String(number),
+          });
+          if (detail === null) return c.json({ error: 'issue_not_found' }, 404);
+          return c.json({
+            number: Number(detail.id),
+            title: detail.title,
+            url: detail.url,
+            author: detail.author,
+            assignee: detail.assignee,
+            labels: detail.labels,
+            comments: detail.commentCount ?? 0,
+            createdAt: detail.createdAt,
+            updatedAt: detail.updatedAt,
+            description: detail.description,
+          });
+        } catch (err) {
+          return c.json(
+            { error: 'github_fetch_failed', message: err instanceof Error ? err.message : String(err) },
+            502,
+          );
+        }
+      },
+    }),
+  );
+
   // ── List a project's open (non-draft) pull requests ─────────────────────
   routes.push(
     registerApiRoute('/web/github/projects/:id/prs', {
@@ -816,6 +863,49 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
           return c.json({
             pullRequests: responsePullRequests,
             nextPage: nextCursor === null ? null : Number(nextCursor),
+          });
+        } catch (err) {
+          return c.json(
+            { error: 'github_fetch_failed', message: err instanceof Error ? err.message : String(err) },
+            502,
+          );
+        }
+      },
+    }),
+  );
+
+  // ── Fetch one pull request's description (board card details) ────────────
+  routes.push(
+    registerApiRoute('/web/github/projects/:id/prs/:number', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const loaded = await loadOrgProject({ github, auth, c: loose(c) });
+        if ('response' in loaded) return loaded.response;
+        const number = parseResourceNumber(c.req.param('number'));
+        if (number === null) return c.json({ error: 'invalid_number' }, 400);
+        try {
+          const pr = await github.versionControl.getPullRequest({
+            connection: {
+              type: 'app-installation',
+              installationId: Number(loaded.project.installation.externalId),
+            },
+            sourceId: loaded.project.repository.slug,
+            pullRequestId: String(number),
+          });
+          if (pr === null) return c.json({ error: 'pull_request_not_found' }, 404);
+          return c.json({
+            number: Number(pr.id),
+            title: pr.title,
+            url: pr.url,
+            author: pr.author,
+            assignees: pr.assignees ?? [],
+            requestedReviewers: pr.requestedReviewers ?? [],
+            baseBranch: pr.baseBranch,
+            headBranch: pr.headBranch,
+            createdAt: pr.createdAt,
+            updatedAt: pr.updatedAt,
+            description: pr.body,
           });
         } catch (err) {
           return c.json(
