@@ -324,6 +324,8 @@ describe('sync reflection suppression (unchanged input)', () => {
     const scripted = createScriptedModel([
       observationsPayload(OVER_THRESHOLD_BODY),
       observationsPayload(OVER_THRESHOLD_BODY),
+      observationsPayload(OVER_THRESHOLD_BODY),
+      observationsPayload(OVER_THRESHOLD_BODY),
       observationsPayload('tiny'),
       observationsPayload(OVER_THRESHOLD_BODY),
     ]);
