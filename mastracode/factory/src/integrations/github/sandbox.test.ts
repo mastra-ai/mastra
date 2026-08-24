@@ -45,9 +45,9 @@ class FakeSandbox implements MaterializationSandbox {
     return { outcome: this.startCount === 1 ? 'created' : 'connected' };
   }
 
-  readonly env: Record<string, string> = {};
-  setEnvironmentVariable(name: string, value: string): void {
-    this.env[name] = value;
+  env: Record<string, string | undefined> = {};
+  setEnv(update: (env: Record<string, string | undefined>) => Record<string, string | undefined>): void {
+    this.env = { ...update({ ...this.env }) };
   }
 
   destroyed = false;

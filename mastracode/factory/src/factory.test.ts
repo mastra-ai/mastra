@@ -395,7 +395,7 @@ describe('MastraFactory.prepare', () => {
 
   it('boots with a sandbox callback without provisioning anything', async () => {
     const create = vi.fn(() => new LocalSandbox({ workingDirectory: '/tmp/mc-factory-test' }));
-    const factory = new MastraFactory({ storage: fakeStorage(), sandbox: create });
+    const factory = new MastraFactory({ secretEncryption, storage: fakeStorage(), sandbox: create });
     await factory.prepare();
     // Boot validation is shape-only — the callback must never be probed.
     expect(create).not.toHaveBeenCalled();
@@ -403,6 +403,7 @@ describe('MastraFactory.prepare', () => {
 
   it('rejects a non-function sandbox config', async () => {
     const factory = new MastraFactory({
+      secretEncryption,
       storage: fakeStorage(),
       sandbox: { create: () => ({}) } as unknown as () => never,
     });

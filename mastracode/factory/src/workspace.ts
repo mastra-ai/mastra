@@ -326,7 +326,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       const patKind = await resolveGithubPatKind('default');
       const ghCliToken =
         (await getGithubPat(() => github.integrationStorage, session.orgId, patKind)) ?? (await getRepositoryToken());
-      target.setEnvironmentVariable?.('GH_TOKEN', ghCliToken);
+      target.setEnv?.(env => ({ ...env, GH_TOKEN: ghCliToken }));
       // Observability only — nothing reads these columns for decisions. The
       // workdir was resolved (and memoized on the entry) by the guarded setup.
       void storage.sessions
@@ -334,10 +334,10 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         .catch(() => {});
       const tokenRegistration: GithubTokenRegistration = {
         inject: freshToken => {
-          if (!target.setEnvironmentVariable) {
+          if (!target.setEnv) {
             throw new Error('The active sandbox provider does not support runtime GitHub token refresh.');
           }
-          target.setEnvironmentVariable('GH_TOKEN', freshToken);
+          target.setEnv(env => ({ ...env, GH_TOKEN: freshToken }));
           tokenRegistration.ghToken = freshToken;
         },
         patKind,
@@ -533,7 +533,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // configured a PAT).
       const setupPatKind = await resolveGithubPatKind('default');
       const setupGhToken = (await getGithubPat(() => github.integrationStorage, session.orgId, setupPatKind)) ?? token;
-      target.setEnvironmentVariable?.('GH_TOKEN', setupGhToken);
+      target.setEnv?.(env => ({ ...env, GH_TOKEN: setupGhToken }));
       await materializeRepo({
         row: { id: session.id, sandboxWorkdir: workdir, materializedAt: session.materializedAt },
         repoInfo: { repoFullName: repoFullName, defaultBranch: repository.defaultBranch },

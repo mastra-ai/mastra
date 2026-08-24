@@ -60,7 +60,7 @@ const mocks = vi.hoisted(() => ({
           if (command === 'pwd') return { exitCode: 0, stdout: '/home/user\n', stderr: '' };
           return { exitCode: 0, stdout: '', stderr: '' };
         }),
-        setEnvironmentVariable: mocks.setEnvironmentVariable,
+        setEnv: mocks.setEnv,
       };
       return sandbox;
     },
@@ -75,7 +75,7 @@ const mocks = vi.hoisted(() => ({
     authorization: { scheme: 'bearer' as const, token: `repo-token-${repositoryId}` },
   })),
   mintInstallationToken: vi.fn(async () => 'gh-token'),
-  setEnvironmentVariable: vi.fn(),
+  setEnv: vi.fn(),
   /** Org GitHub PATs surfaced via integration settings; null = not configured. */
   githubPat: null as string | null,
   githubReviewerPat: null as string | null,
@@ -105,6 +105,18 @@ import { createWorkspaceFactory, FactoryWorkspaceRegistry } from './workspace.js
 
 const tempDirs: string[] = [];
 
+/**
+ * `setEnv` takes an updater rather than a name/value pair, so the assertions
+ * apply the recorded updater to an empty env and read the result back.
+ */
+function lastGhToken(): string | undefined {
+  const calls = mocks.setEnv.mock.calls;
+  const update = calls[calls.length - 1]?.[0] as
+    | ((env: Record<string, string | undefined>) => Record<string, string | undefined>)
+    | undefined;
+  return update?.({}).GH_TOKEN;
+}
+
 afterEach(async () => {
   await Promise.all(tempDirs.splice(0).map(tempDir => fs.rm(tempDir, { recursive: true, force: true })));
   mocks.projects.splice(0);
@@ -119,7 +131,7 @@ afterEach(async () => {
   mocks.runTeardownCommand.mockClear();
   mocks.getRepositoryAccess.mockClear();
   mocks.mintInstallationToken.mockClear();
-  mocks.setEnvironmentVariable.mockClear();
+  mocks.setEnv.mockClear();
   mocks.githubPat = null;
   mocks.githubReviewerPat = null;
   mocks.runBindingRole = null;
@@ -606,7 +618,7 @@ describe('GitHub session workspace preparation', () => {
         actingUserId: 'user-1',
       }),
     );
-    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'repo-token-repository-1');
+    expect(lastGhToken()).toBe('repo-token-repository-1');
     expect(mocks.materializeRepo).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
@@ -1075,7 +1087,7 @@ describe('GitHub session workspace preparation', () => {
     await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
 
     // gh CLI env gets the PAT…
-    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_org_pat');
+    expect(lastGhToken()).toBe('ghp_org_pat');
     expect(mocks.createSandbox).toHaveBeenCalledWith(expect.objectContaining({ actingUserId: 'user-1' }));
     // …but git materialization keeps the installation-scoped token.
     expect(mocks.materializeRepo).toHaveBeenCalledWith(expect.objectContaining({ token: 'repo-token-repository-1' }));
@@ -1091,7 +1103,7 @@ describe('GitHub session workspace preparation', () => {
 
     await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
 
-    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_reviewer');
+    expect(lastGhToken()).toBe('ghp_reviewer');
   });
 
   it('switches a cached workspace to the reviewer PAT when the review binding appears after materialization', async () => {
@@ -1102,18 +1114,18 @@ describe('GitHub session workspace preparation', () => {
     addSession({ id: 'session-a' });
 
     await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
-    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_worker');
+    expect(lastGhToken()).toBe('ghp_worker');
 
     // StartCoordinator creates the session before prepareRunStart creates its
     // review binding, so the first request can cache the worker PAT selection.
     mocks.runBindingRole = 'review';
-    mocks.setEnvironmentVariable.mockClear();
+    mocks.setEnv.mockClear();
     await workspace({
       requestContext: createGithubRequestContext('project-1', 'session-a'),
       mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
     });
 
-    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_reviewer');
+    expect(lastGhToken()).toBe('ghp_reviewer');
   });
 
   it('switches a cached workspace back to the worker PAT when a work binding replaces the review binding', async () => {
@@ -1126,16 +1138,16 @@ describe('GitHub session workspace preparation', () => {
     const reviewerContext = createGithubRequestContext('project-1', 'session-a');
 
     await workspace({ requestContext: reviewerContext });
-    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_reviewer');
+    expect(lastGhToken()).toBe('ghp_reviewer');
 
     mocks.runBindingRole = 'work';
-    mocks.setEnvironmentVariable.mockClear();
+    mocks.setEnv.mockClear();
     await workspace({
       requestContext: createGithubRequestContext('project-1', 'session-a'),
       mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
     });
 
-    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_worker');
+    expect(lastGhToken()).toBe('ghp_worker');
     expect(() => injectGithubToken(reviewerContext, 'stale-reviewer-token')).toThrow(/no longer matches/);
   });
 
@@ -1149,13 +1161,13 @@ describe('GitHub session workspace preparation', () => {
     await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
 
     mocks.runBindingRole = 'work';
-    mocks.setEnvironmentVariable.mockClear();
+    mocks.setEnv.mockClear();
     await workspace({
       requestContext: createGithubRequestContext('project-1', 'session-a'),
       mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
     });
 
-    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'repo-token-repository-1');
+    expect(lastGhToken()).toBe('repo-token-repository-1');
   });
 
   it('fails closed when reviewer credentials cannot be replaced for a worker run', async () => {
@@ -1170,7 +1182,7 @@ describe('GitHub session workspace preparation', () => {
     await workspace({ requestContext: reviewerContext });
 
     mocks.runBindingRole = 'work';
-    mocks.setEnvironmentVariable.mockImplementationOnce(() => {
+    mocks.setEnv.mockImplementationOnce(() => {
       throw new Error('runtime injection failed');
     });
     const destroy = vi.fn(async () => {});
@@ -1202,7 +1214,7 @@ describe('GitHub session workspace preparation', () => {
     await workspace({ requestContext: reviewerContext });
 
     mocks.runBindingRole = 'work';
-    mocks.setEnvironmentVariable.mockImplementationOnce(() => {
+    mocks.setEnv.mockImplementationOnce(() => {
       throw new Error('runtime injection failed');
     });
     const existing = {
@@ -1223,11 +1235,11 @@ describe('GitHub session workspace preparation', () => {
     ).rejects.toThrow('runtime injection failed');
     expect(() => injectGithubToken(reviewerContext, 'stale-reviewer-token')).toThrow(/no longer matches/);
 
-    mocks.setEnvironmentVariable.mockClear();
+    mocks.setEnv.mockClear();
     await expect(
       workspace({ requestContext: createGithubRequestContext('project-1', 'session-a'), mastra: mastra as any }),
     ).resolves.toBe(existing);
-    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_worker');
+    expect(lastGhToken()).toBe('ghp_worker');
   });
 
   it('keeps same-role PAT refresh failures best-effort', async () => {
@@ -1239,7 +1251,7 @@ describe('GitHub session workspace preparation', () => {
     await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
 
     mocks.githubPat = 'ghp_worker_current';
-    mocks.setEnvironmentVariable.mockImplementationOnce(() => {
+    mocks.setEnv.mockImplementationOnce(() => {
       throw new Error('runtime injection failed');
     });
     const existing = { setToolsConfig: vi.fn() };
@@ -1288,7 +1300,7 @@ describe('GitHub session workspace preparation', () => {
       requestContext: createGithubRequestContext('project-1', 'session-a'),
       mastra: mastra as any,
     });
-    expect(mocks.setEnvironmentVariable).not.toHaveBeenCalledWith('GH_TOKEN', 'ghp_reviewer');
+    expect(mocks.setEnv).not.toHaveBeenCalledWith('GH_TOKEN', 'ghp_reviewer');
 
     releaseMaterialization();
     await leader;
@@ -1300,7 +1312,7 @@ describe('GitHub session workspace preparation', () => {
     });
 
     expect(mocks.createSandbox).toHaveBeenCalledTimes(1);
-    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_reviewer');
+    expect(lastGhToken()).toBe('ghp_reviewer');
   });
 
   it('falls back to the worker PAT for review sessions without a reviewer token', async () => {
@@ -1312,7 +1324,7 @@ describe('GitHub session workspace preparation', () => {
 
     await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
 
-    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_worker');
+    expect(lastGhToken()).toBe('ghp_worker');
   });
 
   it('keeps the worker PAT for non-review sessions even when a reviewer token exists', async () => {
@@ -1325,7 +1337,7 @@ describe('GitHub session workspace preparation', () => {
 
     await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
 
-    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_worker');
+    expect(lastGhToken()).toBe('ghp_worker');
   });
 
   it('keeps the worker PAT when only a revoked review binding remains', async () => {
@@ -1339,7 +1351,7 @@ describe('GitHub session workspace preparation', () => {
 
     await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
 
-    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_worker');
+    expect(lastGhToken()).toBe('ghp_worker');
   });
 
   it('registers a runtime injector for refreshing GH_TOKEN in the active sandbox', async () => {
@@ -1351,7 +1363,7 @@ describe('GitHub session workspace preparation', () => {
     await workspace({ requestContext });
     injectGithubToken(requestContext, 'fresh-token');
 
-    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'fresh-token');
+    expect(lastGhToken()).toBe('fresh-token');
   });
 
   it('re-registers the token injector when reusing a workspace on a later request', async () => {
@@ -1367,7 +1379,7 @@ describe('GitHub session workspace preparation', () => {
     });
     injectGithubToken(requestContext, 'later-token');
 
-    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'later-token');
+    expect(lastGhToken()).toBe('later-token');
   });
 
   it('installs a PAT saved after provisioning into the running sandbox on the next reuse', async () => {
@@ -1376,8 +1388,8 @@ describe('GitHub session workspace preparation', () => {
     addSession({ id: 'session-a' });
     await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
     // Initial injection carries the repo-scoped token (no PAT configured yet).
-    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'repo-token-repository-1');
-    mocks.setEnvironmentVariable.mockClear();
+    expect(lastGhToken()).toBe('repo-token-repository-1');
+    mocks.setEnv.mockClear();
 
     // The org pastes a PAT in Settings while the sandbox is already running —
     // it must take effect without a server restart.
@@ -1387,7 +1399,7 @@ describe('GitHub session workspace preparation', () => {
       mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
     });
 
-    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_saved_later');
+    expect(lastGhToken()).toBe('ghp_saved_later');
   });
 
   it('does not re-inject an unchanged PAT on workspace reuse', async () => {
@@ -1396,14 +1408,14 @@ describe('GitHub session workspace preparation', () => {
     addProject();
     addSession({ id: 'session-a' });
     await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
-    mocks.setEnvironmentVariable.mockClear();
+    mocks.setEnv.mockClear();
 
     await workspace({
       requestContext: createGithubRequestContext('project-1', 'session-a'),
       mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
     });
 
-    expect(mocks.setEnvironmentVariable).not.toHaveBeenCalled();
+    expect(mocks.setEnv).not.toHaveBeenCalled();
   });
 
   it('reuses an already registered workspace for the exact GitHub session', async () => {

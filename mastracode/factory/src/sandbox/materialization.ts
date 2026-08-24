@@ -30,8 +30,12 @@ export interface MaterializationSandbox {
     args?: string[],
     options?: { timeout?: number; env?: Record<string, string | undefined> },
   ): Promise<SandboxCommandResult>;
-  /** Update an environment variable for future commands in this sandbox. */
-  setEnvironmentVariable?(name: string, value: string): void;
+  /**
+   * Update the sandbox's runtime environment for future commands. Mirrors
+   * core's optional `WorkspaceSandbox.setEnv`, which every `MastraSandbox`
+   * provides.
+   */
+  setEnv?: WorkspaceSandbox['setEnv'];
   /** Tear down the underlying VM. Optional: providers without it are no-ops. */
   stop?(): Promise<void>;
 }
