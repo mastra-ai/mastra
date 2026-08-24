@@ -150,4 +150,56 @@ describe('useAuthCapabilities', () => {
       expect(url).toBe('http://localhost:4000/api/auth/capabilities');
     });
   });
+
+  describe('apiPrefix normalization', () => {
+    const urlForPrefix = async (apiPrefix: string) => {
+      mockFetch.mockResolvedValue(createMockResponse({ enabled: false, login: null }));
+      const { makeAuthCapabilitiesRequest } = await import('../use-auth-capabilities');
+      await makeAuthCapabilitiesRequest({ options: { baseUrl: 'http://localhost:4000', apiPrefix } } as any);
+      const [url] = mockFetch.mock.calls[0] as [string, RequestInit];
+      return url;
+    };
+
+    it('adds the leading slash a hand-typed prefix is missing', async () => {
+      expect(await urlForPrefix('mastra')).toBe('http://localhost:4000/mastra/auth/capabilities');
+    });
+
+    it('drops a trailing slash so the path does not double up', async () => {
+      expect(await urlForPrefix('/mastra/')).toBe('http://localhost:4000/mastra/auth/capabilities');
+    });
+
+    it('trims surrounding whitespace', async () => {
+      expect(await urlForPrefix('  /mastra  ')).toBe('http://localhost:4000/mastra/auth/capabilities');
+    });
+
+    it('falls back to /api for a whitespace-only prefix', async () => {
+      expect(await urlForPrefix('   ')).toBe('http://localhost:4000/auth/capabilities');
+    });
+
+    it('falls back to /api for an empty prefix', async () => {
+      expect(await urlForPrefix('')).toBe('http://localhost:4000/api/auth/capabilities');
+    });
+  });
+
+  describe('when the server rejects the request', () => {
+    it('throws with the status so the caller can gate on it', async () => {
+      mockFetch.mockResolvedValue({ ok: false, status: 403, json: () => Promise.resolve({}) } as unknown as Response);
+
+      const { makeAuthCapabilitiesRequest } = await import('../use-auth-capabilities');
+
+      await expect(makeAuthCapabilitiesRequest({ options: {} } as any)).rejects.toThrow(
+        'Failed to fetch auth capabilities: 403',
+      );
+    });
+
+    it('does not fall through to parsing the body', async () => {
+      const json = vi.fn();
+      mockFetch.mockResolvedValue({ ok: false, status: 500, json } as unknown as Response);
+
+      const { makeAuthCapabilitiesRequest } = await import('../use-auth-capabilities');
+
+      await expect(makeAuthCapabilitiesRequest({ options: {} } as any)).rejects.toThrow();
+      expect(json).not.toHaveBeenCalled();
+    });
+  });
 });

@@ -56,4 +56,40 @@ describe('useDeleteSkill', () => {
 
     await expect(result.current.mutateAsync()).rejects.toThrow(/skillId is required/);
   });
+
+  it('leaves unrelated caches alone when it invalidates the skills list', async () => {
+    server.use(
+      http.delete(`${BASE_URL}/api/stored/skills/skill-1`, () =>
+        HttpResponse.json({ success: true, message: 'deleted' }),
+      ),
+    );
+
+    const { queryClient, Wrapper } = makeHarness();
+    queryClient.setQueryData(['stored-skills'], { skills: [makeStoredSkill()], total: 1 });
+    queryClient.setQueryData(['stored-agents'], { agents: [], total: 0 });
+
+    const { result } = renderHook(() => useDeleteSkill('skill-1'), { wrapper: Wrapper });
+    await result.current.mutateAsync();
+
+    await waitFor(() => expect(queryClient.getQueryState(['stored-skills'])?.isInvalidated).toBe(true));
+    expect(queryClient.getQueryState(['stored-agents'])?.isInvalidated).toBe(false);
+  });
+
+  it('only drops the deleted skill from the detail cache', async () => {
+    server.use(
+      http.delete(`${BASE_URL}/api/stored/skills/skill-1`, () =>
+        HttpResponse.json({ success: true, message: 'deleted' }),
+      ),
+    );
+
+    const { queryClient, Wrapper } = makeHarness();
+    queryClient.setQueryData(['stored-skill', 'skill-1'], makeStoredSkill({ id: 'skill-1' }));
+    queryClient.setQueryData(['stored-skill', 'skill-2'], makeStoredSkill({ id: 'skill-2' }));
+
+    const { result } = renderHook(() => useDeleteSkill('skill-1'), { wrapper: Wrapper });
+    await result.current.mutateAsync();
+
+    await waitFor(() => expect(queryClient.getQueryData(['stored-skill', 'skill-1'])).toBeUndefined());
+    expect(queryClient.getQueryData(['stored-skill', 'skill-2'])).toMatchObject({ id: 'skill-2' });
+  });
 });

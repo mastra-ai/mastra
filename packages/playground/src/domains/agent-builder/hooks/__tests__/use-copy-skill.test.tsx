@@ -13,6 +13,8 @@ vi.mock('@mastra/playground-ui/utils/toast', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
 
+const { toast } = await import('@mastra/playground-ui/utils/toast');
+
 const BASE_URL = 'http://localhost:4111';
 
 const makeHarness = () => {
@@ -99,5 +101,127 @@ describe('useCopySkill', () => {
 
     expect(receivedBody).not.toHaveProperty('license');
     expect(receivedBody).not.toHaveProperty('files');
+  });
+
+  it('carries a non-null license and files through to the create payload', async () => {
+    const source = makeStoredSkill({
+      id: 'src-3',
+      license: { type: 'MIT' } as never,
+      files: [{ path: 'README.md', content: '# Hi' }] as never,
+    });
+
+    let receivedBody: any = null;
+    server.use(
+      http.post(`${BASE_URL}/api/stored/skills`, async ({ request }) => {
+        receivedBody = await request.json();
+        return HttpResponse.json(makeStoredSkill({ id: 'copy-3' }));
+      }),
+    );
+
+    const { Wrapper } = makeHarness();
+    const { result } = renderHook(() => useCopySkill(), { wrapper: Wrapper });
+
+    await result.current.mutateAsync({ source, name: 'Copy' });
+
+    expect(receivedBody.license).toEqual({ type: 'MIT' });
+    expect(receivedBody.files).toEqual([{ path: 'README.md', content: '# Hi' }]);
+  });
+
+  it('prefers an explicit description over the source one', async () => {
+    const source = makeStoredSkill({ id: 'src-4', description: 'From source' });
+
+    let receivedBody: any = null;
+    server.use(
+      http.post(`${BASE_URL}/api/stored/skills`, async ({ request }) => {
+        receivedBody = await request.json();
+        return HttpResponse.json(makeStoredSkill({ id: 'copy-4' }));
+      }),
+    );
+
+    const { Wrapper } = makeHarness();
+    const { result } = renderHook(() => useCopySkill(), { wrapper: Wrapper });
+
+    await result.current.mutateAsync({ source, name: 'Copy', description: 'Chosen by the user' });
+
+    expect(receivedBody.description).toBe('Chosen by the user');
+  });
+
+  it('falls back to an empty description when neither is set', async () => {
+    const source = makeStoredSkill({ id: 'src-5', description: undefined });
+
+    let receivedBody: any = null;
+    server.use(
+      http.post(`${BASE_URL}/api/stored/skills`, async ({ request }) => {
+        receivedBody = await request.json();
+        return HttpResponse.json(makeStoredSkill({ id: 'copy-5' }));
+      }),
+    );
+
+    const { Wrapper } = makeHarness();
+    const { result } = renderHook(() => useCopySkill(), { wrapper: Wrapper });
+
+    await result.current.mutateAsync({ source, name: 'Copy' });
+
+    expect(receivedBody.description).toBe('');
+  });
+
+  it('omits the source author when the source has none', async () => {
+    const source = makeStoredSkill({ id: 'src-6', authorId: undefined });
+
+    let receivedBody: any = null;
+    server.use(
+      http.post(`${BASE_URL}/api/stored/skills`, async ({ request }) => {
+        receivedBody = await request.json();
+        return HttpResponse.json(makeStoredSkill({ id: 'copy-6' }));
+      }),
+    );
+
+    const { Wrapper } = makeHarness();
+    const { result } = renderHook(() => useCopySkill(), { wrapper: Wrapper });
+
+    await result.current.mutateAsync({ source, name: 'Copy' });
+
+    expect(receivedBody.metadata.origin).not.toHaveProperty('sourceAuthorId');
+  });
+
+  it('tells the user the copy landed', async () => {
+    server.use(http.post(`${BASE_URL}/api/stored/skills`, () => HttpResponse.json(makeStoredSkill({ id: 'copy-7' }))));
+
+    const { Wrapper } = makeHarness();
+    const { result } = renderHook(() => useCopySkill(), { wrapper: Wrapper });
+
+    await result.current.mutateAsync({ source: makeStoredSkill(), name: 'Copy' });
+
+    expect(toast.success).toHaveBeenCalledWith('Skill copied');
+  });
+
+  it('reports the server message when the copy is rejected', async () => {
+    server.use(
+      http.post(`${BASE_URL}/api/stored/skills`, () =>
+        HttpResponse.json({ error: 'name already taken' }, { status: 409 }),
+      ),
+    );
+
+    const { Wrapper } = makeHarness();
+    const { result } = renderHook(() => useCopySkill(), { wrapper: Wrapper });
+
+    await expect(result.current.mutateAsync({ source: makeStoredSkill(), name: 'Copy' })).rejects.toThrow();
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalled());
+    expect(vi.mocked(toast.error).mock.calls[0]?.[0]).toContain('Failed to copy skill:');
+  });
+
+  it('leaves other caches alone when it invalidates the skills list', async () => {
+    server.use(http.post(`${BASE_URL}/api/stored/skills`, () => HttpResponse.json(makeStoredSkill({ id: 'copy-8' }))));
+
+    const { queryClient, Wrapper } = makeHarness();
+    queryClient.setQueryData(['stored-skills'], { skills: [], total: 0 });
+    queryClient.setQueryData(['stored-agents'], { agents: [], total: 0 });
+
+    const { result } = renderHook(() => useCopySkill(), { wrapper: Wrapper });
+    await result.current.mutateAsync({ source: makeStoredSkill(), name: 'Copy' });
+
+    await waitFor(() => expect(queryClient.getQueryState(['stored-skills'])?.isInvalidated).toBe(true));
+    expect(queryClient.getQueryState(['stored-agents'])?.isInvalidated).toBe(false);
   });
 });
