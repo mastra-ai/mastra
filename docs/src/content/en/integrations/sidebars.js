@@ -440,6 +440,12 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'databases/valkey',
+          label: 'Valkey',
+          customProps: { icon: 'https://cdn.simpleicons.org/valkey?viewbox=auto&size=28' },
+        },
+        {
+          type: 'doc',
           id: 'databases/upstash',
           label: 'Upstash',
           customProps: { icon: 'https://cdn.simpleicons.org/upstash?viewbox=auto&size=28' },
