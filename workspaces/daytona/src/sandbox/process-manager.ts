@@ -198,9 +198,8 @@ export class DaytonaProcessManager extends SandboxProcessManager<DaytonaSandbox>
     };
 
     // The base spawn wrapper already merged the sandbox env into options.env
-    const mergedEnv = { ...effectiveOptions.env };
     const envs = Object.fromEntries(
-      Object.entries(mergedEnv).filter((entry): entry is [string, string] => entry[1] !== undefined),
+      Object.entries(effectiveOptions.env ?? {}).filter((entry): entry is [string, string] => entry[1] !== undefined),
     );
 
     // Validate/build before retryOnDead so user-controlled validation errors
