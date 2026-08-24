@@ -39,7 +39,11 @@ import {
 } from './auth.js';
 import type { FactoryIntegration, IntegrationPostToolContext, IntegrationTools } from './integrations/base.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
-import { recordFactoryPullRequestProvenance } from './integrations/github/provenance.js';
+import {
+  recordFactoryPullRequestProvenance,
+  resolveFactoryPullRequestParentWorkItemId,
+} from './integrations/github/provenance.js';
+import type { FactoryPullRequestProvenanceData } from './integrations/github/provenance.js';
 import { PlatformGithubIntegration } from './integrations/platform/github/integration.js';
 import { PlatformLinearIntegration } from './integrations/platform/linear/integration.js';
 import { createCustomProvidersPrimer, registerCustomProvidersSource } from './routes/custom-provider-source.js';
@@ -611,11 +615,12 @@ export class MastraFactory {
           ...(transitionService ? { transitionService } : {}),
           ...(githubIntegration
             ? {
-                recordPullRequestProvenance: (input: Parameters<typeof recordFactoryPullRequestProvenance>[3]) =>
+                recordPullRequestProvenance: (input: Parameters<typeof recordFactoryPullRequestProvenance>[4]) =>
                   recordFactoryPullRequestProvenance(
                     githubIntegration,
                     sourceControlStorage.forIntegration('github'),
                     integrationStorage.forIntegration('github'),
+                    workItemsStorage,
                     input,
                   ),
               }
@@ -804,6 +809,20 @@ export class MastraFactory {
                 reconcileToolResults: () => factoryProcessor?.reconcileAllBoundThreads() ?? Promise.resolve(),
                 prepareBinding,
                 primeCredentials: tenant => primeTenantCredentials({ tenant, credentials: modelCredentialsStorage }),
+                resolveLinkedWorkItemParentId: async ({ orgId, decision }) => {
+                  if (decision.source !== 'github-pr') return null;
+                  const repositoryId = decision.metadata?.githubRepositoryId;
+                  const pullRequestNumber = decision.metadata?.githubPullRequestNumber;
+                  if (typeof repositoryId !== 'number' || typeof pullRequestNumber !== 'number') return null;
+                  return resolveFactoryPullRequestParentWorkItemId(
+                    integrationStorage.forIntegration<
+                      Record<string, unknown>,
+                      Record<string, unknown>,
+                      FactoryPullRequestProvenanceData
+                    >('github'),
+                    { orgId, repositoryId, pullRequestNumber },
+                  );
+                },
               });
             },
           }),

@@ -126,6 +126,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/agentrouter',
+          label: 'AgentRouter',
+        },
+        {
+          type: 'doc',
           id: 'providers/ai-router',
           label: 'AI-ROUTER',
         },
