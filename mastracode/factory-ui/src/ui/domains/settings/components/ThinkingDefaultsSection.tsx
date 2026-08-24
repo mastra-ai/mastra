@@ -39,6 +39,7 @@ export function BaseThinkingSection() {
       <SettingsRow label="Base thinking level" hint="Used by every run without a session or mode override">
         <Segmented
           ariaLabel="Base thinking level"
+          mobileSelect
           value={config?.globalDefault ?? 'off'}
           disabled={disabled}
           options={THINKING_LEVELS}
@@ -65,6 +66,7 @@ export function ModeThinkingDefaultsSection() {
         <SettingsRow key={mode} label={`${mode[0]?.toUpperCase()}${mode.slice(1)} mode`}>
           <Segmented
             ariaLabel={`${mode} mode thinking level`}
+            mobileSelect
             value={config?.modeDefaults[mode] ?? USE_GLOBAL}
             disabled={disabled}
             options={modeOptions}

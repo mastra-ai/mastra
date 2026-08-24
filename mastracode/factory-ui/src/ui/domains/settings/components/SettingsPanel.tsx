@@ -87,7 +87,7 @@ export function SettingsPanel() {
 
   return (
     <section aria-label="Settings" className="flex flex-1 flex-col lg:px-5 lg:pb-5">
-      <div className="mx-auto grid w-full max-w-4xl py-3">
+      <div className="mx-auto grid w-full max-w-4xl grid-cols-[minmax(0,1fr)] py-3">
         {!isMobile && <SettingsHeader autoFocus placement="desktop" />}
         {section === 'account' && <AccountSettingsSection />}
         {section === 'preferences' && <GeneralSettings theme={theme} onThemeChange={setTheme} />}
