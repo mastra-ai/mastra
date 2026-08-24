@@ -250,6 +250,13 @@ describe('assertNoLocalPathDependencies', () => {
     expect(() => assertNoLocalPathDependencies(['zod'], constraints({ dependencies: { zod: spec } }))).not.toThrow();
   });
 
+  it.each(['https://example.com/zod-1.0.0.tgz', 'http://example.com/zod.tar.gz'])(
+    'accepts the remote tarball %j the output install can fetch',
+    spec => {
+      expect(() => assertNoLocalPathDependencies(['zod'], constraints({ dependencies: { zod: spec } }))).not.toThrow();
+    },
+  );
+
   it('accepts a link an override replaces', () => {
     expect(() =>
       assertNoLocalPathDependencies(

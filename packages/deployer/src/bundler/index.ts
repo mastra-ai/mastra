@@ -34,6 +34,8 @@ const NPM_ALIAS_PREFIX = 'npm:';
 const REGISTRY_SPEC_PATTERN = /^[A-Za-z0-9.+_^~><=*|!\s-]+$/;
 const PACKAGE_NAME_PATTERN = /^(?:@[A-Za-z0-9._-]+\/)?[A-Za-z0-9._-]+$/;
 const TARBALL_SUFFIX_PATTERN = /\.(?:tgz|tar\.gz|tar)$/i;
+/** A tarball the output install can fetch by URL, wherever the source app installed it from. */
+const REMOTE_URL_PREFIX_PATTERN = /^https?:\/\//i;
 /** npm reads a value starting like this as a path, whatever follows. A bare `~` is a semver range. */
 const FILE_SPEC_PREFIX_PATTERN = /^(?:\.|~[/\\]|[/\\]|[A-Za-z]:[/\\])/;
 /** A range admitting any published version: `*`, `x`, `>=0`, and any union containing one. */
@@ -230,13 +232,15 @@ export const getSourceDependencyConstraints = async ({
 /**
  * True when a specifier names a directory or tarball on this machine: `link:`, `file:`, a bare path,
  * or a tarball path. The isolated install in the output directory has a different relative-path base,
- * so none of them can be reproduced there.
+ * so none of them can be reproduced there. A tarball URL is not one of them: the output install
+ * fetches it the same way the source app did.
  */
 export const isLocalPathSpec = (spec: string): boolean =>
-  spec.startsWith('link:') ||
-  spec.startsWith('file:') ||
-  FILE_SPEC_PREFIX_PATTERN.test(spec) ||
-  TARBALL_SUFFIX_PATTERN.test(spec);
+  !REMOTE_URL_PREFIX_PATTERN.test(spec) &&
+  (spec.startsWith('link:') ||
+    spec.startsWith('file:') ||
+    FILE_SPEC_PREFIX_PATTERN.test(spec) ||
+    TARBALL_SUFFIX_PATTERN.test(spec));
 
 /**
  * A dependency the app links from a local directory only reaches the output install as a registry

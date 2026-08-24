@@ -1,7 +1,7 @@
 import { it, describe, expect, beforeAll, afterAll, inject } from 'vitest';
 import { join } from 'path';
 import { setupMonorepo } from './prepare';
-import { mkdtemp, mkdir, readdir, rm, readFile, writeFile } from 'fs/promises';
+import { cp, mkdtemp, mkdir, readdir, rm, readFile, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import getPort from 'get-port';
 import { execa, execaNode } from 'execa';
@@ -715,6 +715,44 @@ export const environmentRoute = registerApiRoute('/environment', {
           }
 
           await writeFile(mastraConfigPath, originalMastraConfig);
+          await rm(isolatedFixturePath, { recursive: true, force: true });
+        }
+      },
+      timeout,
+    );
+  });
+
+  describe.sequential('dependencies linked from outside the workspace', () => {
+    it(
+      'fails the build naming the package and its specifier',
+      async () => {
+        const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-linked-dep-test-${pkgManager}-`));
+        try {
+          await setupMonorepo(isolatedFixturePath, pkgManager);
+
+          const appPath = join(isolatedFixturePath, 'apps', 'custom');
+          const linkedPath = join(isolatedFixturePath, 'external', 'unicorn-magic');
+          await cp(join(appPath, 'node_modules', 'unicorn-magic'), linkedPath, { recursive: true });
+
+          const manifestPath = join(appPath, 'package.json');
+          const manifest = await readFile(manifestPath, 'utf8');
+          await writeFile(
+            manifestPath,
+            manifest.replace('"unicorn-magic": "0.4.0"', '"unicorn-magic": "link:../../external/unicorn-magic"'),
+          );
+          await execa(pkgManager, ['install', '--config.minimum-release-age=0'], {
+            cwd: isolatedFixturePath,
+            env: process.env,
+          });
+
+          await removeOutputDir(isolatedFixturePath);
+          const build = await execa(pkgManager, ['build'], { cwd: appPath, env: process.env, reject: false });
+          const output = `${build.stdout}\n${build.stderr}`;
+
+          expect(build.exitCode).not.toBe(0);
+          expect(output).toContain('Cannot bundle dependencies linked from outside the workspace');
+          expect(output).toContain('"unicorn-magic": "link:../../external/unicorn-magic"');
+        } finally {
           await rm(isolatedFixturePath, { recursive: true, force: true });
         }
       },
