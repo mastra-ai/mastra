@@ -1007,10 +1007,13 @@ export class BackgroundTaskManager {
       return true;
     }
 
-    if (isRestart && task.status !== 'running') {
-      // Either gone or already done/cancelled by another worker. Drop the
-      // event silently — the worker group ensures exactly-once delivery, but
-      // the task may have moved on between publish and pickup.
+    const isRunningRedelivery = task.status === 'running' && deliveryAttempt > 1;
+    const canDispatch = isRestart ? task.status === 'running' : task.status === 'pending' || isRunningRedelivery;
+
+    if (!canDispatch) {
+      // The task moved to a state this delivery cannot start. Acknowledge the
+      // stale event without clearing its context: suspended tasks still need
+      // that context to resume, and terminal result hooks may still be running.
       return true;
     }
 

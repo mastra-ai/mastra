@@ -14,6 +14,7 @@ vi.mock('fs-extra', () => ({
 vi.mock('@mastra/deployer/build', () => {
   class MockFileService {
     getFirstExistingFile = vi.fn().mockReturnValue('.env');
+    getExistingFiles = vi.fn((files: string[]) => files);
   }
 
   return {
@@ -58,6 +59,12 @@ describe('WorkerBundler', () => {
       // role is determined at runtime via MASTRA_WORKERS, not baked into the bundle
       expect(entry).not.toMatch(/startWorkers\(['"`]/);
     });
+  });
+
+  it('layers default dotenv files from base to production override', async () => {
+    const { WorkerBundler } = await import('./WorkerBundler');
+
+    await expect(new WorkerBundler().getEnvFiles()).resolves.toEqual(['.env', '.env.local', '.env.production']);
   });
 
   describe('output directory', () => {

@@ -97,6 +97,7 @@ Select a suggestion with arrow keys and press Tab to insert it.
 | `/diff`             | Show modified files or git diff                                             |
 | `/name`             | Rename current thread                                                       |
 | `/cost`             | Show token usage and estimated costs                                        |
+| `/context`          | Audit what is using the context window (`/ctx` alias)                       |
 | `/profile`          | Control process memory diagnostics                                          |
 | `/review`           | Review a GitHub pull request                                                |
 | `/hooks`            | Show/reload configured hooks                                                |

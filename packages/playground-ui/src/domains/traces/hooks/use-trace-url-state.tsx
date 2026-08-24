@@ -143,7 +143,7 @@ export function useTraceUrlState(
       const parsed = new Date(dateFromParamRaw);
       return Number.isNaN(parsed.getTime()) ? undefined : parsed;
     }
-    if (datePreset === 'all') return undefined;
+    // 'all' has no entry in PRESET_MS, so it falls out as an open-ended window.
     const ms = PRESET_MS[datePreset];
     return ms ? new Date(Date.now() - ms) : undefined;
   }, [datePreset, dateFromParamRaw]);

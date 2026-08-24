@@ -39,6 +39,7 @@ function createSession(
     endRunAfterDroppedSignal?: boolean;
     /** Once the session is free, a redelivered signal wakes it and lands. */
     acceptRedeliveredSignal?: boolean;
+    initialDeliveredSignalIds?: string[];
   },
 ) {
   let threadId = 'thread-1';
@@ -52,7 +53,7 @@ function createSession(
   };
   let signalSends = 0;
   const deliveredKeys = new Set<string>();
-  const deliveredSignals = new Set<string>();
+  const deliveredSignals = new Set(options?.initialDeliveredSignalIds ?? []);
   const delivered: string[] = [];
   const sendNotificationSignal = vi.fn(
     async (input: { dedupeKey?: string }, _options?: { requestContext?: { get(key: string): unknown } }) => {
@@ -398,6 +399,78 @@ describe('FactoryDecisionDispatcher', () => {
         secondNow,
       ),
     ).resolves.toBeNull();
+  });
+
+  it('advances the delivery generation when a deferred decision is retried', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    await queueDecision(storage, {
+      type: 'sendMessage',
+      role: 'work',
+      message: 'Review completion.',
+      idempotencyKey: 'message-1',
+    });
+    const firstNow = new Date('2030-01-01T00:00:00Z');
+    const [first] = await storage.claimDeferredDecisions({
+      ownerId: 'first',
+      now: firstNow,
+      leaseExpiresAt: new Date(firstNow.getTime() + 30_000),
+      limit: 1,
+    });
+    expect(first).toMatchObject({ deliveryGeneration: 0 });
+
+    await storage.failDeferredDecision(
+      {
+        id: first!.id,
+        orgId: 'org-1',
+        factoryProjectId: PROJECT_ID,
+        ownerId: 'first',
+        error: 'retry me',
+        terminal: false,
+        availableAt: firstNow,
+      },
+      firstNow,
+    );
+    const [retried] = await storage.claimDeferredDecisions({
+      ownerId: 'second',
+      now: firstNow,
+      leaseExpiresAt: new Date(firstNow.getTime() + 30_000),
+      limit: 1,
+    });
+
+    expect(retried).toMatchObject({ id: first!.id, deliveryGeneration: 1 });
+  });
+
+  it('advances the delivery generation when a failed deferred decision is manually retried', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    await queueDecision(storage, {
+      type: 'sendMessage',
+      role: 'work',
+      message: 'Review completion.',
+      idempotencyKey: 'message-1',
+    });
+    const now = new Date('2030-01-01T00:00:00Z');
+    const [claimed] = await storage.claimDeferredDecisions({
+      ownerId: 'first',
+      now,
+      leaseExpiresAt: new Date(now.getTime() + 30_000),
+      limit: 1,
+    });
+    await storage.failDeferredDecision(
+      {
+        id: claimed!.id,
+        orgId: 'org-1',
+        factoryProjectId: PROJECT_ID,
+        ownerId: 'first',
+        error: 'failed',
+        terminal: true,
+        availableAt: now,
+      },
+      now,
+    );
+
+    const retried = await storage.retryDeferredDecision('org-1', PROJECT_ID, claimed!.id, now);
+
+    expect(retried).toMatchObject({ status: 'retry', attempts: 0, deliveryGeneration: 1 });
   });
 
   it('dispatches a bound session message through notification dedupe and marks the effect succeeded', async () => {
@@ -1168,7 +1241,7 @@ describe('FactoryDecisionDispatcher', () => {
       kickoffKey: 'kickoff-null',
       kickoffMessage: null,
     });
-    const { controller, getAgentEndListenerCount } = createSession(undefined, {
+    const { controller, session, getAgentEndListenerCount } = createSession(undefined, {
       signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
       emitAgentEndDuringSignal: true,
       agentEndReason: reason,
@@ -1188,6 +1261,17 @@ describe('FactoryDecisionDispatcher', () => {
     expect(decision?.lastError).toContain(message);
     // `retry` only helps if the row can actually be picked up again.
     expect(decision?.availableAt).toBeTruthy();
+    expect(decision?.deliveryGeneration).toBe(1);
+    expect(getAgentEndListenerCount()).toBe(0);
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+
+    expect(session.sendSignal).toHaveBeenCalledTimes(2);
+    expect(session.sendSignal.mock.calls.map(call => call[0].id)).toEqual([decision!.id, `${decision!.id}:retry:1`]);
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+      status: 'retry',
+      deliveryGeneration: 2,
+    });
     expect(getAgentEndListenerCount()).toBe(0);
   });
 
@@ -1516,6 +1600,46 @@ describe('FactoryDecisionDispatcher', () => {
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
     const [parked] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
     expect(parked).toMatchObject({ status: 'proposed' });
+    const beforeManualRun = await storage.get({ orgId: 'org-1', id: item.id });
+    if (!beforeManualRun) throw new Error('Expected the work item');
+    await storage.commitRuleEvaluation({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: item.id,
+      ingress: { identity: 'failed-before-manual-run', triggerType: 'test' },
+      ruleSetVersion: 'rules-v1',
+      expectedRevision: beforeManualRun.revision,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [
+        {
+          type: 'invokeSkill',
+          role: 'work',
+          skillName: 'understand-issue',
+          idempotencyKey: 'skill-failed-before-manual-run',
+        },
+      ],
+      causalChain: [],
+      now: new Date('2030-01-01T00:00:30Z'),
+    });
+    const [failedClaim] = await storage.claimDeferredDecisions({
+      ownerId: 'failure-worker',
+      now: new Date('2030-01-01T00:00:30Z'),
+      leaseExpiresAt: new Date('2030-01-01T00:01:00Z'),
+      limit: 1,
+    });
+    if (!failedClaim) throw new Error('Expected the failed run');
+    await storage.failDeferredDecision({
+      id: failedClaim.id,
+      orgId: failedClaim.orgId,
+      factoryProjectId: failedClaim.factoryProjectId,
+      ownerId: 'failure-worker',
+      now: new Date('2030-01-01T00:00:30Z'),
+      availableAt: new Date('2030-01-01T00:00:30Z'),
+      lastError: 'Session unavailable.',
+      failureCode: 'session_unavailable',
+      terminal: true,
+    });
 
     // The person answers by taking the item on, which arms it and emits a
     // second copy of the same run. The parked question is now moot.
@@ -1541,8 +1665,11 @@ describe('FactoryDecisionDispatcher', () => {
     await dispatched;
 
     const decisions = await storage.listDeferredDecisions('org-1', PROJECT_ID);
-    expect(decisions.find(entry => entry.id === parked!.id)?.status).toBe('dismissed');
-    expect(decisions.find(entry => entry.id !== parked!.id)?.status).toBe('succeeded');
+    expect(decisions.find(entry => entry.id === parked!.id)?.status).toBe('superseded');
+    expect(decisions.find(entry => entry.idempotencyKey === 'skill-failed-before-manual-run')?.status).toBe(
+      'superseded',
+    );
+    expect(decisions.find(entry => entry.idempotencyKey === 'skill-approved')?.status).toBe('succeeded');
   });
 
   it('still moves cards for external facts while automatic runs are off', async () => {
@@ -1591,6 +1718,49 @@ describe('FactoryDecisionDispatcher', () => {
     const [record] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
     expect(record?.status).toBe('succeeded');
     expect(sendNotificationSignal).not.toHaveBeenCalled();
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['done']);
+  });
+
+  it('completes a transition when its stored binding has no live session', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'transition',
+      board: 'work',
+      stage: 'done',
+      idempotencyKey: 'merged-dead-session',
+      message: { text: 'Pull request merged; card moved to Done.' },
+    });
+    await storage.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      workItem: {
+        id: item.id,
+        input: {
+          externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
+          title: 'Fix issue',
+          stages: ['execute'],
+          sessions: {},
+          metadata: {},
+        },
+      },
+      role: 'work',
+      session: { sessionId: 'session-gone', branch: 'factory/issue-1', threadId: 'thread-gone' },
+      resourceId: PROJECT_ID,
+      kickoffKey: 'kickoff-dead-session',
+      kickoffMessage: null,
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: { getSessionByResource: vi.fn(async () => undefined) },
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('succeeded');
     expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['done']);
   });
 
@@ -2213,6 +2383,83 @@ describe('FactoryDecisionDispatcher', () => {
     });
   });
 
+  it('keeps live notification transport failures retryable', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'sendMessage',
+      role: 'work',
+      message: 'Review completion.',
+      idempotencyKey: 'message-transport-failure',
+    });
+    const { controller, sendNotificationSignal } = createSession();
+    let resolvePersistence = () => {};
+    const persistence = new Promise<void>(resolve => {
+      resolvePersistence = resolve;
+    });
+    sendNotificationSignal
+      .mockImplementationOnce(() => {
+        throw new Error('socket closed synchronously');
+      })
+      .mockImplementationOnce(async () => ({
+        persisted: persistence,
+        accepted: Promise.reject(new Error('acceptance failed before persistence')),
+      }))
+      .mockRejectedValue(new Error('ECONNRESET'));
+    await storage.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      workItem: {
+        id: item.id,
+        input: {
+          externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
+          title: 'Fix issue',
+          stages: ['execute'],
+          sessions: {},
+          metadata: {},
+        },
+      },
+      role: 'work',
+      session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+      resourceId: PROJECT_ID,
+      kickoffKey: 'kickoff-transport-failure',
+      kickoffMessage: null,
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+    const start = new Date('2030-01-01T00:00:00Z');
+
+    await dispatcher.runOnce(start);
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+      status: 'retry',
+      attempts: 1,
+      failureCode: 'notification_delivery_failed',
+    });
+    const secondAttempt = dispatcher.runOnce(new Date(start.getTime() + 120_000));
+    await new Promise<void>(resolve => setImmediate(resolve));
+    resolvePersistence();
+    await secondAttempt;
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+      status: 'retry',
+      attempts: 2,
+      failureCode: 'notification_delivery_failed',
+    });
+    for (let attempt = 2; attempt < 5; attempt += 1) {
+      await dispatcher.runOnce(new Date(start.getTime() + attempt * 120_000));
+    }
+
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+      status: 'failed',
+      attempts: 5,
+      failureCode: 'notification_delivery_failed',
+      failureOccurrence: 1,
+    });
+  });
   it('backs off missing bindings and reaches a bounded terminal failure with sanitized errors', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { transitionService } = await queueDecision(storage, {
@@ -2236,7 +2483,12 @@ describe('FactoryDecisionDispatcher', () => {
     }
 
     const [decision] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
-    expect(decision).toMatchObject({ status: 'failed', attempts: 5 });
+    expect(decision).toMatchObject({
+      status: 'failed',
+      attempts: 5,
+      failureCode: 'session_unavailable',
+      failureOccurrence: 1,
+    });
     expect(decision!.lastError).toBe('No active Factory binding for role work.');
     expect(decision!.lastError!.length).toBeLessThanOrEqual(512);
   });

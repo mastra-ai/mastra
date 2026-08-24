@@ -358,6 +358,23 @@ export function describeFactoryStorageContract(
         expect(limited.map(r => r.count)).toEqual([4, 3]);
       });
 
+      it('counts rows with equality and in filters', async () => {
+        const count = storage.ops.count?.bind(storage.ops);
+        if (!count) throw new Error(`${backendName} does not implement count`);
+        await storage.ops.insertOne(CONTRACT_ITEMS.name, baseItem({ name: 'count-a', enabled: true }));
+        await storage.ops.insertOne(CONTRACT_ITEMS.name, baseItem({ name: 'count-b', enabled: false }));
+        await storage.ops.insertOne(CONTRACT_ITEMS.name, baseItem({ name: 'count-c', enabled: true }));
+
+        expect(await count(CONTRACT_ITEMS.name, { org_id: 'org-1' })).toBe(3);
+        expect(
+          await count(CONTRACT_ITEMS.name, {
+            org_id: 'org-1',
+            name: { in: ['count-a', 'count-c'] },
+          }),
+        ).toBe(2);
+        expect(await count(CONTRACT_ITEMS.name, { org_id: 'missing' })).toBe(0);
+      });
+
       it('paginates with a keyset cursor over (timestamp desc, id desc) including ties', async () => {
         const early = new Date('2026-07-17T09:00:00.000Z');
         const late = new Date('2026-07-17T11:00:00.000Z');

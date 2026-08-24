@@ -11,7 +11,8 @@
 import { createHash } from 'node:crypto';
 
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
-import type { CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
+import type { CollectionSchema, CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
+import { isTerminalFactoryRuleStage } from '../../../rules/types.js';
 
 export type WorkItemStage = string;
 
@@ -39,6 +40,7 @@ export interface ExternalWorkItemSource {
 
 /** Dispatcher upsert idempotency token — server bookkeeping, dropped from the read wire. */
 export const FACTORY_RULE_MATERIALIZATION_KEY = 'factoryRuleMaterializationKey';
+export const FACTORY_PULL_REQUEST_RECONCILIATION_KEY = 'factoryPullRequestReconciliation';
 
 export interface WorkItemStageEntry {
   stage: WorkItemStage;
@@ -126,8 +128,39 @@ export interface FactoryRuleEvaluationRecord {
   createdAt: Date;
 }
 
-/** `proposed` is parked awaiting approval and never claimed; `dismissed` is a proposal turned down. */
-export type FactoryDispatchStatus = 'pending' | 'proposed' | 'dismissed' | 'leased' | 'retry' | 'succeeded' | 'failed';
+/** `proposed` is parked awaiting approval; `dismissed` is human, `superseded` is automatic. */
+export type FactoryDispatchStatus =
+  | 'pending'
+  | 'proposed'
+  | 'dismissed'
+  | 'superseded'
+  | 'leased'
+  | 'retry'
+  | 'succeeded'
+  | 'failed';
+
+const FACTORY_DISPATCH_FAILURE_CODES = [
+  'session_unavailable',
+  'source_control_missing',
+  'source_repository_missing',
+  'unsupported_provider_item',
+  'notification_delivery_failed',
+  'repository_git_missing',
+  'repository_egress_blocked',
+  'repository_clone_failed',
+  'repository_pull_failed',
+  'repository_push_failed',
+  'repository_commit_failed',
+  'repository_cli_missing',
+  'repository_pr_failed',
+  'unknown',
+] as const;
+
+export type FactoryDispatchFailureCode = (typeof FACTORY_DISPATCH_FAILURE_CODES)[number];
+
+function isFactoryDispatchFailureCode(value: unknown): value is FactoryDispatchFailureCode {
+  return FACTORY_DISPATCH_FAILURE_CODES.some(code => code === value);
+}
 
 export interface FactoryDeferredDecisionPageInput {
   orgId: string;
@@ -140,6 +173,13 @@ export interface FactoryDeferredDecisionPageInput {
 export interface FactoryDeferredDecisionPage {
   decisions: FactoryDeferredDecisionRecord[];
   hasMore: boolean;
+}
+
+export interface FactoryFailedDecisionPageInput {
+  orgId: string;
+  factoryProjectId: string;
+  before?: { occurredAt: Date; id: string };
+  limit: number;
 }
 
 export interface FactoryDeferredDecisionRecord {
@@ -156,15 +196,61 @@ export interface FactoryDeferredDecisionRecord {
   decision: Record<string, unknown>;
   status: FactoryDispatchStatus;
   attempts: number;
+  deliveryGeneration: number;
+  failureOccurrence: number;
   availableAt: Date;
   leaseOwner: string | null;
   leaseExpiresAt: Date | null;
   lastError: string | null;
+  failureCode: FactoryDispatchFailureCode | null;
   /** When a human released this run; set once, so the gate never parks it again. */
   approvedAt: Date | null;
   completedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+}
+
+export type FactoryAttentionKind = 'automation-failed';
+export type FactoryAttentionReceiptState = 'read' | 'archived';
+export type FactoryAttentionReceiptAction = 'read' | 'archive' | 'restore';
+
+export interface FactoryAttentionIdentity {
+  kind: FactoryAttentionKind;
+  sourceId: string;
+  occurrence: number;
+}
+
+export interface FactoryAttentionReceiptRecord extends FactoryAttentionIdentity {
+  id: string;
+  orgId: string;
+  factoryProjectId: string;
+  userId: string;
+  state: FactoryAttentionReceiptState;
+  readAt: Date;
+  archivedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+interface SetAttentionReceiptInput {
+  orgId: string;
+  factoryProjectId: string;
+  userId: string;
+  decisionId: string;
+  failureOccurrence: number;
+  action: FactoryAttentionReceiptAction;
+  now: Date;
+}
+
+export function factoryDecisionAttentionIdentity(
+  decisionId: string,
+  failureOccurrence: number,
+): FactoryAttentionIdentity {
+  return { kind: 'automation-failed', sourceId: decisionId, occurrence: failureOccurrence };
+}
+
+export function factoryAttentionKey(factoryProjectId: string, identity: FactoryAttentionIdentity): string {
+  return `factory:${factoryProjectId}:attention:${identity.kind}:${identity.sourceId}:${identity.occurrence}`;
 }
 
 export interface FactoryRunBindingSessionAddress {
@@ -256,7 +342,9 @@ export interface FactoryDispatchFailureInput extends FactoryLeaseIdentity {
   now: Date;
   availableAt: Date;
   lastError: string;
+  failureCode: FactoryDispatchFailureCode;
   terminal: boolean;
+  advanceDeliveryGeneration?: boolean;
 }
 
 export interface CommitFactoryTransitionInput {
@@ -561,6 +649,8 @@ function applyUpdate({
     updated_at: now,
   };
 }
+const ATTENTION_RECEIPT_QUERY_BATCH_SIZE = 200;
+const ATTENTION_RECEIPT_WRITE_BATCH_SIZE = 25;
 
 const projectRelationLocks = new Map<string, Promise<unknown>>();
 
@@ -584,6 +674,15 @@ function decisionSourceKey(decision: unknown): string | null {
   const record = decision as Record<string, unknown>;
   if (record.type !== 'upsertLinkedWorkItem' || typeof record.sourceKey !== 'string') return null;
   return record.sourceKey;
+}
+
+function deferredDecisionType(decision: FactoryDeferredDecisionRecord): string | undefined {
+  return typeof decision.decision.type === 'string' ? decision.decision.type : undefined;
+}
+
+function ingressWasAccepted(row: GovernanceDbRow | null): boolean {
+  if (!row || typeof row.result !== 'object' || row.result === null || Array.isArray(row.result)) return false;
+  return 'status' in row.result && row.result.status === 'accepted';
 }
 
 const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
@@ -635,10 +734,13 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
       decision: { type: 'json' },
       status: { type: 'text' },
       attempts: { type: 'integer' },
+      delivery_generation: { type: 'integer', default: 0 },
+      failure_occurrence: { type: 'integer', default: 0 },
       available_at: { type: 'timestamp' },
       lease_owner: { type: 'text', nullable: true },
       lease_expires_at: { type: 'timestamp', nullable: true },
       last_error: { type: 'text', nullable: true },
+      failure_code: { type: 'text', nullable: true },
       approved_at: { type: 'timestamp', nullable: true },
       completed_at: { type: 'timestamp', nullable: true },
       created_at: { type: 'timestamp' },
@@ -650,7 +752,50 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
         columns: ['org_id', 'factory_project_id', 'idempotency_key'],
       },
     ],
-    indexes: [{ name: 'factory_deferred_decisions_claim_idx', columns: ['status', 'created_at'] }],
+    indexes: [
+      { name: 'factory_deferred_decisions_claim_idx', columns: ['status', 'created_at'] },
+      {
+        name: 'factory_deferred_decisions_tenant_status_created_idx',
+        columns: ['org_id', 'factory_project_id', 'status', 'created_at', 'id'],
+      },
+      {
+        name: 'factory_deferred_decisions_tenant_status_failed_idx',
+        columns: ['org_id', 'factory_project_id', 'status', 'updated_at', 'id'],
+      },
+    ],
+  },
+  {
+    name: 'factory_attention_receipts',
+    columns: {
+      id: { type: 'uuid-pk' },
+      org_id: { type: 'text' },
+      factory_project_id: { type: 'text' },
+      user_id: { type: 'text' },
+      kind: { type: 'text' },
+      source_id: { type: 'text' },
+      occurrence: { type: 'integer' },
+      state: { type: 'text' },
+      read_at: { type: 'timestamp' },
+      archived_at: { type: 'timestamp', nullable: true },
+      created_at: { type: 'timestamp' },
+      updated_at: { type: 'timestamp' },
+    },
+    uniqueIndexes: [
+      {
+        name: 'factory_attention_receipts_user_source_unique',
+        columns: ['org_id', 'factory_project_id', 'user_id', 'kind', 'source_id', 'occurrence'],
+      },
+    ],
+    indexes: [
+      {
+        name: 'factory_attention_receipts_user_state_idx',
+        columns: ['org_id', 'factory_project_id', 'user_id', 'state'],
+      },
+      {
+        name: 'factory_attention_receipts_source_idx',
+        columns: ['org_id', 'factory_project_id', 'kind', 'source_id', 'occurrence'],
+      },
+    ],
   },
   {
     name: 'factory_run_bindings',
@@ -758,14 +903,57 @@ function toDeferredDecision(row: GovernanceDbRow): FactoryDeferredDecisionRecord
     decision: row.decision as Record<string, unknown>,
     status: row.status as FactoryDispatchStatus,
     attempts: Number(row.attempts),
+    deliveryGeneration: Number(row.delivery_generation ?? 0),
+    failureOccurrence: Number(row.failure_occurrence ?? 0),
     availableAt: row.available_at as Date,
     leaseOwner: (row.lease_owner as string | null) ?? null,
     leaseExpiresAt: (row.lease_expires_at as Date | null) ?? null,
     lastError: (row.last_error as string | null) ?? null,
+    failureCode: isFactoryDispatchFailureCode(row.failure_code) ? row.failure_code : null,
     approvedAt: (row.approved_at as Date | null) ?? null,
     completedAt: (row.completed_at as Date | null) ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at as Date,
+  };
+}
+function attentionReceiptKind(value: unknown): FactoryAttentionKind {
+  if (value === 'automation-failed') return value;
+  throw new Error(`Unsupported attention receipt kind '${String(value)}'.`);
+}
+
+function attentionReceiptState(value: unknown): FactoryAttentionReceiptState {
+  if (value === 'read' || value === 'archived') return value;
+  throw new Error(`Unsupported attention receipt state '${String(value)}'.`);
+}
+
+function toAttentionReceipt(row: GovernanceDbRow): FactoryAttentionReceiptRecord {
+  if (typeof row.source_id !== 'string' || !row.source_id) {
+    throw new Error('Attention receipt source_id must be a non-empty string.');
+  }
+  const occurrence = Number(row.occurrence);
+  if (!Number.isSafeInteger(occurrence) || occurrence < 0) {
+    throw new Error('Attention receipt occurrence must be a non-negative safe integer.');
+  }
+  if (!(row.read_at instanceof Date)) throw new Error('Attention receipt read_at must be a timestamp.');
+  const archivedAt = row.archived_at;
+  if (archivedAt !== null && archivedAt !== undefined && !(archivedAt instanceof Date)) {
+    throw new Error('Attention receipt archived_at must be a timestamp or null.');
+  }
+  if (!(row.created_at instanceof Date)) throw new Error('Attention receipt created_at must be a timestamp.');
+  if (!(row.updated_at instanceof Date)) throw new Error('Attention receipt updated_at must be a timestamp.');
+  return {
+    id: row.id,
+    orgId: row.org_id,
+    factoryProjectId: String(row.factory_project_id),
+    userId: String(row.user_id),
+    kind: attentionReceiptKind(row.kind),
+    sourceId: row.source_id,
+    occurrence,
+    state: attentionReceiptState(row.state),
+    readAt: row.read_at,
+    archivedAt: archivedAt ?? null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }
 function toPendingStart(row: GovernanceDbRow): FactoryPendingStartRecord {
@@ -795,6 +983,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
 
   async init(): Promise<void> {
     await this.ensureCollections([WORK_ITEMS_SCHEMA, ...FACTORY_GOVERNANCE_SCHEMAS]);
+    await this.repairLegacyAttentionState();
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -803,6 +992,12 @@ export class WorkItemsStorage extends FactoryStorageDomain {
 
   get #db(): FactoryStorageOps {
     return this.ops;
+  }
+
+  async #countRows(collection: string, where: CollectionWhere): Promise<number> {
+    const count = this.#db.count;
+    if (!count) throw new Error('[WorkItemsStorage] storage backend does not support collection counts.');
+    return count.call(this.#db, collection, where);
   }
 
   async #withProjectRelationTransaction<T>(
@@ -921,11 +1116,18 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         failed = true;
         return {
           status: input.terminal ? 'failed' : 'retry',
+          ...(table === 'factory_deferred_decisions' && !input.terminal && input.advanceDeliveryGeneration !== false
+            ? { delivery_generation: Number(current.delivery_generation ?? 0) + 1 }
+            : {}),
           available_at: input.availableAt,
           lease_owner: null,
           lease_expires_at: null,
           last_error: input.lastError,
+          ...(table === 'factory_deferred_decisions' ? { failure_code: input.failureCode } : {}),
           completed_at: input.terminal ? input.now : null,
+          ...(table === 'factory_deferred_decisions' && input.terminal
+            ? { failure_occurrence: Number(current.failure_occurrence ?? 0) + 1 }
+            : {}),
           updated_at: input.now,
         };
       },
@@ -945,6 +1147,24 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   /** List the org's work items for a project, newest first. */
   async list({ orgId, factoryProjectId }: { orgId: string; factoryProjectId: string }): Promise<WorkItemRow[]> {
     return this.#listWithOps(this.#db, orgId, factoryProjectId);
+  }
+
+  async listByIds({
+    orgId,
+    factoryProjectId,
+    ids,
+  }: {
+    orgId: string;
+    factoryProjectId: string;
+    ids: string[];
+  }): Promise<WorkItemRow[]> {
+    if (ids.length === 0) return [];
+    const rows = await this.#db.findMany<WorkItemDbRow>('work_items', {
+      org_id: orgId,
+      factory_project_id: factoryProjectId,
+      id: { in: [...new Set(ids)] },
+    });
+    return rows.map(toWorkItem);
   }
 
   async get({ orgId, id }: { orgId: string; id: string }): Promise<WorkItemRow | null> {
@@ -1090,6 +1310,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
                 decision,
                 status: 'pending',
                 attempts: 0,
+                delivery_generation: 0,
                 available_at: now,
                 lease_owner: null,
                 lease_expires_at: null,
@@ -1225,6 +1446,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             decision,
             status: 'pending',
             attempts: 0,
+            delivery_generation: 0,
             available_at: input.now,
             lease_owner: null,
             lease_expires_at: null,
@@ -1308,6 +1530,246 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       },
     );
     return { decisions: rows.slice(0, input.limit).map(toDeferredDecision), hasMore: rows.length > input.limit };
+  }
+
+  async listFailedDecisionPage(input: FactoryFailedDecisionPageInput): Promise<FactoryDeferredDecisionPage> {
+    const rows = await this.#db.findMany<GovernanceDbRow>(
+      'factory_deferred_decisions',
+      {
+        org_id: input.orgId,
+        factory_project_id: input.factoryProjectId,
+        status: 'failed',
+      },
+      {
+        orderBy: [
+          ['updated_at', 'desc'],
+          ['id', 'desc'],
+        ],
+        limit: input.limit + 1,
+        ...(input.before ? { cursor: { values: [input.before.occurredAt, input.before.id] } } : {}),
+      },
+    );
+    return { decisions: rows.slice(0, input.limit).map(toDeferredDecision), hasMore: rows.length > input.limit };
+  }
+
+  async countDeferredDecisionsByStatuses({
+    orgId,
+    factoryProjectId,
+    statuses,
+  }: {
+    orgId: string;
+    factoryProjectId: string;
+    statuses: FactoryDispatchStatus[];
+  }): Promise<number> {
+    return this.#countRows('factory_deferred_decisions', {
+      org_id: orgId,
+      factory_project_id: factoryProjectId,
+      status: { in: statuses },
+    });
+  }
+
+  async getDeferredDecision(
+    orgId: string,
+    factoryProjectId: string,
+    decisionId: string,
+  ): Promise<FactoryDeferredDecisionRecord | null> {
+    const row = await this.#db.findOne<GovernanceDbRow>('factory_deferred_decisions', {
+      id: decisionId,
+      org_id: orgId,
+      factory_project_id: factoryProjectId,
+    });
+    return row ? toDeferredDecision(row) : null;
+  }
+
+  async listAttentionReceipts({
+    orgId,
+    factoryProjectId,
+    userId,
+    identities,
+  }: {
+    orgId: string;
+    factoryProjectId: string;
+    userId: string;
+    identities: FactoryAttentionIdentity[];
+  }): Promise<FactoryAttentionReceiptRecord[]> {
+    if (identities.length === 0) return [];
+    const requested = new Set(
+      identities.map(identity => `${identity.kind}\0${identity.sourceId}\0${identity.occurrence}`),
+    );
+    const sourceIds = [...new Set(identities.map(identity => identity.sourceId))];
+    const kinds = [...new Set(identities.map(identity => identity.kind))];
+    const receipts: FactoryAttentionReceiptRecord[] = [];
+    for (let index = 0; index < sourceIds.length; index += ATTENTION_RECEIPT_QUERY_BATCH_SIZE) {
+      const rows = await this.#db.findMany<GovernanceDbRow>('factory_attention_receipts', {
+        org_id: orgId,
+        factory_project_id: factoryProjectId,
+        user_id: userId,
+        kind: { in: kinds },
+        source_id: { in: sourceIds.slice(index, index + ATTENTION_RECEIPT_QUERY_BATCH_SIZE) },
+      });
+      receipts.push(
+        ...rows
+          .map(toAttentionReceipt)
+          .filter(receipt => requested.has(`${receipt.kind}\0${receipt.sourceId}\0${receipt.occurrence}`)),
+      );
+    }
+    return receipts;
+  }
+
+  async countAttentionReceipts({
+    orgId,
+    factoryProjectId,
+    userId,
+    state,
+  }: {
+    orgId: string;
+    factoryProjectId: string;
+    userId: string;
+    state?: FactoryAttentionReceiptState;
+  }): Promise<number> {
+    return this.#countRows('factory_attention_receipts', {
+      org_id: orgId,
+      factory_project_id: factoryProjectId,
+      user_id: userId,
+      kind: 'automation-failed',
+      ...(state ? { state } : {}),
+    });
+  }
+
+  async deleteAttentionReceipts({
+    orgId,
+    factoryProjectId,
+    identities,
+  }: {
+    orgId: string;
+    factoryProjectId: string;
+    identities: FactoryAttentionIdentity[];
+  }): Promise<void> {
+    const unique = [
+      ...new Map(
+        identities.map(identity => [`${identity.kind}\0${identity.sourceId}\0${identity.occurrence}`, identity]),
+      ).values(),
+    ];
+    for (let index = 0; index < unique.length; index += ATTENTION_RECEIPT_WRITE_BATCH_SIZE) {
+      await Promise.all(
+        unique.slice(index, index + ATTENTION_RECEIPT_WRITE_BATCH_SIZE).map(identity =>
+          this.#db.deleteMany('factory_attention_receipts', {
+            org_id: orgId,
+            factory_project_id: factoryProjectId,
+            kind: identity.kind,
+            source_id: identity.sourceId,
+            occurrence: identity.occurrence,
+          }),
+        ),
+      );
+    }
+  }
+
+  async setAttentionReceipt(input: SetAttentionReceiptInput): Promise<FactoryAttentionReceiptRecord | null> {
+    return this.#retryAttentionReceiptWrite(() =>
+      this.storage.withTransaction(ops => this.#setAttentionReceiptWithOps(ops, input)),
+    );
+  }
+
+  async #retryAttentionReceiptWrite<T>(write: () => Promise<T>): Promise<T> {
+    try {
+      return await write();
+    } catch (error) {
+      if (!(error instanceof UniqueViolationError)) throw error;
+      return write();
+    }
+  }
+
+  async #setAttentionReceiptWithOps(
+    ops: FactoryStorageOps,
+    { orgId, factoryProjectId, userId, decisionId, failureOccurrence, action, now }: SetAttentionReceiptInput,
+  ): Promise<FactoryAttentionReceiptRecord | null> {
+    const identity = factoryDecisionAttentionIdentity(decisionId, failureOccurrence);
+    let currentOccurrence = false;
+    const decision = await ops.updateAtomic<GovernanceDbRow>(
+      'factory_deferred_decisions',
+      { id: decisionId, org_id: orgId, factory_project_id: factoryProjectId },
+      current => {
+        currentOccurrence =
+          current.status === 'failed' && Number(current.failure_occurrence ?? 0) === failureOccurrence;
+        return null;
+      },
+    );
+    if (!decision || !currentOccurrence) return null;
+
+    const where = {
+      org_id: orgId,
+      factory_project_id: factoryProjectId,
+      user_id: userId,
+      kind: identity.kind,
+      source_id: identity.sourceId,
+      occurrence: identity.occurrence,
+    };
+    const existing = await ops.findOne<GovernanceDbRow>('factory_attention_receipts', where);
+    if (!existing) {
+      return toAttentionReceipt(
+        await ops.insertOne<GovernanceDbRow>('factory_attention_receipts', {
+          ...where,
+          state: action === 'archive' ? 'archived' : 'read',
+          read_at: now,
+          archived_at: action === 'archive' ? now : null,
+          created_at: now,
+          updated_at: now,
+        }),
+      );
+    }
+    const row = await ops.updateAtomic<GovernanceDbRow>(
+      'factory_attention_receipts',
+      { id: existing.id, ...where },
+      current => {
+        const preserveArchive = action === 'read' && current.state === 'archived';
+        const archived = action === 'archive' || preserveArchive;
+        return {
+          state: archived ? 'archived' : 'read',
+          read_at: current.read_at,
+          archived_at: action === 'archive' ? now : archived ? (current.archived_at ?? now) : null,
+          updated_at: now,
+        };
+      },
+    );
+    return row ? toAttentionReceipt(row) : null;
+  }
+
+  async markAttentionReceiptsRead({
+    orgId,
+    factoryProjectId,
+    userId,
+    occurrences,
+    now,
+  }: {
+    orgId: string;
+    factoryProjectId: string;
+    userId: string;
+    occurrences: Array<{ decisionId: string; failureOccurrence: number }>;
+    now: Date;
+  }): Promise<void> {
+    const uniqueOccurrences = [
+      ...new Map(
+        occurrences.map(occurrence => [`${occurrence.decisionId}:${occurrence.failureOccurrence}`, occurrence]),
+      ).values(),
+    ];
+    for (let index = 0; index < uniqueOccurrences.length; index += ATTENTION_RECEIPT_WRITE_BATCH_SIZE) {
+      const batch = uniqueOccurrences.slice(index, index + ATTENTION_RECEIPT_WRITE_BATCH_SIZE);
+      await this.#retryAttentionReceiptWrite(() =>
+        this.storage.withTransaction(async ops => {
+          for (const occurrence of batch) {
+            await this.#setAttentionReceiptWithOps(ops, {
+              orgId,
+              factoryProjectId,
+              userId,
+              ...occurrence,
+              action: 'read',
+              now,
+            });
+          }
+        }),
+      );
+    }
   }
 
   async claimDeferredDecisions(input: FactoryLeaseClaimInput): Promise<FactoryDeferredDecisionRecord[]> {
@@ -1404,34 +1866,46 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }
 
   /**
-   * Retire proposals parked on a work item. A merged pull request (or an item
-   * closed out any other way) leaves its queued runs with nothing left to do,
-   * and they would otherwise sit on the card forever asking to be answered.
-   *
-   * Pass `role` to retire only the proposals a run now starting has overtaken:
-   * a parked "start triage" is moot the moment triage is actually running.
+   * Automatically retire proposed or failed work that a newer run or terminal
+   * work-item state has overtaken. Human dismissal remains `dismissed`.
    */
-  async dismissProposalsForWorkItem(input: {
+  async supersedeDecisionsForWorkItem(input: {
     orgId: string;
     factoryProjectId: string;
     workItemId: string;
     role?: string;
-    dismissedAt: Date;
+    supersededAt: Date;
   }): Promise<FactoryDeferredDecisionRecord[]> {
     const rows = await this.#db.findMany<GovernanceDbRow>('factory_deferred_decisions', {
       org_id: input.orgId,
       factory_project_id: input.factoryProjectId,
       work_item_id: input.workItemId,
-      status: 'proposed',
+      status: { in: ['proposed', 'failed'] },
     });
-    const dismissed: FactoryDeferredDecisionRecord[] = [];
+    const superseded: FactoryDeferredDecisionRecord[] = [];
     for (const row of rows) {
-      if (input.role !== undefined && toDeferredDecision(row).decision.role !== input.role) continue;
-      // Re-settled atomically: an approval racing this sweep keeps the run.
-      const record = await this.dismissDeferredDecision(input.orgId, input.factoryProjectId, row.id, input.dismissedAt);
-      if (record) dismissed.push(record);
+      const decision = toDeferredDecision(row);
+      if (input.role !== undefined && decision.decision.role !== input.role) continue;
+      const record =
+        decision.status === 'proposed'
+          ? await this.#settleProposedDecision(
+              {
+                orgId: input.orgId,
+                factoryProjectId: input.factoryProjectId,
+                decisionId: decision.id,
+              },
+              { status: 'superseded', updated_at: input.supersededAt, completed_at: input.supersededAt },
+            )
+          : await this.#resolveFailedDecision({
+              orgId: input.orgId,
+              factoryProjectId: input.factoryProjectId,
+              decisionId: decision.id,
+              status: 'superseded',
+              now: input.supersededAt,
+            });
+      if (record) superseded.push(record);
     }
-    return dismissed;
+    return superseded;
   }
 
   async #settleProposedDecision(
@@ -1451,6 +1925,111 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return settled && row ? toDeferredDecision(row) : null;
   }
 
+  async #resolveFailedDecision({
+    orgId,
+    factoryProjectId,
+    decisionId,
+    status,
+    now,
+  }: {
+    orgId: string;
+    factoryProjectId: string;
+    decisionId: string;
+    status: 'succeeded' | 'superseded';
+    now: Date;
+  }): Promise<FactoryDeferredDecisionRecord | null> {
+    return this.storage.withTransaction(async ops => {
+      let resolved = false;
+      const row = await ops.updateAtomic<GovernanceDbRow>(
+        'factory_deferred_decisions',
+        { id: decisionId, org_id: orgId, factory_project_id: factoryProjectId },
+        current => {
+          if (current.status !== 'failed') return null;
+          resolved = true;
+          return { status, updated_at: now };
+        },
+      );
+      if (!resolved || !row) return null;
+      await ops.deleteMany('factory_attention_receipts', {
+        org_id: orgId,
+        factory_project_id: factoryProjectId,
+        kind: 'automation-failed',
+        source_id: decisionId,
+        occurrence: Number(row.failure_occurrence ?? 0),
+      });
+      return toDeferredDecision(row);
+    });
+  }
+
+  async supersedeTerminalDecisionsForWorkItem(input: {
+    orgId: string;
+    factoryProjectId: string;
+    workItemId: string;
+    supersededAt: Date;
+  }): Promise<void> {
+    await this.supersedeDecisionsForWorkItem(input);
+  }
+
+  async repairLegacyAttentionState(): Promise<void> {
+    let cursor: { values: Array<Date | string> } | undefined;
+    const inspectedWorkItems = new Set<string>();
+    while (true) {
+      const rows = await this.#db.findMany<GovernanceDbRow>(
+        'factory_deferred_decisions',
+        { status: { in: ['failed', 'proposed'] } },
+        {
+          orderBy: [
+            ['created_at', 'asc'],
+            ['id', 'asc'],
+          ],
+          limit: ATTENTION_RECEIPT_QUERY_BATCH_SIZE + 1,
+          ...(cursor ? { cursor } : {}),
+        },
+      );
+      const page = rows.slice(0, ATTENTION_RECEIPT_QUERY_BATCH_SIZE);
+      for (const row of page) {
+        const decision = toDeferredDecision(row);
+        if (
+          decision.status === 'failed' &&
+          decision.failureOccurrence === 0 &&
+          deferredDecisionType(decision) === 'transition'
+        ) {
+          const ingress = await this.#db.findOne<GovernanceDbRow>('factory_rule_ingress', {
+            org_id: decision.orgId,
+            factory_project_id: decision.factoryProjectId,
+            identity: `decision:${decision.idempotencyKey}`,
+          });
+          if (ingressWasAccepted(ingress)) {
+            await this.#resolveFailedDecision({
+              orgId: decision.orgId,
+              factoryProjectId: decision.factoryProjectId,
+              decisionId: decision.id,
+              status: 'succeeded',
+              now: new Date(),
+            });
+            continue;
+          }
+        }
+        if (!decision.workItemId) continue;
+        const itemKey = `${decision.orgId}\0${decision.factoryProjectId}\0${decision.workItemId}`;
+        if (inspectedWorkItems.has(itemKey)) continue;
+        inspectedWorkItems.add(itemKey);
+        const item = await this.get({ orgId: decision.orgId, id: decision.workItemId });
+        if (!item || !isTerminalFactoryRuleStage(item.stages)) continue;
+        await this.supersedeDecisionsForWorkItem({
+          orgId: decision.orgId,
+          factoryProjectId: decision.factoryProjectId,
+          workItemId: decision.workItemId,
+          supersededAt: new Date(),
+        });
+      }
+      const last = page.at(-1);
+      if (rows.length <= ATTENTION_RECEIPT_QUERY_BATCH_SIZE || !last) return;
+      if (!(last.created_at instanceof Date)) throw new Error('Deferred decision created_at is not a timestamp.');
+      cursor = { values: [last.created_at, last.id] };
+    }
+  }
+
   /** Requeue the same idempotent terminal effect; non-failed decisions are never rerun. */
   async retryDeferredDecision(
     orgId: string,
@@ -1458,26 +2037,38 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     decisionId: string,
     now: Date,
   ): Promise<FactoryDeferredDecisionRecord | null> {
-    let retried = false;
-    const row = await this.#db.updateAtomic<GovernanceDbRow>(
-      'factory_deferred_decisions',
-      { id: decisionId, org_id: orgId, factory_project_id: factoryProjectId },
-      current => {
-        if (current.status !== 'failed') return null;
-        retried = true;
-        return {
-          status: 'retry',
-          attempts: 0,
-          available_at: now,
-          lease_owner: null,
-          lease_expires_at: null,
-          last_error: null,
-          completed_at: null,
-          updated_at: now,
-        };
-      },
-    );
-    return retried && row ? toDeferredDecision(row) : null;
+    return this.storage.withTransaction(async ops => {
+      let retried = false;
+      const row = await ops.updateAtomic<GovernanceDbRow>(
+        'factory_deferred_decisions',
+        { id: decisionId, org_id: orgId, factory_project_id: factoryProjectId },
+        current => {
+          if (current.status !== 'failed') return null;
+          retried = true;
+          return {
+            status: 'retry',
+            attempts: 0,
+            delivery_generation: Number(current.delivery_generation ?? 0) + 1,
+            available_at: now,
+            lease_owner: null,
+            lease_expires_at: null,
+            last_error: null,
+            failure_code: null,
+            completed_at: null,
+            updated_at: now,
+          };
+        },
+      );
+      if (!retried || !row) return null;
+      await ops.deleteMany('factory_attention_receipts', {
+        org_id: orgId,
+        factory_project_id: factoryProjectId,
+        kind: 'automation-failed',
+        source_id: decisionId,
+        occurrence: Number(row.failure_occurrence ?? 0),
+      });
+      return toDeferredDecision(row);
+    });
   }
 
   /** Resolve exact active agent authority; partial session matches never authorize. */
@@ -2009,6 +2600,16 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     for (const evaluationId of evaluationIds) {
       const evaluation = await ops.findOne<GovernanceDbRow>('factory_rule_evaluations', { id: evaluationId });
       if (evaluation) ingressIds.add(String(evaluation.ingress_id));
+    }
+
+    const decisionIds = decisions.map(decision => decision.id);
+    for (let index = 0; index < decisionIds.length; index += ATTENTION_RECEIPT_QUERY_BATCH_SIZE) {
+      await ops.deleteMany('factory_attention_receipts', {
+        org_id: orgId,
+        factory_project_id: factoryProjectId,
+        kind: 'automation-failed',
+        source_id: { in: decisionIds.slice(index, index + ATTENTION_RECEIPT_QUERY_BATCH_SIZE) },
+      });
     }
 
     await ops.deleteMany('factory_deferred_decisions', {
