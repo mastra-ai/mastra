@@ -13,9 +13,9 @@ import {
   useFollowUpAgentControllerMutation,
 } from '../../../../hooks/useAgentControllerRunMutations';
 import { settingsSectionPath } from '../../settings/settingsSections';
-import { formatGoalStatus } from '../services/goal';
+import { formatGoalStatus, GOAL_SUBCOMMANDS } from '../services/goal';
 import type { ResolvedChatCommand } from '../services/commands';
-import { AGENT_CONTROLLER_ID } from '../services/constants';
+import { agentControllerSessionArgs } from '../services/hookArgs';
 import { useChatGoal } from './useChatGoal';
 import { useChatModes } from './useChatModes';
 import { useOverlays } from '../../../lib/overlays';
@@ -26,7 +26,6 @@ import { useChatTranscript } from './useChatTranscript';
 const TOOL_CATEGORIES = ['read', 'edit', 'execute', 'mcp', 'other'] as const;
 const PERMISSION_POLICIES = ['allow', 'ask', 'deny'] as const;
 const THINKING_LEVELS = ['off', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
-const GOAL_SUBCOMMANDS = ['status', 'pause', 'resume', 'clear'] as const;
 
 const DRAFT_REASON = 'This command needs a session. Send a prompt to create one first.';
 const PREPARING_REASON = 'Commands run once the session is ready.';
@@ -37,7 +36,7 @@ export interface SessionSettingsCommandsApi {
   /** Available once the session settings query has hydrated. */
   availability: ResolvedChatCommand['availability'];
   current: import('@mastra/client-js').AgentControllerSessionSettings | undefined;
-  setYolo(enabled: boolean): Promise<void>;
+  setYolo(): Promise<void>;
   setThinkingLevel(level: (typeof THINKING_LEVELS)[number]): Promise<void>;
   clearThinkingLevel(): Promise<void>;
 }
@@ -47,12 +46,34 @@ function sessionCommandAvailability(phase: ChatPhase): ResolvedChatCommand['avai
   return { state: 'unavailable', reason: phase === 'draft' ? DRAFT_REASON : PREPARING_REASON };
 }
 
+/** Model/mode pickers run on user drafts too, but never on Factory drafts. */
+function draftableAvailability(
+  phase: ChatPhase,
+  sessionKind: 'user' | 'factory',
+  preparingReason: string,
+): ResolvedChatCommand['availability'] {
+  if (phase === 'ready' || phase === 'busy') return { state: 'available' };
+  if (phase === 'preparing') return { state: 'unavailable', reason: preparingReason };
+  return sessionKind === 'user' ? { state: 'available' } : { state: 'unavailable', reason: DRAFT_REASON };
+}
+
+function firstBlocking(
+  first: ResolvedChatCommand['availability'],
+  second: ResolvedChatCommand['availability'],
+): ResolvedChatCommand['availability'] {
+  return first.state === 'unavailable' ? first : second;
+}
+
 /**
  * Every built-in slash command with its metadata, availability, completions,
  * and behavior in one place. Runtime (server-discovered) commands live in
  * `useRuntimeChatCommands` and are merged by the registry.
  */
-export function useBuiltInChatCommands(phase: ChatPhase, settings: SessionSettingsCommandsApi): ResolvedChatCommand[] {
+export function useBuiltInChatCommands(
+  phase: ChatPhase,
+  sessionKind: 'user' | 'factory',
+  settings: SessionSettingsCommandsApi,
+): ResolvedChatCommand[] {
   const { factoryId } = useParams<{ factoryId: string }>();
   const navigate = useNavigate();
   const location = useLocation();
@@ -64,13 +85,7 @@ export function useBuiltInChatCommands(phase: ChatPhase, settings: SessionSettin
   const { permissions, setPermissionForCategory } = useChatPermissions();
   const { goal } = useChatGoal();
 
-  const hookArgs = {
-    agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
-    scope: projectPath,
-    baseUrl,
-    enabled: sessionEnabled,
-  };
+  const hookArgs = agentControllerSessionArgs(session);
   const setGoalMutation = useSetAgentControllerGoalMutation(hookArgs);
   const pauseGoalMutation = usePauseAgentControllerGoalMutation(hookArgs);
   const resumeGoalMutation = useResumeAgentControllerGoalMutation(hookArgs);
@@ -124,10 +139,7 @@ export function useBuiltInChatCommands(phase: ChatPhase, settings: SessionSettin
       id: 'models',
       invocation: '/models',
       description: 'Switch model',
-      availability:
-        phase === 'preparing'
-          ? { state: 'unavailable', reason: 'Wait for the workspace to finish preparing.' }
-          : { state: 'available' },
+      availability: draftableAvailability(phase, sessionKind, 'Wait for the workspace to finish preparing.'),
       execute: async () => {
         overlays.open('models');
       },
@@ -138,12 +150,12 @@ export function useBuiltInChatCommands(phase: ChatPhase, settings: SessionSettin
       argumentHint: '<id>',
       completeArguments: modes.map(mode => mode.id),
       description: 'Switch mode',
-      availability:
-        phase === 'preparing'
-          ? { state: 'unavailable', reason: 'Wait for the workspace to finish preparing.' }
-          : modes.length <= 1
-            ? { state: 'unavailable', reason: 'Only one mode is available for this session.' }
-            : { state: 'available' },
+      availability: firstBlocking(
+        draftableAvailability(phase, sessionKind, 'Wait for the workspace to finish preparing.'),
+        modes.length <= 1
+          ? { state: 'unavailable' as const, reason: 'Only one mode is available for this session.' }
+          : { state: 'available' as const },
+      ),
       requiresArguments: true,
       execute: async rawArguments => {
         const modeId = rawArguments.trim().split(/\s+/)[0]!;
@@ -219,7 +231,7 @@ export function useBuiltInChatCommands(phase: ChatPhase, settings: SessionSettin
       availability:
         settings.availability.state === 'unavailable' ? settings.availability : sessionCommandAvailability(phase),
       execute: async () => {
-        await settings.setYolo(!settings.current?.yolo);
+        await settings.setYolo();
       },
     },
     {

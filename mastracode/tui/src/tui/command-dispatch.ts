@@ -5,7 +5,7 @@ import type { SlashCommandMetadata } from '@mastra/code-sdk/utils/slash-command-
 import {
   createNodeSlashCommandProcessingContext,
   formatSlashCommandActivation,
-  processSlashCommand,
+  processSlashCommandWithContext,
 } from '@mastra/code-sdk/utils/slash-command-processor';
 import { insertChatComponentWithBoundarySpacing } from './chat-boundary-reconciliation.js';
 import { startGoalWithDefaults } from './commands/goal.js';
@@ -323,7 +323,7 @@ async function handleGoalSourceCommand(
   const customCommand = state.customSlashCommands.find(cmd => cmd.name === sourceName && cmd.goal === true);
   if (customCommand) {
     try {
-      const processedContent = await processSlashCommand(
+      const processedContent = await processSlashCommandWithContext(
         customCommand,
         args,
         createNodeSlashCommandProcessingContext(process.cwd()),
@@ -381,7 +381,7 @@ async function handleCustomSlashCommand(
 ): Promise<void> {
   try {
     // Process the command template
-    const processedContent = await processSlashCommand(
+    const processedContent = await processSlashCommandWithContext(
       command,
       args,
       createNodeSlashCommandProcessingContext(process.cwd()),

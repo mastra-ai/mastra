@@ -5,7 +5,10 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
+import { queryKeys } from '../../api/keys';
+import { useClearAgentControllerGoalMutation } from '../useAgentControllerGoalMutations';
 import { useSetAgentControllerGoalMutation } from '../useAgentControllerGoalMutations';
+import { useAgentControllerGoal } from '../useAgentControllerGoal';
 import { useSendAgentControllerMessageMutation } from '../useAgentControllerRunMutations';
 import { useAgentControllerSettings } from '../useAgentControllerSettings';
 import { useSetAgentControllerStateMutation } from '../useAgentControllerStateMutations';
@@ -94,6 +97,40 @@ describe('agent-controller mutation hooks cache behavior', () => {
     expect(result.current.settingsQuery.data?.smartEditing).toBe(false);
     expect(onReadState).toHaveBeenCalledTimes(1);
     expect(onSetGoal).toHaveBeenCalledWith({ objective: 'ship refactor' });
+  });
+
+  it('writes null — not undefined — into the goal cache when cleared, then refetches', async () => {
+    const goalKey = queryKeys.agentControllerGoal(controllerId, resourceId, scope);
+    const onClear = vi.fn();
+    let goalReads = 0;
+
+    server.use(
+      http.get(`${sessionUrl}/goal`, () => {
+        goalReads += 1;
+        return HttpResponse.json({ goal: null });
+      }),
+      http.delete(`${sessionUrl}/goal`, () => {
+        onClear();
+        return HttpResponse.json({ ok: true });
+      }),
+    );
+
+    const { result, client } = renderHookWithProviders(() => ({
+      clear: useClearAgentControllerGoalMutation(hookArgs),
+      goalQuery: useAgentControllerGoal(hookArgs),
+    }));
+    client.setQueryData(goalKey, { objective: 'old', status: 'active', runsUsed: 2 });
+    expect(client.getQueryData(goalKey)).not.toBeNull();
+
+    await act(async () => result.current.clear.mutateAsync());
+    await waitForMutationsIdle(client);
+
+    // `undefined` would be a TanStack no-op; the cache must hold the query's
+    // empty value `null`, and the mounted observer refetches to confirm.
+    expect(onClear).toHaveBeenCalledTimes(1);
+    expect(result.current.goalQuery.isSuccess).toBe(true);
+    expect(result.current.goalQuery.data).toBeNull();
+    expect(goalReads).toBeGreaterThan(0);
   });
 
   it('refreshes only the exact project thread list after creating a thread', async () => {

@@ -387,9 +387,10 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
     }
     // Non-recursive: list with name + type via a portable loop. Use printf,
     // not echo — bash-as-/bin/sh (macOS local sandboxes) does not expand \t
-    // in echo arguments.
+    // in echo arguments. Symlinks get their own kind so callers can skip
+    // them without stat'ing each entry.
     const result = await this.exec(
-      `cd ${shellQuote(abs)} 2>/dev/null && for f in * .[!.]*; do [ -e "$f" ] || continue; if [ -d "$f" ]; then printf 'd\\t%s\\n' "$f"; else printf 'f\\t%s\\n' "$f"; fi; done`,
+      `cd ${shellQuote(abs)} 2>/dev/null && for f in * .[!.]*; do [ -e "$f" ] || continue; if [ -d "$f" ] && [ ! -L "$f" ]; then printf 'dir\\t%s\\n' "$f"; elif [ -L "$f" ]; then if [ -d "$f" ]; then printf 'link-dir\\t%s\\n' "$f"; else printf 'link-file\\t%s\\n' "$f"; fi; else printf 'file\\t%s\\n' "$f"; fi; done`,
     );
     if (result.exitCode !== 0) throw new Error(`Directory not found: ${path}`);
     return this.parseListOutput(result.stdout, options);
@@ -401,11 +402,20 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
       if (!line) continue;
       const tab = line.indexOf('\t');
       if (tab < 0) continue;
-      const type = line.slice(0, tab) === 'd' ? 'directory' : 'file';
+      const kind = line.slice(0, tab);
       const name = line.slice(tab + 1);
       if (!name || name === '.' || name === '..') continue;
+      if (kind === 'link-dir') {
+        entries.push({ name, type: 'directory', isSymlink: true });
+        continue;
+      }
+      if (kind === 'link-file') {
+        entries.push({ name, type: 'file', isSymlink: true });
+        continue;
+      }
+      const type = kind === 'd' || kind === 'dir' ? 'directory' : 'file';
       if (type === 'file' && !this.matchesExtension(name, options?.extension)) continue;
-      entries.push({ name, type });
+      entries.push(type === 'directory' ? { name, type } : { name, type });
     }
     return entries;
   }

@@ -69,3 +69,29 @@ export function findCommand<T extends ChatCommandDescriptor>(commands: readonly 
   if (!command) return undefined;
   return commands.find(candidate => candidate.invocation === command);
 }
+
+/** Tokens whose meaning depends entirely on server-side discovery. */
+export function isRuntimeStyleToken(command: string): boolean {
+  return command.startsWith('//') || command.startsWith('/skill/') || command.startsWith('/goal/');
+}
+
+/**
+ * Execution lookup with the custom-command fallback: an unmatched `/name`
+ * resolves to the canonical `//name` runtime token while callers keep the
+ * user's original text for display.
+ */
+export function resolveCommandToken<T extends ChatCommandDescriptor>(
+  commands: readonly T[],
+  text: string,
+): { command: T; invocation: string } | undefined {
+  const parsed = parseCommandInput(text);
+  if (!parsed.command) return undefined;
+  const exact = findCommand(commands, text);
+  if (exact) return { command: exact, invocation: exact.invocation };
+  const token = parsed.command;
+  if (!isRuntimeStyleToken(token)) {
+    const custom = commands.find(candidate => candidate.invocation === `//${token.slice(1)}`);
+    if (custom) return { command: custom, invocation: custom.invocation };
+  }
+  return undefined;
+}

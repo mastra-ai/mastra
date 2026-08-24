@@ -4,6 +4,8 @@ import { useEffect, useEffectEvent, useReducer } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { queryKeys } from '../../../../api/keys';
+import { isKnownAgentControllerEvent } from '@mastra/client-js';
+
 import { useAgentControllerTranscript } from '../hooks/useAgentControllerTranscript';
 import { initialChatRuntime, runtimeReducer } from '../services/runtime';
 import type { ChatRuntimeState } from '../services/runtime';
@@ -11,6 +13,7 @@ import type { TranscriptState } from '../services/transcript';
 import { SessionFavicon } from '../components/SessionFavicon';
 import type { SessionFaviconState } from '../components/SessionFavicon';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
+import { normalizeGoalSnapshot } from '../services/goal';
 import { ChatConnectionProvider } from './ChatConnectionProvider';
 import { ChatRuntimeContext } from './ChatRuntimeContext';
 import { ChatTranscriptContext } from './ChatTranscriptContext';
@@ -42,9 +45,14 @@ export function ChatTranscriptProvider({
   const onEvent = (event: Parameters<typeof transcriptApi.onEvent>[0]) => {
     transcriptApi.onEvent(event);
     dispatchRuntime(event);
-    if (event.type === 'goal_evaluation') {
-      // The streamed snapshot covers the refetch window; the query stays
-      // authoritative once it lands.
+    if (isKnownAgentControllerEvent(event) && event.type === 'goal_evaluation') {
+      // Seed the cache with the streamed snapshot immediately so a cleared or
+      // absent goal cannot keep serving stale data during the refetch, then
+      // invalidate for the authoritative record.
+      queryClient.setQueryData(
+        queryKeys.agentControllerGoal(AGENT_CONTROLLER_ID, resourceId, projectPath),
+        normalizeGoalSnapshot(event.payload),
+      );
       void queryClient.invalidateQueries({
         queryKey: queryKeys.agentControllerGoal(AGENT_CONTROLLER_ID, resourceId, projectPath),
         exact: true,

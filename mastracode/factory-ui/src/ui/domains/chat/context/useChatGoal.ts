@@ -1,6 +1,6 @@
 import { useChatSessionContext } from './useChatSessionContext';
 import { useChatRuntime } from './useChatRuntime';
-import { useAgentControllerGoal } from '../../../../hooks/useAgentControllerGoalMutations';
+import { useAgentControllerGoal } from '../../../../hooks/useAgentControllerGoal';
 import type { ChatGoal } from '../services/goal';
 import { normalizeGoalSnapshot } from '../services/goal';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
@@ -28,9 +28,11 @@ export function useChatGoal(): ChatGoalValue {
 
   if (!sessionEnabled) return { goal: undefined };
 
-  const streamed = runtime.goal ? normalizeGoalSnapshot(runtime.goal) : undefined;
-  if (query.isFetching && streamed) {
-    return { goal: streamed };
+  // Before the query has resolved, the streamed `goal_evaluation` snapshot is
+  // all we have. Once resolved, query data is authoritative — `null` means no
+  // goal and must never fall back to an older snapshot.
+  if (!query.isSuccess) {
+    return { goal: runtime.goal ? normalizeGoalSnapshot(runtime.goal) : undefined };
   }
-  return { goal: query.data ?? streamed };
+  return { goal: query.data ?? undefined };
 }

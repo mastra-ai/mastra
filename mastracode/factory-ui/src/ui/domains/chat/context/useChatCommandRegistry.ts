@@ -1,15 +1,16 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 import type { AgentControllerSessionSettings } from '@mastra/client-js';
 
 import { queryKeys } from '../../../../api/keys';
+import { AGENT_CONTROLLER_ID } from '../services/constants';
+import { agentControllerSessionArgs } from '../services/hookArgs';
 import { useAgentControllerSettings } from '../../../../hooks/useAgentControllerSettings';
 import { useClearAgentControllerThinkingLevelMutation } from '../../../../hooks/useClearAgentControllerThinkingLevelMutation';
 import { useUpdateAgentControllerSettingsMutation } from '../../../../hooks/useUpdateAgentControllerSettingsMutation';
 import type { CommandAvailability, ResolvedChatCommand } from '../services/commands';
-import { findCommand, parseCommandInput } from '../services/commands';
-import { AGENT_CONTROLLER_ID } from '../services/constants';
+import { isRuntimeStyleToken, parseCommandInput, resolveCommandToken } from '../services/commands';
 import { useChatMessagesInitializing } from './useChatMessagesInitializing';
 import { useChatSessionContext } from './useChatSessionContext';
 import { useChatTranscript } from './useChatTranscript';
@@ -19,29 +20,31 @@ import { useRuntimeChatCommands } from './useRuntimeChatCommands';
 
 export interface ChatCommandRegistryApi {
   /** Built-ins merged with runtime commands, `/help` included. */
-  commands: ResolvedChatCommand[];
+  commands: RefCommands;
   /** Executes slash input. Returns false when the text is not a command. */
   executeText(text: string): Promise<boolean>;
-  /** Deduplicated discovery refetch; awaited before an "unknown" verdict. */
+  /** Resolves with current discovery descriptors (fresh fetch only if stale). */
   refreshRuntimeCommands(): Promise<unknown>;
 }
 
-const SETTINGS_LOADING = 'Session settings are loading';
+type RefCommands = ResolvedChatCommand[];
 
-function firstBlocking(first: CommandAvailability, second: CommandAvailability): CommandAvailability {
-  return first.state === 'unavailable' ? first : second;
-}
+const SETTINGS_LOADING = 'Session settings are loading';
+const SETTINGS_ERROR = 'Session settings could not be loaded. Try again in a moment.';
 
 /**
  * Single executable registry for composer slash commands: built-ins plus
  * runtime (server-discovered) commands, with availability, argument
  * completions, and behavior resolved per session phase. Mounted inside
- * `ChatCommandsProvider` so failures can restore the exact draft text.
+ * `ChatCommandsProvider`, which owns the composer draft.
  */
-export function useChatCommandRegistry(setComposerDraft: (draft: string) => void): ChatCommandRegistryApi {
+export function useChatCommandRegistry(
+  composerDraft: string,
+  setComposerDraft: (draft: string) => void,
+): ChatCommandRegistryApi {
   const queryClient = useQueryClient();
   const session = useChatSessionContext();
-  const { resourceId, projectPath, baseUrl, sessionEnabled } = session;
+  const { resourceId, projectPath, sessionEnabled } = session;
   const { busy, pushNotice } = useChatTranscript();
   const messagesInitializing = useChatMessagesInitializing();
   const preparingThreadId = usePreparingThreadId();
@@ -58,46 +61,39 @@ export function useChatCommandRegistry(setComposerDraft: (draft: string) => void
   // Settings hydration backs /yolo and /think — one source of truth for both
   // their visible availability reason and execution after a pending submit.
   const settingsQuery = useAgentControllerSettings({
-    agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
-    scope: projectPath,
-    baseUrl,
+    ...agentControllerSessionArgs(session),
     enabled: sessionEnabled,
   });
-  const updateSettings = useUpdateAgentControllerSettingsMutation({
-    agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
-    scope: projectPath,
-    baseUrl,
-    enabled: sessionEnabled,
-  });
-  const clearThinking = useClearAgentControllerThinkingLevelMutation({
-    agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
-    scope: projectPath,
-    baseUrl,
-    enabled: sessionEnabled,
-  });
+  const updateSettings = useUpdateAgentControllerSettingsMutation(agentControllerSessionArgs(session));
+  const clearThinking = useClearAgentControllerThinkingLevelMutation(agentControllerSessionArgs(session));
 
-  const ensureSettings = useCallback(async (): Promise<AgentControllerSessionSettings | undefined> => {
-    const key = queryKeys.agentControllerSettings(AGENT_CONTROLLER_ID, resourceId, projectPath);
-    const existing = queryClient.getQueryData<AgentControllerSessionSettings>(key);
-    if (existing) return existing;
+  const ensureSettings = useCallback(async (): Promise<AgentControllerSessionSettings> => {
+    const cached = queryClient.getQueryData<AgentControllerSessionSettings>(
+      queryKeys.agentControllerSettings(AGENT_CONTROLLER_ID, resourceId, projectPath),
+    );
+    if (cached) return cached;
     const result = await settingsQuery.refetch();
-    return result.data ?? undefined;
+    if (!result.data) throw new Error(SETTINGS_ERROR);
+    return result.data;
   }, [queryClient, resourceId, projectPath, settingsQuery]);
 
-  const settingsApi: SessionSettingsCommandsApi = {
-    availability:
-      phase !== 'ready' && phase !== 'busy'
-        ? { state: 'available' }
+  const settingsAvailability: CommandAvailability =
+    phase !== 'ready' && phase !== 'busy'
+      ? { state: 'available' }
+      : settingsQuery.isError
+        ? { state: 'unavailable', reason: SETTINGS_ERROR }
         : settingsQuery.isPending
           ? { state: 'unavailable', reason: SETTINGS_LOADING }
-          : { state: 'available' },
+          : { state: 'available' };
+
+  const settingsApi: SessionSettingsCommandsApi = {
+    availability: settingsAvailability,
+    // Render-time value backs non-mutating /think status only; every mutation
+    // derives its target from the awaited ensure result.
     current: settingsQuery.data,
-    setYolo: async enabled => {
-      await ensureSettings();
-      await updateSettings.mutateAsync({ yolo: enabled });
+    setYolo: async () => {
+      const current = await ensureSettings();
+      await updateSettings.mutateAsync({ yolo: !current.yolo });
     },
     setThinkingLevel: async level => {
       await ensureSettings();
@@ -109,14 +105,24 @@ export function useChatCommandRegistry(setComposerDraft: (draft: string) => void
     },
   };
 
-  const builtInCommands = useBuiltInChatCommands(phase, settingsApi);
+  const builtInCommands = useBuiltInChatCommands(phase, session.kind, settingsApi);
   const runtime = useRuntimeChatCommands(phase);
-  const refreshRuntimeCommands = useCallback(() => runtime.refreshRuntimeCommands(), [runtime]);
+  const builtInCommandsRef = useRef(builtInCommands);
+  builtInCommandsRef.current = builtInCommands;
 
-  const withoutHelp: ResolvedChatCommand[] = [
-    ...builtInCommands.filter(command => command.id !== 'help'),
-    ...runtime.commands,
-  ];
+  /**
+   * Discovery refreshes when a ready/busy draft first turns into a slash
+   * command. Level-triggered: a slash typed while preparing stays pending and
+   * fires once the session becomes ready; fresh cached results are reused.
+   */
+  const slashDiscoveryHandledRef = useRef(false);
+  useEffect(() => {
+    const isSlash = composerDraft.trimStart().startsWith('/');
+    const readyish = sessionEnabled && (phase === 'ready' || phase === 'busy');
+    if (!isSlash || !readyish || slashDiscoveryHandledRef.current) return;
+    slashDiscoveryHandledRef.current = true;
+    void runtime.refreshRuntimeCommands();
+  }, [composerDraft, phase, sessionEnabled, runtime]);
 
   const helpCommand: ResolvedChatCommand = {
     id: 'help',
@@ -124,93 +130,96 @@ export function useChatCommandRegistry(setComposerDraft: (draft: string) => void
     description: 'Show the command list',
     availability: { state: 'available' },
     execute: async () => {
-      const resolved = commandsRef.current;
-      const width = Math.max(...resolved.map(command => `${command.invocation} ${command.argumentHint ?? ''}`.length));
-      const lines = resolved.map(command => {
-        const signature = `${command.invocation} ${command.argumentHint ?? ''}`.padEnd(width);
-        const suffix = command.availability.state === 'unavailable' ? `  (${command.availability.reason})` : '';
-        return `  ${signature}  — ${command.description}${suffix}`;
+      // The first /help on a ready session must include runtime entries even
+      // when no discovery had completed before the submit — format from the
+      // awaited result, never render-time state.
+      const descriptors = await runtime.refreshRuntimeCommands();
+      const builtIns = builtInCommandsRef.current.filter(builtIn => builtIn.id !== 'help');
+      const runtimeEntries = runtime
+        .buildCommands(descriptors)
+        .filter(runtimeEntry => !builtIns.some(builtIn => builtIn.invocation === runtimeEntry.invocation));
+      const resolved = [...builtIns, ...runtimeEntries, helpCommand];
+      const width = Math.max(...resolved.map(entry => `${entry.invocation} ${entry.argumentHint ?? ''}`.length));
+      const lines = resolved.map(entry => {
+        const signature = `${entry.invocation} ${entry.argumentHint ?? ''}`.padEnd(width);
+        const suffix = entry.availability.state === 'unavailable' ? `  (${entry.availability.reason})` : '';
+        return `  ${signature}  — ${entry.description}${suffix}`;
       });
       pushNotice(['Available commands:', ...lines].join('\n'));
     },
   };
 
-  const commands: ResolvedChatCommand[] = [...withoutHelp, helpCommand];
-  // Execution and /help always see the latest resolved registry without
-  // rebuilding the callback identity every render.
-  const commandsRef = useRef(commands);
+  const mergedRuntime = runtime.commands.filter(
+    runtimeCommand => !builtInCommands.some(builtIn => builtIn.invocation === runtimeCommand.invocation),
+  );
+  const commands: ResolvedChatCommand[] = [
+    ...builtInCommands.filter(builtIn => builtIn.id !== 'help'),
+    ...mergedRuntime,
+    helpCommand,
+  ];
+  // Execution always sees the latest resolved list without rebuilding callback
+  // identity on every keystroke.
+  const commandsRef = useRef<RefCommands>(commands);
   commandsRef.current = commands;
 
   const executeText = useCallback(
     async (text: string): Promise<boolean> => {
-      const parsed = parseCommandInput(text);
-      if (!parsed.command) return false;
+      // Plain prompts are not commands — bail out before any discovery I/O so
+      // normal message sends stay untouched.
+      if (!parseCommandInput(text).command) return false;
 
-      let match = findCommand(commandsRef.current, text);
+      let resolved = resolveCommandToken(commandsRef.current, text);
 
-      if (
-        !match &&
-        !parsed.command.startsWith('//') &&
-        !parsed.command.startsWith('/skill/') &&
-        !parsed.command.startsWith('/goal/')
-      ) {
-        // Unmatched `/name` falls back to a custom `//name`: preparation gets
-        // the canonical token while the optimistic row keeps the user's text.
-        match = findCommand(commandsRef.current, `//${parsed.command.slice(1)}`);
-      }
-
-      // The composer clears its draft before executing; every path that does
-      // not run a command gives the user their exact text back.
-      const keepDraft = () => setComposerDraft(text);
-
-      if (!match && runtime.isFetching) {
-        // A discovery still in flight may know this token — settle before an
-        // unknown verdict so loading is never misreported.
+      if (!resolved) {
+        // A discovery still settling may know this token — await it, rebuild
+        // the runtime list FROM THE RESULT, then retry before declaring the
+        // input unknown.
         try {
-          await refreshRuntimeCommands();
+          const descriptors = await runtime.refreshRuntimeCommands();
+          resolved = resolveCommandToken([...builtInCommandsRef.current, ...runtime.buildCommands(descriptors)], text);
         } catch {
+          setComposerDraft(text);
           pushNotice('Commands are unavailable right now.', 'error');
           return true;
         }
       }
-      if (!match) match = findCommand(commandsRef.current, text);
 
-      if (!match) {
-        const looksRuntimeOnly =
-          parsed.command.startsWith('//') ||
-          parsed.command.startsWith('/skill/') ||
-          parsed.command.startsWith('/goal/');
-        keepDraft();
-        if (runtime.isError && looksRuntimeOnly) {
+      if (!resolved) {
+        const parsedCommand = parseCommandInput(text).command ?? '';
+        setComposerDraft(text);
+        if (runtime.isError && isRuntimeStyleToken(parsedCommand)) {
           pushNotice('Commands are unavailable right now.', 'error');
           return true;
         }
-        pushNotice(`Unknown command: ${parsed.command}`, 'error');
+        pushNotice(`Unknown command: ${parsedCommand}`, 'error');
         return true;
       }
 
-      if (match.availability.state === 'unavailable') {
-        keepDraft();
-        pushNotice(match.availability.reason);
+      const { command } = resolved;
+      const { rawArguments } = parseCommandInput(text);
+
+      if (command.availability.state === 'unavailable') {
+        setComposerDraft(text);
+        pushNotice(command.availability.reason);
         return true;
       }
 
-      if (match.requiresArguments && !parsed.rawArguments.trim()) {
-        keepDraft();
-        pushNotice(`Usage: ${match.invocation} ${match.argumentHint ?? '<arguments>'}`);
+      if (command.requiresArguments && !rawArguments) {
+        setComposerDraft(text);
+        pushNotice(`Usage: ${command.invocation} ${command.argumentHint ?? '<arguments>'}`);
         return true;
       }
 
       try {
-        await match.execute(parsed.rawArguments, text);
+        await command.execute(rawArguments, text);
       } catch (error) {
         setComposerDraft(text);
         pushNotice(error instanceof Error ? error.message : 'The command failed.', 'error');
       }
       return true;
     },
-    [pushNotice, runtime.isError, runtime.isFetching, refreshRuntimeCommands, setComposerDraft],
+    [pushNotice, runtime, setComposerDraft],
   );
 
-  return { commands, executeText, refreshRuntimeCommands };
+  return { commands, executeText, refreshRuntimeCommands: runtime.refreshRuntimeCommands };
 }

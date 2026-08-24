@@ -76,6 +76,7 @@ vi.mock('../display.js', () => ({
 
 vi.mock('@mastra/code-sdk/utils/slash-command-processor', () => ({
   processSlashCommand: mocks.processSlashCommand,
+  processSlashCommandWithContext: mocks.processSlashCommand,
   createNodeSlashCommandProcessingContext: () => ({ readFile: vi.fn(), executeShell: vi.fn() }),
   formatSlashCommandActivation: (name: string, content: string) =>
     `<slash-command name="${name}">\n${content}\n</slash-command>`,

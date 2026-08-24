@@ -5,6 +5,7 @@ import type { RouteAuth } from './route.js';
 
 export const MAX_RESOURCE_ID_LENGTH = 512;
 export const MAX_SCOPE_LENGTH = 2048;
+export const MAX_ARGUMENTS_LENGTH = 16_384;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -14,6 +15,32 @@ export interface SessionCommandAddress {
   projectRepositoryId?: string;
   scope?: string;
 }
+
+/**
+ * Validate and normalize a session address from an untrusted body. Undefined
+ * when any field is malformed — callers answer `invalid_request`.
+ */
+export function parseSessionAddress(value: Record<string, unknown>): SessionCommandAddress | undefined {
+  if (typeof value.resourceId !== 'string' || value.resourceId.length === 0) return undefined;
+  if (value.resourceId.length > MAX_RESOURCE_ID_LENGTH) return undefined;
+  if (
+    value.projectRepositoryId !== undefined &&
+    (typeof value.projectRepositoryId !== 'string' || !UUID_RE.test(value.projectRepositoryId))
+  ) {
+    return undefined;
+  }
+  if (value.scope !== undefined && (typeof value.scope !== 'string' || value.scope.length > MAX_SCOPE_LENGTH)) {
+    return undefined;
+  }
+  return {
+    resourceId: value.resourceId,
+    ...(value.projectRepositoryId ? { projectRepositoryId: value.projectRepositoryId } : {}),
+    ...(value.scope ? { scope: value.scope } : {}),
+  };
+}
+
+/** How strictly a stored user-session row authorizes the caller. */
+export type StoredSessionAccess = 'viewer' | 'owner';
 
 export interface SessionAuthorizationResult {
   allowed: boolean;
@@ -44,7 +71,10 @@ export interface SessionAddressAuthorizerDeps {
  * Order of proofs:
  * 1. Personal sessions are keyed by the WorkOS user id — always allowed.
  * 2. A stored source-control session row with this id is authoritative: same
- *    org, owner-only when private, no scope requirement.
+ *    org, owner-only when private, no scope requirement. With
+ *    `storedSessionAccess: 'owner'` the caller must additionally BE the row's
+ *    owner — preparation runs shell/file directives outside agent tool
+ *    approval, so only the owner may expand commands.
  * 3. Otherwise fall back to the shared repository/connection/worktree proof,
  *    which needs an explicit `projectRepositoryId` and `scope`.
  *
@@ -55,7 +85,7 @@ export async function authorizeSessionAddress(
   deps: SessionAddressAuthorizerDeps,
   context: Context,
   address: SessionCommandAddress,
-  options: { invalidRequestMessage?: string } = {},
+  options: { invalidRequestMessage?: string; storedSessionAccess?: StoredSessionAccess } = {},
 ): Promise<SessionAuthorizationResult> {
   const { auth, sourceControlStorage: storage, ensureSourceControlReady } = deps;
   if (!auth.enabled()) return { allowed: true };
@@ -93,6 +123,7 @@ export async function authorizeSessionAddress(
     if (stored.projectRepositoryId !== address.projectRepositoryId) return SESSION_FORBIDDEN;
     if (stored.orgId !== tenant.orgId) return SESSION_FORBIDDEN;
     if (stored.visibility === 'private' && stored.userId !== tenant.userId) return SESSION_FORBIDDEN;
+    if (options.storedSessionAccess === 'owner' && stored.userId !== tenant.userId) return SESSION_FORBIDDEN;
     return { allowed: true };
   }
 

@@ -1,6 +1,7 @@
 import { DEFAULT_CONFIG_DIR } from '@mastra/code-sdk/constants';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import {
+  WorkspaceCommandLimitExceededError,
   loadCommandDirectories,
   loadGlobalCustomCommands,
   loadWorkspaceCustomCommands,
@@ -9,7 +10,7 @@ import {
 import {
   createWorkspaceSlashCommandProcessingContext,
   formatSlashCommandActivation,
-  processSlashCommand,
+  processSlashCommandWithContext,
 } from '@mastra/code-sdk/utils/slash-command-processor';
 import type { AgentController } from '@mastra/core/agent-controller';
 import type { Workspace, WorkspaceFilesystem } from '@mastra/core/workspace';
@@ -26,7 +27,12 @@ import { resolveSkillInvocation, SkillInvocationError } from '../skills/service.
 
 export class SessionCommandError extends Error {
   constructor(
-    readonly code: 'session_not_found' | 'command_not_found' | 'command_unavailable' | 'command_expansion_failed',
+    readonly code:
+      | 'session_not_found'
+      | 'command_not_found'
+      | 'command_unavailable'
+      | 'command_expansion_failed'
+      | 'command_discovery_failed',
     message: string,
   ) {
     super(message);
@@ -77,6 +83,25 @@ async function resolveLiveSession(deps: SessionCommandServiceDeps): Promise<Comm
     throw new SessionCommandError('session_not_found', 'Agent controller session not found.');
   }
   return session;
+}
+
+/**
+ * Merged custom commands with discovery-limit overruns mapped onto the
+ * redacted route contract.
+ */
+async function loadWorkspaceCommandsGuarded(
+  deps: SessionCommandServiceDeps,
+  filesystem: WorkspaceFilesystem,
+  configDir: string,
+): Promise<Map<string, SlashCommandMetadata>> {
+  try {
+    return await loadMergedCustomCommands(deps, filesystem, configDir);
+  } catch (error) {
+    if (error instanceof WorkspaceCommandLimitExceededError) {
+      throw new SessionCommandError('command_discovery_failed', error.message);
+    }
+    throw error;
+  }
 }
 
 /** Custom commands merged in TUI precedence order: globals < workspace < plugins. */
@@ -190,6 +215,32 @@ function splitCustomArguments(argumentsText: string | undefined): string[] {
 }
 
 /**
+ * Expand a custom command template inside the session workspace. Discovery
+ * limit overruns surface as the redacted `command_discovery_failed` contract.
+ */
+async function expandCustomCommandTemplate(
+  filesystem: WorkspaceFilesystem,
+  sandbox: Workspace['sandbox'],
+  template: SlashCommandMetadata,
+  argumentsText: string | undefined,
+): Promise<string> {
+  try {
+    return (
+      await processSlashCommandWithContext(
+        template,
+        splitCustomArguments(argumentsText),
+        createWorkspaceSlashCommandProcessingContext({ filesystem, sandbox }),
+      )
+    ).trim();
+  } catch (error) {
+    if (error instanceof WorkspaceCommandLimitExceededError) {
+      throw new SessionCommandError('command_discovery_failed', error.message);
+    }
+    throw new SessionCommandError('command_expansion_failed', 'The command could not be expanded.');
+  }
+}
+
+/**
  * Re-discover the addressed session's commands and expand the exact token.
  * A stale browser-side descriptor is never trusted: the token must exist in
  * fresh discovery before any template runs or an envelope is built.
@@ -221,20 +272,9 @@ export async function prepareSessionCommand(
       throw new SessionCommandError('command_unavailable', 'This session cannot run custom commands.');
     }
     // Custom commands keep /goal/<name> precedence over same-name skills.
-    const custom = (await loadMergedCustomCommands(deps, filesystem, configDir)).get(name);
+    const custom = (await loadWorkspaceCommandsGuarded(deps, filesystem, configDir)).get(name);
     if (custom?.goal === true) {
-      let expanded: string;
-      try {
-        expanded = (
-          await processSlashCommand(
-            custom,
-            splitCustomArguments(input.arguments),
-            createWorkspaceSlashCommandProcessingContext({ filesystem, sandbox: workspace!.sandbox }),
-          )
-        ).trim();
-      } catch {
-        throw new SessionCommandError('command_expansion_failed', 'The command could not be expanded.');
-      }
+      const expanded = await expandCustomCommandTemplate(filesystem, workspace!.sandbox, custom, input.arguments);
       if (!expanded) {
         return { action: 'none', notice: `${token} produced no output.` };
       }
@@ -268,23 +308,12 @@ async function prepareCustomMessage(
   if (!filesystem) {
     throw new SessionCommandError('command_unavailable', 'This session cannot run custom commands.');
   }
-  const template = (await loadMergedCustomCommands(deps, filesystem, configDir)).get(name);
+  const template = (await loadWorkspaceCommandsGuarded(deps, filesystem, configDir)).get(name);
   if (!template) {
     throw new SessionCommandError('command_not_found', `Unknown command: ${token}`);
   }
 
-  let expanded: string;
-  try {
-    expanded = (
-      await processSlashCommand(
-        template,
-        splitCustomArguments(argumentsText),
-        createWorkspaceSlashCommandProcessingContext({ filesystem, sandbox: workspace!.sandbox }),
-      )
-    ).trim();
-  } catch {
-    throw new SessionCommandError('command_expansion_failed', 'The command could not be expanded.');
-  }
+  const expanded = await expandCustomCommandTemplate(filesystem, workspace!.sandbox, template, argumentsText);
   if (!expanded) {
     return { action: 'none', notice: `${token} produced no output.` };
   }

@@ -121,7 +121,7 @@ export function useOverlayControllerHandlers() {
       HttpResponse.json({ categories: { read: 'ask' }, tools: {} }),
     ),
     http.get(`${API}/sessions/:resourceId/goal`, () => HttpResponse.json({})),
-    http.post(`${API}/commands/discover`, () =>
+    http.post(`${TEST_BASE_URL}/web/agent-controller/code/commands/discover`, () =>
       HttpResponse.json({
         capabilities: { customCommands: 'supported', skills: 'supported' },
         commands: [],

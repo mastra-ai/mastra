@@ -9,14 +9,11 @@ import { resolveSkillInvocation, SkillInvocationError } from '../skills/service.
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { RouteDependencies } from './route.js';
 import { Route } from './route.js';
-import { authorizeSessionAddress } from './session-address.js';
+import { authorizeSessionAddress, parseSessionAddress } from './session-address.js';
 import type { SessionAuthorizationResult, SessionCommandAddress } from './session-address.js';
 
-const MAX_RESOURCE_ID_LENGTH = 512;
-const MAX_SCOPE_LENGTH = 2048;
 const MAX_ARGUMENTS_LENGTH = 16_384;
 const SKILL_NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 interface SkillInvocationBody {
   resourceId: string;
@@ -41,25 +38,14 @@ function loose(context: unknown): Context {
 function parseBody(value: unknown): SkillInvocationBody | undefined {
   if (!value || typeof value !== 'object') return undefined;
   const input = value as Record<string, unknown>;
-  if (typeof input.resourceId !== 'string' || input.resourceId.length === 0) return undefined;
-  if (input.resourceId.length > MAX_RESOURCE_ID_LENGTH) return undefined;
-  if (
-    input.projectRepositoryId !== undefined &&
-    (typeof input.projectRepositoryId !== 'string' || !UUID_RE.test(input.projectRepositoryId))
-  ) {
-    return undefined;
-  }
-  if (input.scope !== undefined && (typeof input.scope !== 'string' || input.scope.length > MAX_SCOPE_LENGTH)) {
-    return undefined;
-  }
+  const address = parseSessionAddress(input);
+  if (!address) return undefined;
   if (typeof input.name !== 'string' || input.name.length > 64 || !SKILL_NAME_RE.test(input.name)) return undefined;
   if (input.arguments !== undefined) {
     if (typeof input.arguments !== 'string' || input.arguments.length > MAX_ARGUMENTS_LENGTH) return undefined;
   }
   return {
-    resourceId: input.resourceId,
-    ...(input.projectRepositoryId ? { projectRepositoryId: input.projectRepositoryId } : {}),
-    ...(input.scope ? { scope: input.scope } : {}),
+    ...address,
     name: input.name,
     ...(input.arguments !== undefined ? { arguments: input.arguments } : {}),
   };

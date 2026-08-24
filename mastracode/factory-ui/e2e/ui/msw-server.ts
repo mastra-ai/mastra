@@ -43,4 +43,13 @@ export const server = setupServer(
   http.get('*/web/factory/projects/:id/decisions', () => HttpResponse.json({ decisions: [] })),
   http.get('*/web/factory/projects/:id/work-items', () => HttpResponse.json({ workItems: [] })),
   http.get('*/web/github/projects/:projectRepositoryId/worktrees', () => HttpResponse.json({ worktrees: [] })),
+  // Ambient session-command surfaces mounted by the composer registry; tests
+  // exercising commands override these with `server.use(...)`.
+  http.get('*/api/agent-controller/:controllerId/sessions/:resourceId/goal', () => HttpResponse.json({})),
+  http.post('*/web/agent-controller/:controllerId/commands/discover', () =>
+    HttpResponse.json({
+      capabilities: { customCommands: 'supported', skills: 'supported' },
+      commands: [],
+    }),
+  ),
 );

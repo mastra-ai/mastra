@@ -1519,7 +1519,7 @@ export const SET_AGENT_CONTROLLER_GOAL_ROUTE = createRoute({
   responseSchema: goalResponseSchema,
   summary: 'Set a goal',
   description:
-    'Sets a new objective for the session\u2019s thread. The agent\u2019s in-loop goal judge evaluates progress after each turn.',
+    'Sets a new objective for the session\u2019s thread; the agent\u2019s in-loop goal judge evaluates progress after each turn. With trigger=true the reminder signal starts a run once persisted; an inactive/missing goal answers 409, and a failed start pauses the goal and answers 502 goal_trigger_failed.',
   tags: ['AgentController', 'Goals'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
@@ -1565,7 +1565,8 @@ export const UPDATE_AGENT_CONTROLLER_GOAL_ROUTE = createRoute({
   bodySchema: updateGoalBodySchema,
   responseSchema: goalResponseSchema,
   summary: 'Update goal options',
-  description: 'Updates the judge model, max runs, or status of the active goal. No-op when no goal is set.',
+  description:
+    'Updates the judge model, max runs, or status of the active goal; no-op when no goal is set. With trigger=true the goal must be active (409 otherwise) and its reminder signal starts a run; a failed start pauses it and answers 502 goal_trigger_failed.',
   tags: ['AgentController', 'Goals'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',

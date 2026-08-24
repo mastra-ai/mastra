@@ -45,7 +45,7 @@ describe('Composer slash-command suggestions', () => {
 
     it('renders runtime invocations verbatim without prepending a slash', async () => {
       server.use(
-        http.post(`${TEST_BASE_URL}/api/agent-controller/code/commands/discover`, () =>
+        http.post(`${TEST_BASE_URL}/web/agent-controller/code/commands/discover`, () =>
           HttpResponse.json({
             capabilities: { customCommands: 'supported', skills: 'supported' },
             commands: [

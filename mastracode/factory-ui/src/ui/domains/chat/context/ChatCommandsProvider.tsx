@@ -26,7 +26,7 @@ export function ChatCommandsProvider({ children }: { children: ReactNode }) {
     setComposerDraft(draft);
     requestAnimationFrame(() => composerInputRef.current?.focus());
   };
-  const { commands, executeText, refreshRuntimeCommands } = useChatCommandRegistry(setComposerDraft);
+  const { commands, executeText, refreshRuntimeCommands } = useChatCommandRegistry(composerDraft, setComposerDraft);
 
   const value: ChatCommandsApi = {
     composerDraft,

@@ -11,19 +11,18 @@ import type { RouteDependencies } from './route.js';
 import { Route } from './route.js';
 import {
   authorizeSessionAddress,
-  MAX_RESOURCE_ID_LENGTH,
-  MAX_SCOPE_LENGTH,
+  MAX_ARGUMENTS_LENGTH,
+  parseSessionAddress,
   type SessionAuthorizationResult,
   type SessionCommandAddress,
 } from './session-address.js';
 import {
+  isSessionCommandToken,
   MAX_COMMAND_LENGTH,
+  sessionCommandsRoute,
   type SessionCommandDiscoveryRequest,
   type SessionCommandPrepareRequest,
 } from './session-command-contract.js';
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const MAX_ARGUMENTS_LENGTH = 16_384;
 
 export interface SessionCommandRoutesDeps extends RouteDependencies {
   controllerId: string;
@@ -42,49 +41,29 @@ const ERROR_STATUS = {
   command_not_found: 404,
   command_unavailable: 409,
   command_expansion_failed: 422,
+  command_discovery_failed: 422,
 } as const;
 
 function loose(context: unknown): Context {
   return context as Context;
 }
 
-function parseAddress(value: Record<string, unknown>): SessionCommandAddress | undefined {
-  if (typeof value.resourceId !== 'string' || value.resourceId.length === 0) return undefined;
-  if (value.resourceId.length > MAX_RESOURCE_ID_LENGTH) return undefined;
-  if (
-    value.projectRepositoryId !== undefined &&
-    (typeof value.projectRepositoryId !== 'string' || !UUID_RE.test(value.projectRepositoryId))
-  ) {
-    return undefined;
-  }
-  if (value.scope !== undefined && (typeof value.scope !== 'string' || value.scope.length > MAX_SCOPE_LENGTH)) {
-    return undefined;
-  }
-  return {
-    resourceId: value.resourceId,
-    ...(value.projectRepositoryId ? { projectRepositoryId: value.projectRepositoryId } : {}),
-    ...(value.scope ? { scope: value.scope } : {}),
-  };
-}
-
 function parseDiscoverBody(value: unknown): SessionCommandDiscoveryRequest | undefined {
   if (!value || typeof value !== 'object') return undefined;
-  return parseAddress(value as Record<string, unknown>);
+  return parseSessionAddress(value as Record<string, unknown>);
 }
 
 function parsePrepareBody(value: unknown): SessionCommandPrepareRequest | undefined {
   if (!value || typeof value !== 'object') return undefined;
   const input = value as Record<string, unknown>;
-  const address = parseAddress(input);
+  const address = parseSessionAddress(input);
   if (!address) return undefined;
   if (typeof input.command !== 'string' || input.command.length === 0 || input.command.length > MAX_COMMAND_LENGTH) {
     return undefined;
   }
-  // Tokens are exact: no control characters, no interior whitespace.
-  if (/[\x00-\x1f\x7f]/.test(input.command) || /\s/.test(input.command.trim())) return undefined;
-  if (!input.command.startsWith('//') && !input.command.startsWith('/skill/') && !input.command.startsWith('/goal/')) {
-    return undefined;
-  }
+  // Tokens are exact: printable, no control characters, no interior whitespace.
+  if (/\s/.test(input.command.trim()) || /[\x00-\x1f\x7f]/.test(input.command)) return undefined;
+  if (!isSessionCommandToken(input.command)) return undefined;
   let args: string | undefined;
   if (input.arguments !== undefined) {
     if (typeof input.arguments !== 'string' || input.arguments.length > MAX_ARGUMENTS_LENGTH) return undefined;
@@ -118,6 +97,19 @@ export class SessionCommandRoutes extends Route<SessionCommandRoutesDeps> {
       customAuthorize ??
       ((context: Context, address: SessionCommandAddress) =>
         authorizeSessionAddress({ auth, sourceControlStorage, ensureSourceControlReady }, context, address));
+    const authorizeWithOptions = customAuthorize
+      ? async (
+          context: Context,
+          address: SessionCommandAddress,
+          options: { storedSessionAccess?: 'owner' | 'viewer' },
+        ) => {
+          // Custom authorizers predate the ownership knob; they already gate
+          // their own callers, so the option degrades to the plain check.
+          void options;
+          return customAuthorize(context, address);
+        }
+      : (context: Context, address: SessionCommandAddress, options: Parameters<typeof authorizeSessionAddress>[3]) =>
+          authorizeSessionAddress({ auth, sourceControlStorage, ensureSourceControlReady }, context, address, options);
 
     const serviceDeps = (body: SessionCommandAddress) => ({
       controller,
@@ -173,7 +165,7 @@ export class SessionCommandRoutes extends Route<SessionCommandRoutesDeps> {
         return c.json({ error: 'invalid_request', message: 'Invalid preparation request.' }, 400);
       }
 
-      const authorization = await authorize(c, body);
+      const authorization = await authorizeWithOptions(c, body, { storedSessionAccess: 'owner' });
       if (!authorization.allowed) {
         return c.json({ error: authorization.code, message: authorization.message }, authorization.status ?? 403);
       }
@@ -188,12 +180,12 @@ export class SessionCommandRoutes extends Route<SessionCommandRoutesDeps> {
     };
 
     return [
-      registerApiRoute('/web/agent-controller/:controllerId/commands/discover', {
+      registerApiRoute(sessionCommandsRoute(':controllerId', 'discover'), {
         method: 'POST',
         requiresAuth: false,
         handler: context => handleDiscover(context),
       }),
-      registerApiRoute('/web/agent-controller/:controllerId/commands/prepare', {
+      registerApiRoute(sessionCommandsRoute(':controllerId', 'prepare'), {
         method: 'POST',
         requiresAuth: false,
         handler: context => handlePrepare(context),

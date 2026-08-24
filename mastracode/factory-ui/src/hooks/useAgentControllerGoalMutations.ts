@@ -1,32 +1,18 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { queryKeys } from '../api/keys';
 import {
   createAgentControllerClient,
   requireAgentControllerSession,
 } from '../ui/domains/chat/services/agentControllerClient';
-import { normalizeGoalRecord, type ChatGoal } from '../ui/domains/chat/services/goal';
+import { normalizeGoalRecord } from '../ui/domains/chat/services/goal';
 
-interface AgentControllerGoalMutationArgs {
+export interface AgentControllerGoalMutationArgs {
   agentControllerId: string;
   resourceId: string;
   scope?: string;
   baseUrl?: string;
   enabled?: boolean;
-}
-
-export function useAgentControllerGoal(args: AgentControllerGoalMutationArgs) {
-  const { agentControllerId, resourceId, scope, baseUrl = '', enabled = true } = args;
-  const { session } = createAgentControllerClient({ agentControllerId, resourceId, scope, baseUrl, enabled });
-  return useQuery({
-    queryKey: queryKeys.agentControllerGoal(agentControllerId, resourceId, scope),
-    enabled: enabled && Boolean(resourceId && session),
-    staleTime: 0,
-    queryFn: async (): Promise<ChatGoal | null> => {
-      const record = await requireAgentControllerSession(session).getGoal();
-      return record ? normalizeGoalRecord(record) : null;
-    },
-  });
 }
 
 export function useSetAgentControllerGoalMutation(args: AgentControllerGoalMutationArgs) {
@@ -93,7 +79,12 @@ export function useClearAgentControllerGoalMutation(args: AgentControllerGoalMut
   return useMutation({
     mutationFn: () => requireAgentControllerSession(session).clearGoal(),
     onSuccess: () => {
-      queryClient.setQueryData(goalKey, undefined);
+      // `undefined` would be a TanStack no-op; the query's empty value is
+      // `null`, so write that and reconfirm with an exact refetch.
+      queryClient.setQueryData(goalKey, null);
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: goalKey, exact: true });
     },
   });
 }

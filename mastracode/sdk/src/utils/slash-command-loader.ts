@@ -123,16 +123,6 @@ export interface ScanCommandDirectoryOptions {
   visitedDirectories?: Set<string>;
 }
 
-async function isContainedWithin(fullPath: string, rootDir: string): Promise<boolean> {
-  try {
-    const realPath = await fs.realpath(fullPath);
-    const realRoot = await fs.realpath(rootDir);
-    return isPathWithinRoot(realPath, realRoot);
-  } catch {
-    return false;
-  }
-}
-
 export async function scanCommandDirectory(
   dirPath: string,
   rootDir?: string,
@@ -260,6 +250,19 @@ export function workspaceCommandRoots(configDirName = DEFAULT_CONFIG_DIR): strin
   return ['.opencode/command', '.claude/commands', `${configDirName}/commands`];
 }
 
+/** Raised when a workspace scan exceeds a resource bound; never carries paths. */
+export class WorkspaceCommandLimitExceededError extends Error {
+  constructor() {
+    super('Workspace command discovery exceeded its resource limits.');
+    this.name = 'WorkspaceCommandLimitExceededError';
+  }
+}
+
+const MAX_SCAN_DEPTH = 16;
+const MAX_COMMAND_FILES = 256;
+const MAX_COMMAND_FILE_BYTES = 256 * 1024;
+const MAX_AGGREGATE_COMMAND_BYTES = 2 * 1024 * 1024;
+
 function toPosixPath(p: string): string {
   return p.split(path.sep).join('/');
 }
@@ -271,6 +274,13 @@ function posixJoin(...segments: string[]): string {
 interface WorkspaceEntry {
   name: string;
   type: 'file' | 'directory';
+  isSymlink?: boolean;
+}
+
+interface WorkspaceScanState {
+  visitedDirectories: Set<string>;
+  fileCount: number;
+  totalBytes: number;
 }
 
 /**
@@ -281,33 +291,55 @@ async function collectWorkspaceCommands(
   filesystem: Pick<WorkspaceFilesystem, 'exists' | 'readdir' | 'readFile'>,
   directory: string,
   baseDir: string,
+  state: WorkspaceScanState,
+  depth: number,
 ): Promise<SlashCommandMetadata[]> {
+  if (depth > MAX_SCAN_DEPTH || state.fileCount > MAX_COMMAND_FILES) {
+    throw new WorkspaceCommandLimitExceededError();
+  }
+  // Cycle guard on top of the symlink skip: nested mounts can loop without a
+  // single symlinked entry.
+  const canonical = toPosixPath(directory);
+  if (state.visitedDirectories.has(canonical)) return [];
+  state.visitedDirectories.add(canonical);
+
   const exists = await filesystem.exists(directory);
   if (!exists) return [];
 
   const entries: WorkspaceEntry[] = (await filesystem.readdir(directory, {})).map(entry => ({
     name: entry.name,
     type: entry.type,
+    ...(entry.isSymlink !== undefined ? { isSymlink: entry.isSymlink } : {}),
   }));
   const commands: SlashCommandMetadata[] = [];
 
   for (const entry of entries) {
     if (entry.name === 'node_modules') continue;
-    // Plain entry names only: the workspace filesystem owns containment for
-    // symlinks, but traversal segments in an entry name must never escape.
+    // Plain entry names only: traversal segments in an entry name must never
+    // escape the scanned root.
     if (entry.name.includes('/') || entry.name.includes('\\') || entry.name === '.' || entry.name === '..') continue;
 
     const childPath = posixJoin(directory, entry.name);
 
     if (entry.type === 'directory') {
-      commands.push(...(await collectWorkspaceCommands(filesystem, childPath, baseDir)));
+      // Symlinked directories are never followed; the workspace filesystem
+      // owns containment for real directories only.
+      if (entry.isSymlink) continue;
+      commands.push(...(await collectWorkspaceCommands(filesystem, childPath, baseDir, state, depth + 1)));
     } else if (entry.type === 'file' && entry.name.endsWith('.md')) {
+      if (entry.isSymlink) continue;
+      state.fileCount += 1;
+      if (state.fileCount > MAX_COMMAND_FILES) throw new WorkspaceCommandLimitExceededError();
+
       const content = await filesystem.readFile(childPath, { encoding: 'utf-8' });
-      const command = parseCommandSource(
-        typeof content === 'string' ? content : content.toString('utf-8'),
-        childPath,
-        baseDir,
-      );
+      const text = typeof content === 'string' ? content : content.toString('utf-8');
+      const byteLength = Buffer.byteLength(text, 'utf-8');
+      state.totalBytes += byteLength;
+      if (byteLength > MAX_COMMAND_FILE_BYTES || state.totalBytes > MAX_AGGREGATE_COMMAND_BYTES) {
+        throw new WorkspaceCommandLimitExceededError();
+      }
+
+      const command = parseCommandSource(text, childPath, baseDir);
       if (command) commands.push(command);
     }
   }
@@ -319,54 +351,19 @@ async function collectWorkspaceCommands(
  * Load custom commands from a workspace's project roots (.opencode/command,
  * .claude/commands, <configDir>/commands — later roots win). All reads go
  * through the workspace filesystem; nothing touches the host disk.
+ *
+ * Symlinked entries are skipped and the scan is bounded by depth, file count,
+ * per-file and aggregate bytes. Exceeding a bound throws
+ * {@link WorkspaceCommandLimitExceededError} rather than returning partial results.
  */
 export async function loadWorkspaceCustomCommands(
   filesystem: Pick<WorkspaceFilesystem, 'exists' | 'readdir' | 'readFile'>,
   configDirName = DEFAULT_CONFIG_DIR,
 ): Promise<SlashCommandMetadata[]> {
+  const state: WorkspaceScanState = { visitedDirectories: new Set(), fileCount: 0, totalBytes: 0 };
   return mergeByName(
     await Promise.all(
-      workspaceCommandRoots(configDirName).map(root => collectWorkspaceCommands(filesystem, root, root)),
+      workspaceCommandRoots(configDirName).map(root => collectWorkspaceCommands(filesystem, root, root, state, 0)),
     ),
   );
-}
-
-/**
- * Get the commands directory path for a project
- */
-export function getProjectCommandsDir(projectDir: string, configDirName = DEFAULT_CONFIG_DIR): string {
-  return path.join(projectDir, configDirName, 'commands');
-}
-
-/**
- * Initialize a commands directory with an example command
- */
-export async function initCommandsDirectory(projectDir: string, configDirName = DEFAULT_CONFIG_DIR): Promise<void> {
-  const commandsDir = getProjectCommandsDir(projectDir, configDirName);
-
-  try {
-    await fs.mkdir(commandsDir, { recursive: true });
-
-    // Create an example command
-    const examplePath = path.join(commandsDir, 'example.md');
-    const exampleContent = `---
-name: example
-description: An example slash command
----
-
-This is an example slash command template.
-You can use variables like \$ARGUMENTS or \$1, \$2 for positional args.
-You can also include file content with @filename.
-Shell commands with !command will be executed and output included.
-`;
-
-    try {
-      await fs.access(examplePath);
-      // File already exists, don't overwrite
-    } catch {
-      await fs.writeFile(examplePath, exampleContent, 'utf-8');
-    }
-  } catch (error) {
-    console.error('Error initializing commands directory:', error);
-  }
 }

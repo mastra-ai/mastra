@@ -11,6 +11,7 @@ import {
   loadWorkspaceCustomCommands,
   parseCommandFile,
   scanCommandDirectory,
+  WorkspaceCommandLimitExceededError,
 } from '../slash-command-loader.js';
 
 interface FakeWorkspaceFile {
@@ -305,6 +306,51 @@ describe('slash command loader', () => {
 
       await expect(loadWorkspaceCustomCommands(filesystem)).resolves.toEqual([]);
       expect(readFile).not.toHaveBeenCalled();
+    });
+
+    it('skips symlinked directories instead of following them', async () => {
+      const files = new Map<string, string>([['.claude/commands/real.md', 'Real\n']]);
+      const listed: string[] = [];
+      const filesystem = {
+        exists: async (candidate: string) => candidate === '.claude/commands',
+        readdir: async (candidate: string): Promise<FileEntry[]> => {
+          listed.push(candidate);
+          if (candidate !== '.claude/commands') return [];
+          return [
+            { name: 'real.md', type: 'file' },
+            { name: 'loop', type: 'directory', isSymlink: true },
+          ];
+        },
+        readFile: async (candidate: string) => files.get(candidate) ?? '',
+      };
+
+      const commands = await loadWorkspaceCustomCommands(filesystem);
+
+      // The symlinked directory is skipped without ever being listed.
+      expect(listed).toEqual(['.claude/commands']);
+
+      expect(commands.map(command => command.name)).toEqual(['real']);
+    });
+
+    it('throws the redacted limit error for an oversized command file', async () => {
+      const oversized = 'x'.repeat(256 * 1024 + 1);
+      const filesystem = createFakeWorkspaceFilesystem({
+        '.claude/commands/huge.md': oversized,
+      });
+
+      await expect(loadWorkspaceCustomCommands(filesystem)).rejects.toBeInstanceOf(WorkspaceCommandLimitExceededError);
+    });
+
+    it('throws once the aggregate byte budget is exceeded across roots', async () => {
+      // Two files of ~1.1 MiB each cross the 2 MiB aggregate but stay under
+      // the per-file cap.
+      const big = 'y'.repeat(1100 * 1024);
+      const filesystem = createFakeWorkspaceFilesystem({
+        '.opencode/command/a.md': big,
+        '.claude/commands/b.md': big,
+      });
+
+      await expect(loadWorkspaceCustomCommands(filesystem)).rejects.toBeInstanceOf(WorkspaceCommandLimitExceededError);
     });
 
     it('propagates unexpected read errors', async () => {

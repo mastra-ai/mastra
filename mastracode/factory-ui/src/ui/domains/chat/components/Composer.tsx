@@ -11,7 +11,7 @@ import {
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowUp, ImagePlus, Square } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { useMatch, useNavigate, useParams } from 'react-router';
 
@@ -76,7 +76,6 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     composerInputRef: inputRef,
     setComposerDraft,
     executeText,
-    refreshRuntimeCommands,
     commands,
   } = useChatCommands();
   const modeColorClass = getModeColorClass(activeModeId ?? modes[0]?.id);
@@ -106,18 +105,6 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const spotlightRef = useComposerSpotlight();
   const modeSwitchPendingRef = useRef(false);
   const suggestions = planFeedback.pending ? [] : matchCommands(commands, draft);
-  const slashTransitionRef = useRef(false);
-  // Discovery is refreshed when a ready/busy draft first turns into a slash
-  // command, so runtime suggestions never lag behind a new custom command or
-  // skill — and an unknown verdict never races a still-loading discovery.
-  useEffect(() => {
-    const isSlash = draft.trimStart().startsWith('/');
-    const wasSlash = slashTransitionRef.current;
-    slashTransitionRef.current = isSlash;
-    if (isSlash && !wasSlash && !chatPreparing && sessionEnabled) {
-      void refreshRuntimeCommands();
-    }
-  }, [draft, chatPreparing, sessionEnabled, refreshRuntimeCommands]);
   const showSuggestions = suggestions.length > 0;
   const [activeSuggestion, setActiveSuggestion] = useState(0);
   const composerDisabled = createDraftSessionMutation.isPending || blocked || planFeedback.isSubmitting;

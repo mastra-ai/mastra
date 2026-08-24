@@ -606,7 +606,11 @@ export class AgentControllerSession extends BaseResource {
     return this.request(this.url(path));
   }
 
-  /** Merge key-value pairs into the session state and clear (unset) listed keys in one atomic update. Existing keys not in the payload are preserved. */
+  /**
+   * Merge key-value pairs into the session state and clear the listed keys in
+   * one atomic update (`unset`). A key present in both fields is rejected.
+   * Existing keys not mentioned are preserved.
+   */
   async setState(updates: Record<string, unknown>, options?: { unset?: string[] }): Promise<void> {
     await this.request(this.url(`${this.base()}/state`), {
       method: 'PUT',
@@ -737,7 +741,13 @@ export class AgentControllerSession extends BaseResource {
     return body.goal;
   }
 
-  /** Set a new goal objective. The agent's in-loop judge evaluates progress after each turn. */
+  /**
+   * Set a new goal objective. The agent's in-loop judge evaluates progress
+   * after each turn. With `trigger: true` the reminder signal is sent once the
+   * goal is persisted; a goal that cannot start is paused server-side and the
+   * call rejects with 502 `goal_trigger_failed`. Triggering an inactive or
+   * missing goal answers 409.
+   */
   async setGoal(
     objective: string,
     options?: { judgeModelId?: string; maxRuns?: number; trigger?: boolean },
@@ -749,7 +759,12 @@ export class AgentControllerSession extends BaseResource {
     return body.goal;
   }
 
-  /** Update goal options (judge model, max runs, status). */
+  /**
+   * Update goal options (judge model, max runs, status). With
+   * `trigger: true` the updated goal must exist and be active — otherwise the
+   * call answers 409 — and its reminder signal starts a run; a failed start
+   * pauses the goal and rejects with 502 `goal_trigger_failed`.
+   */
   async updateGoal(options: {
     judgeModelId?: string;
     maxRuns?: number;

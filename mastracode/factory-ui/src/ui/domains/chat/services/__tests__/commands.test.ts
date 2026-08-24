@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { ResolvedChatCommand } from '../commands';
-import { findCommand, matchCommands, parseCommandInput } from '../commands';
+import { findCommand, matchCommands, parseCommandInput, resolveCommandToken } from '../commands';
 
 function makeCommand(invocation: string, overrides: Partial<ResolvedChatCommand> = {}): ResolvedChatCommand {
   return {
@@ -82,5 +82,14 @@ describe('findCommand', () => {
   it('distinguishes /goal from the /goal/<name> goal source', () => {
     expect(findCommand(REGISTRY, '/goal/deploy')?.invocation).toBe('/goal/deploy');
     expect(findCommand(REGISTRY, '/goal/deploy extra')?.invocation).toBe('/goal/deploy');
+  });
+
+  it('resolves exact tokens and falls back /name to the canonical //name', () => {
+    expect(resolveCommandToken(REGISTRY, '//deploy now')?.invocation).toBe('//deploy');
+    // No explicit custom named "models" exists — no fallback happens.
+    expect(resolveCommandToken(REGISTRY, '/models')?.invocation).toBe('/models');
+    const fallback = resolveCommandToken([makeCommand('//review')], '/review args');
+    expect(fallback?.invocation).toBe('//review');
+    expect(resolveCommandToken(REGISTRY, 'plain text')).toBeUndefined();
   });
 });

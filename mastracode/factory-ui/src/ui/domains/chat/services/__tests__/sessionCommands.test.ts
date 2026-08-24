@@ -29,7 +29,7 @@ describe('sessionCommands service', () => {
 
     expect(result.commands.map(command => command.command)).toEqual(['//review', '/skill/understand-pr']);
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-    expect(url).toBe('http://localhost:4111/api/agent-controller/code/commands/discover');
+    expect(url).toBe('http://localhost:4111/web/agent-controller/code/commands/discover');
     expect(init.credentials).toBe('include');
     expect(JSON.parse(String(init.body))).toEqual({
       resourceId: 'resource-1',
@@ -48,7 +48,7 @@ describe('sessionCommands service', () => {
 
     expect(outcome).toEqual({ action: 'goal', objective: 'Ship it' });
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-    expect(url).toBe('http://localhost:4111/api/agent-controller/code/commands/prepare');
+    expect(url).toBe('http://localhost:4111/web/agent-controller/code/commands/prepare');
     expect(JSON.parse(String(init.body))).toEqual({
       resourceId: 'resource-1',
       projectRepositoryId: '00000000-0000-4000-8000-000000000001',
@@ -56,6 +56,29 @@ describe('sessionCommands service', () => {
       command: '/goal/deploy',
       arguments: 'now',
     });
+  });
+
+  it('rejects malformed 2xx discovery payloads before React sees them', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ capabilities: { customCommands: 'sure' }, commands: [] }), { status: 200 }),
+      ),
+    );
+
+    await expect(discoverSessionCommandsViaFetch(ADDRESS)).rejects.toThrow('Malformed capability flags');
+  });
+
+  it('rejects unknown preparation outcomes', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ action: 'teleport' }), { status: 200 })),
+    );
+
+    await expect(prepareSessionCommandViaFetch(ADDRESS, { command: '//x' })).rejects.toThrow(
+      'Unknown preparation outcome',
+    );
   });
 
   it('surfaces the server error message on failures', async () => {

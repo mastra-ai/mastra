@@ -14,12 +14,16 @@ const processorTestState = vi.hoisted(() => ({ failExpansion: false }));
 
 vi.mock('@mastra/code-sdk/utils/slash-command-processor', async importOriginal => {
   const actual = await importOriginal<typeof import('@mastra/code-sdk/utils/slash-command-processor')>();
+  const guard =
+    <Args extends unknown[]>(run: (...args: Args) => Promise<string>) =>
+    async (...args: Args): Promise<string> => {
+      if (processorTestState.failExpansion) throw new Error('sandbox exploded with secrets');
+      return run(...args);
+    };
   return {
     ...actual,
-    processSlashCommand: async (...args: Parameters<typeof actual.processSlashCommand>) => {
-      if (processorTestState.failExpansion) throw new Error('sandbox exploded with secrets');
-      return actual.processSlashCommand(...args);
-    },
+    processSlashCommand: guard(actual.processSlashCommand),
+    processSlashCommandWithContext: guard(actual.processSlashCommandWithContext),
   };
 });
 
