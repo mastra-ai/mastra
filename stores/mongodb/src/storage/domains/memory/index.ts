@@ -66,6 +66,7 @@ import { formatDateForMongoDB } from '../utils';
 export class MemoryStorageMongoDB extends MemoryStorage {
   override readonly supportsPartialThreadUpdate = true;
   readonly supportsObservationalMemory = true;
+  override readonly supportsObservationBufferClaims: boolean = true;
 
   #connector: MongoDBConnector;
   #skipDefaultIndexes?: boolean;

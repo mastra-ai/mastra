@@ -236,6 +236,7 @@ function parseClaimOutcome(result: SerializedClaimOutcome): ObservationBufferCla
 export class MemoryConvex extends MemoryStorage {
   override readonly supportsPartialThreadUpdate = true;
   readonly supportsObservationalMemory = true;
+  override readonly supportsObservationBufferClaims: boolean = true;
 
   #db: ConvexDB;
   constructor(config: ConvexDomainConfig) {

@@ -1064,6 +1064,15 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
     });
 
     describe('Observation Buffer Claim', () => {
+      // Skip for adapters that have not opted into the durable claim contract
+      // (supportsObservationBufferClaims defaults to false on the base) —
+      // non-capable adapters run the legacy buffering lifecycle instead.
+      beforeEach(ctx => {
+        if (!memoryStorage.supportsObservationBufferClaims) {
+          ctx.skip();
+        }
+      });
+
       // External adapters evaluate expiry against their own backend clock, so
       // these cases use short leases plus real waits instead of injected clocks.
       const LEASE_MS = 30_000;
