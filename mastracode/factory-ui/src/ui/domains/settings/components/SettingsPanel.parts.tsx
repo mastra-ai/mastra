@@ -88,14 +88,24 @@ interface ModelSettingsProps {
 export function ModelSettings({ settings, updating, onBehaviorChange }: ModelSettingsProps) {
   return (
     <SettingsRow label="Thinking level" hint="Extended-reasoning budget for the agent">
-      <Segmented
-        ariaLabel="Thinking level"
-        mobileSelect
-        value={settings?.thinkingLevel ?? 'off'}
-        disabled={!settings || updating}
-        options={THINKING_LEVELS}
-        onChange={v => onBehaviorChange({ thinkingLevel: v })}
-      />
+      <div className="w-full lg:hidden">
+        <SegmentedSelect
+          ariaLabel="Thinking level"
+          value={settings?.thinkingLevel ?? 'off'}
+          disabled={!settings || updating}
+          options={THINKING_LEVELS}
+          onChange={v => onBehaviorChange({ thinkingLevel: v })}
+        />
+      </div>
+      <div className="hidden lg:block">
+        <Segmented
+          ariaLabel="Thinking level"
+          value={settings?.thinkingLevel ?? 'off'}
+          disabled={!settings || updating}
+          options={THINKING_LEVELS}
+          onChange={v => onBehaviorChange({ thinkingLevel: v })}
+        />
+      </div>
     </SettingsRow>
   );
 }
@@ -362,23 +372,16 @@ function ModelPicker({
   );
 }
 
-export function Segmented<T extends string>({
-  value,
-  options,
-  ariaLabel,
-  disabled,
-  onChange,
-  mobileSelect,
-}: {
+interface SegmentedProps<T extends string> {
   value: T;
   options: { value: T; label: string }[];
   ariaLabel: string;
   disabled?: boolean;
   onChange: (value: T) => void;
-  /** Render a full-width Select below `lg` instead of the button group. */
-  mobileSelect?: boolean;
-}) {
-  const group = (
+}
+
+export function Segmented<T extends string>({ value, options, ariaLabel, disabled, onChange }: SegmentedProps<T>) {
+  return (
     <ButtonsGroup spacing="close" role="group" aria-label={ariaLabel}>
       {options.map(o => (
         <Button
@@ -394,27 +397,29 @@ export function Segmented<T extends string>({
       ))}
     </ButtonsGroup>
   );
+}
 
-  if (!mobileSelect) return group;
-
+/** Select rendering of the same choice — callers decide which variant shows at which breakpoint. */
+export function SegmentedSelect<T extends string>({
+  value,
+  options,
+  ariaLabel,
+  disabled,
+  onChange,
+}: SegmentedProps<T>) {
   return (
-    <>
-      <div className="w-full lg:hidden">
-        <Select value={value} disabled={disabled} onValueChange={v => onChange(v as T)}>
-          <SelectTrigger variant="outline" size="sm" aria-label={ariaLabel} className="w-full">
-            {options.find(o => o.value === value)?.label ?? value}
-          </SelectTrigger>
-          <SelectContent>
-            {options.map(o => (
-              <SelectItem key={o.value} value={o.value}>
-                {o.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      <div className="hidden lg:block">{group}</div>
-    </>
+    <Select value={value} disabled={disabled} onValueChange={v => onChange(v as T)}>
+      <SelectTrigger variant="outline" size="sm" aria-label={ariaLabel} className="w-full">
+        {options.find(o => o.value === value)?.label ?? value}
+      </SelectTrigger>
+      <SelectContent>
+        {options.map(o => (
+          <SelectItem key={o.value} value={o.value}>
+            {o.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 
