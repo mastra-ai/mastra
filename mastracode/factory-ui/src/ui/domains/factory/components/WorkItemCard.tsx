@@ -82,6 +82,7 @@ function cardPrimaryAction({
 
 export function WorkItemCard({
   item,
+  highlighted,
   columnStage,
   allItems,
   activityPage,
@@ -106,6 +107,7 @@ export function WorkItemCard({
   onRemove,
 }: {
   item: WorkItem;
+  highlighted: boolean;
   columnStage: BoardStageId;
   allItems: WorkItem[];
   activityPage?: AuditEventPage;
@@ -155,6 +157,14 @@ export function WorkItemCard({
     runSpec !== undefined
       ? runSpec.actions.find(action => action.role === 'review' && action.role in sessions)
       : undefined;
+  // A card can land in a lane without its run ever starting — an approved plan
+  // transitions to Building and writes the `work` session ref itself, so the
+  // slot looks used and `runActions` filters Build out. Offer the lane's own
+  // run from the menu so the card is never a dead end.
+  const laneAction =
+    runSpec !== undefined && reReviewAction === undefined
+      ? runSpec.actions.find(action => action.stage === columnStage && action.role in sessions)
+      : undefined;
   const primaryAction = cardPrimaryAction({
     item,
     runSpec,
@@ -165,6 +175,13 @@ export function WorkItemCard({
     onCreateSession,
   });
   const threadSession = itemThreadSession(sessions);
+  const proposedRunLabel =
+    proposal === undefined
+      ? undefined
+      : (runSpec?.actions.find(action => action.role === proposal.role)?.label ??
+        defaultRunAction?.label ??
+        'Start run');
+
   const relatedItems = relatedWorkItems(item, allItems);
   const labels = metadataLabels(item.metadata);
   const activity = workItemActivity(item, activityPage);
@@ -173,6 +190,10 @@ export function WorkItemCard({
       threadSession !== undefined
         ? { label: 'Open session', affordance: 'open' }
         : { label: primaryAction.label, affordance: 'run' },
+    proposal:
+      proposal === undefined || proposedRunLabel === undefined
+        ? undefined
+        : { label: proposedRunLabel, decisionId: proposal.id },
     moving:
       evaluatingStage === undefined
         ? undefined
@@ -197,6 +218,8 @@ export function WorkItemCard({
         aria-busy={evaluating || runPending || undefined}
         data-testid="work-item-card"
         data-related={relatedItems.length > 0 ? 'true' : undefined}
+        data-work-item-id={item.id}
+        data-highlighted={highlighted || undefined}
         onDragStart={event => {
           if (!evaluating) setDragPayload(event, { kind: 'work-item', id: item.id, fromStage: columnStage });
         }}
@@ -204,6 +227,7 @@ export function WorkItemCard({
           'group relative flex flex-col gap-3 rounded-xl border border-border1/50 bg-neutral6/5 p-3 outline-none transition-colors hover:bg-surface3',
           evaluating ? 'cursor-wait' : 'cursor-grab active:cursor-grabbing',
           runPending && 'opacity-70',
+          highlighted && 'border-warning1/40 bg-warning1/5 ring-1 ring-warning1/30',
         )}
       >
         {threadSession !== undefined ? (
@@ -262,6 +286,26 @@ export function WorkItemCard({
                 >
                   {actionIcon(reReviewAction.label)}
                   <span>{pendingRunRoles.has(reReviewAction.role) ? 'Starting…' : 'Re-review'}</span>
+                </DropdownMenu.Item>
+              )}
+              {runSpec !== undefined && laneAction !== undefined && (
+                <DropdownMenu.Item
+                  disabled={runDisabled || pendingRunRoles.has(laneAction.role)}
+                  onClick={() => onRestartRun(runSpec, laneAction)}
+                >
+                  {actionIcon(laneAction.label)}
+                  <span>{pendingRunRoles.has(laneAction.role) ? 'Starting…' : laneAction.label}</span>
+                </DropdownMenu.Item>
+              )}
+              {/* Once the card has a live session it renders as a link, so the
+                  menu is the only place left to release a proposed run. */}
+              {proposal !== undefined && (
+                <DropdownMenu.Item
+                  disabled={runDisabled || approvingDecisionId === proposal.id}
+                  onClick={() => onApproveProposal(proposal.id)}
+                >
+                  {actionIcon(proposedRunLabel ?? 'Start run')}
+                  <span>{approvingDecisionId === proposal.id ? 'Starting…' : 'Start suggested run'}</span>
                 </DropdownMenu.Item>
               )}
               {proposal !== undefined && (
@@ -355,6 +399,10 @@ export function WorkItemCard({
             {status.kind !== 'idle' && (
               <CardStatus
                 status={status}
+                onApprove={
+                  status.kind === 'waiting' && !runDisabled ? () => onApproveProposal(status.decisionId) : undefined
+                }
+                approving={status.kind === 'waiting' && approvingDecisionId === status.decisionId}
                 onRetry={retryDecisionId === undefined ? undefined : () => onRetryDecision(retryDecisionId)}
                 retrying={retryDecisionId !== undefined && retryDecisionId === retryingDecisionId}
               />

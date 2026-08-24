@@ -1,5 +1,11 @@
 {
-  "attachment": ["deepseek-chat", "deepseek-reasoner"],
-  "temperature": ["deepseek-chat", "deepseek-reasoner", "deepseek-v4-flash", "deepseek-v4-pro"],
-  "structuredOutput": ["deepseek-v4-flash", "deepseek-v4-pro"]
+  "attachment": ["deepseek-chat", "deepseek-reasoner", "deepseek-v4-flash-vision-exp"],
+  "temperature": [
+    "deepseek-chat",
+    "deepseek-reasoner",
+    "deepseek-v4-flash",
+    "deepseek-v4-flash-vision-exp",
+    "deepseek-v4-pro"
+  ],
+  "structuredOutput": ["deepseek-v4-flash", "deepseek-v4-flash-vision-exp", "deepseek-v4-pro"]
 }

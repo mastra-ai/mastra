@@ -11,6 +11,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
+import { factoryDispatchFailureMetadata } from '../rules/dispatch-errors.js';
 import type {
   FactoryStartCoordinator,
   FactoryStartPreparedResult,
@@ -37,8 +38,13 @@ import type {
   WorkItemStage,
   WorkItemsStorage,
 } from '../storage/domains/work-items/base.js';
-import { WorkItemRelationError } from '../storage/domains/work-items/base.js';
+import {
+  FACTORY_PULL_REQUEST_RECONCILIATION_KEY,
+  FACTORY_RULE_MATERIALIZATION_KEY,
+  WorkItemRelationError,
+} from '../storage/domains/work-items/base.js';
 import { computeFactoryMetrics, parseMetricsRange } from '../storage/domains/work-items/metrics.js';
+import { buildAttentionRoutes, factoryDecisionType } from './attention.js';
 import type { RouteDependencies } from './route.js';
 import { Route } from './route.js';
 
@@ -56,6 +62,18 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
   startCoordinator?: Pick<FactoryStartCoordinator, 'prepare'>;
   /** Materialized sessions, read to report which of the listed cards are being worked. */
   liveSessions: Pick<LiveSessions, 'isRunning'>;
+}
+
+/** The card as clients see it, without the dispatcher's internal bookkeeping. */
+function toWireWorkItem(item: WorkItemRow): WorkItemRow {
+  if (
+    !item.metadata ||
+    (!(FACTORY_RULE_MATERIALIZATION_KEY in item.metadata) &&
+      !(FACTORY_PULL_REQUEST_RECONCILIATION_KEY in item.metadata))
+  ) {
+    return item;
+  }
+  return { ...item, metadata: publicWorkItemMetadata(item.metadata) ?? {} };
 }
 
 /** Session ids of the listed cards whose agent run is in flight. */
@@ -105,6 +123,16 @@ function validMetadata(value: unknown): value is Record<string, unknown> | null 
   }
 }
 
+function publicWorkItemMetadata(value: Record<string, unknown> | null): Record<string, unknown> | null {
+  if (value === null) return null;
+  const {
+    [FACTORY_RULE_MATERIALIZATION_KEY]: _materialization,
+    [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]: _reconciliation,
+    ...metadata
+  } = value;
+  return metadata;
+}
+
 function parseExternalSource(value: unknown): ExternalWorkItemSource | null | undefined {
   if (value === undefined || value === null) return value;
   if (!isRecord(value)) return undefined;
@@ -150,7 +178,11 @@ export function parseCreateWorkItem(body: unknown): CreateWorkItemInput | null {
   if (stages !== undefined && !validStages(stages)) return null;
   const parsedSessions = sessions === undefined ? undefined : parseSessions(sessions);
   if (sessions !== undefined && parsedSessions === undefined) return null;
-  if (metadata !== undefined && !validMetadata(metadata)) return null;
+  let parsedMetadata: Record<string, unknown> | null | undefined;
+  if (metadata !== undefined) {
+    if (!validMetadata(metadata)) return null;
+    parsedMetadata = publicWorkItemMetadata(metadata);
+  }
 
   return {
     title: title.trim(),
@@ -158,7 +190,7 @@ export function parseCreateWorkItem(body: unknown): CreateWorkItemInput | null {
     ...(hasParentWorkItemId ? { parentWorkItemId: parentWorkItemId ?? null } : {}),
     ...(stages !== undefined ? { stages } : {}),
     ...(parsedSessions !== undefined ? { sessions: parsedSessions } : {}),
-    ...(metadata !== undefined ? { metadata } : {}),
+    ...(parsedMetadata !== undefined ? { metadata: parsedMetadata } : {}),
   };
 }
 
@@ -182,14 +214,18 @@ export function parseUpdateWorkItem(body: unknown): UpdateWorkItemInput | null {
   if (stages !== undefined && !validStages(stages)) return null;
   const parsedSessions = sessions === undefined ? undefined : parseSessions(sessions);
   if (sessions !== undefined && parsedSessions === undefined) return null;
-  if (metadata !== undefined && !validMetadata(metadata)) return null;
+  let parsedMetadata: Record<string, unknown> | null | undefined;
+  if (metadata !== undefined) {
+    if (!validMetadata(metadata)) return null;
+    parsedMetadata = publicWorkItemMetadata(metadata);
+  }
 
   return {
     ...(hasParentWorkItemId ? { parentWorkItemId: parentWorkItemId ?? null } : {}),
     ...(title !== undefined ? { title: title.trim() } : {}),
     ...(stages !== undefined ? { stages } : {}),
     ...(parsedSessions !== undefined ? { sessions: parsedSessions } : {}),
-    ...(metadata !== undefined ? { metadata } : {}),
+    ...(parsedMetadata !== undefined ? { metadata: parsedMetadata } : {}),
   };
 }
 
@@ -312,6 +348,7 @@ const DECISION_STATUSES = new Set<FactoryDispatchStatus>([
   'pending',
   'proposed',
   'dismissed',
+  'superseded',
   'leased',
   'retry',
   'succeeded',
@@ -358,19 +395,18 @@ function parseDecisionCursor(raw: string | undefined): { createdAt: Date; id: st
   }
 }
 
-function decisionType(decision: FactoryDeferredDecisionRecord): string {
-  return typeof decision.decision.type === 'string' ? decision.decision.type.slice(0, 64) : 'unknown';
-}
-
 function decisionSummary(decision: FactoryDeferredDecisionRecord) {
   return {
     id: decision.id,
     evaluationId: decision.evaluationId,
     workItemId: decision.workItemId,
-    type: decisionType(decision),
+    type: factoryDecisionType(decision),
     role: typeof decision.decision.role === 'string' ? decision.decision.role.slice(0, 32) : null,
     status: decision.status,
     attempts: decision.attempts,
+    failureOccurrence: decision.failureOccurrence,
+    failureCode: decision.failureCode,
+    canRetry: factoryDispatchFailureMetadata(decision.failureCode).canRetry,
     lastError: decision.lastError?.slice(0, 512) ?? null,
     createdAt: decision.createdAt.toISOString(),
     updatedAt: decision.updatedAt.toISOString(),
@@ -508,8 +544,12 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
         const decisionId = context.req.param('decisionId');
         if (!decisionId || !UUID_RE.test(decisionId)) return c.json({ error: 'invalid_decision_id' }, 422);
         await workItems.ensureReady();
-        const decision = await settle(resolved.orgId, resolved.factoryProjectId, decisionId, new Date());
+        const now = new Date();
+        const decision = await settle(resolved.orgId, resolved.factoryProjectId, decisionId, now);
         if (!decision) return c.json({ error: 'decision_not_proposed' }, 409);
+        // Releasing a proposal is a person taking the item on. Approval arms the
+        // item's autonomy inside the same storage transaction (see
+        // approveDeferredDecision), so follow-up runs no longer wait for approval.
         await audit.emit({
           context,
           input: {
@@ -518,7 +558,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             targets: decision.workItemId
               ? [{ type: 'work_item', id: decision.workItemId }]
               : [{ type: 'rule_decision', id: decision.id }],
-            metadata: { decisionId: decision.id, effect: decisionType(decision) },
+            metadata: { decisionId: decision.id, effect: factoryDecisionType(decision) },
           },
         });
         return c.json({ decision: decisionSummary(decision) });
@@ -542,7 +582,10 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             orgId: resolved.orgId,
             factoryProjectId: resolved.factoryProjectId,
           });
-          return c.json({ workItems: items, runningSessionIds: runningSessionIds(items, liveSessions) });
+          return c.json({
+            workItems: items.map(toWireWorkItem),
+            runningSessionIds: runningSessionIds(items, liveSessions),
+          });
         },
       }),
 
@@ -612,6 +655,11 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
         },
       }),
 
+      ...buildAttentionRoutes({
+        workItems,
+        resolveProject: context => this.#resolveProject(loose(context)),
+      }),
+
       this.#proposalRoute({ verb: 'approve', settle: workItems.approveDeferredDecision.bind(workItems) }),
       this.#proposalRoute({ verb: 'dismiss', settle: workItems.dismissDeferredDecision.bind(workItems) }),
 
@@ -625,6 +673,14 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           const decisionId = context.req.param('decisionId');
           if (!decisionId || !UUID_RE.test(decisionId)) return c.json({ error: 'invalid_decision_id' }, 422);
           await workItems.ensureReady();
+          const current = await workItems.getDeferredDecision(resolved.orgId, resolved.factoryProjectId, decisionId);
+          if (
+            !current ||
+            current.status !== 'failed' ||
+            !factoryDispatchFailureMetadata(current.failureCode).canRetry
+          ) {
+            return c.json({ error: 'decision_not_retryable' }, 409);
+          }
           const decision = await workItems.retryDeferredDecision(
             resolved.orgId,
             resolved.factoryProjectId,
@@ -707,7 +763,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
                 patch: boundedPatch as unknown as Record<string, unknown>,
               });
             }
-            return c.json({ workItem: item });
+            return c.json({ workItem: toWireWorkItem(item) });
           } catch (error) {
             if (error instanceof WorkItemRelationError) {
               return c.json({ error: error.code, message: error.message }, 400);
@@ -781,6 +837,11 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           if (!input) return c.json({ error: 'invalid_factory_start' }, 400);
           input.requestContext = loose(c).get('requestContext');
           input.defaultModelId = resolved.defaultModelId ?? undefined;
+          // This route is only reached by a person pressing a run action, so
+          // reaching it is the commitment the approval gate is asking for.
+          // Arming rides inside prepareRunStart's transaction so a crash can't
+          // start the run while leaving its follow-up work waiting on approval.
+          input.armAutonomy = true;
           if (
             !input.workItem.id &&
             ((input.workItem.input.stages ?? ['intake']).length !== 1 ||
@@ -852,7 +913,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
               previous: updated.previous,
               patch: patch as Record<string, unknown>,
             });
-            return c.json({ workItem: updated.item });
+            return c.json({ workItem: toWireWorkItem(updated.item) });
           } catch (error) {
             if (error instanceof WorkItemRelationError) {
               return c.json({ error: error.code, message: error.message }, 400);

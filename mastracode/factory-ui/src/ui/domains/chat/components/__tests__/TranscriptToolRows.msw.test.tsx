@@ -1,9 +1,11 @@
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-controller';
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { renderWithProviders } from '../../../../../../e2e/ui/render';
+import { initialTranscript, transcriptReducer } from '../../services/transcript';
 import type { TimelineEntry, ToolCall } from '../../services/transcript';
 import { TranscriptEntries } from '../Transcript';
 
@@ -49,7 +51,12 @@ function runningTool(toolCallId: string, toolName: string, args: unknown): Mastr
 }
 
 function renderEntries(entries: TimelineEntry[]) {
-  return renderWithProviders(<TranscriptEntries entries={entries} onApprove={() => {}} onRespond={() => {}} />);
+  // The plan card resolves its workspace from the route, so entries render under a router like in the app.
+  return renderWithProviders(
+    <MemoryRouter>
+      <TranscriptEntries entries={entries} onApprove={() => {}} onRespond={() => {}} />
+    </MemoryRouter>,
+  );
 }
 
 describe('TranscriptEntries tool rows', () => {
@@ -174,6 +181,47 @@ describe('TranscriptEntries tool rows', () => {
 
     expect(screen.queryByRole('group', { name: /Tool group/ })).not.toBeInTheDocument();
     expect(screen.getByRole('group', { name: promptLabel })).toBeInTheDocument();
+  });
+
+  it('reconstructs a resolved submit_plan card from persisted message history after reload', () => {
+    const persistedMessage: MastraDBMessage = {
+      id: 'msg-plan-resolved',
+      role: 'assistant',
+      createdAt: CREATED_AT,
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'plan-call-1',
+              toolName: 'submit_plan',
+              args: { path: '.artifacts/plans/reloaded.md' },
+              result: {
+                toolId: 'submit_plan',
+                content: 'Plan rejected with feedback.',
+                submittedPlan: {
+                  title: 'Reloaded plan',
+                  path: '.artifacts/plans/reloaded.md',
+                  plan: '## Durable step\n\nUse the persisted result.',
+                  feedback: 'Add a rollback step.',
+                },
+              },
+            },
+          },
+        ],
+      },
+    };
+    const restored = transcriptReducer(initialTranscript, { type: 'mergeWindow', messages: [persistedMessage] });
+
+    renderEntries(restored.entries);
+
+    const card = screen.getByRole('group', { name: 'Plan approval' });
+    expect(within(card).getByText('Reloaded plan')).toBeInTheDocument();
+    expect(within(card).getByText('Use the persisted result.')).toBeInTheDocument();
+    expect(within(card).getByRole('note', { name: 'Plan feedback' })).toHaveTextContent('Add a rollback step.');
+    expect(within(card).queryByRole('button', { name: /approve|reject/i })).not.toBeInTheDocument();
   });
 
   it('breaks a run on a suspended call so the agent question stays answerable', () => {

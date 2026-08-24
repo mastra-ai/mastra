@@ -99,6 +99,7 @@ export class MessageHistory implements Processor {
     }
 
     const { threadId, resourceId } = context;
+    const memoryRunState = parseMemoryRequestContext(requestContext)?.runState?.();
 
     const span = this.createMemorySpan(
       'recall',
@@ -111,16 +112,21 @@ export class MessageHistory implements Processor {
 
     try {
       // 1. Fetch historical messages from storage (as DB format)
-      const result = await this.storage.listMessages({
-        threadId,
-        resourceId,
-        page: 0,
-        perPage: this.lastMessages,
-        orderBy: { field: 'createdAt', direction: 'DESC' },
-      });
+      const cacheKey = `history:${threadId}:${resourceId ?? ''}:${this.lastMessages ?? 'all'}`;
+      const loadMessages = async () => {
+        const result = await this.storage.listMessages({
+          threadId,
+          resourceId,
+          page: 0,
+          perPage: this.lastMessages,
+          orderBy: { field: 'createdAt', direction: 'DESC' },
+        });
+        return result.messages;
+      };
+      const messages = memoryRunState ? await memoryRunState.load(cacheKey, loadMessages) : await loadMessages();
 
       // 2. Filter out system messages (they should never be stored in DB)
-      const filteredMessages = result.messages.filter((msg: MastraDBMessage) => {
+      const filteredMessages = messages.filter((msg: MastraDBMessage) => {
         return msg.role !== 'system';
       });
 

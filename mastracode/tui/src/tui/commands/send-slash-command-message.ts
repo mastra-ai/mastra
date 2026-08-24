@@ -18,7 +18,7 @@ export async function sendSlashCommandMessage(
 
   if (isCurrentThreadActive(ctx)) {
     const signal = ctx.state.session.sendSignal({ content });
-    addPendingUserMessage(ctx.state, signal.id, displayText);
+    addPendingUserMessage(ctx.state, signal.id, displayText, undefined, { isInterjection: true });
     try {
       await signal.accepted;
     } catch (error) {

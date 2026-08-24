@@ -60,6 +60,14 @@ export const TABLE_HARNESS_SESSIONS = 'mastra_harness_sessions';
 // Thread state (per-thread, per-type durable state; e.g. the task list)
 export const TABLE_THREAD_STATE = 'mastra_thread_state';
 
+// Knowledge store tables
+export const TABLE_KNOWLEDGE_NODES = 'mastra_knowledge_nodes';
+export const TABLE_KNOWLEDGE_RECORDS = 'mastra_knowledge_records';
+export const TABLE_KNOWLEDGE_MENTIONS = 'mastra_knowledge_mentions';
+export const TABLE_KNOWLEDGE_CURSORS = 'mastra_knowledge_cursors';
+export const TABLE_KNOWLEDGE_ACTIVITY = 'mastra_knowledge_activity';
+export const TABLE_KNOWLEDGE_SEMANTIC_OUTBOX = 'mastra_knowledge_semantic_outbox';
+
 /** Union of all core table name constants. */
 export type TABLE_NAMES =
   | typeof TABLE_WORKFLOW_SNAPSHOT
@@ -99,7 +107,13 @@ export type TABLE_NAMES =
   | typeof TABLE_NOTIFICATIONS
   | typeof TABLE_HARNESS_SESSIONS
   | typeof TABLE_THREAD_STATE
-  | typeof TABLE_WORKFLOW_DEFINITIONS;
+  | typeof TABLE_WORKFLOW_DEFINITIONS
+  | typeof TABLE_KNOWLEDGE_NODES
+  | typeof TABLE_KNOWLEDGE_RECORDS
+  | typeof TABLE_KNOWLEDGE_MENTIONS
+  | typeof TABLE_KNOWLEDGE_CURSORS
+  | typeof TABLE_KNOWLEDGE_ACTIVITY
+  | typeof TABLE_KNOWLEDGE_SEMANTIC_OUTBOX;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -211,6 +225,7 @@ export const AGENT_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
   workspace: { type: 'jsonb', nullable: true },
   skills: { type: 'jsonb', nullable: true },
   skillsFormat: { type: 'text', nullable: true },
+  durable: { type: 'jsonb', nullable: true },
   browser: { type: 'jsonb', nullable: true },
   // Version metadata
   changedFields: { type: 'jsonb', nullable: true }, // Array of field names
@@ -603,8 +618,11 @@ export const EXPERIMENTS_SCHEMA: Record<string, StorageColumn> = {
   trialIndex: { type: 'integer', nullable: true },
   datasetId: { type: 'text', nullable: true, references: { table: 'mastra_datasets', column: 'id' } },
   datasetVersion: { type: 'integer', nullable: true },
-  targetType: { type: 'text', nullable: false },
-  targetId: { type: 'text', nullable: false },
+  // Nullable: caller-driven ingestion experiments have no registered target.
+  targetType: { type: 'text', nullable: true },
+  targetId: { type: 'text', nullable: true },
+  // Run-level scorer IDs pinned at create time for caller-driven experiments.
+  scorerIds: { type: 'jsonb', nullable: true },
   status: { type: 'text', nullable: false },
   totalItems: { type: 'integer', nullable: false },
   succeededCount: { type: 'integer', nullable: false },
@@ -631,6 +649,8 @@ export const EXPERIMENT_RESULTS_SCHEMA: Record<string, StorageColumn> = {
   startedAt: { type: 'timestamp', nullable: false },
   completedAt: { type: 'timestamp', nullable: false },
   retryCount: { type: 'integer', nullable: false },
+  // Nullable for backwards compatibility with pre-existing rows; readers treat NULL as 0.
+  attempt: { type: 'integer', nullable: true },
   traceId: { type: 'text', nullable: true },
   status: { type: 'text', nullable: true },
   tags: { type: 'jsonb', nullable: true },
@@ -639,6 +659,77 @@ export const EXPERIMENT_RESULTS_SCHEMA: Record<string, StorageColumn> = {
   organizationId: { type: 'text', nullable: true },
   projectId: { type: 'text', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
+};
+
+export const KNOWLEDGE_NODES_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  type: { type: 'text', nullable: false },
+  name: { type: 'text', nullable: false },
+  canonicalName: { type: 'text', nullable: false },
+  kind: { type: 'text', nullable: true },
+  content: { type: 'text', nullable: true },
+  scope: { type: 'jsonb', nullable: false },
+  scopeKey: { type: 'text', nullable: false },
+  version: { type: 'integer', nullable: false },
+  mergedInto: { type: 'text', nullable: true },
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: false },
+};
+
+export const KNOWLEDGE_RECORDS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  node: { type: 'text', nullable: false },
+  text: { type: 'text', nullable: false },
+  scope: { type: 'jsonb', nullable: false },
+  scopeKey: { type: 'text', nullable: false },
+  sourceThreadId: { type: 'text', nullable: false },
+  capturedAt: { type: 'timestamp', nullable: false },
+  when: { type: 'timestamp', nullable: true },
+  maxScope: { type: 'text', nullable: true },
+  metadata: { type: 'jsonb', nullable: true },
+  deletedAt: { type: 'timestamp', nullable: true },
+  deletedBy: { type: 'text', nullable: true },
+};
+
+export const KNOWLEDGE_MENTIONS_SCHEMA: Record<string, StorageColumn> = {
+  sourceType: { type: 'text', nullable: false },
+  sourceId: { type: 'text', nullable: false },
+  recordId: { type: 'text', nullable: false },
+};
+
+export const KNOWLEDGE_CURSORS_SCHEMA: Record<string, StorageColumn> = {
+  sourceThreadId: { type: 'text', nullable: false },
+  agent: { type: 'text', nullable: false },
+  lastKnowledgeId: { type: 'text', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: false },
+};
+
+export const KNOWLEDGE_ACTIVITY_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  action: { type: 'text', nullable: false },
+  recordType: { type: 'text', nullable: false },
+  recordId: { type: 'text', nullable: false },
+  scope: { type: 'jsonb', nullable: false },
+  scopeKey: { type: 'text', nullable: false },
+  sourceThreadId: { type: 'text', nullable: true },
+  createdAt: { type: 'timestamp', nullable: false },
+};
+
+export const KNOWLEDGE_SEMANTIC_OUTBOX_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  idempotencyKey: { type: 'text', nullable: false },
+  documentId: { type: 'text', nullable: false },
+  documentType: { type: 'text', nullable: false },
+  operation: { type: 'text', nullable: false },
+  scope: { type: 'jsonb', nullable: false },
+  scopeKey: { type: 'text', nullable: false },
+  status: { type: 'text', nullable: false },
+  attempts: { type: 'integer', nullable: false },
+  availableAt: { type: 'timestamp', nullable: false },
+  claimedAt: { type: 'timestamp', nullable: true },
+  claimedBy: { type: 'text', nullable: true },
+  createdAt: { type: 'timestamp', nullable: false },
+  completedAt: { type: 'timestamp', nullable: true },
 };
 
 /**
@@ -796,6 +887,12 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
   [TABLE_HARNESS_SESSIONS]: HARNESS_SESSIONS_SCHEMA,
   [TABLE_THREAD_STATE]: THREAD_STATE_SCHEMA,
   [TABLE_WORKFLOW_DEFINITIONS]: WORKFLOW_DEFINITIONS_SCHEMA,
+  [TABLE_KNOWLEDGE_NODES]: KNOWLEDGE_NODES_SCHEMA,
+  [TABLE_KNOWLEDGE_RECORDS]: KNOWLEDGE_RECORDS_SCHEMA,
+  [TABLE_KNOWLEDGE_MENTIONS]: KNOWLEDGE_MENTIONS_SCHEMA,
+  [TABLE_KNOWLEDGE_CURSORS]: KNOWLEDGE_CURSORS_SCHEMA,
+  [TABLE_KNOWLEDGE_ACTIVITY]: KNOWLEDGE_ACTIVITY_SCHEMA,
+  [TABLE_KNOWLEDGE_SEMANTIC_OUTBOX]: KNOWLEDGE_SEMANTIC_OUTBOX_SCHEMA,
 };
 
 /**
@@ -811,6 +908,14 @@ export const TABLE_CONFIGS: Partial<Record<TABLE_NAMES, StorageTableConfig>> = {
   },
   [TABLE_NOTIFICATIONS]: { columns: NOTIFICATIONS_SCHEMA, compositePrimaryKey: ['threadId', 'id'] },
   [TABLE_THREAD_STATE]: { columns: THREAD_STATE_SCHEMA, compositePrimaryKey: ['threadId', 'type'] },
+  [TABLE_KNOWLEDGE_MENTIONS]: {
+    columns: KNOWLEDGE_MENTIONS_SCHEMA,
+    compositePrimaryKey: ['sourceType', 'sourceId', 'recordId'],
+  },
+  [TABLE_KNOWLEDGE_CURSORS]: {
+    columns: KNOWLEDGE_CURSORS_SCHEMA,
+    compositePrimaryKey: ['sourceThreadId', 'agent'],
+  },
 };
 
 /**

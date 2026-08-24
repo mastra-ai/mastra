@@ -302,8 +302,9 @@ export interface GlobalSettings {
   updateDismissedVersion: string | null;
   // Mastra gateway configuration
   memoryGateway: { baseUrl?: string };
-  // LSP configuration forwarded to the workspace
-  lsp?: LSPConfig;
+  // LSP configuration forwarded to the workspace. Disabled unless the user
+  // opts in with `true` or an LSPConfig object.
+  lsp?: boolean | LSPConfig;
   // Browser automation configuration
   browser: BrowserSettings;
   // Direct TUI `!` shell passthrough configuration
@@ -398,7 +399,7 @@ const DEFAULTS: GlobalSettings = {
   modelUseCounts: {},
   updateDismissedVersion: null,
   memoryGateway: {},
-  lsp: {},
+  lsp: false,
   browser: {
     enabled: false,
     provider: 'stagehand',
@@ -642,6 +643,26 @@ function parseStoredViewport(raw: unknown): BrowserViewport {
 }
 
 /**
+ * Validate the `lsp` setting from JSON. Accepts both the boolean opt-in/opt-out
+ * form and the full LSPConfig object; anything else is treated as unset.
+ */
+function parseLspSettings(raw: unknown): boolean | LSPConfig | undefined {
+  if (typeof raw === 'boolean') return raw;
+  if (raw && typeof raw === 'object') return raw as LSPConfig;
+  return undefined;
+}
+
+/**
+ * Resolve the effective LSP config. LSP is opt-in: `false` and an absent
+ * setting both mean disabled, `true` means enabled with defaults.
+ */
+export function resolveLspSetting(lsp: boolean | LSPConfig | undefined): LSPConfig | false {
+  if (lsp === true) return {};
+  if (!lsp) return false;
+  return lsp;
+}
+
+/**
  * Deep-merge and validate browser settings from JSON.
  * Explicitly validates types to handle malformed settings.json gracefully.
  */
@@ -787,7 +808,7 @@ function migrateFromAuth(settingsPath: string): boolean {
         modelUseCounts: raw.modelUseCounts && typeof raw.modelUseCounts === 'object' ? raw.modelUseCounts : {},
         updateDismissedVersion: typeof raw.updateDismissedVersion === 'string' ? raw.updateDismissedVersion : null,
         memoryGateway: raw.memoryGateway && typeof raw.memoryGateway === 'object' ? raw.memoryGateway : {},
-        lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
+        lsp: parseLspSettings(raw.lsp),
         browser: parseBrowserSettings(raw.browser),
         shellPassthrough: parseShellPassthroughSettings(raw.shellPassthrough),
         voice: parseVoiceSettings(raw.voice),
@@ -915,7 +936,7 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
       modelUseCounts: raw.modelUseCounts && typeof raw.modelUseCounts === 'object' ? raw.modelUseCounts : {},
       updateDismissedVersion: typeof raw.updateDismissedVersion === 'string' ? raw.updateDismissedVersion : null,
       memoryGateway: raw.memoryGateway && typeof raw.memoryGateway === 'object' ? raw.memoryGateway : {},
-      lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
+      lsp: parseLspSettings(raw.lsp),
       browser: parseBrowserSettings(raw.browser),
       shellPassthrough: parseShellPassthroughSettings(raw.shellPassthrough),
       voice: parseVoiceSettings(raw.voice),

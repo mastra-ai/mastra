@@ -46,7 +46,6 @@ const item = { link: '/docs/old/page#array' }
 [Parent relative](../old/page#parent)
 `,
   'src/content/en/docs/sidebars.js': sidebar,
-  'src/content/en/guides/sidebars.js': "const sidebars = { guidesSidebar: ['index'] }\nexport default sidebars\n",
   'src/content/en/reference/sidebars.js':
     "const sidebars = { referenceSidebar: [{ type: 'doc', id: 'index' }] }\nexport default sidebars\n",
   'vercel.redirects.json': `${JSON.stringify(

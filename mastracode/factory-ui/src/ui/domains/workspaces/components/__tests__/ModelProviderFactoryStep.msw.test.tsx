@@ -160,6 +160,7 @@ describe('Model provider onboarding', () => {
       expect(onOMDefaults).toHaveBeenCalledWith({
         providerId: 'openai',
         factoryModelId: 'openai/gpt-5.6-sol',
+        factoryId: 'factory-1',
       });
     });
   });
@@ -216,6 +217,7 @@ describe('Model provider onboarding', () => {
       expect(onOMDefaults).toHaveBeenCalledWith({
         providerId: 'openai',
         factoryModelId: 'openai/gpt-5.6-sol',
+        factoryId: 'factory-1',
       });
     });
   });

@@ -18,7 +18,8 @@ import {
   Repeat,
   type LucideIcon,
 } from 'lucide-react';
-import { Fragment, useState } from 'react';
+import { Fragment } from 'react';
+import { useSearchParams } from 'react-router';
 
 import { useFactoryDecisionAction, useFactoryDecisionHistory } from '../../hooks/useFactoryDecisions';
 import { relativeTime } from '../../lib/date/relativeTime';
@@ -43,6 +44,7 @@ const STATUS_ICON: Record<FactoryDecisionStatus, { icon: LucideIcon; className: 
   pending: { icon: CircleDashed, className: 'text-accent1' },
   proposed: { icon: CirclePause, className: 'text-accent6' },
   dismissed: { icon: CircleSlash, className: 'text-icon3' },
+  superseded: { icon: CircleSlash, className: 'text-icon3' },
   leased: { icon: CircleDashed, className: 'text-accent1' },
   retry: { icon: CircleDashed, className: 'text-accent1' },
   succeeded: { icon: CircleCheck, className: 'text-green' },
@@ -53,6 +55,7 @@ const STATUS_LABEL: Record<FactoryDecisionStatus, string> = {
   pending: 'queued',
   proposed: 'awaiting approval',
   dismissed: 'dismissed',
+  superseded: 'superseded',
   leased: 'running',
   retry: 'retrying',
   succeeded: 'done',
@@ -65,7 +68,9 @@ export function RulesPage() {
 }
 
 function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefined }) {
-  const [decisionGroup, setDecisionGroup] = useState('all');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedGroup = searchParams.get('group');
+  const decisionGroup = DECISION_GROUPS.find(entry => entry.key === requestedGroup)?.key ?? 'all';
   const decisionFilter = DECISION_GROUPS.find(entry => entry.key === decisionGroup);
   const decisionStatuses = decisionFilter?.statuses;
   const decisionsQuery = useFactoryDecisionHistory(factoryProjectId, decisionGroup, decisionStatuses);
@@ -98,7 +103,7 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
                 variant={decisionGroup === entry.key ? 'primary' : 'outline'}
                 size="sm"
                 aria-pressed={decisionGroup === entry.key}
-                onClick={() => setDecisionGroup(entry.key)}
+                onClick={() => setSearchParams(entry.key === 'all' ? {} : { group: entry.key }, { replace: true })}
               >
                 <Icon aria-hidden />
                 {entry.label}
@@ -129,7 +134,7 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
           }
           actionSlot={
             hasDecisionFilter ? (
-              <Button variant="outline" size="sm" onClick={() => setDecisionGroup('all')}>
+              <Button variant="outline" size="sm" onClick={() => setSearchParams({}, { replace: true })}>
                 Show all effects
               </Button>
             ) : undefined
@@ -245,7 +250,7 @@ function DecisionRow({
             </Button>
           </div>
         ) : null}
-        {decision.status === 'failed' ? (
+        {decision.status === 'failed' && decision.canRetry ? (
           <Button variant="outline" size="sm" disabled={retrying} onClick={onRetry}>
             {retrying ? 'Retrying…' : 'Retry'}
           </Button>

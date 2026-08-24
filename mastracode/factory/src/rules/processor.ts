@@ -11,8 +11,9 @@ import type {
 import type { FactoryRunBindingRecord, WorkItemsStorage, WorkItemRow } from '../storage/domains/work-items/base.js';
 import { getFactorySessionCoordinates } from './binding-context.js';
 import { resolveFactoryToolRule } from './resolve.js';
+import { workItemSource } from './transition-service.js';
 import type { FactoryTransitionService } from './transition-service.js';
-import { isFactoryRuleStage } from './types.js';
+import { factoryRuleStage } from './types.js';
 import type {
   FactoryCommitDecision,
   FactoryRuleBoard,
@@ -28,6 +29,14 @@ const STATE_ID = 'factory-phase';
 const RULE_TIMEOUT_MS = 5_000;
 const TRANSCRIPT_PAGE_SIZE = 50;
 const MAX_LINKED_ITEMS = 5;
+function ruleStage(item: WorkItemRow | null | undefined): FactoryRuleStage | undefined {
+  return item ? factoryRuleStage(item.stages) : undefined;
+}
+
+function itemInRuleStage(item: WorkItemRow | null | undefined): item is WorkItemRow {
+  return ruleStage(item) !== undefined;
+}
+
 const PHASE_LABELS: Record<FactoryRuleStage, string> = {
   intake: 'Intake',
   triage: 'Investigating',
@@ -69,15 +78,6 @@ type PhaseSnapshotValue = {
   ruleSetVersion?: string;
   status: 'active' | 'none';
 };
-
-function workItemSource(item: WorkItemRow) {
-  if (!item.externalSource) return 'manual' as const;
-  if (item.externalSource.integrationId === 'linear') return 'linear-issue' as const;
-  // See transition-service: non-GitHub, non-Linear provenance (Slack threads)
-  // is a plain work item, not a GitHub issue.
-  if (item.externalSource.integrationId !== 'github') return 'manual' as const;
-  return item.externalSource.type === 'pull-request' ? ('github-pr' as const) : ('github-issue' as const);
-}
 
 function workItemSourceKey(item: WorkItemRow): string | null {
   const source = item.externalSource;
@@ -262,8 +262,8 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     }
 
     const item = await this.options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
-    const stage = item?.stages.length === 1 ? item.stages[0] : undefined;
-    if (!item || !isFactoryRuleStage(stage)) return;
+    const stage = ruleStage(item);
+    if (!item || !stage) return;
     const allItems = await this.options.storage.list({
       orgId: binding.orgId,
       factoryProjectId: binding.factoryProjectId,
@@ -287,7 +287,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       return;
 
     const linkedText = linked.length
-      ? `\nLinked items: ${linked.map(candidate => `${workItemSource(candidate)} ${candidate.title}`).join('; ')}`
+      ? `\nLinked items: ${linked.map(candidate => `${workItemSource(candidate.externalSource)} ${candidate.title}`).join('; ')}`
       : '';
     const snapshotContents =
       `Factory ${board} phase: ${PHASE_LABELS[stage]} (${escapeText(stage)})\n` +
@@ -317,6 +317,11 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
   async reconcileBinding(binding: FactoryRunBindingRecord): Promise<void> {
     const reader = this.options.messageReader;
     if (!reader || binding.status !== 'active') return;
+    // One keyed read up front: a binding whose item is gone or no longer in a
+    // single rule stage would ingest nothing, so skip the cursor and message
+    // reads entirely instead of paying them on every walk.
+    const item = await this.options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
+    if (!itemInRuleStage(item)) return;
     const cursor = await this.options.storage.getToolResultCursor(binding.orgId, binding.factoryProjectId, binding.id);
     let page = 0;
     while (true) {
@@ -328,7 +333,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
         ...(cursor ? { filter: { dateRange: { start: cursor.lastMessageCreatedAt } } } : {}),
         orderBy: { field: 'createdAt', direction: 'ASC' },
       });
-      await this.ingestMessages(binding, result.messages);
+      await this.ingestMessages(binding, result.messages, undefined, item);
       const last = result.messages.at(-1);
       if (last) {
         await this.options.storage.advanceToolResultCursor({
@@ -349,9 +354,10 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     binding: FactoryRunBindingRecord,
     messages: MastraDBMessage[],
     toolCallIds?: ReadonlySet<string>,
+    preloadedItem?: WorkItemRow,
   ): Promise<void> {
-    const item = await this.options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
-    if (!item || item.stages.length !== 1 || !isFactoryRuleStage(item.stages[0])) return;
+    const item = preloadedItem ?? (await this.options.storage.get({ orgId: binding.orgId, id: binding.workItemId }));
+    if (!itemInRuleStage(item)) return;
     for (const message of messages) {
       for (const toolResult of completedToolResults(message)) {
         if (toolCallIds && !toolCallIds.has(toolResult.toolCallId)) continue;
@@ -403,12 +409,13 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       ruleSetVersion: this.options.rules.version,
       item: {
         id: item.id,
-        source: workItemSource(item),
+        source: workItemSource(item.externalSource),
         sourceKey: workItemSourceKey(item),
         parentWorkItemId: item.parentWorkItemId,
         title: item.title,
         url: item.externalSource?.url ?? null,
         stages: item.stages,
+        metadata: item.metadata,
       },
       board,
       itemRevision: item.revision,

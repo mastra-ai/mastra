@@ -294,6 +294,16 @@ class PgFactoryStorageOps implements FactoryStorageOps {
     return this.#select<T>(this.#queryable, collection, where, opts);
   }
 
+  async count(collection: string, where: CollectionWhere): Promise<number> {
+    const schema = this.#schema(collection);
+    const filter = this.#buildWhere(schema, where);
+    const result = await this.#queryable.query(
+      `SELECT COUNT(*) AS count FROM "${schema.name}" WHERE ${filter.sql}`,
+      filter.args,
+    );
+    return Number(result.rows[0]?.count ?? 0);
+  }
+
   async insertOne<T extends Record<string, unknown>>(collection: string, row: Partial<T>): Promise<T> {
     const schema = this.#schema(collection);
     const pk = primaryKeyOf(schema);
@@ -430,6 +440,44 @@ class PgFactoryStorageOps implements FactoryStorageOps {
  * Supports serializable app-table transactions for cross-replica invariant
  * enforcement and `authDatabase()` exposing the shared pool.
  */
+/**
+ * A pool-level `error` listener only covers *idle* clients: pg hands ownership
+ * of a client to the borrower for the duration of a checkout and takes its own
+ * listener off. So a backend restart or network blip that lands on a client
+ * mid-transaction reaches an emitter with no listener, and Node escalates that
+ * to an uncaughtException that kills the process — the pool handler logs the
+ * idle siblings and the borrowed one still brings everything down.
+ *
+ * Attach a listener once per physical connection instead. `connect` fires when
+ * the pool establishes a client, so the client stays covered for its whole life
+ * and there is nothing to remove on release.
+ *
+ * That listener outlives the checkout, so it also sees the failures the pool is
+ * already reporting through its own idle listener. Follow `acquire`/`release`
+ * to tell the two apart and stay quiet while the client is idle — otherwise one
+ * dropped connection is announced twice, the second time as the wrong thing.
+ *
+ * The pool still discards the failed connection; this only keeps the failure
+ * reportable instead of fatal.
+ */
+export function guardCheckedOutClientErrors(pool: Pool, warn = console.warn): void {
+  // pg emits 'connect' from inside the acquire path, so a client is borrowed
+  // from the moment it exists.
+  const borrowed = new WeakSet<object>();
+
+  pool.on('connect', client => {
+    borrowed.add(client);
+    client.on('error', err => {
+      if (!borrowed.has(client)) return; // idle: the pool's own listener reports this one
+      warn(
+        `PgFactoryStorage: client error while checked out (the pool discards this connection): ${err instanceof Error ? err.message : String(err)}`,
+      );
+    });
+  });
+  pool.on('acquire', client => borrowed.add(client));
+  pool.on('release', (_err, client) => borrowed.delete(client));
+}
+
 export class PgFactoryStorage extends FactoryStorage {
   readonly ops: FactoryStorageOps;
 
@@ -459,6 +507,7 @@ export class PgFactoryStorage extends FactoryStorage {
           `PgFactoryStorage: idle pool client error (pool discards the client and reconnects on next checkout): ${err instanceof Error ? err.message : String(err)}`,
         );
       });
+      guardCheckedOutClientErrors(this.#pool);
     }
     this.ops = new PgFactoryStorageOps(this.#pool, this.#schemas);
   }

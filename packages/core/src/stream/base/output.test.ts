@@ -1411,4 +1411,107 @@ describe('MastraModelOutput', () => {
       expect(output.status).toBe('failed');
     });
   });
+
+  describe('error chunks in the per-chunk output processor pass', () => {
+    const runId = 'error-bypass-run';
+
+    function createErrorChunk(message: string): ChunkType {
+      return {
+        type: 'error',
+        runId,
+        from: ChunkFrom.AGENT,
+        payload: { error: new Error(message) },
+      } as ChunkType;
+    }
+
+    function createErrorFinishChunk(): ChunkType {
+      return {
+        type: 'finish',
+        runId,
+        from: ChunkFrom.AGENT,
+        payload: {
+          id: 'finish-err',
+          output: { steps: [], usage: {} },
+          stepResult: { reason: 'error', warnings: [], isContinued: false },
+          metadata: {},
+          messages: { nonUser: [], all: [] },
+        },
+      } as ChunkType;
+    }
+
+    function createToolCallsFinishChunk(): ChunkType {
+      return {
+        type: 'finish',
+        runId,
+        from: ChunkFrom.AGENT,
+        payload: {
+          id: 'finish-tc',
+          output: { steps: [], usage: {} },
+          stepResult: { reason: 'tool-calls', warnings: [], isContinued: true },
+          metadata: {},
+          messages: { nonUser: [], all: [] },
+        },
+      } as ChunkType;
+    }
+
+    function createRecordingProcessor(seen: string[]): Processor {
+      return {
+        id: 'part-recorder',
+        name: 'Part Recorder',
+        processOutputStream: async ({ part }) => {
+          seen.push(part.type);
+          return part;
+        },
+      };
+    }
+
+    async function run(chunks: ChunkType[], deferErrorChunks?: boolean) {
+      const seen: string[] = [];
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream: createChunkStream(chunks),
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: {
+          runId,
+          outputProcessors: [createRecordingProcessor(seen)],
+          isLLMExecutionStep: true,
+          ...(deferErrorChunks !== undefined ? { deferErrorChunks } : {}),
+        },
+      });
+
+      const forwarded: string[] = [];
+      for await (const chunk of output.fullStream) {
+        forwarded.push(chunk.type);
+      }
+
+      return { seen, forwarded };
+    }
+
+    it('should not run output processors on error chunks when deferErrorChunks is set', async () => {
+      const { seen, forwarded } = await run(
+        [createTextDeltaChunk(runId, 'hello'), createErrorChunk('rate limited'), createErrorFinishChunk()],
+        true,
+      );
+
+      // The error is still on the stream — it is only hidden from processors.
+      expect(seen).toEqual(['text-delta']);
+      expect(forwarded).toContain('error');
+      expect(forwarded).toContain('text-delta');
+    });
+
+    it('should still run output processors on error chunks when deferErrorChunks is not set', async () => {
+      // Durable agents route only post-retry terminal errors through this path,
+      // so they must keep seeing them.
+      const { seen } = await run([createTextDeltaChunk(runId, 'hello'), createErrorChunk('fatal')]);
+
+      expect(seen).toEqual(['text-delta', 'error']);
+    });
+
+    it('should keep bypassing tool-calls finish chunks regardless of deferErrorChunks', async () => {
+      const { seen } = await run([createTextDeltaChunk(runId, 'hello'), createToolCallsFinishChunk()], true);
+
+      expect(seen).toEqual(['text-delta']);
+    });
+  });
 });

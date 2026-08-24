@@ -460,6 +460,44 @@ describe('agent-controller routes', () => {
       expect(received.type).toBe('agent_start');
     });
 
+    it('preserves live streamed messages across the SSE boundary without cloning', async () => {
+      const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-live-message',
+        abortSignal: new AbortController().signal,
+      } as any)) as ReadableStream<unknown>;
+
+      const reader = stream.getReader();
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({
+        resourceId: 'user-live-message',
+        id: 'user-live-message',
+        ownerId: 'code',
+      });
+      const message = {
+        id: 'assistant-live-1',
+        role: 'assistant',
+        createdAt: new Date('2026-01-02T03:04:05.000Z'),
+        content: { format: 2, parts: [{ type: 'text', text: 'first' }] },
+      } as any;
+
+      session.emit({ type: 'message_update', message });
+      message.content.parts[0].text = 'later';
+
+      let received: any;
+      for (let i = 0; i < 10 && received === undefined; i++) {
+        const { value } = await reader.read();
+        if (value && typeof value === 'object' && (value as any).type === 'message_update') received = value;
+      }
+      await reader.cancel();
+
+      expect(received.message).toBe(message);
+      expect(received.message.content.parts[0].text).toBe('later');
+      expect(received.message.createdAt).toEqual(new Date('2026-01-02T03:04:05.000Z'));
+    });
+
     it('flattens Error instances on error events so the message survives JSON serialization', async () => {
       const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
         mastra,
@@ -488,6 +526,38 @@ describe('agent-controller routes', () => {
       expect(received.error).toEqual({ name: 'Error', message: 'model quota exhausted' });
       expect(JSON.parse(JSON.stringify(received)).error.message).toBe('model quota exhausted');
       expect(received.errorType).toBe('provider');
+    });
+
+    it('flattens Error instances on every event that carries one, not just on `error`', async () => {
+      const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-ws-err',
+        abortSignal: new AbortController().signal,
+      } as any)) as ReadableStream<unknown>;
+
+      const reader = stream.getReader();
+
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({ resourceId: 'user-ws-err', id: 'user-ws-err', ownerId: 'code' });
+      session.emit({ type: 'workspace_error', error: new Error('clone failed: permission denied') });
+      session.emit({ type: 'workspace_status_changed', status: 'error', error: new Error('sandbox unreachable') });
+
+      // The workspace emits its own status changes on the same stream, so match
+      // on the error-carrying ones rather than on the first of each type.
+      const received = new Map<string, unknown>();
+      for (let i = 0; i < 20 && received.size < 2; i++) {
+        const { value } = await reader.read();
+        if (!value || typeof value !== 'object' || !('type' in value) || !('error' in value) || !value.error) continue;
+        const { type } = value;
+        if (type === 'workspace_error' || type === 'workspace_status_changed') received.set(type, value);
+      }
+      await reader.cancel();
+
+      const wired = (type: string) => JSON.parse(JSON.stringify(received.get(type))).error;
+      expect(wired('workspace_error')).toEqual({ name: 'Error', message: 'clone failed: permission denied' });
+      expect(wired('workspace_status_changed')).toEqual({ name: 'Error', message: 'sandbox unreachable' });
     });
 
     it('converts display-state Maps to plain objects so tool state survives JSON serialization', async () => {
@@ -822,6 +892,34 @@ describe('agent-controller routes', () => {
       expect(all.threads.length).toBeGreaterThanOrEqual(3);
     });
 
+    it('keeps persisted session preferences out of a thread\u2019s tags', async () => {
+      // Preferences that survive a restart (thinking level, notifications) share
+      // the flat thread `metadata` bag with the scoping tags. They are string
+      // valued, so nothing but the reserved-key filter keeps them from surfacing
+      // as tags \u2014 and from being matchable through the `tags` filter.
+      await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-prefs',
+      } as any);
+      const session = await mastra.getAgentController('code')!.createSession({ resourceId: 'user-prefs' });
+      await session.state.set({ projectPath: '/repo' } as any);
+      await session.thread.create({ title: 'p1' });
+      await session.state.set({ projectPath: '/repo', thinkingLevel: 'high', notifications: 'bell' } as any);
+
+      // The reserved keys are passed as filter tags with values the thread does
+      // not have: they must be dropped before matching, not narrow the result.
+      const res = (await LIST_AGENT_CONTROLLER_THREADS_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-prefs',
+        tags: { projectPath: '/repo', thinkingLevel: 'low', notifications: 'off' },
+      } as any)) as { threads: { title?: string; tags?: Record<string, string> }[] };
+
+      const thread = res.threads.find(t => t.title === 'p1');
+      expect(thread?.tags).toEqual({ projectPath: '/repo' });
+    });
+
     it('annotates each thread with its run state (active while a run executes, idle otherwise)', async () => {
       // Thread state comes from the agent thread-stream runtime — the same
       // per-thread active/idle tracking the signals `ifIdle` path uses.
@@ -995,6 +1093,30 @@ describe('agent-controller routes', () => {
           threadId: victimThreadId,
         } as any),
       ).rejects.toThrow('Thread not found');
+    });
+
+    it('SESSION STATE rejects a requested thread owned by another resource', async () => {
+      const { victimThreadId } = await setupTwoSessions();
+      await expect(
+        GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.handler({
+          mastra,
+          controllerId: 'code',
+          resourceId: 'attacker',
+          threadId: victimThreadId,
+        } as any),
+      ).rejects.toThrow(`thread "${victimThreadId}" not found`);
+    });
+
+    it('SESSION STATE rejects a requested thread that does not exist', async () => {
+      await setupTwoSessions();
+      await expect(
+        GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.handler({
+          mastra,
+          controllerId: 'code',
+          resourceId: 'attacker',
+          threadId: 'missing-thread',
+        } as any),
+      ).rejects.toThrow('thread "missing-thread" not found');
     });
   });
 });

@@ -262,7 +262,7 @@ const sidebars = {
         },
         {
           type: 'category',
-          label: 'Sandbox',
+          label: 'Sandboxes',
           link: {
             type: 'doc',
             id: 'sandbox/overview',
@@ -671,6 +671,14 @@ const sidebars = {
             contextualSidebarLabel: 'Multi-agent systems',
           },
           items: [
+            {
+              type: 'doc',
+              id: 'guides/context-engineering',
+              label: 'Context engineering',
+              customProps: {
+                tags: ['new'],
+              },
+            },
             {
               type: 'doc',
               id: 'guides/streaming',

@@ -7,17 +7,17 @@
 
 export type Simplify<T> = { [K in keyof T]: T[K] } & {};
 
-type Shared_Auxiliary_294 =
+type Shared_Auxiliary_298 =
   | string
   | number
   | boolean
   | null
-  | Shared_Auxiliary_294[]
+  | Shared_Auxiliary_298[]
   | {
-      [key: string]: Shared_Auxiliary_294;
+      [key: string]: Shared_Auxiliary_298;
     };
 
-type Shared_Auxiliary_1085 =
+type Shared_Auxiliary_1095 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -62,19 +62,19 @@ type Shared_Auxiliary_1085 =
     }
   | {
       op: 'and' | 'or';
-      args: Shared_Auxiliary_1085[];
+      args: Shared_Auxiliary_1095[];
     }
   | {
       op: 'not';
-      arg: Shared_Auxiliary_1085;
+      arg: Shared_Auxiliary_1095;
     };
 
-type Shared_Auxiliary_1226 = {
+type Shared_Auxiliary_1236 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_1226[] | undefined;
+  children?: Shared_Auxiliary_1236[] | undefined;
 };
 
 type Shared_Type_0 = {
@@ -945,6 +945,16 @@ type Shared_Type_42 = {
         [key: string]: unknown;
       }
     | undefined;
+  /** Whether this agent is hydrated with durable execution enabled */
+  durable?:
+    | (
+        | boolean
+        | {
+            maxSteps?: number | undefined;
+            cleanupTimeoutMs?: number | undefined;
+          }
+      )
+    | undefined;
 };
 
 type Shared_Type_43 = {
@@ -1041,7 +1051,7 @@ type Shared_Type_49 = {
   providerOptions?:
     | {
         [key: string]: {
-          [key: string]: Shared_Auxiliary_294;
+          [key: string]: Shared_Auxiliary_298;
         };
       }
     | undefined;
@@ -1055,7 +1065,7 @@ type Shared_Type_50 = {
   providerOptions?:
     | {
         [key: string]: {
-          [key: string]: Shared_Auxiliary_294;
+          [key: string]: Shared_Auxiliary_298;
         };
       }
     | undefined;
@@ -1070,13 +1080,13 @@ type Shared_Type_51 = {
     | undefined;
   metadata?:
     | {
-        [key: string]: Shared_Auxiliary_294;
+        [key: string]: Shared_Auxiliary_298;
       }
     | undefined;
   providerOptions?:
     | {
         [key: string]: {
-          [key: string]: Shared_Auxiliary_294;
+          [key: string]: Shared_Auxiliary_298;
         };
       }
     | undefined;
@@ -1164,7 +1174,7 @@ type Shared_Type_54 = {
   createdAt?: (string | Date) | undefined;
   metadata?:
     | {
-        [key: string]: Shared_Auxiliary_294;
+        [key: string]: Shared_Auxiliary_298;
       }
     | undefined;
   attributes?:
@@ -1177,7 +1187,7 @@ type Shared_Type_54 = {
   providerOptions?:
     | {
         [key: string]: {
-          [key: string]: Shared_Auxiliary_294;
+          [key: string]: Shared_Auxiliary_298;
         };
       }
     | undefined;
@@ -1190,7 +1200,7 @@ type Shared_Type_55 = {
   createdAt?: (string | Date) | undefined;
   metadata?:
     | {
-        [key: string]: Shared_Auxiliary_294;
+        [key: string]: Shared_Auxiliary_298;
       }
     | undefined;
   attributes?:
@@ -1203,7 +1213,7 @@ type Shared_Type_55 = {
   providerOptions?:
     | {
         [key: string]: {
-          [key: string]: Shared_Auxiliary_294;
+          [key: string]: Shared_Auxiliary_298;
         };
       }
     | undefined;
@@ -1796,6 +1806,12 @@ type Shared_Type_78 = {
   scorerId?: (string | string[]) | undefined;
   /** Filter by how the score was produced */
   scoreSource?: string | undefined;
+  /** Filter by metadata key-value pairs (exact match per key) */
+  metadata?:
+    | ({
+        [key: string]: unknown;
+      } | null)
+    | undefined;
   /** Filter by how the score was produced */
   source?: string | undefined;
 };
@@ -2466,13 +2482,13 @@ type Shared_Type_107 =
   | {
       type: 'conditional';
       steps: Shared_Type_105[];
-      predicates: Shared_Auxiliary_1085[];
+      predicates: Shared_Auxiliary_1095[];
     }
   | {
       type: 'loop';
       step: Shared_Type_105;
       loopType: 'dowhile' | 'dountil';
-      predicate: Shared_Auxiliary_1085;
+      predicate: Shared_Auxiliary_1095;
     };
 
 type Shared_Type_108 = {
@@ -2809,7 +2825,7 @@ type Shared_Type_120 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1226[] | undefined;
+  files?: Shared_Auxiliary_1236[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -3186,8 +3202,9 @@ type Shared_Type_141 = {
   datasetId: string | null;
   datasetVersion: number | null;
   agentVersion?: (string | null) | undefined;
-  targetType: 'agent' | 'workflow' | 'scorer' | 'processor';
-  targetId: string;
+  targetType: ('agent' | 'workflow' | 'scorer' | 'processor') | null;
+  targetId: string | null;
+  scorerIds?: (string[] | null) | undefined;
   name?: string | undefined;
   description?: string | undefined;
   metadata?:
@@ -3259,6 +3276,7 @@ type Shared_Type_143 = {
   startedAt: Date;
   completedAt: Date;
   retryCount: number;
+  attempt?: number | undefined;
   traceId: string | null;
   status?: (('needs-review' | 'reviewed' | 'complete') | null) | undefined;
   tags?: (string[] | null) | undefined;
@@ -8623,7 +8641,11 @@ export type GetObservabilityTracesTraceId_PathParams = {
   traceId: string;
 };
 
-export type GetObservabilityTracesTraceId_Response = GetObservabilityTracesTraceIdBranchesSpanId_Response;
+export type GetObservabilityTracesTraceId_Response = {
+  /** Unique trace identifier */
+  traceId: string;
+  spans: Shared_Type_74[];
+};
 
 export type GetObservabilityTracesTraceId_Request = Simplify<
   (GetObservabilityTracesTraceId_PathParams extends never ? {} : { params: GetObservabilityTracesTraceId_PathParams }) &
@@ -8828,6 +8850,7 @@ export type GetObservabilityTracesTraceIdSpanIdScores_Response = {
           | 'WORKFLOW'
           | 'TRAJECTORY'
           | 'STEP'
+          | 'EXTERNAL'
           | 'agent_run'
           | 'scorer_run'
           | 'scorer_step'
@@ -9225,6 +9248,17 @@ export type GetObservabilityScores_QueryParams = {
   scorerId?: ((string | string[]) | undefined) | undefined;
   /** Filter by how the score was produced */
   scoreSource?: (string | undefined) | undefined;
+  metadata?:
+    | (
+        | (
+            | ({
+                [key: string]: unknown;
+              } | null)
+            | undefined
+          )
+        | undefined
+      )
+    | unknown;
   /** Filter by how the score was produced */
   source?: (string | undefined) | undefined;
   page?: (number | undefined) | undefined;
@@ -12636,6 +12670,19 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
         | undefined
       )
     | undefined;
+  /** Opt this agent into durable execution when it is hydrated. Cache and pubsub are inherited from the Mastra instance; without distributed backends durability is process-local. Does not enable automatic recovery — that stays `recovery.durableAgents`. */
+  durable?:
+    | (
+        | (
+            | boolean
+            | {
+                maxSteps?: number | undefined;
+                cleanupTimeoutMs?: number | undefined;
+              }
+          )
+        | undefined
+      )
+    | undefined;
 };
 
 export type PostStoredAgentsStoredAgentIdExport_Response = {
@@ -12749,6 +12796,19 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
         | {
             [key: string]: unknown;
           }
+        | undefined
+      )
+    | undefined;
+  /** Opt this agent into durable execution when it is hydrated. Cache and pubsub are inherited from the Mastra instance; without distributed backends durability is process-local. Does not enable automatic recovery — that stays `recovery.durableAgents`. */
+  durable?:
+    | (
+        | (
+            | boolean
+            | {
+                maxSteps?: number | undefined;
+                cleanupTimeoutMs?: number | undefined;
+              }
+          )
         | undefined
       )
     | undefined;
@@ -13001,6 +13061,16 @@ export type PostStoredAgents_Body = {
         [key: string]: unknown;
       }
     | undefined;
+  /** Opt this agent into durable execution when it is hydrated. Cache and pubsub are inherited from the Mastra instance; without distributed backends durability is process-local. Does not enable automatic recovery — that stays `recovery.durableAgents`. */
+  durable?:
+    | (
+        | boolean
+        | {
+            maxSteps?: number | undefined;
+            cleanupTimeoutMs?: number | undefined;
+          }
+      )
+    | undefined;
 };
 
 export type PostStoredAgents_Response = PostAgentsAgentIdClone_Response;
@@ -13247,6 +13317,19 @@ export type PatchStoredAgentsStoredAgentId_Body = {
         | {
             [key: string]: unknown;
           }
+        | undefined
+      )
+    | undefined;
+  /** Opt this agent into durable execution when it is hydrated. Cache and pubsub are inherited from the Mastra instance; without distributed backends durability is process-local. Does not enable automatic recovery — that stays `recovery.durableAgents`. */
+  durable?:
+    | (
+        | (
+            | boolean
+            | {
+                maxSteps?: number | undefined;
+                cleanupTimeoutMs?: number | undefined;
+              }
+          )
         | undefined
       )
     | undefined;
@@ -16348,7 +16431,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1226[] | undefined;
+  files?: Shared_Auxiliary_1236[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -16406,7 +16489,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (Shared_Auxiliary_1226[] | undefined) | undefined;
+  files?: (Shared_Auxiliary_1236[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
@@ -18033,10 +18116,14 @@ export interface GetDatasetsDatasetIdExperiments_RouteContract {
 export type PostDatasetsDatasetIdExperiments_PathParams = GetDatasetsDatasetId_PathParams;
 
 export type PostDatasetsDatasetIdExperiments_Body = {
-  /** Type of target to run against */
-  targetType: 'agent' | 'workflow' | 'scorer';
-  /** ID of the target */
-  targetId: string;
+  /** When true (default), spawns the in-process runner. When false, creates the experiment without running it: the caller drives the loop via run-item (targeted) or result submission (target-less). */
+  start?: boolean | undefined;
+  /** Type of target to run against. Required when start is true. Optional for create-only experiments. */
+  targetType?: ('agent' | 'workflow' | 'scorer') | undefined;
+  /** ID of the target. Required when targetType is set. */
+  targetId?: string | undefined;
+  /** Caller-supplied experiment id (e.g. a workflow run id) for idempotent create-only requests. Ignored when start is true. */
+  id?: string | undefined;
   /** Name of the experiment */
   name?: string | undefined;
   /** Description of the experiment */
@@ -18108,7 +18195,9 @@ export type PostDatasetsDatasetIdExperiments_Response = {
   totalItems: number;
   succeededCount: number;
   failedCount: number;
-  startedAt: Date;
+  /** Dataset version pinned on the experiment (create-only) */
+  datasetVersion?: number | undefined;
+  startedAt: Date | null;
   completedAt: Date | null;
   results: {
     itemId: string;
@@ -18154,14 +18243,165 @@ export interface PostDatasetsDatasetIdExperiments_RouteContract {
 }
 
 // ============================================================================
-// Route: GET /datasets/:datasetId/experiments/:experimentId
+// Route: POST /datasets/:datasetId/experiments/:experimentId/items/:itemId/run
 // ============================================================================
-export type GetDatasetsDatasetIdExperimentsExperimentId_PathParams = {
+export type PostDatasetsDatasetIdExperimentsExperimentIdItemsItemIdRun_PathParams = {
+  /** Unique identifier for the dataset */
+  datasetId: string;
+  /** Unique identifier for the experiment */
+  experimentId: string;
+  /** Unique identifier for the dataset item */
+  itemId: string;
+};
+
+export type PostDatasetsDatasetIdExperimentsExperimentIdItemsItemIdRun_Body = {
+  /** Zero-based repetition index. Defaults to 0. */
+  attempt?: number | undefined;
+  /** Request context merged with the item's own request context (item wins) */
+  requestContext?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+};
+
+export type PostDatasetsDatasetIdExperimentsExperimentIdItemsItemIdRun_Response = {
+  result: Shared_Type_143;
+  scores: {
+    scorerId: string;
+    scorerName: string;
+    score: number | null;
+    reason: string | null;
+    error: string | null;
+    failedStep?: string | undefined;
+    completedSteps?: string[] | undefined;
+    targetScope?: ('span' | 'trajectory') | undefined;
+    stepId?: string | undefined;
+  }[];
+};
+
+export type PostDatasetsDatasetIdExperimentsExperimentIdItemsItemIdRun_Request = Simplify<
+  (PostDatasetsDatasetIdExperimentsExperimentIdItemsItemIdRun_PathParams extends never
+    ? {}
+    : { params: PostDatasetsDatasetIdExperimentsExperimentIdItemsItemIdRun_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostDatasetsDatasetIdExperimentsExperimentIdItemsItemIdRun_Body extends never
+      ? {}
+      : {} extends PostDatasetsDatasetIdExperimentsExperimentIdItemsItemIdRun_Body
+        ? { body?: PostDatasetsDatasetIdExperimentsExperimentIdItemsItemIdRun_Body }
+        : { body: PostDatasetsDatasetIdExperimentsExperimentIdItemsItemIdRun_Body })
+>;
+
+export interface PostDatasetsDatasetIdExperimentsExperimentIdItemsItemIdRun_RouteContract {
+  pathParams: PostDatasetsDatasetIdExperimentsExperimentIdItemsItemIdRun_PathParams;
+  queryParams: never;
+  body: PostDatasetsDatasetIdExperimentsExperimentIdItemsItemIdRun_Body;
+  request: PostDatasetsDatasetIdExperimentsExperimentIdItemsItemIdRun_Request;
+  response: PostDatasetsDatasetIdExperimentsExperimentIdItemsItemIdRun_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /datasets/:datasetId/experiments/:experimentId/results
+// ============================================================================
+export type PostDatasetsDatasetIdExperimentsExperimentIdResults_PathParams = {
   /** Unique identifier for the dataset */
   datasetId: string;
   /** Unique identifier for the experiment */
   experimentId: string;
 };
+
+export type PostDatasetsDatasetIdExperimentsExperimentIdResults_Body = {
+  /** Dataset item this result belongs to */
+  itemId: string;
+  /** Zero-based repetition index. Defaults to 0. */
+  attempt?: number | undefined;
+  /** Input replayed by the external runner. Defaults to the dataset item input. */
+  input?: unknown | undefined;
+  /** Output produced by the external runner */
+  output?: unknown | undefined;
+  /** Ground truth. Defaults to the dataset item groundTruth. */
+  groundTruth?: unknown | undefined;
+  /** Failure info when the item run failed */
+  error?:
+    | ({
+        message: string;
+        stack?: string | undefined;
+        code?: string | undefined;
+      } | null)
+    | undefined;
+  startedAt?: Date | undefined;
+  completedAt?: Date | undefined;
+  traceId?: string | undefined;
+  /** Externally computed scores, persisted keyed by runId = experimentId */
+  scores?:
+    | {
+        scorerId: string;
+        scorerName?: string | undefined;
+        score: number;
+        reason?: string | undefined;
+        metadata?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+      }[]
+    | undefined;
+};
+
+export type PostDatasetsDatasetIdExperimentsExperimentIdResults_Response = Shared_Type_143;
+
+export type PostDatasetsDatasetIdExperimentsExperimentIdResults_Request = Simplify<
+  (PostDatasetsDatasetIdExperimentsExperimentIdResults_PathParams extends never
+    ? {}
+    : { params: PostDatasetsDatasetIdExperimentsExperimentIdResults_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostDatasetsDatasetIdExperimentsExperimentIdResults_Body extends never
+      ? {}
+      : {} extends PostDatasetsDatasetIdExperimentsExperimentIdResults_Body
+        ? { body?: PostDatasetsDatasetIdExperimentsExperimentIdResults_Body }
+        : { body: PostDatasetsDatasetIdExperimentsExperimentIdResults_Body })
+>;
+
+export interface PostDatasetsDatasetIdExperimentsExperimentIdResults_RouteContract {
+  pathParams: PostDatasetsDatasetIdExperimentsExperimentIdResults_PathParams;
+  queryParams: never;
+  body: PostDatasetsDatasetIdExperimentsExperimentIdResults_Body;
+  request: PostDatasetsDatasetIdExperimentsExperimentIdResults_Request;
+  response: PostDatasetsDatasetIdExperimentsExperimentIdResults_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /datasets/:datasetId/experiments/:experimentId/finalize
+// ============================================================================
+export type PostDatasetsDatasetIdExperimentsExperimentIdFinalize_PathParams =
+  PostDatasetsDatasetIdExperimentsExperimentIdResults_PathParams;
+
+export type PostDatasetsDatasetIdExperimentsExperimentIdFinalize_Response = Shared_Type_141;
+
+export type PostDatasetsDatasetIdExperimentsExperimentIdFinalize_Request = Simplify<
+  (PostDatasetsDatasetIdExperimentsExperimentIdFinalize_PathParams extends never
+    ? {}
+    : { params: PostDatasetsDatasetIdExperimentsExperimentIdFinalize_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface PostDatasetsDatasetIdExperimentsExperimentIdFinalize_RouteContract {
+  pathParams: PostDatasetsDatasetIdExperimentsExperimentIdFinalize_PathParams;
+  queryParams: never;
+  body: never;
+  request: PostDatasetsDatasetIdExperimentsExperimentIdFinalize_Request;
+  response: PostDatasetsDatasetIdExperimentsExperimentIdFinalize_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /datasets/:datasetId/experiments/:experimentId
+// ============================================================================
+export type GetDatasetsDatasetIdExperimentsExperimentId_PathParams =
+  PostDatasetsDatasetIdExperimentsExperimentIdResults_PathParams;
 
 export type GetDatasetsDatasetIdExperimentsExperimentId_Response = Shared_Type_141 | null;
 
@@ -18186,7 +18426,7 @@ export interface GetDatasetsDatasetIdExperimentsExperimentId_RouteContract {
 // Route: GET /datasets/:datasetId/experiments/:experimentId/results
 // ============================================================================
 export type GetDatasetsDatasetIdExperimentsExperimentIdResults_PathParams =
-  GetDatasetsDatasetIdExperimentsExperimentId_PathParams;
+  PostDatasetsDatasetIdExperimentsExperimentIdResults_PathParams;
 
 export type GetDatasetsDatasetIdExperimentsExperimentIdResults_QueryParams = GetScoresRunRunId_QueryParams;
 
@@ -18239,7 +18479,8 @@ export type PatchDatasetsDatasetIdExperimentsExperimentIdResultsResultId_Body = 
   comment?: (string | null) | undefined;
 };
 
-export type PatchDatasetsDatasetIdExperimentsExperimentIdResultsResultId_Response = Shared_Type_143;
+export type PatchDatasetsDatasetIdExperimentsExperimentIdResultsResultId_Response =
+  PostDatasetsDatasetIdExperimentsExperimentIdResults_Response;
 
 export type PatchDatasetsDatasetIdExperimentsExperimentIdResultsResultId_Request = Simplify<
   (PatchDatasetsDatasetIdExperimentsExperimentIdResultsResultId_PathParams extends never
@@ -20106,7 +20347,15 @@ export type GetAgentControllerControllerIdSessionsResourceId_Response = {
     | undefined;
   tokenUsage?:
     | {
-        [key: string]: unknown;
+        promptTokens: number;
+        completionTokens: number;
+        totalTokens: number;
+        reasoningTokens?: number | undefined;
+        cachedInputTokens?: number | undefined;
+        cacheCreationInputTokens?: number | undefined;
+        cacheCreationInputTokens5m?: number | undefined;
+        cacheCreationInputTokens1h?: number | undefined;
+        raw?: unknown | undefined;
       }
     | undefined;
   settings?:
@@ -21687,6 +21936,9 @@ export interface RouteTypes {
   'GET /experiments/review-summary': GetExperimentsReviewSummary_RouteContract;
   'GET /datasets/:datasetId/experiments': GetDatasetsDatasetIdExperiments_RouteContract;
   'POST /datasets/:datasetId/experiments': PostDatasetsDatasetIdExperiments_RouteContract;
+  'POST /datasets/:datasetId/experiments/:experimentId/items/:itemId/run': PostDatasetsDatasetIdExperimentsExperimentIdItemsItemIdRun_RouteContract;
+  'POST /datasets/:datasetId/experiments/:experimentId/results': PostDatasetsDatasetIdExperimentsExperimentIdResults_RouteContract;
+  'POST /datasets/:datasetId/experiments/:experimentId/finalize': PostDatasetsDatasetIdExperimentsExperimentIdFinalize_RouteContract;
   'GET /datasets/:datasetId/experiments/:experimentId': GetDatasetsDatasetIdExperimentsExperimentId_RouteContract;
   'GET /datasets/:datasetId/experiments/:experimentId/results': GetDatasetsDatasetIdExperimentsExperimentIdResults_RouteContract;
   'PATCH /datasets/:datasetId/experiments/:experimentId/results/:resultId': PatchDatasetsDatasetIdExperimentsExperimentIdResultsResultId_RouteContract;
@@ -22145,8 +22397,15 @@ export interface Client {
   '/datasets/:datasetId/experiments/:experimentId': {
     GET: GetDatasetsDatasetIdExperimentsExperimentId_RouteContract;
   };
+  '/datasets/:datasetId/experiments/:experimentId/finalize': {
+    POST: PostDatasetsDatasetIdExperimentsExperimentIdFinalize_RouteContract;
+  };
+  '/datasets/:datasetId/experiments/:experimentId/items/:itemId/run': {
+    POST: PostDatasetsDatasetIdExperimentsExperimentIdItemsItemIdRun_RouteContract;
+  };
   '/datasets/:datasetId/experiments/:experimentId/results': {
     GET: GetDatasetsDatasetIdExperimentsExperimentIdResults_RouteContract;
+    POST: PostDatasetsDatasetIdExperimentsExperimentIdResults_RouteContract;
   };
   '/datasets/:datasetId/experiments/:experimentId/results/:resultId': {
     PATCH: PatchDatasetsDatasetIdExperimentsExperimentIdResultsResultId_RouteContract;
