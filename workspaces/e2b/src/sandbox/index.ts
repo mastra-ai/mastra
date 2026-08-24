@@ -1033,9 +1033,8 @@ export class E2BSandbox extends MastraSandbox {
     if (!error) return false;
     const errorStr = String(error);
     return (
-      errorStr.includes('sandbox was not found') ||
+      /\b(?:paused\s+)?sandbox(?:\s+\S+)?\s+(?:was\s+)?not found\b/i.test(errorStr) ||
       errorStr.includes('Sandbox is probably not running') ||
-      errorStr.includes('Sandbox not found') ||
       errorStr.includes('sandbox has been killed')
     );
   }

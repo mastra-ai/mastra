@@ -2933,6 +2933,7 @@ export interface ExperimentResult {
   input: unknown;
   output: unknown | null;
   groundTruth: unknown | null;
+  metadata: Record<string, unknown> | null;
   error: { message: string; stack?: string; code?: string } | null;
   startedAt: Date;
   completedAt: Date;
@@ -3026,6 +3027,7 @@ export interface AddExperimentResultInput {
   input: unknown;
   output: unknown | null;
   groundTruth: unknown | null;
+  metadata?: Record<string, unknown> | null;
   error: { message: string; stack?: string; code?: string } | null;
   startedAt: Date;
   completedAt: Date;

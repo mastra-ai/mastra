@@ -1,4 +1,3 @@
-import type { Client, InValue } from '@libsql/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   MCPServersStorage,
@@ -25,6 +24,7 @@ import type {
 } from '@mastra/core/storage/domains/mcp-servers';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
+import type { SqliteClient as Client, SqliteInValue as InValue } from '../../db/client';
 import { buildSelectColumns } from '../../db/utils';
 
 export class MCPServersLibSQL extends MCPServersStorage {

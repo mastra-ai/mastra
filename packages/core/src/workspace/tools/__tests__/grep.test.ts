@@ -8,6 +8,40 @@ import { LocalFilesystem } from '../../filesystem';
 import { Workspace } from '../../workspace';
 import { createWorkspaceTools } from '../tools';
 
+const GREP_FILESYSTEM_CONCURRENCY = 8;
+
+class DelayedLocalFilesystem extends LocalFilesystem {
+  private inFlightReaddir = 0;
+  private inFlightReadFile = 0;
+  maxInFlightReaddir = 0;
+  maxInFlightReadFile = 0;
+  readFileCalls: string[] = [];
+
+  async readdir(inputPath: string, options?: Parameters<LocalFilesystem['readdir']>[1]) {
+    this.inFlightReaddir++;
+    this.maxInFlightReaddir = Math.max(this.maxInFlightReaddir, this.inFlightReaddir);
+    try {
+      await new Promise(resolve => setTimeout(resolve, inputPath.endsWith('slow') ? 15 : 5));
+      return await super.readdir(inputPath, options);
+    } finally {
+      this.inFlightReaddir--;
+    }
+  }
+
+  async readFile(inputPath: string, options?: Parameters<LocalFilesystem['readFile']>[1]) {
+    this.readFileCalls.push(inputPath);
+    this.inFlightReadFile++;
+    this.maxInFlightReadFile = Math.max(this.maxInFlightReadFile, this.inFlightReadFile);
+    try {
+      const delay = inputPath.includes('slow') ? 15 : 5;
+      await new Promise(resolve => setTimeout(resolve, delay));
+      return await super.readFile(inputPath, options);
+    } finally {
+      this.inFlightReadFile--;
+    }
+  }
+}
+
 describe('workspace_grep', () => {
   let tempDir: string;
 
@@ -517,6 +551,51 @@ describe('workspace_grep', () => {
     expect(result).toContain('src/app.ts');
     expect(result).not.toContain('style.css');
     expect(result).not.toContain('lib/');
+  });
+
+  it('should bound concurrent directory listings and file reads while preserving output order', async () => {
+    for (const directory of ['fast-a', 'slow', 'fast-b']) {
+      await fs.mkdir(path.join(tempDir, directory), { recursive: true });
+      for (let index = 0; index < 4; index++) {
+        await fs.writeFile(path.join(tempDir, directory, `file-${index}.ts`), `target ${directory} ${index}`);
+      }
+    }
+
+    const filesystem = new DelayedLocalFilesystem({ basePath: tempDir });
+    const workspace = new Workspace({ filesystem });
+    const tools = await createWorkspaceTools(workspace);
+
+    const result = (await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute(
+      { pattern: 'target' },
+      { workspace },
+    )) as string;
+
+    expect(result).toContain('12 matches across 12 files');
+    expect(filesystem.maxInFlightReaddir).toBeGreaterThan(1);
+    expect(filesystem.maxInFlightReaddir).toBeLessThanOrEqual(GREP_FILESYSTEM_CONCURRENCY);
+    expect(filesystem.maxInFlightReadFile).toBeGreaterThan(1);
+    expect(filesystem.maxInFlightReadFile).toBeLessThanOrEqual(GREP_FILESYSTEM_CONCURRENCY);
+    expect(result.indexOf('./fast-a/file-0.ts')).toBeLessThan(result.indexOf('./fast-b/file-0.ts'));
+    expect(result.indexOf('./fast-b/file-0.ts')).toBeLessThan(result.indexOf('./slow/file-0.ts'));
+  });
+
+  it('should stop scheduling file reads after reaching the internal global cap', async () => {
+    const lines = Array.from({ length: 100 }, (_, i) => `line_${i}`).join('\n');
+    for (let index = 0; index < 24; index++) {
+      await fs.writeFile(path.join(tempDir, `file-${String(index).padStart(2, '0')}.ts`), lines);
+    }
+
+    const filesystem = new DelayedLocalFilesystem({ basePath: tempDir });
+    const workspace = new Workspace({ filesystem });
+    const tools = await createWorkspaceTools(workspace);
+
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({ pattern: 'line_' }, { workspace });
+
+    expect(result).toContain('1000 matches across 10 files');
+    expect(result).toContain('(truncated at 1000)');
+    const searchedFileCalls = filesystem.readFileCalls.filter(filePath => filePath.endsWith('.ts'));
+    expect(searchedFileCalls.length).toBeGreaterThanOrEqual(10);
+    expect(searchedFileCalls.length).toBeLessThanOrEqual(16);
   });
 
   it('should truncate at internal global cap', async () => {

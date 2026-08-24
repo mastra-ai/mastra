@@ -321,6 +321,43 @@ describe('ChatChannelOutputProcessor', () => {
       expect(await drainStreamingPlan(plan)).toEqual(['Hel', 'lo!']);
     });
 
+    it('does not open a StreamingPlan for whitespace and zero-width-only text', async () => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: true });
+      await drive(
+        channels,
+        [
+          { type: 'text-delta', payload: { text: ' \n\t' } },
+          { type: 'text-delta', payload: { text: '\u200B\u200C\u200D\uFEFF' } },
+          { type: 'step-finish', payload: {} },
+          { type: 'finish', payload: {} },
+        ],
+        chatThread,
+      );
+
+      expect(calls.filter(c => c.kind === 'post')).toEqual([]);
+    });
+
+    it('opens a StreamingPlan on meaningful text and preserves surrounding whitespace chunks', async () => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: true });
+      await drive(
+        channels,
+        [
+          { type: 'text-delta', payload: { text: ' \u200B ' } },
+          { type: 'text-delta', payload: { text: 'Hello' } },
+          { type: 'text-delta', payload: { text: ' ' } },
+          { type: 'text-delta', payload: { text: 'world' } },
+          { type: 'step-finish', payload: {} },
+          { type: 'finish', payload: {} },
+        ],
+        chatThread,
+      );
+
+      const posts = calls.filter(c => c.kind === 'post');
+      expect(posts).toHaveLength(1);
+      const plan = (posts[0] as Extract<Call, { kind: 'post' }>).arg as any;
+      expect(await drainStreamingPlan(plan)).toEqual([' \u200B ', 'Hello', ' ', 'world']);
+    });
+
     it('forwards updateIntervalMs onto the StreamingPlan options', async () => {
       const { channels, calls, chatThread } = makeChannels({ streaming: { updateIntervalMs: 250 } });
       await drive(
@@ -342,10 +379,11 @@ describe('ChatChannelOutputProcessor', () => {
         channels,
         [
           { type: 'text-delta', payload: { text: 'first' } },
+          { type: 'finish', payload: {} },
           { type: 'step-finish', payload: { stepResult: { isContinued: true } } },
           { type: 'text-delta', payload: { text: 'second' } },
-          { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
           { type: 'finish', payload: {} },
+          { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
         ],
         chatThread,
       );
@@ -478,6 +516,48 @@ describe('ChatChannelOutputProcessor', () => {
       // 2 tools × 2 updates each (in_progress + complete) → 4 chunks total.
       expect(taskUpdates).toHaveLength(4);
       expect(new Set(taskUpdates.map(t => t.id))).toEqual(new Set(['t1', 't2']));
+    });
+
+    it("'grouped': keeps one plan open across per-step finish chunks", async () => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: true, toolDisplay: 'grouped' });
+      await drive(
+        channels,
+        [
+          { type: 'text-delta', payload: { text: 'first ' } },
+          {
+            type: 'tool-call',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } },
+          },
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' }, result: 'rainy' },
+          },
+          { type: 'finish', payload: {} },
+          { type: 'step-finish', payload: { stepResult: { isContinued: true } } },
+          { type: 'text-delta', payload: { text: 'second' } },
+          {
+            type: 'tool-call',
+            payload: { toolCallId: 't2', toolName: 'weather', args: { city: 'LA' } },
+          },
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't2', toolName: 'weather', args: { city: 'LA' }, result: 'sunny' },
+          },
+          { type: 'finish', payload: {} },
+          { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+        ],
+        chatThread,
+      );
+
+      const posts = calls.filter(c => c.kind === 'post');
+      expect(posts).toHaveLength(1);
+      const drained = await drainStreamingPlan((posts[0] as Extract<Call, { kind: 'post' }>).arg);
+      expect(drained.filter((piece): piece is string => typeof piece === 'string').join('')).toBe('first second');
+      const taskUpdates = drained.filter(
+        (piece): piece is { type: 'task_update'; id: string } =>
+          typeof piece === 'object' && (piece as any).type === 'task_update',
+      );
+      expect(new Set(taskUpdates.map(update => update.id))).toEqual(new Set(['t1', 't2']));
     });
 
     it("flushes pending OM tasks as 'complete' before closing the session", async () => {
