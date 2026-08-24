@@ -1575,19 +1575,21 @@ export class DurableAgent<
   /**
    * Abort a run by id.
    *
-   * Same gap as {@link abortThreadStream}. A run that has not started yet is
-   * left to the base implementation, which records the intent the durable entry
-   * points consult when the run starts.
+   * Same gap as {@link abortThreadStream}. The abort request goes out whether
+   * or not this process knows the run: a durable run is routinely executed by
+   * another process, which is the one holding the controller that has to be
+   * flipped. A request nobody is listening for is a no-op, exactly like
+   * aborting a run that already finished, and a run that has not started yet
+   * is still covered by the intent the base implementation records.
    */
   abortRunStream(runId: string): boolean {
     const aborted = super.abortRunStream(runId);
-    if (!this.#isRunExecuting(runId)) return aborted;
-
     this.#abortDurableRun(runId);
-    return true;
+
+    return aborted || this.#isRunExecuting(runId);
   }
 
-  /** Whether `runId` is under way rather than queued, started or not by this process. */
+  /** Whether this process can see `runId` executing, in its registries or on the thread runtime. */
   #isRunExecuting(runId: string): boolean {
     return (
       this.#runRegistry.get(runId) !== undefined ||
@@ -1600,7 +1602,8 @@ export class DurableAgent<
    * Stop `runId` wherever it is executing: the controller this process holds
    * for it, if it holds one, plus the abort request that reaches the process
    * actually running the steps. Mirrors the `abort()` handed out with a stream
-   * result.
+   * result, which flips the same pair without gating on what this process
+   * happens to know about the run.
    */
   #abortDurableRun(runId: string): void {
     const controller = (this.#runRegistry.get(runId) ?? globalRunRegistry.get(runId))?.abortController;
@@ -1611,6 +1614,7 @@ export class DurableAgent<
     // abort synchronously and a failed publish is logged, not thrown.
     void this.requestRemoteAbort(runId);
   }
+
   /**
    * Abort a durable run, in this process and in whichever process is executing it.
    *

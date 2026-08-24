@@ -18,9 +18,11 @@ import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
 
-function createAbortableModel() {
+/** @param onCall - invoked as soon as the model starts streaming, to synchronize on a live run. */
+function createAbortableModel(onCall?: () => void) {
   return new MockLanguageModelV2({
     doStream: async ({ abortSignal }: { abortSignal?: AbortSignal }) => {
+      onCall?.();
       // If the caller already aborted before the call landed, fail fast with
       // the canonical AbortError name so the durable abort heuristic fires.
       if (abortSignal?.aborted) {
@@ -255,18 +257,24 @@ describe('DurableAgent abort signal', () => {
     // A durable run keeps its controller on the durable run registry, not in
     // the thread runtime's prepared-run map, so the base implementation reaches
     // neither: without the durable abort request the run streams on.
+    // Resolves when the model is actually streaming, so the abort below lands
+    // on a run under way rather than on one that has not started yet.
+    let streaming: () => void;
+    const modelCalled = new Promise<void>(resolve => {
+      streaming = resolve;
+    });
     const baseAgent = new Agent({
       id: 'abort-thread-stream-agent',
       name: 'Abort Thread Stream Agent',
       instructions: 'Test',
-      model: createAbortableModel() as LanguageModelV2,
+      model: createAbortableModel(() => streaming()) as LanguageModelV2,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
     const threadId = 'abort-thread-stream-thread';
     const resourceId = 'abort-thread-stream-resource';
 
-    let abortPayload: unknown;
+    let abortPayload: { steps: { finishReason?: string }[] } | undefined;
     const { output, cleanup } = await durableAgent.stream('Go', {
       memory: { thread: threadId, resource: resourceId },
       onAbort: data => {
@@ -274,31 +282,32 @@ describe('DurableAgent abort signal', () => {
       },
     });
 
-    // Give the workflow a tick to subscribe + call doStream before we abort.
-    await new Promise(r => setTimeout(r, 10));
+    await modelCalled;
     expect(durableAgent.abortThreadStream({ threadId, resourceId })).toBe(true);
 
-    try {
-      await output.consumeStream();
-    } catch {
-      // expected — the run never produced a normal finish
-    }
+    // Awaited without a catch: the run has to end through the abort path,
+    // rather than by surfacing some unrelated stream failure.
+    await output.consumeStream();
 
-    expect(abortPayload).toBeDefined();
+    expect(abortPayload?.steps.at(-1)?.finishReason).toBe('abort');
 
     cleanup();
   });
 
   it('abortRunStream stops a durable run that is already executing', async () => {
+    let streaming: () => void;
+    const modelCalled = new Promise<void>(resolve => {
+      streaming = resolve;
+    });
     const baseAgent = new Agent({
       id: 'abort-run-stream-agent',
       name: 'Abort Run Stream Agent',
       instructions: 'Test',
-      model: createAbortableModel() as LanguageModelV2,
+      model: createAbortableModel(() => streaming()) as LanguageModelV2,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    let abortPayload: unknown;
+    let abortPayload: { steps: { finishReason?: string }[] } | undefined;
     const { output, runId, cleanup } = await durableAgent.stream('Go', {
       memory: { thread: 'abort-run-stream-thread', resource: 'abort-run-stream-resource' },
       onAbort: data => {
@@ -306,16 +315,14 @@ describe('DurableAgent abort signal', () => {
       },
     });
 
-    await new Promise(r => setTimeout(r, 10));
+    await modelCalled;
     expect(durableAgent.abortRunStream(runId)).toBe(true);
 
-    try {
-      await output.consumeStream();
-    } catch {
-      // expected — the run never produced a normal finish
-    }
+    // Awaited without a catch: the run has to end through the abort path,
+    // rather than by surfacing some unrelated stream failure.
+    await output.consumeStream();
 
-    expect(abortPayload).toBeDefined();
+    expect(abortPayload?.steps.at(-1)?.finishReason).toBe('abort');
 
     cleanup();
   });
