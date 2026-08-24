@@ -484,7 +484,6 @@ export async function runStreamingDriver({
     }
 
     if (chunk.type === 'finish') {
-      await closeSession();
       tracker.reset();
       continue;
     }

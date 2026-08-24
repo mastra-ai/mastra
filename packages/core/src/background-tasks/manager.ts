@@ -334,70 +334,53 @@ export class BackgroundTaskManager {
   async cancel(taskId: string): Promise<void> {
     if (this.initPromise) await this.initPromise;
     const storage = await this.getStorage();
-    const task = await storage.getTask(taskId);
+    let task = await storage.getTask(taskId);
     if (!task) {
       throw new Error(`Task not found: ${taskId}`);
     }
 
-    if (
-      task.status === 'completed' ||
-      task.status === 'failed' ||
-      task.status === 'cancelled' ||
-      task.status === 'timed_out'
-    ) {
-      return; // no-op for terminal states
-    }
+    while (true) {
+      if (
+        task.status === 'completed' ||
+        task.status === 'failed' ||
+        task.status === 'cancelled' ||
+        task.status === 'timed_out'
+      ) {
+        return; // no-op for terminal states
+      }
 
-    if (task.status === 'pending') {
-      await storage.updateTask(taskId, { status: 'cancelled', completedAt: new Date() });
-      const cancelledTask = await storage.getTask(taskId);
-      if (cancelledTask) await this.publishLifecycleEvent('task.cancelled', cancelledTask);
-      this.deregisterTaskContext(taskId);
-      return;
-    }
+      const previousStatus = task.status;
+      const cancelled = await storage.updateTask(
+        taskId,
+        { status: 'cancelled', completedAt: new Date() },
+        { expectedStatus: previousStatus },
+      );
+      if (!cancelled) {
+        task = await storage.getTask(taskId);
+        if (!task) return;
+        continue;
+      }
 
-    if (task.status === 'suspended') {
-      // No active executor or AbortController to tear down — the task is
-      // sitting on a workflow snapshot. Flip storage, publish, and tell the
-      // workflow run to cancel so the snapshot is cleaned up too.
-      await storage.updateTask(taskId, { status: 'cancelled', completedAt: new Date() });
-      if (this.#mastra) {
-        try {
-          const workflow = this.#mastra.__getInternalWorkflow(BACKGROUND_TASK_WORKFLOW_ID);
-          const wrapper = await workflow.createRun({ runId: taskId });
-          await wrapper.cancel();
-        } catch (err) {
-          this.#mastra?.getLogger?.()?.warn(`background-task workflow cancel failed for ${taskId}:`, err as any);
+      if (previousStatus === 'running') {
+        // Abort the running tool
+        const controller = this.activeAbortControllers.get(taskId);
+        if (controller) {
+          controller.abort(new Error('Task cancelled'));
+          this.activeAbortControllers.delete(taskId);
         }
       }
-      const cancelledTask = await storage.getTask(taskId);
-      if (cancelledTask) await this.publishLifecycleEvent('task.cancelled', cancelledTask);
-      this.deregisterTaskContext(taskId);
-      return;
-    }
 
-    if (task.status === 'running') {
-      await storage.updateTask(taskId, { status: 'cancelled', completedAt: new Date() });
-
-      // Abort the running tool
-      const controller = this.activeAbortControllers.get(taskId);
-      if (controller) {
-        controller.abort(new Error('Task cancelled'));
-        this.activeAbortControllers.delete(taskId);
-      }
-
-      // Also cancel the workflow run so workflow storage reflects the
-      // cancellation (run status flips to 'canceled' and the workflow's
-      // abortSignal fires — redundant with the local AbortController above
-      // but keeps run history clean and propagates cross-process via the
-      // workflow.cancel pubsub event).
-      if (this.#mastra) {
-        try {
-          const workflow = this.#mastra.__getInternalWorkflow(BACKGROUND_TASK_WORKFLOW_ID);
-          const wrapper = await workflow.createRun({ runId: taskId });
-          await wrapper.cancel();
-        } catch (err) {
-          this.#mastra?.getLogger?.()?.warn(`background-task workflow cancel failed for ${taskId}:`, err as any);
+      if (previousStatus === 'running' || previousStatus === 'suspended') {
+        // Cancel the workflow run so workflow storage reflects the
+        // cancellation and any stored suspended snapshot is cleaned up.
+        if (this.#mastra) {
+          try {
+            const workflow = this.#mastra.__getInternalWorkflow(BACKGROUND_TASK_WORKFLOW_ID);
+            const wrapper = await workflow.createRun({ runId: taskId });
+            await wrapper.cancel();
+          } catch (err) {
+            this.#mastra?.getLogger?.()?.warn(`background-task workflow cancel failed for ${taskId}:`, err as any);
+          }
         }
       }
 
@@ -405,12 +388,15 @@ export class BackgroundTaskManager {
       if (cancelledTask) await this.publishLifecycleEvent('task.cancelled', cancelledTask);
       this.deregisterTaskContext(taskId);
 
-      // Also publish cancel on dispatch topic for distributed worker abort
-      await this.pubsub.publish(TOPIC_DISPATCH, {
-        type: 'task.cancel',
-        data: { taskId },
-        runId: taskId,
-      });
+      if (previousStatus === 'running') {
+        // Also publish cancel on dispatch topic for distributed worker abort
+        await this.pubsub.publish(TOPIC_DISPATCH, {
+          type: 'task.cancel',
+          data: { taskId },
+          runId: taskId,
+        });
+      }
+      return;
     }
   }
 
@@ -1023,12 +1009,18 @@ export class BackgroundTaskManager {
     // leaves the task `pending`, so the worker that picks up the redelivery
     // still gets the full retry budget.
     const retryCount = task.status === 'running' ? deliveryAttempt - 1 : task.retryCount;
-    await storage.updateTask(taskId, { status: 'running', startedAt: new Date(), retryCount });
+    const started = await storage.updateTask(
+      taskId,
+      { status: 'running', startedAt: new Date(), retryCount },
+      { expectedStatus: task.status },
+    );
+    if (!started) return true;
     if (this.shuttingDown) return false;
 
     // Publish running lifecycle event (fan-out, for stream consumers)
     const runningTask = await storage.getTask(taskId);
-    if (runningTask) await this.publishLifecycleEvent('task.running', runningTask);
+    if (!runningTask || runningTask.status !== 'running') return true;
+    await this.publishLifecycleEvent('task.running', runningTask);
     if (this.shuttingDown) return false;
 
     // Fire-and-forget the workflow run; the workflow step body owns
@@ -1084,12 +1076,17 @@ export class BackgroundTaskManager {
       return true;
     }
 
-    await storage.updateTask(taskId, {
-      status: 'running',
-      startedAt: new Date(),
-      suspendPayload: undefined,
-      suspendedAt: undefined,
-    });
+    const resumed = await storage.updateTask(
+      taskId,
+      {
+        status: 'running',
+        startedAt: new Date(),
+        suspendPayload: undefined,
+        suspendedAt: undefined,
+      },
+      { expectedStatus: 'suspended' },
+    );
+    if (!resumed) return true;
     const resumedTask = await storage.getTask(taskId);
     if (resumedTask) {
       await this.publishLifecycleEvent('task.resumed', resumedTask);
