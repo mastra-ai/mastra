@@ -20,35 +20,6 @@ No dirs/globs, no unrelated files, no direct `stryker run`, no
 tests/fixtures/generated/config/docs. Strengthen the TDD/BDD tests to kill
 survivors (never weaken assertions); report truly equivalent/unreachable ones.
 
-A survivor in a module-level initializer that _throws_ when mutated (e.g. an
-`Intl.DateTimeFormat` option) cannot be killed: the import fails, so the suite
-reports zero tests instead of a failing one and Stryker sees no kill. Report
-those rather than moving the initializer into the function to chase the score.
-
-recharts lays out nothing under jsdom — `ResponsiveContainer` renders an empty
-box, so no axis, series, tooltip or click handler inside a chart is reachable
-from a rendered component. Logic that only runs through those callbacks belongs
-in a sibling module of plain functions (see `flame-graph-data.ts`,
-`latency-card-view.utils.ts`), which is both testable and a cleaner split. What
-is left inside the chart is configuration, and its survivors are expected.
-
-A test that throws asynchronously still passes under vitest but crashes
-Stryker's runner with `Cannot convert object to primitive value`. jsdom ships no
-`PointerEvent`, which Base UI's Checkbox constructs on click — stub it in any
-test that clicks one. Base UI opens a popover on `fireEvent.click`, but React
-turns a `pointerover` into the `onPointerEnter` a component listens for, so fire
-that rather than `fireEvent.pointerEnter` (which drops the coordinates).
-
-`code-editor.tsx` is mostly CodeMirror theme objects, and its tests mock
-`@uiw/react-codemirror` — so nothing inside those themes is observable and their
-survivors are expected. What is worth pinning there is which extensions the
-editor builds, and the frame it draws around them.
-
-Base UI's `ScrollArea.Scrollbar` and `Corner` also render nothing under jsdom —
-they need real layout to know there is any overflow — so the scrollbars a
-ScrollArea asks for, and their own styling, cannot be reached from a rendered
-component either.
-
 Rules:
 
 - Drive the real @mastra/client-js + React Query stack; only mock the network.
