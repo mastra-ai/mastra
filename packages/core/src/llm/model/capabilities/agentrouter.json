@@ -1,0 +1,4 @@
+{
+  "attachment": ["claude-opus-4-8", "claude-opus-5", "gpt-5.6-sol"],
+  "structuredOutput": ["gpt-5.6-sol"]
+}

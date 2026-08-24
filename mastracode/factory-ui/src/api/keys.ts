@@ -52,12 +52,18 @@ export const queryKeys = {
     ['factory', 'decisions', githubProjectId ?? null] as const,
   factoryDecisions: (githubProjectId: string | undefined, statusKey: string) =>
     ['factory', 'decisions', githubProjectId ?? null, statusKey] as const,
+  factoryAttentionRoot: (factoryProjectId: string | undefined) =>
+    ['factory', 'attention', factoryProjectId ?? null] as const,
+  factoryAttention: (factoryProjectId: string | undefined, view: string, limit: number) =>
+    [...queryKeys.factoryAttentionRoot(factoryProjectId), view, limit] as const,
   factoryAudit: (githubProjectId: string | undefined, group: string, actorKey?: string) =>
     ['factory', 'audit', githubProjectId ?? null, group, actorKey ?? null] as const,
   factoryAuditPortal: () => ['factory', 'audit-portal'] as const,
   sessions: (projectRepositoryId: string | undefined) => ['sessions', projectRepositoryId ?? null] as const,
   workspaces: (projectRepositoryId: string | undefined) => ['sessions', projectRepositoryId ?? null] as const,
   userSession: (sessionId: string | undefined) => ['user-session', sessionId ?? null] as const,
+  workspaceAttention: (projectRepositoryId: string | undefined, sessionKind: 'factory' | 'user') =>
+    ['workspace-attention', projectRepositoryId ?? null, sessionKind] as const,
   ensureSandbox: (projectRepositoryId: string | undefined) => ['ensure-sandbox', projectRepositoryId ?? null] as const,
   ensureSandboxProgress: (projectRepositoryId: string | undefined) =>
     ['ensure-sandbox-progress', projectRepositoryId ?? null] as const,

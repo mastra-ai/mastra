@@ -82,6 +82,7 @@ function cardPrimaryAction({
 
 export function WorkItemCard({
   item,
+  highlighted,
   columnStage,
   allItems,
   activityPage,
@@ -106,6 +107,7 @@ export function WorkItemCard({
   onRemove,
 }: {
   item: WorkItem;
+  highlighted: boolean;
   columnStage: BoardStageId;
   allItems: WorkItem[];
   activityPage?: AuditEventPage;
@@ -179,12 +181,6 @@ export function WorkItemCard({
       : (runSpec?.actions.find(action => action.role === proposal.role)?.label ??
         defaultRunAction?.label ??
         'Start run');
-  // A run parked on a PR that has since closed or merged is dead work nobody
-  // needs to answer. It stays in the menu so it can still be dismissed, but it
-  // does not get to claim the status row and ask for a decision.
-  const proposalNeedsAnswer =
-    proposal !== undefined &&
-    (item.source !== 'github-pr' || ['open', 'draft'].includes(pullRequestStatusForItem(item)));
 
   const relatedItems = relatedWorkItems(item, allItems);
   const labels = metadataLabels(item.metadata);
@@ -195,7 +191,7 @@ export function WorkItemCard({
         ? { label: 'Open session', affordance: 'open' }
         : { label: primaryAction.label, affordance: 'run' },
     proposal:
-      proposal === undefined || proposedRunLabel === undefined || !proposalNeedsAnswer
+      proposal === undefined || proposedRunLabel === undefined
         ? undefined
         : { label: proposedRunLabel, decisionId: proposal.id },
     moving:
@@ -222,6 +218,8 @@ export function WorkItemCard({
         aria-busy={evaluating || runPending || undefined}
         data-testid="work-item-card"
         data-related={relatedItems.length > 0 ? 'true' : undefined}
+        data-work-item-id={item.id}
+        data-highlighted={highlighted || undefined}
         onDragStart={event => {
           if (!evaluating) setDragPayload(event, { kind: 'work-item', id: item.id, fromStage: columnStage });
         }}
@@ -229,6 +227,7 @@ export function WorkItemCard({
           'group relative flex flex-col gap-3 rounded-xl border border-border1/50 bg-neutral6/5 p-3 outline-none transition-colors hover:bg-surface3',
           evaluating ? 'cursor-wait' : 'cursor-grab active:cursor-grabbing',
           runPending && 'opacity-70',
+          highlighted && 'border-warning1/40 bg-warning1/5 ring-1 ring-warning1/30',
         )}
       >
         {threadSession !== undefined ? (

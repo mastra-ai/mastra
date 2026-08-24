@@ -13,7 +13,7 @@ import { MastraFGAPermissions, getWorkflowFGAResourceId, requireFGA } from '../a
 import type { ActorSignal } from '../auth/ee';
 import { MastraBase } from '../base';
 import { RequestContext } from '../di';
-import { ErrorCategory, ErrorDomain, MastraError, getErrorFromUnknown } from '../error';
+import { ErrorCategory, ErrorDomain, MastraError, MastraNonRetryableError, getErrorFromUnknown } from '../error';
 import type { MastraScorers } from '../evals';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
@@ -2540,6 +2540,14 @@ export class Workflow<
     disableScorers?: boolean;
     /** Optional pubsub instance for streaming events. If not provided, a new EventEmitterPubSub is created. */
     pubsub?: PubSub;
+    /**
+     * Overrides the workflow-wide `shouldPersistSnapshot` option for this run only.
+     * Used for transient runs that must never touch storage even when the workflow
+     * persists normally (e.g. per-chunk agent output-processor runs, #19605).
+     */
+    shouldPersistSnapshot?: WorkflowOptions['shouldPersistSnapshot'];
+    /** Overrides the workflow-wide tracing policy for this run only. */
+    tracingPolicy?: TracingPolicy;
   }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext>> {
     if (this.stepFlow.length === 0) {
       throw new Error(
@@ -2576,8 +2584,11 @@ export class Workflow<
         retryConfig: this.retryConfig,
         serializedStepGraph: this.serializedStepGraph,
         disableScorers: options?.disableScorers,
-        cleanup: () => this.#runs.delete(runIdToUse),
-        tracingPolicy: this.#options?.tracingPolicy,
+        cleanup: () => {
+          this.#runs.delete(runIdToUse);
+          this.executionEngine.clearRunPersistenceOverride(runIdToUse);
+        },
+        tracingPolicy: options?.tracingPolicy ?? this.#options?.tracingPolicy,
         workflowSteps: this.steps,
         validateInputs: this.#options?.validateInputs,
         workflowEngineType: this.engineType,
@@ -2586,7 +2597,11 @@ export class Workflow<
 
     this.#runs.set(runIdToUse, run);
 
-    const shouldPersistSnapshot = this.#options.shouldPersistSnapshot({
+    if (options?.shouldPersistSnapshot) {
+      this.executionEngine.setRunPersistenceOverride(runIdToUse, options.shouldPersistSnapshot);
+    }
+
+    const shouldPersistSnapshot = (options?.shouldPersistSnapshot ?? this.#options.shouldPersistSnapshot)({
       workflowStatus: run.workflowRunStatus,
       stepResults: {},
     });
@@ -2909,6 +2924,13 @@ export class Workflow<
     }
 
     if (res.status === 'failed') {
+      const isNonRetryable = Object.values(res.steps).some(stepResult => {
+        const result = stepResult as StepResult<any, any, any, any>;
+        return result.status === 'failed' && result.nonRetryable;
+      });
+      if (isNonRetryable) {
+        throw new MastraNonRetryableError(res.error.message, { cause: res.error });
+      }
       throw res.error;
     }
 
@@ -3034,37 +3056,48 @@ export class Workflow<
     for (const step of Object.keys(steps)) {
       const stepGraph = findStepInGraph(serializedStepGraph, step);
       finalSteps[step] = steps[step] as StepResult<any, any, any, any>;
-      const isNestedWorkflowEntry =
-        !!stepGraph && (stepGraph.type === 'workflow' || (stepGraph as any)?.step?.component === 'WORKFLOW');
-      if (isNestedWorkflowEntry) {
-        const nestedWorkflowId =
-          stepGraph!.type === 'workflow' ? (stepGraph as { type: 'workflow'; workflowId: string }).workflowId : step;
-        // Evented runtime stores nested workflow's runId in metadata.nestedRunId (set by step-executor).
-        // Default runtime uses the parent runId directly to look up nested workflow steps.
+      const nestedWorkflowEntry =
+        stepGraph?.type === 'workflow'
+          ? stepGraph
+          : (stepGraph as any)?.step?.type === 'workflow'
+            ? (stepGraph as any).step
+            : (stepGraph as any)?.step?.component === 'WORKFLOW'
+              ? { workflowId: step }
+              : undefined;
+      if (nestedWorkflowEntry) {
+        const nestedWorkflowId = nestedWorkflowEntry.workflowId as string;
         const stepResult = steps[step] as any;
-        const nestedRunId = stepResult?.metadata?.nestedRunId ?? runId;
+        const nestedRunIdMetadata = stepResult?.metadata?.nestedRunId;
+        const invocationResults = Array.isArray(stepResult) ? stepResult : undefined;
+        const nestedRunIds = Array.isArray(nestedRunIdMetadata)
+          ? nestedRunIdMetadata
+          : invocationResults
+            ? invocationResults.map(result => result?.metadata?.nestedRunId)
+            : [nestedRunIdMetadata ?? runId];
+        const useIndexedPaths = Array.isArray(nestedRunIdMetadata) || !!invocationResults;
+        const updatedNestedSteps = {} as Record<string, StepResult<any, any, any, any>>;
 
-        const nestedSteps = await this.getWorkflowRunSteps({ runId: nestedRunId, workflowId: nestedWorkflowId });
-        if (nestedSteps) {
-          const updatedNestedSteps = Object.entries(nestedSteps).reduce(
-            (acc, [key, value]) => {
-              acc[`${step}.${key}`] = value as StepResult<any, any, any, any>;
-              return acc;
-            },
-            {} as Record<string, StepResult<any, any, any, any>>,
-          );
-          finalSteps = { ...finalSteps, ...updatedNestedSteps };
+        for (const [index, nestedRunId] of nestedRunIds.entries()) {
+          if (typeof nestedRunId !== 'string') continue;
 
-          // Nested suspend is recorded on both the container and the flattened leaf.
-          // Demote the container in the public steps map so clients (e.g. Studio)
-          // that treat every status==='suspended' entry as a resume target only
-          // see the leaf. Keep the container entry for hierarchy; leave suspendedPaths alone.
-          const parentStep = finalSteps[step];
-          if (parentStep?.status === 'suspended') {
-            const hasSuspendedChild = Object.values(updatedNestedSteps).some(child => child?.status === 'suspended');
-            if (hasSuspendedChild) {
-              finalSteps[step] = { ...parentStep, status: 'running' };
-            }
+          const nestedSteps = await this.getWorkflowRunSteps({ runId: nestedRunId, workflowId: nestedWorkflowId });
+          for (const [key, value] of Object.entries(nestedSteps)) {
+            const prefix = useIndexedPaths ? `${step}[${index}]` : step;
+            updatedNestedSteps[`${prefix}.${key}`] = value as StepResult<any, any, any, any>;
+          }
+        }
+
+        finalSteps = { ...finalSteps, ...updatedNestedSteps };
+
+        // Nested suspend is recorded on both the container and the flattened leaf.
+        // Demote the container in the public steps map so clients (e.g. Studio)
+        // that treat every status==='suspended' entry as a resume target only
+        // see the leaf. Keep the container entry for hierarchy; leave suspendedPaths alone.
+        const parentStep = finalSteps[step];
+        if (parentStep?.status === 'suspended') {
+          const hasSuspendedChild = Object.values(updatedNestedSteps).some(child => child?.status === 'suspended');
+          if (hasSuspendedChild) {
+            finalSteps[step] = { ...parentStep, status: 'running' };
           }
         }
       }

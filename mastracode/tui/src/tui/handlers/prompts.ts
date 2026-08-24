@@ -161,9 +161,6 @@ export async function handleAskQuestion(
 
           state.ui.requestRender();
 
-          // Ensure the chat scrolls to show the question
-          state.chatContainer.invalidate();
-
           // Focus the question component
           questionComponent.focused = true;
         } catch {
@@ -273,7 +270,6 @@ export async function handleSandboxAccessRequest(
       state.chatContainer.addChild(questionComponent);
       questionComponent.focused = true;
       state.ui.requestRender();
-      state.chatContainer.invalidate();
     };
 
     // If another inline question is already active, queue this one
@@ -485,7 +481,6 @@ export async function handlePlanApproval(
       state.chatContainer.addChild(approvalComponent);
     }
     state.ui.requestRender();
-    state.chatContainer.invalidate();
     // #21139: focusing the approval while a command overlay (e.g. the /models
     // pack selector) is focused makes pi-tui record a blocked overlay-restore
     // state; the unconditional editor refocus on resolve then transfers that
