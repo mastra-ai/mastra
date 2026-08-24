@@ -60,6 +60,37 @@ export const OM_MIGRATION_COLUMNS: string[] = [
 ];
 
 /**
+ * Convert a driver-returned claim timestamp to a Date without round-tripping
+ * through String(), which drops milliseconds from driver-parsed Date values.
+ */
+function toClaimInstant(value: unknown): Date {
+  return value instanceof Date ? value : new Date(value as string);
+}
+
+/**
+ * Reinterpret a raw read of a naive TIMESTAMP column that stores UTC
+ * wall-clock time. The driver parses naive values in the process-local
+ * timezone, so rebuild the instant from the wall-clock components as UTC.
+ */
+function parseNaiveUtcInstant(value: unknown): Date {
+  if (value instanceof Date) {
+    return new Date(
+      Date.UTC(
+        value.getFullYear(),
+        value.getMonth(),
+        value.getDate(),
+        value.getHours(),
+        value.getMinutes(),
+        value.getSeconds(),
+        value.getMilliseconds(),
+      ),
+    );
+  }
+  const s = String(value);
+  return new Date(/(?:[zZ]|[+-]\d\d(?::?\d\d)?)$/.test(s) ? s : `${s.replace(' ', 'T')}Z`);
+}
+
+/**
  * The OM schema is imported statically above: the peer dependency range
  * (`@mastra/core >= 1.49.0`) guarantees the export exists. This used to be a
  * dynamic `require` guarded by `typeof require === 'function'` for older core
@@ -2106,13 +2137,13 @@ export class MemoryPG extends MemoryStorage {
       lastBufferedAtTime: row.lastBufferedAtTime ? new Date(String(row.lastBufferedAtTime)) : null,
       observationBufferClaimToken: row.observationBufferClaimToken ?? null,
       observationBufferClaimAcquiredAt: row.observationBufferClaimAcquiredAt
-        ? new Date(String(row.observationBufferClaimAcquiredAt))
+        ? parseNaiveUtcInstant(row.observationBufferClaimAcquiredAt)
         : null,
       observationBufferClaimRenewedAt: row.observationBufferClaimRenewedAt
-        ? new Date(String(row.observationBufferClaimRenewedAt))
+        ? parseNaiveUtcInstant(row.observationBufferClaimRenewedAt)
         : null,
       observationBufferClaimExpiresAt: row.observationBufferClaimExpiresAt
-        ? new Date(String(row.observationBufferClaimExpiresAt))
+        ? parseNaiveUtcInstant(row.observationBufferClaimExpiresAt)
         : null,
       config: row.config ? (typeof row.config === 'string' ? JSON.parse(row.config) : row.config) : {},
       metadata: row.metadata ? (typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata) : undefined,
@@ -2673,9 +2704,9 @@ export class MemoryPG extends MemoryStorage {
       ok: true,
       claim: {
         ownerToken,
-        acquiredAt: new Date(String(row.observationBufferClaimAcquiredAt)),
-        renewedAt: new Date(String(row.observationBufferClaimRenewedAt)),
-        expiresAt: new Date(String(row.observationBufferClaimExpiresAt)),
+        acquiredAt: toClaimInstant(row.observationBufferClaimAcquiredAt),
+        renewedAt: toClaimInstant(row.observationBufferClaimRenewedAt),
+        expiresAt: toClaimInstant(row.observationBufferClaimExpiresAt),
       },
     };
   }
@@ -2707,7 +2738,10 @@ export class MemoryPG extends MemoryStorage {
                 AND ("isBufferingObservation" IS NOT true
                   OR "updatedAtZ" <= now() - make_interval(secs => $2)))
             )
-          RETURNING "observationBufferClaimAcquiredAt", "observationBufferClaimRenewedAt", "observationBufferClaimExpiresAt"`,
+          RETURNING
+            "observationBufferClaimAcquiredAt" AT TIME ZONE 'utc' AS "observationBufferClaimAcquiredAt",
+            "observationBufferClaimRenewedAt" AT TIME ZONE 'utc' AS "observationBufferClaimRenewedAt",
+            "observationBufferClaimExpiresAt" AT TIME ZONE 'utc' AS "observationBufferClaimExpiresAt"`,
         [input.ownerToken, leaseSeconds, input.lastBufferedAtTokens ?? null, input.id],
       );
       if (!row) {
@@ -2746,7 +2780,10 @@ export class MemoryPG extends MemoryStorage {
           WHERE id = $2
             AND "observationBufferClaimToken" = $3
             AND "observationBufferClaimExpiresAt" > ${now}
-          RETURNING "observationBufferClaimAcquiredAt", "observationBufferClaimRenewedAt", "observationBufferClaimExpiresAt"`,
+          RETURNING
+            "observationBufferClaimAcquiredAt" AT TIME ZONE 'utc' AS "observationBufferClaimAcquiredAt",
+            "observationBufferClaimRenewedAt" AT TIME ZONE 'utc' AS "observationBufferClaimRenewedAt",
+            "observationBufferClaimExpiresAt" AT TIME ZONE 'utc' AS "observationBufferClaimExpiresAt"`,
         [input.leaseMs / 1000, input.id, input.ownerToken],
       );
       if (!row) {
@@ -2816,9 +2853,9 @@ export class MemoryPG extends MemoryStorage {
         id: `ombuf-${randomUUID()}`,
         cycleId: input.chunk.cycleId,
         observations: input.chunk.observations,
-        tokenCount: input.chunk.tokenCount,
+        tokenCount: Math.round(input.chunk.tokenCount),
         messageIds: input.chunk.messageIds,
-        messageTokens: input.chunk.messageTokens,
+        messageTokens: Math.round(input.chunk.messageTokens ?? 0),
         lastObservedAt: input.chunk.lastObservedAt,
         createdAt: new Date(),
         suggestedContinuation: input.chunk.suggestedContinuation,

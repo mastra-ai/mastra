@@ -2171,7 +2171,7 @@ export class MemoryMySQL extends MemoryStorage {
                 AND (${omCol('observationBufferClaimExpiresAt')} IS NULL
                   OR ${omCol('observationBufferClaimExpiresAt')} <= NOW(3)))
               OR (${omCol('observationBufferClaimToken')} IS NULL
-                AND (${omCol('isBufferingObservation')} != true
+                AND (NOT COALESCE(${omCol('isBufferingObservation')}, false)
                   OR ${omCol('updatedAt')} <= NOW(3) - INTERVAL ? MICROSECOND))
             )`,
         [input.ownerToken, leaseMicros, input.lastBufferedAtTokens ?? null, input.id, leaseMicros],

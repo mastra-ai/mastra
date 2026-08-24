@@ -11,7 +11,7 @@ npm install @mastra/mongodb
 ## Prerequisites
 
 - MongoDB Atlas Local (via Docker) or MongoDB Atlas Cloud instance with Atlas Search enabled
-- MongoDB 7.0+ recommended
+- MongoDB 5.0+ required (the observation buffer claim logic uses date aggregation operators such as `$dateSubtract` and `$dateAdd`); MongoDB 7.0+ recommended
 
 ## Usage
 

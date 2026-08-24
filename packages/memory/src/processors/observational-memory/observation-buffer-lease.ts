@@ -73,12 +73,19 @@ export class ObservationBufferLease {
     recordId: string;
     ownerToken: string;
     policy: ObservationBufferLeasePolicy;
+    confirmedExpiresAtMs?: number;
   }) {
     this.#storage = args.storage;
     this.recordId = args.recordId;
     this.ownerToken = args.ownerToken;
     this.#policy = args.policy;
-    this.#lastConfirmedExpiresAtMs = Date.now() + args.policy.leaseMs;
+    // Seed from the storage-confirmed acquire expiry when available so the
+    // estimate matches the same source the renewal path uses; fall back to the
+    // local clock only if the confirmed value is unusable.
+    this.#lastConfirmedExpiresAtMs =
+      args.confirmedExpiresAtMs !== undefined && Number.isFinite(args.confirmedExpiresAtMs)
+        ? args.confirmedExpiresAtMs
+        : Date.now() + args.policy.leaseMs;
   }
 
   /**
@@ -101,7 +108,13 @@ export class ObservationBufferLease {
       lastBufferedAtTokens: args.lastBufferedAtTokens,
     });
     if (!outcome.ok) return null;
-    const lease = new ObservationBufferLease({ storage: args.storage, recordId: args.recordId, ownerToken, policy });
+    const lease = new ObservationBufferLease({
+      storage: args.storage,
+      recordId: args.recordId,
+      ownerToken,
+      policy,
+      confirmedExpiresAtMs: new Date(outcome.claim.expiresAt).getTime(),
+    });
     lease.#scheduleRenewal();
     return lease;
   }

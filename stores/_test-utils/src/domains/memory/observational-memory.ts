@@ -1080,6 +1080,7 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
 
       it('first claim succeeds and persists owner, expiry, and legacy boolean', async () => {
         const { input, record } = await initRecord();
+        const before = Date.now();
         const res = await memoryStorage.acquireObservationBufferClaim({
           id: record.id,
           ownerToken: 'owner-a',
@@ -1089,7 +1090,11 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
         expect(res.ok).toBe(true);
         if (res.ok) {
           expect(res.claim.ownerToken).toBe('owner-a');
-          expect(res.claim.expiresAt.getTime()).toBeGreaterThan(Date.now() - 1000);
+          // The expiry must be a real future instant close to now + leaseMs;
+          // the tolerance absorbs round-trip latency and small clock drift
+          // between the backend clock and this process.
+          expect(res.claim.expiresAt.getTime()).toBeGreaterThan(before);
+          expect(res.claim.expiresAt.getTime()).toBeLessThanOrEqual(before + LEASE_MS + 60_000);
         }
 
         const updated = await memoryStorage.getObservationalMemory(input.threadId, input.resourceId);
@@ -1145,10 +1150,10 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
         });
         expect(renewed.ok).toBe(true);
         if (renewed.ok) {
-          expect(renewed.claim.expiresAt.getTime()).toBeGreaterThan(firstExpiry - 1);
+          expect(renewed.claim.expiresAt.getTime()).toBeGreaterThan(firstExpiry);
         }
         const second = await memoryStorage.getObservationalMemory(input.threadId, input.resourceId);
-        expect(second!.observationBufferClaimExpiresAt!.getTime()).toBeGreaterThan(firstExpiry - 1);
+        expect(second!.observationBufferClaimExpiresAt!.getTime()).toBeGreaterThan(firstExpiry);
       });
 
       it('an expired owner cannot renew or commit, even before takeover', async () => {
@@ -1290,10 +1295,12 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
         // Simulate a pre-claim binary's write: boolean true, no owner metadata.
         await memoryStorage.setBufferingObservationFlag(record.id, true, 1234);
 
+        // Probe during the grace window with the long lease so a slow remote
+        // round-trip cannot silently age the row past a short grace window.
         const duringGrace = await memoryStorage.acquireObservationBufferClaim({
           id: record.id,
           ownerToken: 'owner-b',
-          leaseMs: SHORT_LEASE_MS,
+          leaseMs: LEASE_MS,
         });
         expect(duringGrace).toEqual({ ok: false, reason: 'lost' });
 
