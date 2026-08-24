@@ -74,8 +74,8 @@ import { createKnowledgeInspector as createScopedKnowledgeInspector } from './kn
 import { createMcpManager } from './mcp/index.js';
 import type { McpServerConfig } from './mcp/index.js';
 import { hasExplicitOMConfiguration } from './onboarding/om-settings.js';
+import type { ProviderAccess } from './onboarding/packs.js';
 import { getAvailableModePacks, getAvailableOmPacks, selectPreferredOMPack } from './onboarding/packs.js';
-import { computeProviderAccess } from './onboarding/provider-access.js';
 import {
   loadSettings,
   MASTRA_GATEWAY_PROVIDER,
@@ -443,7 +443,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // never leak into process-global env vars.
   if (!hasCredentialStoreProvider()) {
     try {
-      const registry: Record<string, ProviderConfig> = PROVIDER_REGISTRY;
+      const registry = PROVIDER_REGISTRY as Record<string, ProviderConfig>;
       const providerEnvVars: Record<string, string | undefined> = {};
       for (const [provider, cfg] of Object.entries(registry)) {
         const envVars = cfg?.apiKeyEnvVar;
@@ -978,7 +978,50 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   ];
   const intervalHandlers = config?.intervalHandlers ?? defaultIntervalHandlers;
 
-  const startupAccess = computeProviderAccess(authStorage, mgApiKey);
+  // Build lightweight provider access for resolving built-in packs at startup.
+  // Anthropic/OpenAI use AuthStorage; other providers use env API keys.
+  // Also scan the full provider registry so configured API keys satisfy access checks.
+  const anthropicCred = authStorage.get('anthropic');
+  const openaiCred = authStorage.get('openai-codex');
+  const githubCopilotCred = authStorage.get('github-copilot');
+  const startupAccess: ProviderAccess = {
+    anthropic:
+      anthropicCred?.type === 'oauth'
+        ? 'oauth'
+        : anthropicCred?.type === 'api_key' && anthropicCred.key.trim().length > 0
+          ? 'apikey'
+          : false,
+    openai:
+      openaiCred?.type === 'oauth'
+        ? 'oauth'
+        : openaiCred?.type === 'api_key' && openaiCred.key.trim().length > 0
+          ? 'apikey'
+          : false,
+    cerebras: process.env.CEREBRAS_API_KEY ? 'apikey' : false,
+    google: process.env.GOOGLE_GENERATIVE_AI_API_KEY ? 'apikey' : false,
+    deepseek: process.env.DEEPSEEK_API_KEY ? 'apikey' : false,
+    'github-copilot': githubCopilotCred?.type === 'oauth' ? 'oauth' : false,
+  };
+  // Gateway covers all providers — ensure Anthropic/OpenAI packs are visible
+  if (mgApiKey) {
+    if (!startupAccess.anthropic) startupAccess.anthropic = 'apikey';
+    if (!startupAccess.openai) startupAccess.openai = 'apikey';
+  }
+  // Check all providers in the registry for API keys
+  try {
+    const registry = PROVIDER_REGISTRY as Record<string, ProviderConfig>;
+    for (const [provider, config] of Object.entries(registry)) {
+      if (startupAccess[provider] === 'oauth' || startupAccess[provider] === 'apikey') continue; // Already enabled above
+      if (provider === 'anthropic' || provider === 'openai') continue;
+      const envVars = config?.apiKeyEnvVar;
+      const envVarList = Array.isArray(envVars) ? envVars : envVars ? [envVars] : [];
+      if (envVarList.some(envVar => process.env[envVar])) {
+        startupAccess[provider] = 'apikey';
+      }
+    }
+  } catch {
+    // Registry may not be loaded yet; the 5 hardcoded providers are sufficient fallback
+  }
   const builtinPacks = getAvailableModePacks(startupAccess);
   const builtinOmPacks = getAvailableOmPacks(startupAccess);
   const effectiveDefaults = resolveModelDefaults(globalSettings, builtinPacks);

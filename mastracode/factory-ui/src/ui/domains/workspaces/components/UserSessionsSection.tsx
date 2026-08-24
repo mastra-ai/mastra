@@ -17,8 +17,8 @@ import { useWorkspaceAttentionState } from '../../../../hooks/useWorkspaceAttent
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { removeCachedSession, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { usePinnedSessions } from '../hooks/usePinnedSessions';
-import { deleteUserSession, regenerateSessionTitle } from '../services/github';
-import type { FactoryUserSession } from '../services/github';
+import { deleteUserSession, regenerateSessionTitle } from '../services/user-sessions';
+import type { FactoryUserSession } from '../services/user-sessions';
 import { getUserSessionLabel, getUserSessionTooltip } from '../services/sessionPresentation';
 import { SessionNavRow } from './SessionNavRow';
 import type { SessionRowStatus } from './SessionNavRow';
