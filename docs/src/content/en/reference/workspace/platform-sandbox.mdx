@@ -160,13 +160,13 @@ await sandbox.start()
 
 The resolver doesn't run when `PlatformSandbox` reattaches to an existing `sandboxId`. It resolves the repository's public default-branch head at fresh-start time, then Platform starts or reuses the corresponding template build. If the repository head can't be resolved or the provider build fails, sandbox creation continues with the provider's default template so runtime setup can perform a cold checkout. The lazy definition never includes credentials. Private-repository template builds require a future secret transport capability.
 
-`createRepoTemplate()` also attaches a commit-independent `lineageId` (`repo:<repoFullName>:<workdir>`) to the definition. Platform uses `lineageId` to find a previous ready template for the same repository and boot the new commit on that warm filesystem while the exact commit template builds in the background. Callers using the raw `Template()` builder can attach their own lineage key with `.withLineageId(id)` (any non-empty string up to 200 characters); omit it to opt out of stale-lineage fallback.
+`createRepoTemplate()` also attaches a commit-independent `family` key (`repo:<repoFullName>:<workdir>`) to the definition. `family` groups successive builds of the "same thing" — every commit of the same repo+workdir belongs to the same family. Platform uses it to find a prior ready build in the same family and boot the new commit on that warm filesystem while the exact commit template builds in the background. Callers using the raw `Template()` builder can attach their own family key with `.withFamily(key)` (any non-empty string up to 200 characters); omit it to opt out of family fallback. The family key never influences the content-addressed template identity — two definitions that differ only in `family` share the same cache slot.
 
 Platform stores build state under the definition's server-derived content hash within the selected environment and provider.
 
 #### Observing a pending template build
 
-When a sandbox boots on a fallback template (either same-lineage stale or the provider base), the platform response includes a `templatePending` field that `PlatformSandbox` surfaces for observability:
+When a sandbox boots on a fallback template (either a prior member of the same family or the provider base), the platform response includes a `templatePending` field that `PlatformSandbox` surfaces for observability:
 
 ```typescript
 await sandbox.start()

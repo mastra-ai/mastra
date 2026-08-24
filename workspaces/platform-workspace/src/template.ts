@@ -12,13 +12,17 @@ export interface SerializedSandboxTemplate {
   schemaVersion: 1;
   operations: SandboxTemplateOperation[];
   /**
-   * Optional commit-independent hint the platform uses to find a same-lineage
-   * prior build (e.g. a rolling ref keyed by repository + workdir). The server
-   * strips this from the content identity so different commits of the same
-   * template share cache lookups. Set by builders like `createRepoTemplate`;
-   * clients rarely set it directly.
+   * Optional caller-supplied family key that groups successive builds of
+   * the "same thing" — e.g. the same repository+workdir across commits,
+   * the same recipe across parameter tweaks. When set, the platform MAY
+   * boot the sandbox from a prior member of the same family (a rolling
+   * ref that successful builds re-tag) while the exact template continues
+   * to build in the background. The server strips this from the content
+   * identity so different commits of the same family share cache lookups
+   * but still produce distinct build records. Set by builders like
+   * `createRepoTemplate`; clients rarely set it directly.
    */
-  lineageId?: string;
+  family?: string;
 }
 
 export interface AptInstallOptions {
@@ -43,13 +47,15 @@ export interface SandboxTemplateBuilder {
   pipInstall(packages?: string | string[], options?: PipInstallOptions): SandboxTemplateBuilder;
   npmInstall(packages?: string | string[], options?: NpmInstallOptions): SandboxTemplateBuilder;
   /**
-   * Attach a commit-independent lineage hint. The platform uses this to find
-   * a same-lineage prior build so a fresh commit can boot on a warm filesystem
-   * while the exact template continues to build in the background. Excluded
-   * from the content identity — different commits of the same lineage share
+   * Attach a family key that groups successive builds of the same
+   * underlying thing (e.g. a repository+workdir across commits). The
+   * platform uses this to find a prior build in the same family so a
+   * fresh definition can boot on a warm filesystem while the exact
+   * template finishes building in the background. Excluded from the
+   * content identity — different definitions in the same family share
    * cache lookups but produce distinct build records.
    */
-  withLineageId(lineageId: string): SandboxTemplateBuilder;
+  withFamily(family: string): SandboxTemplateBuilder;
 }
 
 const SERIALIZE_TEMPLATE = Symbol('serializeTemplate');
@@ -58,15 +64,15 @@ const MAX_SERIALIZED_BYTES = 256 * 1024;
 const MAX_STRING_LENGTH = 32 * 1024;
 const MAX_COLLECTION_ITEMS = 512;
 
-const MAX_LINEAGE_ID_LENGTH = 200;
+const MAX_FAMILY_LENGTH = 200;
 
 class SerializableSandboxTemplateBuilder implements SandboxTemplateBuilder {
   readonly #operations: readonly SandboxTemplateOperation[];
-  readonly #lineageId: string | undefined;
+  readonly #family: string | undefined;
 
-  constructor(operations: readonly SandboxTemplateOperation[] = [], lineageId?: string) {
+  constructor(operations: readonly SandboxTemplateOperation[] = [], family?: string) {
     this.#operations = operations;
-    this.#lineageId = lineageId;
+    this.#family = family;
   }
 
   runCmd(command: string | string[]): SandboxTemplateBuilder {
@@ -105,14 +111,14 @@ class SerializableSandboxTemplateBuilder implements SandboxTemplateBuilder {
     return this.#appendOptionalInstall('npmInstall', packages, options, ['g', 'dev']);
   }
 
-  withLineageId(lineageId: string): SandboxTemplateBuilder {
-    if (typeof lineageId !== 'string' || lineageId.length === 0) {
-      throw new TypeError('lineageId must be a non-empty string');
+  withFamily(family: string): SandboxTemplateBuilder {
+    if (typeof family !== 'string' || family.length === 0) {
+      throw new TypeError('family must be a non-empty string');
     }
-    if (lineageId.length > MAX_LINEAGE_ID_LENGTH) {
-      throw new RangeError(`lineageId cannot exceed ${MAX_LINEAGE_ID_LENGTH} characters`);
+    if (family.length > MAX_FAMILY_LENGTH) {
+      throw new RangeError(`family cannot exceed ${MAX_FAMILY_LENGTH} characters`);
     }
-    return new SerializableSandboxTemplateBuilder(this.#operations, lineageId);
+    return new SerializableSandboxTemplateBuilder(this.#operations, family);
   }
 
   [SERIALIZE_TEMPLATE](): SerializedSandboxTemplate {
@@ -122,7 +128,7 @@ class SerializableSandboxTemplateBuilder implements SandboxTemplateBuilder {
         method: operation.method,
         args: cloneJson(operation.args),
       })),
-      ...(this.#lineageId !== undefined && { lineageId: this.#lineageId }),
+      ...(this.#family !== undefined && { family: this.#family }),
     };
   }
 
@@ -153,7 +159,7 @@ class SerializableSandboxTemplateBuilder implements SandboxTemplateBuilder {
       throw new RangeError(`Serialized sandbox template cannot exceed ${MAX_SERIALIZED_BYTES} bytes`);
     }
 
-    return new SerializableSandboxTemplateBuilder(operations, this.#lineageId);
+    return new SerializableSandboxTemplateBuilder(operations, this.#family);
   }
 }
 

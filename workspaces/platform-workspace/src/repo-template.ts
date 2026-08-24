@@ -49,11 +49,12 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
       ...(options.setupCommand ? [`cd "${workdir}" && ${options.setupCommand}`] : []),
     ];
 
-    // Commit-independent lineage key. The platform uses it to find a
-    // same-lineage prior build so new commits boot on a warm filesystem
-    // while the exact template continues to build in the background.
-    const lineageId = `repo:${options.repoFullName}:${workdir}`;
-    return Template().runCmd(steps).withLineageId(lineageId);
+    // Commit-independent family key that groups every commit of the same
+    // repo+workdir together. The platform uses it to find a prior build in
+    // the same family so new commits boot on a warm filesystem while the
+    // exact template continues to build in the background.
+    const family = `repo:${options.repoFullName}:${workdir}`;
+    return Template().runCmd(steps).withFamily(family);
   };
 }
 

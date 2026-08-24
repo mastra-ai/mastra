@@ -140,10 +140,11 @@ interface CreateSandboxResponse {
   createdAt?: string;
   destroyedAt?: string | null;
   /**
-   * Present when the sandbox booted from a same-lineage stale template or
-   * the provider base template while the requested exact template continues
-   * to build in the background. Absent when the sandbox booted on the exact
-   * template. See {@link SandboxTemplatePending} for semantics.
+   * Present when the sandbox booted from a prior member of the same
+   * template family or the provider base template while the requested
+   * exact template continues to build in the background. Absent when the
+   * sandbox booted on the exact template. See {@link SandboxTemplatePending}
+   * for semantics.
    *
    * Only emitted by the create route today; reattach responses never carry
    * this field.
@@ -170,10 +171,10 @@ const CREATE_RETRY_BASE_DELAY_MS = 2_000;
 /**
  * Observability handle for a template that was requested but is still being
  * built by the platform. Present on {@link CreateSandboxResponse} and echoed
- * as {@link PlatformSandbox.templatePending} when the sandbox booted from a
- * same-lineage stale template or from the provider's base template while
- * the exact template continues to build in the background. Absent when the
- * sandbox booted on the exact template.
+ * as {@link PlatformSandbox.templatePending} when the sandbox booted from
+ * a prior member of the same template family or from the provider's base
+ * template while the exact template continues to build in the background.
+ * Absent when the sandbox booted on the exact template.
  *
  * `PlatformSandbox` does not act on this: freshness is reconciled by the
  * caller's own `onStart` runtime setup (e.g. `git fetch && checkout`), not
@@ -394,8 +395,9 @@ export class PlatformSandbox extends MastraSandbox {
   declare readonly processes: PlatformProcessManager;
   /**
    * Populated from the platform's create/reattach response when the sandbox
-   * booted from a same-lineage stale template or the provider base template
-   * while the requested exact template continues to build in the background.
+   * booted from a prior member of the same template family or the provider
+   * base template while the requested exact template continues to build in
+   * the background.
    * `undefined` when the sandbox booted on the exact template (or when no
    * template was requested). Observability-only; consumers reconcile freshness
    * in their own runtime setup and reprovision to pick up the ready template
@@ -637,10 +639,10 @@ export class PlatformSandbox extends MastraSandbox {
     // window from killing the caller's whole workflow.
     //
     // Template builds never block a create anymore: the proxy always returns
-    // a running sandbox on the best available fallback (a same-lineage stale
-    // template if one exists, otherwise the provider base template) and
-    // surfaces `templatePending` in the 201 body describing the build that
-    // continues in the background.
+    // a running sandbox on the best available fallback (a prior member of the
+    // same template family if one exists, otherwise the provider base
+    // template) and surfaces `templatePending` in the 201 body describing the
+    // build that continues in the background.
     let response: Response | undefined;
     const requestStartedAt = Date.now();
     for (let attempt = 1; ; attempt++) {
