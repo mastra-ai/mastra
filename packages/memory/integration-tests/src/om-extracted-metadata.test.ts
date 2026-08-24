@@ -268,23 +268,19 @@ describe('Observational Memory extracted metadata persistence', () => {
     const seededValue = 'format-a; format-b';
     let observerInput = '';
     let observerHistory = '';
-    const extractObserverHistory = (value: unknown): string => {
-      if (typeof value === 'string') {
-        const historyStart = value.indexOf('## New Message History to Observe');
-        if (historyStart === -1) return '';
-        const historyEnd = value.indexOf('\n\n---\n\n', historyStart);
-        return value.slice(historyStart, historyEnd === -1 ? undefined : historyEnd);
-      }
-      if (Array.isArray(value)) return value.map(extractObserverHistory).find(Boolean) ?? '';
-      if (value && typeof value === 'object') {
-        return Object.values(value).map(extractObserverHistory).find(Boolean) ?? '';
-      }
+    const flattenPromptText = (value: unknown): string => {
+      if (typeof value === 'string') return value;
+      if (Array.isArray(value)) return value.map(flattenPromptText).join('');
+      if (value && typeof value === 'object') return Object.values(value).map(flattenPromptText).join('');
       return '';
     };
     const model = new MockLanguageModelV2({
       doStream: async ({ prompt }) => {
         observerInput = JSON.stringify(prompt);
-        observerHistory = extractObserverHistory(prompt);
+        const promptText = flattenPromptText(prompt);
+        const historyStart = promptText.indexOf('## New Message History to Observe');
+        const historyEnd = promptText.indexOf('\n\n---\n\n', historyStart);
+        observerHistory = promptText.slice(historyStart, historyEnd === -1 ? undefined : historyEnd);
         const observerSawSeed = observerHistory.includes(seededValue);
         const observerOutput = observerSawSeed
           ? `<observations>\n- unrelated task\n</observations>\n<working-memory>rewritten-by-observer</working-memory>`
