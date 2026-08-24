@@ -140,12 +140,50 @@ describe('foreach: per-iteration progress survives a failed iteration', () => {
     expect(result.status).toBe('failed');
   });
 
-  it('does not re-run successful iterations with concurrency > 1', async () => {
-    const { executions, run } = await setup(2);
+  it('preserves successful iterations regardless of concurrent completion order', async () => {
+    const executions = [0, 0, 0];
+    const seed = createStep({
+      id: 'out-of-order-seed',
+      inputSchema: z.object({}),
+      outputSchema: z.array(z.number()),
+      execute: async () => [0, 1, 2],
+    });
+    const processItem = createStep({
+      id: 'out-of-order-process-item',
+      inputSchema: z.number(),
+      outputSchema: z.number(),
+      execute: async ({ inputData }) => {
+        executions[inputData]! += 1;
+        if (inputData === 0) {
+          await new Promise(resolve => setTimeout(resolve, 20));
+        }
+        if (inputData === 1 && executions[inputData] === 1) {
+          await new Promise(resolve => setTimeout(resolve, 10));
+          throw new Error('transient failure');
+        }
+        return inputData;
+      },
+    });
+    const workflow = createWorkflow({
+      id: 'out-of-order-foreach-failure-progress',
+      inputSchema: z.object({}),
+      outputSchema: z.array(z.number()),
+      retryConfig: { attempts: 0 },
+    })
+      .then(seed)
+      .foreach(processItem, { concurrency: 3 });
+    workflow.commit();
+    new Mastra({ workflows: { workflow }, storage: new MockStore(), logger: false });
 
-    const result = await run.timeTravel({ step: 'process-item' });
+    const run = await workflow.createRun();
+    const first = await run.start({ inputData: {} });
 
-    expect(executions).toEqual([1, 2]);
+    expect(first.status).toBe('failed');
+    expect(executions).toEqual([1, 1, 1]);
+
+    const result = await run.timeTravel({ step: 'out-of-order-process-item' });
+
+    expect(executions).toEqual([1, 2, 1]);
     expect(result.status).toBe('success');
   });
 });

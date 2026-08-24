@@ -944,25 +944,7 @@ describe('Workflow (Evented Engine Specific)', () => {
   });
 
   describe('foreach failure progress (issue #21749)', () => {
-    /**
-     * Known gap, tracked separately: the default engine preserves successful
-     * foreach iterations across a time travel to a failed foreach, but the
-     * evented engine still replays them.
-     *
-     * The two engines record foreach progress differently. The default engine
-     * keeps per-iteration results in `__workflow_meta.foreachOutput` and skips
-     * the successful ones on re-entry. The evented engine instead derives its
-     * position from the persisted result array (`idx = currentResult.output.length`,
-     * with `null` placeholders for iterations that have been dispatched but
-     * have not landed yet). Carrying that array through time travel is not
-     * sufficient on its own: a fully-populated array makes `idx` reach
-     * `targetLen`, at which point `processWorkflowForEach` neither advances nor
-     * re-dispatches the unfinished slots. Fixing it properly means teaching the
-     * processor to reset the non-successful slots and republish
-     * `workflow.step.run` for them, in the same shape as the existing bulk
-     * resume path — a self-contained change, but a larger one than this fix.
-     */
-    it.skip('does not re-execute successful iterations when time travelling to a failed foreach', async () => {
+    it('does not re-execute successful iterations when time travelling to a failed foreach', async () => {
       const executions = [0, 0];
 
       const seed = createStep({
