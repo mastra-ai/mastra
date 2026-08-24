@@ -1,6 +1,7 @@
 import { createTool } from '@mastra/core/tools';
 import { createParallelSearchTool, createParallelExtractTool } from '@mastra/parallel';
 import { createTavilySearchTool, createTavilyExtractTool } from '@mastra/tavily';
+import { z } from 'zod';
 
 import { truncateStringForTokenEstimate } from '../utils/token-estimator.js';
 
@@ -8,6 +9,10 @@ const MAX_WEB_SEARCH_TOKENS = 2_000;
 const MAX_WEB_EXTRACT_TOKENS = 2_000;
 
 const MIN_RELEVANCE_SCORE = 0.25;
+
+const parallelWebSearchInputSchema = z.object({
+  query: z.string().min(1).describe('The search query'),
+});
 
 /**
  * Check whether a Tavily API key is available in the environment.
@@ -100,9 +105,9 @@ export function createParallelWebSearchTool() {
   return createTool({
     id: 'web-search',
     description: parallelSearchTool.description!,
-    inputSchema: parallelSearchTool.inputSchema!,
+    inputSchema: parallelWebSearchInputSchema,
     execute: async (input, context) => {
-      const output: any = await parallelSearchTool.execute!(input as any, context as any);
+      const output: any = await parallelSearchTool.execute!({ searchQueries: [input.query] }, context as any);
       const parts: string[] = [];
 
       for (const result of output.results) {

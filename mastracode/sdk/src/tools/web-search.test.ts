@@ -76,7 +76,16 @@ describe('createConfiguredWebTools', () => {
 });
 
 describe('Parallel web tool adapters', () => {
+  it('uses Mastra Code query input instead of Parallel searchQueries', () => {
+    const tool = createParallelWebSearchTool();
+    const inputSchema = tool.inputSchema as z.ZodType;
+
+    expect(inputSchema.safeParse({ query: 'example query' }).success).toBe(true);
+    expect(inputSchema.safeParse({ searchQueries: ['example query'] }).success).toBe(false);
+  });
+
   it('formats Parallel search results for Mastra Code', async () => {
+    providerMocks.parallelSearchExecute.mockClear();
     providerMocks.parallelSearchExecute.mockResolvedValueOnce({
       searchId: 'search-1',
       sessionId: 'session-1',
@@ -92,10 +101,14 @@ describe('Parallel web tool adapters', () => {
     });
     const tool = createParallelWebSearchTool();
 
-    const output = await tool.execute!({ searchQueries: ['example query'] }, {} as never);
+    const output = await tool.execute!({ query: 'example query' }, {} as never);
 
     expect(output).toBe(
       '## Example result\nhttps://example.com/result\nFirst relevant excerpt.\nSecond relevant excerpt.',
+    );
+    expect(providerMocks.parallelSearchExecute).toHaveBeenCalledWith(
+      { searchQueries: ['example query'] },
+      expect.anything(),
     );
   });
 

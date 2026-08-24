@@ -158,7 +158,7 @@ Mastra Code selects the first available provider in this order:
 - **Anthropic web search**: Built into Anthropic models and used when no provider key is configured.
 - **OpenAI web search**: Built into OpenAI models and used when no provider key is configured.
 
-Parallel search accepts one or more `searchQueries` and optional controls such as `objective`, `mode`, `maxResults`, domain filters, date filters, and location. Tavily and model-native providers accept a single `query`; their optional parameters vary by provider.
+Provider-backed versions of `web_search` accept a single `query`. Optional parameters vary by provider.
 
 Tavily parameters:
 
