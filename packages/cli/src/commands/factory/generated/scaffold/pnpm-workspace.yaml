@@ -1,0 +1,14 @@
+# pnpm configuration for Mastra Factory.
+minimumReleaseAgeExclude:
+  - '@mastra/*'
+  - mastra
+allowBuilds:
+  '@google/genai': true
+  agent-browser: true
+  bufferutil: true
+  edgedriver: false
+  esbuild: true
+  geckodriver: false
+  onnxruntime-node: true
+  protobufjs: true
+  utf-8-validate: true

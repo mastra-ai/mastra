@@ -1,8 +1,8 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import type { PosthogAnalytics } from 'mastra/dist/analytics/index.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { FactoryAnalytics } from './analytics.js';
 
 const clack = vi.hoisted(() => ({
   intro: vi.fn(),
@@ -48,13 +48,15 @@ const cliAuth = vi.hoisted(() => ({
 vi.mock('@clack/prompts', () => clack);
 vi.mock('tinyexec', () => tinyexec);
 vi.mock('./platform.js', () => platform);
-vi.mock('mastra/internal/auth', () => cliAuth);
+vi.mock('../auth/api.js', () => cliAuth);
+vi.mock('../auth/credentials.js', () => cliAuth);
+vi.mock('../auth/orgs.js', () => cliAuth);
 
 import { create } from './create.js';
 import { detectPackageManager, getInstallArgs } from './utils/pm.js';
 
-const analytics = { trackEvent: () => {}, shutdown: async () => {} } as unknown as PosthogAnalytics;
-const TEMPLATE_REPO = 'https://github.com/mastra-ai/softwarefactory-template';
+const analytics = { trackEvent: () => {}, shutdown: async () => {} } as unknown as FactoryAnalytics;
+const TEMPLATE_REPO = 'https://github.com/example/custom-factory-template';
 
 const ENV_EXAMPLE = `# Mastra Factory environment.
 
@@ -120,27 +122,50 @@ afterEach(() => {
 });
 
 describe('create --no-platform', () => {
-  it('scaffolds a project with a verbatim .env and shows the next steps', async () => {
+  it('writes the built-in scaffold without cloning a template', async () => {
     await create({
       projectName: 'my-factory',
-      template: TEMPLATE_REPO,
       noPlatform: true,
       analytics,
     });
 
     const projectPath = path.join(workDir, 'my-factory');
     const env = fs.readFileSync(path.join(projectPath, '.env'), 'utf8');
+    const expectedFiles = [
+      '.env',
+      '.env.example',
+      '.env.schema',
+      '.gitignore',
+      'README.md',
+      'docker-compose.yml',
+      'package.json',
+      'pnpm-workspace.yaml',
+      'src/mastra/index.ts',
+      'tsconfig.json',
+    ];
 
-    // With --no-platform, .env stays a verbatim copy of .env.example — the
-    // CLI writes no values. Everything stays a commented placeholder (an
-    // active `KEY=` would load as the empty string and poison
-    // `process.env.X ?? default` fallbacks).
-    expect(env).toBe(ENV_EXAMPLE);
-    expect(env).not.toMatch(/^[A-Z][A-Z0-9_]*=/m);
+    for (const file of expectedFiles) {
+      expect(fs.existsSync(path.join(projectPath, file)), file).toBe(true);
+    }
+    expect(tinyexec.x).not.toHaveBeenCalledWith('npx', expect.arrayContaining(['degit']), expect.anything());
+
+    // With --no-platform, .env stays a verbatim copy of the built-in
+    // .env.example and the CLI writes no platform credentials.
+    expect(env).toBe(fs.readFileSync(path.join(projectPath, '.env.example'), 'utf8'));
+    expect(env).not.toMatch(/^MASTRA_PLATFORM_SECRET_KEY=/m);
+    expect(env).not.toMatch(/^MASTRA_PROJECT_ID=/m);
 
     // Project renamed and installed.
     const pkg = JSON.parse(fs.readFileSync(path.join(projectPath, 'package.json'), 'utf8'));
     expect(pkg.name).toBe('my-factory');
+    for (const [packageName, spec] of Object.entries({ ...pkg.dependencies, ...pkg.devDependencies })) {
+      if (packageName === 'mastra' || packageName.startsWith('@mastra/')) {
+        expect(spec).toMatch(/^(?:\^\d+\.\d+\.\d+|\d+\.\d+\.\d+-(?:alpha|beta|rc|next)\.\d+)$/);
+        expect(spec).not.toBe('latest');
+      }
+    }
+    expect(pkg.dependencies['@mastra/core']).toBeTruthy();
+    expect(pkg.devDependencies.mastra).toBeTruthy();
     const packageManager = detectPackageManager();
     expect(tinyexec.x).toHaveBeenCalledWith(packageManager, getInstallArgs(packageManager), {
       throwOnError: true,
@@ -248,7 +273,7 @@ describe('create (platform provisioning)', () => {
     expect(platform.mintOrgApiKey).toHaveBeenCalledWith({
       token: 'wos-token',
       orgId: 'org_123',
-      keyName: 'create-factory: my-factory',
+      keyName: 'mastra factory create: my-factory',
     });
     expect(platform.attachNeonDatabase).toHaveBeenCalledWith({
       token: 'wos-token',
@@ -471,32 +496,33 @@ describe('create — .env safety before git commit', () => {
     expect(gitignore).toMatch(/^\.env$/m);
   });
 
-  it.runIf(process.platform !== 'win32')(
-    'skips git init when .gitignore cannot be updated so .env secrets are never staged',
-    async () => {
-      // Ship a .gitignore that does NOT cover `.env` — the scaffolder must
-      // append to it. We then make the scaffolded copy read-only so the
-      // append fails and the git init step is aborted.
-      fs.writeFileSync(path.join(templateDir, '.gitignore'), 'node_modules\n');
+  it('skips git init when .gitignore cannot be updated so .env secrets are never staged', async () => {
+    // Ship a .gitignore that does NOT cover `.env` — the scaffolder must
+    // append to it. Fail that specific write deterministically; file modes do
+    // not prevent writes when CI runs the test as root.
+    fs.writeFileSync(path.join(templateDir, '.gitignore'), 'node_modules\n');
+    const projectGitignore = path.join(workDir, 'my-factory', '.gitignore');
+    const writeFileSync = fs.writeFileSync.bind(fs);
+    const writeSpy = vi.spyOn(fs, 'writeFileSync').mockImplementation((file, data, options) => {
+      if (file === projectGitignore) {
+        throw new Error('simulated .gitignore write failure');
+      }
+      return writeFileSync(file, data, options);
+    });
 
-      // Intercept the copy step: after the template lands in the project dir,
-      // lock its .gitignore before ensureEnvGitignored runs. We do this via a
-      // one-shot spy that fires when the create flow calls into runInherit for
-      // the first git command — but simpler: pre-chmod the template's file
-      // itself. The scaffolder copies it into the project dir, preserving the
-      // read-only bit, so the subsequent writeFileSync throws EACCES.
-      fs.chmodSync(path.join(templateDir, '.gitignore'), 0o444);
-
+    try {
       await create({ projectName: 'my-factory', template: TEMPLATE_REPO, analytics });
+    } finally {
+      writeSpy.mockRestore();
+    }
 
-      const runCalls = tinyexec.x.mock.calls as Array<[string, string[]]>;
-      const anyGit = runCalls.some(call => call[0] === 'git');
-      expect(anyGit).toBe(false);
+    const runCalls = tinyexec.x.mock.calls as Array<[string, string[]]>;
+    const anyGit = runCalls.some(call => call[0] === 'git');
+    expect(anyGit).toBe(false);
 
-      // User was warned about it.
-      const warns = clack.log.warn.mock.calls.flat().join('\n');
-      expect(warns).toMatch(/\.gitignore/);
-      expect(warns).toMatch(/Skipping git init/i);
-    },
-  );
+    // User was warned about it.
+    const warns = clack.log.warn.mock.calls.flat().join('\n');
+    expect(warns).toMatch(/\.gitignore/);
+    expect(warns).toMatch(/Skipping git init/i);
+  });
 });
