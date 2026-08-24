@@ -86,7 +86,7 @@ export function SettingsPanel() {
   };
 
   return (
-    <section aria-label="Settings" className="flex flex-1 flex-col px-5 pb-5">
+    <section aria-label="Settings" className="flex flex-1 flex-col lg:px-5 lg:pb-5">
       <div className="mx-auto grid w-full max-w-4xl py-3">
         {!isMobile && <SettingsHeader autoFocus placement="desktop" />}
         {section === 'account' && <AccountSettingsSection />}

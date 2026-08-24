@@ -257,7 +257,7 @@ function BoardContent({
         viewportRef={scroll.containerRef}
         orientation="horizontal"
         className="min-h-0 flex-1 [&_[data-hovering]:not([data-scrolling])]:opacity-0"
-        viewPortClassName="snap-x snap-mandatory scroll-px-3 overscroll-x-contain pb-2 *:h-full [container-type:inline-size] lg:snap-none lg:scroll-px-0 lg:overscroll-x-auto"
+        viewPortClassName="overscroll-x-contain pb-2 *:h-full [container-type:inline-size] lg:overscroll-x-auto"
         aria-label="Board columns"
         onPointerDown={scroll.claimForUser}
         onWheel={scroll.claimForUser}

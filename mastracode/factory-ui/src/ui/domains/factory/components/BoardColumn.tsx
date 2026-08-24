@@ -100,7 +100,7 @@ export function BoardColumn({
       aria-label={collapsed ? `${label}, empty` : label}
       data-testid={`board-column-${stage}`}
       className={cn(
-        'group/column flex min-h-0 min-w-0 w-[80cqw] shrink-0 snap-start snap-always flex-col gap-4 transition-[width,background-color] motion-reduce:transition-none lg:snap-normal lg:[scroll-snap-align:none]',
+        'group/column flex min-h-0 min-w-0 w-[80cqw] shrink-0 flex-col gap-4 transition-[width,background-color] motion-reduce:transition-none',
         collapsed ? 'rounded-lg lg:w-14 lg:gap-0' : 'lg:w-80',
         collapsed && dragOver && 'bg-surface2 ring-1 ring-border1',
       )}
