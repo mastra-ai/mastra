@@ -300,7 +300,7 @@ export function ProviderAccessSection() {
         </TabList>
 
         <SettingsCard>
-          <TabContent value="oauth" className="py-0 overflow-visible">
+          <TabContent value="oauth" className="overflow-visible py-0">
             {providersQuery.isPending ? (
               <div className="px-4 py-3">
                 <SkeletonRows label="Loading providers" rows={3} rowClassName="h-9 w-full" />
@@ -355,7 +355,7 @@ export function ProviderAccessSection() {
             )}
           </TabContent>
 
-          <TabContent value="api-key" className="py-0 overflow-visible">
+          <TabContent value="api-key" className="overflow-visible py-0">
             <div className="px-4 pt-3 pb-1">
               <div className="relative">
                 <Search size={14} className="text-icon3 pointer-events-none absolute top-1/2 left-3 -translate-y-1/2" />
