@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { Agent } from '../agent';
+import { MessageList } from '../agent/message-list';
 import type { MastraDBMessage, MastraMessageContentV2 } from '../agent/message-list/state/types';
 import { isUserAuthoredMessage } from '../agent/signals';
 import type { ActiveThreadRun } from '../agent/thread-stream-runtime';
@@ -149,17 +150,8 @@ export function buildFableFallbackProviderOptions(
  * from the model they selected.
  */
 
-/** Longest opening ask fed to the title model — enough to name a thread, short enough to stay cheap. */
-const TITLE_PROMPT_LIMIT = 2000;
-
-function titlePromptFrom(message: MastraDBMessage | undefined): string {
-  if (!message) return '';
-  return message.content.parts
-    .flatMap(part => (part.type === 'text' ? [part.text] : []))
-    .join(' ')
-    .trim()
-    .slice(0, TITLE_PROMPT_LIMIT);
-}
+/** How much of the tail a rename reads: enough to say where the thread went, bounded so a long thread costs no more than a short one. */
+const TITLE_WINDOW_MESSAGES = 20;
 
 /**
  * The AgentController orchestrates multiple agent modes, shared state, memory, and storage.
@@ -1287,9 +1279,11 @@ export class AgentController<TState = {}> {
     const thread = await this.queryThreadById({ threadId });
     if (!thread) throw new Error(`Thread not found: ${threadId}`);
 
-    const first = await this.queryFirstUserMessages({ threadIds: [threadId] });
-    const prompt = titlePromptFrom(first.get(threadId));
-    if (!prompt) throw new Error('This conversation has no message to name it from yet.');
+    const recent = await this.queryThreadMessages({ threadId, limit: TITLE_WINDOW_MESSAGES });
+    const messages = new MessageList().add(recent, 'memory').get.all.ui();
+    if (!messages.some(message => message.role === 'user')) {
+      throw new Error('This conversation has no message to name it from yet.');
+    }
 
     const session = resourceId ? await this.getSessionByResource(resourceId, scope) : undefined;
     const agent = session
@@ -1303,7 +1297,7 @@ export class AgentController<TState = {}> {
 
     const title = (
       await agent.generateTitleFromUserMessage({
-        message: prompt,
+        messages,
         requestContext,
         model: model ?? titleConfig?.model,
         instructions: titleConfig?.instructions,

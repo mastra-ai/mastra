@@ -137,6 +137,25 @@ describe('AgentController thread titles', () => {
     expect(namer.mock.calls[0]?.[0].requestContext?.get('user')).toEqual({ id: 'thread-owner' });
   });
 
+  it('names a thread from where the conversation went, not only its opening ask', async () => {
+    const { controller, session, agent } = await startNamedThread();
+    const threadId = session.thread.getId()!;
+    const events: AgentControllerEvent[] = [];
+    session.subscribe(event => events.push(event));
+
+    await session.sendMessage({ content: 'Actually, switch it to streaming ingestion' });
+    await vi.waitFor(() => expect(events.some(event => event.type === 'agent_end')).toBe(true), { timeout: 10_000 });
+
+    const namer = vi.spyOn(agent, 'generateTitleFromUserMessage');
+    await controller.generateThreadTitle({ threadId, resourceId: session.identity.getResourceId() });
+
+    const named = (namer.mock.calls[0]?.[0].messages ?? [])
+      .flatMap(message => message.parts?.filter(part => part.type === 'text').map(part => part.text) ?? [])
+      .join(' ');
+    expect(named).toContain('Rewrite the log parser');
+    expect(named).toContain('switch it to streaming ingestion');
+  });
+
   it('keeps the thread working when the title model cannot answer', async () => {
     const { session, memory, events } = await startThread(createBrokenModel());
     const threadId = session.thread.getId()!;
