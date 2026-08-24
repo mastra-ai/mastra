@@ -11,7 +11,15 @@ import { FactoryTransitionService } from './transition-service.js';
 
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
 
-function requestContext(overrides: Partial<{ threadId: string; scope: string; authenticated: boolean }> = {}) {
+function requestContext(
+  overrides: Partial<{
+    threadId: string;
+    scope: string;
+    authenticated: boolean;
+    modelId: string;
+    thinkingLevel: 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+  }> = {},
+) {
   const context = new RequestContext();
   if (overrides.authenticated !== false) {
     context.set('user', { workosId: 'user-1', organizationId: 'org-1' });
@@ -20,12 +28,14 @@ function requestContext(overrides: Partial<{ threadId: string; scope: string; au
     resourceId: 'resource-1',
     threadId: overrides.threadId ?? 'thread-1',
     scope: overrides.scope ?? '/worktree',
-    getState: () => ({ factoryProjectId: PROJECT_ID }),
+    state: { factoryProjectId: PROJECT_ID, thinkingLevel: overrides.thinkingLevel ?? 'high' },
+    getState: () => ({ factoryProjectId: PROJECT_ID, thinkingLevel: overrides.thinkingLevel ?? 'high' }),
+    session: { modelId: overrides.modelId ?? 'openai/gpt-5.6-sol', modeId: 'review' },
   });
   return context;
 }
 
-async function prepare(storage: WorkItemsStorage, role = 'work') {
+async function prepare(storage: WorkItemsStorage, role = 'work', sourceType: 'issue' | 'pull-request' = 'issue') {
   return storage.prepareRunStart({
     orgId: 'org-1',
     userId: 'user-1',
@@ -34,9 +44,9 @@ async function prepare(storage: WorkItemsStorage, role = 'work') {
       input: {
         externalSource: {
           integrationId: 'github',
-          type: 'issue',
-          externalId: 'github-issue:1',
-          url: 'https://example.test/issues/1',
+          type: sourceType,
+          externalId: sourceType === 'issue' ? 'github-issue:1' : 'github-pr:1',
+          url: sourceType === 'issue' ? 'https://example.test/issues/1' : 'https://example.test/pull/1',
         },
         title: 'Improve the settings UI',
         stages: ['planning'],
@@ -362,8 +372,65 @@ describe('FactoryPhaseStateProcessor', () => {
 
     const signal = await processor.computeStateSignal(stateArgs(requestContext({ authenticated: false })));
 
-    expect(signal).toMatchObject({ attributes: { status: 'active', board: 'work', stage: 'planning', role: 'work' } });
+    expect(signal).toMatchObject({
+      attributes: {
+        status: 'active',
+        board: 'work',
+        stage: 'planning',
+        role: 'work',
+      },
+    });
+    expect(signal?.attributes).not.toHaveProperty('modelId');
+    expect(signal?.attributes).not.toHaveProperty('thinkingLevel');
     expect(signal?.contents).toContain('Revision: 1');
+    expect(signal?.contents).not.toContain('Runtime:');
+  });
+
+  it('re-emits phase state when either review runtime field changes', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    await prepare(storage, 'review', 'pull-request');
+    const rules = defaultFactoryRules({ version: 'rules-v1' });
+    const processor = new FactoryPhaseStateProcessor({ rules, storage });
+    const first = await processor.computeStateSignal(stateArgs(requestContext()));
+    const priorState = {
+      contextWindow: { hasSnapshot: true },
+      lastSnapshot: { metadata: { value: first?.metadata?.value } },
+      tracking: { currentCacheKey: first?.cacheKey },
+    };
+    const modelChanged = await processor.computeStateSignal(
+      stateArgs(requestContext({ modelId: 'openai/gpt-5.5' }), priorState),
+    );
+    const reasoningChanged = await processor.computeStateSignal(
+      stateArgs(requestContext({ thinkingLevel: 'xhigh' }), priorState),
+    );
+
+    expect(modelChanged?.cacheKey).not.toBe(first?.cacheKey);
+    expect(modelChanged).toMatchObject({
+      value: {
+        phase: { modelId: 'openai/gpt-5.5', thinkingLevel: 'high' },
+      },
+      attributes: { modelId: 'openai/gpt-5.5', thinkingLevel: 'high' },
+    });
+    expect(modelChanged?.contents).toContain('Runtime: model=openai/gpt-5.5, reasoning-setting=high');
+    expect(reasoningChanged?.cacheKey).not.toBe(first?.cacheKey);
+    expect(reasoningChanged).toMatchObject({
+      value: {
+        phase: { modelId: 'openai/gpt-5.6-sol', thinkingLevel: 'xhigh' },
+      },
+      attributes: { modelId: 'openai/gpt-5.6-sol', thinkingLevel: 'xhigh' },
+    });
+    expect(reasoningChanged?.contents).toContain('Runtime: model=openai/gpt-5.6-sol, reasoning-setting=xhigh');
+  });
+
+  it('rejects review phase state without a selected model', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    await prepare(storage, 'review', 'pull-request');
+    const rules = defaultFactoryRules({ version: 'rules-v1' });
+    const processor = new FactoryPhaseStateProcessor({ rules, storage });
+
+    await expect(processor.computeStateSignal(stateArgs(requestContext({ modelId: '' })))).rejects.toThrow(
+      'Factory review phase requires a selected session model.',
+    );
   });
 
   it('emits, suppresses, re-emits after compaction, and retracts a revoked phase snapshot', async () => {

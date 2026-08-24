@@ -8,6 +8,7 @@ import type {
   UpdateExperimentInput,
   AddExperimentResultInput,
   UpdateExperimentResultInput,
+  UpsertExperimentResultInput,
   ListExperimentsInput,
   ListExperimentsOutput,
   ListExperimentResultsInput,
@@ -37,8 +38,9 @@ export class ExperimentsInMemory extends ExperimentsStorage {
       datasetId: input.datasetId,
       datasetVersion: input.datasetVersion,
       agentVersion: input.agentVersion ?? null,
-      targetType: input.targetType,
-      targetId: input.targetId,
+      targetType: input.targetType ?? null,
+      targetId: input.targetId ?? null,
+      scorerIds: input.scorerIds ?? null,
       name: input.name,
       description: input.description,
       metadata: input.metadata,
@@ -188,10 +190,12 @@ export class ExperimentsInMemory extends ExperimentsStorage {
       input: input.input,
       output: input.output,
       groundTruth: input.groundTruth,
+      metadata: input.metadata ?? null,
       error: input.error,
       startedAt: input.startedAt,
       completedAt: input.completedAt,
       retryCount: input.retryCount,
+      attempt: input.attempt ?? 0,
       traceId: input.traceId ?? null,
       status: input.status ?? null,
       tags: input.tags ?? null,
@@ -203,6 +207,42 @@ export class ExperimentsInMemory extends ExperimentsStorage {
     };
     this.db.experimentResults.set(result.id, result);
     return result;
+  }
+
+  async upsertExperimentResult(input: UpsertExperimentResultInput): Promise<ExperimentResult> {
+    const attempt = input.attempt ?? 0;
+    const existing = Array.from(this.db.experimentResults.values()).find(
+      r => r.experimentId === input.experimentId && r.itemId === input.itemId && (r.attempt ?? 0) === attempt,
+    );
+    if (!existing) {
+      return this.addExperimentResult({ ...input, attempt });
+    }
+    // Last write wins on the natural key; keep row id + createdAt stable.
+    const replaced: ExperimentResult = {
+      id: existing.id,
+      experimentId: input.experimentId,
+      itemId: input.itemId,
+      itemDatasetVersion: input.itemDatasetVersion,
+      input: input.input,
+      output: input.output,
+      groundTruth: input.groundTruth,
+      metadata: input.metadata ?? null,
+      error: input.error,
+      startedAt: input.startedAt,
+      completedAt: input.completedAt,
+      retryCount: input.retryCount,
+      attempt,
+      traceId: input.traceId ?? null,
+      status: input.status ?? null,
+      tags: input.tags ?? null,
+      comment: existing.comment ?? null,
+      toolMockReport: input.toolMockReport ?? null,
+      organizationId: input.organizationId ?? null,
+      projectId: input.projectId ?? null,
+      createdAt: existing.createdAt,
+    };
+    this.db.experimentResults.set(existing.id, replaced);
+    return replaced;
   }
 
   async updateExperimentResult(input: UpdateExperimentResultInput): Promise<ExperimentResult> {

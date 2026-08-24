@@ -1,9 +1,10 @@
 /**
  * Tracing operations for the v-next Postgres observability domain.
  *
- * Insert-only: only ended spans are persisted. Retry idempotency is provided
- * by `ON CONFLICT ("traceId", "spanId", "endedAt") DO NOTHING` on the
- * partitioned span table.
+ * Event-sourced: a span is written when it starts and again when it ends, so a
+ * running span is visible before its result exists. The two rows differ in
+ * `endedAt` (part of the primary key), so they coexist; reads collapse them
+ * back to one span per `(traceId, spanId)`.
  */
 
 import type {
@@ -22,23 +23,50 @@ import type {
 import type { DbClient } from '../../../client';
 import { qualifiedTable, TABLE_SPAN_EVENTS } from './ddl';
 import { rowToLightSpanRecord, rowToSpanRecord, spanRecordToRow } from './helpers';
-import { buildInsert, SPAN_LIGHT_SELECT_COLUMNS, SPAN_SELECT_COLUMNS } from './sql';
+import {
+  buildInsert,
+  spanConflictClause,
+  SPAN_COLLAPSE_ORDER,
+  SPAN_LIGHT_SELECT_COLUMNS,
+  SPAN_SELECT_COLUMNS,
+} from './sql';
 
 // ---------------------------------------------------------------------------
 // Writes
 // ---------------------------------------------------------------------------
 
-export async function createSpan(client: DbClient, schema: string, args: CreateSpanArgs): Promise<void> {
-  const row = spanRecordToRow(args.span);
-  const insert = buildInsert(schema, TABLE_SPAN_EVENTS, [row]);
+async function writeSpanRows(client: DbClient, schema: string, rows: Record<string, unknown>[]): Promise<void> {
+  const deduped = dedupeSpanRows(rows);
+  const insert = buildInsert(schema, TABLE_SPAN_EVENTS, deduped, spanConflictClause(Object.keys(deduped[0] ?? {})));
   if (insert) await client.query(insert.text, insert.values);
+}
+
+/**
+ * Collapse rows that share a primary key within a single batch. Postgres
+ * rejects an `ON CONFLICT DO UPDATE` statement whose VALUES list would touch
+ * the same row twice, which a batch containing both the start and the end of a
+ * zero-duration span would do. The ended row wins, matching what the conflict
+ * clause would have done across two separate statements.
+ */
+function dedupeSpanRows(rows: Record<string, unknown>[]): Record<string, unknown>[] {
+  if (rows.length < 2) return rows;
+  const byKey = new Map<string, Record<string, unknown>>();
+  for (const row of rows) {
+    const key = `${row.traceId}\u0000${row.spanId}\u0000${String(row.endedAt)}`;
+    const existing = byKey.get(key);
+    if (existing && !existing.isPending) continue;
+    byKey.set(key, row);
+  }
+  return [...byKey.values()];
+}
+
+export async function createSpan(client: DbClient, schema: string, args: CreateSpanArgs): Promise<void> {
+  await writeSpanRows(client, schema, [spanRecordToRow(args.span)]);
 }
 
 export async function batchCreateSpans(client: DbClient, schema: string, args: BatchCreateSpansArgs): Promise<void> {
   if (args.records.length === 0) return;
-  const rows = args.records.map(spanRecordToRow);
-  const insert = buildInsert(schema, TABLE_SPAN_EVENTS, rows);
-  if (insert) await client.query(insert.text, insert.values);
+  await writeSpanRows(client, schema, args.records.map(spanRecordToRow));
 }
 
 // ---------------------------------------------------------------------------
@@ -52,10 +80,13 @@ export async function getSpans(client: DbClient, schema: string, args: GetSpansA
 
   const table = qualifiedTable(schema, TABLE_SPAN_EVENTS);
   const rows = await client.manyOrNone<Record<string, any>>(
-    `SELECT ${SPAN_SELECT_COLUMNS}
-     FROM ${table}
-     WHERE "traceId" = $1
-       AND "spanId" = ANY($2::text[])
+    `SELECT * FROM (
+       SELECT DISTINCT ON ("spanId") ${SPAN_SELECT_COLUMNS}
+       FROM ${table}
+       WHERE "traceId" = $1
+         AND "spanId" = ANY($2::text[])
+       ORDER BY "spanId", ${SPAN_COLLAPSE_ORDER}
+     ) collapsed
      ORDER BY "startedAt" ASC`,
     [args.traceId, args.spanIds],
   );
@@ -69,7 +100,7 @@ export async function getSpan(client: DbClient, schema: string, args: GetSpanArg
     `SELECT ${SPAN_SELECT_COLUMNS}
      FROM ${table}
      WHERE "traceId" = $1 AND "spanId" = $2
-     ORDER BY "endedAt" DESC
+     ORDER BY ${SPAN_COLLAPSE_ORDER}
      LIMIT 1`,
     [args.traceId, args.spanId],
   );
@@ -80,9 +111,12 @@ export async function getSpan(client: DbClient, schema: string, args: GetSpanArg
 export async function getTrace(client: DbClient, schema: string, args: GetTraceArgs): Promise<GetTraceResponse | null> {
   const table = qualifiedTable(schema, TABLE_SPAN_EVENTS);
   const rows = await client.manyOrNone<Record<string, any>>(
-    `SELECT ${SPAN_SELECT_COLUMNS}
-     FROM ${table}
-     WHERE "traceId" = $1
+    `SELECT * FROM (
+       SELECT DISTINCT ON ("spanId") ${SPAN_SELECT_COLUMNS}
+       FROM ${table}
+       WHERE "traceId" = $1
+       ORDER BY "spanId", ${SPAN_COLLAPSE_ORDER}
+     ) collapsed
      ORDER BY "startedAt" ASC`,
     [args.traceId],
   );
@@ -97,9 +131,12 @@ export async function getTraceLight(
 ): Promise<GetTraceLightResponse | null> {
   const table = qualifiedTable(schema, TABLE_SPAN_EVENTS);
   const rows = await client.manyOrNone<Record<string, any>>(
-    `SELECT ${SPAN_LIGHT_SELECT_COLUMNS}
-     FROM ${table}
-     WHERE "traceId" = $1
+    `SELECT * FROM (
+       SELECT DISTINCT ON ("spanId") ${SPAN_LIGHT_SELECT_COLUMNS}
+       FROM ${table}
+       WHERE "traceId" = $1
+       ORDER BY "spanId", ${SPAN_COLLAPSE_ORDER}
+     ) collapsed
      ORDER BY "startedAt" ASC`,
     [args.traceId],
   );

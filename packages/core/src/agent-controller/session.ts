@@ -24,6 +24,7 @@ import type { TracingContext, TracingOptions } from '../observability';
 import type { RequestContext } from '../request-context';
 import { toStandardSchema } from '../schema';
 import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
+import type { SubmitPlanResumeData } from '../tools/builtin/submit-plan';
 import { safeStringify } from '../utils';
 import { Workspace } from '../workspace';
 
@@ -507,6 +508,10 @@ export class SessionThread {
   /** Persist a setting to a specific thread, regardless of the current binding. */
   async setSettingOn({ threadId, key, value }: { threadId: string; key: string; value: unknown }): Promise<void> {
     if (!this.#store) return;
+    if (value === undefined) {
+      await this.#store.deleteMetadata({ threadId, key });
+      return;
+    }
     await this.#store.setMetadata({ threadId, key, value });
   }
 
@@ -672,6 +677,7 @@ export class SessionThread {
       await store.saveThread({
         thread: { ...thread, title, updatedAt: new Date() },
       });
+      this.#owner.emit({ type: 'thread_title_updated', threadId, title });
     }
   }
 
@@ -1551,6 +1557,27 @@ export class SessionModel {
   /** Persist `modelId` as the last-used model for `modeId`. */
   async saveForMode({ modeId, modelId }: { modeId: string; modelId: string }): Promise<void> {
     await this.#store()?.set(modeModelKey(modeId), modelId);
+  }
+
+  /**
+   * Re-sync the in-memory selection from the persisted per-mode model.
+   *
+   * The persisted `modeModelId_<mode>` thread setting is the source of truth for
+   * "which model this mode runs". The in-memory {@link get} value is only a
+   * per-instance cache, so in multiplayer deployments (multiple processes or a
+   * fresh Session for an existing thread) it can drift from what another actor
+   * persisted. Calling this at run start reconciles the cache with storage.
+   *
+   * Only overrides when a persisted value exists (so brand-new threads keep
+   * their seeded/default selection) and only emits `model_changed` when the
+   * value actually changes (a no-op in the single-player TUI, where the cache
+   * and the persisted value are always written together).
+   */
+  async syncFromPersisted({ modeId }: { modeId: string }): Promise<void> {
+    const stored = (await this.#store()?.get(modeModelKey(modeId))) as string | undefined;
+    if (!stored || stored === this.#id) return;
+    this.#id = stored;
+    this.#bus.emit({ type: 'model_changed', modelId: stored, scope: 'thread', modeId });
   }
 
   /**
@@ -3659,7 +3686,7 @@ export class Session<TState = unknown> {
       if (suspension?.toolName === 'submit_plan') {
         await this.handlePlanApprovalResume({
           toolCallId: resolvedToolCallId,
-          response: resumeData as { action: 'approved' | 'rejected'; feedback?: string },
+          response: resumeData as SubmitPlanResumeData,
           requestContext,
         });
         return;
@@ -3689,7 +3716,7 @@ export class Session<TState = unknown> {
     requestContext,
   }: {
     toolCallId: string;
-    response: { action: 'approved' | 'rejected'; feedback?: string };
+    response: SubmitPlanResumeData;
     requestContext?: RequestContext;
   }): Promise<void> {
     if (response.action === 'rejected') {

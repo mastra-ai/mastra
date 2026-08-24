@@ -1495,7 +1495,15 @@ export class DurableAgent<
     const entry = globalRunRegistry.get(runId);
     const requestContext = entry?.requestContext;
 
-    const run = await workflow.createRun({ runId, pubsub: this.pubsub });
+    // Populate the run row's resourceId column so storage-level resource
+    // filters (listSuspendedRuns / listActiveRuns) can narrow the query,
+    // mirroring the non-durable agentic loop (loop/workflows/stream.ts).
+    const memoryInfo = (
+      workflowInput.messageListState as { memoryInfo?: { threadId?: string; resourceId?: string } } | undefined
+    )?.memoryInfo;
+    const resourceId = workflowInput.state?.resourceId ?? memoryInfo?.resourceId;
+
+    const run = await workflow.createRun({ runId, resourceId, pubsub: this.pubsub });
     // Parent the workflow run under the AGENT_RUN span so the trace exports under it.
     const result = await run.start({
       inputData: workflowInput,
@@ -1693,6 +1701,9 @@ export class DurableAgent<
           { once: true },
         );
       }
+    }
+    if (agentThreadStreamRuntime.isRunAborted(runId, this.getPubSub())) {
+      abortController.abort();
     }
     registryEntry.abortController = abortController;
     registryEntry.abortSignal = abortController.signal;
@@ -1991,6 +2002,9 @@ export class DurableAgent<
         );
       }
     }
+    if (agentThreadStreamRuntime.isRunAborted(runId, this.getPubSub())) {
+      abortController.abort();
+    }
     entry.abortController = abortController;
     entry.abortSignal = abortController.signal;
     const globalEntryForAbort = globalRunRegistry.get(runId);
@@ -2130,7 +2144,7 @@ export class DurableAgent<
           });
         }
 
-        const run = await workflow.createRun({ runId, pubsub: this.pubsub });
+        const run = await workflow.createRun({ runId, resourceId: memoryInfo?.resourceId, pubsub: this.pubsub });
         if (this.__getGoalConfig()) {
           await beginGoalActivity({
             mastra: this.#mastra,
@@ -2374,7 +2388,10 @@ export class DurableAgent<
     const workflowExecution = this.#raceRecoveryLease(ready, recoveryLease)
       .then(async () => {
         recoveryLease.assertOwned();
-        const run = await this.#raceRecoveryLease(workflow.createRun({ runId, pubsub: recoveryPubsub }), recoveryLease);
+        const run = await this.#raceRecoveryLease(
+          workflow.createRun({ runId, resourceId, pubsub: recoveryPubsub }),
+          recoveryLease,
+        );
         recoveryLease.assertOwned();
         const result = await this.#raceRecoveryLease(
           run.restart({
@@ -2597,6 +2614,9 @@ export class DurableAgent<
           { once: true },
         );
       }
+    }
+    if (agentThreadStreamRuntime.isRunAborted(runId, this.getPubSub())) {
+      abortController.abort();
     }
     registryEntry.abortController = abortController;
     registryEntry.abortSignal = abortController.signal;
@@ -2849,6 +2869,9 @@ export class DurableAgent<
       });
     }
 
+    // resourceId is a storage column, so it is pushed down to narrow the query
+    // (the in-process check below remains as backstop for adapters that skip
+    // the filter and for rows persisted before the column was populated).
     // Filtering by agentId/threadId happens in application code because those
     // fields only exist inside each row's `snapshot` JSON — storage adapters
     // have no predicate for them. Fetch candidates in bounded batches so peak
@@ -2861,6 +2884,7 @@ export class DurableAgent<
       const { runs, total: storageTotal } = await workflowsStore.listWorkflowRuns({
         workflowName: DurableStepIds.AGENTIC_LOOP,
         status: 'running',
+        resourceId,
         fromDate,
         toDate,
         perPage: LIST_ACTIVE_RUNS_STORAGE_BATCH_SIZE,

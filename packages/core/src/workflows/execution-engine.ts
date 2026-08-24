@@ -67,10 +67,40 @@ export interface ExecutionEngineOptions {
 export abstract class ExecutionEngine extends MastraBase {
   public mastra?: Mastra;
   public options: ExecutionEngineOptions;
+
+  /**
+   * Per-run overrides of `options.shouldPersistSnapshot`, keyed by runId.
+   *
+   * `options` is shared by every run of a workflow, so persistence is otherwise a
+   * per-workflow decision. Some callers need it per run: an agent output processor
+   * executes its workflow once per streamed chunk, and those runs must never write
+   * snapshots even when the same workflow instance persists normally when the user
+   * starts it directly (#19605).
+   */
+  private runPersistenceOverrides = new Map<string, ExecutionEngineOptions['shouldPersistSnapshot']>();
+
   constructor({ mastra, options }: { mastra?: Mastra; options: ExecutionEngineOptions }) {
     super({ name: 'ExecutionEngine', component: RegisteredLogger.WORKFLOW });
     this.mastra = mastra;
     this.options = options;
+  }
+
+  /** Registers a run-scoped `shouldPersistSnapshot` predicate. */
+  setRunPersistenceOverride(
+    runId: string,
+    shouldPersistSnapshot: ExecutionEngineOptions['shouldPersistSnapshot'],
+  ): void {
+    this.runPersistenceOverrides.set(runId, shouldPersistSnapshot);
+  }
+
+  /** Returns the run-scoped `shouldPersistSnapshot` predicate, if one was registered. */
+  getRunPersistenceOverride(runId: string): ExecutionEngineOptions['shouldPersistSnapshot'] | undefined {
+    return this.runPersistenceOverrides.get(runId);
+  }
+
+  /** Clears the run-scoped predicate (called on run cleanup). */
+  clearRunPersistenceOverride(runId: string): void {
+    this.runPersistenceOverrides.delete(runId);
   }
 
   __registerMastra(mastra: Mastra) {

@@ -7,6 +7,7 @@ import type {
   UpdateExperimentInput,
   AddExperimentResultInput,
   UpdateExperimentResultInput,
+  UpsertExperimentResultInput,
   ListExperimentsInput,
   ListExperimentsOutput,
   ListExperimentResultsInput,
@@ -56,6 +57,18 @@ export abstract class ExperimentsStorage extends StorageDomain {
 
   // Results (per-item)
   abstract addExperimentResult(input: AddExperimentResultInput): Promise<ExperimentResult>;
+  /**
+   * Insert-or-replace a result identified by the natural key
+   * `(experimentId, itemId, attempt)` (attempt defaults to 0). When a row with
+   * the same key already exists it is replaced (last write wins) with three
+   * exceptions implementers MUST preserve: the row `id`, `createdAt`, and the
+   * reviewer-authored `comment` (written via `updateExperimentResult`) — a
+   * retried submission must never clear a reviewer's comment. This makes
+   * retried external
+   * submissions idempotent: a Temporal-style worker can retry a submission
+   * freely and converge on one logical row instead of duplicating.
+   */
+  abstract upsertExperimentResult(input: UpsertExperimentResultInput): Promise<ExperimentResult>;
   abstract updateExperimentResult(input: UpdateExperimentResultInput): Promise<ExperimentResult>;
   /**
    * When `filters` is set, returns `null` on tenancy mismatch (never throws).

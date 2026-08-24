@@ -355,6 +355,30 @@ export function allTableDDL(schema: string, mode: TableDDLMode): string[] {
   ];
 }
 
+/**
+ * Additive column migrations for tables created by an older version of this
+ * schema. `CREATE TABLE IF NOT EXISTS` is a no-op on an existing table, so new
+ * columns have to be added out of band.
+ *
+ * `ALTER TABLE` takes an AccessExclusiveLock on the partitioned parent, so
+ * callers must check {@link columnExistsSQL} first and only run the statement
+ * when the column is genuinely missing. On Postgres 11+ the non-volatile
+ * default does not rewrite the table, and the ALTER cascades to partitions.
+ */
+export function additiveColumns(schema: string): { table: string; column: string; ddl: string }[] {
+  return [
+    {
+      table: TABLE_SPAN_EVENTS,
+      column: 'isPending',
+      ddl: `ALTER TABLE ${qualifiedTable(schema, TABLE_SPAN_EVENTS)} ADD COLUMN IF NOT EXISTS "isPending" boolean NOT NULL DEFAULT false`,
+    },
+  ];
+}
+
+/** Existence probe for an additive column. Params: schema, table, column. */
+export const columnExistsSQL = `SELECT 1 FROM information_schema.columns
+   WHERE table_schema = $1 AND table_name = $2 AND column_name = $3`;
+
 /** Index CREATEs. Safe to run repeatedly. */
 export function allIndexDDL(schema: string): string[] {
   return tableIndexes().map(spec => indexDDL(schema, spec));

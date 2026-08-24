@@ -21,7 +21,7 @@ import type { MessageList } from '../../../message-list';
 import type { SaveQueueManager } from '../../../save-queue';
 import { resolveDeclineReason } from '../../../tool-approval';
 import { DurableStepIds } from '../../constants';
-import { globalRunRegistry } from '../../run-registry';
+import { globalRunRegistry, markRunActive } from '../../run-registry';
 import { emitSuspendedEvent, emitChunkEvent } from '../../stream-adapter';
 import type {
   DurableToolCallInput,
@@ -1283,7 +1283,13 @@ export function createDurableToolCallStep() {
       }
 
       try {
-        const result = await tool.execute(cleanedArgs, toolOptions);
+        const releaseRunActivity = markRunActive(runId);
+        let result: unknown;
+        try {
+          result = await tool.execute(cleanedArgs, toolOptions);
+        } finally {
+          releaseRunActivity();
+        }
 
         // Fire onOutput lifecycle hook after successful execution (matches non-durable path).
         if (tool && 'onOutput' in tool && typeof (tool as any).onOutput === 'function') {

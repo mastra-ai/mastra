@@ -41,6 +41,26 @@ describe('runExperiment lifecycle hooks', () => {
     expect(calls).toEqual(['beforeAll', 'task:one', 'task:two', 'afterAll:2']);
   });
 
+  it('round-trips inline item metadata in results and completion events', async () => {
+    const events: unknown[] = [];
+    const summary = await runExperiment(createMastra(), {
+      data: [{ id: 'a', input: 'one', metadata: { source: 'inline' } }],
+      task: ({ input }) => input,
+      onEvent: event => {
+        events.push(event);
+      },
+    });
+
+    expect(summary.results[0]?.metadata).toEqual({ source: 'inline' });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'experiment.item.completed',
+        itemId: 'a',
+        metadata: { source: 'inline' },
+      }),
+    );
+  });
+
   it('passes experimentId and mastra to run-level hooks', async () => {
     const mastra = createMastra();
     const beforeAll = vi.fn();

@@ -1,4 +1,18 @@
 {
-  "temperature": ["gemma4-26b", "gpt-oss-120b", "minimax-m2.5-230b", "mistral4-119b", "qwen3.6-35b"],
-  "structuredOutput": ["gemma4-26b", "gpt-oss-120b", "kimi-k2.7-code-1100b", "qwen3.6-35b"]
+  "temperature": [
+    "deepseek-v4-flash-0731-284b",
+    "gemma4-26b",
+    "gpt-oss-120b",
+    "mistral4-119b",
+    "qwen3.6-35b",
+    "qwen3.8-27b"
+  ],
+  "structuredOutput": [
+    "deepseek-v4-flash-0731-284b",
+    "gemma4-26b",
+    "gpt-oss-120b",
+    "kimi-k2.7-code-1100b",
+    "qwen3.6-35b",
+    "qwen3.8-27b"
+  ]
 }

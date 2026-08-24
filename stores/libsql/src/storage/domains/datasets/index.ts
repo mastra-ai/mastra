@@ -1,4 +1,3 @@
-import type { Client, InValue } from '@libsql/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   createStorageErrorId,
@@ -41,6 +40,7 @@ import type {
 
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
+import type { SqliteClient as Client, SqliteInValue as InValue } from '../../db/client';
 import { buildSelectColumns } from '../../db/utils';
 import { withClientWriteLock } from '../../db/write-lock';
 import { tenancyWhere } from '../utils';
@@ -833,10 +833,9 @@ export class DatasetsLibSQL extends DatasetsStorage {
     try {
       let result;
       if (args.datasetVersion !== undefined) {
-        // T3.13 — exact version match, exclude deleted
         result = await this.#client.execute({
-          sql: `SELECT ${buildSelectColumns(TABLE_DATASET_ITEMS)} FROM ${TABLE_DATASET_ITEMS} WHERE id = ? AND datasetVersion = ? AND isDeleted = 0`,
-          args: [args.id, args.datasetVersion],
+          sql: `SELECT ${buildSelectColumns(TABLE_DATASET_ITEMS)} FROM ${TABLE_DATASET_ITEMS} WHERE id = ? AND datasetVersion <= ? AND (validTo IS NULL OR validTo > ?) AND isDeleted = 0 ORDER BY datasetVersion DESC LIMIT 1`,
+          args: [args.id, args.datasetVersion, args.datasetVersion],
         });
       } else {
         // T3.12 — current row (validTo IS NULL AND isDeleted = false)

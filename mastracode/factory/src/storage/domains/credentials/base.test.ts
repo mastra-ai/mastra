@@ -38,13 +38,13 @@ describe('ModelCredentialsStorage', () => {
     expect(await store.resolveCredential('org1', 'bob', 'anthropic')).toBeUndefined();
   });
 
-  it('rejects org-scoped OAuth credentials without a user tenant', async () => {
+  it('stores org-scoped OAuth credentials (org-wide sign-in)', async () => {
     const store = await makeStore();
 
-    await expect(
-      store.setCredential({ orgId: 'org1' }, 'anthropic', oauth('org', Date.now() + 60_000)),
-    ).rejects.toThrow('OAuth credentials must be user-scoped');
-    expect(await store.listCredentials('org1', 'alice')).toEqual([]);
+    await store.setCredential({ orgId: 'org1' }, 'anthropic', oauth('org', Date.now() + 60_000));
+    expect(await store.getCredential({ orgId: 'org1' }, 'anthropic')).toMatchObject({ type: 'oauth' });
+    // Visible to every org member through resolution.
+    expect(await store.resolveCredential('org1', 'alice', 'anthropic')).toMatchObject({ scope: 'org' });
   });
 
   it('resolves user > org and lists both scopes for a member', async () => {
@@ -67,6 +67,23 @@ describe('ModelCredentialsStorage', () => {
     const bobList = await store.listCredentials('org1', 'bob');
     expect(bobList).toHaveLength(1);
     expect(bobList[0]!.scope).toBe('org');
+  });
+
+  it("resolves org > user when precedence is 'org' (factory runs)", async () => {
+    const store = await makeStore();
+    await store.setCredential({ orgId: 'org1' }, 'openai', { type: 'api_key', key: 'sk-org' });
+    await store.setCredential({ orgId: 'org1', userId: 'alice' }, 'openai', { type: 'api_key', key: 'sk-alice' });
+    await store.setCredential({ orgId: 'org1', userId: 'alice' }, 'google', { type: 'api_key', key: 'sk-alice-g' });
+
+    expect(await store.resolveCredential('org1', 'alice', 'openai', 'org')).toMatchObject({
+      scope: 'org',
+      credential: { key: 'sk-org' },
+    });
+    // No org row — falls back to the user's personal key.
+    expect(await store.resolveCredential('org1', 'alice', 'google', 'org')).toMatchObject({
+      scope: 'user',
+      credential: { key: 'sk-alice-g' },
+    });
   });
 
   it('removes only the addressed scope', async () => {

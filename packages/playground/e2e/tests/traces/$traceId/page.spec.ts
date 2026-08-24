@@ -1,5 +1,5 @@
 import type { MastraClient } from '@mastra/client-js';
-import { SpanType } from '@mastra/core/observability';
+import { EntityType, SpanType } from '@mastra/core/observability';
 import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { resetStorage } from '../../__utils__/reset-storage';
@@ -7,6 +7,8 @@ import { expectBreadcrumbLink, expectCurrentBreadcrumb, expectRouteDocsLink } fr
 
 const FAKE_TRACE_ID = 'trace-does-not-exist';
 const LONG_TRACE_ID = 'trace-with-many-spans';
+const ENTITY_TRACE_ID = 'trace-with-entity';
+const ENTITY_NAME = 'SAP Connectivity Orchestration Agent';
 const ROOT_SPAN_ID = 'root-span';
 const SELECTED_SPAN_ID = 'span-60';
 const TRACE_STARTED_AT_MS = Date.parse('2026-07-14T08:00:00.000Z');
@@ -108,6 +110,29 @@ async function mockTraceResponse(page: Page, status: number, body: unknown = { e
         spans: [],
         pagination: { page: 0, perPage: 25, total: 0, hasMore: false },
       }),
+    });
+  });
+}
+
+const entityTraceResponse: TraceLightResponse = {
+  traceId: ENTITY_TRACE_ID,
+  spans: [
+    {
+      ...rootSpan,
+      traceId: ENTITY_TRACE_ID,
+      entityId: 'sap-connectivity-orchestration-agent',
+      entityName: ENTITY_NAME,
+      entityType: EntityType.AGENT,
+    },
+  ],
+};
+
+async function mockEntityTrace(page: Page) {
+  await page.route(`**/api/observability/traces/${ENTITY_TRACE_ID}/light`, async route => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(entityTraceResponse),
     });
   });
 }
@@ -237,6 +262,41 @@ test.describe('Trace detail page', () => {
 
       await expect.poll(() => spanDetailsContent.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
       expect(await timelineContent.evaluate(element => element.scrollTop)).toBe(timelineScrollTop);
+    });
+  });
+
+  test.describe('when a trace with a long entity name is opened', () => {
+    /**
+     * FEATURE: Trace metadata summary.
+     * USER STORY: A user can read the entity, status and timings of a trace at a glance.
+     * BEHAVIOR UNDER TEST: The metadata summary spans the page and shows each value in full.
+     * DATA FLOW: A typed light-trace response is fulfilled at the network boundary and rendered by the real trace page.
+     * PERSISTENCE: None - the summary is derived from the root span on every render.
+     * DOWNSTREAM EFFECT: Values stay readable instead of being clipped to an ellipsis.
+     */
+    test('shows the trace metadata across the page width without clipping values', async ({ page }) => {
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await mockEntityTrace(page);
+      await page.goto(`/traces/${ENTITY_TRACE_ID}`);
+
+      const metadata = page.locator('dl').first();
+      await expect(metadata.getByText(ENTITY_NAME)).toBeVisible();
+
+      const contentWidth = await page
+        .locator('main')
+        .first()
+        .evaluate(element => {
+          const styles = getComputedStyle(element);
+          return element.clientWidth - parseFloat(styles.paddingLeft) - parseFloat(styles.paddingRight);
+        });
+      await expect
+        .poll(() => metadata.evaluate(element => element.clientWidth))
+        .toBeGreaterThanOrEqual(contentWidth - 1);
+      expect(await metadata.evaluate(element => element.clientWidth)).toBeLessThanOrEqual(contentWidth + 1);
+
+      const entityValue = metadata.locator('dd').filter({ hasText: ENTITY_NAME });
+      await expect(entityValue).toHaveCount(1);
+      expect(await entityValue.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
     });
   });
 

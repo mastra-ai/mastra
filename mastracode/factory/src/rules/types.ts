@@ -7,6 +7,16 @@ export function isFactoryRuleStage(value: unknown): value is FactoryRuleStage {
   return typeof value === 'string' && FACTORY_RULE_STAGES.some(stage => stage === value);
 }
 
+export function factoryRuleStage(stages: readonly string[]): FactoryRuleStage | undefined {
+  const stage = stages.length === 1 ? stages[0] : undefined;
+  return isFactoryRuleStage(stage) ? stage : undefined;
+}
+
+export function isTerminalFactoryRuleStage(stages: readonly string[]): boolean {
+  const stage = factoryRuleStage(stages);
+  return stage === 'done' || stage === 'canceled';
+}
+
 export const FACTORY_RULE_BOARDS = ['work', 'review'] as const;
 export type FactoryRuleBoard = (typeof FACTORY_RULE_BOARDS)[number];
 
