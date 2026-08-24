@@ -34,10 +34,9 @@ import { isProcessorWorkflow } from '../../../processors/index';
 import { PrepareStepProcessor } from '../../../processors/processors/prepare-step';
 import { ProcessorRunner } from '../../../processors/runner';
 import type { ProcessorState } from '../../../processors/runner';
-import { spanPulseId } from '../../../pulse/bridge';
 import { emitPulseFact } from '../../../pulse/emitter';
 import { factIds, mintFactId } from '../../../pulse/identity';
-import { emitSpanFact, usageTokenData } from '../../../pulse/lifecycle';
+import { emitLifecycleFact, usageTokenData } from '../../../pulse/lifecycle';
 import { RequestContext } from '../../../request-context';
 import { execute } from '../../../stream/aisdk/v5/execute';
 import { DefaultStepResult } from '../../../stream/aisdk/v5/output-helpers';
@@ -569,7 +568,7 @@ async function processOutputStream<OUTPUT = undefined>({
     }
 
     entry.span.end(args !== undefined ? { metadata: { args } } : undefined);
-    emitSpanFact(entry.span as any, 'ended');
+    emitLifecycleFact('ended', undefined);
     entry.ended = true;
     clientToolArgsTextByToolCallId.delete(toolCallId);
   };
@@ -647,7 +646,7 @@ async function processOutputStream<OUTPUT = undefined>({
         },
         ...(args !== undefined ? { input: args } : {}),
       });
-      emitSpanFact(clientToolSpan as any, 'started');
+      emitLifecycleFact('started', undefined);
       if (clientToolSpan) {
         const carrier = proxy.inject(clientToolSpan);
         const entry = { carrier, span: clientToolSpan, ended: false };
@@ -1070,7 +1069,7 @@ async function processOutputStream<OUTPUT = undefined>({
     if (!entry.ended) {
       const parsedArgs = parseClientToolArgsFromDeltas(toolCallId);
       entry.span.end(parsedArgs !== undefined ? { metadata: { args: parsedArgs } } : undefined);
-      emitSpanFact(entry.span as any, 'ended');
+      emitLifecycleFact('ended', undefined);
       entry.ended = true;
     }
   }
@@ -1201,7 +1200,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         : inputData.messageId || messageIdPassed;
       // Start the MODEL_STEP span at the beginning of LLM execution
       modelSpanTracker?.startStep();
-      emitSpanFact(modelSpanTracker?.getTracingContext?.()?.currentSpan as any, 'started', {
+      emitLifecycleFact('started', {
         runId,
         surface: 'model',
         base: 'step',
@@ -1669,18 +1668,13 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             // deterministic id (keyed by the freeze nonce) so the executed
             // fact can point back with an explicit join arrow.
             const stepIndex = inputData.output?.steps?.length ?? 0;
-            const stepSpan = modelSpanTracker?.getTracingContext?.()?.currentSpan as
-              | { id?: string; traceId?: string }
-              | undefined;
-            const stepFactId = stepSpan?.id
-              ? spanPulseId(stepSpan.traceId ?? '', stepSpan.id, 'started')
-              : factIds.step(runId!, stepIndex);
+            const stepFactId = factIds.step(runId!, stepIndex);
             const finalizedId = mintFactId(runId!, 'model_input', 'finalized', 'started', pulseFreezeId);
             emitPulseFact({
               id: finalizedId,
               runId,
-              traceId: stepSpan?.traceId ?? runId,
-              parentSpanId: stepSpan?.id ?? `model.step.${stepIndex}`,
+              traceId: runId,
+              parentSpanId: `model.step.${stepIndex}`,
               surface: 'model_input',
               action: 'finalized',
               type: 'state',
@@ -1812,19 +1806,14 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 if (emitted || !pulseFreezeId) return;
                 emitted = true;
                 const stepIndex = inputData.output?.steps?.length ?? 0;
-                const stepSpan = modelSpanTracker?.getTracingContext?.()?.currentSpan as
-                  | { id?: string; traceId?: string }
-                  | undefined;
-                const stepFactId = stepSpan?.id
-                  ? spanPulseId(stepSpan.traceId ?? '', stepSpan.id, 'started')
-                  : factIds.step(runId!, stepIndex);
+                const stepFactId = factIds.step(runId!, stepIndex);
                 const finalizedId = mintFactId(runId!, 'model_input', 'finalized', 'started', pulseFreezeId);
                 const executedId = mintFactId(runId!, 'model_input', 'executed', 'started', pulseFreezeId);
                 emitPulseFact({
                   id: executedId,
                   runId,
-                  traceId: stepSpan?.traceId ?? runId,
-                  parentSpanId: stepSpan?.id ?? `model.step.${stepIndex}`,
+                  traceId: runId,
+                  parentSpanId: `model.step.${stepIndex}`,
                   surface: 'model_input',
                   action: 'executed',
                   type: 'state',
@@ -1852,7 +1841,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             })(),
             onStepBoundary: info => {
               const stepIndex = inputData.output?.steps?.length ?? 0;
-              emitSpanFact(modelSpanTracker?.getTracingContext?.()?.currentSpan as any, 'ended', {
+              emitLifecycleFact('ended', {
                 runId,
                 surface: 'model',
                 base: 'step',

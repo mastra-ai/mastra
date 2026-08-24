@@ -7,7 +7,7 @@ import type { MemoryConfigInternal } from '../../../memory/types';
 import { createObservabilityContext } from '../../../observability';
 import type { Span, SpanType } from '../../../observability';
 import { StructuredOutputProcessor } from '../../../processors';
-import { emitSpanFact } from '../../../pulse/lifecycle';
+import { emitLifecycleFact } from '../../../pulse/lifecycle';
 import type { RequestContext } from '../../../request-context';
 import type { Step } from '../../../workflows/step';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
@@ -77,11 +77,11 @@ export function createMapResultsStep<OUTPUT = undefined>({
       pulseStatus?: 'aborted' | 'suspended',
     ) => {
       agentSpan?.end(opts as any);
-      emitSpanFact(agentSpan as any, 'ended', { ...runCtx, output: !pulseStatus, status: pulseStatus });
+      emitLifecycleFact('ended', { ...runCtx, output: !pulseStatus, status: pulseStatus });
     };
     const errorAgentSpan: NonNullable<typeof agentSpan>['error'] = opts => {
       agentSpan?.error(opts as any);
-      emitSpanFact(agentSpan as any, 'ended', { ...runCtx, error: true });
+      emitLifecycleFact('ended', { ...runCtx, error: true });
     };
 
     // Class instances written to runScope by upstream steps. These never travel

@@ -48,14 +48,7 @@ import type {
 import { NoOpObservability, noOpLoggerContext, noOpMetricsContext } from '../observability';
 import { initContextStorage } from '../observability/context-storage';
 import type { Processor } from '../processors';
-import {
-  NATIVE_SURFACES,
-  PulseBridge,
-  PulseBus,
-  PulseStorageExporter,
-  registerPulseEmitter,
-  unregisterPulseEmitter,
-} from '../pulse';
+import { PulseBus, PulseStorageExporter, registerPulseEmitter, unregisterPulseEmitter } from '../pulse';
 import type { PulseConfig } from '../pulse';
 import type { AgentScheduleHandler } from '../schedules/define';
 import { metadataEqual, targetsEqual } from '../schedules/row-diff';
@@ -702,7 +695,6 @@ export class Mastra<
   #observability: ObservabilityEntrypoint;
   #observabilityExplicit = false;
   #pulseBus?: PulseBus;
-  #pulseBridge?: PulseBridge;
   #onScorerHook?: ReturnType<typeof createOnScorerHook>;
   #tts?: TTTS;
   #deployer?: MastraDeployer;
@@ -1273,17 +1265,6 @@ export class Mastra<
   }
 
   /**
-   * Register the pulse span bridge on the current default observability
-   * instance. Re-run when the observability entrypoint is replaced (fs-routed
-   * observability) so the bridge follows the active instance.
-   */
-  #registerPulseBridge(): void {
-    if (!this.#pulseBridge) return;
-    const defaultInstance = this.#observability.getDefaultInstance?.();
-    defaultInstance?.registerExporter?.(this.#pulseBridge);
-  }
-
-  /**
    * Creates a new Mastra instance with the provided configuration.
    *
    * The constructor initializes all the components specified in the config, sets up
@@ -1558,18 +1539,13 @@ export class Mastra<
       for (const exporter of config.pulse.exporters ?? []) {
         this.#pulseBus.registerExporter(exporter);
       }
-      // Agent-scope lifecycle facts arrive first-hand from the call sites;
-      // the bridge translates only what the native lane does not cover yet
-      // (workflow spans, logs, metrics, scores, drops).
-      this.#pulseBridge = new PulseBridge({ bus: this.#pulseBus, nativeSurfaces: NATIVE_SURFACES });
-      this.#registerPulseBridge();
-      // EXPERIMENT (Gate 1): native signal/content facts flow through a
-      // process-level sink so truth-boundary seams stay one-line no-ops
-      // when pulse is off.
+      // HARD SPLIT: pulse never touches the observability system. Every
+      // fact arrives first-hand from the call sites through the
+      // process-level emitter sink (a one-line no-op when pulse is off).
       registerPulseEmitter(this.#pulseBus);
       // Propagate the instance logger (mirrors observability's setLogger
       // fan-out) — otherwise drops/warnings land on a default ConsoleLogger.
-      for (const component of [this.#pulseBus, this.#pulseBridge, ...this.#pulseBus.getExporters()]) {
+      for (const component of [this.#pulseBus, ...this.#pulseBus.getExporters()]) {
         (component as { __setLogger?: (l: unknown) => void }).__setLogger?.(this.#logger);
       }
     }
@@ -2951,9 +2927,6 @@ export class Mastra<
     const rawLogger = this.#logger instanceof DualLogger ? this.#logger.baseLogger : this.#logger;
     this.#observability.setLogger({ logger: rawLogger as any });
     this.#observability.setMastraContext({ mastra: this as any });
-    // The pulse bridge was registered against the previous (possibly no-op)
-    // entrypoint's default instance — follow the replacement.
-    this.#registerPulseBridge();
   }
 
   /**

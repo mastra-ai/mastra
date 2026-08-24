@@ -16,7 +16,7 @@ import { parseMemoryRequestContext } from '../memory/types';
 import { EntityType, SpanType, createObservabilityContext, resolveObservabilityContext } from '../observability';
 import type { ObservabilityContext, Span } from '../observability';
 import type { TracingContext } from '../observability/types';
-import { emitSpanFact } from '../pulse/lifecycle';
+import { emitLifecycleFact } from '../pulse/lifecycle';
 import type { RequestContext } from '../request-context';
 import type { ChunkType } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
@@ -678,7 +678,7 @@ export class ProcessorRunner {
         name: `output processor: ${processor.id}`,
         parent: { surface: 'agent', base: 'run' },
       };
-      emitSpanFact(processorSpan as any, 'started', pulsePctx);
+      emitLifecycleFact('started', pulsePctx);
 
       // Start recording MessageList mutations for this processor
       messageList.startRecording();
@@ -744,7 +744,7 @@ export class ProcessorRunner {
           },
           attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
         });
-        emitSpanFact(processorSpan as any, 'ended', pulsePctx);
+        emitLifecycleFact('ended', pulsePctx);
       } catch (error) {
         // Stop recording on error
         messageList.stopRecording();
@@ -761,12 +761,12 @@ export class ProcessorRunner {
               },
             },
           });
-          emitSpanFact(processorSpan as any, 'ended', { ...pulsePctx, error: true });
+          emitLifecycleFact('ended', { ...pulsePctx, error: true });
           await invokeOnViolation(processor, error);
           throw error;
         }
         processorSpan?.error({ error: error as Error, endSpan: true });
-        emitSpanFact(processorSpan as any, 'ended', { ...pulsePctx, error: true });
+        emitLifecycleFact('ended', { ...pulsePctx, error: true });
         throw error;
       }
     }
@@ -1192,7 +1192,7 @@ export class ProcessorRunner {
         name: `input processor: ${processor.id}`,
         parent: { surface: 'agent', base: 'run' },
       };
-      emitSpanFact(processorSpan as any, 'started', pulsePctx);
+      emitLifecycleFact('started', pulsePctx);
 
       // Start recording MessageList mutations for this processor
       messageList.startRecording();
@@ -1326,7 +1326,7 @@ export class ProcessorRunner {
           },
           attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
         });
-        emitSpanFact(processorSpan as any, 'ended', pulsePctx);
+        emitLifecycleFact('ended', pulsePctx);
       } catch (error) {
         // Stop recording on error
         messageList.stopRecording();
@@ -1343,12 +1343,12 @@ export class ProcessorRunner {
               },
             },
           });
-          emitSpanFact(processorSpan as any, 'ended', { ...pulsePctx, error: true });
+          emitLifecycleFact('ended', { ...pulsePctx, error: true });
           await invokeOnViolation(processor, error);
           throw error;
         }
         processorSpan?.error({ error: error as Error, endSpan: true });
-        emitSpanFact(processorSpan as any, 'ended', { ...pulsePctx, error: true });
+        emitLifecycleFact('ended', { ...pulsePctx, error: true });
         throw error;
       }
     }
@@ -1519,7 +1519,7 @@ export class ProcessorRunner {
         name: `input step processor: ${processor.id}`,
         parent: { surface: 'agent', base: 'run' },
       };
-      emitSpanFact(processorSpan as any, 'started', pulsePctx);
+      emitLifecycleFact('started', pulsePctx);
 
       // Start recording MessageList mutations for this processor
       messageList.startRecording();
@@ -1649,7 +1649,7 @@ export class ProcessorRunner {
           }),
           attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
         });
-        emitSpanFact(processorSpan as any, 'ended', pulsePctx);
+        emitLifecycleFact('ended', pulsePctx);
       } catch (error) {
         // Stop recording on error
         messageList.stopRecording();
@@ -1666,12 +1666,12 @@ export class ProcessorRunner {
               },
             },
           });
-          emitSpanFact(processorSpan as any, 'ended', { ...pulsePctx, error: true });
+          emitLifecycleFact('ended', { ...pulsePctx, error: true });
           await invokeOnViolation(processor, error);
           throw error;
         }
         processorSpan?.error({ error: error as Error, endSpan: true });
-        emitSpanFact(processorSpan as any, 'ended', { ...pulsePctx, error: true });
+        emitLifecycleFact('ended', { ...pulsePctx, error: true });
         throw error;
       }
     }
@@ -1977,7 +1977,7 @@ export class ProcessorRunner {
         name: `output step processor: ${processor.id}`,
         parent: { surface: 'agent', base: 'run' },
       };
-      emitSpanFact(processorSpan as any, 'started', pulsePctx);
+      emitLifecycleFact('started', pulsePctx);
 
       // Start recording MessageList mutations for this processor
       messageList.startRecording();
@@ -2056,7 +2056,7 @@ export class ProcessorRunner {
           },
           attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
         });
-        emitSpanFact(processorSpan as any, 'ended', pulsePctx);
+        emitLifecycleFact('ended', pulsePctx);
       } catch (error) {
         // Stop recording on error
         messageList.stopRecording();
@@ -2073,12 +2073,12 @@ export class ProcessorRunner {
               },
             },
           });
-          emitSpanFact(processorSpan as any, 'ended', { ...pulsePctx, error: true });
+          emitLifecycleFact('ended', { ...pulsePctx, error: true });
           await invokeOnViolation(processor, error);
           throw error;
         }
         processorSpan?.error({ error: error as Error, endSpan: true });
-        emitSpanFact(processorSpan as any, 'ended', { ...pulsePctx, error: true });
+        emitLifecycleFact('ended', { ...pulsePctx, error: true });
         throw error;
       }
     }
@@ -2205,7 +2205,7 @@ export class ProcessorRunner {
         name: `tool result processor: ${processor.id}`,
         parent: { surface: 'agent', base: 'run' },
       };
-      emitSpanFact(processorSpan as any, 'started', pulsePctx);
+      emitLifecycleFact('started', pulsePctx);
 
       // Start recording MessageList mutations for this processor
       messageList.startRecording();
@@ -2270,7 +2270,7 @@ export class ProcessorRunner {
           },
           attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
         });
-        emitSpanFact(processorSpan as any, 'ended', pulsePctx);
+        emitLifecycleFact('ended', pulsePctx);
       } catch (error) {
         // Stop recording on error
         messageList.stopRecording();
@@ -2287,11 +2287,11 @@ export class ProcessorRunner {
               },
             },
           });
-          emitSpanFact(processorSpan as any, 'ended', { ...pulsePctx, error: true });
+          emitLifecycleFact('ended', { ...pulsePctx, error: true });
           throw error;
         }
         processorSpan?.error({ error: error as Error, endSpan: true });
-        emitSpanFact(processorSpan as any, 'ended', { ...pulsePctx, error: true });
+        emitLifecycleFact('ended', { ...pulsePctx, error: true });
         throw error;
       }
     }
@@ -2379,7 +2379,7 @@ export class ProcessorRunner {
         name: `request error processor: ${processor.id}`,
         parent: { surface: 'agent', base: 'run' },
       };
-      emitSpanFact(processorSpan as any, 'started', pulsePctx);
+      emitLifecycleFact('started', pulsePctx);
 
       // Start recording MessageList mutations for this processor
       messageList.startRecording();
@@ -2439,7 +2439,7 @@ export class ProcessorRunner {
           output,
           attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
         });
-        emitSpanFact(processorSpan as any, 'ended', pulsePctx);
+        emitLifecycleFact('ended', pulsePctx);
 
         if (result?.retry) {
           return { retry: true };
@@ -2460,7 +2460,7 @@ export class ProcessorRunner {
               },
             },
           });
-          emitSpanFact(processorSpan as any, 'ended', { ...pulsePctx, error: true });
+          emitLifecycleFact('ended', { ...pulsePctx, error: true });
           await invokeOnViolation(processor, processorError);
           throw processorError;
         }

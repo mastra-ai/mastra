@@ -6,7 +6,7 @@ import type { PulseRecord, PulseRelationshipRecord } from '@mastra/core/storage'
  * ClickHouseHttpPulseExporter — standalone ClickHouse writer for the pulse
  * pipeline (experimental).
  *
- * The pulse translation lives in `@mastra/core` (`PulseBridge` + the native
+ * The pulse facts come first-hand from `@mastra/core` (the native
  * session forwarder, activated via `new Mastra({ pulse })`); the default
  * writer is core's `PulseStorageExporter` over the `pulse` storage domain.
  * This exporter is for users WITHOUT a composite store carrying a pulse

@@ -8,7 +8,7 @@ import type { LoopOptions } from '../../loop/types';
 import type { Mastra } from '../../mastra';
 import { SpanType, resolveObservabilityContext } from '../../observability';
 import { executeWithContextSync } from '../../observability/utils';
-import { emitSpanFact, usageTokenData } from '../../pulse/lifecycle';
+import { emitLifecycleFact, usageTokenData } from '../../pulse/lifecycle';
 import { getToolDefinitionsForTracing } from '../../stream/aisdk/v5/compat/prepare-tools';
 import type { MastraModelOutput } from '../../stream/base/output';
 import type { ModelManagerModelConfig } from '../../stream/types';
@@ -190,7 +190,7 @@ export class MastraLLMVNext extends MastraBase {
       tracingPolicy: this.#options?.tracingPolicy,
       requestContext,
     });
-    emitSpanFact(modelSpan as any, 'started', {
+    emitLifecycleFact('started', {
       runId,
       surface: 'model',
       base: 'generate',
@@ -285,7 +285,7 @@ export class MastraLLMVNext extends MastraBase {
                 e,
               );
               modelSpanTracker?.reportGenerationError({ error: mastraError });
-              emitSpanFact(modelSpan as any, 'ended', { runId, surface: 'model', base: 'generate', error: true });
+              emitLifecycleFact('ended', { runId, surface: 'model', base: 'generate', error: true });
               this.logger.trackException(mastraError);
               throw mastraError;
             }
@@ -338,7 +338,7 @@ export class MastraLLMVNext extends MastraBase {
               providerMetadata: props?.providerMetadata,
               stepProviderMetadata: props?.steps.map(step => step.providerMetadata),
             });
-            emitSpanFact(modelSpan as any, 'ended', {
+            emitLifecycleFact('ended', {
               runId,
               surface: 'model',
               base: 'generate',
@@ -414,7 +414,7 @@ export class MastraLLMVNext extends MastraBase {
         e,
       );
       modelSpanTracker?.reportGenerationError({ error: mastraError });
-      emitSpanFact(modelSpan as any, 'ended', { runId, surface: 'model', base: 'generate', error: true });
+      emitLifecycleFact('ended', { runId, surface: 'model', base: 'generate', error: true });
       throw mastraError;
     }
   }

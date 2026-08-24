@@ -27,9 +27,8 @@ export interface PulseFactInput {
   runId: string;
   /** Flow identity when known at the seam ('' when genuinely unknown). */
   traceId?: string;
-  /** Deterministic pulse id (span lifecycle facts reuse spanPulseId so the
-   * native and bridge lanes collapse under idempotent reads); random when
-   * omitted. */
+  /** Deterministic pulse id (minted from run identity — identity.ts — so
+   * replays collapse under idempotent reads); random when omitted. */
   id?: string;
   /** Fact time (span start/end for lifecycle facts); emit time when omitted. */
   timestamp?: Date;

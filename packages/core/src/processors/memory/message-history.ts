@@ -5,7 +5,7 @@ import { parseMemoryRequestContext } from '../../memory';
 import { removeWorkingMemoryTags } from '../../memory/working-memory-utils';
 import { SpanType, EntityType } from '../../observability';
 import type { ObservabilityContext, MemoryOperationAttributes } from '../../observability';
-import { emitSpanFact } from '../../pulse/lifecycle';
+import { emitLifecycleFact } from '../../pulse/lifecycle';
 import type { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage';
 
@@ -119,7 +119,7 @@ export class MessageHistory implements Processor {
       threadId,
       resourceId,
     } as const;
-    emitSpanFact(span as any, 'started', recallCtx);
+    emitLifecycleFact('started', recallCtx);
 
     try {
       // 1. Fetch historical messages from storage (as DB format)
@@ -150,7 +150,7 @@ export class MessageHistory implements Processor {
           output: { success: true },
           attributes: { messageCount: 0 },
         });
-        emitSpanFact(span as any, 'ended', recallCtx);
+        emitLifecycleFact('ended', recallCtx);
         return messageList;
       }
 
@@ -167,12 +167,12 @@ export class MessageHistory implements Processor {
         output: { success: true },
         attributes: { messageCount: chronologicalMessages.length },
       });
-      emitSpanFact(span as any, 'ended', recallCtx);
+      emitLifecycleFact('ended', recallCtx);
 
       return messageList;
     } catch (error) {
       span?.error({ error: error as Error, endSpan: true });
-      emitSpanFact(span as any, 'ended', { ...recallCtx, error: true });
+      emitLifecycleFact('ended', { ...recallCtx, error: true });
       throw error;
     }
   }
@@ -291,7 +291,7 @@ export class MessageHistory implements Processor {
       threadId,
       resourceId,
     } as const;
-    emitSpanFact(span as any, 'started', saveCtx);
+    emitLifecycleFact('started', saveCtx);
 
     try {
       await this.persistMessages({ messages: messagesToSave, threadId, resourceId });
@@ -301,12 +301,12 @@ export class MessageHistory implements Processor {
       span?.end({
         output: { success: true },
       });
-      emitSpanFact(span as any, 'ended', saveCtx);
+      emitLifecycleFact('ended', saveCtx);
 
       return messageList;
     } catch (error) {
       span?.error({ error: error as Error, endSpan: true });
-      emitSpanFact(span as any, 'ended', { ...saveCtx, error: true });
+      emitLifecycleFact('ended', { ...saveCtx, error: true });
       throw error;
     }
   }
