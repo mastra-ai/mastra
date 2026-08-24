@@ -82,8 +82,14 @@ export class EventedAgent<
   protected override async executeWorkflow(runId: string, workflowInput: DurableAgenticWorkflowInput): Promise<void> {
     try {
       const workflow = this.getWorkflow();
+      // Populate the run row's resourceId column so storage-level resource
+      // filters (listSuspendedRuns / listActiveRuns) can narrow the query.
+      const memoryInfo = (
+        workflowInput.messageListState as { memoryInfo?: { threadId?: string; resourceId?: string } } | undefined
+      )?.memoryInfo;
       const run = await workflow.createRun({
         runId,
+        resourceId: workflowInput.state?.resourceId ?? memoryInfo?.resourceId,
         pubsub: this.pubsubInternal,
       });
       // Fire and forget - use startAsync for non-blocking execution.

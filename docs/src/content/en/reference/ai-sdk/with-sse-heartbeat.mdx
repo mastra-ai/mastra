@@ -1,0 +1,68 @@
+---
+title: "Reference: withSseHeartbeat() | AI SDK"
+description: API reference for withSseHeartbeat(), a function that adds periodic SSE heartbeats to a streaming response.
+packages:
+  - "@mastra/ai-sdk"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# withSseHeartbeat()
+
+Wraps a server-sent events `Response` so it emits periodic `: heartbeat` comments while the underlying stream is idle. Proxies and load balancers often close connections that send no bytes for a while, which drops responses during long reasoning bursts or slow tool calls.
+
+Use this when you build the response yourself with [`handleChatStream()`](/reference/ai-sdk/handle-chat-stream), [`handleWorkflowStream()`](/reference/ai-sdk/handle-workflow-stream), or [`handleNetworkStream()`](/reference/ai-sdk/handle-network-stream). [`chatRoute()`](/reference/ai-sdk/chat-route) applies the same wrapper internally through its `heartbeatMs` option.
+
+## Usage example
+
+Next.js App Router example:
+
+```typescript title="app/api/chat/route.ts"
+import { handleChatStream, withSseHeartbeat } from '@mastra/ai-sdk'
+import { createUIMessageStreamResponse } from 'ai'
+import { mastra } from '@/src/mastra'
+
+export async function POST(req: Request) {
+  const params = await req.json()
+  const stream = await handleChatStream({
+    mastra,
+    agentId: 'weatherAgent',
+    version: 'v7',
+    params,
+  })
+  return withSseHeartbeat(createUIMessageStreamResponse({ stream }), 15000)
+}
+```
+
+Wrap the response after it has been encoded. `handleChatStream()` returns a stream of UI message chunks, and heartbeats are raw SSE comments that only exist once those chunks are serialized to the wire format.
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'response',
+    type: 'Response',
+    description: 'The server-sent events response to wrap. Status, status text, and headers are preserved.',
+    isOptional: false,
+  },
+  {
+    name: 'heartbeatMs',
+    type: 'number',
+    description:
+      'Interval in milliseconds between heartbeats. Omit it or pass a value of `0` or less to disable heartbeats.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Returns
+
+A `Response` that streams the source body with heartbeat comments inserted during idle periods. The input response is returned unchanged when `heartbeatMs` is omitted, is `0` or less, or the response has no body.
+
+## Behavior
+
+- Heartbeats are only inserted between complete SSE frames, so a partially delivered frame is never split.
+- Source data, stream completion, and stream errors always take priority over a due heartbeat.
+- Canceling the wrapped response cancels the source stream and clears the pending heartbeat timer.
+- A `RangeError` is thrown when heartbeats are enabled with a value that can't be scheduled with a timer, meaning a non-finite number or a value greater than `2147483647`. Use `assertValidHeartbeatMs()` to apply the same check to user-supplied configuration before you start streaming.

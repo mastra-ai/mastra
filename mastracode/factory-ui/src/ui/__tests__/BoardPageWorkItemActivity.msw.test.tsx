@@ -351,7 +351,7 @@ describe('Board work-item activity', () => {
     await waitForMutationsIdle(client);
 
     await screen.findByText('Authored issue');
-    await user.click(screen.getByRole('combobox'));
+    await user.click(within(screen.getByLabelText('Board filters mobile')).getByRole('combobox'));
     await user.type(await screen.findByPlaceholderText('Search teammates...'), 'octo');
     expect(screen.queryByRole('option', { name: /Grace Hopper/ })).not.toBeInTheDocument();
     await user.click(await screen.findByRole('option', { name: /octocat/ }));
@@ -363,7 +363,7 @@ describe('Board work-item activity', () => {
     expect(screen.getByText('Assigned issue')).toBeInTheDocument();
     expect(screen.queryByText('Unrelated issue')).not.toBeInTheDocument();
 
-    await user.click(screen.getByLabelText('Filter by relevance'));
+    await user.click(within(screen.getByLabelText('Board filters mobile')).getByLabelText('Filter by relevance'));
     await user.click(await screen.findByRole('menuitemcheckbox', { name: 'Authored' }));
     expect(screen.queryByRole('menuitemcheckbox', { name: 'Review requested' })).not.toBeInTheDocument();
     await waitFor(() => {
@@ -374,7 +374,9 @@ describe('Board work-item activity', () => {
     expect(screen.getByText('Assigned issue')).toBeInTheDocument();
 
     await user.keyboard('{Escape}');
-    await user.click(screen.getByRole('button', { name: 'Reset filters' }));
+    await user.click(
+      within(screen.getByLabelText('Board filters mobile')).getByRole('button', { name: 'Reset filters' }),
+    );
     await waitFor(() => {
       const params = new URLSearchParams(router.state.location.search);
       expect(params.get('teammate')).toBeNull();
@@ -452,7 +454,7 @@ describe('Board work-item activity', () => {
 
     await screen.findByText('Linear planning item');
     await waitFor(() => expect(linearIssuesRequested).toHaveBeenCalled());
-    await user.click(screen.getByRole('combobox'));
+    await user.click(within(screen.getByLabelText('Board filters mobile')).getByRole('combobox'));
     await user.type(await screen.findByPlaceholderText('Search teammates...'), 'Linear Ada');
     await user.click(await screen.findByRole('option', { name: /Linear Ada.*linear/i }));
 
@@ -508,7 +510,7 @@ describe('Board work-item activity', () => {
     await waitForMutationsIdle(client);
 
     await screen.findByText('Authored PR');
-    await user.click(screen.getByRole('combobox'));
+    await user.click(within(screen.getByLabelText('Board filters mobile')).getByRole('combobox'));
     await user.click(await screen.findByRole('option', { name: /octocat/ }));
 
     expect(screen.getByText('Authored PR')).toBeInTheDocument();
@@ -516,7 +518,7 @@ describe('Board work-item activity', () => {
     expect(screen.getByText('Requested PR')).toBeInTheDocument();
     expect(screen.queryByText('Worked PR')).not.toBeInTheDocument();
 
-    await user.click(screen.getByLabelText('Filter by relevance'));
+    await user.click(within(screen.getByLabelText('Board filters mobile')).getByLabelText('Filter by relevance'));
     await user.click(await screen.findByRole('menuitemcheckbox', { name: 'Authored' }));
 
     expect(screen.queryByText('Authored PR')).not.toBeInTheDocument();
@@ -524,7 +526,7 @@ describe('Board work-item activity', () => {
     expect(screen.getByText('Requested PR')).toBeInTheDocument();
 
     await user.keyboard('{Escape}');
-    await user.click(screen.getByRole('combobox'));
+    await user.click(within(screen.getByLabelText('Board filters mobile')).getByRole('combobox'));
     await user.click(await screen.findByRole('option', { name: /Ada Lovelace/ }));
 
     expect(screen.getByText('Worked PR')).toBeInTheDocument();

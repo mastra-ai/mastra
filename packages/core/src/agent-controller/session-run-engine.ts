@@ -45,6 +45,8 @@ type StreamIgnoredChunk =
   | StreamPayloadChunk<'redacted-reasoning'>
   | StreamPayloadChunk<'source'>
   | StreamPayloadChunk<'file'>
+  | StreamPayloadChunk<'reasoning-file'>
+  | StreamPayloadChunk<'custom'>
   | StreamPayloadChunk<'raw'>
   | StreamPayloadChunk<'step-start'>
   | StreamPayloadChunk<'tool-output'>

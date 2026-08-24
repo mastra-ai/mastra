@@ -53,6 +53,7 @@ import {
 } from './db-message-parts.js';
 import type { AssistantRenderPart } from './db-message-parts.js';
 import { formatToolResult, isTaskMutationTool } from './handlers/tool.js';
+import { pruneChatContainer } from './prune-chat.js';
 import type { TUIState } from './state.js';
 import { BOX_INDENT, getMarkdownTheme, theme } from './theme.js';
 
@@ -1174,6 +1175,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
   }
 
   reconcileChatBoundarySpacers(state.chatContainer);
+  pruneChatContainer(state);
   state.ui.requestRender();
 }
 

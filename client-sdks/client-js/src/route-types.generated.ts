@@ -1806,6 +1806,12 @@ type Shared_Type_78 = {
   scorerId?: (string | string[]) | undefined;
   /** Filter by how the score was produced */
   scoreSource?: string | undefined;
+  /** Filter by metadata key-value pairs (exact match per key) */
+  metadata?:
+    | ({
+        [key: string]: unknown;
+      } | null)
+    | undefined;
   /** Filter by how the score was produced */
   source?: string | undefined;
 };
@@ -9250,6 +9256,17 @@ export type GetObservabilityScores_QueryParams = {
   scorerId?: ((string | string[]) | undefined) | undefined;
   /** Filter by how the score was produced */
   scoreSource?: (string | undefined) | undefined;
+  metadata?:
+    | (
+        | (
+            | ({
+                [key: string]: unknown;
+              } | null)
+            | undefined
+          )
+        | undefined
+      )
+    | unknown;
   /** Filter by how the score was produced */
   source?: (string | undefined) | undefined;
   page?: (number | undefined) | undefined;

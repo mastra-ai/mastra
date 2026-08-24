@@ -1,5 +1,6 @@
 import type { AgentScorerConfig, WorkflowScorerConfig } from '../../evals';
 import type { MastraScorer, ScorerStepName } from '../../evals/base';
+import type { TrajectoryExpectation } from '../../evals/types';
 import type { Mastra } from '../../mastra';
 import type { VersionOverrides } from '../../mastra/types';
 import type {
@@ -23,6 +24,8 @@ export interface DataItem<I = unknown, E = unknown> {
   input: I;
   /** Ground truth for scoring */
   groundTruth?: E;
+  /** Expected trajectory forwarded to trajectory scorers as `run.expectedTrajectory` */
+  expectedTrajectory?: TrajectoryExpectation;
   /** Additional metadata */
   metadata?: Record<string, unknown>;
   /** Per-item request context merged over the global request context (item takes precedence) */

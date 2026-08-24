@@ -13,6 +13,7 @@ import { useCallback, useMemo } from 'react';
 import { useWatch } from 'react-hook-form';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
+import { getEditorOwnership } from '../../utils/editor-ownership';
 import { DisplayConditionsDialog } from '@/domains/cms';
 import { SubSectionHeader } from '@/domains/cms/components/section/section-header';
 import { MCPClientList } from '@/domains/mcps/components/mcp-client-list';
@@ -26,11 +27,13 @@ export function ToolsPage() {
   const selectedTools = useWatch({ control, name: 'tools' });
   const selectedIntegrationTools = useWatch({ control, name: 'integrationTools' });
   const variables = useWatch({ control, name: 'variables' });
-  const toolsConfig = editorConfig === false ? false : editorConfig?.tools;
-  const descriptionsOnly = isCodeAgentOverride && typeof toolsConfig === 'object' && toolsConfig.description === true;
-  const isToolsLocked = isCodeAgentOverride && (editorConfig === false || toolsConfig === false);
+  const {
+    isToolsLocked,
+    toolDescriptionsOnly: descriptionsOnly,
+    ownsToolDescriptions,
+  } = getEditorOwnership(isCodeAgentOverride, editorConfig);
   const canEditToolMembership = !readOnly && !descriptionsOnly && !isToolsLocked;
-  const canEditToolDescriptions = !readOnly && !isToolsLocked && (!isCodeAgentOverride || toolsConfig !== false);
+  const canEditToolDescriptions = !readOnly && ownsToolDescriptions;
   // MCP clients and integration tools are tool-membership additions, so they
   // are hidden whenever tool membership cannot be edited (locked or descriptions-only).
   const hideToolMembershipSections = isToolsLocked || descriptionsOnly;
