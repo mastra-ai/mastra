@@ -226,9 +226,7 @@ export class BackgroundTasksMySQL extends BackgroundTasksStorage {
     if (setClauses.length === 0) return false;
 
     params.push(taskId);
-    const statusPredicate = options?.expectedStatus
-      ? ` AND ${quoteIdentifier('status', 'column name')} = ?`
-      : '';
+    const statusPredicate = options?.expectedStatus ? ` AND ${quoteIdentifier('status', 'column name')} = ?` : '';
     if (options?.expectedStatus) params.push(options.expectedStatus);
     const [result] = await this.pool.execute<ResultSetHeader>(
       `UPDATE ${formatTableName(TABLE_BACKGROUND_TASKS)} SET ${setClauses.join(', ')} WHERE ${quoteIdentifier('id', 'column name')} = ?${statusPredicate}`,
