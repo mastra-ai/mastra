@@ -1894,7 +1894,8 @@ export class AgentController<TState = {}> {
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
   }): Promise<Record<string, unknown>> {
-    if (!session.thread.getId()) {
+    const runThreadId = session.thread.getId();
+    if (!runThreadId) {
       throw new Error('Cannot build stream options without a current thread');
     }
 
@@ -1928,10 +1929,12 @@ export class AgentController<TState = {}> {
     const streamOptions: Record<string, unknown> = {
       ...this.buildSharedRunOptions(session),
       memory: {
-        thread: session.thread.getId(),
+        thread: runThreadId,
         resource: session.identity.getResourceId(),
+        // Titling outlives the run, so the thread it named is the one captured here,
+        // not whichever thread the session happens to hold when the model answers.
         onTitleGenerated: (title: string) =>
-          session.emit({ type: 'thread_title_updated', threadId: session.thread.getId() ?? '', title }),
+          session.emit({ type: 'thread_title_updated', threadId: runThreadId, title }),
       },
       abortSignal: session.run.ensureAbortController().signal,
       requestContext,

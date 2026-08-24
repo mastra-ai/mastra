@@ -102,13 +102,22 @@ export function UserSessionsSection() {
     },
   });
 
+  // Pending is per session: the mutation itself only remembers the last row asked for.
+  const [regenerating, setRegenerating] = useState<ReadonlySet<string>>(new Set());
   const regenerateTitle = useMutation({
     mutationFn: (session: FactoryUserSession) => regenerateSessionTitle(baseUrl, session.sessionId),
+    onMutate: session => setRegenerating(current => new Set(current).add(session.sessionId)),
     onSuccess: title => {
       invalidate();
       toast(`Renamed to “${title}”`);
     },
     onError: error => toast.error(error instanceof Error ? error.message : 'Failed to regenerate title'),
+    onSettled: (_title, _error, session) =>
+      setRegenerating(current => {
+        const next = new Set(current);
+        next.delete(session.sessionId);
+        return next;
+      }),
   });
 
   if (!sessionsEnabled) return null;
@@ -167,9 +176,7 @@ export function UserSessionsSection() {
                 // row would reappear. Unknown viewer (auth disabled) keeps it.
                 onDelete={viewerUserId && !isOwn(session) ? undefined : () => setConfirmDelete(session)}
                 onRegenerateTitle={viewerUserId && !isOwn(session) ? undefined : () => regenerateTitle.mutate(session)}
-                regeneratingTitle={
-                  regenerateTitle.isPending && regenerateTitle.variables?.sessionId === session.sessionId
-                }
+                regeneratingTitle={regenerating.has(session.sessionId)}
               />
             );
           })}

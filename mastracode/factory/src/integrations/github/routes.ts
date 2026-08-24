@@ -1430,12 +1430,13 @@ function buildProjectGitRoutes({
         requestContext.set('user', { workosId: row.userId, organizationId: row.orgId });
 
         try {
-          const title = await controller.generateThreadTitle({
+          const generated = await controller.generateThreadTitle({
             threadId: thread.id,
             resourceId: sessionId,
             requestContext,
             ...(stored?.observerModelId ? { model: titleModel(stored.observerModelId) } : {}),
           });
+          const title = generated ? normalizeSessionTitle(generated) : null;
           if (!title) return c.json({ error: 'The model returned an empty title. Try again.' }, 502);
           await github.sourceControlStorage.sessions.rename({ sessionId, title });
           return c.json({ title });

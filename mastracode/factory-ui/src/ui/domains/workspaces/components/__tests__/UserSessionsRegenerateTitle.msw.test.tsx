@@ -99,6 +99,42 @@ describe('User session title regeneration', () => {
     expect(await screen.findByRole('button', { name: 'Factory audit log review' })).toBeInTheDocument();
   });
 
+  it('keeps a pending session disabled while another session finishes first', async () => {
+    const other: FactoryUserSession = { ...session, id: 'row-2', sessionId: 'sess-2', title: 'Second session' };
+    let releaseFirst = () => {};
+    const firstAnswered = new Promise<void>(resolve => {
+      releaseFirst = resolve;
+    });
+    const asked: string[] = [];
+    useFactoryFixtures(() => [session, other]);
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/user-sessions/:sessionId/title`, async ({ params }) => {
+        asked.push(String(params.sessionId));
+        if (params.sessionId === sessionId) await firstAnswered;
+        return HttpResponse.json({ title: `Named ${params.sessionId}` });
+      }),
+    );
+
+    const user = userEvent.setup();
+    const { client } = renderSection();
+
+    await openTitleAction(user, 'Tell me what have been done in the factory since');
+    await openTitleAction(user, 'Second session');
+    expect(await screen.findByText('Renamed to “Named sess-2”')).toBeInTheDocument();
+
+    await user.click(
+      await screen.findByRole('button', {
+        name: 'Session actions for Tell me what have been done in the factory since',
+      }),
+    );
+    expect(await screen.findByRole('menuitem', { name: 'Regenerate title' })).toHaveAttribute('aria-disabled', 'true');
+    await user.click(await screen.findByRole('menuitem', { name: 'Regenerate title' }));
+
+    releaseFirst();
+    await waitForMutationsIdle(client);
+    expect(asked).toEqual([sessionId, 'sess-2']);
+  });
+
   it('surfaces the server’s reason when there is nothing to name the session from', async () => {
     useFactoryFixtures(() => [session]);
     server.use(

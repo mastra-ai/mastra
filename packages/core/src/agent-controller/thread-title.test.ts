@@ -151,6 +151,15 @@ describe('AgentController thread titles', () => {
     expect(events.some(event => event.type === 'error')).toBe(false);
   });
 
+  it('says so when the thread has nothing to name it from', async () => {
+    const { controller, session } = await startNamedThread();
+    const empty = await session.thread.create({ title: 'Untouched' });
+
+    await expect(controller.generateThreadTitle({ threadId: empty.id })).rejects.toThrow(
+      'This conversation has no message to name it from yet.',
+    );
+  });
+
   it('refuses to name a thread that has no user message', async () => {
     const { controller } = await startNamedThread();
     const thread = await controller.queryThreadById({ threadId: 'missing-thread' });

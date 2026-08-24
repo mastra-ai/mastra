@@ -2130,6 +2130,40 @@ describe('Factory session routes', () => {
     expect(tables.sessions.find(row => row.sessionId === sessionId)?.title).toBe('Log parser rewrite');
   });
 
+  it('caps and tidies the title the model returned', async () => {
+    seedMaterializedProject();
+    const controller = {
+      queryThreads: vi.fn(async () => [{ id: 'thread-1', updatedAt: new Date() }]),
+      generateThreadTitle: vi.fn(async () => `  Rewrite   the log parser ${'and more '.repeat(20)}`),
+    } as any;
+    const app = buildApp({ workosId: 'u1' }, { controller });
+    const created = await postJson(app, '/web/github/projects/p1/sessions', { title: 'rewrite the log parser' });
+    const sessionId = (await created.json()).session.sessionId;
+
+    const response = await app.request(`/web/user-sessions/${sessionId}/title`, { method: 'POST' });
+
+    const { title } = await response.json();
+    expect(title.length).toBeLessThanOrEqual(80);
+    expect(title.startsWith('Rewrite the log parser and more')).toBe(true);
+    expect(tables.sessions.find(row => row.sessionId === sessionId)?.title).toBe(title);
+  });
+
+  it('rejects a title the model returned as whitespace', async () => {
+    seedMaterializedProject();
+    const controller = {
+      queryThreads: vi.fn(async () => [{ id: 'thread-1', updatedAt: new Date() }]),
+      generateThreadTitle: vi.fn(async () => '   '),
+    } as any;
+    const app = buildApp({ workosId: 'u1' }, { controller });
+    const created = await postJson(app, '/web/github/projects/p1/sessions', { title: 'rewrite the log parser' });
+    const sessionId = (await created.json()).session.sessionId;
+
+    const response = await app.request(`/web/user-sessions/${sessionId}/title`, { method: 'POST' });
+
+    expect(response.status).toBe(502);
+    expect(tables.sessions.find(row => row.sessionId === sessionId)?.title).toBe('rewrite the log parser');
+  });
+
   it('explains that a session with no conversation cannot be named', async () => {
     seedMaterializedProject();
     const controller = { queryThreads: vi.fn(async () => []), generateThreadTitle: vi.fn() } as any;

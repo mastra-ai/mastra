@@ -14,7 +14,7 @@ function createMockAgentController(initialState: Record<string, unknown> = {}, p
     state,
     loadOMProgress: vi.fn().mockResolvedValue(undefined),
     session: {
-      thread: { list: vi.fn().mockResolvedValue([]) },
+      thread: { list: vi.fn().mockResolvedValue([]), getId: vi.fn(() => 'thread-1') },
       state: {
         get: () => ({ ...state }),
         set: setState,
@@ -201,6 +201,16 @@ describe('dispatchEvent thread lifecycle', () => {
     );
 
     expect(state.currentThreadTitle).toBe('Log parser rewrite');
+  });
+
+  it('leaves the status line alone when another thread of the session is named', async () => {
+    await dispatchEvent(
+      { type: 'thread_title_updated', threadId: 'other-thread', title: 'Log parser rewrite' },
+      ectx,
+      state,
+    );
+
+    expect(state.currentThreadTitle).toBe('Old thread');
   });
 
   it('does not clear non-ephemeral state like currentModelId', async () => {
