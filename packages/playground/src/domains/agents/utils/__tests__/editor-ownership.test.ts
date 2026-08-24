@@ -134,6 +134,35 @@ describe('getEditorOwnership', () => {
       },
     },
     {
+      // A tools object that grants nothing owns neither membership nor descriptions.
+      name: 'editor: { tools: {} }',
+      isCodeAgentOverride: true,
+      editorConfig: { tools: {} },
+      expected: {
+        ownsInstructions: false,
+        ownsTools: false,
+        ownsToolDescriptions: false,
+        isInstructionsLocked: true,
+        isToolsLocked: true,
+        toolDescriptionsOnly: false,
+        isFullyLocked: true,
+      },
+    },
+    {
+      name: 'editor: { tools: { description: false } }',
+      isCodeAgentOverride: true,
+      editorConfig: { tools: { description: false } },
+      expected: {
+        ownsInstructions: false,
+        ownsTools: false,
+        ownsToolDescriptions: false,
+        isInstructionsLocked: true,
+        isToolsLocked: true,
+        toolDescriptionsOnly: false,
+        isFullyLocked: true,
+      },
+    },
+    {
       // The reported bug: an object locking every field must behave like `editor: false`.
       name: 'editor: { instructions: false, tools: false }',
       isCodeAgentOverride: true,
@@ -169,6 +198,12 @@ describe('getEditorOwnership', () => {
       expect(getEditorOwnership(isCodeAgentOverride, editorConfig)).toEqual(expected);
     });
   }
+
+  it('locks everything when the server sends a null editor config', () => {
+    // `editor` is typed as object | boolean | undefined, but a server sending an
+    // explicit null must not crash the editor — it locks, like `editor: false`.
+    expect(getEditorOwnership(true, null as never)).toEqual(getEditorOwnership(true, false));
+  });
 
   it('treats editor: false and an all-locked editor object identically', () => {
     expect(getEditorOwnership(true, { instructions: false, tools: false })).toEqual(getEditorOwnership(true, false));

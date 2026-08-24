@@ -26,6 +26,9 @@ export const useAgentBuilderAllowedModels = ({
   const client = useMastraClient();
 
   const { data, isLoading } = useQuery({
+    // Stryker disable next-line ArrayDeclaration,StringLiteral: a private cache identity
+    // shared only between mounts of this hook (the create/edit pages prefetch through it).
+    // Nothing else reads, seeds or invalidates the key, so renaming it is unobservable.
     queryKey: ['builder-available-models'],
     queryFn: () => client.getBuilderAvailableModels(),
     enabled,

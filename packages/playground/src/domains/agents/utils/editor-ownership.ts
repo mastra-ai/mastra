@@ -45,8 +45,14 @@ export function getEditorOwnership(
 ): EditorOwnership {
   const isOverride = !!isCodeAgentOverride;
   const config = editorConfig;
+  // Stryker disable next-line ConditionalExpression,BooleanLiteral: defensive redundancy.
+  // When `config` is `false`, `config?.tools` already reads as `undefined`, and both
+  // `undefined` and `false` fail every check below — no input can tell them apart.
   const toolsConfig = config === false ? false : config?.tools;
 
+  // Stryker disable next-line ConditionalExpression,BooleanLiteral: defensive redundancy.
+  // `config !== false` only restates the following check: a boolean `config` has no
+  // `.instructions`, so the comparison is already false without the guard.
   const ownsInstructions = !isOverride || config === undefined || (config !== false && config?.instructions === true);
   const ownsTools = !isOverride || config === undefined || toolsConfig === true;
   const ownsToolDescriptions =
