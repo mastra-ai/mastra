@@ -17,7 +17,7 @@ import { githubNumberForItem } from '../../factory/boardItems';
 import { pullRequestCandidateIndex, relatedWorkItems, relationshipLabel } from '../../factory/services/relationships';
 import type { WorkItem } from '../../factory/services/workItems';
 import { usePinnedSessions } from '../hooks/usePinnedSessions';
-import type { FactoryUserSession } from '../services/github';
+import type { FactoryUserSession } from '../services/user-sessions';
 import { getFactorySessionKind } from '../services/sessionPresentation';
 import { SessionNavRow } from './SessionNavRow';
 import type { SessionRowStatus } from './SessionNavRow';

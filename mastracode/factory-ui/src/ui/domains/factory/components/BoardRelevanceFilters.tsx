@@ -67,8 +67,8 @@ export function BoardRelevanceFilters({
     })),
   ];
 
-  return (
-    <div className="flex flex-wrap items-center gap-2" aria-label="Board filters">
+  const renderControls = (mobile: boolean) => (
+    <>
       <Combobox
         options={teammateOptions}
         value={selectedParticipantId ?? ALL_TEAMMATES}
@@ -78,7 +78,7 @@ export function BoardRelevanceFilters({
         emptyText="No teammate found."
         size="sm"
         variant="outline"
-        className="w-auto min-w-44"
+        className={mobile ? 'w-full' : 'w-auto min-w-44'}
       />
 
       <DropdownMenu>
@@ -89,6 +89,7 @@ export function BoardRelevanceFilters({
             size="sm"
             disabled={selectedParticipantId === undefined}
             aria-label="Filter by relevance"
+            className={mobile ? 'w-full justify-start' : undefined}
           >
             <ListFilter size={14} aria-hidden />
             <span className="max-w-48 truncate">{relevanceLabel || 'No relevance selected'}</span>
@@ -116,6 +117,7 @@ export function BoardRelevanceFilters({
             size="sm"
             disabled={availableLabels.length === 0 && selectedLabels.size === 0}
             aria-label="Filter by labels"
+            className={mobile ? 'w-full justify-start' : undefined}
           >
             <Tag size={14} aria-hidden />
             <span className="max-w-48 truncate">{labelButtonText}</span>
@@ -157,11 +159,28 @@ export function BoardRelevanceFilters({
       </DropdownMenu>
 
       {hasActiveFilters && (
-        <Button type="button" variant="ghost" size="sm" onClick={onReset}>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={onReset}
+          className={mobile ? 'w-full justify-start' : undefined}
+        >
           <RotateCcw size={14} aria-hidden />
           Reset filters
         </Button>
       )}
-    </div>
+    </>
+  );
+
+  return (
+    <>
+      <div className="flex flex-col gap-3 lg:hidden" aria-label="Board filters mobile">
+        {renderControls(true)}
+      </div>
+      <div className="hidden flex-wrap items-center gap-2 lg:flex" aria-label="Board filters">
+        {renderControls(false)}
+      </div>
+    </>
   );
 }

@@ -321,6 +321,43 @@ describe('ChatChannelOutputProcessor', () => {
       expect(await drainStreamingPlan(plan)).toEqual(['Hel', 'lo!']);
     });
 
+    it('does not open a StreamingPlan for whitespace and zero-width-only text', async () => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: true });
+      await drive(
+        channels,
+        [
+          { type: 'text-delta', payload: { text: ' \n\t' } },
+          { type: 'text-delta', payload: { text: '\u200B\u200C\u200D\uFEFF' } },
+          { type: 'step-finish', payload: {} },
+          { type: 'finish', payload: {} },
+        ],
+        chatThread,
+      );
+
+      expect(calls.filter(c => c.kind === 'post')).toEqual([]);
+    });
+
+    it('opens a StreamingPlan on meaningful text and preserves surrounding whitespace chunks', async () => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: true });
+      await drive(
+        channels,
+        [
+          { type: 'text-delta', payload: { text: ' \u200B ' } },
+          { type: 'text-delta', payload: { text: 'Hello' } },
+          { type: 'text-delta', payload: { text: ' ' } },
+          { type: 'text-delta', payload: { text: 'world' } },
+          { type: 'step-finish', payload: {} },
+          { type: 'finish', payload: {} },
+        ],
+        chatThread,
+      );
+
+      const posts = calls.filter(c => c.kind === 'post');
+      expect(posts).toHaveLength(1);
+      const plan = (posts[0] as Extract<Call, { kind: 'post' }>).arg as any;
+      expect(await drainStreamingPlan(plan)).toEqual([' \u200B ', 'Hello', ' ', 'world']);
+    });
+
     it('forwards updateIntervalMs onto the StreamingPlan options', async () => {
       const { channels, calls, chatThread } = makeChannels({ streaming: { updateIntervalMs: 250 } });
       await drive(

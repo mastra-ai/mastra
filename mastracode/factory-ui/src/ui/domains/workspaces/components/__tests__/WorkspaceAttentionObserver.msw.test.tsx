@@ -7,7 +7,7 @@ import { useWorkspaceAttentionState } from '../../../../../hooks/useWorkspaceAtt
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { AGENT_CONTROLLER_ID } from '../../../chat/services/constants';
-import type { FactoryUserSession } from '../../services/github';
+import type { FactoryUserSession } from '../../services/user-sessions';
 import { WorkspaceAttentionObserver } from '../WorkspaceAttentionObserver';
 
 const REPOSITORY_ID = 'repository-1';

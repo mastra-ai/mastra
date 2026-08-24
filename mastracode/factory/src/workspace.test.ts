@@ -306,8 +306,10 @@ describe('getFactoryWorkspace', () => {
     expect(plan).toContain('include the same plan in the conversation');
     expect(review).toContain('.artifacts/factory-review/pr-<number>.md');
     expect(review).toContain('.artifacts/factory-review/follow-up-pr-<number>.md');
+    expect(review).toContain('Review runtime: <model>, reasoning setting: <reasoning>.');
     expect(rereview).toContain('.artifacts/factory-rereview/pr-<number>.md');
     expect(rereview).toContain('.artifacts/factory-rereview/follow-up-pr-<number>.md');
+    expect(rereview).toContain('Review runtime: <model>, reasoning setting: <reasoning>.');
   });
 
   it('keeps the autonomous Factory skills on the terminal-handoff contract', async () => {

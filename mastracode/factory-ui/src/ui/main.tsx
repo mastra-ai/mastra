@@ -8,6 +8,7 @@ import { RouterProvider } from 'react-router/dom';
 
 import { ApiConfigProvider } from '../api/config';
 import { createQueryClient } from '../query-client';
+import { PwaInstallBanner } from './lib/pwa';
 import { createAppRouter } from './router';
 import '@mastra/playground-ui/style.css';
 import './tailwind.css';
@@ -33,6 +34,7 @@ createRoot(document.getElementById('root')!).render(
         <QueryClientProvider client={queryClient}>
           <ApiConfigProvider baseUrl="">
             <RouterProvider router={router} />
+            <PwaInstallBanner />
             <Toaster position="bottom-right" />
           </ApiConfigProvider>
         </QueryClientProvider>

@@ -1,6 +1,6 @@
 import type { WorkItem } from '../../factory/services/workItems';
-import { USER_SESSION_BRANCH_PREFIX } from './github';
-import type { FactoryUserSession } from './github';
+import { USER_SESSION_BRANCH_PREFIX } from './user-sessions';
+import type { FactoryUserSession } from './user-sessions';
 
 const REVIEW_BRANCH_PREFIX = 'factory/pr-';
 
