@@ -13,7 +13,7 @@ import type { AvailableModelOption } from '../../../../hooks/useAvailableModels'
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { ModelCombobox } from './ModelCombobox';
 import { SettingsRow } from './SettingsCard';
-import { Segmented } from './SettingsPanel.parts';
+import { Segmented, SegmentedSelect } from './SettingsPanel.parts';
 
 type AttachmentChoice = 'auto' | 'on' | 'off';
 
@@ -196,13 +196,24 @@ export function OMSection({
       </SettingsRow>
 
       <SettingsRow label="Observe attachments" hint="Whether attached files are included in observations">
-        <Segmented
-          ariaLabel="Observe attachments"
-          value={attachmentChoice}
-          disabled={busy || !config}
-          options={attachmentOptions}
-          onChange={value => attachmentsMutation.mutate({ value: choiceToAttachment(value) })}
-        />
+        <div className="w-full lg:hidden">
+          <SegmentedSelect
+            ariaLabel="Observe attachments"
+            value={attachmentChoice}
+            disabled={busy || !config}
+            options={attachmentOptions}
+            onChange={value => attachmentsMutation.mutate({ value: choiceToAttachment(value) })}
+          />
+        </div>
+        <div className="hidden lg:block">
+          <Segmented
+            ariaLabel="Observe attachments"
+            value={attachmentChoice}
+            disabled={busy || !config}
+            options={attachmentOptions}
+            onChange={value => attachmentsMutation.mutate({ value: choiceToAttachment(value) })}
+          />
+        </div>
       </SettingsRow>
     </>
   );

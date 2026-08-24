@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { coreFeatures } from '@mastra/core/features';
 import { SpanType } from '@mastra/core/observability';
+import { TraceStatus } from '@mastra/core/storage';
 import { Pool } from 'pg';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -1372,6 +1373,84 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
         await harness.domain.batchCreateSpans({ records: [span] });
 
         expect(await countRows(harness.baseClient, harness.schema, TABLE_SPAN_EVENTS)).toBe(1);
+      } finally {
+        await harness.close();
+      }
+    });
+  });
+
+  describe('event-sourced collapse — in-progress spans', () => {
+    it('lists a started span as running, then as ended once the end row lands', async () => {
+      const harness = await createHarness({ schemaPrefix: 'obs_vnext_collapse_running' });
+
+      try {
+        const base = {
+          traceId: 'collapse-running-trace',
+          spanId: 'collapse-running-span',
+          startedAt: dayAt(0, 16),
+        };
+
+        await harness.domain.createSpan({ span: makeSpan({ ...base, endedAt: undefined }) });
+
+        const running = await harness.domain.listTraces({ filters: { status: TraceStatus.RUNNING } });
+        expect(running.spans.map(s => s.spanId)).toEqual([base.spanId]);
+        expect(running.spans[0]!.endedAt).toBeNull();
+        expect(await harness.domain.listTraces({ filters: { status: TraceStatus.SUCCESS } })).toMatchObject({
+          spans: [],
+        });
+
+        await harness.domain.createSpan({ span: makeSpan({ ...base, endedAt: dayAt(0, 16, 5) }) });
+
+        const all = await harness.domain.listTraces({});
+        expect(all.spans.map(s => s.spanId)).toEqual([base.spanId]);
+        expect(all.spans[0]!.endedAt).toEqual(dayAt(0, 16, 5));
+        expect(all.pagination.total).toBe(1);
+        expect((await harness.domain.listTraces({ filters: { status: TraceStatus.RUNNING } })).spans).toEqual([]);
+      } finally {
+        await harness.close();
+      }
+    });
+
+    it('collapses a zero-duration span whose start and end share a timestamp', async () => {
+      const harness = await createHarness({ schemaPrefix: 'obs_vnext_collapse_zero' });
+
+      try {
+        const at = dayAt(0, 17);
+        const base = { traceId: 'collapse-zero-trace', spanId: 'collapse-zero-span', startedAt: at };
+
+        await harness.domain.createSpan({ span: makeSpan({ ...base, endedAt: undefined }) });
+        await harness.domain.createSpan({ span: makeSpan({ ...base, endedAt: at }) });
+
+        // Both rows share the (traceId, spanId, endedAt) key, so the end row has
+        // to overwrite the pending one rather than be dropped as a duplicate.
+        expect(await countRows(harness.baseClient, harness.schema, TABLE_SPAN_EVENTS)).toBe(1);
+
+        const listed = await harness.domain.listTraces({});
+        expect(listed.spans).toHaveLength(1);
+        expect(listed.spans[0]!.endedAt).toEqual(at);
+      } finally {
+        await harness.close();
+      }
+    });
+
+    it('shows one trace when a suspended run opens a second root on resume', async () => {
+      const harness = await createHarness({ schemaPrefix: 'obs_vnext_collapse_resume' });
+
+      try {
+        const traceId = 'collapse-resume-trace';
+        await harness.domain.createSpan({
+          span: makeSpan({ traceId, spanId: 'root-suspended', startedAt: dayAt(0, 18), endedAt: dayAt(0, 18, 1) }),
+        });
+        await harness.domain.createSpan({
+          span: makeSpan({ traceId, spanId: 'root-resumed', startedAt: dayAt(0, 19), endedAt: undefined }),
+        });
+
+        const listed = await harness.domain.listTraces({});
+        expect(listed.pagination.total).toBe(1);
+        expect(listed.spans.map(s => s.spanId)).toEqual(['root-resumed']);
+
+        const root = await harness.domain.getRootSpan({ traceId });
+        expect(root?.span.spanId).toBe('root-resumed');
       } finally {
         await harness.close();
       }

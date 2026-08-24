@@ -9,18 +9,18 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import type { Theme } from '@mastra/playground-ui/components/ThemeProvider';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Brain, Check } from 'lucide-react';
+import { Check } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 import { DONE_SOUND_OPTIONS, loadDoneSound, playDoneSound, saveDoneSound } from '../services/doneSound';
 import type { DoneSound } from '../services/doneSound';
 import { SettingsCard, SettingsRow } from './SettingsCard';
 import { SettingsSubsection } from './SettingsSubsection';
+import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 
 type ThinkingLevel = NonNullable<AgentControllerSessionSettings['thinkingLevel']>;
 type NotificationMode = AgentControllerSessionSettings['notifications'];
@@ -87,14 +87,25 @@ interface ModelSettingsProps {
 
 export function ModelSettings({ settings, updating, onBehaviorChange }: ModelSettingsProps) {
   return (
-    <SettingsRow label="Thinking level" hint="Extended-reasoning budget for the agent" icon={<Brain size={14} />}>
-      <SelectControl
-        ariaLabel="Thinking level"
-        value={settings?.thinkingLevel ?? 'off'}
-        disabled={!settings || updating}
-        options={THINKING_LEVELS}
-        onChange={v => onBehaviorChange({ thinkingLevel: v })}
-      />
+    <SettingsRow label="Thinking level" hint="Extended-reasoning budget for the agent">
+      <div className="w-full lg:hidden">
+        <SegmentedSelect
+          ariaLabel="Thinking level"
+          value={settings?.thinkingLevel ?? 'off'}
+          disabled={!settings || updating}
+          options={THINKING_LEVELS}
+          onChange={v => onBehaviorChange({ thinkingLevel: v })}
+        />
+      </div>
+      <div className="hidden lg:block">
+        <Segmented
+          ariaLabel="Thinking level"
+          value={settings?.thinkingLevel ?? 'off'}
+          disabled={!settings || updating}
+          options={THINKING_LEVELS}
+          onChange={v => onBehaviorChange({ thinkingLevel: v })}
+        />
+      </div>
     </SettingsRow>
   );
 }
@@ -120,11 +131,7 @@ export function BehaviorSettings({
   return (
     <div className="flex flex-col gap-8">
       <SettingsCard>
-        <SettingsRow
-          label="Auto-approve tools"
-          hint="Run tool calls without asking (YOLO)"
-          info="Sets every tool permission below to Allow."
-        >
+        <SettingsRow label="Auto-approve tools" hint="Run tool calls without asking (YOLO)">
           <Toggle
             ariaLabel="Auto-approve tools"
             checked={!!settings?.yolo}
@@ -184,7 +191,7 @@ function PermissionsSection({
   return (
     <SettingsSubsection
       title="Tool permissions"
-      description="“Allow” runs without asking, “Ask” prompts you, “Deny” blocks it."
+      description="“Allow” runs without asking, “Ask” prompts you, “Deny” blocks it. Auto-approve above sets every category to Allow."
     >
       <SettingsCard>
         {TOOL_CATEGORIES.map(({ value, label, hint }) => (
@@ -365,19 +372,15 @@ function ModelPicker({
   );
 }
 
-export function Segmented<T extends string>({
-  value,
-  options,
-  ariaLabel,
-  disabled,
-  onChange,
-}: {
+interface SegmentedProps<T extends string> {
   value: T;
   options: { value: T; label: string }[];
   ariaLabel: string;
   disabled?: boolean;
   onChange: (value: T) => void;
-}) {
+}
+
+export function Segmented<T extends string>({ value, options, ariaLabel, disabled, onChange }: SegmentedProps<T>) {
   return (
     <ButtonsGroup spacing="close" role="group" aria-label={ariaLabel}>
       {options.map(o => (
@@ -396,25 +399,18 @@ export function Segmented<T extends string>({
   );
 }
 
-export function SelectControl<T extends string>({
+/** Select rendering of the same choice — callers decide which variant shows at which breakpoint. */
+export function SegmentedSelect<T extends string>({
   value,
   options,
   ariaLabel,
   disabled,
   onChange,
-  className,
-}: {
-  value: T;
-  options: { value: T; label: string }[];
-  ariaLabel: string;
-  disabled?: boolean;
-  onChange: (value: T) => void;
-  className?: string;
-}) {
+}: SegmentedProps<T>) {
   return (
-    <Select value={value} onValueChange={onChange} disabled={disabled}>
-      <SelectTrigger aria-label={ariaLabel} size="sm" className={cn('w-full sm:w-48', className)}>
-        <SelectValue />
+    <Select value={value} disabled={disabled} onValueChange={v => onChange(v as T)}>
+      <SelectTrigger variant="outline" size="sm" aria-label={ariaLabel} className="w-full">
+        {options.find(o => o.value === value)?.label ?? value}
       </SelectTrigger>
       <SelectContent>
         {options.map(o => (
