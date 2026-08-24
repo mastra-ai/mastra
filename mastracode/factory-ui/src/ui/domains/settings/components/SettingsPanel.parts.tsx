@@ -9,11 +9,12 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Input } from '@mastra/playground-ui/components/Input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import type { Theme } from '@mastra/playground-ui/components/ThemeProvider';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Check } from 'lucide-react';
+import { Brain, Check } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 import { DONE_SOUND_OPTIONS, loadDoneSound, playDoneSound, saveDoneSound } from '../services/doneSound';
@@ -388,6 +389,37 @@ export function Segmented<T extends string>({
         </Button>
       ))}
     </ButtonsGroup>
+  );
+}
+
+export function SelectControl<T extends string>({
+  value,
+  options,
+  ariaLabel,
+  disabled,
+  onChange,
+  className,
+}: {
+  value: T;
+  options: { value: T; label: string }[];
+  ariaLabel: string;
+  disabled?: boolean;
+  onChange: (value: T) => void;
+  className?: string;
+}) {
+  return (
+    <Select value={value} onValueChange={onChange} disabled={disabled}>
+      <SelectTrigger aria-label={ariaLabel} size="sm" className={cn('w-full sm:w-48', className)}>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {options.map(o => (
+          <SelectItem key={o.value} value={o.value}>
+            {o.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 

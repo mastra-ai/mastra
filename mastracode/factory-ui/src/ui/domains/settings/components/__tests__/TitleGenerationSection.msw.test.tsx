@@ -27,7 +27,7 @@ describe('TitleGenerationSection', () => {
     expect(await screen.findByRole('combobox', { name: 'Thread title model' })).toBeInTheDocument();
     const toggle = screen.getByRole('group', { name: 'Automatic thread titles' });
     expect(within(toggle).getByRole('button', { name: 'On' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('group', { name: 'Thread title thinking level' })).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Thread title thinking level' })).toBeInTheDocument();
   });
 
   it('hides the model rows when generation is off', async () => {
@@ -95,6 +95,36 @@ describe('TitleGenerationSection', () => {
     await waitFor(() =>
       expect(screen.getByRole('combobox', { name: 'Thread title model' })).not.toHaveTextContent('openai/gpt-5.4-mini'),
     );
+  });
+
+  it('pins a thinking level and resets it back to the default', async () => {
+    let lastBody: unknown;
+    server.use(
+      http.get(TITLE_URL, () => HttpResponse.json(enabledConfig)),
+      http.put(TITLE_URL, async ({ request }) => {
+        lastBody = await request.json();
+        const body = lastBody as { thinkingLevel?: string | null };
+        return HttpResponse.json({ ok: true, config: { ...enabledConfig, thinkingLevel: body.thinkingLevel ?? null } });
+      }),
+    );
+
+    const user = userEvent.setup();
+    const { client } = renderWithProviders(<TitleGenerationSection models={MODELS} />);
+
+    await user.click(await screen.findByRole('combobox', { name: 'Thread title thinking level' }));
+    await user.click(await screen.findByRole('option', { name: 'Low' }));
+
+    await waitForMutationsIdle(client);
+    expect(lastBody).toEqual({ thinkingLevel: 'low' });
+    await waitFor(() =>
+      expect(screen.getByRole('combobox', { name: 'Thread title thinking level' })).toHaveTextContent('Low'),
+    );
+
+    await user.click(screen.getByRole('combobox', { name: 'Thread title thinking level' }));
+    await user.click(await screen.findByRole('option', { name: 'Default' }));
+
+    await waitForMutationsIdle(client);
+    expect(lastBody).toEqual({ thinkingLevel: null });
   });
 
   it('surfaces a write failure and keeps the previous state', async () => {

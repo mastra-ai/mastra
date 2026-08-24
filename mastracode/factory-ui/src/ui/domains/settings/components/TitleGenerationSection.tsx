@@ -7,11 +7,16 @@ import { useTitleGenerationQuery, useUpdateTitleGenerationMutation } from '../..
 import type { TitleGenerationConfigInfo } from '../../../../api/types';
 
 import { ModelCombobox } from './ModelCombobox';
-import { Segmented, THINKING_LEVELS } from './SettingsPanel.parts';
+import { Segmented, SelectControl, THINKING_LEVELS } from './SettingsPanel.parts';
 import { SettingsRow } from './SettingsCard';
 
 /** Sentinel for "no thinking-level override — the model's default applies". */
 const USE_MODEL_DEFAULT = '__default__';
+
+const THINKING_OPTIONS: Array<{
+  value: typeof USE_MODEL_DEFAULT | NonNullable<TitleGenerationConfigInfo['thinkingLevel']>;
+  label: string;
+}> = [{ value: USE_MODEL_DEFAULT, label: 'Default' }, ...THINKING_LEVELS];
 
 /** Server defaults, applied when the config cannot be loaded (e.g. older API). */
 const FALLBACK_CONFIG: TitleGenerationConfigInfo = { enabled: true, modelId: null, thinkingLevel: null };
@@ -57,42 +62,42 @@ export function TitleGenerationSection({ models }: { models: AvailableModelOptio
         />
       </SettingsRow>
       {config?.enabled && (
-        <>
-          <SettingsRow label="Title model" hint="Unset uses the cheap default for the first connected provider.">
-            <div className="flex w-full max-w-72 items-center gap-2">
-              {update.isPending && <Spinner size="sm" aria-label="Saving title model" className="text-icon3 shrink-0" />}
-              <label className="min-w-0 flex-1">
-                <span className="sr-only">Thread title model</span>
-                <ModelCombobox
-                  models={models}
-                  value={config.modelId ?? ''}
-                  placeholder="Default"
-                  disabled={disabled}
-                  onValueChange={value => update.mutate({ modelId: value })}
-                />
-              </label>
-              {config.modelId && (
-                <button
-                  type="button"
-                  className={buttonVariants({ variant: 'ghost' })}
-                  disabled={disabled}
-                  onClick={() => update.mutate({ modelId: null })}
-                >
-                  Reset
-                </button>
-              )}
-            </div>
-          </SettingsRow>
-          <SettingsRow label="Title thinking level" hint="Reasoning effort for the title request">
-            <Segmented
+        <SettingsRow
+          label="Title model"
+          hint="Model used to name new threads. Unset uses the cheap default for the first connected provider."
+        >
+          <div className="flex w-full max-w-md items-center gap-2">
+            {update.isPending && <Spinner size="sm" aria-label="Saving title model" className="text-icon3 shrink-0" />}
+            <label className="min-w-0 flex-1">
+              <span className="sr-only">Thread title model</span>
+              <ModelCombobox
+                models={models}
+                value={config.modelId ?? ''}
+                placeholder="Default"
+                disabled={disabled}
+                onValueChange={value => update.mutate({ modelId: value })}
+              />
+            </label>
+            <SelectControl
               ariaLabel="Thread title thinking level"
               value={config.thinkingLevel ?? USE_MODEL_DEFAULT}
               disabled={disabled}
-              options={[{ value: USE_MODEL_DEFAULT, label: 'Default' }, ...THINKING_LEVELS]}
+              options={THINKING_OPTIONS}
+              className="sm:w-32"
               onChange={value => update.mutate({ thinkingLevel: value === USE_MODEL_DEFAULT ? null : value })}
             />
-          </SettingsRow>
-        </>
+            {config.modelId && (
+              <button
+                type="button"
+                className={buttonVariants({ variant: 'ghost' })}
+                disabled={disabled}
+                onClick={() => update.mutate({ modelId: null })}
+              >
+                Reset
+              </button>
+            )}
+          </div>
+        </SettingsRow>
       )}
     </>
   );
