@@ -119,4 +119,60 @@ describe('flattenWorkflowTree', () => {
       expect(childRow.kind === 'workflow' && childRow.nestedIds).toEqual([]);
     });
   });
+  describe('when a workflow record is missing its pieces', () => {
+    it('reports no nested ids for a workflow with no steps', () => {
+      expect(getDirectNestedWorkflowIds({ allSteps: {} } as never)).toEqual([]);
+    });
+
+    it('reports no nested ids when allSteps is absent', () => {
+      expect(getDirectNestedWorkflowIds({ steps: { a: {} } } as never)).toEqual([]);
+    });
+  });
+});
+
+describe('buildRegistryIndex — edge cases', () => {
+  it('indexes a workflow that carries no name by its registry key alone', () => {
+    const index = buildRegistryIndex({ onlyKey: { name: '' } as never });
+
+    expect(index.get('onlyKey')).toBe('onlyKey');
+    expect(index.size).toBe(1);
+  });
+
+  it('reports an empty index for an empty registry', () => {
+    expect(buildRegistryIndex({}).size).toBe(0);
+  });
+});
+
+describe('flattenWorkflowTree — inline leaves', () => {
+  it('leaves the description undefined when the parent knows nothing about the step', () => {
+    // The step is still flagged as a nested workflow, but carries no description.
+    const parent = {
+      ...workflowsFixture.prdGroomProduct,
+      id: 'prdGroomProduct',
+      allSteps: { 'use-case-arch': { isWorkflow: true } },
+    } as unknown as WorkflowListEntry;
+
+    const rows = flattenWorkflowTree([parent], workflowsFixture, new Set(['prdGroomProduct']));
+    const inlineRow = rows[1];
+
+    expect(inlineRow?.kind).toBe('inline');
+    expect(inlineRow && 'description' in inlineRow && inlineRow.description).toBeUndefined();
+  });
+
+  it('renders nothing below a row that is expanded but composes no workflows', () => {
+    const leaf = entry('prdShipProduct');
+    const rows = flattenWorkflowTree(
+      [{ ...leaf, steps: {} } as WorkflowListEntry],
+      workflowsFixture,
+      new Set([leaf.id]),
+    );
+
+    expect(rows).toHaveLength(1);
+  });
+
+  it('renders nothing below a row that composes workflows but is collapsed', () => {
+    const rows = flattenWorkflowTree([entry('prdShipProduct')], workflowsFixture, new Set());
+
+    expect(rows).toHaveLength(1);
+  });
 });
