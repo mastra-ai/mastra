@@ -489,6 +489,13 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       this.sessionsRows.filter(row => row.projectRepositoryId === projectRepositoryId),
     getBySessionId: async (sessionId: string): Promise<SourceControlSession | null> =>
       this.sessionsRows.find(row => row.sessionId === sessionId) ?? null,
+    rename: async ({ sessionId, title }: { sessionId: string; title: string }): Promise<void> => {
+      const row = this.sessionsRows.find(candidate => candidate.sessionId === sessionId);
+      if (row) {
+        row.title = title;
+        row.updatedAt = new Date();
+      }
+    },
     getForBranch: async ({
       projectRepositoryId,
       userId,

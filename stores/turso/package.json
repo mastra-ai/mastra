@@ -1,6 +1,6 @@
 {
   "name": "@mastra/turso",
-  "version": "0.1.0-alpha.0",
+  "version": "0.1.0-alpha.1",
   "description": "Turso Database storage provider for Mastra",
   "type": "module",
   "main": "dist/index.js",

@@ -98,6 +98,10 @@ export interface FactoryDecisionDispatcherOptions {
   reconcileToolResults?: () => Promise<void>;
   prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
+  resolveLinkedWorkItemParentId?: (input: {
+    orgId: string;
+    decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>;
+  }) => Promise<string | null>;
   maxInFlight?: number;
   /** How often the stale-binding sweep runs. Defaults to 10 minutes. */
   staleBindingSweepIntervalMs?: number;
@@ -208,6 +212,7 @@ export class FactoryDecisionDispatcher {
   readonly #reconcileToolResults?: () => Promise<void>;
   readonly #prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   readonly #primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
+  readonly #resolveLinkedWorkItemParentId?: FactoryDecisionDispatcherOptions['resolveLinkedWorkItemParentId'];
   readonly #maxInFlight: number;
   readonly #staleBindingSweepIntervalMs: number;
   readonly #staleBindingTtlMs: number;
@@ -228,6 +233,7 @@ export class FactoryDecisionDispatcher {
     this.#reconcileToolResults = options.reconcileToolResults;
     this.#prepareBinding = options.prepareBinding;
     this.#primeCredentials = options.primeCredentials;
+    this.#resolveLinkedWorkItemParentId = options.resolveLinkedWorkItemParentId;
     const maxInFlight = options.maxInFlight ?? MAX_IN_FLIGHT;
     this.#maxInFlight = Number.isFinite(maxInFlight) && maxInFlight > 0 ? Math.floor(maxInFlight) : MAX_IN_FLIGHT;
     this.#staleBindingSweepIntervalMs = positiveMs(
@@ -367,6 +373,7 @@ export class FactoryDecisionDispatcher {
   }
 
   async #dispatchDecision(record: FactoryDeferredDecisionRecord, now: Date): Promise<void> {
+    let executionCompleted = false;
     try {
       const decision = validateFactoryRuleDecision(record.decision, record.causalChain.length);
       if (decision.type === 'reject') throw new Error('Deferred Factory decisions cannot reject.');
@@ -381,6 +388,7 @@ export class FactoryDecisionDispatcher {
           this.#storage.renewDeferredDecisionLease(leaseIdentity(record, this.#ownerId), leaseExpiresAt),
         async () => this.#executeDecision(record, decision),
       );
+      executionCompleted = true;
       const completed = await this.#storage.completeDeferredDecision(leaseIdentity(record, this.#ownerId), new Date());
       if (!completed) throw new Error('Factory decision lease was lost before completion.');
     } catch (error) {
@@ -392,6 +400,7 @@ export class FactoryDecisionDispatcher {
         lastError: sanitizeDispatchError(error),
         failureCode: factoryDispatchFailureCode(error),
         terminal,
+        advanceDeliveryGeneration: !executionCompleted,
       });
     }
   }
@@ -516,8 +525,10 @@ export class FactoryDecisionDispatcher {
               });
         const session = resolved.session as DispatcherSession;
         await this.#switchThread(session, binding);
+        const deliveryId =
+          record.deliveryGeneration === 0 ? record.id : `${record.id}:retry:${record.deliveryGeneration}`;
         const delivered = await session.thread.listActiveMessages();
-        if (delivered.some(message => message.id === record.id)) return;
+        if (delivered.some(message => message.id === deliveryId)) return;
         if (decision.cancelInFlight) session.abort();
         const precedingMessage = decision.precedingMessage;
         if (precedingMessage) {
@@ -566,7 +577,7 @@ export class FactoryDecisionDispatcher {
         const sendKickoff = async () => {
           const result = session.sendSignal(
             {
-              id: record.id,
+              id: deliveryId,
               type: 'user',
               tagName: 'user',
               contents: resolved.message,
@@ -594,11 +605,11 @@ export class FactoryDecisionDispatcher {
             // in flight. If that run ends before draining its queue the prompt
             // is dropped silently: no turn starts, no error surfaces, and the
             // decision reports success while the card sits in its new stage with
-            // nobody working. Signals persist under their own id (the same
-            // identity the replay guard above reads), so confirm the message
-            // actually landed in the thread rather than trusting the ack.
+            // nobody working. Signals persist under their generation-scoped id
+            // (the same identity the replay guard above reads), so confirm the
+            // message actually landed in the thread rather than trusting the ack.
             const landed = await session.thread.listActiveMessages();
-            if (!landed.some(message => message.id === record.id)) {
+            if (!landed.some(message => message.id === deliveryId)) {
               // The condition that resolves this is the in-flight run ending, so
               // wait for exactly that and redeliver into the idle session. A
               // backoff cannot work here: retries are sized in seconds and a turn
@@ -698,13 +709,20 @@ export class FactoryDecisionDispatcher {
     decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>,
     causalChain: FactoryRuleCausalEntry[],
   ): Promise<void> {
-    const result = await this.#storage.upsert({
+    const parentWorkItemId =
+      record.workItemId ??
+      (await this.#resolveLinkedWorkItemParentId?.({
+        orgId: record.orgId,
+        decision,
+      })) ??
+      null;
+    let result = await this.#storage.upsert({
       orgId: record.orgId,
       userId: 'factory-rule-dispatcher',
       factoryProjectId: record.factoryProjectId,
       input: {
         externalSource: externalSourceForDecision(decision),
-        parentWorkItemId: record.workItemId,
+        parentWorkItemId,
         title: decision.title,
         stages: ['intake'],
         sessions: {},
@@ -712,6 +730,15 @@ export class FactoryDecisionDispatcher {
       },
       reuseMode: 'preserve',
     });
+    if (!result.item.parentWorkItemId && parentWorkItemId) {
+      const item = await this.#storage.setParentWorkItemIfMissing({
+        orgId: record.orgId,
+        id: result.item.id,
+        userId: 'factory-rule-dispatcher',
+        parentWorkItemId,
+      });
+      if (item) result = { ...result, item };
+    }
     const materializedByDecision = result.item.metadata?.[FACTORY_RULE_MATERIALIZATION_KEY] === record.idempotencyKey;
     if (!materializedByDecision && (decision.stage === 'intake' || !result.item.stages.includes('intake'))) return;
 

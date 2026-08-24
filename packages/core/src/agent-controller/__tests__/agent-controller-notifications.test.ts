@@ -60,7 +60,7 @@ describe('AgentController notification signals', () => {
         threadId,
         ifIdle: expect.objectContaining({
           streamOptions: expect.objectContaining({
-            memory: { resource: 'resource-1', thread: threadId },
+            memory: expect.objectContaining({ resource: 'resource-1', thread: threadId }),
             maxSteps: 1000,
             savePerStep: false,
           }),

@@ -1205,12 +1205,15 @@ export class Agent<
         }
       }
 
-      // 2. Any of a full Agent sub-agent's tools has background.enabled === true
+      // 2. Any of a full Agent sub-agent's tools has backgroundConfig.enabled === true
       if (subAgent instanceof Agent) {
-        const subAgentTools = await subAgent.getToolsForExecution({ requestContext });
+        const subAgentTools = await subAgent.getToolsForExecution({
+          requestContext,
+          backgroundTaskEnabled: true,
+        });
         if (subAgentTools && typeof subAgentTools === 'object') {
           for (const tool of Object.values(subAgentTools)) {
-            const bg = (tool as any)?.background as ToolBackgroundConfig | undefined;
+            const bg = (tool as any)?.backgroundConfig as ToolBackgroundConfig | undefined;
             if (bg?.enabled === true) {
               return { enabled: true, waitTimeoutMs: subAgentBgConfig?.waitTimeoutMs };
             }
@@ -5768,7 +5771,9 @@ export class Agent<
         // Derive a ToolBackgroundConfig from the sub-agent's tools/config so the
         // parent can dispatch the entire sub-agent invocation as a background task
         // when appropriate.
-        const subAgentBackgroundConfig = await this.deriveSubAgentBackgroundConfig(agent, requestContext);
+        const subAgentBackgroundConfig = backgroundTaskEnabled
+          ? await this.deriveSubAgentBackgroundConfig(agent, requestContext)
+          : undefined;
 
         const options: ToolOptions = {
           name: `agent-${agentName}`,
@@ -6098,6 +6103,7 @@ export class Agent<
     hooks?: ToolHooks;
     delegation?: DelegationConfig;
     methodType?: AgentMethodType;
+    backgroundTaskEnabled?: boolean;
   }): Promise<Record<string, CoreTool>> {
     const requestContext = options.requestContext ?? new RequestContext();
     const defaultOptions = await this.getDefaultOptions({ requestContext });
@@ -6133,6 +6139,7 @@ export class Agent<
       // survive when callers pass a partial per-call delegation override.
       delegation: mergedOptions.delegation,
       methodType: options.methodType ?? 'stream',
+      backgroundTaskEnabled: options.backgroundTaskEnabled,
     });
   }
 
@@ -6256,6 +6263,7 @@ export class Agent<
       ...observabilityContext,
       autoResumeSuspendedTools,
       delegation,
+      backgroundTaskEnabled,
     });
 
     const workflowTools = await this.listWorkflowTools({
@@ -6670,7 +6678,9 @@ export class Agent<
   async #loadAgenticLoopSnapshotOrThrow({ runId, method }: { runId: string; method: string }) {
     const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
     const workflowsStore = await effectiveMastra?.getStorage()?.getStore('workflows');
-    const existingSnapshot = await waitForSuspendedSnapshot(workflowsStore, 'agentic-loop', runId);
+    const existingSnapshot = await waitForSuspendedSnapshot(workflowsStore, 'agentic-loop', runId, {
+      missingSnapshotGraceReads: 3,
+    });
 
     if (!existingSnapshot) {
       const hasStorage = !!workflowsStore;
