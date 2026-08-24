@@ -21,11 +21,21 @@ const parser = (schema: JSONSchema7) => {
   return (value: unknown) => zodSchema.parse(value);
 };
 
-/** Every branch / property must stay self-describing in the schema editor. */
-const describedEntries = (schema: JSONSchema7) => [
-  ...((schema.anyOf ?? []) as JSONSchema7[]),
-  ...Object.values((schema.properties ?? {}) as Record<string, JSONSchema7>),
-];
+/**
+ * Collects every node in the schema tree that declares a `description`, so the
+ * assertion is "documentation stays non-empty" rather than a copy of the text.
+ */
+const describedNodes = (node: unknown, found: JSONSchema7[] = []): JSONSchema7[] => {
+  if (!node || typeof node !== 'object') return found;
+  if (Array.isArray(node)) {
+    for (const entry of node) describedNodes(entry, found);
+    return found;
+  }
+  const schema = node as JSONSchema7 & Record<string, unknown>;
+  if ('description' in schema) found.push(schema);
+  for (const value of Object.values(schema)) describedNodes(value, found);
+  return found;
+};
 
 const schemas = () => renderHook(() => useScorerSchema()).result.current;
 
@@ -157,13 +167,45 @@ describe('useScorerSchema', () => {
       expect(parsed.requestContext).toEqual({ tenant: 'acme' });
     });
 
-    it('documents every top-level field', () => {
-      const fields = describedEntries(schemas().agentInputSchema);
+    it('keeps every documented node in the tree self-describing', () => {
+      const nodes = describedNodes(schemas().agentInputSchema);
 
-      expect(fields.length).toBeGreaterThan(0);
-      for (const field of fields) {
-        expect(field.description ?? '').not.toBe('');
+      expect(nodes.length).toBeGreaterThan(5);
+      for (const node of nodes) {
+        expect(node.description).not.toBe('');
       }
+    });
+
+    it.each(['additionalContext', 'requestContext'])('rejects a non-object %s', field => {
+      expect(accepts()(agentScoringInput({ [field]: 'not-an-object' }))).toBe(false);
+    });
+
+    it('requires a role on a system message', () => {
+      const payload = agentScoringInput();
+      payload.input.systemMessages = [{ content: 'be terse' } as never];
+
+      expect(accepts()(payload)).toBe(false);
+    });
+
+    it('requires content on a system message', () => {
+      const payload = agentScoringInput();
+      payload.input.systemMessages = [{ role: 'system' } as never];
+
+      expect(accepts()(payload)).toBe(false);
+    });
+
+    it('requires a role on a tagged system message', () => {
+      const payload = agentScoringInput();
+      payload.input.taggedSystemMessages = { persona: [{ content: 'be terse' } as never] };
+
+      expect(accepts()(payload)).toBe(false);
+    });
+
+    it('requires content on a tagged system message', () => {
+      const payload = agentScoringInput();
+      payload.input.taggedSystemMessages = { persona: [{ role: 'system' } as never] };
+
+      expect(accepts()(payload)).toBe(false);
     });
 
     it('declares the JSON Schema dialect it is written against', () => {
@@ -206,13 +248,23 @@ describe('useScorerSchema', () => {
       expect(parsed.output).toEqual({ b: 2 });
     });
 
-    it('documents every top-level field', () => {
-      const fields = describedEntries(schemas().customInputSchema);
+    it('keeps every documented node in the tree self-describing', () => {
+      const nodes = describedNodes(schemas().customInputSchema);
 
-      expect(fields.length).toBeGreaterThan(0);
-      for (const field of fields) {
-        expect(field.description ?? '').not.toBe('');
+      expect(nodes.length).toBeGreaterThan(5);
+      for (const node of nodes) {
+        expect(node.description).not.toBe('');
       }
+    });
+
+    it('keeps every field of the free-form context objects', () => {
+      const parsed = parser(schemas().customInputSchema)({
+        additionalContext: { a: 1, b: { c: 2 } },
+        requestContext: { tenant: 'acme' },
+      }) as { additionalContext: Record<string, unknown>; requestContext: Record<string, unknown> };
+
+      expect(parsed.additionalContext).toEqual({ a: 1, b: { c: 2 } });
+      expect(parsed.requestContext).toEqual({ tenant: 'acme' });
     });
 
     it('declares the JSON Schema dialect it is written against', () => {

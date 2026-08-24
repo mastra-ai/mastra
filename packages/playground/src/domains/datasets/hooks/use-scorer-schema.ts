@@ -21,6 +21,9 @@ const CONTENT_SCHEMA: JSONSchema7 = {
 const MESSAGE_SCHEMA: JSONSchema7 = {
   type: 'object',
   properties: {
+    // Stryker disable next-line StringLiteral: `enum` already pins the accepted values,
+    // so `type` is redundant here — Studio's JSON-Schema-to-Zod converter reads `enum`
+    // first and never looks at it. Kept because the schema is also read by the server.
     role: { type: 'string', enum: ['user', 'assistant', 'system', 'tool'] },
     content: CONTENT_SCHEMA,
   },
@@ -50,6 +53,7 @@ const SCORER_RUN_INPUT_FOR_AGENT: JSONSchema7 = {
       items: {
         type: 'object',
         properties: {
+          // Stryker disable next-line StringLiteral: redundant next to `enum`, as above.
           role: { type: 'string', enum: ['system'] },
           content: CONTENT_SCHEMA,
         },
@@ -64,6 +68,7 @@ const SCORER_RUN_INPUT_FOR_AGENT: JSONSchema7 = {
         items: {
           type: 'object',
           properties: {
+            // Stryker disable next-line StringLiteral: redundant next to `enum`, as above.
             role: { type: 'string', enum: ['system'] },
             content: CONTENT_SCHEMA,
           },
@@ -112,6 +117,9 @@ const SCORER_AGENT_INPUT_SCHEMA: JSONSchema7 = {
       additionalProperties: true,
     },
   },
+  // Stryker disable next-line ArrayDeclaration: an empty `required` list and a list
+  // naming a field that is not declared in `properties` behave identically — every
+  // declared property stays optional either way.
   required: [],
 };
 
@@ -146,6 +154,7 @@ const SCORER_CUSTOM_INPUT_SCHEMA: JSONSchema7 = {
       additionalProperties: true,
     },
   },
+  // Stryker disable next-line ArrayDeclaration: inert, as above.
   required: [],
 };
 
