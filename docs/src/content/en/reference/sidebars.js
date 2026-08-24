@@ -786,6 +786,7 @@ const sidebars = {
         { type: 'doc', id: 'storage/overview', label: 'Overview' },
         { type: 'doc', id: 'storage/composite', label: 'Composite Storage' },
         { type: 'doc', id: 'storage/retention', label: 'Retention (prune)' },
+        { type: 'doc', id: 'storage/turso', label: 'Turso Storage' },
       ],
     },
     {

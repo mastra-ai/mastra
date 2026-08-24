@@ -1,6 +1,6 @@
 ---
 title: "Reference: MongoDB vector store | Vectors"
-description: Documentation for the MongoDBVector class in Mastra, which provides vector search using MongoDB Atlas and Atlas Vector Search.
+description: Documentation for the MongoDBVector class in Mastra, which provides vector search using MongoDB Atlas and Vector Search.
 packages:
   - "@mastra/core"
   - "@mastra/fastembed"
@@ -11,7 +11,7 @@ packages:
 
 # MongoDB vector store
 
-The `MongoDBVector` class provides vector search using [MongoDB Atlas Vector Search](https://www.mongodb.com/docs/atlas/atlas-vector-search/). It enables efficient similarity search and metadata filtering within your MongoDB collections.
+The `MongoDBVector` class provides vector search using [MongoDB Vector Search](https://www.mongodb.com/docs/atlas/atlas-vector-search/). It enables efficient similarity search and metadata filtering within your MongoDB collections.
 
 ## Installation
 
@@ -120,7 +120,7 @@ Creates a new vector index (collection) in MongoDB.
     type: 'string[]',
     isOptional: true,
     description:
-      'Metadata field names to declare as filter fields in the Atlas vectorSearch index (registered as `metadata.<field>`). Queries that filter only on declared fields are pushed directly into `$vectorSearch` instead of pre-filtering candidate `_id`s, avoiding the 16 MB BSON limit on large result sets. Filters that reference an undeclared field, or use an operator `$vectorSearch` does not support, fall back to the pre-filter automatically.',
+      'Metadata field names to declare as filter fields in the MongoDB vectorSearch index (registered as `metadata.<field>`). Queries that filter only on declared fields are pushed directly into `$vectorSearch` instead of pre-filtering candidate `_id`s, avoiding the 16 MB BSON limit on large result sets. Filters that reference an undeclared field, or use an operator `$vectorSearch` does not support, fall back to the pre-filter automatically.',
   },
   {
     name: 'collectionName',
@@ -134,7 +134,7 @@ Creates a new vector index (collection) in MongoDB.
     type: 'string',
     isOptional: true,
     description:
-      'Name for the Atlas vectorSearch index created on the collection. Defaults to `${indexName}_vector_index`.',
+      'Name for the MongoDB vectorSearch index created on the collection. Defaults to `${indexName}_vector_index`.',
   },
   {
     name: 'allowWrites',
@@ -275,7 +275,7 @@ Searches for similar vectors with optional metadata filtering.
 
 ### `createSearchIndex()`
 
-Provisions an Atlas Search (BM25/full-text) index on the collection backing an index and records it as the text-search index that `textQuery()` and `hybridQuery()` will target.
+Provisions a MongoDB Search (BM25/full-text) index on the collection backing an index and records it as the text-search index that `textQuery()` and `hybridQuery()` will target.
 
 **Managed vs. bring-your-own collections:**
 
@@ -307,7 +307,7 @@ Naming:
     defaultValue:
       '${collectionName}_search_index (or ${collectionName}_${indexName}_search_fields_index when `fields` is given)',
     description:
-      'Name for the Atlas Search index. When `fields` is provided and this is omitted, a distinct default name that is unique per logical index is used, so the field mapping is not shadowed by the auto-created dynamic index and two logical indexes on the same collection do not collide.',
+      'Name for the MongoDB Search index. When `fields` is provided and this is omitted, a distinct default name that is unique per logical index is used, so the field mapping is not shadowed by the auto-created dynamic index and two logical indexes on the same collection do not collide.',
   },
   {
     name: 'waitUntilReady',
@@ -331,7 +331,7 @@ The field-mapped index name includes the logical `indexName`, so two logical ind
 
 ### `waitForSearchIndexReady()`
 
-Waits for the full-text (BM25) search index of an index to become READY. `waitForIndexReady()` polls only the vectorSearch index; `createSearchIndex()` returns while the Atlas Search full-text index is still building, so an immediate `textQuery()`/`hybridQuery()` can intermittently fail. Call this (or pass `waitUntilReady: true` to `createSearchIndex()`) to block until the resolved text index reports READY.
+Waits for the full-text (BM25) search index of an index to become READY. `waitForIndexReady()` polls only the vectorSearch index; `createSearchIndex()` returns while the MongoDB Search full-text index is still building, so an immediate `textQuery()`/`hybridQuery()` can intermittently fail. Call this (or pass `waitUntilReady: true` to `createSearchIndex()`) to block until the resolved text index reports READY.
 
 <PropertiesTable
   content={[
@@ -370,7 +370,7 @@ await store.waitForSearchIndexReady({ indexName: 'precedents' })
 
 ### `textQuery()`
 
-Runs a full-text (BM25) search against an Atlas Search index. By default it targets the text-search index recorded for this index (set by `createSearchIndex()`, or the dynamic `${collectionName}_search_index` auto-created by `createIndex()`). Pass `searchIndexName` to target a specific index for this call.
+Runs a full-text (BM25) search against a MongoDB Search index. By default it targets the text-search index recorded for this index (set by `createSearchIndex()`, or the dynamic `${collectionName}_search_index` auto-created by `createIndex()`). Pass `searchIndexName` to target a specific index for this call.
 
 Metadata filters here (like `hybridQuery()`) are applied via a `$match` stage. For the vector branch of `hybridQuery()`, filters on fields not declared via `filterFields` at index creation are transparently materialised as candidate `_id`s (the same fallback `query()` uses), so undeclared-field filters don't error.
 
@@ -433,7 +433,7 @@ const results = await store.textQuery({
 
 ### `hybridQuery()`
 
-Runs a hybrid search that fuses vector similarity and full-text results using MongoDB's server-side `$rankFusion`. It requires MongoDB >= 8.0 and is generally available from 8.1. On 8.0.x, it may require a MongoDB support case for enablement. It runs where enabled, including Atlas 8.0.x. A full-text search index must exist: it's auto-created for managed indexes, but for a bring-your-own collection you must call `createSearchIndex()` first (opt-in).
+Runs a hybrid search that fuses vector similarity and full-text results using MongoDB's server-side `$rankFusion`. It requires MongoDB >= 8.0 and is generally available from 8.1. On 8.0.x, it may require a MongoDB support case for enablement. It runs where enabled, including MongoDB Atlas 8.0.x. A full-text search index must exist: it's auto-created for managed indexes, but for a bring-your-own collection you must call `createSearchIndex()` first (opt-in).
 
 <PropertiesTable
   content={[
@@ -512,7 +512,7 @@ const results = await store.hybridQuery({
 })
 ```
 
-`hybridQuery()` requires MongoDB >= 8.0 for the `$rankFusion` stage. The stage is generally available from 8.1. On 8.0.x, it may need a MongoDB support case to enable and runs where enabled, such as Atlas 8.0.x. If you're running an older version, or `$rankFusion` isn't enabled on your 8.0.x deployment, use `query()` and `textQuery()` separately and merge the results client-side.
+`hybridQuery()` requires MongoDB >= 8.0 for the `$rankFusion` stage. The stage is generally available from 8.1. On 8.0.x, it may need a MongoDB support case to enable and runs where enabled, such as MongoDB Atlas 8.0.x. If you're running an older version, or `$rankFusion` isn't enabled on your 8.0.x deployment, use `query()` and `textQuery()` separately and merge the results client-side.
 
 ### `describeIndex()`
 
@@ -543,7 +543,7 @@ interface IndexStats {
 Deletes a vector index. Behavior depends on how the index was created:
 
 - **Managed index** (created without `collectionName`): drops the entire collection and all its data.
-- **Bring-your-own index** (created with `collectionName`): drops the Atlas vectorSearch index. If `createSearchIndex()` provisioned a companion full-text search index, it drops that index too. The caller's operational collection and its documents are preserved. This store never drops a collection it didn't create.
+- **Bring-your-own index** (created with `collectionName`): drops the MongoDB vectorSearch index. If `createSearchIndex()` provisioned a companion full-text search index, it drops that index too. The caller's operational collection and its documents are preserved. This store never drops a collection it didn't create.
 
 The BYO classification is recorded durably when the index is created, so it's applied correctly even by a different process (e.g. an index created by a setup job and later deleted by a long-lived service). Always pass the **logical index name** (the `indexName` used at `createIndex`), not the physical collection name.
 
@@ -760,7 +760,7 @@ Embeddings are numeric vectors used by memory's `semanticRecall` to retrieve rel
 
 :::note
 
-MongoDB Atlas Vector Search is recommended for production use. For self-hosted deployments, Vector Search is available with [local Atlas deployments via the Atlas CLI](https://www.mongodb.com/docs/atlas/cli/current/atlas-cli-deploy-local/).
+MongoDB Vector Search is recommended for production use. For self-hosted deployments, Vector Search is available with [local Atlas deployments via the Atlas CLI](https://www.mongodb.com/docs/atlas/cli/current/atlas-cli-deploy-local/).
 
 :::
 

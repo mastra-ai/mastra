@@ -1,5 +1,29 @@
 # @mastra/playground-ui
 
+## 51.1.0-alpha.6
+
+### Minor Changes
+
+- Added a composable tool-call component for building accessible, collapsible tool activity rows with custom icons, details, status content, and expanded results. ([#22183](https://github.com/mastra-ai/mastra/pull/22183))
+
+  ```tsx
+  import { ToolCall, ToolCallContent, ToolCallTrigger } from '@mastra/playground-ui/components/ai/tool-call';
+
+  <ToolCall status="running">
+    <ToolCallTrigger>Running command</ToolCallTrigger>
+    <ToolCallContent>Command output</ToolCallContent>
+  </ToolCall>;
+  ```
+
+### Patch Changes
+
+- Added controlled snapshot frame selection to SankeySignals. The component now requires selectedFrameId and onFrameIdChange props, so the host application owns which timeline snapshot is displayed (for example to persist and restore it). Timeline clicks, snapshot playback, and perspective changes all report the new frame through onFrameIdChange. The playground signals overview page resolves the initial frame from the snapshot list and passes it down. ([#22187](https://github.com/mastra-ai/mastra/pull/22187))
+
+- Updated dependencies [[`c8e4cea`](https://github.com/mastra-ai/mastra/commit/c8e4ceac9a390d78c8327dff3cdb2861dd71957f), [`ed01e9a`](https://github.com/mastra-ai/mastra/commit/ed01e9a807514a904374bf687a7b8f18750f6f78), [`4e9a228`](https://github.com/mastra-ai/mastra/commit/4e9a2283d5fd6ed1b70a2751eb3dc2cbf82ada20), [`63041eb`](https://github.com/mastra-ai/mastra/commit/63041eb4c50b520a0a80e03d4cd6ea99f67715a0)]:
+  - @mastra/core@1.62.0-alpha.6
+  - @mastra/client-js@1.42.1-alpha.6
+  - @mastra/react@1.4.6-alpha.6
+
 ## 51.0.1-alpha.5
 
 ### Patch Changes

@@ -41,7 +41,7 @@ export function SettingsPageLayout({ children }: { children: ReactNode }) {
             <SettingsHeader autoFocus placement="mobile" />
           </div>
         )}
-        {children}
+        <div className="flex flex-1 flex-col px-5 pb-5 lg:px-0 lg:pb-0">{children}</div>
       </main>
     );
   }
