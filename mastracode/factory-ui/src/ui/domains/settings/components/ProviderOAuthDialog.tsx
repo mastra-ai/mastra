@@ -1,4 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import {
   Dialog,
   DialogBody,
@@ -10,7 +11,7 @@ import {
 } from '@mastra/playground-ui/components/Dialog';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Check, Copy, ExternalLink, Loader2 } from 'lucide-react';
+import { ExternalLink, Loader2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 import type { OAuthStartResponse } from '../../../../api/types';
@@ -111,7 +112,6 @@ function DeviceCodeDialog({ provider, session, onClose, onComplete }: ProviderOA
   const onCompleteRef = useRef(onComplete);
   const [nextPollAt, setNextPollAt] = useState(() => Date.now() + (session.nextPollMs ?? 1000));
   const [flowError, setFlowError] = useState<string>();
-  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     onCompleteRef.current = onComplete;
@@ -144,13 +144,6 @@ function DeviceCodeDialog({ provider, session, onClose, onComplete }: ProviderOA
     return () => window.clearTimeout(timer);
   }, [nextPollAt, poll, provider, session.sessionId]);
 
-  const copyCode = async () => {
-    if (!session.userCode) return;
-    await navigator.clipboard.writeText(session.userCode);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 2000);
-  };
-
   const close = () => {
     if (!pollMutation.isPending) onClose();
   };
@@ -168,15 +161,7 @@ function DeviceCodeDialog({ provider, session, onClose, onComplete }: ProviderOA
               <span className="font-mono text-header-lg tracking-widest break-all select-all">
                 {session.userCode}
               </span>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label="Copy code"
-                tooltip="Copy code"
-                onClick={() => void copyCode()}
-              >
-                {copied ? <Check /> : <Copy />}
-              </Button>
+              <CopyButton content={session.userCode} variant="ghost" size="icon-sm" tooltip="Copy code" />
             </div>
           )}
           <Button variant="outline" className="w-full" onClick={() => openAuthorizationUrl(session.url)}>
