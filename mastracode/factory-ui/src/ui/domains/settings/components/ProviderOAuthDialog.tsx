@@ -1,4 +1,3 @@
-import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import {
   Dialog,
@@ -11,7 +10,7 @@ import {
 } from '@mastra/playground-ui/components/Dialog';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Copy, ExternalLink, Loader2 } from 'lucide-react';
+import { Check, Copy, ExternalLink, Loader2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 import type { OAuthStartResponse } from '../../../../api/types';
@@ -112,6 +111,7 @@ function DeviceCodeDialog({ provider, session, onClose, onComplete }: ProviderOA
   const onCompleteRef = useRef(onComplete);
   const [nextPollAt, setNextPollAt] = useState(() => Date.now() + (session.nextPollMs ?? 1000));
   const [flowError, setFlowError] = useState<string>();
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     onCompleteRef.current = onComplete;
@@ -145,7 +145,10 @@ function DeviceCodeDialog({ provider, session, onClose, onComplete }: ProviderOA
   }, [nextPollAt, poll, provider, session.sessionId]);
 
   const copyCode = async () => {
-    if (session.userCode) await navigator.clipboard.writeText(session.userCode);
+    if (!session.userCode) return;
+    await navigator.clipboard.writeText(session.userCode);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 2000);
   };
 
   const close = () => {
@@ -155,29 +158,33 @@ function DeviceCodeDialog({ provider, session, onClose, onComplete }: ProviderOA
   return (
     <Dialog open onOpenChange={open => !open && close()}>
       <DialogContent>
-        <DialogHeader>
+        <DialogHeader className="items-center text-center">
           <DialogTitle>Sign in to {displayName}</DialogTitle>
           <DialogDescription>Enter the device code on the provider authorization page.</DialogDescription>
         </DialogHeader>
-        <DialogBody className="flex flex-col gap-4">
-          <Txt as="p" variant="ui-sm" className="text-icon4">
-            {session.instructions}
-          </Txt>
+        <DialogBody className="flex flex-col items-center gap-4 text-center">
           {session.userCode && (
-            <div className="flex items-center justify-between gap-3">
-              <Badge size="md" variant="info">
+            <div className="flex items-center justify-center gap-2">
+              <span className="font-mono text-header-lg tracking-widest break-all select-all">
                 {session.userCode}
-              </Badge>
-              <Button size="sm" onClick={() => void copyCode()}>
-                <Copy />
-                Copy code
+              </span>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Copy code"
+                tooltip="Copy code"
+                onClick={() => void copyCode()}
+              >
+                {copied ? <Check /> : <Copy />}
               </Button>
             </div>
           )}
-          <Button variant="outline" onClick={() => openAuthorizationUrl(session.url)}>
+          <Button variant="outline" className="w-full" onClick={() => openAuthorizationUrl(session.url)}>
             <ExternalLink />
             Open authorization page
           </Button>
+        </DialogBody>
+        <DialogFooter className="sm:justify-between">
           {flowError ? (
             <Txt as="p" variant="ui-sm" className="text-notice-destructive-fg">
               {flowError}
@@ -190,8 +197,6 @@ function DeviceCodeDialog({ provider, session, onClose, onComplete }: ProviderOA
               </Txt>
             </div>
           )}
-        </DialogBody>
-        <DialogFooter>
           <Button disabled={pollMutation.isPending} onClick={close}>
             Cancel
           </Button>
