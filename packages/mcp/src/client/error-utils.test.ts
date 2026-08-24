@@ -85,4 +85,28 @@ describe('getMCPDiscoveryErrorDetails', () => {
 
     expect(getMCPDiscoveryErrorDetails(root)).toEqual({ message: 'deep root' });
   });
+
+  it('does not throw when third-party error accessors or string conversion throw', () => {
+    const inaccessible = new Proxy(Object.create(null) as object, {
+      get() {
+        throw new Error('access denied');
+      },
+    });
+
+    expect(getMCPDiscoveryErrorDetails(inaccessible)).toEqual({ message: 'Unknown error' });
+
+    const partial = new Error('request failed');
+    Object.defineProperty(partial, 'status', {
+      get() {
+        throw new Error('status unavailable');
+      },
+    });
+    Object.defineProperty(partial, 'code', {
+      get() {
+        throw new Error('code unavailable');
+      },
+    });
+
+    expect(getMCPDiscoveryErrorDetails(partial)).toEqual({ message: 'request failed' });
+  });
 });

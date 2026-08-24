@@ -43,6 +43,30 @@ function asErrorRecord(value: unknown): Record<string, unknown> | undefined {
   return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : undefined;
 }
 
+function getErrorProperty(record: Record<string, unknown> | undefined, property: string): unknown {
+  if (!record) return undefined;
+
+  try {
+    return record[property];
+  } catch {
+    // Third-party errors can expose values through getters or Proxy traps.
+    // Discovery error reporting must never turn one server failure into an
+    // aggregate rejection merely because inspecting that failure throws.
+    return undefined;
+  }
+}
+
+function getErrorMessage(error: unknown): string {
+  const message = getErrorProperty(asErrorRecord(error), 'message');
+  if (typeof message === 'string') return message;
+
+  try {
+    return String(error);
+  } catch {
+    return 'Unknown error';
+  }
+}
+
 /**
  * Preserve machine-readable transport metadata before aggregate discovery turns
  * a thrown error into its legacy per-server string.
@@ -54,7 +78,7 @@ function asErrorRecord(value: unknown): Record<string, unknown> | undefined {
  * third-party causes.
  */
 export function getMCPDiscoveryErrorDetails(error: unknown): MCPDiscoveryErrorDetails {
-  let message = error instanceof Error ? error.message : String(error);
+  let message = getErrorMessage(error);
   let httpStatus: number | undefined;
   let code: string | number | undefined;
   let current: unknown = error;
@@ -69,14 +93,14 @@ export function getMCPDiscoveryErrorDetails(error: unknown): MCPDiscoveryErrorDe
     const record = asErrorRecord(current);
     if (!record) break;
 
-    const data = asErrorRecord(record.data);
+    const data = asErrorRecord(getErrorProperty(record, 'data'));
     if (httpStatus === undefined) {
       for (const candidate of [
-        record.status,
-        record.statusCode,
-        record.code,
-        data?.status,
-        data?.statusCode,
+        getErrorProperty(record, 'status'),
+        getErrorProperty(record, 'statusCode'),
+        getErrorProperty(record, 'code'),
+        getErrorProperty(data, 'status'),
+        getErrorProperty(data, 'statusCode'),
       ]) {
         if (isHttpStatus(candidate)) {
           httpStatus = candidate;
@@ -85,7 +109,7 @@ export function getMCPDiscoveryErrorDetails(error: unknown): MCPDiscoveryErrorDe
       }
     }
 
-    for (const candidate of [record.code, data?.code]) {
+    for (const candidate of [getErrorProperty(record, 'code'), getErrorProperty(data, 'code')]) {
       if ((typeof candidate === 'string' || typeof candidate === 'number') && !isHttpStatus(candidate)) {
         // Prefer the deepest code: outer Mastra errors describe the aggregate
         // operation, while the innermost SDK/network code classifies the cause.
@@ -93,7 +117,7 @@ export function getMCPDiscoveryErrorDetails(error: unknown): MCPDiscoveryErrorDe
       }
     }
 
-    current = record.cause;
+    current = getErrorProperty(record, 'cause');
   }
 
   if (httpStatus !== undefined && !message.includes(`(HTTP ${httpStatus})`)) {

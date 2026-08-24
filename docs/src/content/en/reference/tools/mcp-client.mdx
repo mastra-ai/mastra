@@ -563,6 +563,18 @@ for (const serverName in resourcesByServer) {
 }
 ```
 
+#### `resources.listWithErrors(options?)`
+
+Preserves successful resources while reporting failed servers through legacy string `errors` and structured `errorDetails`. Pass `perServerTimeoutMs` to bound each server independently and include `durations`.
+
+```typescript
+const { resources, errors, errorDetails, durations } = await mcpClient.resources.listWithErrors({
+  perServerTimeoutMs: 3_000,
+})
+
+console.log(resources, errors, errorDetails, durations)
+```
+
 #### `resources.templates()`
 
 Retrieves all available resource templates from all connected MCP servers, grouped by server name.
@@ -578,6 +590,15 @@ const templatesByServer = await mcpClient.resources.templates()
 for (const serverName in templatesByServer) {
   console.log(`Templates from ${serverName}:`, templatesByServer[serverName])
 }
+```
+
+#### `resources.templatesWithErrors(options?)`
+
+Returns successful resource templates together with per-server string `errors`, structured `errorDetails`, and optional `durations`.
+
+```typescript
+const { templates, errors, errorDetails } = await mcpClient.resources.templatesWithErrors()
+console.log(templates, errors, errorDetails)
 ```
 
 #### `resources.read(serverName: string, uri: string)`
@@ -831,6 +852,15 @@ const promptsByServer = await mcpClient.prompts.list()
 for (const serverName in promptsByServer) {
   console.log(`Prompts from ${serverName}:`, promptsByServer[serverName])
 }
+```
+
+#### `prompts.listWithErrors(options?)`
+
+Returns successful prompts together with per-server string `errors`, structured `errorDetails`, and optional `durations`.
+
+```typescript
+const { prompts, errors, errorDetails } = await mcpClient.prompts.listWithErrors()
+console.log(prompts, errors, errorDetails)
 ```
 
 #### `prompts.get({ serverName, name, args?, version? })`

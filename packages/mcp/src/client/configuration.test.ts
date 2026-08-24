@@ -124,6 +124,71 @@ describe('MCPClient tool discovery retries', () => {
     });
   });
 
+  it('exposes structured failures for resource, template, and prompt discovery', async () => {
+    const client = createMultiServerClient();
+    const weatherResources = [{ uri: 'weather://current', name: 'Current weather' }] as any;
+    const weatherTemplates = [{ uriTemplate: 'weather://forecast/{city}', name: 'Forecast' }] as any;
+    const weatherPrompts = [{ name: 'forecast', description: 'Create a forecast' }] as any;
+    const weatherClient = {
+      resources: {
+        list: vi.fn().mockResolvedValue(weatherResources),
+        templates: vi.fn().mockResolvedValue(weatherTemplates),
+      },
+      prompts: {
+        list: vi.fn().mockResolvedValue(weatherPrompts),
+      },
+    } as any;
+    const transportError = Object.assign(new Error('service unavailable'), {
+      status: 503,
+      code: 'CLIENT_HTTP_NOT_IMPLEMENTED',
+    });
+    const stockError = new Error('Failed to connect to MCP server stock', { cause: transportError });
+
+    vi.spyOn(client as any, 'getConnectedClientForServer').mockImplementation(async (serverName: string) => {
+      if (serverName === 'stock') throw stockError;
+      return weatherClient;
+    });
+
+    const resources = await client.resources.listWithErrors();
+    const templates = await client.resources.templatesWithErrors();
+    const prompts = await client.prompts.listWithErrors();
+    const expectedDiagnostics = {
+      errors: { stock: 'Failed to connect to MCP server stock (HTTP 503)' },
+      errorDetails: {
+        stock: {
+          message: 'Failed to connect to MCP server stock (HTTP 503)',
+          httpStatus: 503,
+          code: 'CLIENT_HTTP_NOT_IMPLEMENTED',
+        },
+      },
+    };
+
+    expect(resources).toEqual({ resources: { weather: weatherResources }, ...expectedDiagnostics });
+    expect(templates).toEqual({ templates: { weather: weatherTemplates }, ...expectedDiagnostics });
+    expect(prompts).toEqual({ prompts: { weather: weatherPrompts }, ...expectedDiagnostics });
+
+    await expect(client.resources.list()).resolves.toEqual({ weather: weatherResources });
+    await expect(client.resources.templates()).resolves.toEqual({ weather: weatherTemplates });
+    await expect(client.prompts.list()).resolves.toEqual({ weather: weatherPrompts });
+  });
+
+  it('keeps aggregate discovery isolated when an error metadata accessor throws', async () => {
+    const client = createClient();
+    const hostileError = new Proxy(Object.create(null) as object, {
+      get() {
+        throw new Error('metadata accessor failed');
+      },
+    });
+
+    vi.spyOn(client as any, 'getConnectedClientForServer').mockRejectedValue(hostileError);
+
+    await expect(client.listToolsWithErrors()).resolves.toEqual({
+      tools: {},
+      errors: { weather: 'Unknown error' },
+      errorDetails: { weather: { message: 'Unknown error' } },
+    });
+  });
+
   it('returns healthy tools and timing diagnostics when another server exceeds its discovery budget', async () => {
     vi.useFakeTimers();
     const client = createMultiServerClient();

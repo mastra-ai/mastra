@@ -335,20 +335,13 @@ To fix this you have three different options:
        * const resources = await mcp.resources.list();
        * console.log(resources.weatherServer); // Array of resources
        * ```
+      */
+      list: async (): Promise<Record<string, Resource[]>> => (await this.listResourcesWithErrors()).resources,
+      /**
+       * Lists resources while preserving per-server discovery failures.
+       * The existing `list()` method remains the success-only convenience API.
        */
-      list: async (): Promise<Record<string, Resource[]>> => {
-        const allResources: Record<string, Resource[]> = {};
-        const settled = await this.discoverAcrossServers(
-          async serverName => (await this.getConnectedClientForServer(serverName)).resources.list(),
-          { errorId: 'MCP_CLIENT_LIST_RESOURCES_FAILED', logMessage: 'Failed to list resources from server:' },
-        );
-        for (const { serverName, value, error } of settled) {
-          if (error === undefined) {
-            allResources[serverName] = value;
-          }
-        }
-        return allResources;
-      },
+      listWithErrors: (options?: MCPDiscoveryOptions) => this.listResourcesWithErrors(options),
       /**
        * Lists all available resource templates from all configured servers.
        *
@@ -363,22 +356,13 @@ To fix this you have three different options:
        * console.log(templates.weatherServer); // Array of resource templates
        * ```
        */
-      templates: async (): Promise<Record<string, ResourceTemplateType[]>> => {
-        const allTemplates: Record<string, ResourceTemplateType[]> = {};
-        const settled = await this.discoverAcrossServers(
-          async serverName => (await this.getConnectedClientForServer(serverName)).resources.templates(),
-          {
-            errorId: 'MCP_CLIENT_LIST_RESOURCE_TEMPLATES_FAILED',
-            logMessage: 'Failed to list resource templates from server:',
-          },
-        );
-        for (const { serverName, value, error } of settled) {
-          if (error === undefined) {
-            allTemplates[serverName] = value;
-          }
-        }
-        return allTemplates;
-      },
+      templates: async (): Promise<Record<string, ResourceTemplateType[]>> =>
+        (await this.listResourceTemplatesWithErrors()).templates,
+      /**
+       * Lists resource templates while preserving per-server discovery failures.
+       * The existing `templates()` method remains the success-only convenience API.
+       */
+      templatesWithErrors: (options?: MCPDiscoveryOptions) => this.listResourceTemplatesWithErrors(options),
       /**
        * Reads the content of a specific resource from a server.
        *
@@ -586,19 +570,12 @@ To fix this you have three different options:
        * console.log(prompts.weatherServer); // Array of prompts
        * ```
        */
-      list: async (): Promise<Record<string, Prompt[]>> => {
-        const allPrompts: Record<string, Prompt[]> = {};
-        const settled = await this.discoverAcrossServers(
-          async serverName => (await this.getConnectedClientForServer(serverName)).prompts.list(),
-          { errorId: 'MCP_CLIENT_LIST_PROMPTS_FAILED', logMessage: 'Failed to list prompts from server:' },
-        );
-        for (const { serverName, value, error } of settled) {
-          if (error === undefined) {
-            allPrompts[serverName] = value;
-          }
-        }
-        return allPrompts;
-      },
+      list: async (): Promise<Record<string, Prompt[]>> => (await this.listPromptsWithErrors()).prompts,
+      /**
+       * Lists prompts while preserving per-server discovery failures.
+       * The existing `list()` method remains the success-only convenience API.
+       */
+      listWithErrors: (options?: MCPDiscoveryOptions) => this.listPromptsWithErrors(options),
       /**
        * Retrieves a specific prompt with its messages from a server.
        *
@@ -1329,6 +1306,81 @@ To fix this you have three different options:
     return tools;
   }
 
+  private async listResourcesWithErrors(options?: MCPDiscoveryOptions): Promise<{
+    resources: Record<string, Resource[]>;
+    errors: Record<string, string>;
+    errorDetails: Record<string, MCPDiscoveryErrorDetails>;
+    durations?: Record<string, number>;
+  }> {
+    const { values, ...diagnostics } = await this.discoverValuesWithErrors(
+      async serverName => (await this.getConnectedClientForServer(serverName)).resources.list(),
+      { errorId: 'MCP_CLIENT_LIST_RESOURCES_FAILED', logMessage: 'Failed to list resources from server:' },
+      options,
+    );
+    return { resources: values, ...diagnostics };
+  }
+
+  private async listResourceTemplatesWithErrors(options?: MCPDiscoveryOptions): Promise<{
+    templates: Record<string, ResourceTemplateType[]>;
+    errors: Record<string, string>;
+    errorDetails: Record<string, MCPDiscoveryErrorDetails>;
+    durations?: Record<string, number>;
+  }> {
+    const { values, ...diagnostics } = await this.discoverValuesWithErrors(
+      async serverName => (await this.getConnectedClientForServer(serverName)).resources.templates(),
+      {
+        errorId: 'MCP_CLIENT_LIST_RESOURCE_TEMPLATES_FAILED',
+        logMessage: 'Failed to list resource templates from server:',
+      },
+      options,
+    );
+    return { templates: values, ...diagnostics };
+  }
+
+  private async listPromptsWithErrors(options?: MCPDiscoveryOptions): Promise<{
+    prompts: Record<string, Prompt[]>;
+    errors: Record<string, string>;
+    errorDetails: Record<string, MCPDiscoveryErrorDetails>;
+    durations?: Record<string, number>;
+  }> {
+    const { values, ...diagnostics } = await this.discoverValuesWithErrors(
+      async serverName => (await this.getConnectedClientForServer(serverName)).prompts.list(),
+      { errorId: 'MCP_CLIENT_LIST_PROMPTS_FAILED', logMessage: 'Failed to list prompts from server:' },
+      options,
+    );
+    return { prompts: values, ...diagnostics };
+  }
+
+  private async discoverValuesWithErrors<T>(
+    operation: (serverName: string) => Promise<T>,
+    onError: { errorId: Uppercase<string>; logMessage: string },
+    options?: MCPDiscoveryOptions,
+  ): Promise<{
+    values: Record<string, T>;
+    errors: Record<string, string>;
+    errorDetails: Record<string, MCPDiscoveryErrorDetails>;
+    durations?: Record<string, number>;
+  }> {
+    const values: Record<string, T> = {};
+    const errors: Record<string, string> = {};
+    const errorDetails: Record<string, MCPDiscoveryErrorDetails> = {};
+    const durations: Record<string, number> = {};
+    const settled = await this.discoverAcrossServers(operation, onError, options);
+
+    for (const { serverName, value, error, duration } of settled) {
+      durations[serverName] = duration;
+      if (error !== undefined) {
+        errors[serverName] = error.message;
+        errorDetails[serverName] = error;
+      } else {
+        values[serverName] = value;
+      }
+    }
+
+    const result = { values, errors, errorDetails };
+    return options ? { ...result, durations } : result;
+  }
+
   /**
    * Runs a per-server discovery `operation` against every configured server
    * concurrently, isolating and logging per-server failures. Results are
@@ -1370,21 +1422,38 @@ To fix this you have three different options:
 
           return { serverName, value, error: undefined, duration: performance.now() - startedAt };
         } catch (error) {
-          const mastraError = new MastraError(
-            {
+          const discoveryError = getMCPDiscoveryErrorDetails(error);
+
+          try {
+            const mastraError = new MastraError(
+              {
+                id: onError.errorId,
+                domain: ErrorDomain.MCP,
+                category: ErrorCategory.THIRD_PARTY,
+                details: { serverName },
+              },
+              error,
+            );
+            this.logger.trackException(mastraError);
+            this.logger.error(onError.logMessage, { error: mastraError.toString() });
+          } catch {
+            // Error inspection performed by telemetry must not make aggregate
+            // discovery reject. Preserve the normalized message even when a
+            // hostile third-party Error uses throwing getters or Proxy traps.
+            const fallbackError = new MastraError({
               id: onError.errorId,
               domain: ErrorDomain.MCP,
               category: ErrorCategory.THIRD_PARTY,
+              text: discoveryError.message,
               details: { serverName },
-            },
-            error,
-          );
-          this.logger.trackException(mastraError);
-          this.logger.error(onError.logMessage, { error: mastraError.toString() });
+            });
+            this.logger.trackException(fallbackError);
+            this.logger.error(onError.logMessage, { error: fallbackError.toString() });
+          }
           return {
             serverName,
             value: undefined,
-            error: getMCPDiscoveryErrorDetails(error),
+            error: discoveryError,
             duration: performance.now() - startedAt,
           };
         } finally {
