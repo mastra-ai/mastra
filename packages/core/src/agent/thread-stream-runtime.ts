@@ -840,6 +840,10 @@ export class AgentThreadStreamRuntime {
     };
   }
 
+  isRunAborted(runId: string, pubsub?: PubSub): boolean {
+    return this.#getState(pubsub).abortedRunIds.has(runId);
+  }
+
   abortRun(runId: string, pubsub?: PubSub): boolean {
     const state = this.#getState(pubsub);
     const preparedRun = state.preparedRunsById.get(runId);
@@ -1156,13 +1160,11 @@ export class AgentThreadStreamRuntime {
    * records left behind by abandoned suspends and by resumes that land on a
    * different instance (which never clean the origin instance's record).
    *
-   * When the expiring record is still the run's current record — an abandoned
-   * suspend, not one superseded by a same-instance resume — the teardown mirrors
-   * #watchThreadRunCompletion's terminal path: it clears run-level state, releases
-   * the cross-process lease, and publishes `run-completed` so remote subscribers
-   * stop treating the thread as blocked and drain any queued follow-up work. A
-   * superseded older stream just has its stream entry dropped; the resumed run
-   * keeps its lease, suspended marker, and active slot.
+   * An expiring record only proves that this runtime no longer owns warm state.
+   * Another instance may have resumed the same runId and taken over its lease, so
+   * cleanup must remain local: stop this runtime's renewal timer and let an
+   * abandoned lease expire naturally instead of releasing or broadcasting a
+   * terminal event that could disrupt the resumed run.
    */
   #sweepStaleSuspendedRecords(state: AgentThreadRuntimeState, pubsub: PubSub | undefined) {
     const now = Date.now();
@@ -1180,9 +1182,7 @@ export class AgentThreadStreamRuntime {
       state.threadRunsById.delete(record.runId);
       state.threadKeysByRunId.delete(record.runId);
       this.#clearSuspendedRun(state, record.runId);
-      // Stop renewing and release the cross-process lease, otherwise the run's
-      // lease-renewal timer keeps the thread owned forever on other instances.
-      this.#releaseThreadLease(pubsub, staleKey, record.runId);
+      this.#stopLeaseRenewal(this.#getPubSub(pubsub), record.runId);
       if (
         state.activeThreadRunIds.get(staleKey) === record.runId &&
         state.activeThreadStreamIds.get(staleKey) === streamId
@@ -1190,8 +1190,6 @@ export class AgentThreadStreamRuntime {
         state.activeThreadRunIds.delete(staleKey);
         state.activeThreadStreamIds.delete(staleKey);
       }
-      // An abandoned suspend persisted its snapshot before parking.
-      this.#publish(pubsub, staleKey, { type: 'run-completed', runId: record.runId, streamId, persisted: true });
     }
   }
 

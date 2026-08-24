@@ -281,6 +281,139 @@ describe('BackgroundTaskManager lifecycle', () => {
     await pubsub.close();
   });
 
+  it.each(
+    (['completed', 'failed', 'timed_out', 'suspended'] as const).flatMap(status =>
+      ([undefined, 1, 2] as const).map(deliveryAttempt => ({ status, deliveryAttempt })),
+    ),
+  )(
+    'ignores a stale dispatch for a $status task at delivery attempt $deliveryAttempt',
+    async ({ status, deliveryAttempt }) => {
+      const pubsub = new CapturingPubSub();
+      const manager = new BackgroundTaskManager({ enabled: true });
+      await manager.init(pubsub);
+
+      const task = makeRunningTask({ status });
+      const updateTask = vi.fn(async () => {});
+      const createRun = vi.fn();
+      const getInternalWorkflow = vi.fn(() => ({ createRun }));
+      const executionHook = vi.spyOn(manager, 'runLocalExecutionHook');
+      manager.registerTaskContext(task.id, { executor: { execute: vi.fn() } });
+      manager.__registerMastra({
+        getStorage: () => ({
+          getStore: async () => ({
+            getTask: async () => task,
+            updateTask,
+            listTasks: async () => ({ tasks: [] }),
+          }),
+        }),
+        __getInternalWorkflow: getInternalWorkflow,
+      } as unknown as Mastra);
+      const publish = vi.spyOn(pubsub, 'publish');
+      const ack = vi.fn(async () => {});
+      const event: Event = {
+        type: 'task.dispatch',
+        id: 'event-1',
+        data: { taskId: task.id },
+        runId: task.id,
+        createdAt: new Date(),
+        ...(deliveryAttempt === undefined ? {} : { deliveryAttempt }),
+      };
+
+      await pubsub.dispatchCallback!(event, ack);
+
+      expect(ack).toHaveBeenCalledOnce();
+      expect(updateTask).not.toHaveBeenCalled();
+      expect(publish).not.toHaveBeenCalled();
+      expect(executionHook).not.toHaveBeenCalled();
+      expect(getInternalWorkflow).not.toHaveBeenCalled();
+      expect(createRun).not.toHaveBeenCalled();
+      expect(manager.taskContexts.has(task.id)).toBe(true);
+      await manager.shutdown();
+      await pubsub.close();
+    },
+  );
+
+  it.each([undefined, 1])('ignores a duplicate first delivery for a running task (%s)', async deliveryAttempt => {
+    const pubsub = new CapturingPubSub();
+    const manager = new BackgroundTaskManager({ enabled: true });
+    await manager.init(pubsub);
+
+    const task = makeRunningTask();
+    const updateTask = vi.fn(async () => {});
+    const getInternalWorkflow = vi.fn();
+    manager.__registerMastra({
+      getStorage: () => ({
+        getStore: async () => ({
+          getTask: async () => task,
+          updateTask,
+          listTasks: async () => ({ tasks: [] }),
+        }),
+      }),
+      __getInternalWorkflow: getInternalWorkflow,
+    } as unknown as Mastra);
+    const ack = vi.fn(async () => {});
+    const event: Event = {
+      type: 'task.dispatch',
+      id: 'event-1',
+      data: { taskId: task.id },
+      runId: task.id,
+      createdAt: new Date(),
+      ...(deliveryAttempt === undefined ? {} : { deliveryAttempt }),
+    };
+
+    await pubsub.dispatchCallback!(event, ack);
+
+    expect(ack).toHaveBeenCalledOnce();
+    expect(updateTask).not.toHaveBeenCalled();
+    expect(getInternalWorkflow).not.toHaveBeenCalled();
+    await manager.shutdown();
+    await pubsub.close();
+  });
+
+  it('still restarts an explicitly restarted running task', async () => {
+    const pubsub = new CapturingPubSub();
+    const manager = new BackgroundTaskManager({ enabled: true });
+    await manager.init(pubsub);
+
+    const task = makeRunningTask();
+    const updateTask = vi.fn(async () => {});
+    const start = vi.fn(async () => ({ status: 'success' }));
+    const restart = vi.fn(async () => ({ status: 'success' }));
+    const deleteWorkflowRunById = vi.fn(async () => {});
+    manager.__registerMastra({
+      getStorage: () => ({
+        getStore: async () => ({
+          getTask: async () => task,
+          updateTask,
+          listTasks: async () => ({ tasks: [] }),
+        }),
+      }),
+      __getInternalWorkflow: () => ({
+        getWorkflowRunById: async () => ({ status: 'running' }),
+        createRun: async () => ({ start, restart }),
+        deleteWorkflowRunById,
+      }),
+    } as unknown as Mastra);
+    const ack = vi.fn(async () => {});
+    const event: Event = {
+      type: 'task.dispatch',
+      id: 'event-1',
+      data: { taskId: task.id, isRestart: true },
+      runId: task.id,
+      createdAt: new Date(),
+    };
+
+    await pubsub.dispatchCallback!(event, ack);
+
+    expect(updateTask).toHaveBeenCalledWith(task.id, expect.objectContaining({ status: 'running' }));
+    expect(restart).toHaveBeenCalledOnce();
+    expect(start).not.toHaveBeenCalled();
+    expect(ack).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(deleteWorkflowRunById).toHaveBeenCalledWith(task.id));
+    await manager.shutdown();
+    await pubsub.close();
+  });
+
   it('does not consume a retry when a redelivered dispatch was declined before starting', async () => {
     const pubsub = new CapturingPubSub();
     const manager = new BackgroundTaskManager({ enabled: true });

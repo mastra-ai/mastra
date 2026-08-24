@@ -1,7 +1,10 @@
 import type { FactoryRunBindingRecord, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 
 export interface TerminalStageCleanupOptions {
-  workItems: Pick<WorkItemsStorage, 'listRunBindings' | 'revokeRunBindingsForWorkItem' | 'dismissProposalsForWorkItem'>;
+  workItems: Pick<
+    WorkItemsStorage,
+    'listRunBindings' | 'revokeRunBindingsForWorkItem' | 'supersedeTerminalDecisionsForWorkItem'
+  >;
   /** Final ingest of trailing tool results before the binding is revoked. */
   reconcileBinding?: (binding: FactoryRunBindingRecord) => Promise<void>;
   /** Release the item's session sandboxes back to the reuse pool. */
@@ -46,16 +49,14 @@ export function createTerminalStageCleanup(options: TerminalStageCleanupOptions)
       // Best-effort; the staleness sweep retries later.
     }
     try {
-      // A merged pull request answers its own parked runs: there is nothing
-      // left for them to do, so they should stop asking to be started.
-      await options.workItems.dismissProposalsForWorkItem({
+      await options.workItems.supersedeTerminalDecisionsForWorkItem({
         orgId: args.orgId,
         factoryProjectId: args.factoryProjectId,
         workItemId: args.workItemId,
-        dismissedAt: new Date(),
+        supersededAt: new Date(),
       });
     } catch {
-      // Best-effort; a stranded proposal is still dismissible from the card.
+      // Best-effort; legacy rows are repaired at the next startup.
     }
     try {
       await options.releaseSandboxes?.(args);

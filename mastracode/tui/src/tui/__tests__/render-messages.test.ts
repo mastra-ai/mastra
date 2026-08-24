@@ -29,6 +29,8 @@ function createState(): TUIState {
     allToolComponents: [],
     pendingTools: new Map(),
     pendingSubagents: new Map(),
+    pendingAskUserComponents: new Map(),
+    pendingSubmitPlanComponents: new Map(),
     allShellComponents: [],
     assistantRenderRegistry: new AssistantRenderRegistry(),
     messageComponentsById: new Map(),
@@ -751,6 +753,25 @@ describe('addUserMessage', () => {
 
     expect(state.chatContainer.children).toEqual([rendered]);
     expect(state.messageComponentsById.get('signal-idle-1')).toBe(rendered);
+  });
+});
+
+describe('renderExistingMessages history bounds', () => {
+  it('prunes oversized startup history before the first render', async () => {
+    const state = createState();
+    const messages = Array.from({ length: 300 }, (_, index) => createUserMessage(`message-${index}`, `user-${index}`));
+    state.session = {
+      ...state.session,
+      thread: { listActiveMessages: vi.fn().mockResolvedValue(messages) },
+    } as unknown as TUIState['session'];
+
+    await renderExistingMessages(state);
+
+    expect(state.chatContainer.children.length).toBeLessThanOrEqual(250);
+    expect(state.chatContainer.render(80).join('\n')).toContain('message-299');
+    expect(state.messageComponentsById.has('user-0')).toBe(false);
+    expect(state.messageComponentsById.has('user-299')).toBe(true);
+    expect(state.ui.requestRender).toHaveBeenCalledOnce();
   });
 });
 
