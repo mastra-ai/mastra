@@ -3,6 +3,15 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { ObservationTurn } from '../observation-turn/turn';
 
+/**
+ * The turn/step lifecycle owns no curation. Activation and end-of-turn used to launch
+ * `maybeCurate` directly (racing the idle buffer — the bug this rework fixes); curation is now
+ * driven solely by the pipeline-completion callback wired at the Subconscious config layer.
+ *
+ * The fake OM below deliberately has NO curation surface at all: if any turn/step path still
+ * tried to launch curation, it would throw on the missing method and fail these tests.
+ */
+
 function record(): ObservationalMemoryRecord {
   return {
     id: 'record-1',
@@ -22,16 +31,17 @@ function record(): ObservationalMemoryRecord {
 
 function harness() {
   const current = record();
-  const maybeCurate = vi.fn(async () => {});
   const om = {
     activate: vi.fn(async () => ({ activated: true, record: current, activatedMessageIds: [] })),
     resetBufferingState: vi.fn(async () => {}),
     getOrCreateRecord: vi.fn(async () => current),
-    maybeCurate,
     reflector: { maybeReflect: vi.fn(async () => {}) },
     composeHooks: vi.fn(() => ({})),
     getStatus: vi.fn(async () => ({ shouldObserve: true, canActivate: true, record: current })),
     waitForBuffering: vi.fn(async () => {}),
+    buffering: { isAsyncObservationEnabled: vi.fn(() => false) },
+    getObservationConfig: vi.fn(() => ({ bufferOnIdle: false })),
+    trackBackgroundWork: vi.fn(<T>(work: Promise<T>) => work),
     scope: 'thread',
   };
   const messageList = {
@@ -52,28 +62,40 @@ function harness() {
     messageList: messageList as any,
     requestContext: requestContext as any,
   });
-  return { om, maybeCurate, requestContext, turn };
+  return { om, turn };
 }
 
-describe('curation evaluation after activation', () => {
-  it('evaluates after step-0 activation', async () => {
-    const { om, maybeCurate, requestContext, turn } = harness();
+describe('turn/step lifecycle owns no curation', () => {
+  it('step-0 activation completes without launching curation', async () => {
+    const { om, turn } = harness();
     await turn.start();
     om.reflector.maybeReflect.mockRejectedValueOnce(new Error('stop after activation'));
 
+    // Reaches maybeReflect (i.e. past the point where activation used to launch curation)
+    // against an OM with zero curation surface — a leftover call site would throw earlier.
     await expect(turn.step(0).prepare()).rejects.toThrow('stop after activation');
-
-    expect(maybeCurate).toHaveBeenCalledWith('thread-1', 'resource-1', expect.any(Object), requestContext);
+    expect(om.activate).toHaveBeenCalled();
   });
 
-  it('evaluates after threshold-path activation', async () => {
-    const { maybeCurate, requestContext, turn } = harness();
+  it('threshold-path activation completes without launching curation', async () => {
+    const { om, turn } = harness();
     await turn.start();
     const step = turn.step(1);
 
     const result = await (step as any).runThresholdObservation();
 
     expect(result.succeeded).toBe(true);
-    expect(maybeCurate).toHaveBeenCalledWith('thread-1', 'resource-1', expect.any(Object), requestContext);
+    expect(om.activate).toHaveBeenCalled();
+  });
+
+  it('turn.end() launches nothing beyond idle buffering (the old racy curation launch is gone)', async () => {
+    const { om, turn } = harness();
+    await turn.start();
+
+    const result = await turn.end();
+
+    expect(result.record).toBeTruthy();
+    // No background work was launched at all: buffering disabled, and no curation call exists.
+    expect(om.trackBackgroundWork).not.toHaveBeenCalled();
   });
 });

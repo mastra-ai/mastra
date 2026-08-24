@@ -81,7 +81,6 @@ function createMockOM(opts: { asyncEnabled: boolean; bufferOnIdle?: boolean; uno
     persistMessages: vi.fn(async () => {}),
     buffer: vi.fn(async () => ({ buffered: true, record })),
     trackBackgroundWork: vi.fn(<T>(work: Promise<T>) => work),
-    maybeCurate: vi.fn(async () => {}),
     scope: 'thread' as const,
     _mockRecord: record,
   };

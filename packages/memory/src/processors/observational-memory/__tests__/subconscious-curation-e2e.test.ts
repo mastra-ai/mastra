@@ -9,17 +9,16 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Memory, Subconscious } from '../../../index';
 
 /**
- * End-to-end proof for the curation triggers.
+ * End-to-end proof for the curation placement cadence.
  *
  * A real `Memory`, the real knowledge store, the real `Subconscious`, and the real
  * observational-memory engine that `Memory` builds for itself. Nothing calls
- * `Memory.runCuration` by hand — the only way the curator can run is if a lifecycle site
- * evaluated the trigger and decided to run it, which is exactly the claim under test
- * (coverage of the *lifecycle*, not of a predicate).
+ * `Memory.runCuration` by hand — the only way the curator can run is if the pipeline-completion
+ * wiring evaluated the trigger and decided to run it, which is exactly the claim under test.
  *
- * Model calls are mocked and the worklist is seeded straight into the store, so what this
- * proves is the path from lifecycle entry to curator run to cursor advance — not the capture
- * agent that would normally have written those records.
+ * Placement sets cadence: `curate` in the observation array → evaluated after each successfully
+ * completed observation; in the reflection array (the default, and where legacy options land) →
+ * reflection phase only; absent from both arrays → zero curation work.
  */
 
 function createMockModel(text: string) {
@@ -94,9 +93,11 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('curation triggers, end to end on a real Memory', () => {
-  it('curates from the lifecycle once the uncurated worklist crosses the threshold', async () => {
-    const memory = createMemory(new Subconscious({ observation: [], curationThreshold: 3 }));
+describe('observation-placed curation, end to end on a real Memory', () => {
+  it('curates after the observation completes once the uncurated worklist crosses the threshold', async () => {
+    const memory = createMemory(
+      new Subconscious({ observation: [{ name: 'curate', trigger: { uncuratedRecords: 3 } }] }),
+    );
     const lastRecord = await seedUncurated(memory, 3);
 
     const generate = vi
@@ -125,7 +126,9 @@ describe('curation triggers, end to end on a real Memory', () => {
   });
 
   it('uses the thread id as the resource scope when resourceId is omitted', async () => {
-    const memory = createMemory(new Subconscious({ observation: [], curationThreshold: 1 }));
+    const memory = createMemory(
+      new Subconscious({ observation: [{ name: 'curate', trigger: { uncuratedRecords: 1 } }] }),
+    );
     const lastRecord = await seedUncurated(memory, 1, 'alpha');
 
     vi.spyOn(Agent.prototype, 'generate').mockResolvedValue({
@@ -143,7 +146,9 @@ describe('curation triggers, end to end on a real Memory', () => {
   });
 
   it('leaves the curator alone while the worklist is below the threshold', async () => {
-    const memory = createMemory(new Subconscious({ observation: [], curationThreshold: 5 }));
+    const memory = createMemory(
+      new Subconscious({ observation: [{ name: 'curate', trigger: { uncuratedRecords: 5 } }] }),
+    );
     await seedUncurated(memory, 2);
 
     vi.spyOn(Agent.prototype, 'generate').mockResolvedValue({ text: '<curation-complete />' } as any);
@@ -163,31 +168,11 @@ describe('curation triggers, end to end on a real Memory', () => {
     expect(runCuration).not.toHaveBeenCalled();
   });
 
-  it('never curates when both triggers are off, however much work piles up', async () => {
-    // The default-off contract: an existing deployment that never opted in keeps today's behaviour.
-    const memory = createMemory(new Subconscious({ observation: [] }));
-    await seedUncurated(memory, 25);
-
-    vi.spyOn(Agent.prototype, 'generate').mockResolvedValue({ text: '<curation-complete />' } as any);
-    const runCuration = vi.spyOn(memory, 'runCuration');
-
-    const om = (await memory.omEngine)!;
-    const result = await om.finalize({
-      threadId: 'alpha',
-      resourceId: 'user-42',
-      messages: createMessages(10),
-      requestContext: requestContext(),
-    });
-    await memory.settled();
-
-    expect(result.observed).toBe(true);
-
-    expect(runCuration).not.toHaveBeenCalled();
-  });
-
-  it('curates from the lifecycle when the cursor is stale and new knowledge arrived', async () => {
+  it('curates after the observation when the cursor is stale and new knowledge arrived', async () => {
     // Age arm: no volume threshold at all, so the only thing that can fire is staleness.
-    const memory = createMemory(new Subconscious({ observation: [], curationMaxAgeMs: 1 }));
+    const memory = createMemory(
+      new Subconscious({ observation: [{ name: 'curate', trigger: { uncuratedRecords: false, maxAgeMs: 1 } }] }),
+    );
     const alreadyCurated = await seedUncurated(memory, 1);
 
     const store = (await memory.storage.getStore('knowledge'))!;
@@ -220,7 +205,9 @@ describe('curation triggers, end to end on a real Memory', () => {
   });
 
   it('leaves a stale cursor alone while no new knowledge has arrived', async () => {
-    const memory = createMemory(new Subconscious({ observation: [], curationMaxAgeMs: 1 }));
+    const memory = createMemory(
+      new Subconscious({ observation: [{ name: 'curate', trigger: { uncuratedRecords: false, maxAgeMs: 1 } }] }),
+    );
     const alreadyCurated = await seedUncurated(memory, 1);
 
     const store = (await memory.storage.getStore('knowledge'))!;
@@ -245,14 +232,17 @@ describe('curation triggers, end to end on a real Memory', () => {
 
     expect(runCuration).not.toHaveBeenCalled();
   });
+});
 
-  it('honours the deprecated curationCadence as the volume trigger', async () => {
-    const memory = createMemory(new Subconscious({ observation: [], curationCadence: 2 }));
-    const lastRecord = await seedUncurated(memory, 2);
+describe('reflection-placed curation cadence', () => {
+  it('does not curate at observation completion when curate lives in the reflection array (default)', async () => {
+    // The default placement — and where the deprecated top-level options land. Observation
+    // completion is no longer a curation lifecycle point for reflection-placed curate; this is
+    // the deliberate cadence change from the old finalize()-driven behaviour.
+    const memory = createMemory(new Subconscious({ observation: [], curationThreshold: 1 }));
+    await seedUncurated(memory, 5);
 
-    vi.spyOn(Agent.prototype, 'generate').mockResolvedValue({
-      text: `<curation-complete through="${lastRecord.id}" />`,
-    } as any);
+    vi.spyOn(Agent.prototype, 'generate').mockResolvedValue({ text: '<curation-complete />' } as any);
     const runCuration = vi.spyOn(memory, 'runCuration');
 
     const om = (await memory.omEngine)!;
@@ -265,7 +255,100 @@ describe('curation triggers, end to end on a real Memory', () => {
     await memory.settled();
 
     expect(result.observed).toBe(true);
+    expect(runCuration).not.toHaveBeenCalled();
+  });
 
-    expect(runCuration).toHaveBeenCalledOnce();
+  it('runs the curator at reflection commit when the legacy-translated trigger fires', async () => {
+    const memory = createMemory(new Subconscious({ observation: [], curationThreshold: 2 }));
+    const lastRecord = await seedUncurated(memory, 3);
+
+    const generate = vi
+      .spyOn(Agent.prototype, 'generate')
+      .mockResolvedValue({ text: `<curation-complete through="${lastRecord.id}" />` } as any);
+
+    const om = (await memory.omEngine)!;
+    // Create the OM record the gate re-reads, then drive the reflection-commit seam directly.
+    await om.finalize({
+      threadId: 'alpha',
+      resourceId: 'user-42',
+      messages: createMessages(10),
+      requestContext: requestContext(),
+    });
+    await memory.settled();
+    generate.mockClear();
+
+    await (om as any).reflector.onReflectionCommitted({
+      parentThreadId: 'alpha',
+      resourceId: 'user-42',
+      observations: '* Something worth reflecting on',
+      requestContext: requestContext(),
+    });
+    await memory.settled();
+
+    expect(generate).toHaveBeenCalled();
+    const store = (await memory.storage.getStore('knowledge'))!;
+    expect(await store.getCurationCursor({ sourceThreadId: 'alpha', agent: 'curate' })).toMatchObject({
+      lastKnowledgeId: lastRecord.id,
+    });
+  });
+
+  it('gates the reflection-commit curator off when the legacy-translated trigger has not fired', async () => {
+    const memory = createMemory(new Subconscious({ observation: [], curationThreshold: 50 }));
+    const lastRecord = await seedUncurated(memory, 2);
+
+    const generate = vi
+      .spyOn(Agent.prototype, 'generate')
+      .mockResolvedValue({ text: `<curation-complete through="${lastRecord.id}" />` } as any);
+
+    const om = (await memory.omEngine)!;
+    await om.finalize({
+      threadId: 'alpha',
+      resourceId: 'user-42',
+      messages: createMessages(10),
+      requestContext: requestContext(),
+    });
+    await memory.settled();
+    generate.mockClear();
+
+    await (om as any).reflector.onReflectionCommitted({
+      parentThreadId: 'alpha',
+      resourceId: 'user-42',
+      observations: '* Something worth reflecting on',
+      requestContext: requestContext(),
+    });
+    await memory.settled();
+
+    // Only the learner may have run; the curator was gated off, so the cursor never advanced.
+    const store = (await memory.storage.getStore('knowledge'))!;
+    expect(await store.getCurationCursor({ sourceThreadId: 'alpha', agent: 'curate' })).toBeFalsy();
+  });
+});
+
+describe('absent curation performs zero work', () => {
+  it('never curates when curate is in neither array, however much work piles up', async () => {
+    const subconscious = new Subconscious({ observation: [], reflection: ['learn'] });
+    expect(subconscious.resolved.curation).toBeNull();
+
+    const memory = createMemory(subconscious);
+    await seedUncurated(memory, 25);
+
+    vi.spyOn(Agent.prototype, 'generate').mockResolvedValue({ text: '<curation-complete />' } as any);
+    const runCuration = vi.spyOn(memory, 'runCuration');
+    const store = (await memory.storage.getStore('knowledge'))!;
+    const worklistQuery = vi.spyOn(store, 'knowledgeBySource');
+
+    const om = (await memory.omEngine)!;
+    const result = await om.finalize({
+      threadId: 'alpha',
+      resourceId: 'user-42',
+      messages: createMessages(10),
+      requestContext: requestContext(),
+    });
+    await memory.settled();
+
+    expect(result.observed).toBe(true);
+    expect(runCuration).not.toHaveBeenCalled();
+    // No evaluator exists, so not even the bounded trigger query ran.
+    expect(worklistQuery).not.toHaveBeenCalled();
   });
 });

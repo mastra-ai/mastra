@@ -9,7 +9,6 @@ import type { ObservabilityContext } from '@mastra/core/observability';
 import type { ProcessorContext, ProcessorStreamWriter } from '@mastra/core/processors';
 import { MessageHistory } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
-import { canonicalizeKnowledgeScope } from '@mastra/core/storage';
 import type { MemoryStorage, ObservationalMemoryRecord, ObservationalMemoryHistoryOptions } from '@mastra/core/storage';
 import type { ProviderMetadata } from '@mastra/core/stream';
 import xxhash from 'xxhash-wasm';
@@ -246,11 +245,6 @@ import { registerOp, unregisterOp, isOpActiveInProcess } from './operation-regis
 import type { CompressionLevel } from './reflector-agent';
 import { ReflectorRunner } from './reflector-runner';
 import { isOmReproCaptureEnabled, writeObserverExchangeReproCapture } from './repro-capture';
-import { CURATION_AGENT } from './subconscious/curate';
-import type { CurationAttemptState } from './subconscious/curation-backoff';
-import { clearedBackoff, isBackingOff, nextBackoff, readAttemptState } from './subconscious/curation-backoff';
-import { curationQueryLimit, shouldCurate } from './subconscious/curation-trigger';
-import { resolveKnowledgeResourceId } from './subconscious/scope';
 import {
   calculateDynamicThreshold,
   calculateProjectedMessageRemoval,
@@ -266,6 +260,7 @@ import type {
   ObservationDebugEvent,
   ObservationalMemoryConfig,
   ObservationalMemoryModel,
+  ObservationCompletedContext,
   ObserveHookContext,
   ObserveHookUsage,
   ObserveHooks,
@@ -357,17 +352,8 @@ export class ObservationalMemory {
   private hasher = xxhash();
   private mastra?: Mastra;
   private memory?: Memory;
-  private curationThreshold: number | false = false;
-  private curationMaxAgeMs: number | false = false;
-  /**
-   * Serialises curation evaluation per record within this process. Several lifecycle sites can
-   * evaluate in the same turn; without this they read the same attempt state, both decide to run,
-   * and both call the curator. Cross-process claiming is a separate concern — see
-   * {@link maybeCurate}.
-   */
-  private curationEvaluations = new Map<string, Promise<void>>();
-  /** Injectable clock, so age-trigger behaviour is testable without waiting in real time. */
-  private now: () => number = Date.now;
+  /** Generic post-pipeline completion callback; see {@link ObservationCompletedContext}. */
+  private onObservationCompleted?: (context: ObservationCompletedContext) => Promise<void> | void;
 
   /**
    * Track message IDs observed during this instance's lifetime.
@@ -505,9 +491,7 @@ export class ObservationalMemory {
     this.hookExecution = config.hookExecution ?? 'non-blocking';
     this.mastra = config.mastra;
     this.memory = config.memory;
-    this.curationThreshold = config.curationThreshold ?? config.curationCadence ?? false;
-    this.curationMaxAgeMs = config.curationMaxAgeMs ?? false;
-    if (config.now) this.now = config.now;
+    this.onObservationCompleted = config.onObservationCompleted;
 
     // Resolve "default" to the model default for the agent being configured.
     const resolveModel = (model: ObservationalMemoryModel | undefined, defaultModel: string) =>
@@ -2314,6 +2298,7 @@ ${formattedMessages}
           requestContext,
           observabilityContext,
         }).run(),
+      requestContext,
     );
 
     // Update the buffer cursor so the next buffer only sees messages newer than this one.
@@ -3036,7 +3021,7 @@ ${formattedMessages}
     // Observe if threshold is crossed (advances the cursor)
     const postStatus = await this.getStatus({ threadId, resourceId, messages });
     if (postStatus.shouldObserve) {
-      const obsResult = await this.observe({ threadId, resourceId, messages });
+      const obsResult = await this.observe({ threadId, resourceId, messages, requestContext });
       observed = obsResult.observed;
     }
 
@@ -3048,15 +3033,6 @@ ${formattedMessages}
     }
 
     const record = await this.getOrCreateRecord(threadId, resourceId);
-
-    // Last chance in the turn: a final buffered capture that activated here would otherwise sit
-    // uncurated indefinitely. Awaited rather than fire-and-forget — the turn is ending, so there
-    // is no later step to carry it.
-    if (activated || observed || reflected) {
-      await this.maybeCurate(threadId, resourceId, record, requestContext).catch(error => {
-        omDebug(`[OM:finalize] curation failed: ${error instanceof Error ? error.message : String(error)}`);
-      });
-    }
 
     return { activated, observed, reflected, record };
   }
@@ -3319,6 +3295,7 @@ ${formattedMessages}
             currentModel: opts.currentModel,
             observabilityContext,
           }).run(),
+        requestContext,
       );
 
       if (isOmReproCaptureEnabled()) {
@@ -3682,6 +3659,7 @@ ${formattedMessages}
   private async runBufferedObservationCycle(
     context: ObserveHookContext,
     run: () => Promise<ObservationRunResult>,
+    requestContext?: RequestContext,
   ): Promise<ObservationRunResult | undefined> {
     const hooks = this.composeHooks(undefined, context, 'non-blocking');
     let runResult: ObservationRunResult | undefined;
@@ -3690,6 +3668,14 @@ ${formattedMessages}
     try {
       await hooks?.onObservationStart?.();
       runResult = await run();
+      if (runResult.observed && !runResult.error && context.threadId) {
+        this.notifyObservationCompleted({
+          threadId: context.threadId,
+          resourceId: context.resourceId,
+          trigger: context.trigger ?? 'async-buffer',
+          requestContext,
+        });
+      }
       return runResult;
     } catch (error) {
       lifecycleError = error;
@@ -3709,6 +3695,23 @@ ${formattedMessages}
         );
       }
     }
+  }
+
+  /**
+   * Invoke the generic post-pipeline completion callback, if configured.
+   *
+   * Fire-and-forget but registered with {@link trackBackgroundWork}, so `Memory.settled()`
+   * joins any async work the callback starts. Callback failures are logged and never
+   * propagate into the pipeline that completed.
+   */
+  private notifyObservationCompleted(context: ObservationCompletedContext): void {
+    const callback = this.onObservationCompleted;
+    if (!callback) return;
+    void this.trackBackgroundWork(Promise.resolve().then(() => callback(context))).catch(error => {
+      omDebug(
+        `[OM:hooks] onObservationCompleted callback failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    });
   }
 
   /**
@@ -3825,155 +3828,10 @@ ${formattedMessages}
     const reflected = record.generationCount > generationBefore && generationBefore >= 0;
 
     if (observed) {
-      // Fire-and-forget; a curation failure must never fail the observation.
-      void this.trackBackgroundWork(this.maybeCurate(threadId, resourceId, record, requestContext)).catch(error => {
-        omDebug(`[OM:observe] curation failed: ${error instanceof Error ? error.message : String(error)}`);
-      });
+      this.notifyObservationCompleted({ threadId, resourceId, trigger: opts.trigger ?? 'manual', requestContext });
     }
 
     return { observed, reflected, record };
-  }
-
-  /**
-   * Evaluate the curation triggers and run the curator when one fires.
-   *
-   * Called from every lifecycle point that can leave uncurated knowledge behind — step-0
-   * activation, later-step activation, the sync observe path, and end-of-turn finalize — so a
-   * short conversation that never reaches a later step still gets curated. Nothing is ever
-   * scheduled: this is lazy and turn-driven, and an idle resource never triggers anything.
-   *
-   * Volume is measured against the curation cursor with one bounded query whose limit is the
-   * smallest number that can answer the question (see `curationQueryLimit`). Age is only
-   * consulted alongside at least one uncurated record.
-   *
-   * Concurrency: evaluations are serialised per record within this process via
-   * {@link curationEvaluations}, so several sites in the same turn cannot each decide to run.
-   * Retry state is persisted on the record, so a failing curator stays backed off across a
-   * restart rather than resuming once per turn.
-   *
-   * Known limitation — two live instances sharing one storage can still both evaluate and both
-   * run the curator. Closing that needs an atomic claim, which the storage layer does not
-   * currently expose for this data: `updateObservationalMemoryConfig` is an unconditional
-   * deep-merge with no expected-version or conditional-write argument, and the one claim/lease
-   * primitive that does exist (`claimSemanticOutbox`, with its `workerId`/`claimedAt`/
-   * `claimTimeoutMs` columns) is welded to the semantic outbox table. The curation cursor prevents
-   * acknowledged input from being selected again, but it does not serialize concurrent model calls
-   * or guarantee that their output mutations cannot conflict.
-   */
-  /** @internal Called by the observation turn's lifecycle sites. Do not call directly. */
-  async maybeCurate(
-    threadId: string,
-    resourceId: string | undefined,
-    record: ObservationalMemoryRecord,
-    requestContext?: RequestContext,
-  ): Promise<void> {
-    const memory = this.memory;
-    if (!memory) return;
-    const triggerConfig = {
-      curationThreshold: this.curationThreshold,
-      curationMaxAgeMs: this.curationMaxAgeMs,
-    };
-    const limit = curationQueryLimit(triggerConfig);
-    if (limit < 1) return;
-
-    const previous = this.curationEvaluations.get(record.id) ?? Promise.resolve();
-    const next = previous
-      .catch(() => {})
-      .then(() => this.evaluateCuration(threadId, resourceId, record, triggerConfig, limit, requestContext));
-    this.curationEvaluations.set(record.id, next);
-    try {
-      await next;
-    } finally {
-      if (this.curationEvaluations.get(record.id) === next) this.curationEvaluations.delete(record.id);
-    }
-  }
-
-  private async evaluateCuration(
-    threadId: string,
-    resourceId: string | undefined,
-    record: ObservationalMemoryRecord,
-    triggerConfig: { curationThreshold: number | false; curationMaxAgeMs: number | false },
-    limit: number,
-    requestContext?: RequestContext,
-  ): Promise<void> {
-    const memory = this.memory;
-    if (!memory) return;
-
-    const organizationId = requestContext?.get('organizationId');
-    if (typeof organizationId !== 'string' || !organizationId.trim()) return;
-
-    // Re-read the record: the caller's copy may predate a sibling lifecycle site's write.
-    const fresh = (await this.getRecord(threadId, resourceId)) ?? record;
-    const attempt = readAttemptState(fresh.config);
-    if (isBackingOff(attempt, this.now())) {
-      omDebug(`[OM:curate] backing off after ${attempt?.failures} failure(s) thread=${threadId}`);
-      return;
-    }
-
-    const store = await memory.storage.getStore('knowledge');
-    if (!store) return;
-
-    const effectiveResourceId = resourceId ?? threadId;
-    const scope = canonicalizeKnowledgeScope([
-      `org:${organizationId}`,
-      `resource:${resolveKnowledgeResourceId(requestContext, effectiveResourceId)}`,
-      `thread:${threadId}`,
-    ]);
-
-    const cursor = await store.getCurationCursor({ sourceThreadId: threadId, agent: CURATION_AGENT });
-    const page = await store.knowledgeBySource({
-      sourceThreadId: threadId,
-      scope,
-      after: cursor?.lastKnowledgeId,
-      limit,
-      includeDeleted: false,
-    });
-
-    const reason = shouldCurate({
-      config: triggerConfig,
-      cursor,
-      newRecordCount: page.records.length,
-      now: this.now(),
-    });
-    if (!reason) return;
-
-    let outcome: 'ran' | 'no-op' | 'skipped' | 'no-model';
-    try {
-      const result = await memory.runCuration({
-        threadId,
-        resourceId: effectiveResourceId,
-        requestContext,
-      });
-      outcome = result.outcome;
-    } catch (error) {
-      await this.recordCurationAttempt(fresh.id, nextBackoff(attempt, this.now()));
-      omDebug(`[OM:curate] threw: ${error instanceof Error ? error.message : String(error)} thread=${threadId}`);
-      throw error;
-    }
-
-    // `skipped` means another same-process curation is already in flight. It is neither progress
-    // nor failure, so the existing backoff state is left exactly as it was.
-    if (outcome === 'skipped') {
-      omDebug(`[OM:curate] trigger=${reason} outcome=${outcome} thread=${threadId}`);
-      return;
-    }
-
-    const cursorAfter = await store.getCurationCursor({ sourceThreadId: threadId, agent: CURATION_AGENT });
-    const advanced = cursorAfter?.lastKnowledgeId !== cursor?.lastKnowledgeId;
-    if (outcome !== 'ran' || !advanced) {
-      await this.recordCurationAttempt(fresh.id, nextBackoff(attempt, this.now()));
-    } else if (attempt && attempt.failures > 0) {
-      await this.recordCurationAttempt(fresh.id, clearedBackoff());
-    }
-
-    omDebug(`[OM:curate] trigger=${reason} outcome=${outcome} advanced=${advanced} thread=${threadId}`);
-  }
-
-  private async recordCurationAttempt(recordId: string, attempt: CurationAttemptState): Promise<void> {
-    await this.storage.updateObservationalMemoryConfig({
-      id: recordId,
-      config: { subconscious: { curationAttempt: attempt } },
-    });
   }
 
   /**

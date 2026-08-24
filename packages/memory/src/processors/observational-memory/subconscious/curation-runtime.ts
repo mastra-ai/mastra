@@ -1,6 +1,6 @@
 import type { RequestContext } from '@mastra/core/request-context';
 import { canonicalizeKnowledgeScope } from '@mastra/core/storage';
-import type { ObservationalMemoryRecord } from '@mastra/core/storage';
+import type { KnowledgeStorage, ObservationalMemoryRecord } from '@mastra/core/storage';
 
 import type { Memory } from '../../..';
 import { omDebug } from '../debug';
@@ -47,17 +47,21 @@ export interface CurationEvaluatorDeps {
 export interface CurationEvaluateOptions {
   threadId: string;
   resourceId?: string;
-  /** The caller's record, used only as a fallback when the fresh read returns nothing. */
-  record: ObservationalMemoryRecord;
   requestContext?: RequestContext;
 }
 
 export interface CurationEvaluator {
   /**
    * Evaluate the trigger for one completed pipeline and run the curator when it fires.
-   * Serialized per record; safe to call from multiple completion sites in the same turn.
+   * Serialized per thread; safe to call from multiple completion sites in the same turn.
    */
   evaluate(options: CurationEvaluateOptions): Promise<void>;
+  /**
+   * Read-only trigger check for reflection-placed curation: backoff + bounded query +
+   * `shouldCurate`, with no cursor bookkeeping and no curator invocation. The reflection
+   * commit handler runs (and advances the cursor) itself when this returns true.
+   */
+  gate(options: CurationEvaluateOptions): Promise<boolean>;
 }
 
 /**
@@ -80,25 +84,32 @@ export function createCurationEvaluator(
   const now = deps.now ?? (() => Date.now());
   const evaluations = new Map<string, Promise<void>>();
 
-  async function evaluateOnce({
-    threadId,
-    resourceId,
-    record,
-    requestContext,
-  }: CurationEvaluateOptions): Promise<void> {
+  /**
+   * Shared read-only trigger check. Returns the fresh record, its attempt state, and the
+   * trigger reason — or null when nothing should run (missing org context, no record yet,
+   * backing off, no knowledge store, or the trigger did not fire).
+   */
+  async function checkTrigger({ threadId, resourceId, requestContext }: CurationEvaluateOptions): Promise<{
+    fresh: ObservationalMemoryRecord;
+    attempt: CurationAttemptState | undefined;
+    reason: NonNullable<ReturnType<typeof shouldCurate>>;
+    cursorBefore: Awaited<ReturnType<KnowledgeStorage['getCurationCursor']>>;
+    store: KnowledgeStorage;
+  } | null> {
     const organizationId = requestContext?.get('organizationId');
-    if (typeof organizationId !== 'string' || !organizationId.trim()) return;
+    if (typeof organizationId !== 'string' || !organizationId.trim()) return null;
 
     // Re-read the record: the caller's copy may predate a sibling completion site's write.
-    const fresh = (await deps.getRecord(threadId, resourceId)) ?? record;
+    const fresh = await deps.getRecord(threadId, resourceId);
+    if (!fresh) return null;
     const attempt = readAttemptState(fresh.config);
     if (isBackingOff(attempt, now())) {
       omDebug(`[OM:curate] backing off after ${attempt?.failures} failure(s) thread=${threadId}`);
-      return;
+      return null;
     }
 
     const store = await deps.memory.storage.getStore('knowledge');
-    if (!store) return;
+    if (!store) return null;
 
     const effectiveResourceId = resourceId ?? threadId;
     const scope = canonicalizeKnowledgeScope([
@@ -122,7 +133,16 @@ export function createCurationEvaluator(
       newRecordCount: page.records.length,
       now: now(),
     });
-    if (!reason) return;
+    if (!reason) return null;
+    return { fresh, attempt, reason, cursorBefore: cursor, store };
+  }
+
+  async function evaluateOnce(options: CurationEvaluateOptions): Promise<void> {
+    const { threadId, resourceId, requestContext } = options;
+    const checked = await checkTrigger(options);
+    if (!checked) return;
+    const { fresh, attempt, reason, cursorBefore: cursor, store } = checked;
+    const effectiveResourceId = resourceId ?? threadId;
 
     let outcome: 'ran' | 'no-op' | 'skipped' | 'no-model';
     try {
@@ -158,7 +178,7 @@ export function createCurationEvaluator(
 
   return {
     async evaluate(options: CurationEvaluateOptions): Promise<void> {
-      const key = options.record.id;
+      const key = `${options.threadId}::${options.resourceId ?? ''}`;
       const previous = evaluations.get(key) ?? Promise.resolve();
       const next = previous.catch(() => {}).then(() => evaluateOnce(options));
       evaluations.set(key, next);
@@ -167,6 +187,9 @@ export function createCurationEvaluator(
       } finally {
         if (evaluations.get(key) === next) evaluations.delete(key);
       }
+    },
+    async gate(options: CurationEvaluateOptions): Promise<boolean> {
+      return (await checkTrigger(options)) !== null;
     },
   };
 }

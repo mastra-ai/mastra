@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Memory, Subconscious } from '../../../index';
 import { ObservationalMemory } from '../observational-memory';
+import { createCurationEvaluator } from '../subconscious/curation-runtime';
 import type { ObservationalMemoryModel } from '../types';
 
 const scope = ['org:acme', 'resource:user-42', 'thread:alpha'];
@@ -325,14 +326,40 @@ function createEngine(options: {
   now?: () => number;
   memory?: unknown;
 }) {
+  const storage = new InMemoryMemory({ db: new InMemoryDB() });
+  // The engine-level wiring the Memory class performs: legacy options translate into a trigger,
+  // the trigger becomes an evaluator, and the evaluator hangs off the generic completion seam.
+  const hasLegacy = options.threshold !== undefined || options.cadence !== undefined || options.maxAgeMs !== undefined;
+  const evaluator = createCurationEvaluator(
+    hasLegacy
+      ? {
+          placement: 'observation',
+          trigger: {
+            uncuratedRecords: options.threshold !== undefined ? options.threshold : (options.cadence ?? false),
+            maxAgeMs: options.maxAgeMs ?? false,
+          },
+        }
+      : null,
+    {
+      memory: options.memory as any,
+      getRecord: (threadId: string, resourceId?: string) =>
+        storage.getObservationalMemory(threadId, resourceId ?? threadId),
+      updateRecordConfig: (id: string, config: any) => storage.updateObservationalMemoryConfig({ id, config }),
+      now: options.now,
+    },
+  );
   return new ObservationalMemory({
-    storage: new InMemoryMemory({ db: new InMemoryDB() }),
+    storage,
     scope: 'thread',
     memory: options.memory as any,
-    curationCadence: options.cadence,
-    curationThreshold: options.threshold,
-    curationMaxAgeMs: options.maxAgeMs,
-    now: options.now,
+    onObservationCompleted: evaluator
+      ? (context: any) =>
+          evaluator.evaluate({
+            threadId: context.threadId,
+            resourceId: context.resourceId,
+            requestContext: context.requestContext,
+          })
+      : undefined,
     observation: {
       model: createMockModel('<observations>\n* Something happened\n</observations>'),
       messageTokens: 100,

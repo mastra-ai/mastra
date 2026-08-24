@@ -1,10 +1,7 @@
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
-import { ObservationalMemory } from '../observational-memory';
 import {
   CURATION_BACKOFF_BASE_MS,
   CURATION_BACKOFF_CAP_MS,
@@ -13,39 +10,12 @@ import {
   nextBackoff,
   readAttemptState,
 } from '../subconscious/curation-backoff';
+import { createCurationEvaluator } from '../subconscious/curation-runtime';
 
 function requestContext() {
   const context = new RequestContext();
   context.set('organizationId', 'acme');
   return context;
-}
-
-function createMockModel(text: string) {
-  return new MockLanguageModelV2({
-    doStream: async () => ({
-      stream: convertArrayToReadableStream([
-        { type: 'text-start', id: 'text-1' },
-        { type: 'text-delta', id: 'text-1', delta: text },
-        { type: 'text-end', id: 'text-1' },
-        { type: 'finish', finishReason: 'stop', usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 } },
-      ]),
-      rawCall: { rawPrompt: null, rawSettings: {} },
-      warnings: [],
-    }),
-  } as any);
-}
-
-function createBulkMessages(count: number, threadId: string): MastraDBMessage[] {
-  return Array.from({ length: count }, (_, i) => ({
-    id: `msg-${threadId}-${i}`,
-    threadId,
-    role: i % 2 === 0 ? 'user' : 'assistant',
-    createdAt: new Date(Date.now() + i),
-    content: {
-      format: 2,
-      parts: [{ type: 'text', text: `Message ${i} with enough text to move the token counter along.` }],
-    } as MastraMessageContentV2,
-  })) as MastraDBMessage[];
 }
 
 type CurationOutcome = 'ran' | 'no-op' | 'skipped' | 'no-model';
@@ -77,25 +47,26 @@ function stubMemory(initialOutcome: CurationOutcome, uncurated = 5, advanceCurso
   };
 }
 
-/** Shared storage lets a second engine stand in for the same deployment after a restart. */
-function createEngine(memory: unknown, now: () => number, storage = new InMemoryMemory({ db: new InMemoryDB() })) {
-  const om = new ObservationalMemory({
-    storage,
-    scope: 'thread',
-    memory: memory as any,
-    curationThreshold: 3,
-    now,
-    observation: {
-      model: createMockModel('<observations>\n* Something happened\n</observations>'),
-      messageTokens: 100,
-      bufferTokens: false,
+/**
+ * The backoff lifecycle now lives in the curator runtime: the evaluator persists attempt state
+ * onto the OM record's config and honours it across evaluations — OM itself knows nothing.
+ * Shared storage lets a second evaluator stand in for the same deployment after a restart.
+ */
+function createEvaluator(memory: unknown, now: () => number, storage = new InMemoryMemory({ db: new InMemoryDB() })) {
+  const evaluator = createCurationEvaluator(
+    { placement: 'observation', trigger: { uncuratedRecords: 3, maxAgeMs: false } },
+    {
+      memory: memory as any,
+      getRecord: (threadId, resourceId) => storage.getObservationalMemory(threadId, resourceId ?? threadId),
+      updateRecordConfig: (recordId, config) => storage.updateObservationalMemoryConfig({ id: recordId, config }),
+      now,
     },
-    reflection: {
-      model: createMockModel('<observations>\n* Condensed\n</observations>'),
-      observationTokens: 50_000,
-    },
-  } as any);
-  return { om, storage };
+  )!;
+  return { evaluator, storage };
+}
+
+async function seedRecord(storage: InMemoryMemory, threadId: string) {
+  return storage.initializeObservationalMemory({ threadId, resourceId: threadId, scope: 'thread', config: {} });
 }
 
 describe('curation backoff state', () => {
@@ -129,45 +100,41 @@ describe('curation backoff state', () => {
   });
 });
 
-describe('curation backoff in the lifecycle', () => {
-  const settle = () => new Promise(resolve => setTimeout(resolve, 20));
-
-  it('does not retry a failed curation on the very next turn', async () => {
+describe('curation backoff in the evaluator lifecycle', () => {
+  it('does not retry a failed curation on the very next evaluation', async () => {
     const memory = stubMemory('no-model');
     let now = 1_000_000;
-    const { om } = createEngine(memory, () => now);
+    const { evaluator, storage } = createEvaluator(memory, () => now);
     const threadId = 'failing-thread';
+    await seedRecord(storage, threadId);
 
-    await om.observe({ threadId, messages: createBulkMessages(10, threadId), requestContext: requestContext() });
-    await settle();
+    await evaluator.evaluate({ threadId, requestContext: requestContext() });
     expect(memory.runCuration).toHaveBeenCalledTimes(1);
 
     // Same minute: still inside the backoff window.
     now += 30_000;
-    const record = (await om.getRecord(threadId))!;
-    await om.maybeCurate(threadId, undefined, record, requestContext());
+    await evaluator.evaluate({ threadId, requestContext: requestContext() });
     expect(memory.runCuration).toHaveBeenCalledTimes(1);
 
     // Past the window: allowed to try again.
     now += CURATION_BACKOFF_BASE_MS;
-    await om.maybeCurate(threadId, undefined, record, requestContext());
+    await evaluator.evaluate({ threadId, requestContext: requestContext() });
     expect(memory.runCuration).toHaveBeenCalledTimes(2);
   });
 
-  it('survives a restart — a fresh instance still honours the persisted backoff', async () => {
+  it('survives a restart — a fresh evaluator still honours the persisted backoff', async () => {
     const memory = stubMemory('no-model');
-    let now = 2_000_000;
-    const { om, storage } = createEngine(memory, () => now);
+    const now = 2_000_000;
+    const { evaluator, storage } = createEvaluator(memory, () => now);
     const threadId = 'restart-thread';
+    await seedRecord(storage, threadId);
 
-    await om.observe({ threadId, messages: createBulkMessages(10, threadId), requestContext: requestContext() });
-    await settle();
+    await evaluator.evaluate({ threadId, requestContext: requestContext() });
     expect(memory.runCuration).toHaveBeenCalledTimes(1);
 
-    // A new engine over the same storage is what a redeploy looks like.
-    const restarted = createEngine(memory, () => now + 30_000, storage).om;
-    const record = (await restarted.getRecord(threadId))!;
-    await restarted.maybeCurate(threadId, undefined, record, requestContext());
+    // A new evaluator over the same storage is what a redeploy looks like.
+    const restarted = createEvaluator(memory, () => now + 30_000, storage).evaluator;
+    await restarted.evaluate({ threadId, requestContext: requestContext() });
 
     expect(memory.runCuration).toHaveBeenCalledTimes(1);
   });
@@ -175,31 +142,30 @@ describe('curation backoff in the lifecycle', () => {
   it('clears the backoff after a successful curation', async () => {
     const memory = stubMemory('no-model');
     let now = 3_000_000;
-    const { om } = createEngine(memory, () => now);
+    const { evaluator, storage } = createEvaluator(memory, () => now);
     const threadId = 'recovering-thread';
+    await seedRecord(storage, threadId);
 
-    await om.observe({ threadId, messages: createBulkMessages(10, threadId), requestContext: requestContext() });
-    await settle();
+    await evaluator.evaluate({ threadId, requestContext: requestContext() });
 
     memory.setOutcome('ran');
     now += CURATION_BACKOFF_BASE_MS;
-    const record = (await om.getRecord(threadId))!;
-    await om.maybeCurate(threadId, undefined, record, requestContext());
+    await evaluator.evaluate({ threadId, requestContext: requestContext() });
 
-    const after = await om.getRecord(threadId);
+    const after = await storage.getObservationalMemory(threadId, threadId);
     expect(readAttemptState(after?.config)).toEqual({ failures: 0, nextAttemptAt: 0 });
   });
 
   it('leaves backoff state untouched when the curator skips', async () => {
     const memory = stubMemory('skipped');
     const now = 4_000_000;
-    const { om } = createEngine(memory, () => now);
+    const { evaluator, storage } = createEvaluator(memory, () => now);
     const threadId = 'skipping-thread';
+    await seedRecord(storage, threadId);
 
-    await om.observe({ threadId, messages: createBulkMessages(10, threadId), requestContext: requestContext() });
-    await settle();
+    await evaluator.evaluate({ threadId, requestContext: requestContext() });
 
-    const record = await om.getRecord(threadId);
+    const record = await storage.getObservationalMemory(threadId, threadId);
     expect(memory.runCuration).toHaveBeenCalledTimes(1);
     expect(readAttemptState(record?.config)).toBeUndefined();
   });
@@ -207,13 +173,13 @@ describe('curation backoff in the lifecycle', () => {
   it('backs off when the curator reports ran without advancing the cursor', async () => {
     const memory = stubMemory('ran', 5, false);
     const now = 4_500_000;
-    const { om } = createEngine(memory, () => now);
+    const { evaluator, storage } = createEvaluator(memory, () => now);
     const threadId = 'no-progress-thread';
-    const record = await (om as any).getOrCreateRecord(threadId, undefined);
+    await seedRecord(storage, threadId);
 
-    await om.maybeCurate(threadId, undefined, record, requestContext());
+    await evaluator.evaluate({ threadId, requestContext: requestContext() });
 
-    const after = await om.getRecord(threadId);
+    const after = await storage.getObservationalMemory(threadId, threadId);
     expect(readAttemptState(after?.config)).toEqual({
       failures: 1,
       nextAttemptAt: now + CURATION_BACKOFF_BASE_MS,
@@ -224,13 +190,15 @@ describe('curation backoff in the lifecycle', () => {
     const memory = stubMemory('ran');
     memory.runCuration.mockRejectedValue(new Error('curator exploded'));
     const now = 5_000_000;
-    const { om } = createEngine(memory, () => now);
+    const { evaluator, storage } = createEvaluator(memory, () => now);
     const threadId = 'throwing-thread';
-    const record = await (om as any).getOrCreateRecord(threadId, undefined);
+    await seedRecord(storage, threadId);
 
-    await expect(om.maybeCurate(threadId, undefined, record, requestContext())).rejects.toThrow('curator exploded');
+    await expect(evaluator.evaluate({ threadId, requestContext: requestContext() })).rejects.toThrow(
+      'curator exploded',
+    );
 
-    const after = await om.getRecord(threadId);
+    const after = await storage.getObservationalMemory(threadId, threadId);
     expect(readAttemptState(after?.config)).toEqual({
       failures: 1,
       nextAttemptAt: now + CURATION_BACKOFF_BASE_MS,

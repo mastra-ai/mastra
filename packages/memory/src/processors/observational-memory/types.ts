@@ -947,31 +947,6 @@ export interface ObservationalMemoryConfig {
   memory?: Memory;
 
   /**
-   * Deprecated spelling of `curationThreshold`. Counts uncurated knowledge records and is off by
-   * default. An explicitly configured `curationThreshold`, including `false`, wins. Requires
-   * `memory`.
-   *
-   * @deprecated Use `curationThreshold`.
-   */
-  curationCadence?: number;
-
-  /**
-   * Run the subconscious curator once this many uncurated knowledge records have accumulated.
-   * Off by default. Requires `memory`.
-   */
-  curationThreshold?: number | false;
-
-  /**
-   * Opportunistic age threshold: how stale the curation cursor may get before the next lifecycle
-   * evaluation runs the curator. Never a timer — evaluated only when the lifecycle already looks,
-   * and only when at least one uncurated record exists. Off by default. Requires `memory`.
-   */
-  curationMaxAgeMs?: number | false;
-
-  /** Injectable clock for curation age evaluation. Tests only; defaults to `Date.now`. */
-  now?: () => number;
-
-  /**
    * Enable retrieval-mode observation group metadata.
    * When true, observation groups are treated as durable pointers to raw
    * message history and a `recall` tool is registered so the actor can
@@ -1112,6 +1087,15 @@ export interface ObservationalMemoryConfig {
   /** @internal Runs Subconscious reflection work only after a reflection is durably committed. */
   onReflectionCommitted?: (context: ReflectionCommittedContext) => Promise<void>;
 
+  /**
+   * @internal Generic lifecycle callback fired after an observation pipeline completes
+   * successfully — after the observer cycle, persistence, and all extractor hooks have
+   * finished — on the sync, async-buffered, and idle-buffered paths. Never fired for
+   * failed cycles. Invoked fire-and-forget but tracked via `trackBackgroundWork`, so
+   * `Memory.settled()` joins any async work it starts.
+   */
+  onObservationCompleted?: (context: ObservationCompletedContext) => Promise<void> | void;
+
   /** @internal Parent Mastra instance for custom gateway model resolution. */
   mastra?: Mastra;
 }
@@ -1194,6 +1178,15 @@ export interface ObserveHookUsage {
  *   `triggerAsyncBuffering`), whether awaited or fire-and-forget.
  */
 export type ObserveTrigger = 'manual' | 'turn-sync' | 'async-buffer';
+
+/** Context for the generic post-observation pipeline completion callback. */
+export interface ObservationCompletedContext {
+  threadId: string;
+  resourceId?: string;
+  /** Which pipeline path produced the completed cycle. */
+  trigger: ObserveTrigger;
+  requestContext?: RequestContext;
+}
 
 /**
  * Call context passed to config-level `ObserveHooks` callbacks. Config-level

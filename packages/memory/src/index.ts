@@ -53,6 +53,7 @@ import xxhash from 'xxhash-wasm';
 import type { ObservationalMemory, ObservationalMemoryConfig } from './processors/observational-memory';
 import { KnowledgeSemanticIndexCoordinator, Subconscious } from './processors/observational-memory/subconscious';
 import { createCuratorHandler } from './processors/observational-memory/subconscious/curate';
+import { createCurationEvaluator } from './processors/observational-memory/subconscious/curation-runtime';
 import { createKnowledgeTools } from './processors/observational-memory/subconscious/knowledge-tools';
 import {
   composeReflectionAgentHandlers,
@@ -1966,41 +1967,76 @@ ${workingMemory}`;
       activateOnProviderChange: omConfig.activateOnProviderChange,
       shareTokenBudget: omConfig.shareTokenBudget,
       model: omConfig.model,
-      curationCadence:
-        omConfig.experimental_subconscious instanceof Subconscious
-          ? omConfig.experimental_subconscious.resolved.curationCadence
-          : undefined,
-      curationThreshold:
-        omConfig.experimental_subconscious instanceof Subconscious
-          ? omConfig.experimental_subconscious.resolved.curationThreshold
-          : false,
-      curationMaxAgeMs:
-        omConfig.experimental_subconscious instanceof Subconscious
-          ? omConfig.experimental_subconscious.resolved.curationMaxAgeMs
-          : false,
       mastra: this._mastraInstance,
       onIndexObservations,
       hooks: omConfig.hooks,
-      onReflectionCommitted:
-        omConfig.experimental_subconscious instanceof Subconscious
-          ? (() => {
-              const resolved = omConfig.experimental_subconscious.resolved;
-              const omModel = omConfig.observation?.model ?? omConfig.model;
+      ...(omConfig.experimental_subconscious instanceof Subconscious
+        ? (() => {
+            const resolved = omConfig.experimental_subconscious.resolved;
+            const omModel = omConfig.observation?.model ?? omConfig.model;
+            const curation = resolved.curation;
+            const evaluator = createCurationEvaluator(curation, {
+              memory: this,
+              // Mirror OM's storage identity: resource-scoped records are keyed by resourceId
+              // alone; thread-scoped records by threadId (see OM getStorageIds).
+              getRecord: (threadId, resourceId) =>
+                omConfig.scope === 'resource'
+                  ? memoryStore.getObservationalMemory(null, resourceId ?? threadId)
+                  : memoryStore.getObservationalMemory(threadId, resourceId ?? threadId),
+              updateRecordConfig: (recordId, config) =>
+                memoryStore.updateObservationalMemoryConfig({ id: recordId, config }).then(() => {}),
+            });
+
+            // Observation placement: curation evaluates after each successfully completed
+            // observation pipeline, via OM's generic completion callback.
+            const onObservationCompleted =
+              curation?.placement === 'observation' && evaluator
+                ? (context: { threadId: string; resourceId?: string; requestContext?: RequestContext }) =>
+                    evaluator.evaluate({
+                      threadId: context.threadId,
+                      resourceId: context.resourceId,
+                      requestContext: context.requestContext,
+                    })
+                : undefined;
+
+            // Reflection placement: curate runs at reflection commit — unconditionally when no
+            // trigger is configured (the historical behavior), gated by the trigger otherwise.
+            const handlers = [];
+            if (curation?.placement === 'reflection') {
               const curate = createCuratorHandler(
                 this,
                 resolved,
                 new Memory({ storage: this.storage, options: { observationalMemory: false } }),
                 { omModel },
               );
-              const learn = createLearnerHandler(
+              handlers.push(
+                evaluator
+                  ? async (context: Parameters<typeof curate>[0]) => {
+                      const fires = await evaluator.gate({
+                        threadId: context.parentThreadId,
+                        resourceId: context.resourceId,
+                        requestContext: context.requestContext,
+                      });
+                      if (!fires) return;
+                      await curate(context);
+                    }
+                  : curate,
+              );
+            }
+            handlers.push(
+              createLearnerHandler(
                 this,
                 resolved,
                 new Memory({ storage: this.storage, options: { observationalMemory: false } }),
                 { omModel },
-              );
-              return composeReflectionAgentHandlers([curate, learn]);
-            })()
-          : undefined,
+              ),
+            );
+            return {
+              onObservationCompleted,
+              onReflectionCommitted: composeReflectionAgentHandlers(handlers),
+            };
+          })()
+        : {}),
       observation: omConfig.observation
         ? {
             model: omConfig.observation.model,

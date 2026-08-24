@@ -125,7 +125,12 @@ export class Subconscious {
 
   constructor(config: SubconsciousConfig = {}) {
     const observation = config.observation ?? ['capture', 'remind'];
-    const reflection = config.reflection ?? ['curate', 'learn'];
+    // The signed default includes curate in the reflection array; an explicit curate entry in
+    // the observation array claims the placement, so the default yields rather than colliding.
+    const defaultReflection: SubconsciousReflectionEntry[] = observation.some(entry => entryName(entry) === 'curate')
+      ? ['learn']
+      : ['curate', 'learn'];
+    const reflection = config.reflection ?? defaultReflection;
     assertUniqueNames(observation, 'observation');
     assertUniqueNames(reflection, 'reflection');
 

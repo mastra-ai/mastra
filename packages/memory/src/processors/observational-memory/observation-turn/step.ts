@@ -101,7 +101,6 @@ export class ObservationStep {
           recordId: activation.record.id,
         });
         await this.turn.refreshRecord();
-        this.evaluateCuration();
       }
 
       // Check if reflection is needed (whether or not activation happened).
@@ -381,22 +380,6 @@ export class ObservationStep {
   }
 
   /**
-   * Fire-and-forget curation trigger evaluation after an activation committed knowledge.
-   *
-   * Activation is a lifecycle point that can leave uncurated records behind without ever
-   * reaching the sync observe path, so a short conversation would otherwise never curate.
-   * A curation failure must never fail the turn.
-   */
-  private evaluateCuration(): void {
-    const { om, threadId, resourceId } = this.turn;
-    void om
-      .trackBackgroundWork(om.maybeCurate(threadId, resourceId, this.turn.record, this.turn.requestContext))
-      .catch(error => {
-        omDebug(`[OM:step] activation curation failed: ${error instanceof Error ? error.message : String(error)}`);
-      });
-  }
-
-  /**
    * Run the full threshold observation pipeline:
    * waitForBuffering → re-check → activate → reflect → observe (sync fallback when
    * buffered activation did not happen)
@@ -465,8 +448,6 @@ export class ObservationStep {
           lastActivityAt: getLastActivityFromMessages(getObservableMessages(messageList)),
           reflectionHooks: om.composeHooks(undefined, { threadId, resourceId, trigger: 'turn-sync' }),
         });
-
-        this.evaluateCuration();
 
         return {
           succeeded: true,

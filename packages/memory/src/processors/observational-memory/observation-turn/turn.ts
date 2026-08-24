@@ -253,15 +253,6 @@ export class ObservationTurn {
       }
     }
 
-    // End-of-turn curation evaluation. Without this, a conversation that never reaches a later
-    // step — the common short-conversation case — would leave its knowledge uncurated until some
-    // future turn happened to cross a threshold. Fire-and-forget: the turn is over, and a curation
-    // failure must never fail it. Messages buffered on idle above are covered by the next turn's
-    // step-0 activation site.
-    void this.om.maybeCurate(this.threadId, this.resourceId, this._record!, this.requestContext).catch(err => {
-      omDebug(`[OM:turn.end] curation failed: ${err?.message}`);
-    });
-
     return { record: this._record! };
   }
 
