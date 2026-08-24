@@ -169,6 +169,41 @@ function getOMGenerationUniqueIndexName(schemaName?: string): string {
   });
 }
 
+interface OMGenerationIndexMetadata {
+  isValid: boolean;
+  isReady: boolean;
+  isLive: boolean;
+  isUnique: boolean;
+  isImmediate: boolean;
+  isNonPartial: boolean;
+  hasNoExpressions: boolean;
+  tableName: string;
+  columns: string[];
+}
+
+function getOMGenerationIndexProblems(metadata: OMGenerationIndexMetadata | null | undefined): string[] {
+  if (!metadata) return ['the relation is missing or is not an index'];
+
+  const problems: string[] = [];
+  if (!metadata.isValid) problems.push('the index is invalid');
+  if (!metadata.isReady) problems.push('the index is not ready for inserts');
+  if (!metadata.isLive) problems.push('the index is being dropped');
+  if (!metadata.isUnique) problems.push('the index is not unique');
+  if (!metadata.isImmediate) problems.push('the index does not enforce uniqueness immediately');
+  if (!metadata.isNonPartial) problems.push('the index is partial');
+  if (!metadata.hasNoExpressions) problems.push('the index contains expressions');
+  if (metadata.tableName !== OM_TABLE)
+    problems.push(`the index belongs to table ${JSON.stringify(metadata.tableName)}`);
+  if (
+    metadata.columns.length !== 2 ||
+    metadata.columns[0] !== 'lookupKey' ||
+    metadata.columns[1] !== 'generationCount'
+  ) {
+    problems.push(`the key columns are (${metadata.columns.map(column => JSON.stringify(column)).join(', ')})`);
+  }
+  return problems;
+}
+
 function dedupeMessagesForSave(messages: MastraDBMessage[]): MastraDBMessage[] {
   const deduped = new Map<string, MastraDBMessage>();
   for (const message of messages) {
@@ -367,6 +402,11 @@ export class MemoryPG extends MemoryStorage {
 
   private async ensureOMGenerationUniqueness(tableName: string): Promise<void> {
     const indexName = getOMGenerationUniqueIndexName(this.#schema);
+    const existingIndex = await this.getOMGenerationIndexMetadata(indexName);
+    if (existingIndex) {
+      this.assertOMGenerationIndexCompatible(indexName, existingIndex);
+      return;
+    }
 
     try {
       await this.#db.createIndexFromStatement(
@@ -378,11 +418,9 @@ export class MemoryPG extends MemoryStorage {
       // accept the catalog collision after confirming that the other process
       // actually created the expected index.
       if (isDuplicateRelationError(error)) {
-        const existingIndex = await this.#db.client.oneOrNone(
-          `SELECT 1 FROM pg_indexes WHERE schemaname = $1 AND indexname = $2`,
-          [this.#schema, indexName],
-        );
-        if (existingIndex) return;
+        const racedIndex = await this.getOMGenerationIndexMetadata(indexName);
+        this.assertOMGenerationIndexCompatible(indexName, racedIndex);
+        return;
       }
 
       // Building a unique index over an upgraded database fails with 23505
@@ -426,6 +464,63 @@ export class MemoryPG extends MemoryStorage {
 
       throw error;
     }
+
+    const createdIndex = await this.getOMGenerationIndexMetadata(indexName);
+    this.assertOMGenerationIndexCompatible(indexName, createdIndex);
+  }
+
+  private async getOMGenerationIndexMetadata(indexName: string): Promise<OMGenerationIndexMetadata | null> {
+    return this.#db.client.oneOrNone<OMGenerationIndexMetadata>(
+      `SELECT i.indisvalid AS "isValid",
+              i.indisready AS "isReady",
+              i.indislive AS "isLive",
+              i.indisunique AS "isUnique",
+              i.indimmediate AS "isImmediate",
+              i.indpred IS NULL AS "isNonPartial",
+              i.indexprs IS NULL AS "hasNoExpressions",
+              table_class.relname AS "tableName",
+              ARRAY(
+                SELECT attribute.attname
+                  FROM unnest(i.indkey::smallint[]) WITH ORDINALITY AS index_key(attnum, ordinal_position)
+                  JOIN pg_catalog.pg_attribute attribute
+                    ON attribute.attrelid = i.indrelid
+                   AND attribute.attnum = index_key.attnum
+                 WHERE index_key.ordinal_position <= i.indnkeyatts
+                 ORDER BY index_key.ordinal_position
+              )::text[] AS columns
+         FROM pg_catalog.pg_index i
+         JOIN pg_catalog.pg_class index_class ON index_class.oid = i.indexrelid
+         JOIN pg_catalog.pg_class table_class ON table_class.oid = i.indrelid
+         JOIN pg_catalog.pg_namespace namespace ON namespace.oid = index_class.relnamespace
+        WHERE namespace.nspname = $1
+          AND index_class.relname = $2`,
+      [this.#schema, indexName],
+    );
+  }
+
+  private assertOMGenerationIndexCompatible(
+    indexName: string,
+    metadata: OMGenerationIndexMetadata | null | undefined,
+  ): void {
+    const problems = getOMGenerationIndexProblems(metadata);
+    if (problems.length === 0) return;
+
+    throw new MastraError({
+      id: createStorageErrorId('PG', 'MIGRATION_REQUIRED', 'INVALID_OBSERVATIONAL_MEMORY_GENERATION_INDEX'),
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.USER,
+      text:
+        `PostgreSQL relation ${JSON.stringify(`${this.#schema}.${indexName}`)} does not provide the required ` +
+        `observational-memory generation invariant: ${problems.join('; ')}. ` +
+        `Review and replace that relation with a valid, immediate, non-partial unique index on ` +
+        `("lookupKey", "generationCount") before restarting.`,
+      details: {
+        schemaName: this.#schema,
+        tableName: OM_TABLE,
+        indexName,
+        reason: problems.join('; '),
+      },
+    });
   }
 
   /**

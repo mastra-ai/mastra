@@ -208,6 +208,8 @@ GROUP BY "lookupKey", "generationCount"
 HAVING COUNT(*) > 1;
 ```
 
+Initialization also validates the required index through the PostgreSQL catalog. If an incompatible relation already occupies its name, Mastra fails closed instead of assuming that `CREATE UNIQUE INDEX IF NOT EXISTS` produced the expected invariant. Review and replace the conflicting relation described by the error before restarting.
+
 If you set `disableInit: true`, include the unique `(lookupKey, generationCount)` index from the current `@mastra/pg` schema in your externally managed migration before deploying the package update.
 
 ### Observability
