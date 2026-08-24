@@ -361,6 +361,7 @@ function ZoomTrack({
       </div>
       <div
         ref={trackRef}
+        data-zoom-track=""
         className="relative h-6 cursor-pointer select-none"
         onMouseDown={e => {
           const ts = toTimestamp(e.clientX);
@@ -377,13 +378,23 @@ function ZoomTrack({
           }
         }}
       >
-        <div className="bg-surface2/60 absolute inset-y-0 left-0" style={{ width: `${leftPercent}%` }} />
         <div
+          data-zoom-part="before"
+          className="bg-surface2/60 absolute inset-y-0 left-0"
+          style={{ width: `${leftPercent}%` }}
+        />
+        <div
+          data-zoom-part="band"
           className="border-border1/30 bg-neutral6/5 absolute inset-y-0 border-y"
           style={{ left: `${leftPercent}%`, right: `${100 - rightPercent}%` }}
         />
-        <div className="bg-surface2/60 absolute inset-y-0 right-0" style={{ width: `${100 - rightPercent}%` }} />
         <div
+          data-zoom-part="after"
+          className="bg-surface2/60 absolute inset-y-0 right-0"
+          style={{ width: `${100 - rightPercent}%` }}
+        />
+        <div
+          data-zoom-handle="left"
           className="bg-neutral6/50 hover:bg-neutral6 absolute inset-y-0 w-1 cursor-col-resize"
           style={{ left: `${leftPercent}%`, transform: 'translateX(-50%)' }}
           onMouseDown={e => {
@@ -393,6 +404,7 @@ function ZoomTrack({
           }}
         />
         <div
+          data-zoom-handle="right"
           className="bg-neutral6/50 hover:bg-neutral6 absolute inset-y-0 w-1 cursor-col-resize"
           style={{ left: `${rightPercent}%`, transform: 'translateX(-50%)' }}
           onMouseDown={e => {

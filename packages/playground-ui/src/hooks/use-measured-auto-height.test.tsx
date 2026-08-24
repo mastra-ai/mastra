@@ -223,6 +223,14 @@ describe('useMeasuredAutoHeight', () => {
     expect(cancelAnimationFrame).toHaveBeenCalledTimes(2);
     expect(cancelAnimationFrame).toHaveBeenNthCalledWith(1, 1);
     expect(cancelAnimationFrame).toHaveBeenNthCalledWith(2, 2);
+
+    // And the one frame that survives is the one that takes the measurement.
+    vi.spyOn(element, 'getBoundingClientRect').mockReturnValue(createRect(96));
+    act(() => {
+      frames[frames.length - 1]?.(0);
+    });
+
+    expect(result.current.height).toBe(96);
   });
 
   it('stops observing and drops a pending frame when it goes away', async () => {

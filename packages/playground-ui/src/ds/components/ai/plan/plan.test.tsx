@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { Button } from '../../Button';
 import { TooltipProvider } from '../../Tooltip';
@@ -25,11 +25,13 @@ import {
 } from './plan';
 import { toast } from '@/lib/toast';
 
-vi.mock('@/lib/toast', () => ({
-  toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }),
-}));
-
 const renderPlan = (element: ReactNode) => render(<TooltipProvider>{element}</TooltipProvider>);
+
+/** Spied rather than module-mocked: `@/lib/toast` is one of our own services. */
+let toastSuccess: ReturnType<typeof vi.spyOn>;
+beforeEach(() => {
+  toastSuccess = vi.spyOn(toast, 'success').mockImplementation(() => '');
+});
 
 const mockClipboard = (writeText: ReturnType<typeof vi.fn>) => {
   Object.defineProperty(navigator, 'clipboard', {
@@ -109,7 +111,7 @@ describe('Plan', () => {
     );
 
     // The button says so on its own face; a toast on top would be noise.
-    expect(vi.mocked(toast.success)).not.toHaveBeenCalled();
+    expect(toastSuccess).not.toHaveBeenCalled();
   });
 
   it('preserves fixed copy behavior when unsupported button props are provided at runtime', async () => {
@@ -503,6 +505,7 @@ describe('PlanPath', () => {
 
   it('falls back to the path itself when there is nothing to take from it', () => {
     expect(pathOf('/')?.getAttribute('title')).toBe('/');
+    expect(pathOf('/')?.textContent).toBe('/');
   });
 });
 

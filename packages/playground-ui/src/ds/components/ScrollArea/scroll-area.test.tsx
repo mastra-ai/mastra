@@ -106,7 +106,11 @@ describe('ScrollArea', () => {
   describe('viewportRef', () => {
     it('hands the viewport to a callback ref', () => {
       const seen: Array<HTMLDivElement | null> = [];
-      renderArea({ viewportRef: node => seen.push(node) });
+      renderArea({
+        viewportRef: node => {
+          seen.push(node);
+        },
+      });
 
       expect(seen[0]).toBe(getViewport());
     });

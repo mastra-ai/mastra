@@ -66,7 +66,7 @@ export const hourlyInputTokenSeries: GetMetricTimeSeriesResponse = {
   ],
 };
 
-/** Same buckets as `inputTokenSeries`, priced in another currency. */
+/** One output bucket, overlapping the first `inputTokenSeries` bucket, priced in eur. */
 export const eurOutputTokenSeries: GetMetricTimeSeriesResponse = {
   series: [
     {

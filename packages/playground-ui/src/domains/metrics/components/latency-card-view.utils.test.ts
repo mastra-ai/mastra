@@ -32,6 +32,12 @@ describe('averageLatency', () => {
     expect(averageLatency([{ p50: 7470 }], 'p50')).toBe('7470');
   });
 
+  it('counts a bucket missing its percentile as zero rather than spoiling the average', () => {
+    expect(averageLatency([{ p50: 100 }, {}, { p50: 200 }], 'p50')).toBe('100');
+    expect(averageLatency([{ p50: 100 }, { p50: 'n/a' }], 'p50')).toBe('50');
+    expect(averageLatency([{ p50: Number.NaN }, { p50: 100 }], 'p50')).toBe('50');
+  });
+
   it('reads nothing charted as zero', () => {
     expect(averageLatency([], 'p50')).toBe('0');
   });

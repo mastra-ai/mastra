@@ -6,9 +6,11 @@ import { createElement } from 'react';
 import type { ToasterProps } from 'sonner';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { sonnerMock, ToasterMock } = vi.hoisted(() => {
+const { sonnerDefault, sonnerMock, ToasterMock } = vi.hoisted(() => {
   const ToasterMock = vi.fn<(props: ToasterProps) => null>(() => null);
   return {
+    // Sonner's own callable export, so tests can see what is handed to it.
+    sonnerDefault: vi.fn((..._args: unknown[]) => undefined),
     sonnerMock: {
       success: vi.fn(),
       error: vi.fn(),
@@ -22,7 +24,7 @@ const { sonnerMock, ToasterMock } = vi.hoisted(() => {
 });
 
 vi.mock('sonner', () => ({
-  toast: Object.assign((..._args: unknown[]) => undefined, sonnerMock),
+  toast: Object.assign(sonnerDefault, sonnerMock),
   Toaster: ToasterMock,
 }));
 
@@ -30,6 +32,7 @@ import { Toaster, toast } from './toast';
 
 beforeEach(() => {
   Object.values(sonnerMock).forEach(fn => fn.mockClear());
+  sonnerDefault.mockClear();
   ToasterMock.mockClear();
 });
 
@@ -162,6 +165,9 @@ describe('toast entry point', () => {
 
     expect(Array.isArray(result)).toBe(true);
     expect(result).toHaveLength(2);
+    expect(sonnerDefault).toHaveBeenCalledTimes(2);
+    expect(sonnerDefault).toHaveBeenNthCalledWith(1, 'one', {});
+    expect(sonnerDefault).toHaveBeenNthCalledWith(2, 'two', {});
   });
 
   it('accepts a React element', () => {
@@ -174,9 +180,12 @@ describe('toast entry point', () => {
   });
 
   it('forwards a custom node and a dismiss id', () => {
-    toast.custom(createElement('span', null, 'custom'));
+    const node = createElement('span', null, 'custom');
+    toast.custom(node);
     toast.dismiss('toast-1');
 
+    // `custom` goes straight through sonner's callable export.
+    expect(sonnerDefault).toHaveBeenCalledWith(node, {});
     expect(sonnerMock.dismiss).toHaveBeenCalledWith('toast-1');
   });
 });

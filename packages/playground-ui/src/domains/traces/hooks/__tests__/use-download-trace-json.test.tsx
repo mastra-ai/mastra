@@ -120,7 +120,7 @@ describe('useDownloadTraceJson', () => {
     expect(clickedDownloadAttr).toBe(`trace-${TRACE_ID}.json`);
   });
 
-  it('narrates the download while it runs, when it lands and when it fails', async () => {
+  it('gives the toast the words for every stage of the download', async () => {
     server.use(http.get(`${BASE_URL}/api/observability/traces/:traceId`, () => HttpResponse.json(traceFixture)));
 
     const { result } = renderHook(() => useDownloadTraceJson(), { wrapper: makeWrapper() });
@@ -129,7 +129,7 @@ describe('useDownloadTraceJson', () => {
     await waitFor(() => expect(result.current.isPending).toBe(false));
 
     expect(toastCalls).toHaveLength(1);
-    expect(toastCalls[0]?.loadingMessage).toBe('Preparing trace download\u2026');
+    expect(toastCalls[0]?.loadingMessage).toBe('Preparing trace download…');
     expect(toastCalls[0]?.successMessage).toBe('Trace downloaded');
     expect(toastCalls[0]?.errorMessage).toBe('Failed to download trace');
   });

@@ -2,7 +2,7 @@
 import { MastraReactProvider } from '@mastra/react';
 import { act, renderHook } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_TRACE_COLUMN_PREFERENCES } from '../../trace-list-columns';
 import { useTraceColumnPreferences } from '../use-trace-column-preferences';
 
@@ -201,6 +201,10 @@ describe('useTraceColumnPreferences', () => {
   });
 
   describe('when storage is involved', () => {
+    // Restored here rather than at the end of each test, so a failing assertion
+    // cannot leave a throwing storage spy in place for every test after it.
+    afterEach(() => vi.restoreAllMocks());
+
     it('does not write anything until the columns are edited', () => {
       const setItem = vi.spyOn(window.localStorage, 'setItem');
 
@@ -250,7 +254,6 @@ describe('useTraceColumnPreferences', () => {
       });
 
       expect(result.current.preferences).toEqual(DEFAULT_TRACE_COLUMN_PREFERENCES);
-      vi.restoreAllMocks();
     });
 
     it('keeps editing in memory when storage cannot be written', () => {
@@ -267,7 +270,6 @@ describe('useTraceColumnPreferences', () => {
       });
 
       expect(result.current.preferences.visibleColumns).toEqual(['input', 'entity', 'duration']);
-      vi.restoreAllMocks();
     });
   });
 });

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { buildSankeyHueMap, hashHue, nodeColor, nodeColorVivid } from './sankeyColor';
 
@@ -11,19 +11,14 @@ function circularDistance(left: number, right: number) {
 
 type CssStub = { supports?: (property: string, value: string) => boolean };
 
-const globalWithCss = globalThis as typeof globalThis & { CSS?: CssStub };
-
-function stubCss(stub: CssStub | undefined) {
-  if (stub === undefined) {
-    delete globalWithCss.CSS;
-    return;
-  }
-  globalWithCss.CSS = stub;
+/** Stubbed rather than deleted, so jsdom's own `CSS` comes back afterwards. */
+function stubCss(stub: CssStub) {
+  vi.stubGlobal('CSS', stub);
 }
 
 describe('Sankey colors', () => {
   afterEach(() => {
-    stubCss(undefined);
+    vi.unstubAllGlobals();
   });
 
   it('returns stable normalized hashes and environment-appropriate colors', () => {

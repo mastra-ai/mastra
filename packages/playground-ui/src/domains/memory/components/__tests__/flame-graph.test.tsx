@@ -43,7 +43,7 @@ describe('FlameGraph', () => {
     // The zoom track is the cursor-pointer div next to the "Zoom" label. Give it
     // a non-zero rect (jsdom returns zeros) so a fractional drag position maps to
     // a real timestamp inside the domain.
-    const track = document.querySelector('.cursor-pointer.select-none') as HTMLElement;
+    const track = document.querySelector('[data-zoom-track]') as HTMLElement;
     expect(track).toBeTruthy();
     track.getBoundingClientRect = () => ({ left: 0, width: 100, top: 0, height: 24 }) as DOMRect;
 
@@ -163,7 +163,10 @@ describe('FlameGraph rows', () => {
 });
 
 describe('FlameGraph zoom track', () => {
-  const trackOf = () => document.querySelector('.cursor-pointer.select-none') as HTMLElement;
+  const trackOf = () => document.querySelector('[data-zoom-track]') as HTMLElement;
+  const partOf = (part: 'before' | 'band' | 'after') =>
+    trackOf().querySelector(`[data-zoom-part="${part}"]`) as HTMLElement;
+  const handleOf = (side: 'left' | 'right') => trackOf().querySelector(`[data-zoom-handle="${side}"]`) as HTMLElement;
 
   it('shades the part of the domain the zoom range excludes', () => {
     render(
@@ -177,8 +180,7 @@ describe('FlameGraph zoom track', () => {
       />,
     );
 
-    const leftShade = trackOf().firstElementChild as HTMLElement;
-    expect(leftShade.style.width).toBe('25%');
+    expect(partOf('before').style.width).toBe('25%');
   });
 
   it('draws the selected band and its handles at the zoomed edges', () => {
@@ -194,10 +196,10 @@ describe('FlameGraph zoom track', () => {
       />,
     );
 
-    const [leftShade, band, rightShade, leftHandle, rightHandle] = Array.from(trackOf().children) as HTMLElement[];
+    const [band, leftHandle, rightHandle] = [partOf('band'), handleOf('left'), handleOf('right')];
 
-    expect(leftShade?.style.width).toBe('25%');
-    expect(rightShade?.style.width).toBe('25%');
+    expect(partOf('before').style.width).toBe('25%');
+    expect(partOf('after').style.width).toBe('25%');
     expect(band?.style.left).toBe('25%');
     expect(band?.style.right).toBe('25%');
     // Each handle straddles its own edge rather than sitting beside it.
@@ -222,7 +224,7 @@ describe('FlameGraph zoom track', () => {
 
     const track = trackOf();
     track.getBoundingClientRect = () => ({ left: 0, width: 100, top: 0, height: 24 }) as DOMRect;
-    const rightHandle = track.children[4] as HTMLElement;
+    const rightHandle = handleOf('right');
 
     // Grabbing the right handle near the left edge must still move the right
     // bound — the handle wins over the nearest-edge guess.
@@ -250,7 +252,7 @@ describe('FlameGraph zoom track', () => {
 
     const track = trackOf();
     track.getBoundingClientRect = () => ({ left: 0, width: 100, top: 0, height: 24 }) as DOMRect;
-    const leftHandle = track.children[3] as HTMLElement;
+    const leftHandle = handleOf('left');
 
     fireEvent.mouseDown(leftHandle, { clientX: 95 });
     fireEvent.mouseMove(window, { clientX: 40 });
@@ -277,7 +279,7 @@ describe('FlameGraph zoom track', () => {
     const track = trackOf();
     track.getBoundingClientRect = () => ({ left: 0, width: 100, top: 0, height: 24 }) as DOMRect;
 
-    fireEvent.mouseDown(track.children[3] as HTMLElement, { clientX: 50 });
+    fireEvent.mouseDown(handleOf('left'), { clientX: 50 });
 
     // The press only picks the handle up; the range moves once the mouse does.
     expect(onZoomRangeChange).not.toHaveBeenCalled();
@@ -296,8 +298,8 @@ describe('FlameGraph zoom track', () => {
     );
 
     const track = trackOf();
-    expect((track.firstElementChild as HTMLElement).style.width).toBe('0%');
-    expect((track.children[2] as HTMLElement).style.width).toBe('0%');
+    expect((track.querySelector('[data-zoom-part="before"]') as HTMLElement).style.width).toBe('0%');
+    expect(partOf('after').style.width).toBe('0%');
   });
 
   it('grabs whichever handle the click landed nearer to', () => {
@@ -445,7 +447,7 @@ describe('FlameGraph zoom track', () => {
     fireEvent.mouseUp(window);
 
     // Uncontrolled: the range it shows is its own, not the one it was handed.
-    expect((track.firstElementChild as HTMLElement).style.width).toBe('40%');
+    expect((track.querySelector('[data-zoom-part="before"]') as HTMLElement).style.width).toBe('40%');
   });
 
   it('puts its own range back on reset when it owns it', () => {
@@ -457,11 +459,11 @@ describe('FlameGraph zoom track', () => {
     fireEvent.mouseDown(track, { clientX: 0 });
     fireEvent.mouseMove(window, { clientX: 40 });
     fireEvent.mouseUp(window);
-    expect((track.firstElementChild as HTMLElement).style.width).toBe('40%');
+    expect((track.querySelector('[data-zoom-part="before"]') as HTMLElement).style.width).toBe('40%');
 
     fireEvent.click(screen.getByLabelText('Reset zoom'));
 
-    expect((track.firstElementChild as HTMLElement).style.width).toBe('0%');
+    expect((track.querySelector('[data-zoom-part="before"]') as HTMLElement).style.width).toBe('0%');
   });
 
   it('sits at the full width for a domain with no span at all', () => {
@@ -476,35 +478,15 @@ describe('FlameGraph zoom track', () => {
 
     const track = trackOf();
     // Nothing to divide by, so the whole track reads as selected.
-    expect((track.firstElementChild as HTMLElement).style.width).toBe('0%');
-    expect((track.children[2] as HTMLElement).style.width).toBe('0%');
+    expect((track.querySelector('[data-zoom-part="before"]') as HTMLElement).style.width).toBe('0%');
+    expect(partOf('after').style.width).toBe('0%');
   });
 });
 
-describe('FlameGraph timestamp selection', () => {
-  it('renders a chart row per series whether or not anyone is listening', () => {
-    const listening = render(
-      <FlameGraph
-        omRecords={omHistoryRecords}
-        markers={markers}
-        messages={memoryMessages}
-        tDomain={tDomain}
-        onSelectTimestamp={vi.fn()}
-      />,
-    );
-    const withHandler = listening.container.querySelectorAll('.recharts-responsive-container').length;
-
-    cleanup();
-
-    const quiet = render(
-      <FlameGraph omRecords={omHistoryRecords} markers={markers} messages={memoryMessages} tDomain={tDomain} />,
-    );
-
-    // The click affordance lives inside the chart surface, which recharts does
-    // not lay out under jsdom; the rows themselves are the same either way.
-    expect(quiet.container.querySelectorAll('.recharts-responsive-container')).toHaveLength(withHandler);
-  });
-});
+// Timestamp selection has no test here on purpose. Both halves of it — the
+// `cursor-pointer` affordance and the chart-level `onClick` — sit on a recharts
+// component, and recharts lays out nothing under jsdom, so neither reaches the
+// DOM. What the click decides is `toSelectedT`, covered in flame-graph-data.test.ts.
 
 describe('FlameTooltip', () => {
   const entry = (name: string, value: unknown, t?: number) => ({ name, value, payload: t == null ? {} : { t } });
@@ -571,7 +553,9 @@ describe('FlameTooltip', () => {
     );
 
     expect(screen.queryByText('t')).toBeNull();
-    expect(screen.queryByText('time', { exact: true })?.textContent).toBe('time');
+    // `time` survives once, as the moment's own label — not as a reading.
+    expect(screen.getAllByText('time')).toHaveLength(1);
+    expect(screen.queryByText('x')).toBeNull();
     expect(screen.getByText('tokens')).toBeTruthy();
   });
 

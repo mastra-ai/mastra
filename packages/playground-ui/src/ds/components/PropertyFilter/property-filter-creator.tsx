@@ -101,14 +101,14 @@ export function PropertyFilterCreator({
   /**
    * Replace whatever token exists for `fieldId` with the given value. Used by
    * both single-select (radio) and multi-select (checkbox) pick-multi panels.
-   * Pass `undefined` or `[]` to remove the token entirely.
+   * An empty list means nothing is selected, which removes the token here —
+   * unlike the applied pill, where the filter stays on in a neutral state.
    */
   const replacePickMultiToken = useCallback(
-    (fieldId: string, value: string | string[] | undefined) => {
+    (fieldId: string, value: string | string[]) => {
       const existingIndex = tokens.findIndex(t => t.fieldId === fieldId);
-      const shouldRemove = value === undefined || (Array.isArray(value) && value.length === 0);
 
-      if (shouldRemove) {
+      if (Array.isArray(value) && value.length === 0) {
         if (existingIndex === -1) return;
         onTokensChange(tokens.filter((_, i) => i !== existingIndex));
         return;
@@ -296,7 +296,7 @@ type PickMultiField = Extract<PropertyFilterField, { kind: 'pick-multi' }>;
 type PickMultiMenuItemProps = {
   field: PickMultiField;
   tokens: PropertyFilterToken[];
-  onChange: (fieldId: string, value: string | string[] | undefined) => void;
+  onChange: (fieldId: string, value: string | string[]) => void;
   open: boolean;
   onToggle: (fieldId: string) => void;
   onClose: () => void;

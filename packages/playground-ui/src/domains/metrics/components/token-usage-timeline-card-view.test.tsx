@@ -25,26 +25,7 @@ const secondPoint: TokenTimelinePoint = {
   costUnit: 'usd',
 };
 
-const data: TokenTimelinePoint[] = [
-  {
-    time: 'Jun 01',
-    tsMs: new Date('2026-06-01T00:00:00.000Z').getTime(),
-    input: 1200,
-    output: 300,
-    total: 1500,
-    cost: 0.042,
-    costUnit: 'usd',
-  },
-  {
-    time: 'Jun 02',
-    tsMs: new Date('2026-06-02T00:00:00.000Z').getTime(),
-    input: 800,
-    output: 200,
-    total: 1000,
-    cost: 0.028,
-    costUnit: 'usd',
-  },
-];
+const data: TokenTimelinePoint[] = [firstPoint, secondPoint];
 
 afterEach(() => {
   cleanup();
@@ -142,7 +123,9 @@ describe('TokenUsageTimelineCardView', () => {
     render(
       <TokenUsageTimelineCardView
         data={[
-          { ...firstPoint, cost: 0, costUnit: 'usd' },
+          // Priced in another currency, so counting it would leave the card
+          // unable to name a single one — the total would disappear entirely.
+          { ...firstPoint, cost: 0, costUnit: 'eur' },
           { ...secondPoint, cost: 0.028, costUnit: 'usd' },
         ]}
         interval="1d"
@@ -153,8 +136,8 @@ describe('TokenUsageTimelineCardView', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: 'Cost' }));
 
-    // Only the priced bucket counts towards the total.
     expect(screen.getAllByText('$0.03')).toHaveLength(2);
+    expect(screen.queryByText('No cost data yet')).toBeNull();
   });
 
   it('does not let an unpriced bucket drag the currency down with it', () => {
@@ -212,17 +195,19 @@ describe('TokenUsageTimelineCardView', () => {
     expect(screen.getAllByText('0.0700 eur')).toHaveLength(2);
   });
 
-  it('shows a spinner while loading and an explanation when the load failed', () => {
-    const loading = render(<TokenUsageTimelineCardView data={data} interval="1d" isLoading isError={false} />);
+  it('shows a spinner while loading', () => {
+    const { container } = render(<TokenUsageTimelineCardView data={data} interval="1d" isLoading isError={false} />);
 
-    expect(loading.container.querySelector('svg')).toBeTruthy();
+    // The spinner itself, not whichever icon happens to be in the card.
+    expect(container.querySelector('.spinner')).toBeTruthy();
     expect(screen.queryByRole('tab')).toBeNull();
+  });
 
-    cleanup();
-
-    render(<TokenUsageTimelineCardView data={data} interval="1d" isLoading={false} isError />);
+  it('explains itself when the load failed', () => {
+    const { container } = render(<TokenUsageTimelineCardView data={data} interval="1d" isLoading={false} isError />);
 
     expect(screen.getByText('Failed to load token usage timeline')).toBeTruthy();
+    expect(container.querySelector('.spinner')).toBeNull();
     expect(screen.queryByRole('tab')).toBeNull();
   });
 

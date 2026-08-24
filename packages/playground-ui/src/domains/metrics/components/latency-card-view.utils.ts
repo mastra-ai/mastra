@@ -12,10 +12,18 @@ export function isLatencyTab(value: string): value is LatencyTab {
   return value === 'agents' || value === 'workflows' || value === 'tools';
 }
 
-/** Averages one percentile over the charted points, rounded to whole milliseconds. */
+/**
+ * Averages one percentile over the charted points, rounded to whole milliseconds.
+ * The chart hands its aggregate untyped rows, so a bucket missing the percentile
+ * counts as zero rather than turning the whole average into `NaN` on screen.
+ */
 export function averageLatency(data: Record<string, unknown>[], key: 'p50' | 'p95'): string {
   if (data.length === 0) return '0';
-  return `${Math.round(data.reduce((sum, point) => sum + (point[key] as number), 0) / data.length)}`;
+  const total = data.reduce((sum, point) => {
+    const value = point[key];
+    return sum + (typeof value === 'number' && Number.isFinite(value) ? value : 0);
+  }, 0);
+  return `${Math.round(total / data.length)}`;
 }
 
 /**

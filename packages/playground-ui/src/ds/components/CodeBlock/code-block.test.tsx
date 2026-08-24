@@ -251,7 +251,14 @@ describe('CodeBlock — copying', () => {
   it('names the copy action the way the caller asked', async () => {
     renderBlock(<CodeBlock code="npm i" copyTooltip="Copy the install command" />);
 
-    await waitFor(() => expect(screen.getByRole('button', { name: /copy/i })).toBeTruthy());
+    // The tooltip is the button's accessible name, so it has to be the exact one.
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Copy the install command' })).toBeTruthy());
+  });
+
+  it('falls back to its own name for the copy action', async () => {
+    renderBlock(<CodeBlock code="npm i" />);
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Copy to clipboard' })).toBeTruthy());
   });
 
   it('keeps a caller class alongside its own', () => {

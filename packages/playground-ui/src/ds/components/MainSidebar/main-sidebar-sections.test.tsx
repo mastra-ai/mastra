@@ -150,7 +150,7 @@ describe('MainSidebarSections', () => {
     expect(container.querySelector('[role="separator"]')).toBeNull();
   });
 
-  it('falls back to each link\u2019s own active flag without a caller predicate', () => {
+  it('falls back to each link’s own active flag without a caller predicate', () => {
     render(
       <MainSidebarSections
         sections={[

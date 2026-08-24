@@ -344,12 +344,22 @@ describe('TraceDataPanelView — span selection', () => {
     expect(onSpanSelect).toHaveBeenCalledWith(undefined);
   });
 
-  it('clears a requested span even while the trace is still loading', () => {
+  it('clears the selection when no span was asked for, without waiting for the trace', () => {
     const onSpanSelect = vi.fn();
     render(<TraceDataPanelView {...baseProps} spans={[]} isLoading onSpanSelect={onSpanSelect} />);
 
-    // No span was asked for, so there is nothing to wait for the data to confirm.
+    // Nothing was asked for, so there is nothing for the data to confirm.
     expect(onSpanSelect).toHaveBeenCalledWith(undefined);
+  });
+
+  it('holds a requested span while the trace is still loading', () => {
+    const onSpanSelect = vi.fn();
+    render(
+      <TraceDataPanelView {...baseProps} spans={[]} isLoading initialSpanId="span-1" onSpanSelect={onSpanSelect} />,
+    );
+
+    // An in-flight fetch must not wipe a selection the URL asked for.
+    expect(onSpanSelect).not.toHaveBeenCalled();
   });
 });
 

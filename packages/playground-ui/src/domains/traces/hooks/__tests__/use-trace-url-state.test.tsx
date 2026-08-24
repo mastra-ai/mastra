@@ -87,6 +87,10 @@ describe('useTraceUrlState.handleSpanChangeWithTab', () => {
 const paramsNow = () => new URLSearchParams(currentSearch);
 
 describe('useTraceUrlState date state', () => {
+  // Restored here rather than at the end of each test, so a failing assertion
+  // cannot leave fake timers running for every test after it.
+  afterEach(() => vi.useRealTimers());
+
   it('defaults to the last 24 hours without a preset in the URL', () => {
     render(<Harness initial="" />);
 
@@ -115,8 +119,6 @@ describe('useTraceUrlState date state', () => {
     expect(api.selectedDateFrom?.toISOString()).toBe(new Date(Date.now() - hours * 3600_000).toISOString());
     // A rolling window has no explicit end — it runs up to now.
     expect(api.selectedDateTo).toBeUndefined();
-
-    vi.useRealTimers();
   });
 
   it('has no start date at all for the "all" preset', () => {
@@ -163,8 +165,6 @@ describe('useTraceUrlState date state', () => {
 
     expect(api.selectedDateFrom?.toISOString()).toBe(new Date(Date.now() - 72 * 3600_000).toISOString());
     expect(api.selectedDateTo).toBeUndefined();
-
-    vi.useRealTimers();
   });
 });
 

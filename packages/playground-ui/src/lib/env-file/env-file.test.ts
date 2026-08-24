@@ -276,6 +276,20 @@ ESCAPED="quote \" and slash \\"
     });
   });
 
+  it('refuses a file that holds binary content', async () => {
+    await expect(readEnvFile(new File(['A=1\0B=2'], '.env'))).resolves.toEqual({
+      ok: false,
+      error: 'File appears to be binary. Please import a plain-text .env file.',
+    });
+  });
+
+  it('refuses a file that assigns nothing at all', async () => {
+    await expect(readEnvFile(new File(['# only a comment\n\n'], '.env'))).resolves.toEqual({
+      ok: false,
+      error: 'No valid environment variables found in the file.',
+    });
+  });
+
   it('strips a byte order mark only at the very start', () => {
     expect(parseEnvFileText('\uFEFFKEY=value')).toEqual([{ key: 'KEY', value: 'value' }]);
     // Without a leading mark there is nothing to strip: one inside a value is content.

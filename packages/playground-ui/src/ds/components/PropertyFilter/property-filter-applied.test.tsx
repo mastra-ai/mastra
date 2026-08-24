@@ -511,6 +511,35 @@ describe('PropertyFilterApplied — a pick-multi pill', () => {
     expect(onTokensChange).toHaveBeenLastCalledWith([{ fieldId: 'rootEntityType', value: 'workflow_run' }]);
   });
 
+  it('keeps the pill in a neutral state when the last choice is unticked', async () => {
+    const onTokensChange = vi.fn();
+    const multiFields: PropertyFilterField[] = [
+      {
+        id: 'rootEntityType',
+        label: 'Primitive Type',
+        kind: 'pick-multi',
+        multi: true,
+        options: [
+          { label: 'Agent', value: 'agent' },
+          { label: 'Workflow', value: 'workflow_run' },
+        ],
+      },
+    ];
+    render(
+      <PropertyFilterApplied
+        fields={multiFields}
+        tokens={[{ fieldId: 'rootEntityType', value: ['agent'] }]}
+        onTokensChange={onTokensChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'agent' }));
+    fireEvent.click(await screen.findByRole('checkbox', { name: /Agent/i }));
+
+    // The filter survives as an empty selection; only × takes the pill away.
+    expect(onTokensChange).toHaveBeenLastCalledWith([{ fieldId: 'rootEntityType', value: [] }]);
+  });
+
   it('removes the pill on request', () => {
     const onTokensChange = vi.fn();
     render(<PropertyFilterApplied fields={FIELDS} tokens={pickTokens} onTokensChange={onTokensChange} />);

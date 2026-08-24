@@ -295,7 +295,7 @@ describe('useTokenUsageTimeSeries', () => {
     expect(result.current.data?.data[0]?.input).toBe(500);
   });
 
-  it('keeps one interval\u2019s buckets out of another\u2019s cache', async () => {
+  it('keeps one window’s buckets apart, and stamps the interval on the cache key', async () => {
     serveSeries(hourlyInputTokenSeries, emptyTokenSeries);
 
     // One client for both hooks, and nothing ever goes stale, so a shared cache
@@ -312,6 +312,16 @@ describe('useTokenUsageTimeSeries', () => {
     await waitFor(() => expect(hourly.result.current.data?.interval).toBe('1h'));
 
     expect(hourly.result.current.data?.data.map(point => point.time)).toEqual(['00:05', '13:45']);
+
+    // The window alone already tells these two apart, so the interval in the key
+    // cannot be caught by behaviour — assert the shape of the key itself.
+    const intervals = queryClient
+      .getQueryCache()
+      .getAll()
+      .map(query => query.queryKey)
+      .filter(key => key[1] === 'token-usage-timeseries')
+      .map(key => key.at(-1));
+    expect(intervals.sort()).toEqual(['1d', '1h']);
   });
 
   it('returns an empty list when a response carries no series', async () => {
