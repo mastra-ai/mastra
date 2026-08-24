@@ -17,9 +17,14 @@ import { server } from '@/test/msw-server';
 const BASE_URL = 'http://localhost:4111';
 const REGISTRIES_URL = `${BASE_URL}/api/editor/builder/registries`;
 
-const makeHarness = () => {
+/**
+ * `retry` defaults to off so unrelated specs stay fast. The no-retry
+ * assertions pass `retry: true` instead, so what they observe is each hook's
+ * own `retry: false` rather than the client default masking it.
+ */
+const makeHarness = ({ retry = false }: { retry?: boolean } = {}) => {
   const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    defaultOptions: { queries: { retry }, mutations: { retry: false } },
   });
   const wrapper = ({ children }: { children: ReactNode }) => (
     <MastraReactProvider baseUrl={BASE_URL}>
@@ -375,5 +380,92 @@ describe('useInstallBuilderRegistrySkill', () => {
       );
       expect(onInstall).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('the cache entries the registry hooks write', () => {
+  it('files the registry list under a key of its own', async () => {
+    server.use(http.get(REGISTRIES_URL, () => HttpResponse.json({ registries: [] })));
+    const { wrapper, queryClient } = makeHarness();
+
+    const { result } = renderHook(() => useBuilderRegistries(), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(queryClient.getQueryData(['builder-registries'])).toEqual({ registries: [] });
+  });
+
+  it("files a popular feed under its registry, apart from that registry's previews", async () => {
+    server.use(http.get(`${REGISTRIES_URL}/skills-sh/popular`, () => HttpResponse.json({ skills: [] })));
+    const { wrapper, queryClient } = makeHarness();
+
+    const { result } = renderHook(() => usePopularBuilderRegistrySkills('skills-sh'), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(queryClient.getQueryData(['builder-registry', 'skills-sh', 'popular'])).toBeDefined();
+    expect(queryClient.getQueryData(['builder-registry', 'other', 'popular'])).toBeUndefined();
+  });
+});
+
+/**
+ * `MastraClient.request` has its own retry budget, so a 5xx reaches React Query
+ * only after the SDK has given up. What `retry: false` guarantees is that React
+ * Query does not start that sequence over — i.e. the attempt count stops
+ * growing once the error surfaces.
+ */
+describe('the registry reads do not retry a failure', () => {
+  it('surfaces a popular-feed failure after one attempt', async () => {
+    let calls = 0;
+    server.use(
+      http.get(`${REGISTRIES_URL}/skills-sh/popular`, () => {
+        calls += 1;
+        return new HttpResponse(null, { status: 500 });
+      }),
+    );
+    const { wrapper } = makeHarness({ retry: true });
+
+    const { result } = renderHook(() => usePopularBuilderRegistrySkills('skills-sh'), { wrapper });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    const afterFirstFailure = calls;
+
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    expect(calls).toBe(afterFirstFailure);
+  });
+
+  it('surfaces a preview failure after one attempt', async () => {
+    let calls = 0;
+    server.use(
+      http.get(`${REGISTRIES_URL}/skills-sh/preview`, () => {
+        calls += 1;
+        return new HttpResponse(null, { status: 500 });
+      }),
+    );
+    const { wrapper } = makeHarness({ retry: true });
+
+    const { result } = renderHook(() => useBuilderRegistryPreview('skills-sh', 'acme', 'skills', 'a/SKILL.md'), {
+      wrapper,
+    });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    const afterFirstFailure = calls;
+
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    expect(calls).toBe(afterFirstFailure);
+  });
+
+  it('surfaces a registry-list failure after one attempt', async () => {
+    let calls = 0;
+    server.use(
+      http.get(REGISTRIES_URL, () => {
+        calls += 1;
+        return new HttpResponse(null, { status: 500 });
+      }),
+    );
+    const { wrapper } = makeHarness({ retry: true });
+
+    const { result } = renderHook(() => useBuilderRegistries(), { wrapper });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    const afterFirstFailure = calls;
+
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    expect(calls).toBe(afterFirstFailure);
   });
 });

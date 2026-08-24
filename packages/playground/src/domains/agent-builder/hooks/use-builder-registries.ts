@@ -27,6 +27,9 @@ export function useBuilderRegistries(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ['builder-registries'],
     queryFn: (): Promise<ListBuilderRegistriesResponse> => client.listBuilderRegistries(),
+    // React Query treats `enabled: undefined` exactly like `enabled: true`, so
+    // `??` and `&&` cannot be told apart here.
+    // Stryker disable next-line LogicalOperator
     enabled: options?.enabled ?? true,
     retry: false,
   });
@@ -56,6 +59,9 @@ export function usePopularBuilderRegistrySkills(registryId: string | undefined) 
   return useQuery({
     queryKey: ['builder-registry', registryId, 'popular'],
     queryFn: (): Promise<BuilderRegistryPopularResponse> => {
+      // Unreachable: `enabled` below already keeps the query idle without a
+      // registry. The throw only narrows `string | undefined` for TypeScript.
+      // Stryker disable next-line ConditionalExpression
       if (!registryId) throw new Error('Registry ID is required');
       return client.getBuilderRegistryPopular(registryId, { limit: 10, offset: 0 });
     },
@@ -79,6 +85,9 @@ export function useBuilderRegistryPreview(
   return useQuery({
     queryKey: ['builder-registry', registryId, 'preview', owner, repo, skillPath],
     queryFn: async (): Promise<string> => {
+      // Unreachable: `enabled` below already requires all four. The throw only
+      // narrows `string | undefined` for TypeScript.
+      // Stryker disable next-line ConditionalExpression,LogicalOperator,StringLiteral
       if (!registryId || !owner || !repo || !skillPath) {
         throw new Error('registryId, owner, repo, and skillPath are required');
       }

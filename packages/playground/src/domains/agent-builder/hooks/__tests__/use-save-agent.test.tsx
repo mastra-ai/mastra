@@ -41,7 +41,8 @@ const renderSave = ({
   patchBody,
 }: {
   agentId: string;
-  availableAgentTools: AgentTool[];
+  /** Omit to exercise the hook's own default for the tool and skill lists. */
+  availableAgentTools?: AgentTool[];
   defaultValues: AgentBuilderEditFormValues;
   capabilities?: AuthCapabilities;
   silent?: boolean;
@@ -83,9 +84,15 @@ const renderSave = ({
     );
   };
 
-  const { result } = renderHook(() => useSaveAgent({ agentId, availableAgentTools, silent, onSuccess }), {
-    wrapper: Wrapper,
-  });
+  const { result } = renderHook(
+    () =>
+      useSaveAgent(
+        availableAgentTools === undefined
+          ? { agentId, silent, onSuccess }
+          : { agentId, availableAgentTools, silent, onSuccess },
+      ),
+    { wrapper: Wrapper },
+  );
 
   return { hook: result, captured };
 };
@@ -514,6 +521,21 @@ describe('useSaveAgent', () => {
 
       expect(toast.success).not.toHaveBeenCalled();
       expect(onSuccess).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when the caller names no available tools or skills', () => {
+    it('still saves the form selection, just without any catalogue metadata', async () => {
+      const { hook, captured } = renderSave({ agentId: 'existing-id', defaultValues: baseValues });
+
+      await act(async () => {
+        await hook.current.save({ ...baseValues, tools: { weather: true }, skills: { helper: true } });
+      });
+
+      // The form's selection is authoritative; the catalogue only supplies the
+      // details, so an empty one yields a bare entry rather than dropping it.
+      expect(captured.body?.tools).toEqual({ weather: {} });
+      expect(captured.body).toHaveProperty('browser');
     });
   });
 });

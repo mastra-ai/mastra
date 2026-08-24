@@ -1,14 +1,14 @@
 import type { CreateStoredSkillParams, StoredSkillFileNode } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { AgentBuilderEditFormValues } from '../../schemas';
-import { useCreateSkillTool } from '../use-create-skill-tool';
+import { CREATE_SKILL_TOOL_NAME, useCreateSkillTool } from '../use-create-skill-tool';
 import { authEnabledWritableCapabilities } from './fixtures/auth';
 import { makeStoredSkill } from './fixtures/stored-skills';
 import { extractSkillInstructions } from '@/domains/agents/components/agent-cms-pages/skill-file-tree-utils';
@@ -68,6 +68,9 @@ const renderCreateSkillTool = (options: { availableWorkspaces?: { id: string; na
       defaultValues: { name: '', description: '', instructions: '', tools: {}, agents: {}, skills: {} },
     });
     formRef.current = methods;
+    // RHF's formState is a proxy: subscribe during render so the tool's writes
+    // are tracked as dirty edits.
+    void methods.formState.isDirty;
     return (
       <MastraReactProvider baseUrl={BASE_URL}>
         <QueryClientProvider client={queryClient}>
@@ -391,6 +394,68 @@ describe('useCreateSkillTool', () => {
       await runTool(result.current.tool, { name: 'S', description: 'D', instructions: 'I' });
 
       expect(form().getValues('skills')).toEqual({});
+    });
+  });
+
+  describe('what it tells the model about itself', () => {
+    it('exposes the canonical tool id', () => {
+      seedWritableAuth();
+      const { result } = renderCreateSkillTool();
+
+      expect(result.current.tool.id).toBe(CREATE_SKILL_TOOL_NAME);
+      expect(result.current.tool.id).toBe('createSkillTool');
+    });
+
+    it('says what the tool does and which fields it needs', () => {
+      seedWritableAuth();
+      const { result } = renderCreateSkillTool();
+      const description = result.current.tool.description ?? '';
+
+      expect(description).toContain('Create a new stored skill');
+      expect(description).toContain('attach it to the agent currently being edited');
+      expect(description).toContain('`name`, `description`, and `instructions`');
+      expect(description).toContain('SKILL.md');
+      expect(description).toContain('required when more than one workspace is available');
+      expect(description).toContain('defaults to "private"');
+    });
+  });
+
+  describe('when the model sends a workspace id of the wrong shape', () => {
+    it.each([
+      ['a number', 42],
+      ['an object', { id: 'ws-1' }],
+      ['null', null],
+    ])('ignores %s and falls back to the sole workspace', async (_label, workspaceId) => {
+      seedWritableAuth();
+      seedWorkspaceWrite();
+      const calls = seedSkillCreate();
+      const { result } = renderCreateSkillTool({ availableWorkspaces: [{ id: 'ws-only', name: 'Only' }] });
+
+      await act(async () => {
+        await runTool(result.current.tool, {
+          name: 'S',
+          description: 'D',
+          instructions: 'I',
+          workspaceId,
+        } as never);
+      });
+
+      await waitFor(() => expect(calls.length).toBe(1));
+    });
+  });
+
+  describe('once the skill is attached', () => {
+    it('marks the form dirty so the save button lights up', async () => {
+      seedWritableAuth();
+      seedWorkspaceWrite();
+      seedSkillCreate();
+      const { result, form } = renderCreateSkillTool({ availableWorkspaces: [{ id: 'ws-only', name: 'Only' }] });
+
+      await act(async () => {
+        await runTool(result.current.tool, { name: 'S', description: 'D', instructions: 'I' } as never);
+      });
+
+      await waitFor(() => expect(form().formState.isDirty).toBe(true));
     });
   });
 });

@@ -97,6 +97,9 @@ export function useCreateSkillTool({ availableWorkspaces = [] }: UseCreateSkillT
         } catch (err) {
           return {
             success: false,
+            // The mutation rejects with an Error, so the fallback only
+            // satisfies the `unknown` narrowing — it can never be reached.
+            // Stryker disable next-line StringLiteral
             error: err instanceof Error ? err.message : 'Failed to create skill',
           };
         }

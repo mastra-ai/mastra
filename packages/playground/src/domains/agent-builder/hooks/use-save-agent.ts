@@ -64,6 +64,9 @@ export function useSaveAgent({
         if (policyDetails) {
           toast.error(policyDetails.message);
         } else {
+          // The mutation rejects with an Error, so the fallback only satisfies
+          // the `unknown` narrowing — it can never be reached.
+          // Stryker disable next-line StringLiteral
           toast.error(`Failed to save agent: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
         throw error;

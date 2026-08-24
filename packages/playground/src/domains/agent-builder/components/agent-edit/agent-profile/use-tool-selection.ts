@@ -17,9 +17,16 @@ export const useToolSelection = () => {
   const writeIntegration = useCallback(
     (providerId: string, mutate: (config: ToolProvidersFormValue[string]) => ToolProvidersFormValue[string]) => {
       const current = getValues('toolProviders') ?? {};
+      // The empty maps are only a shape for the mutator to read: both callers
+      // below replace `tools` and `connections` wholesale, so an absent entry
+      // and this default produce the same write.
+      // Stryker disable next-line ObjectLiteral
       const existing = current[providerId] ?? { tools: {}, connections: {} };
       setValue('toolProviders', { ...current, [providerId]: mutate(existing) }, { shouldDirty: true });
     },
+    // `getValues` and `setValue` are stable across renders, so an empty
+    // dependency list would memoize identically.
+    // Stryker disable next-line ArrayDeclaration
     [getValues, setValue],
   );
 
@@ -44,6 +51,9 @@ export const useToolSelection = () => {
       const current = getValues(fieldName) ?? {};
       setValue(fieldName, { ...current, [item.id]: next }, { shouldDirty: true });
     },
+    // Every dependency is stable across renders, so an empty dependency list
+    // would memoize identically.
+    // Stryker disable next-line ArrayDeclaration
     [getValues, setValue, writeIntegration],
   );
 
@@ -74,6 +84,9 @@ export const useToolSelection = () => {
         return { ...existing, tools, connections };
       });
     },
+    // `writeIntegration` is itself memoized on stable inputs, so an empty
+    // dependency list would memoize identically.
+    // Stryker disable next-line ArrayDeclaration
     [writeIntegration],
   );
 

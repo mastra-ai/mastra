@@ -169,6 +169,33 @@ describe('toggling an integration tool', () => {
     expect(Object.keys(form().getValues('toolProviders')!)).toEqual(['composio', 'other']);
   });
 
+  it('marks the form dirty so the save button lights up', async () => {
+    const { selection, form } = renderSelection();
+
+    await run(() => selection().toggle(integrationTool(), true));
+
+    expect(form().formState.isDirty).toBe(true);
+  });
+
+  it('survives a stored provider entry that records no connections', async () => {
+    const { selection, form } = renderSelection({
+      toolProviders: { composio: { tools: {} } as never },
+    });
+
+    await run(() => selection().toggle(integrationTool(), true));
+
+    expect(form().getValues('toolProviders')?.composio.tools).toHaveProperty('GMAIL_FETCH_EMAILS');
+  });
+
+  it('routes by the row type, not by the presence of provider metadata', async () => {
+    const { selection, form } = renderSelection();
+
+    await run(() => selection().toggle(nativeTool({ id: 'weather', providerId: 'composio', toolkit: 'gmail' }), true));
+
+    expect(form().getValues('tools')).toEqual({ weather: true });
+    expect(form().getValues('toolProviders')).toBeUndefined();
+  });
+
   it('preserves connections already pinned on the provider', async () => {
     const { selection, form } = renderSelection({
       toolProviders: {
@@ -225,6 +252,24 @@ describe('pinning a connection after OAuth', () => {
     await run(() => selection().pinConnection(integrationTool(), 'conn-1'));
 
     expect(form().getValues('toolProviders')?.composio.tools.GMAIL_FETCH_EMAILS.description).toBe('Edited label');
+  });
+
+  it('marks the form dirty so the save button lights up', async () => {
+    const { selection, form } = renderSelection();
+
+    await run(() => selection().pinConnection(integrationTool(), 'conn-1'));
+
+    expect(form().formState.isDirty).toBe(true);
+  });
+
+  it('survives a stored provider entry that records no connections', async () => {
+    const { selection, form } = renderSelection({
+      toolProviders: { composio: { tools: {} } as never },
+    });
+
+    await run(() => selection().pinConnection(integrationTool(), 'conn-1'));
+
+    expect(form().getValues('toolProviders')?.composio.connections?.gmail).toHaveLength(1);
   });
 
   it('appends a second connection alongside the first', async () => {

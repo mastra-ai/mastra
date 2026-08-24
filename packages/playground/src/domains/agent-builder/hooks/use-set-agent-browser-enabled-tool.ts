@@ -29,6 +29,9 @@ export function useSetAgentBrowserEnabledTool() {
           return { success: true };
         },
       }),
+    // `useFormContext` hands back the same object on every render, so an empty
+    // dependency list would memoize identically.
+    // Stryker disable next-line ArrayDeclaration
     [formMethods],
   );
 }
