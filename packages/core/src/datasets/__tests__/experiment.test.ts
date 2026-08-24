@@ -99,6 +99,10 @@ describe('Experiment (via Dataset)', () => {
     expect(result.status).toBe('completed');
     expect(result.totalItems).toBe(2);
     expect(result.succeededCount).toBe(2);
+    expect(result.results.every(item => item.metadata?.source === 'test')).toBe(true);
+
+    const persisted = await ds.listExperimentResults({ experimentId: result.experimentId });
+    expect(persisted.results.every(item => item.metadata?.source === 'test')).toBe(true);
   });
 
   // 2. Inline task with generic type params

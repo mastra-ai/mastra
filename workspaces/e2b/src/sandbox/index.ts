@@ -209,7 +209,6 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
   private _isRetrying = false;
   private readonly timeout: number;
   private readonly templateSpec?: TemplateSpec;
-  private readonly env: Record<string, string>;
   private readonly metadata: Record<string, unknown>;
   private readonly network?: SandboxNetworkOpts;
   private readonly lifecycle: SandboxLifecycle;
@@ -227,13 +226,12 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
     super({
       ...options,
       name: 'E2BSandbox',
-      processes: new E2BProcessManager({ env: options.env ?? {} }),
+      processes: new E2BProcessManager(),
     });
 
     this.id = options.id ?? this.generateId();
     this.timeout = options.timeout ?? 300_000; // 5 minutes;
     this.templateSpec = options.template;
-    this.env = options.env ?? {};
     this.metadata = options.metadata ?? {};
     this.network = options.network;
     // Always sent explicitly: the E2B API defaults to 'kill' when lifecycle is omitted.
@@ -1038,9 +1036,8 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
     if (!error) return false;
     const errorStr = String(error);
     return (
-      errorStr.includes('sandbox was not found') ||
+      /\b(?:paused\s+)?sandbox(?:\s+\S+)?\s+(?:was\s+)?not found\b/i.test(errorStr) ||
       errorStr.includes('Sandbox is probably not running') ||
-      errorStr.includes('Sandbox not found') ||
       errorStr.includes('sandbox has been killed')
     );
   }

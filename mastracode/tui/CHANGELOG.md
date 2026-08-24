@@ -1,5 +1,37 @@
 # mastracode
 
+## 0.36.0-alpha.7
+
+### Patch Changes
+
+- Added browser-safe thinking command helpers so Mastra Code interfaces can share command parsing, model capabilities, and default resolution. ([#22198](https://github.com/mastra-ai/mastra/pull/22198))
+
+  ```ts
+  import { parseThinkCommand, resolveDefaultThinkingLevel } from '@mastra/code-sdk/thinking';
+
+  const action = parseThinkCommand('high');
+  const fallback = resolveDefaultThinkingLevel({ globalDefault: 'medium', modeDefaults: { plan: 'high' } }, 'plan');
+  ```
+
+- Updated dependencies [[`db6940e`](https://github.com/mastra-ai/mastra/commit/db6940ea63b76df2bc0a7c105a493342b9eaf0ec), [`ae8790c`](https://github.com/mastra-ai/mastra/commit/ae8790c4bfaa088d2ab279d1dcc06f326b9fd109), [`04a815f`](https://github.com/mastra-ai/mastra/commit/04a815fc8971d29e97fcdcc5008a1eb472fc00ff), [`dfb7efa`](https://github.com/mastra-ai/mastra/commit/dfb7efa19e348b5a788be2d954362cbae12379d6), [`ee0c1a0`](https://github.com/mastra-ai/mastra/commit/ee0c1a097de3acebe7dfc8c136479d4cb5b5b451), [`befbfc2`](https://github.com/mastra-ai/mastra/commit/befbfc260d5ec5ece7cdb65a80e94292f428d4c9), [`04a815f`](https://github.com/mastra-ai/mastra/commit/04a815fc8971d29e97fcdcc5008a1eb472fc00ff), [`db6940e`](https://github.com/mastra-ai/mastra/commit/db6940ea63b76df2bc0a7c105a493342b9eaf0ec), [`cced745`](https://github.com/mastra-ai/mastra/commit/cced745a056ec2225c5bc702e32d848847aa8b65)]:
+  - @mastra/libsql@1.22.0-alpha.1
+  - @mastra/core@1.62.0-alpha.7
+  - @mastra/code-sdk@1.5.0-alpha.7
+  - @mastra/mcp@1.17.2-alpha.2
+  - @mastra/memory@1.28.0-alpha.2
+
+## 0.36.0-alpha.6
+
+### Patch Changes
+
+- Improved the provider device-code sign-in dialog. The code is now the main element with an inline copy button, and copy failures show an error instead of failing silently. ([#22186](https://github.com/mastra-ai/mastra/pull/22186))
+
+- Updated dependencies [[`c8e4cea`](https://github.com/mastra-ai/mastra/commit/c8e4ceac9a390d78c8327dff3cdb2861dd71957f), [`ed01e9a`](https://github.com/mastra-ai/mastra/commit/ed01e9a807514a904374bf687a7b8f18750f6f78), [`a981e66`](https://github.com/mastra-ai/mastra/commit/a981e662ed8fc476292375d135cb14a2681efedf), [`ae2dc20`](https://github.com/mastra-ai/mastra/commit/ae2dc201dbb48466c3cf77e3d4ef04826132b2db), [`4e9a228`](https://github.com/mastra-ai/mastra/commit/4e9a2283d5fd6ed1b70a2751eb3dc2cbf82ada20), [`997cf5b`](https://github.com/mastra-ai/mastra/commit/997cf5bb3fc600b30aa20e048b663e48e0e1305a), [`63041eb`](https://github.com/mastra-ai/mastra/commit/63041eb4c50b520a0a80e03d4cd6ea99f67715a0)]:
+  - @mastra/core@1.62.0-alpha.6
+  - @mastra/pg@1.22.0-alpha.3
+  - @mastra/mcp@1.17.2-alpha.1
+  - @mastra/code-sdk@1.5.0-alpha.6
+
 ## 0.36.0-alpha.5
 
 ### Patch Changes

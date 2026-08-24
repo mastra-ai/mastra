@@ -1,5 +1,58 @@
 # @mastra/core
 
+## 1.62.0-alpha.7
+
+### Patch Changes
+
+- Route channel slash commands through AgentChannels handlers ([#22223](https://github.com/mastra-ai/mastra/pull/22223))
+
+- Fixed cleared AgentController session preferences so they are removed from thread metadata and stay cleared after restart. ([#22198](https://github.com/mastra-ai/mastra/pull/22198))
+
+- Added a `denied` flag to the agent controller `tool_end` event. Approval-denied tool calls and tools aborted while parked at an approval gate already emit `tool_end` with `isError: false` (the tool didn't fail — it never ran), which made them indistinguishable from a real successful completion. Subscribers that need to know whether the tool actually did work can now gate on `denied !== true`. ([#22213](https://github.com/mastra-ai/mastra/pull/22213))
+
+  ```ts
+  session.subscribe(event => {
+    if (event.type !== 'tool_end') return;
+    if (event.isError) return; // tool ran and failed
+    if (event.denied) return; // tool was approval-denied or aborted before it ran
+    // ...tool actually executed successfully
+  });
+  ```
+
+## 1.62.0-alpha.6
+
+### Patch Changes
+
+- Fixed semantic recall initialization to fail instead of silently selecting the default vector index when embedding dimensions cannot be determined. ([#22171](https://github.com/mastra-ai/mastra/pull/22171))
+
+- Fixed `timeTravel()` on a failed `.foreach()` step re-running iterations that had already succeeded, which duplicated their side effects (publishing, billing, uploads, notifications). ([#22133](https://github.com/mastra-ai/mastra/pull/22133))
+
+  A failed foreach now records which iterations completed, so re-entering the step only runs the ones that did not.
+
+  ```ts
+  const run = await workflow.createRunAsync();
+  await run.start({ inputData: { items: [1, 2] } }); // item 2 fails
+
+  // Previously both items ran again. Now only item 2 runs.
+  await run.timeTravel({ step: 'process-item' });
+  ```
+
+  Fixes #21749
+
+- Prevent stale-build instances from executing scheduled workflow runs. ([#22125](https://github.com/mastra-ai/mastra/pull/22125))
+
+  A scheduled fire carries only a workflow id, so whichever process consumes it resolves the step graph from its _own_ registry. During a rollout a not-yet-cycled instance from the previous deploy could therefore run an outdated step graph — skipping steps the current build had added, including gates meant to stop the workflow from running at all — while HTTP runs of the same workflow on the same deployment executed the current graph (#19169).
+
+  This is now fenced on both sides:
+
+  - Declarative schedule rows record a hash of the workflow's serialized step graph. The scheduler refuses to claim a due fire when its local definition doesn't match the row, leaving the fire for an instance running the current build. If no instance claims it for several consecutive ticks, the scheduler escalates to an error and records a failed trigger rather than stalling silently — it never forces a stale fire through.
+  - When the claiming process also runs workflow execution, the fire is published `localOnly` so the instance that verified the definition is the instance that runs it. Scheduler-only deployments, where pinning locally would strand the fire, keep publishing to the shared topic.
+  - Fires that do reach the shared topic now carry the schedule's definition hash, and a consumer whose locally registered workflow hashes differently refuses the run and records a failed trigger instead of executing an outdated graph.
+
+  Rows without a hash (legacy or imperatively created schedules) and agent schedules fail open and are unaffected.
+
+- Documented that `server.middleware` handlers use Hono's signature and which serving paths run them. ([#22161](https://github.com/mastra-ai/mastra/pull/22161))
+
 ## 1.62.0-alpha.5
 
 ### Patch Changes

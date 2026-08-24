@@ -18,8 +18,8 @@ import {
   getUserSession,
   listUserSessions,
   USER_SESSION_BRANCH_PREFIX,
-} from '../ui/domains/workspaces/services/github';
-import type { FactoryUserSession } from '../ui/domains/workspaces/services/github';
+} from '../ui/domains/workspaces/services/user-sessions';
+import type { FactoryUserSession } from '../ui/domains/workspaces/services/user-sessions';
 
 interface AgentControllerThreadsScope {
   agentControllerId?: string;

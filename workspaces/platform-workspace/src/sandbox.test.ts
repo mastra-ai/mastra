@@ -139,6 +139,31 @@ describe('PlatformSandbox', () => {
     expect(init.data).toEqual({ command: 'echo ok', cwd: '/workspace', env: { A: '1' } });
   });
 
+  it('setEnv after construction reaches subsequent exec frames', async () => {
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+      .mockResolvedValueOnce(leaseResponse());
+    const { factory, sockets } = fakeExecSocket({ exitCode: 0, stdout: 'ok' });
+
+    const sandbox = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      fetch: fetchMock,
+      webSocketFactory: factory,
+    });
+
+    await sandbox._start();
+    sandbox.setEnv(env => ({ ...env, GH_TOKEN: 'tok_1' }));
+    const result = await sandbox.executeCommand('echo', ['ok'], { env: { A: '1' } });
+
+    expect(result).toMatchObject({ success: true, exitCode: 0 });
+    const init = JSON.parse(sockets[0]!.sent[0]!) as { data: Record<string, unknown> };
+    expect(init.data).toEqual({ command: 'echo ok', env: { GH_TOKEN: 'tok_1', A: '1' } });
+  });
+
   it('uses E2B direct exec for E2B leases instead of the Railway WebSocket protocol', async () => {
     vi.stubEnv('SANDBOX_PROVIDER', 'e2b');
     vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');

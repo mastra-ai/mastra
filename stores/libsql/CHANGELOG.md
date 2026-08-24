@@ -1,5 +1,33 @@
 # @mastra/libsql
 
+## 1.22.0-alpha.1
+
+### Minor Changes
+
+- Added a reusable SQLite client contract so storage adapters can use compatible SQLite drivers. ([#22181](https://github.com/mastra-ai/mastra/pull/22181))
+
+  ```typescript
+  import type { SqliteClient } from '@mastra/libsql';
+
+  const client: SqliteClient = createCompatibleSqliteClient();
+  ```
+
+### Patch Changes
+
+- Added native Turso Database file storage for Mastra agents, workflows, memory, and other storage domains. ([#22181](https://github.com/mastra-ai/mastra/pull/22181))
+
+  ```typescript
+  import { TursoStore } from '@mastra/turso';
+
+  const storage = new TursoStore({
+    id: 'local-storage',
+    path: './mastra.db',
+  });
+  ```
+
+- Updated dependencies [[`ae8790c`](https://github.com/mastra-ai/mastra/commit/ae8790c4bfaa088d2ab279d1dcc06f326b9fd109), [`04a815f`](https://github.com/mastra-ai/mastra/commit/04a815fc8971d29e97fcdcc5008a1eb472fc00ff), [`cced745`](https://github.com/mastra-ai/mastra/commit/cced745a056ec2225c5bc702e32d848847aa8b65)]:
+  - @mastra/core@1.62.0-alpha.7
+
 ## 1.22.0-alpha.0
 
 ### Minor Changes

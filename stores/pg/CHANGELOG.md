@@ -1,5 +1,46 @@
 # @mastra/pg
 
+## 1.22.0-alpha.3
+
+### Minor Changes
+
+- Added namespace isolation to PgVector operations so applications can safely reuse vector indexes across tenants. Existing vectors remain available in the default namespace. ([#22149](https://github.com/mastra-ai/mastra/pull/22149))
+
+  ```ts
+  await pgVector.upsert({
+    indexName: 'documents',
+    vectors,
+    ids,
+    namespace: 'tenant-123',
+  });
+
+  const results = await pgVector.query({
+    indexName: 'documents',
+    queryVector,
+    namespace: 'tenant-123',
+  });
+  ```
+
+### Patch Changes
+
+- Fixed `PgVector` scanning every vector table on startup. Constructing a `PgVector` warms an index cache in the background, and that warmup asked for full index statistics, which include `SELECT COUNT(*)` per table. On a large index that is a full table scan per index, per process start, and the warmup never used the count it paid for. `query()`, `upsert()`, `updateVector()` and the "has this index changed?" check in `createIndex()` paid for the same count. ([#22180](https://github.com/mastra-ai/mastra/pull/22180))
+
+  These paths now read only the index metadata they use (dimension, metric, index type, vector type, index configuration), all of which comes from the Postgres catalog at a cost that does not grow with the size of the table.
+
+  `describeIndex()` is unchanged and still returns an exact `count`:
+
+  ```ts
+  const stats = await pgVector.describeIndex({ indexName: 'embeddings' });
+  console.log(stats.count); // exact row count, as before
+  ```
+
+  Concurrent callers on a cold cache also no longer duplicate the lookup: the first call is shared with everyone waiting on it, and a failed lookup is not cached.
+
+  Fixes [#21952](https://github.com/mastra-ai/mastra/issues/21952).
+
+- Updated dependencies [[`c8e4cea`](https://github.com/mastra-ai/mastra/commit/c8e4ceac9a390d78c8327dff3cdb2861dd71957f), [`ed01e9a`](https://github.com/mastra-ai/mastra/commit/ed01e9a807514a904374bf687a7b8f18750f6f78), [`4e9a228`](https://github.com/mastra-ai/mastra/commit/4e9a2283d5fd6ed1b70a2751eb3dc2cbf82ada20), [`63041eb`](https://github.com/mastra-ai/mastra/commit/63041eb4c50b520a0a80e03d4cd6ea99f67715a0)]:
+  - @mastra/core@1.62.0-alpha.6
+
 ## 1.22.0-alpha.2
 
 ### Minor Changes
