@@ -43,6 +43,38 @@ describe('isIosSafariLike', () => {
     expect(isIosSafariLike()).toBe(false);
   });
 
+  it('is false for Chrome on iOS', () => {
+    stubNavigator(
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/126.0.6478.54 Mobile/15E148 Safari/604.1',
+      5,
+    );
+    expect(isIosSafariLike()).toBe(false);
+  });
+
+  it('is false for Firefox on iOS', () => {
+    stubNavigator(
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) FxiOS/127.0 Mobile/15E148 Safari/605.1.15',
+      5,
+    );
+    expect(isIosSafariLike()).toBe(false);
+  });
+
+  it('is false for Edge on iOS', () => {
+    stubNavigator(
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) EdgiOS/126.0.2592.56 Version/17.0 Mobile/15E148 Safari/604.1',
+      5,
+    );
+    expect(isIosSafariLike()).toBe(false);
+  });
+
+  it('is false for Opera on iOS', () => {
+    stubNavigator(
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) OPT/4.5.1 Mobile/15E148 Safari/604.1',
+      5,
+    );
+    expect(isIosSafariLike()).toBe(false);
+  });
+
   it('is false for Android Chrome', () => {
     stubNavigator(
       'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36',

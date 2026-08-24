@@ -154,6 +154,23 @@ describe('usePwaInstall', () => {
     expect(result.current.canInstall).toBe(false);
   });
 
+  it('becomes eligible again when the dismissal window expires without a remount', () => {
+    vi.useFakeTimers();
+    try {
+      const { result } = renderHook(() => usePwaInstall());
+      const { event } = createInstallPromptEvent('accepted');
+      act(() => void window.dispatchEvent(event));
+
+      act(() => result.current.dismiss());
+      expect(result.current.canInstall).toBe(false);
+
+      act(() => void vi.advanceTimersByTime(INSTALL_BANNER_DISMISS_DURATION_MS + 1000));
+      expect(result.current.canInstall).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('becomes eligible again after the dismissal window expires', () => {
     localStorage.setItem(DISMISSED_KEY, String(Date.now() - INSTALL_BANNER_DISMISS_DURATION_MS - 1000));
     const { result } = renderHook(() => usePwaInstall());

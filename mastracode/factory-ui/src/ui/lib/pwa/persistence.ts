@@ -21,6 +21,19 @@ export function wasRecentlyDismissed(): boolean {
   }
 }
 
+/** Milliseconds until the current dismissal expires, or 0 if not dismissed. */
+export function getDismissalRemainingMs(): number {
+  try {
+    const stored = localStorage.getItem(DISMISSED_AT_KEY);
+    if (!stored) return 0;
+    const dismissedAt = Number(stored);
+    if (!Number.isFinite(dismissedAt)) return 0;
+    return Math.max(0, dismissedAt + INSTALL_BANNER_DISMISS_DURATION_MS - Date.now());
+  } catch {
+    return 0;
+  }
+}
+
 export function markDismissed(): void {
   try {
     localStorage.setItem(DISMISSED_AT_KEY, String(Date.now()));

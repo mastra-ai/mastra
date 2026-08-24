@@ -1,7 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { isIosSafariLike } from './platform';
-import { isManuallyInstalled, markDismissed, markManuallyInstalled, wasRecentlyDismissed } from './persistence';
+import {
+  getDismissalRemainingMs,
+  isManuallyInstalled,
+  markDismissed,
+  markManuallyInstalled,
+  wasRecentlyDismissed,
+} from './persistence';
 import { isRunningStandalone } from './standalone';
 
 /** Non-standard Chromium event; not in lib.dom, so typed locally. */
@@ -58,7 +64,14 @@ export function usePwaInstall(): PwaInstall {
     };
   }, []);
 
-  const install = useCallback(async () => {
+  // While dismissed, schedule the banner to reappear when the window expires.
+  useEffect(() => {
+    if (!dismissed) return;
+    const timeout = setTimeout(() => setDismissed(false), getDismissalRemainingMs());
+    return () => clearTimeout(timeout);
+  }, [dismissed]);
+
+  const install = async () => {
     if (state === 'manual-install') {
       // No install API on iOS: showing the instructions is our best proxy.
       markManuallyInstalled();
@@ -72,12 +85,12 @@ export function usePwaInstall(): PwaInstall {
     await deferredPrompt.prompt();
     const { outcome } = await deferredPrompt.userChoice;
     setState(outcome === 'accepted' ? 'installed' : 'unavailable');
-  }, [state]);
+  };
 
-  const dismiss = useCallback(() => {
+  const dismiss = () => {
     markDismissed();
     setDismissed(true);
-  }, []);
+  };
 
   const isInstalled = state === 'installed';
   const installable = state === 'native-prompt-available' || state === 'manual-install';
