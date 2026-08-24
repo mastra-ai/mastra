@@ -42,6 +42,15 @@ describe('useIsToolProviderAdmin', () => {
     await waitFor(() => expect(result.current).toBe(true));
   });
 
+  it('is admin when only one of several permissions grants the bypass', async () => {
+    server.use(withPermissions(['agents:read', 'tool-providers:read', 'tool-providers:admin']));
+
+    const { wrapper } = makeWrapper();
+    const { result } = renderHook(() => useIsToolProviderAdmin(), { wrapper });
+
+    await waitFor(() => expect(result.current).toBe(true));
+  });
+
   it('is not admin with unrelated or differently-scoped permissions', async () => {
     server.use(withPermissions(['agents:*', 'tool-providers:read']));
 
@@ -49,6 +58,16 @@ describe('useIsToolProviderAdmin', () => {
     const { result } = renderHook(() => useIsToolProviderAdmin(), { wrapper });
 
     // Wait for the auth query to settle, then assert it never flips to admin.
+    await waitForAuthSettled(queryClient);
+    expect(result.current).toBe(false);
+  });
+
+  it('is not admin when the permission list is empty', async () => {
+    server.use(withPermissions([]));
+
+    const { wrapper, queryClient } = makeWrapper();
+    const { result } = renderHook(() => useIsToolProviderAdmin(), { wrapper });
+
     await waitForAuthSettled(queryClient);
     expect(result.current).toBe(false);
   });

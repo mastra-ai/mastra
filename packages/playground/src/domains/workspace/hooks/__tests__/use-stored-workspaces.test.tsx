@@ -65,4 +65,28 @@ describe('useStoredWorkspaces', () => {
     expect(onFetch).not.toHaveBeenCalled();
     expect(result.current.fetchStatus).toBe('idle');
   });
+
+  it('keeps each set of list params in its own cache entry', async () => {
+    server.use(
+      http.get(`${BASE_URL}/api/stored/workspaces`, ({ request }) => {
+        const page = new URL(request.url).searchParams.get('page');
+        return HttpResponse.json({
+          workspaces: [{ id: `ws-page-${page}`, name: `WS ${page}`, status: 'active', createdAt: '', updatedAt: '' }],
+          total: 2,
+          page: Number(page),
+          perPage: 1,
+          hasMore: page === '1',
+        });
+      }),
+    );
+    const sharedWrapper = wrapper();
+
+    const first = renderHook(() => useStoredWorkspaces({ page: 1, perPage: 1 }), { wrapper: sharedWrapper });
+    await waitFor(() => expect(first.result.current.data?.workspaces[0]?.id).toBe('ws-page-1'));
+
+    const second = renderHook(() => useStoredWorkspaces({ page: 2, perPage: 1 }), { wrapper: sharedWrapper });
+    await waitFor(() => expect(second.result.current.data?.workspaces[0]?.id).toBe('ws-page-2'));
+
+    expect(first.result.current.data?.workspaces[0]?.id).toBe('ws-page-1');
+  });
 });

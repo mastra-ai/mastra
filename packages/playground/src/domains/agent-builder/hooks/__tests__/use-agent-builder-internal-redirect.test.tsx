@@ -150,4 +150,39 @@ describe('useAgentBuilderInternalRedirect', () => {
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current).toEqual({ isLoading: false, hasAgents: false });
   });
+
+  it('stays isLoading=true after the draft query lands but the published one is still pending', async () => {
+    const gate = deferred();
+    stubStoredAgents(async status => {
+      if (status === 'draft') return HttpResponse.json(oneDraftAgent);
+      await gate.promise;
+      return HttpResponse.json(emptyStoredAgents);
+    });
+
+    const { result } = renderHook(() => useAgentBuilderInternalRedirect(), { wrapper: createWrapper() });
+
+    // hasAgents flipping proves the draft query settled while the other is pending.
+    await waitFor(() => expect(result.current.hasAgents).toBe(true));
+    expect(result.current.isLoading).toBe(true);
+
+    gate.resolve();
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+  });
+
+  it('stays isLoading=true after the published query lands but the draft one is still pending', async () => {
+    const gate = deferred();
+    stubStoredAgents(async status => {
+      if (status === 'published') return HttpResponse.json(onePublishedAgent);
+      await gate.promise;
+      return HttpResponse.json(emptyStoredAgents);
+    });
+
+    const { result } = renderHook(() => useAgentBuilderInternalRedirect(), { wrapper: createWrapper() });
+
+    await waitFor(() => expect(result.current.hasAgents).toBe(true));
+    expect(result.current.isLoading).toBe(true);
+
+    gate.resolve();
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+  });
 });

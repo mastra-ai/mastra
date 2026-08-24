@@ -95,3 +95,6 @@ om-reflector-fixture.json
 .stryker-tmp-sweep/
 .stryker-sweep.json
 **/reports/mutation/
+
+.stryker-tmp-verify/
+.stryker-verify.json

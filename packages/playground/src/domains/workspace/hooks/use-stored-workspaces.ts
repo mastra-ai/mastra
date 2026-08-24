@@ -11,6 +11,8 @@ export const useStoredWorkspaces = (params?: ListStoredWorkspacesParams, options
   const client = useMastraClient();
 
   return useQuery({
+    // Stryker disable next-line StringLiteral: the prefix is a private cache identity —
+    // no other module reads, seeds or invalidates this key, so renaming it is unobservable.
     queryKey: ['stored-workspaces', params],
     queryFn: async (): Promise<ListStoredWorkspacesResponse> => {
       return client.listStoredWorkspaces(params);
