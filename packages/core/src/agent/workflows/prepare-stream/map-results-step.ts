@@ -26,28 +26,6 @@ import {
 } from './run-scope-keys';
 import type { AgentCapabilities, PrepareMemoryStepOutput, PrepareToolsStepOutput } from './schema';
 
-/**
- * Assistant text that was already streamed to the caller when the abort happened.
- *
- * Prefers the snapshot taken when the abort signal fired. Falls back to the aborted finish
- * payload, which the stream builds from its own buffer at the abort event. Text a provider
- * emitted after cancellation is never included.
- */
-function getPartialAbortedText(
-  payload: { text?: string; finishReason?: string },
-  streamedTextAtAbort?: string,
-): string {
-  if (typeof streamedTextAtAbort === 'string' && streamedTextAtAbort.length > 0) {
-    return streamedTextAtAbort;
-  }
-
-  if (payload.finishReason === 'aborted' && typeof payload.text === 'string') {
-    return payload.text;
-  }
-
-  return '';
-}
-
 interface MapResultsStepOptions<OUTPUT = undefined> {
   capabilities: AgentCapabilities;
   options: InnerAgentExecutionOptions<OUTPUT>;
@@ -96,25 +74,6 @@ export function createMapResultsStep<OUTPUT = undefined>({
     const convertedTools = runScope.get(CONVERTED_TOOLS_KEY);
 
     let threadCreatedByStep = false;
-    let abortTranscriptPersisted = false;
-    // Text already handed to the caller. Snapshotted the moment the abort signal fires so
-    // chunks a provider keeps producing after cancellation can never widen the snapshot.
-    let streamedText = '';
-    let streamedTextAtAbort: string | undefined;
-
-    if (options.abortSignal) {
-      if (options.abortSignal.aborted) {
-        streamedTextAtAbort = streamedText;
-      } else {
-        options.abortSignal.addEventListener(
-          'abort',
-          () => {
-            streamedTextAtAbort = streamedText;
-          },
-          { once: true },
-        );
-      }
-    }
 
     const result = {
       ...options,
@@ -129,10 +88,6 @@ export function createMapResultsStep<OUTPUT = undefined>({
       requestContext,
       messageList,
       onStepFinish: async (props: any) => {
-        // Completed-step output is already represented in MessageList. Only track text from the
-        // current in-flight step so an abort cannot synthesize a duplicate of an older step.
-        streamedText = '';
-
         // When OM is enabled saving per step corrupts things because OM handles its own saving
         const shouldSavePerStep = options.savePerStep && !memoryConfig?.observationalMemory;
         if (shouldSavePerStep && !memoryConfig?.readOnly) {
@@ -369,67 +324,13 @@ export function createMapResultsStep<OUTPUT = undefined>({
           const aborted = payload.finishReason === 'aborted' || options.abortSignal?.aborted === true;
 
           if (aborted) {
-            const endAbortedSpan = () => {
-              if (payload.finishReason === 'aborted') {
-                agentSpan?.end({ output: { status: 'aborted', reason: 'abort' } });
-              } else {
-                agentSpan?.end();
-              }
-            };
-
-            if (!abortTranscriptPersisted) {
-              abortTranscriptPersisted = true;
-
-              try {
-                if (memory && memoryData.thread && result.threadId && saveQueueManager && !memoryConfig?.readOnly) {
-                  const partialText = getPartialAbortedText(payload, streamedTextAtAbort);
-                  const responseMessages = messageList.get.response.db();
-                  const currentResponseId = payload.response?.id;
-                  const currentResponseAlreadyPresent =
-                    typeof currentResponseId === 'string' &&
-                    responseMessages.some(message => message.id === currentResponseId);
-
-                  // Aborting cannot erase submitted history or completed tool side effects, which may
-                  // represent irreversible external actions. Only text visible before abort is added.
-                  if (partialText.trim().length > 0 && !currentResponseAlreadyPresent) {
-                    messageList.add(
-                      {
-                        ...(typeof currentResponseId === 'string' && { id: currentResponseId }),
-                        role: 'assistant',
-                        content: [{ type: 'text', text: partialText }],
-                      },
-                      'response',
-                      { merge: false },
-                    );
-                  }
-
-                  if (!memoryData.threadExists && !threadCreatedByStep) {
-                    await memory.createThread({
-                      threadId: memoryData.thread.id,
-                      title: memoryData.thread.title,
-                      metadata: memoryData.thread.metadata,
-                      resourceId: memoryData.thread.resourceId,
-                      memoryConfig,
-                    });
-                    threadCreatedByStep = true;
-                  }
-
-                  await saveQueueManager.flushMessages(messageList, result.threadId, memoryConfig);
-                }
-              } catch (e) {
-                capabilities.logger.error('Error saving memory on abort', {
-                  error: e,
-                  runId,
-                });
-              }
-
-              endAbortedSpan();
-            }
-
-            // The aborted finish payload is synthetic; the caller already received onAbort.
             if (payload.finishReason === 'aborted') {
+              agentSpan?.end({ output: { status: 'aborted', reason: 'abort' } });
+              // The aborted finish payload is synthetic; the caller already received onAbort.
               return;
             }
+
+            agentSpan?.end();
           } else {
             try {
               const outputText =
@@ -487,12 +388,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
           });
         },
         onStepFinish: result.onStepFinish,
-        onChunk: async (chunk: any) => {
-          if (chunk.type === 'text-delta') {
-            streamedText += chunk.payload.text;
-          }
-          await options.onChunk?.(chunk);
-        },
+        onChunk: options.onChunk,
         onError: options.onError,
         onAbort: options.onAbort,
         abortSignal: options.abortSignal,
