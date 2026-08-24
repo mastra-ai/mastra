@@ -35,7 +35,14 @@ is left inside the chart is configuration, and its survivors are expected.
 A test that throws asynchronously still passes under vitest but crashes
 Stryker's runner with `Cannot convert object to primitive value`. jsdom ships no
 `PointerEvent`, which Base UI's Checkbox constructs on click — stub it in any
-test that clicks one.
+test that clicks one. Base UI opens a popover on `fireEvent.click`, but React
+turns a `pointerover` into the `onPointerEnter` a component listens for, so fire
+that rather than `fireEvent.pointerEnter` (which drops the coordinates).
+
+Base UI's `ScrollArea.Scrollbar` and `Corner` also render nothing under jsdom —
+they need real layout to know there is any overflow — so the scrollbars a
+ScrollArea asks for, and their own styling, cannot be reached from a rendered
+component either.
 
 Rules:
 
