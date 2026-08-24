@@ -183,8 +183,16 @@ export class EditorPromptNamespace extends CrudEditorNamespace<
             : await store.getVersionByNumber(id, options.versionNumber!);
           if (!version || version.blockId !== id) return null;
 
-          const { blockId: _blockId, ...snapshot } = version;
-          return { ...promptBlock, ...snapshot } as StorageResolvedPromptBlockType;
+          const {
+            id: versionId,
+            blockId: _blockId,
+            versionNumber: _versionNumber,
+            changedFields: _changedFields,
+            changeMessage: _changeMessage,
+            createdAt: _createdAt,
+            ...snapshot
+          } = version;
+          return { ...promptBlock, ...snapshot, resolvedVersionId: versionId } as StorageResolvedPromptBlockType;
         }
         return store.getByIdResolved(id, options?.status ? { status: options.status } : undefined);
       },

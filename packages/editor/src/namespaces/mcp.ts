@@ -50,8 +50,16 @@ export class EditorMCPNamespace extends CrudEditorNamespace<
             : await store.getVersionByNumber(id, options.versionNumber!);
           if (!version || version.mcpClientId !== id) return null;
 
-          const { mcpClientId: _mcpClientId, ...snapshot } = version;
-          return { ...mcpClient, ...snapshot } as StorageResolvedMCPClientType;
+          const {
+            id: versionId,
+            mcpClientId: _mcpClientId,
+            versionNumber: _versionNumber,
+            changedFields: _changedFields,
+            changeMessage: _changeMessage,
+            createdAt: _createdAt,
+            ...snapshot
+          } = version;
+          return { ...mcpClient, ...snapshot, resolvedVersionId: versionId } as StorageResolvedMCPClientType;
         }
         return store.getByIdResolved(id, options?.status ? { status: options.status } : undefined);
       },

@@ -284,8 +284,16 @@ export class EditorWorkspaceNamespace extends CrudEditorNamespace<
             : await store.getVersionByNumber(id, options.versionNumber!);
           if (!version || version.workspaceId !== id) return null;
 
-          const { workspaceId: _workspaceId, ...snapshot } = version;
-          return { ...workspace, ...snapshot } as StorageResolvedWorkspaceType;
+          const {
+            id: versionId,
+            workspaceId: _workspaceId,
+            versionNumber: _versionNumber,
+            changedFields: _changedFields,
+            changeMessage: _changeMessage,
+            createdAt: _createdAt,
+            ...snapshot
+          } = version;
+          return { ...workspace, ...snapshot, resolvedVersionId: versionId } as StorageResolvedWorkspaceType;
         }
         return store.getByIdResolved(id, options?.status ? { status: options.status } : undefined);
       },

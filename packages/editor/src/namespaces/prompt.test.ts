@@ -101,8 +101,21 @@ describe('EditorPromptNamespace', () => {
 
     expect((await prompt.getById('pinned-block'))!.content).toBe('Published content');
     expect((await prompt.getById('pinned-block', { status: 'draft' }))!.content).toBe('Draft content');
-    expect((await prompt.getById('pinned-block', { versionId: draftVersion.id }))!.content).toBe('Draft content');
-    expect((await prompt.getById('pinned-block', { versionNumber: 2 }))!.content).toBe('Draft content');
+
+    const resolvedByVersionId = await prompt.getById('pinned-block', { versionId: draftVersion.id });
+    expect(resolvedByVersionId).toMatchObject({
+      id: 'pinned-block',
+      content: 'Draft content',
+      resolvedVersionId: draftVersion.id,
+    });
+
+    const resolvedByVersionNumber = await prompt.getById('pinned-block', { versionNumber: 2 });
+    expect(resolvedByVersionNumber).toMatchObject({
+      id: 'pinned-block',
+      content: 'Draft content',
+      resolvedVersionId: draftVersion.id,
+    });
+
     await expect(prompt.getById('pinned-block', { versionId: publishedVersion.id, versionNumber: 2 })).rejects.toThrow(
       'versionId and versionNumber cannot be used together',
     );

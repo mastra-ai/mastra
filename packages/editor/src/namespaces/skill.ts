@@ -51,8 +51,16 @@ export class EditorSkillNamespace extends CrudEditorNamespace<
             : await store.getVersionByNumber(id, options.versionNumber!);
           if (!version || version.skillId !== id) return null;
 
-          const { skillId: _skillId, ...snapshot } = version;
-          return { ...skill, ...snapshot } as StorageResolvedSkillType;
+          const {
+            id: versionId,
+            skillId: _skillId,
+            versionNumber: _versionNumber,
+            changedFields: _changedFields,
+            changeMessage: _changeMessage,
+            createdAt: _createdAt,
+            ...snapshot
+          } = version;
+          return { ...skill, ...snapshot, resolvedVersionId: versionId } as StorageResolvedSkillType;
         }
         return store.getByIdResolved(id, options?.status ? { status: options.status } : undefined);
       },

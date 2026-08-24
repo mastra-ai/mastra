@@ -160,8 +160,16 @@ export class EditorMCPServerNamespace extends CrudEditorNamespace<
             : await store.getVersionByNumber(id, options.versionNumber!);
           if (!version || version.mcpServerId !== id) return null;
 
-          const { mcpServerId: _mcpServerId, ...snapshot } = version;
-          return { ...mcpServer, ...snapshot } as StorageResolvedMCPServerType;
+          const {
+            id: versionId,
+            mcpServerId: _mcpServerId,
+            versionNumber: _versionNumber,
+            changedFields: _changedFields,
+            changeMessage: _changeMessage,
+            createdAt: _createdAt,
+            ...snapshot
+          } = version;
+          return { ...mcpServer, ...snapshot, resolvedVersionId: versionId } as StorageResolvedMCPServerType;
         }
         return store.getByIdResolved(id, options?.status ? { status: options.status } : undefined);
       },

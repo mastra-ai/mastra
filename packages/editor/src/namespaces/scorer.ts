@@ -66,8 +66,20 @@ export class EditorScorerNamespace extends CrudEditorNamespace<
             : await store.getVersionByNumber(id, options.versionNumber!);
           if (!version || version.scorerDefinitionId !== id) return null;
 
-          const { scorerDefinitionId: _scorerDefinitionId, ...snapshot } = version;
-          return { ...scorerDefinition, ...snapshot } as StorageResolvedScorerDefinitionType;
+          const {
+            id: versionId,
+            scorerDefinitionId: _scorerDefinitionId,
+            versionNumber: _versionNumber,
+            changedFields: _changedFields,
+            changeMessage: _changeMessage,
+            createdAt: _createdAt,
+            ...snapshot
+          } = version;
+          return {
+            ...scorerDefinition,
+            ...snapshot,
+            resolvedVersionId: versionId,
+          } as StorageResolvedScorerDefinitionType;
         }
         return store.getByIdResolved(id, options?.status ? { status: options.status } : undefined);
       },
