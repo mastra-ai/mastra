@@ -137,7 +137,7 @@ describe('AbortSignal basics', () => {
     expect(result.text).toBe('Completed normally.');
   }, 10000);
 
-  it('persists an aborted turn through the Observational Memory output processor', async () => {
+  it('persists an aborted turn when Observational Memory is configured', async () => {
     const controller = new AbortController();
     const store = new InMemoryStore();
     const memory = new Memory({
