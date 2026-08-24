@@ -143,4 +143,26 @@ describe('Parallel web tool adapters', () => {
       '## https://example.com/page\nFull page content.\n\n## https://example.com/missing\nError: not_found (404)\nPage not found',
     );
   });
+
+  it('surfaces Parallel search validation errors', async () => {
+    providerMocks.parallelSearchExecute.mockResolvedValueOnce({
+      error: true,
+      message: 'Invalid Parallel search input',
+      validationErrors: { errors: ['Invalid Parallel search input'], fields: {} },
+    });
+    const tool = createParallelWebSearchTool();
+
+    await expect(tool.execute!({ query: 'example query' }, {} as never)).rejects.toThrow(
+      'Invalid Parallel search input',
+    );
+  });
+
+  it('rejects missing Parallel extract output', async () => {
+    providerMocks.parallelExtractExecute.mockResolvedValueOnce(undefined);
+    const tool = createParallelWebExtractTool();
+
+    await expect(tool.execute!({ urls: ['https://example.com/page'] }, {} as never)).rejects.toThrow(
+      'Parallel extract returned no output',
+    );
+  });
 });

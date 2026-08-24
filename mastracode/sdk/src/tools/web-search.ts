@@ -1,4 +1,4 @@
-import { createTool } from '@mastra/core/tools';
+import { createTool, isValidationError, type ValidationError } from '@mastra/core/tools';
 import { createParallelSearchTool, createParallelExtractTool } from '@mastra/parallel';
 import { createTavilySearchTool, createTavilyExtractTool } from '@mastra/tavily';
 import { z } from 'zod';
@@ -13,6 +13,18 @@ const MIN_RELEVANCE_SCORE = 0.25;
 const parallelWebSearchInputSchema = z.object({
   query: z.string().min(1).describe('The search query'),
 });
+
+function requireParallelOutput<T>(output: T | ValidationError | void, operation: 'search' | 'extract'): T {
+  if (output === undefined) {
+    throw new Error(`Parallel ${operation} returned no output`);
+  }
+
+  if (isValidationError(output)) {
+    throw new Error(output.message);
+  }
+
+  return output;
+}
 
 /**
  * Check whether a Tavily API key is available in the environment.
@@ -107,7 +119,10 @@ export function createParallelWebSearchTool() {
     description: parallelSearchTool.description!,
     inputSchema: parallelWebSearchInputSchema,
     execute: async (input, context) => {
-      const output: any = await parallelSearchTool.execute!({ searchQueries: [input.query] }, context as any);
+      const output = requireParallelOutput(
+        await parallelSearchTool.execute!({ searchQueries: [input.query] }, context),
+        'search',
+      );
       const parts: string[] = [];
 
       for (const result of output.results) {
@@ -133,7 +148,7 @@ export function createParallelWebExtractTool() {
     description: parallelExtractTool.description!,
     inputSchema: parallelExtractTool.inputSchema!,
     execute: async (input, context) => {
-      const output: any = await parallelExtractTool.execute!(input as any, context as any);
+      const output = requireParallelOutput(await parallelExtractTool.execute!(input, context), 'extract');
       const parts: string[] = [];
 
       for (const result of output.results) {
