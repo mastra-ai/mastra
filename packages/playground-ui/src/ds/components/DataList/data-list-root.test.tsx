@@ -81,6 +81,52 @@ describe('DataListRoot', () => {
       expect(scrollRef.current?.className).not.toContain('mask-t-from');
     });
 
+    it('leaves the top unfaded by default, since the header sits there', () => {
+      const scrollRef = createRef<HTMLDivElement>();
+      render(
+        <DataList columns="1fr 1fr" scrollRef={scrollRef}>
+          <Header />
+        </DataList>,
+      );
+
+      expect(scrollRef.current?.className).not.toContain('mask-t-from');
+      expect(scrollRef.current?.className).toContain('mask-b-from');
+    });
+
+    it('fades the top when the caller asks for it by name', () => {
+      const scrollRef = createRef<HTMLDivElement>();
+      render(
+        <DataList columns="1fr 1fr" mask={{ top: true }} scrollRef={scrollRef}>
+          <Header />
+        </DataList>,
+      );
+
+      expect(scrollRef.current?.className).toContain('mask-t-from');
+    });
+
+    it('fades every end when the caller turns masking on outright', () => {
+      const scrollRef = createRef<HTMLDivElement>();
+      render(
+        <DataList columns="1fr 1fr" mask scrollRef={scrollRef}>
+          <Header />
+        </DataList>,
+      );
+
+      expect(scrollRef.current?.className).toContain('mask-t-from');
+      expect(scrollRef.current?.className).toContain('mask-b-from');
+    });
+
+    it('fades nothing when the caller turns masking off', () => {
+      const scrollRef = createRef<HTMLDivElement>();
+      render(
+        <DataList columns="1fr 1fr" mask={false} scrollRef={scrollRef}>
+          <Header />
+        </DataList>,
+      );
+
+      expect(scrollRef.current?.className).not.toContain('mask-');
+    });
+
     it('lets max-height classes constrain the scrollable viewport', () => {
       const scrollRef = createRef<HTMLDivElement>();
       render(
