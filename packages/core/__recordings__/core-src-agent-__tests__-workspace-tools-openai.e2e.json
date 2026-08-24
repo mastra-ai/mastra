@@ -7,7 +7,7 @@
   },
   "recordings": [
     {
-      "hash": "497d294fffcc47d4",
+      "hash": "3bc7c58948a0774e",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -640,32 +640,6 @@
                 "required": ["path", "pattern", "replacement", "transform", "targetName", "newName", "importSpec"],
                 "additionalProperties": false,
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
-              },
-              "strict": false
-            },
-            {
-              "type": "function",
-              "name": "mastra_workspace_lsp_inspect",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
               },
               "strict": false
             }
@@ -1387,33 +1361,6 @@
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
               },
               "strict": false
-            },
-            {
-              "type": "function",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "name": "mastra_workspace_lsp_inspect",
-              "output_schema": null,
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
-              },
-              "strict": false
             }
           ],
           "top_logprobs": 0,
@@ -1438,7 +1385,7 @@
       }
     },
     {
-      "hash": "5144ddcc1292ccd1",
+      "hash": "f5135554ba38ebf0",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -2080,32 +2027,6 @@
                 "required": ["path", "pattern", "replacement", "transform", "targetName", "newName", "importSpec"],
                 "additionalProperties": false,
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
-              },
-              "strict": false
-            },
-            {
-              "type": "function",
-              "name": "mastra_workspace_lsp_inspect",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
               },
               "strict": false
             }
@@ -2833,33 +2754,6 @@
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
               },
               "strict": false
-            },
-            {
-              "type": "function",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "name": "mastra_workspace_lsp_inspect",
-              "output_schema": null,
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
-              },
-              "strict": false
             }
           ],
           "top_logprobs": 0,
@@ -2884,7 +2778,7 @@
       }
     },
     {
-      "hash": "fcd74c8cdfa464d6",
+      "hash": "994076cd77f8b013",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -3517,32 +3411,6 @@
                 "required": ["path", "pattern", "replacement", "transform", "targetName", "newName", "importSpec"],
                 "additionalProperties": false,
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
-              },
-              "strict": false
-            },
-            {
-              "type": "function",
-              "name": "mastra_workspace_lsp_inspect",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
               },
               "strict": false
             }
@@ -4270,33 +4138,6 @@
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
               },
               "strict": false
-            },
-            {
-              "type": "function",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "name": "mastra_workspace_lsp_inspect",
-              "output_schema": null,
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
-              },
-              "strict": false
             }
           ],
           "top_logprobs": 0,
@@ -4517,7 +4358,7 @@
       }
     },
     {
-      "hash": "b6aeba6c9e5ef7f7",
+      "hash": "80271bbc1d2064e8",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -5177,32 +5018,6 @@
                 "required": ["path", "pattern", "replacement", "transform", "targetName", "newName", "importSpec"],
                 "additionalProperties": false,
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
-              },
-              "strict": true
-            },
-            {
-              "type": "function",
-              "name": "mastra_workspace_lsp_inspect",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
               },
               "strict": true
             }
@@ -5946,33 +5761,6 @@
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
               },
               "strict": true
-            },
-            {
-              "type": "function",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "name": "mastra_workspace_lsp_inspect",
-              "output_schema": null,
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
-              },
-              "strict": true
             }
           ],
           "top_logprobs": 0,
@@ -5997,7 +5785,7 @@
       }
     },
     {
-      "hash": "513c28761f9aa87a",
+      "hash": "f90340abf589417a",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -6666,32 +6454,6 @@
                 "required": ["path", "pattern", "replacement", "transform", "targetName", "newName", "importSpec"],
                 "additionalProperties": false,
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
-              },
-              "strict": true
-            },
-            {
-              "type": "function",
-              "name": "mastra_workspace_lsp_inspect",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
               },
               "strict": true
             }
@@ -7441,33 +7203,6 @@
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
               },
               "strict": true
-            },
-            {
-              "type": "function",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "name": "mastra_workspace_lsp_inspect",
-              "output_schema": null,
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
-              },
-              "strict": true
             }
           ],
           "top_logprobs": 0,
@@ -7492,7 +7227,7 @@
       }
     },
     {
-      "hash": "3ef742b3c6bc8cea",
+      "hash": "dc8f4e160fac2e66",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -8152,32 +7887,6 @@
                 "required": ["path", "pattern", "replacement", "transform", "targetName", "newName", "importSpec"],
                 "additionalProperties": false,
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
-              },
-              "strict": true
-            },
-            {
-              "type": "function",
-              "name": "mastra_workspace_lsp_inspect",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
               },
               "strict": true
             }
@@ -8921,33 +8630,6 @@
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
               },
               "strict": true
-            },
-            {
-              "type": "function",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "name": "mastra_workspace_lsp_inspect",
-              "output_schema": null,
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
-              },
-              "strict": true
             }
           ],
           "top_logprobs": 0,
@@ -8972,7 +8654,7 @@
       }
     },
     {
-      "hash": "251f731f3e9ecce8",
+      "hash": "b3e57885afa5aebf",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -9641,32 +9323,6 @@
                 "required": ["path", "pattern", "replacement", "transform", "targetName", "newName", "importSpec"],
                 "additionalProperties": false,
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
-              },
-              "strict": true
-            },
-            {
-              "type": "function",
-              "name": "mastra_workspace_lsp_inspect",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
               },
               "strict": true
             }
@@ -10416,33 +10072,6 @@
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
               },
               "strict": true
-            },
-            {
-              "type": "function",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "name": "mastra_workspace_lsp_inspect",
-              "output_schema": null,
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
-              },
-              "strict": true
             }
           ],
           "top_logprobs": 0,
@@ -10467,7 +10096,7 @@
       }
     },
     {
-      "hash": "6b55ff4ab87638bb",
+      "hash": "bb67efddd82e7bbc",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -11127,32 +10756,6 @@
                 "required": ["path", "pattern", "replacement", "transform", "targetName", "newName", "importSpec"],
                 "additionalProperties": false,
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
-              },
-              "strict": true
-            },
-            {
-              "type": "function",
-              "name": "mastra_workspace_lsp_inspect",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
               },
               "strict": true
             }
@@ -11902,33 +11505,6 @@
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
               },
               "strict": true
-            },
-            {
-              "type": "function",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "name": "mastra_workspace_lsp_inspect",
-              "output_schema": null,
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
-              },
-              "strict": true
             }
           ],
           "top_logprobs": 0,
@@ -11953,7 +11529,7 @@
       }
     },
     {
-      "hash": "1f3c7940b14009bc",
+      "hash": "1638bf25f8d2d8c9",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -12613,32 +12189,6 @@
                 "required": ["path", "pattern", "replacement", "transform", "targetName", "newName", "importSpec"],
                 "additionalProperties": false,
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
-              },
-              "strict": true
-            },
-            {
-              "type": "function",
-              "name": "mastra_workspace_lsp_inspect",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
               },
               "strict": true
             }
@@ -13382,33 +12932,6 @@
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
               },
               "strict": true
-            },
-            {
-              "type": "function",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "name": "mastra_workspace_lsp_inspect",
-              "output_schema": null,
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
-              },
-              "strict": true
             }
           ],
           "top_logprobs": 0,
@@ -13433,7 +12956,7 @@
       }
     },
     {
-      "hash": "86f55a7e6cb9e664",
+      "hash": "1a392adcc63a3a5d",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -14102,32 +13625,6 @@
                 "required": ["path", "pattern", "replacement", "transform", "targetName", "newName", "importSpec"],
                 "additionalProperties": false,
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
-              },
-              "strict": true
-            },
-            {
-              "type": "function",
-              "name": "mastra_workspace_lsp_inspect",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
               },
               "strict": true
             }
@@ -14877,33 +14374,6 @@
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
               },
               "strict": true
-            },
-            {
-              "type": "function",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "name": "mastra_workspace_lsp_inspect",
-              "output_schema": null,
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
-              },
-              "strict": true
             }
           ],
           "top_logprobs": 0,
@@ -14928,7 +14398,7 @@
       }
     },
     {
-      "hash": "8cb080314598b849",
+      "hash": "8e3e194dc16d97ba",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -15565,32 +15035,6 @@
                 "required": ["path", "pattern", "replacement", "transform", "targetName", "newName", "importSpec"],
                 "additionalProperties": false,
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
-              },
-              "strict": false
-            },
-            {
-              "type": "function",
-              "name": "mastra_workspace_lsp_inspect",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
               },
               "strict": false
             }
@@ -16314,33 +15758,6 @@
               "strict": false
             },
             {
-              "type": "function",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "name": "mastra_workspace_lsp_inspect",
-              "output_schema": null,
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
-              },
-              "strict": false
-            },
-            {
               "type": "web_search",
               "return_token_budget": "default",
               "search_content_types": ["text"],
@@ -16376,7 +15793,7 @@
       }
     },
     {
-      "hash": "4ec262cafeebbac1",
+      "hash": "6dd3b1843f3d823f",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -17022,32 +16439,6 @@
                 "required": ["path", "pattern", "replacement", "transform", "targetName", "newName", "importSpec"],
                 "additionalProperties": false,
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
-              },
-              "strict": false
-            },
-            {
-              "type": "function",
-              "name": "mastra_workspace_lsp_inspect",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
               },
               "strict": false
             }
@@ -17777,33 +17168,6 @@
               "strict": false
             },
             {
-              "type": "function",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "name": "mastra_workspace_lsp_inspect",
-              "output_schema": null,
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
-              },
-              "strict": false
-            },
-            {
               "type": "web_search",
               "return_token_budget": "default",
               "search_content_types": ["text"],
@@ -17839,7 +17203,7 @@
       }
     },
     {
-      "hash": "96c689aa3c56511a",
+      "hash": "c79d3e3abf4bc1af",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -18503,32 +17867,6 @@
                 "required": ["path", "pattern", "replacement", "transform", "targetName", "newName", "importSpec"],
                 "additionalProperties": false,
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
-              },
-              "strict": true
-            },
-            {
-              "type": "function",
-              "name": "mastra_workspace_lsp_inspect",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
               },
               "strict": true
             }
@@ -19274,33 +18612,6 @@
               "strict": true
             },
             {
-              "type": "function",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "name": "mastra_workspace_lsp_inspect",
-              "output_schema": null,
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
-              },
-              "strict": true
-            },
-            {
               "type": "web_search",
               "return_token_budget": "default",
               "search_content_types": ["text"],
@@ -19336,7 +18647,7 @@
       }
     },
     {
-      "hash": "0e63f755eeaf07bc",
+      "hash": "afd5199f04b26f6c",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -20009,32 +19320,6 @@
                 "required": ["path", "pattern", "replacement", "transform", "targetName", "newName", "importSpec"],
                 "additionalProperties": false,
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
-              },
-              "strict": true
-            },
-            {
-              "type": "function",
-              "name": "mastra_workspace_lsp_inspect",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
               },
               "strict": true
             }
@@ -20786,33 +20071,6 @@
               "strict": true
             },
             {
-              "type": "function",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "name": "mastra_workspace_lsp_inspect",
-              "output_schema": null,
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
-              },
-              "strict": true
-            },
-            {
               "type": "web_search",
               "return_token_budget": "default",
               "search_content_types": ["text"],
@@ -20848,7 +20106,7 @@
       }
     },
     {
-      "hash": "dd00010d77dc2c7b",
+      "hash": "4153f97609d5db0d",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -21481,32 +20739,6 @@
                 "required": ["path", "pattern", "replacement", "transform", "targetName", "newName", "importSpec"],
                 "additionalProperties": false,
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
-              },
-              "strict": false
-            },
-            {
-              "type": "function",
-              "name": "mastra_workspace_lsp_inspect",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
               },
               "strict": false
             }
@@ -22227,33 +21459,6 @@
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
               },
               "strict": false
-            },
-            {
-              "type": "function",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "name": "mastra_workspace_lsp_inspect",
-              "output_schema": null,
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
-              },
-              "strict": false
             }
           ],
           "top_logprobs": 0,
@@ -22278,7 +21483,7 @@
       }
     },
     {
-      "hash": "7625a902a8b55f5e",
+      "hash": "d4b5fcfe822d77cc",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -22920,32 +22125,6 @@
                 "required": ["path", "pattern", "replacement", "transform", "targetName", "newName", "importSpec"],
                 "additionalProperties": false,
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
-              },
-              "strict": false
-            },
-            {
-              "type": "function",
-              "name": "mastra_workspace_lsp_inspect",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
               },
               "strict": false
             }
@@ -23672,33 +22851,6 @@
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
               },
               "strict": false
-            },
-            {
-              "type": "function",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "name": "mastra_workspace_lsp_inspect",
-              "output_schema": null,
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
-              },
-              "strict": false
             }
           ],
           "top_logprobs": 0,
@@ -23723,7 +22875,7 @@
       }
     },
     {
-      "hash": "9fa66cd46a8ec86c",
+      "hash": "70674c826799ecb1",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -24356,32 +23508,6 @@
                 "required": ["path", "pattern", "replacement", "transform", "targetName", "newName", "importSpec"],
                 "additionalProperties": false,
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
-              },
-              "strict": false
-            },
-            {
-              "type": "function",
-              "name": "mastra_workspace_lsp_inspect",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
               },
               "strict": false
             }
@@ -25108,33 +24234,6 @@
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
               },
               "strict": false
-            },
-            {
-              "type": "function",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "name": "mastra_workspace_lsp_inspect",
-              "output_schema": null,
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
-              },
-              "strict": false
             }
           ],
           "top_logprobs": 0,
@@ -25354,7 +24453,7 @@
       }
     },
     {
-      "hash": "2301f3564005d1f8",
+      "hash": "c5005823c8aa50bb",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -26014,32 +25113,6 @@
                 "required": ["path", "pattern", "replacement", "transform", "targetName", "newName", "importSpec"],
                 "additionalProperties": false,
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
-              },
-              "strict": true
-            },
-            {
-              "type": "function",
-              "name": "mastra_workspace_lsp_inspect",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
               },
               "strict": true
             }
@@ -26782,33 +25855,6 @@
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
               },
               "strict": true
-            },
-            {
-              "type": "function",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "name": "mastra_workspace_lsp_inspect",
-              "output_schema": null,
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
-              },
-              "strict": true
             }
           ],
           "top_logprobs": 0,
@@ -26833,7 +25879,7 @@
       }
     },
     {
-      "hash": "fd51dc88f24ea716",
+      "hash": "0ccf2ca029ea9be3",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -27502,32 +26548,6 @@
                 "required": ["path", "pattern", "replacement", "transform", "targetName", "newName", "importSpec"],
                 "additionalProperties": false,
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
-              },
-              "strict": true
-            },
-            {
-              "type": "function",
-              "name": "mastra_workspace_lsp_inspect",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
               },
               "strict": true
             }
@@ -28276,33 +27296,6 @@
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
               },
               "strict": true
-            },
-            {
-              "type": "function",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "name": "mastra_workspace_lsp_inspect",
-              "output_schema": null,
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
-              },
-              "strict": true
             }
           ],
           "top_logprobs": 0,
@@ -28327,7 +27320,7 @@
       }
     },
     {
-      "hash": "9e9b20092b9502c3",
+      "hash": "bc5d69fc579c064b",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -28987,32 +27980,6 @@
                 "required": ["path", "pattern", "replacement", "transform", "targetName", "newName", "importSpec"],
                 "additionalProperties": false,
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
-              },
-              "strict": true
-            },
-            {
-              "type": "function",
-              "name": "mastra_workspace_lsp_inspect",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
               },
               "strict": true
             }
@@ -29755,33 +28722,6 @@
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
               },
               "strict": true
-            },
-            {
-              "type": "function",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "name": "mastra_workspace_lsp_inspect",
-              "output_schema": null,
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
-              },
-              "strict": true
             }
           ],
           "top_logprobs": 0,
@@ -29806,7 +28746,7 @@
       }
     },
     {
-      "hash": "8bea45e8948afbdb",
+      "hash": "8b761a7be3c1dbf9",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -30475,32 +29415,6 @@
                 "required": ["path", "pattern", "replacement", "transform", "targetName", "newName", "importSpec"],
                 "additionalProperties": false,
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
-              },
-              "strict": true
-            },
-            {
-              "type": "function",
-              "name": "mastra_workspace_lsp_inspect",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
               },
               "strict": true
             }
@@ -31249,33 +30163,6 @@
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
               },
               "strict": true
-            },
-            {
-              "type": "function",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "name": "mastra_workspace_lsp_inspect",
-              "output_schema": null,
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
-              },
-              "strict": true
             }
           ],
           "top_logprobs": 0,
@@ -31300,7 +30187,7 @@
       }
     },
     {
-      "hash": "716084364e8e3866",
+      "hash": "c26408b0b8dab1b2",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -31960,32 +30847,6 @@
                 "required": ["path", "pattern", "replacement", "transform", "targetName", "newName", "importSpec"],
                 "additionalProperties": false,
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
-              },
-              "strict": true
-            },
-            {
-              "type": "function",
-              "name": "mastra_workspace_lsp_inspect",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
               },
               "strict": true
             }
@@ -32728,33 +31589,6 @@
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
               },
               "strict": true
-            },
-            {
-              "type": "function",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "name": "mastra_workspace_lsp_inspect",
-              "output_schema": null,
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
-              },
-              "strict": true
             }
           ],
           "top_logprobs": 0,
@@ -32779,7 +31613,7 @@
       }
     },
     {
-      "hash": "77c35c6c0a467229",
+      "hash": "617c7dad5f1fafb6",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -33448,32 +32282,6 @@
                 "required": ["path", "pattern", "replacement", "transform", "targetName", "newName", "importSpec"],
                 "additionalProperties": false,
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
-              },
-              "strict": true
-            },
-            {
-              "type": "function",
-              "name": "mastra_workspace_lsp_inspect",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
               },
               "strict": true
             }
@@ -34222,33 +33030,6 @@
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
               },
               "strict": true
-            },
-            {
-              "type": "function",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "name": "mastra_workspace_lsp_inspect",
-              "output_schema": null,
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
-              },
-              "strict": true
             }
           ],
           "top_logprobs": 0,
@@ -34273,7 +33054,7 @@
       }
     },
     {
-      "hash": "3d8b158c5ab706cf",
+      "hash": "f505a55035bfae2c",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -34933,32 +33714,6 @@
                 "required": ["path", "pattern", "replacement", "transform", "targetName", "newName", "importSpec"],
                 "additionalProperties": false,
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
-              },
-              "strict": true
-            },
-            {
-              "type": "function",
-              "name": "mastra_workspace_lsp_inspect",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
               },
               "strict": true
             }
@@ -35701,33 +34456,6 @@
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
               },
               "strict": true
-            },
-            {
-              "type": "function",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "name": "mastra_workspace_lsp_inspect",
-              "output_schema": null,
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
-              },
-              "strict": true
             }
           ],
           "top_logprobs": 0,
@@ -35752,7 +34480,7 @@
       }
     },
     {
-      "hash": "16f3613ff6bd9bd3",
+      "hash": "9e1fca98a66bfed8",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -36421,32 +35149,6 @@
                 "required": ["path", "pattern", "replacement", "transform", "targetName", "newName", "importSpec"],
                 "additionalProperties": false,
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
-              },
-              "strict": true
-            },
-            {
-              "type": "function",
-              "name": "mastra_workspace_lsp_inspect",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
               },
               "strict": true
             }
@@ -37195,33 +35897,6 @@
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
               },
               "strict": true
-            },
-            {
-              "type": "function",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "name": "mastra_workspace_lsp_inspect",
-              "output_schema": null,
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
-              },
-              "strict": true
             }
           ],
           "top_logprobs": 0,
@@ -37246,7 +35921,7 @@
       }
     },
     {
-      "hash": "551f131e321a5ef8",
+      "hash": "4de2d433916e67b8",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -37883,32 +36558,6 @@
                 "required": ["path", "pattern", "replacement", "transform", "targetName", "newName", "importSpec"],
                 "additionalProperties": false,
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
-              },
-              "strict": false
-            },
-            {
-              "type": "function",
-              "name": "mastra_workspace_lsp_inspect",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
               },
               "strict": false
             }
@@ -38631,33 +37280,6 @@
               "strict": false
             },
             {
-              "type": "function",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "name": "mastra_workspace_lsp_inspect",
-              "output_schema": null,
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
-              },
-              "strict": false
-            },
-            {
               "type": "web_search",
               "return_token_budget": "default",
               "search_content_types": ["text"],
@@ -38693,7 +37315,7 @@
       }
     },
     {
-      "hash": "beae9eefa2688725",
+      "hash": "e335ecba4e176c17",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -39339,32 +37961,6 @@
                 "required": ["path", "pattern", "replacement", "transform", "targetName", "newName", "importSpec"],
                 "additionalProperties": false,
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
-              },
-              "strict": false
-            },
-            {
-              "type": "function",
-              "name": "mastra_workspace_lsp_inspect",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
               },
               "strict": false
             }
@@ -40093,33 +38689,6 @@
               "strict": false
             },
             {
-              "type": "function",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "name": "mastra_workspace_lsp_inspect",
-              "output_schema": null,
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
-              },
-              "strict": false
-            },
-            {
               "type": "web_search",
               "return_token_budget": "default",
               "search_content_types": ["text"],
@@ -40155,7 +38724,7 @@
       }
     },
     {
-      "hash": "73743c74670b5622",
+      "hash": "799dead736ac9b9f",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -40819,32 +39388,6 @@
                 "required": ["path", "pattern", "replacement", "transform", "targetName", "newName", "importSpec"],
                 "additionalProperties": false,
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
-              },
-              "strict": true
-            },
-            {
-              "type": "function",
-              "name": "mastra_workspace_lsp_inspect",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
               },
               "strict": true
             }
@@ -41589,33 +40132,6 @@
               "strict": true
             },
             {
-              "type": "function",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "name": "mastra_workspace_lsp_inspect",
-              "output_schema": null,
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
-              },
-              "strict": true
-            },
-            {
               "type": "web_search",
               "return_token_budget": "default",
               "search_content_types": ["text"],
@@ -41651,7 +40167,7 @@
       }
     },
     {
-      "hash": "a972bbf255637fd8",
+      "hash": "3c9084e0bfe3ad85",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -42324,32 +40840,6 @@
                 "required": ["path", "pattern", "replacement", "transform", "targetName", "newName", "importSpec"],
                 "additionalProperties": false,
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
-              },
-              "strict": true
-            },
-            {
-              "type": "function",
-              "name": "mastra_workspace_lsp_inspect",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
               },
               "strict": true
             }
@@ -43100,33 +41590,6 @@
               "strict": true
             },
             {
-              "type": "function",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "name": "mastra_workspace_lsp_inspect",
-              "output_schema": null,
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
-              },
-              "strict": true
-            },
-            {
               "type": "web_search",
               "return_token_budget": "default",
               "search_content_types": ["text"],
@@ -43162,7 +41625,7 @@
       }
     },
     {
-      "hash": "dd00010d77dc2c7b",
+      "hash": "1a66aef899857dce",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -43787,31 +42250,6 @@
                 "required": ["path", "pattern", "replacement", "transform", "targetName", "newName", "importSpec"],
                 "additionalProperties": false,
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
-              }
-            },
-            {
-              "type": "function",
-              "name": "mastra_workspace_lsp_inspect",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
               }
             }
           ],
@@ -44531,33 +42969,6 @@
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
               },
               "strict": true
-            },
-            {
-              "type": "function",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "name": "mastra_workspace_lsp_inspect",
-              "output_schema": null,
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
-              },
-              "strict": true
             }
           ],
           "top_logprobs": 0,
@@ -44582,7 +42993,7 @@
       }
     },
     {
-      "hash": "d78b8fae2a4171a4",
+      "hash": "d8378b1019c9cba0",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -45218,31 +43629,6 @@
                 "required": ["path", "pattern", "replacement", "transform", "targetName", "newName", "importSpec"],
                 "additionalProperties": false,
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
-              }
-            },
-            {
-              "type": "function",
-              "name": "mastra_workspace_lsp_inspect",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
               }
             }
           ],
@@ -45968,33 +44354,6 @@
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
               },
               "strict": true
-            },
-            {
-              "type": "function",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "name": "mastra_workspace_lsp_inspect",
-              "output_schema": null,
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
-              },
-              "strict": true
             }
           ],
           "top_logprobs": 0,
@@ -46019,7 +44378,7 @@
       }
     },
     {
-      "hash": "9fa66cd46a8ec86c",
+      "hash": "f4d1f3492516ae6f",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -46644,31 +45003,6 @@
                 "required": ["path", "pattern", "replacement", "transform", "targetName", "newName", "importSpec"],
                 "additionalProperties": false,
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
-              }
-            },
-            {
-              "type": "function",
-              "name": "mastra_workspace_lsp_inspect",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
               }
             }
           ],
@@ -47394,33 +45728,6 @@
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
               },
               "strict": true
-            },
-            {
-              "type": "function",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "name": "mastra_workspace_lsp_inspect",
-              "output_schema": null,
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
-              },
-              "strict": true
             }
           ],
           "top_logprobs": 0,
@@ -47640,7 +45947,7 @@
       }
     },
     {
-      "hash": "93bef0fcb65d2eec",
+      "hash": "6d83994d8eb0a4bb",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -48292,31 +46599,6 @@
                 "required": ["path", "pattern", "replacement", "transform", "targetName", "newName", "importSpec"],
                 "additionalProperties": false,
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
-              }
-            },
-            {
-              "type": "function",
-              "name": "mastra_workspace_lsp_inspect",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
               }
             }
           ],
@@ -49058,33 +47340,6 @@
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
               },
               "strict": true
-            },
-            {
-              "type": "function",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "name": "mastra_workspace_lsp_inspect",
-              "output_schema": null,
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
-              },
-              "strict": true
             }
           ],
           "top_logprobs": 0,
@@ -49109,7 +47364,7 @@
       }
     },
     {
-      "hash": "683d800a0daa6e3c",
+      "hash": "051287dc91a18f82",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -49772,31 +48027,6 @@
                 "required": ["path", "pattern", "replacement", "transform", "targetName", "newName", "importSpec"],
                 "additionalProperties": false,
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
-              }
-            },
-            {
-              "type": "function",
-              "name": "mastra_workspace_lsp_inspect",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
               }
             }
           ],
@@ -50544,33 +48774,6 @@
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
               },
               "strict": true
-            },
-            {
-              "type": "function",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "name": "mastra_workspace_lsp_inspect",
-              "output_schema": null,
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
-              },
-              "strict": true
             }
           ],
           "top_logprobs": 0,
@@ -50595,7 +48798,7 @@
       }
     },
     {
-      "hash": "bcee769c5808c425",
+      "hash": "f5d1aa7e110d467b",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -51247,31 +49450,6 @@
                 "required": ["path", "pattern", "replacement", "transform", "targetName", "newName", "importSpec"],
                 "additionalProperties": false,
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
-              }
-            },
-            {
-              "type": "function",
-              "name": "mastra_workspace_lsp_inspect",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
               }
             }
           ],
@@ -52013,33 +50191,6 @@
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
               },
               "strict": true
-            },
-            {
-              "type": "function",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "name": "mastra_workspace_lsp_inspect",
-              "output_schema": null,
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
-              },
-              "strict": true
             }
           ],
           "top_logprobs": 0,
@@ -52064,7 +50215,7 @@
       }
     },
     {
-      "hash": "d602862f65dd9998",
+      "hash": "ee410fe2bedc1102",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -52727,31 +50878,6 @@
                 "required": ["path", "pattern", "replacement", "transform", "targetName", "newName", "importSpec"],
                 "additionalProperties": false,
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
-              }
-            },
-            {
-              "type": "function",
-              "name": "mastra_workspace_lsp_inspect",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
               }
             }
           ],
@@ -53499,33 +51625,6 @@
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
               },
               "strict": true
-            },
-            {
-              "type": "function",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "name": "mastra_workspace_lsp_inspect",
-              "output_schema": null,
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
-              },
-              "strict": true
             }
           ],
           "top_logprobs": 0,
@@ -53550,7 +51649,7 @@
       }
     },
     {
-      "hash": "5c2a5bfe4753bd05",
+      "hash": "969db7f2ec462ea7",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -54202,31 +52301,6 @@
                 "required": ["path", "pattern", "replacement", "transform", "targetName", "newName", "importSpec"],
                 "additionalProperties": false,
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
-              }
-            },
-            {
-              "type": "function",
-              "name": "mastra_workspace_lsp_inspect",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
               }
             }
           ],
@@ -54968,33 +53042,6 @@
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
               },
               "strict": true
-            },
-            {
-              "type": "function",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "name": "mastra_workspace_lsp_inspect",
-              "output_schema": null,
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
-              },
-              "strict": true
             }
           ],
           "top_logprobs": 0,
@@ -55019,7 +53066,7 @@
       }
     },
     {
-      "hash": "79f417c4f0cabcc1",
+      "hash": "050843f950eeeef1",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -55682,31 +53729,6 @@
                 "required": ["path", "pattern", "replacement", "transform", "targetName", "newName", "importSpec"],
                 "additionalProperties": false,
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
-              }
-            },
-            {
-              "type": "function",
-              "name": "mastra_workspace_lsp_inspect",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
               }
             }
           ],
@@ -56454,33 +54476,6 @@
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
               },
               "strict": true
-            },
-            {
-              "type": "function",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "name": "mastra_workspace_lsp_inspect",
-              "output_schema": null,
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
-              },
-              "strict": true
             }
           ],
           "top_logprobs": 0,
@@ -56505,7 +54500,7 @@
       }
     },
     {
-      "hash": "dc7e9c128bb0fd22",
+      "hash": "a493c3e4d37ab9c7",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -57157,31 +55152,6 @@
                 "required": ["path", "pattern", "replacement", "transform", "targetName", "newName", "importSpec"],
                 "additionalProperties": false,
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
-              }
-            },
-            {
-              "type": "function",
-              "name": "mastra_workspace_lsp_inspect",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
               }
             }
           ],
@@ -57923,33 +55893,6 @@
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
               },
               "strict": true
-            },
-            {
-              "type": "function",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "name": "mastra_workspace_lsp_inspect",
-              "output_schema": null,
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
-              },
-              "strict": true
             }
           ],
           "top_logprobs": 0,
@@ -57974,7 +55917,7 @@
       }
     },
     {
-      "hash": "5e817c39f3d6f166",
+      "hash": "93880123f6d63ce8",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -58637,31 +56580,6 @@
                 "required": ["path", "pattern", "replacement", "transform", "targetName", "newName", "importSpec"],
                 "additionalProperties": false,
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
-              }
-            },
-            {
-              "type": "function",
-              "name": "mastra_workspace_lsp_inspect",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
               }
             }
           ],
@@ -59409,33 +57327,6 @@
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
               },
               "strict": true
-            },
-            {
-              "type": "function",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "name": "mastra_workspace_lsp_inspect",
-              "output_schema": null,
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
-              },
-              "strict": true
             }
           ],
           "top_logprobs": 0,
@@ -59460,7 +57351,7 @@
       }
     },
     {
-      "hash": "551f131e321a5ef8",
+      "hash": "b5f114d6953d7ddb",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -60089,31 +57980,6 @@
                 "required": ["path", "pattern", "replacement", "transform", "targetName", "newName", "importSpec"],
                 "additionalProperties": false,
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
-              }
-            },
-            {
-              "type": "function",
-              "name": "mastra_workspace_lsp_inspect",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
               }
             }
           ],
@@ -60835,33 +58701,6 @@
               "strict": true
             },
             {
-              "type": "function",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "name": "mastra_workspace_lsp_inspect",
-              "output_schema": null,
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
-              },
-              "strict": true
-            },
-            {
               "type": "web_search",
               "return_token_budget": "default",
               "search_content_types": ["text"],
@@ -60897,7 +58736,7 @@
       }
     },
     {
-      "hash": "a9dca32ed2c2b1f2",
+      "hash": "b48180ef6c61eccc",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -61537,31 +59376,6 @@
                 "required": ["path", "pattern", "replacement", "transform", "targetName", "newName", "importSpec"],
                 "additionalProperties": false,
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
-              }
-            },
-            {
-              "type": "function",
-              "name": "mastra_workspace_lsp_inspect",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
               }
             }
           ],
@@ -62289,33 +60103,6 @@
               "strict": true
             },
             {
-              "type": "function",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "name": "mastra_workspace_lsp_inspect",
-              "output_schema": null,
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
-              },
-              "strict": true
-            },
-            {
               "type": "web_search",
               "return_token_budget": "default",
               "search_content_types": ["text"],
@@ -62351,7 +60138,7 @@
       }
     },
     {
-      "hash": "199e264295ab3d95",
+      "hash": "3067b6d86739e3d0",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -63007,31 +60794,6 @@
                 "required": ["path", "pattern", "replacement", "transform", "targetName", "newName", "importSpec"],
                 "additionalProperties": false,
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
-              }
-            },
-            {
-              "type": "function",
-              "name": "mastra_workspace_lsp_inspect",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
               }
             }
           ],
@@ -63775,33 +61537,6 @@
               "strict": true
             },
             {
-              "type": "function",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "name": "mastra_workspace_lsp_inspect",
-              "output_schema": null,
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
-              },
-              "strict": true
-            },
-            {
               "type": "web_search",
               "return_token_budget": "default",
               "search_content_types": ["text"],
@@ -63837,7 +61572,7 @@
       }
     },
     {
-      "hash": "0393afde8e829208",
+      "hash": "78e6d053a60ae8a2",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -64504,31 +62239,6 @@
                 "required": ["path", "pattern", "replacement", "transform", "targetName", "newName", "importSpec"],
                 "additionalProperties": false,
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
-              }
-            },
-            {
-              "type": "function",
-              "name": "mastra_workspace_lsp_inspect",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
               }
             }
           ],
@@ -65274,33 +62984,6 @@
                 "required": ["path", "pattern", "replacement", "transform", "targetName", "newName", "importSpec"],
                 "additionalProperties": false,
                 "x-optional": ["pattern", "replacement", "transform", "targetName", "newName", "importSpec"]
-              },
-              "strict": true
-            },
-            {
-              "type": "function",
-              "description": "Inspect code at a specific symbol position using the Language Server Protocol. Provide an absolute file path, a 1-indexed line number, and the exact line content with <<< marking the cursor position. Exactly one <<< marker is required. Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.",
-              "name": "mastra_workspace_lsp_inspect",
-              "output_schema": null,
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "Absolute path to the file"
-                  },
-                  "line": {
-                    "type": "integer",
-                    "description": "Line number (1-indexed)\nconstraints: greater than 0"
-                  },
-                  "match": {
-                    "type": "string",
-                    "description": "Line content with <<< marking the cursor position. Exactly one <<< marker is required. Example: \"const foo = <<<bar()\" means cursor is at bar"
-                  }
-                },
-                "required": ["path", "line", "match"],
-                "additionalProperties": false
               },
               "strict": true
             },
