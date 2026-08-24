@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { useState } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { PropertyFilterCreator } from './property-filter-creator';
@@ -496,6 +497,23 @@ describe('PropertyFilterCreator — a pick-multi property', () => {
     openMenu();
 
     expect(screen.queryByRole('radio', { name: /Agent/i })).toBeNull();
+  });
+
+  it('adds to a selection it has already made', async () => {
+    const Harness = () => {
+      const [tokens, setTokens] = useState<PropertyFilterToken[]>([]);
+      return <PropertyFilterCreator fields={PICK_MULTI_FIELDS} tokens={tokens} onTokensChange={setTokens} />;
+    };
+    render(<Harness />);
+
+    openMenu();
+    fireEvent.click(screen.getByRole('menuitem', { name: /Tags/i }));
+    fireEvent.click(await screen.findByRole('checkbox', { name: /Alpha/i }));
+    fireEvent.click(screen.getByRole('checkbox', { name: /Beta/i }));
+
+    // The second tick keeps the first rather than replacing it.
+    expect(screen.getByRole('checkbox', { name: /Alpha/i }).getAttribute('aria-checked')).toBe('true');
+    expect(screen.getByRole('checkbox', { name: /Beta/i }).getAttribute('aria-checked')).toBe('true');
   });
 
   it('opens the panel and steps into it with the right arrow', async () => {

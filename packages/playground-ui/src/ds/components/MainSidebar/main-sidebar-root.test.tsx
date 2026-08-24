@@ -208,6 +208,15 @@ describe('MainSidebar resize handle keyboard', () => {
     expect(widthOf(scope)).toBe('290px');
   });
 
+  it('keeps stepping from where the last step left it', () => {
+    const { scope, separator } = renderSidebar();
+
+    fireEvent.keyDown(separator, { key: 'ArrowLeft' });
+    fireEvent.keyDown(separator, { key: 'ArrowLeft' });
+
+    expect(widthOf(scope)).toBe('280px');
+  });
+
   it('widens the sidebar a step at a time', () => {
     const { scope, separator } = renderSidebar();
 
@@ -577,6 +586,37 @@ describe('MainSidebar dragging the resize handle', () => {
     fireEvent(window, pointerEvent('pointercancel', { pointerId: 1 }));
 
     expect(document.body.style.cursor).toBe('text');
+  });
+
+  it('takes a new snap zone as soon as it is given one', () => {
+    const panel = (collapseBelow: number) => (
+      <MainSidebarProvider
+        defaultState="default"
+        defaultWidth={300}
+        minWidth={200}
+        maxWidth={480}
+        collapseBelow={collapseBelow}
+      >
+        <MainSidebar>
+          <MainSidebar.Nav>
+            <MainSidebar.NavList>
+              <MainSidebar.NavLink link={{ name: 'Agents', url: '/agents' }} />
+            </MainSidebar.NavList>
+          </MainSidebar.Nav>
+        </MainSidebar>
+      </MainSidebarProvider>
+    );
+
+    mockMatchMedia(false);
+    const { rerender } = render(panel(100));
+    const scope = document.querySelector('[data-sidebar-scope]') as HTMLElement;
+
+    rerender(panel(280));
+
+    press(screen.getByRole('separator'), 300);
+    move(250);
+
+    expect(scope.getAttribute('data-sidebar-state')).toBe('collapsed');
   });
 
   it('follows the pointer back towards where the drag started', () => {
