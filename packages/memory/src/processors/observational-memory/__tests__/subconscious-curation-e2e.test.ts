@@ -22,8 +22,6 @@ import { Memory, Subconscious } from '../../../index';
  * run is able to observe a lifecycle trigger firing. See the simulator gap issue.
  */
 
-const scope = ['org:acme', 'resource:user-42', 'thread:alpha'];
-
 function createMockModel(text: string) {
   return new MockLanguageModelV2({
     doStream: async () => ({
@@ -74,18 +72,19 @@ function requestContext() {
 }
 
 /** Put real knowledge records in the real store, so the trigger has a real worklist to see. */
-async function seedUncurated(memory: Memory, count: number) {
+async function seedUncurated(memory: Memory, count: number, resourceId = 'user-42') {
+  const recordScope = ['org:acme', `resource:${resourceId}`, 'thread:alpha'];
   const store = (await memory.storage.getStore('knowledge'))!;
-  const node = await store.createNode({ name: 'Project Atlas', kind: 'project', scope });
+  const node = await store.createNode({ name: 'Project Atlas', kind: 'project', scope: recordScope });
   let last!: { id: string };
   for (let i = 0; i < count; i++) {
     last = await store.appendKnowledge({
       node: node.id,
       text: `Fact number ${i} about Atlas.`,
-      scope,
+      scope: recordScope,
       sourceThreadId: 'alpha',
-      resolutionScope: scope,
-      defaultScope: scope,
+      resolutionScope: recordScope,
+      defaultScope: recordScope,
     });
   }
   return last;
@@ -119,6 +118,24 @@ describe('curation triggers, end to end on a real Memory', () => {
     // The curator really ran, against the real store, without anyone calling it directly.
     expect(runCuration).toHaveBeenCalledOnce();
     expect(generate).toHaveBeenCalled();
+    const store = (await memory.storage.getStore('knowledge'))!;
+    expect(await store.getCurationCursor({ sourceThreadId: 'alpha', agent: 'curate' })).toMatchObject({
+      lastKnowledgeId: lastRecord.id,
+    });
+  });
+
+  it('uses the thread id as the resource scope when resourceId is omitted', async () => {
+    const memory = createMemory(new Subconscious({ observation: [], curationThreshold: 1 }));
+    const lastRecord = await seedUncurated(memory, 1, 'alpha');
+
+    vi.spyOn(Agent.prototype, 'generate').mockResolvedValue({
+      text: `<curation-complete through="${lastRecord.id}" />`,
+    } as any);
+
+    const om = (await memory.omEngine)!;
+    await om.finalize({ threadId: 'alpha', messages: createMessages(10), requestContext: requestContext() });
+    await memory.settled();
+
     const store = (await memory.storage.getStore('knowledge'))!;
     expect(await store.getCurationCursor({ sourceThreadId: 'alpha', agent: 'curate' })).toMatchObject({
       lastKnowledgeId: lastRecord.id,
