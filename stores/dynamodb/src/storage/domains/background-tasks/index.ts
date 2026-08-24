@@ -115,10 +115,6 @@ export class BackgroundTasksStorageDynamoDB extends BackgroundTasksStorage {
     update: UpdateBackgroundTask,
     options?: { expectedStatus?: BackgroundTask['status'] },
   ): Promise<boolean> {
-    if (options?.expectedStatus) {
-      const existing = await this.getTask(taskId);
-      if (!existing || existing.status !== options.expectedStatus) return false;
-    }
     try {
       const setFields: Record<string, unknown> = {};
       // ElectroDB's .set() ignores undefined values, so any field explicitly set
@@ -179,8 +175,12 @@ export class BackgroundTasksStorageDynamoDB extends BackgroundTasksStorage {
       let op = this.service.entities.background_task.patch({ entity: ENTITY, id: taskId }) as any;
       if (Object.keys(setFields).length > 0) op = op.set(setFields);
       if (removeFields.length > 0) op = op.remove(removeFields);
+      if (options?.expectedStatus) {
+        op = op.where(({ status }: any, { eq }: any) => eq(status, options.expectedStatus));
+      }
       await op.go();
-    } catch (error) {
+    } catch (error: any) {
+      if (options?.expectedStatus && error?.cause?.name === 'ConditionalCheckFailedException') return false;
       throw new MastraError(
         {
           id: createStorageErrorId('DYNAMODB', 'BACKGROUND_TASKS_UPDATE', 'FAILED'),

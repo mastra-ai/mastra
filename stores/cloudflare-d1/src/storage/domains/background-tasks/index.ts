@@ -129,10 +129,6 @@ export class BackgroundTasksStorageD1 extends BackgroundTasksStorage {
     update: UpdateBackgroundTask,
     options?: { expectedStatus?: BackgroundTask['status'] },
   ): Promise<boolean> {
-    if (options?.expectedStatus) {
-      const existing = await this.getTask(taskId);
-      if (!existing || existing.status !== options.expectedStatus) return false;
-    }
     const sets: string[] = [];
     const params: any[] = [];
     if ('status' in update) {
@@ -169,12 +165,14 @@ export class BackgroundTasksStorageD1 extends BackgroundTasksStorage {
     }
     if (sets.length === 0) return false;
     params.push(taskId);
+    const statusPredicate = options?.expectedStatus ? ' AND status = ?' : '';
+    if (options?.expectedStatus) params.push(options.expectedStatus);
     const fullTableName = this.#db.getTableName(TABLE_BACKGROUND_TASKS);
-    await this.#db.executeQuery({
-      sql: `UPDATE ${fullTableName} SET ${sets.join(', ')} WHERE id = ?`,
+    const result = await this.#db.executeQuery({
+      sql: `UPDATE ${fullTableName} SET ${sets.join(', ')} WHERE id = ?${statusPredicate} RETURNING id`,
       params,
     });
-    return true;
+    return Array.isArray(result) && result.length > 0;
   }
   async getTask(taskId: string): Promise<BackgroundTask | null> {
     const fullTableName = this.#db.getTableName(TABLE_BACKGROUND_TASKS);

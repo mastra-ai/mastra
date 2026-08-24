@@ -15,4 +15,4 @@
 '@mastra/pg': patch
 ---
 
-Support conditional background task state updates
+Enforce atomic conditional background task state updates so cancellation cannot be overwritten during dispatch. Background task storage is no longer exposed by Cloudflare KV or ClickHouse, which cannot provide the required compare-and-set semantics.

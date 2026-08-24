@@ -131,10 +131,6 @@ export class BackgroundTasksStorageDO extends BackgroundTasksStorage {
     update: UpdateBackgroundTask,
     options?: { expectedStatus?: BackgroundTask['status'] },
   ): Promise<boolean> {
-    if (options?.expectedStatus) {
-      const existing = await this.getTask(taskId);
-      if (!existing || existing.status !== options.expectedStatus) return false;
-    }
     const columns: string[] = [];
     const values: SqlParam[] = [];
 
@@ -175,9 +171,11 @@ export class BackgroundTasksStorageDO extends BackgroundTasksStorage {
 
     try {
       const fullTableName = this.#db.getTableName(TABLE_BACKGROUND_TASKS);
-      const query = createSqlBuilder().update(fullTableName, columns, values).where('id = ?', taskId);
+      let query = createSqlBuilder().update(fullTableName, columns, values).where('id = ?', taskId);
+      if (options?.expectedStatus) query = query.whereAnd('status = ?', options.expectedStatus);
       const { sql, params } = query.build();
-      await this.#db.executeQuery({ sql, params });
+      const result = await this.#db.executeQuery({ sql: `${sql} RETURNING id`, params });
+      return Array.isArray(result) && result.length > 0;
     } catch (error) {
       throw new MastraError(
         {
@@ -188,7 +186,6 @@ export class BackgroundTasksStorageDO extends BackgroundTasksStorage {
         error,
       );
     }
-    return true;
   }
   async getTask(taskId: string): Promise<BackgroundTask | null> {
     try {
