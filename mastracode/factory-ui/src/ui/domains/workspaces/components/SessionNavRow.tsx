@@ -59,9 +59,8 @@ export function SessionNavRow({
   onPinChange: (pinned: boolean) => void;
   /** Omit on sessions the viewer does not own: the server only lets owners delete. */
   onDelete?: () => void;
-  /** Re-name the session's conversation with the title model. Omitted when the viewer cannot. */
+  /** Omitted for sessions the viewer does not own: the server only lets owners rename. */
   onRegenerateTitle?: () => void;
-  /** True while this row's title is being regenerated. */
   regeneratingTitle?: boolean;
 }) {
   const anchor = useRef<HTMLLIElement>(null);

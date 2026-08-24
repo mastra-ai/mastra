@@ -1248,13 +1248,13 @@ export class AgentController<TState = {}> {
   }
 
   /**
-   * Name a thread from its opening ask, with the model and instructions
-   * `generateTitle` gives the first-turn namer — so a title asked for by hand
-   * reads like one the thread would have been given on its own.
+   * Name a thread from where its conversation went, with the model and
+   * instructions `generateTitle` gives the first-turn namer — so a title asked
+   * for by hand reads like one the thread would have been given on its own.
    *
-   * Runs without constructing a {@link Session}: naming reads the transcript and
-   * writes the thread row, so asking for a title never spins up a workspace or
-   * sandbox. A session already live for the resource lends its agent, request
+   * Runs without constructing a {@link Session}: naming reads a window of recent
+   * messages and writes the thread row, so asking for a title never spins up a
+   * workspace or sandbox. A session already live for the resource lends its agent, request
    * context and event stream; otherwise the default mode answers — and with no
    * session state to read, a `generateTitle.model` that resolves from it falls
    * back to its own default, which is why hosts that store the choice elsewhere
