@@ -14,6 +14,10 @@ export function removeEmptyValues<T extends Record<string, any>>(values: T): Par
   const result: Partial<T> = {};
   for (const key in values) {
     const value = values[key];
+    // The `[]` and `{}` entries are inert: `includes` compares by identity, so a
+    // fresh literal can never match the caller's value. Empty arrays and objects
+    // are dropped by the length checks further down instead.
+    // Stryker disable next-line ArrayDeclaration
     if ([null, undefined, '', [], {}].includes(value)) {
       continue;
     }
