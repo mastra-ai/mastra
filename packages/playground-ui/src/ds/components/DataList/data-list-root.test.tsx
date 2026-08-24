@@ -53,6 +53,39 @@ describe('DataListRoot', () => {
       expect(grid?.className).not.toContain('[&_.data-list-row]:after:hidden');
     });
 
+    it.each([
+      [
+        'tinted',
+        'color-mix(in oklch, var(--surface1), var(--neutral6) 10%)',
+        'color-mix(in oklch, var(--surface1), var(--neutral6) 14%)',
+      ],
+      ['surface', 'var(--surface2)', 'color-mix(in oklch, var(--surface2), var(--neutral6) 10%)'],
+      ['transparent', 'transparent', 'transparent'],
+    ])('paints a %s sticky header with its own colour', (background, resting, hover) => {
+      const { container } = render(
+        <DataList columns="1fr 1fr" stickyHeaderBackground={background as 'tinted' | 'surface' | 'transparent'}>
+          <Header />
+        </DataList>,
+      );
+
+      const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
+      expect(grid?.style.getPropertyValue('--data-list-sticky-header-background')).toBe(resting);
+      expect(grid?.style.getPropertyValue('--data-list-sticky-header-hover-background')).toBe(hover);
+    });
+
+    it('paints a tinted sticky header unless the caller asks otherwise', () => {
+      const { container } = render(
+        <DataList columns="1fr 1fr">
+          <Header />
+        </DataList>,
+      );
+
+      const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
+      expect(grid?.style.getPropertyValue('--data-list-sticky-header-background')).toBe(
+        'color-mix(in oklch, var(--surface1), var(--neutral6) 10%)',
+      );
+    });
+
     it('forwards scrollRef to the scrolling viewport that contains the grid', () => {
       const scrollRef = createRef<HTMLDivElement>();
       const { container } = render(
