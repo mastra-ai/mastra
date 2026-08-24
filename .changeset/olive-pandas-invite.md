@@ -13,7 +13,7 @@ Two new options on `Subconscious`, both **off by default**:
 ```ts
 new Subconscious({
   curationThreshold: 25, // run once 25 uncurated knowledge records have accumulated
-  curationMaxAgeMs: 30 * 60_000, // ...or once the last curation is 30 minutes stale
+  curationMaxAgeMs: 30 * 60_000, // ...or once it is stale and new uncurated knowledge exists
 });
 ```
 
@@ -31,8 +31,8 @@ Retry state is persisted on the observational memory record, so a curator that f
 retried once per turn. A curator that reports `skipped` leaves the backoff untouched.
 
 Known limitation: two live instances sharing one storage can still both decide to curate. There is
-no atomic claim for this state today, and the curation cursor remains the real serializer — the
-loser of a race re-processes records rather than corrupting them.
+no atomic claim for this state today. The curation cursor keeps acknowledged input out of later
+worklists, but it does not serialize concurrent model calls or guarantee conflict-free mutations.
 
 ### Migrating from `curationCadence`
 

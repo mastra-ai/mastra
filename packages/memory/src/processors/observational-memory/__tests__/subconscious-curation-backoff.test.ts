@@ -48,15 +48,25 @@ function createBulkMessages(count: number, threadId: string): MastraDBMessage[] 
   })) as MastraDBMessage[];
 }
 
-function stubMemory(outcome: string, uncurated = 5) {
-  const runCuration = vi.fn(async () => ({ outcome }));
+type CurationOutcome = 'ran' | 'no-op' | 'skipped' | 'no-model';
+
+function stubMemory(initialOutcome: CurationOutcome, uncurated = 5, advanceCursor = true) {
+  let outcome = initialOutcome;
+  let cursor: { lastKnowledgeId: string } | null = null;
+  const runCuration = vi.fn(async () => {
+    if (outcome === 'ran' && advanceCursor) cursor = { lastKnowledgeId: `k-${uncurated - 1}` };
+    return { outcome };
+  });
   return {
     runCuration,
+    setOutcome(next: CurationOutcome) {
+      outcome = next;
+    },
     storage: {
       getStore: async (domain: string) =>
         domain === 'knowledge'
           ? {
-              getCurationCursor: async () => null,
+              getCurationCursor: async () => cursor,
               knowledgeBySource: async ({ limit }: { limit?: number }) => ({
                 records: Array.from({ length: Math.min(uncurated, limit ?? uncurated) }, (_, i) => ({ id: `k-${i}` })),
                 nextCursor: undefined,
@@ -123,7 +133,7 @@ describe('curation backoff in the lifecycle', () => {
   const settle = () => new Promise(resolve => setTimeout(resolve, 20));
 
   it('does not retry a failed curation on the very next turn', async () => {
-    const memory = stubMemory('failed');
+    const memory = stubMemory('no-model');
     let now = 1_000_000;
     const { om } = createEngine(memory, () => now);
     const threadId = 'failing-thread';
@@ -145,7 +155,7 @@ describe('curation backoff in the lifecycle', () => {
   });
 
   it('survives a restart — a fresh instance still honours the persisted backoff', async () => {
-    const memory = stubMemory('failed');
+    const memory = stubMemory('no-model');
     let now = 2_000_000;
     const { om, storage } = createEngine(memory, () => now);
     const threadId = 'restart-thread';
@@ -163,7 +173,7 @@ describe('curation backoff in the lifecycle', () => {
   });
 
   it('clears the backoff after a successful curation', async () => {
-    const memory = stubMemory('failed');
+    const memory = stubMemory('no-model');
     let now = 3_000_000;
     const { om } = createEngine(memory, () => now);
     const threadId = 'recovering-thread';
@@ -171,7 +181,7 @@ describe('curation backoff in the lifecycle', () => {
     await om.observe({ threadId, messages: createBulkMessages(10, threadId), requestContext: requestContext() });
     await settle();
 
-    memory.runCuration.mockResolvedValue({ outcome: 'ran' });
+    memory.setOutcome('ran');
     now += CURATION_BACKOFF_BASE_MS;
     const record = (await om.getRecord(threadId))!;
     await om.maybeCurate(threadId, undefined, record, requestContext());
@@ -191,6 +201,22 @@ describe('curation backoff in the lifecycle', () => {
 
     const record = await om.getRecord(threadId);
     expect(readAttemptState(record?.config)).toBeUndefined();
+  });
+
+  it('backs off when the curator reports ran without advancing the cursor', async () => {
+    const memory = stubMemory('ran', 5, false);
+    const now = 4_500_000;
+    const { om } = createEngine(memory, () => now);
+    const threadId = 'no-progress-thread';
+    const record = await (om as any).getOrCreateRecord(threadId, undefined);
+
+    await om.maybeCurate(threadId, undefined, record, requestContext());
+
+    const after = await om.getRecord(threadId);
+    expect(readAttemptState(after?.config)).toEqual({
+      failures: 1,
+      nextAttemptAt: now + CURATION_BACKOFF_BASE_MS,
+    });
   });
 
   it('backs off when the curator throws, and rethrows to the caller', async () => {

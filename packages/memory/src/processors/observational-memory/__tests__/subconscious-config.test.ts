@@ -224,8 +224,20 @@ describe('curationCadence deprecation', () => {
     try {
       const subconscious = new Subconscious({ curationCadence: 7 });
       expect(subconscious.resolved.curationCadence).toBe(7);
-      expect(subconscious.resolved.curationThreshold).toBe(false);
+      expect(subconscious.resolved.curationThreshold).toBe(7);
       expect(warn.mock.calls[0]?.[0]).not.toContain('is ignored');
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('lets an explicit false threshold disable the deprecated alias', () => {
+    __resetCurationCadenceWarning();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const subconscious = new Subconscious({ curationCadence: 7, curationThreshold: false });
+      expect(subconscious.resolved.curationThreshold).toBe(false);
+      expect(warn.mock.calls[0]?.[0]).toContain('is ignored');
     } finally {
       warn.mockRestore();
     }

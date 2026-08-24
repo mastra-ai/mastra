@@ -162,7 +162,7 @@ export class Subconscious {
     }
 
     if (config.curationCadence !== undefined) {
-      warnCurationCadenceDeprecated(typeof config.curationThreshold === 'number');
+      warnCurationCadenceDeprecated(config.curationThreshold !== undefined);
     }
 
     if (
@@ -194,7 +194,8 @@ export class Subconscious {
       activity: recentUpdates === false ? false : { recentUpdates },
       pins,
       curationCadence: config.curationCadence,
-      curationThreshold: config.curationThreshold ?? false,
+      curationThreshold:
+        config.curationThreshold !== undefined ? config.curationThreshold : (config.curationCadence ?? false),
       curationMaxAgeMs: config.curationMaxAgeMs ?? false,
     });
   }

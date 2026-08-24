@@ -1,4 +1,6 @@
+import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
+import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MastraEmbeddingModel, MastraVector } from '@mastra/core/vector';
@@ -22,6 +24,34 @@ import { Memory, Subconscious } from '../../../index';
 
 const scope = ['org:acme', 'resource:user-42', 'thread:alpha'];
 
+function createMockModel(text: string) {
+  return new MockLanguageModelV2({
+    doStream: async () => ({
+      stream: convertArrayToReadableStream([
+        { type: 'text-start', id: 'text-1' },
+        { type: 'text-delta', id: 'text-1', delta: text },
+        { type: 'text-end', id: 'text-1' },
+        { type: 'finish', finishReason: 'stop', usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 } },
+      ]),
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      warnings: [],
+    }),
+  } as any);
+}
+
+function createMessages(count: number): MastraDBMessage[] {
+  return Array.from({ length: count }, (_, i) => ({
+    id: `msg-${i}`,
+    threadId: 'alpha',
+    role: i % 2 === 0 ? 'user' : 'assistant',
+    createdAt: new Date(Date.now() + i),
+    content: {
+      format: 2,
+      parts: [{ type: 'text', text: `Message ${i} with enough text to cross the observation threshold.` }],
+    } as MastraMessageContentV2,
+  })) as MastraDBMessage[];
+}
+
 function createMemory(subconscious: Subconscious) {
   return new Memory({
     storage: new InMemoryStore(),
@@ -29,7 +59,8 @@ function createMemory(subconscious: Subconscious) {
     embedder: {} as MastraEmbeddingModel<string>,
     options: {
       observationalMemory: {
-        model: 'openai/om-model',
+        model: createMockModel('<observations>\n* The conversation was observed.\n</observations>'),
+        observation: { messageTokens: 100, bufferTokens: false },
         experimental_subconscious: subconscious,
       },
     },
@@ -66,7 +97,7 @@ afterEach(() => {
 
 describe('curation triggers, end to end on a real Memory', () => {
   it('curates from the lifecycle once the uncurated worklist crosses the threshold', async () => {
-    const memory = createMemory(new Subconscious({ curationThreshold: 3 }));
+    const memory = createMemory(new Subconscious({ observation: [], curationThreshold: 3 }));
     const lastRecord = await seedUncurated(memory, 3);
 
     const generate = vi
@@ -75,9 +106,15 @@ describe('curation triggers, end to end on a real Memory', () => {
     const runCuration = vi.spyOn(memory, 'runCuration');
 
     const om = (await memory.omEngine)!;
-    const record = await (om as any).getOrCreateRecord('alpha', 'user-42');
-    await om.maybeCurate('alpha', 'user-42', record, requestContext());
+    const result = await om.finalize({
+      threadId: 'alpha',
+      resourceId: 'user-42',
+      messages: createMessages(10),
+      requestContext: requestContext(),
+    });
     await memory.settled();
+
+    expect(result.observed).toBe(true);
 
     // The curator really ran, against the real store, without anyone calling it directly.
     expect(runCuration).toHaveBeenCalledOnce();
@@ -89,38 +126,50 @@ describe('curation triggers, end to end on a real Memory', () => {
   });
 
   it('leaves the curator alone while the worklist is below the threshold', async () => {
-    const memory = createMemory(new Subconscious({ curationThreshold: 5 }));
+    const memory = createMemory(new Subconscious({ observation: [], curationThreshold: 5 }));
     await seedUncurated(memory, 2);
 
     vi.spyOn(Agent.prototype, 'generate').mockResolvedValue({ text: '<curation-complete />' } as any);
     const runCuration = vi.spyOn(memory, 'runCuration');
 
     const om = (await memory.omEngine)!;
-    const record = await (om as any).getOrCreateRecord('alpha', 'user-42');
-    await om.maybeCurate('alpha', 'user-42', record, requestContext());
+    const result = await om.finalize({
+      threadId: 'alpha',
+      resourceId: 'user-42',
+      messages: createMessages(10),
+      requestContext: requestContext(),
+    });
     await memory.settled();
+
+    expect(result.observed).toBe(true);
 
     expect(runCuration).not.toHaveBeenCalled();
   });
 
   it('never curates when both triggers are off, however much work piles up', async () => {
     // The default-off contract: an existing deployment that never opted in keeps today's behaviour.
-    const memory = createMemory(new Subconscious({}));
+    const memory = createMemory(new Subconscious({ observation: [] }));
     await seedUncurated(memory, 25);
 
     vi.spyOn(Agent.prototype, 'generate').mockResolvedValue({ text: '<curation-complete />' } as any);
     const runCuration = vi.spyOn(memory, 'runCuration');
 
     const om = (await memory.omEngine)!;
-    const record = await (om as any).getOrCreateRecord('alpha', 'user-42');
-    await om.maybeCurate('alpha', 'user-42', record, requestContext());
+    const result = await om.finalize({
+      threadId: 'alpha',
+      resourceId: 'user-42',
+      messages: createMessages(10),
+      requestContext: requestContext(),
+    });
     await memory.settled();
+
+    expect(result.observed).toBe(true);
 
     expect(runCuration).not.toHaveBeenCalled();
   });
 
   it('honours the deprecated curationCadence as the volume trigger', async () => {
-    const memory = createMemory(new Subconscious({ curationCadence: 2 }));
+    const memory = createMemory(new Subconscious({ observation: [], curationCadence: 2 }));
     const lastRecord = await seedUncurated(memory, 2);
 
     vi.spyOn(Agent.prototype, 'generate').mockResolvedValue({
@@ -129,9 +178,15 @@ describe('curation triggers, end to end on a real Memory', () => {
     const runCuration = vi.spyOn(memory, 'runCuration');
 
     const om = (await memory.omEngine)!;
-    const record = await (om as any).getOrCreateRecord('alpha', 'user-42');
-    await om.maybeCurate('alpha', 'user-42', record, requestContext());
+    const result = await om.finalize({
+      threadId: 'alpha',
+      resourceId: 'user-42',
+      messages: createMessages(10),
+      requestContext: requestContext(),
+    });
     await memory.settled();
+
+    expect(result.observed).toBe(true);
 
     expect(runCuration).toHaveBeenCalledOnce();
   });

@@ -947,8 +947,11 @@ export interface ObservationalMemoryConfig {
   memory?: Memory;
 
   /**
-   * Run the subconscious curator (via `memory.runCuration`) after every N committed
-   * observation runs on the synchronous observe path. Off by default. Requires `memory`.
+   * Deprecated spelling of `curationThreshold`. Counts uncurated knowledge records and is off by
+   * default. An explicitly configured `curationThreshold`, including `false`, wins. Requires
+   * `memory`.
+   *
+   * @deprecated Use `curationThreshold`.
    */
   curationCadence?: number;
 

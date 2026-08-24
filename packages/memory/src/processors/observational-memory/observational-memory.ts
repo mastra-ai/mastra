@@ -357,7 +357,6 @@ export class ObservationalMemory {
   private hasher = xxhash();
   private mastra?: Mastra;
   private memory?: Memory;
-  private curationCadence?: number;
   private curationThreshold: number | false = false;
   private curationMaxAgeMs: number | false = false;
   /**
@@ -506,8 +505,7 @@ export class ObservationalMemory {
     this.hookExecution = config.hookExecution ?? 'non-blocking';
     this.mastra = config.mastra;
     this.memory = config.memory;
-    this.curationCadence = config.curationCadence;
-    this.curationThreshold = config.curationThreshold ?? false;
+    this.curationThreshold = config.curationThreshold ?? config.curationCadence ?? false;
     this.curationMaxAgeMs = config.curationMaxAgeMs ?? false;
     if (config.now) this.now = config.now;
 
@@ -3858,9 +3856,9 @@ ${formattedMessages}
    * currently expose for this data: `updateObservationalMemoryConfig` is an unconditional
    * deep-merge with no expected-version or conditional-write argument, and the one claim/lease
    * primitive that does exist (`claimSemanticOutbox`, with its `workerId`/`claimedAt`/
-   * `claimTimeoutMs` columns) is welded to the semantic outbox table. Duplicate work is bounded
-   * rather than unbounded: the curation cursor is the real serializer, so the loser of a race
-   * re-processes records instead of corrupting them.
+   * `claimTimeoutMs` columns) is welded to the semantic outbox table. The curation cursor prevents
+   * acknowledged input from being selected again, but it does not serialize concurrent model calls
+   * or guarantee that their output mutations cannot conflict.
    */
   /** @internal Called by the observation turn's lifecycle sites. Do not call directly. */
   async maybeCurate(
@@ -3870,11 +3868,11 @@ ${formattedMessages}
     requestContext?: RequestContext,
   ): Promise<void> {
     const memory = this.memory;
-    // `curationCadence` is the deprecated spelling of the volume trigger.
-    const threshold: number | false =
-      this.curationThreshold === false ? (this.curationCadence ?? false) : this.curationThreshold;
-    const triggerConfig = { curationThreshold: threshold, curationMaxAgeMs: this.curationMaxAgeMs };
     if (!memory) return;
+    const triggerConfig = {
+      curationThreshold: this.curationThreshold,
+      curationMaxAgeMs: this.curationMaxAgeMs,
+    };
     const limit = curationQueryLimit(triggerConfig);
     if (limit < 1) return;
 
@@ -3927,7 +3925,7 @@ ${formattedMessages}
       scope,
       after: cursor?.lastKnowledgeId,
       limit,
-      includeDeleted: true,
+      includeDeleted: false,
     });
 
     const reason = shouldCurate({
@@ -3938,7 +3936,7 @@ ${formattedMessages}
     });
     if (!reason) return;
 
-    let outcome: string;
+    let outcome: 'ran' | 'no-op' | 'skipped' | 'no-model';
     try {
       const result = await memory.runCuration({
         threadId,
@@ -3952,15 +3950,22 @@ ${formattedMessages}
       throw error;
     }
 
-    // `skipped` means the curator declined for a reason of its own; it is neither progress nor a
-    // failure, so the existing backoff state is left exactly as it was.
-    if (outcome === 'failed' || outcome === 'no-model') {
+    // `skipped` means another same-process curation is already in flight. It is neither progress
+    // nor failure, so the existing backoff state is left exactly as it was.
+    if (outcome === 'skipped') {
+      omDebug(`[OM:curate] trigger=${reason} outcome=${outcome} thread=${threadId}`);
+      return;
+    }
+
+    const cursorAfter = await store.getCurationCursor({ sourceThreadId: threadId, agent: CURATION_AGENT });
+    const advanced = cursorAfter?.lastKnowledgeId !== cursor?.lastKnowledgeId;
+    if (outcome !== 'ran' || !advanced) {
       await this.recordCurationAttempt(fresh.id, nextBackoff(attempt, this.now()));
-    } else if (outcome !== 'skipped' && attempt && attempt.failures > 0) {
+    } else if (attempt && attempt.failures > 0) {
       await this.recordCurationAttempt(fresh.id, clearedBackoff());
     }
 
-    omDebug(`[OM:curate] trigger=${reason} outcome=${outcome} thread=${threadId}`);
+    omDebug(`[OM:curate] trigger=${reason} outcome=${outcome} advanced=${advanced} thread=${threadId}`);
   }
 
   private async recordCurationAttempt(recordId: string, attempt: CurationAttemptState): Promise<void> {

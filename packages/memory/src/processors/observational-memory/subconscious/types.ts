@@ -102,14 +102,13 @@ export interface SubconsciousConfig {
    */
   pins?: boolean | { maxPins?: number; maxCharacters?: number; capturePinning?: boolean };
   /**
-   * Run the curator after every N committed observation runs (in addition to any
-   * caller-driven `Memory.runCuration` triggers). Off by default.
+   * Deprecated spelling of the uncurated-knowledge volume trigger. Off by default.
    *
-   * @deprecated Use {@link curationThreshold}. Still honoured as the volume trigger, but the unit
-   * changed: this counted *committed observation runs*, while `curationThreshold` counts
-   * *uncurated knowledge records* since the last curation. A run can commit several records or
-   * none, so the same number is not the same cadence — see the migration notes in the changeset.
-   * `curationThreshold` also wins when both are set.
+   * @deprecated Use {@link curationThreshold}. Older releases counted *committed observation
+   * runs*; this compatibility alias now counts *uncurated knowledge records* since the last
+   * curation. A run can commit several records or none, so the same number is not the same cadence
+   * — see the migration notes in the changeset. An explicitly configured `curationThreshold`,
+   * including `false`, wins when both are set.
    */
   curationCadence?: number;
   /**
