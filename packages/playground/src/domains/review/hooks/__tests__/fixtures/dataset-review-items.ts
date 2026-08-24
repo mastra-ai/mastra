@@ -63,3 +63,29 @@ export const updatedResultResponse = (comment: string | null): DatasetExperiment
   ...needsReviewResultWithComment,
   comment,
 });
+
+/** A second experiment on the same dataset, used to check the fan-out. */
+export const SECOND_EXPERIMENT_ID = 'exp-2';
+
+export const twoExperimentsResponse: { experiments: DatasetExperiment[]; pagination: PaginationInfo } = {
+  experiments: [experiment, { ...experiment, id: SECOND_EXPERIMENT_ID }],
+  pagination: { ...pagination, total: 2 },
+};
+
+/** An experiment row that lost its dataset link — the hook must skip it. */
+export const orphanExperimentResponse: { experiments: DatasetExperiment[]; pagination: PaginationInfo } = {
+  experiments: [{ ...experiment, datasetId: null as unknown as string }],
+  pagination,
+};
+
+export const makeResult = (overrides: Partial<DatasetExperimentResult> = {}): DatasetExperimentResult => ({
+  ...needsReviewResultWithComment,
+  ...overrides,
+});
+
+export const resultsPage = (
+  results: DatasetExperimentResult[],
+): { results: DatasetExperimentResult[]; pagination: PaginationInfo } => ({
+  results,
+  pagination: { ...pagination, total: results.length },
+});
