@@ -43,10 +43,10 @@ describe('getMCPDiscoveryErrorDetails', () => {
     });
   });
 
-  it('accepts numeric code only when it is a real HTTP status', () => {
+  it('preserves numeric codes without treating them as HTTP status fields', () => {
     expect(getMCPDiscoveryErrorDetails(Object.assign(new Error('payment required'), { code: 402 }))).toEqual({
-      message: 'payment required (HTTP 402)',
-      httpStatus: 402,
+      message: 'payment required',
+      code: 402,
     });
 
     expect(getMCPDiscoveryErrorDetails(Object.assign(new Error('method missing'), { code: -32601 }))).toEqual({

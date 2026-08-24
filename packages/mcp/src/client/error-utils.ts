@@ -29,7 +29,7 @@ export interface MCPDiscoveryErrorDetails {
   message: string;
   /** HTTP response status reported by the MCP transport. */
   httpStatus?: number;
-  /** Deepest non-HTTP error code in the cause chain, such as an MCP SDK or network error code. */
+  /** Deepest error code in the cause chain, such as an MCP SDK, network, or application error code. */
   code?: string | number;
 }
 
@@ -73,9 +73,9 @@ function getErrorMessage(error: unknown): string {
  *
  * MCP SDK 2 keeps an HTTP response status on `SdkHttpError.status` while
  * `code` is a string SDK code. Older transports and wrappers have also used
- * `statusCode` or a numeric `code`, so all three shapes are recognized. The
- * walk is bounded and cycle-safe because application errors may wrap arbitrary
- * third-party causes.
+ * `statusCode`; only explicit status fields are treated as HTTP metadata so a
+ * numeric SDK or application `code` is not mislabeled. The walk is bounded and
+ * cycle-safe because application errors may wrap arbitrary third-party causes.
  */
 export function getMCPDiscoveryErrorDetails(error: unknown): MCPDiscoveryErrorDetails {
   let message = getErrorMessage(error);
@@ -98,7 +98,6 @@ export function getMCPDiscoveryErrorDetails(error: unknown): MCPDiscoveryErrorDe
       for (const candidate of [
         getErrorProperty(record, 'status'),
         getErrorProperty(record, 'statusCode'),
-        getErrorProperty(record, 'code'),
         getErrorProperty(data, 'status'),
         getErrorProperty(data, 'statusCode'),
       ]) {
@@ -110,7 +109,7 @@ export function getMCPDiscoveryErrorDetails(error: unknown): MCPDiscoveryErrorDe
     }
 
     for (const candidate of [getErrorProperty(record, 'code'), getErrorProperty(data, 'code')]) {
-      if ((typeof candidate === 'string' || typeof candidate === 'number') && !isHttpStatus(candidate)) {
+      if (typeof candidate === 'string' || typeof candidate === 'number') {
         // Prefer the deepest code: outer Mastra errors describe the aggregate
         // operation, while the innermost SDK/network code classifies the cause.
         code = candidate;
