@@ -196,22 +196,18 @@ describe('PlatformSandbox', () => {
     expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/railway/projects/proj_123/sandbox/sbx_1');
   });
 
-  it('resolves a lazy template and retries sandbox creation while the provider build is pending', async () => {
+  it('resolves a lazy template and surfaces templatePending when the platform boots on a fallback', async () => {
     vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
     const template = Template().setWorkdir('/workspace/repo').runCmd('pnpm install');
     const definition = serializeSandboxTemplate(template);
     const resolveTemplate = vi.fn().mockResolvedValue(template);
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        json(
-          {
-            error: { message: 'Sandbox template is building', type: 'template_building', retryAfterMs: 0 },
-          },
-          { status: 409 },
-        ),
-      )
-      .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }));
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      json({
+        id: 'sbx_1',
+        createdAt: '2026-06-26T00:00:00.000Z',
+        templatePending: { templateId: 'tpl_pending', retryAfterMs: 5_000 },
+      }),
+    );
     const sandbox = new PlatformSandbox({
       accessToken: 'sk_test',
       projectId: 'proj_123',
@@ -227,14 +223,12 @@ describe('PlatformSandbox', () => {
     await sandbox._start();
 
     expect(resolveTemplate).toHaveBeenCalledTimes(1);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    for (const [url, options] of fetchMock.mock.calls) {
-      expect(String(url)).toBe('https://proxy.test/v1/e2b/projects/proj_123/sandbox');
-      expect(JSON.parse(options.body as string)).toMatchObject({
-        templateDefinition: definition,
-      });
-      expect(JSON.parse(options.body as string)).not.toHaveProperty('templateId');
-    }
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v1/e2b/projects/proj_123/sandbox');
+    const body = JSON.parse(fetchMock.mock.calls[0]![1].body as string);
+    expect(body).toMatchObject({ templateDefinition: definition });
+    expect(body).not.toHaveProperty('templateId');
+    expect(sandbox.templatePending).toEqual({ templateId: 'tpl_pending', retryAfterMs: 5_000 });
   });
 
   it('reuses the resolved template definition when a dead provider sandbox requires fresh provisioning', async () => {
@@ -312,23 +306,11 @@ describe('PlatformSandbox', () => {
     expect(JSON.parse(fetchMock.mock.calls[0]![1].body as string)).not.toHaveProperty('templateDefinition');
   });
 
-  it('falls back to the provider default when the next template retry exceeds the build deadline', async () => {
+  it('leaves templatePending undefined when the platform boots on the exact template', async () => {
     vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
     const template = Template().runCmd('pnpm install');
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(
-        json(
-          {
-            error: {
-              message: 'Sandbox template is building',
-              type: 'template_building',
-              retryAfterMs: 15 * 60_000,
-            },
-          },
-          { status: 409 },
-        ),
-      )
       .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }));
     const sandbox = new PlatformSandbox({
       accessToken: 'sk_test',
@@ -340,12 +322,12 @@ describe('PlatformSandbox', () => {
 
     await sandbox._start();
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(JSON.parse(fetchMock.mock.calls[0]![1].body as string)).toMatchObject({
       templateDefinition: serializeSandboxTemplate(template),
     });
     expect(JSON.parse(fetchMock.mock.calls[0]![1].body as string)).not.toHaveProperty('templateId');
-    expect(JSON.parse(fetchMock.mock.calls[1]![1].body as string)).not.toHaveProperty('templateDefinition');
+    expect(sandbox.templatePending).toBeUndefined();
   });
 
   it('uses E2B direct exec for E2B leases instead of the Railway WebSocket protocol', async () => {

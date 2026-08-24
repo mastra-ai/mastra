@@ -140,6 +140,16 @@ interface CreateSandboxResponse {
   createdAt?: string;
   destroyedAt?: string | null;
   /**
+   * Present when the sandbox booted from a same-lineage stale template or
+   * the provider base template while the requested exact template continues
+   * to build in the background. Absent when the sandbox booted on the exact
+   * template. See {@link SandboxTemplatePending} for semantics.
+   *
+   * Only emitted by the create route today; reattach responses never carry
+   * this field.
+   */
+  templatePending?: SandboxTemplatePending;
+  /**
    * Full sidecar URL (`http://[<ipv6>]:<port>`) the runtime can dial over
    * Railway's private network to reach the in-sandbox exec sidecar. The
    * workspace proxy discovers the sandbox's IPv6 during `Sandbox.create()`
@@ -156,24 +166,22 @@ interface CreateSandboxResponse {
 const CREATE_MAX_ATTEMPTS = 3;
 /** Base delay between create retries; multiplied by the attempt number. */
 const CREATE_RETRY_BASE_DELAY_MS = 2_000;
-/** Maximum time to wait for a provider-owned template build before using the provider default. */
-const TEMPLATE_BUILD_TIMEOUT_MS = 15 * 60_000;
-/** Retry delay used when an older proxy omits `retryAfterMs` from `template_building`. */
-const TEMPLATE_BUILD_RETRY_DELAY_MS = 1_000;
 
-function readTemplateRetryDelay(error: unknown): number | undefined {
-  if (!(error instanceof PlatformApiError) || error.status !== 409 || error.code !== 'template_building') {
-    return undefined;
-  }
-
-  try {
-    const parsed = JSON.parse(error.body) as { error?: { retryAfterMs?: unknown } };
-    const retryAfterMs = parsed.error?.retryAfterMs;
-    if (typeof retryAfterMs === 'number' && Number.isFinite(retryAfterMs) && retryAfterMs >= 0) return retryAfterMs;
-  } catch {
-    // Older proxies may omit structured retry metadata.
-  }
-  return TEMPLATE_BUILD_RETRY_DELAY_MS;
+/**
+ * Observability handle for a template that was requested but is still being
+ * built by the platform. Present on {@link CreateSandboxResponse} and echoed
+ * as {@link PlatformSandbox.templatePending} when the sandbox booted from a
+ * same-lineage stale template or from the provider's base template while
+ * the exact template continues to build in the background. Absent when the
+ * sandbox booted on the exact template.
+ *
+ * `PlatformSandbox` does not act on this: freshness is reconciled by the
+ * caller's own `onStart` runtime setup (e.g. `git fetch && checkout`), not
+ * by replaying template operations inside the running sandbox.
+ */
+export interface SandboxTemplatePending {
+  templateId: string;
+  retryAfterMs: number;
 }
 
 /**
@@ -384,6 +392,16 @@ export class PlatformSandbox extends MastraSandbox {
   readonly provider = 'platform';
   status: ProviderStatus = 'pending';
   declare readonly processes: PlatformProcessManager;
+  /**
+   * Populated from the platform's create/reattach response when the sandbox
+   * booted from a same-lineage stale template or the provider base template
+   * while the requested exact template continues to build in the background.
+   * `undefined` when the sandbox booted on the exact template (or when no
+   * template was requested). Observability-only; consumers reconcile freshness
+   * in their own runtime setup and reprovision to pick up the ready template
+   * on a later start.
+   */
+  templatePending?: SandboxTemplatePending;
 
   private readonly _client: PlatformClient;
   private readonly _usesProviderRoutes: boolean;
@@ -581,6 +599,8 @@ export class PlatformSandbox extends MastraSandbox {
         // provision instead of pointing exec at a dead resource.
         if (!json.destroyedAt) {
           this._createdAt = json.createdAt ? new Date(json.createdAt) : new Date();
+          // Reattach responses never carry templatePending — the field is
+          // set only by the create route. Leave the instance's value alone.
           this._populateAddressFromResponse(json);
           this._logStartComplete(json.id, startedAt, requestMs, 'reattach');
           return { outcome: 'connected' };
@@ -614,14 +634,16 @@ export class PlatformSandbox extends MastraSandbox {
     // the provider is under load. A create either succeeds (201) or fails
     // without allocating a caller-visible resource, so retrying transient
     // 5xx responses with a short backoff is safe and keeps a single flaky
-    // window from killing the caller's whole workflow. A template-backed
-    // create can also return `template_building`; retrying the same idempotent
-    // request lets the proxy poll its durable provider build before provisioning.
+    // window from killing the caller's whole workflow.
+    //
+    // Template builds never block a create anymore: the proxy always returns
+    // a running sandbox on the best available fallback (a same-lineage stale
+    // template if one exists, otherwise the provider base template) and
+    // surfaces `templatePending` in the 201 body describing the build that
+    // continues in the background.
     let response: Response | undefined;
-    let transientAttempts = 0;
     const requestStartedAt = Date.now();
-    const templateDeadline = this._templateDefinition ? requestStartedAt + TEMPLATE_BUILD_TIMEOUT_MS : undefined;
-    for (;;) {
+    for (let attempt = 1; ; attempt++) {
       try {
         response = await this._request('/sandbox', {
           method: 'POST',
@@ -630,27 +652,16 @@ export class PlatformSandbox extends MastraSandbox {
         });
         break;
       } catch (error) {
-        const templateRetryDelay = readTemplateRetryDelay(error);
-        if (templateRetryDelay !== undefined && templateDeadline !== undefined) {
-          if (Date.now() + templateRetryDelay < templateDeadline) {
-            await new Promise(resolve => setTimeout(resolve, templateRetryDelay));
-            continue;
-          }
-          this.logger.warn('Platform sandbox template build timed out; using provider default template');
-          this._templateDefinition = undefined;
-          continue;
-        }
-
         const transient = error instanceof PlatformApiError && error.status >= 500;
-        transientAttempts += 1;
-        if (!transient || transientAttempts >= CREATE_MAX_ATTEMPTS) throw error;
-        await new Promise(resolve => setTimeout(resolve, CREATE_RETRY_BASE_DELAY_MS * transientAttempts));
+        if (!transient || attempt >= CREATE_MAX_ATTEMPTS) throw error;
+        await new Promise(resolve => setTimeout(resolve, CREATE_RETRY_BASE_DELAY_MS * attempt));
       }
     }
     const requestMs = Date.now() - requestStartedAt;
     const json = (await response.json()) as CreateSandboxResponse;
     this._sandboxId = json.id;
     this._createdAt = json.createdAt ? new Date(json.createdAt) : new Date();
+    this.templatePending = json.templatePending;
     this._populateAddressFromResponse(json);
     this._logStartComplete(json.id, startedAt, requestMs, 'provision');
     return { outcome: 'created' };

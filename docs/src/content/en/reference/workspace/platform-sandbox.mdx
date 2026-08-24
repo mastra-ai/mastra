@@ -119,7 +119,7 @@ When `sandboxId` is set, `environmentId` isn't required because the sandbox alre
 
 ### Reusable templates
 
-Pass a reusable template builder to `PlatformSandbox`. A fresh sandbox start sends the serialized definition to Platform, which content-addresses it and starts or reuses the provider build. Sandbox creation retries while the build is pending:
+Pass a reusable template builder to `PlatformSandbox`. A fresh sandbox start sends the serialized definition to Platform, which content-addresses it and starts or reuses the provider build. Sandbox creation never blocks on a build: if the exact template is not yet built, Platform boots the sandbox on the best available fallback (a same-lineage stale template if one exists, otherwise the provider base template) and builds the requested template in the background:
 
 ```typescript
 import { PlatformSandbox, Template } from '@mastra/platform-workspace'
@@ -160,7 +160,25 @@ await sandbox.start()
 
 The resolver doesn't run when `PlatformSandbox` reattaches to an existing `sandboxId`. It resolves the repository's public default-branch head at fresh-start time, then Platform starts or reuses the corresponding template build. If the repository head can't be resolved or the provider build fails, sandbox creation continues with the provider's default template so runtime setup can perform a cold checkout. The lazy definition never includes credentials. Private-repository template builds require a future secret transport capability.
 
+`createRepoTemplate()` also attaches a commit-independent `lineageId` (`repo:<repoFullName>:<workdir>`) to the definition. Platform uses `lineageId` to find a previous ready template for the same repository and boot the new commit on that warm filesystem while the exact commit template builds in the background. Callers using the raw `Template()` builder can attach their own lineage key with `.withLineageId(id)` (any non-empty string up to 200 characters); omit it to opt out of stale-lineage fallback.
+
 Platform stores build state under the definition's server-derived content hash within the selected environment and provider.
+
+#### Observing a pending template build
+
+When a sandbox boots on a fallback template (either same-lineage stale or the provider base), the platform response includes a `templatePending` field that `PlatformSandbox` surfaces for observability:
+
+```typescript
+await sandbox.start()
+if (sandbox.templatePending) {
+  // The sandbox is running on a fallback template.
+  // A later start() of a sandbox with the same template definition
+  // will pick up the exact template once the background build finishes.
+  console.log('exact template still baking:', sandbox.templatePending.templateId)
+}
+```
+
+`templatePending` is undefined when the sandbox booted on the exact template. `PlatformSandbox` never re-executes template operations inside a running sandbox — reconcile any commit-specific filesystem state in your own runtime setup (for example, an `onStart` hook that runs `git fetch && git checkout <sha>`) exactly as you would with a fresh template. Reprovision on a later `start()` to pick up the ready exact template.
 
 :::warning
 
@@ -371,6 +389,12 @@ The `command` argument is a shell string and is concatenated verbatim into the r
     type: 'PlatformProcessManager',
     description:
       'Background process manager. See [SandboxProcessManager reference](/reference/workspace/process-manager).',
+  },
+  {
+    name: 'templatePending',
+    type: '{ templateId: string; retryAfterMs: number } | undefined',
+    description:
+      'Set when the running sandbox booted from a fallback template (same-lineage stale or provider base) while the exact template continues to build in the background. Undefined when the sandbox booted from the exact template. Observability only — PlatformSandbox does not re-execute template operations; reconcile filesystem state in your own runtime setup.',
   },
 ]}
 />

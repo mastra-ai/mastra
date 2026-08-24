@@ -120,8 +120,23 @@ describe('Template', () => {
     type Keys = keyof SandboxTemplateBuilder;
     type HasPublicTemplateClient = 'PlatformTemplateClient' extends keyof typeof platformWorkspace ? true : false;
     expectTypeOf<Keys>().toEqualTypeOf<
-      'runCmd' | 'setWorkdir' | 'setEnvs' | 'aptInstall' | 'pipInstall' | 'npmInstall'
+      'runCmd' | 'setWorkdir' | 'setEnvs' | 'aptInstall' | 'pipInstall' | 'npmInstall' | 'withLineageId'
     >();
     expectTypeOf<HasPublicTemplateClient>().toEqualTypeOf<false>();
+  });
+
+  it('round-trips a lineageId through withLineageId', () => {
+    const definition = serializeSandboxTemplate(Template().runCmd('pnpm install').withLineageId('repo:acme/widgets:$HOME/widgets'));
+    expect(definition.lineageId).toBe('repo:acme/widgets:$HOME/widgets');
+  });
+
+  it('rejects an empty or oversized lineageId', () => {
+    expect(() => Template().withLineageId('')).toThrow();
+    expect(() => Template().withLineageId('x'.repeat(201))).toThrow();
+  });
+
+  it('lineageId survives subsequent builder operations', () => {
+    const definition = serializeSandboxTemplate(Template().withLineageId('repo:acme/widgets:/w').runCmd('pnpm install').setWorkdir('/w'));
+    expect(definition.lineageId).toBe('repo:acme/widgets:/w');
   });
 });

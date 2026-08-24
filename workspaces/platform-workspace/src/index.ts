@@ -26,6 +26,7 @@ export {
   type PlatformSandboxNetworkIsolation,
   type PlatformSandboxTemplate,
   type SandboxAddressRegistry,
+  type SandboxTemplatePending,
 } from './sandbox.js';
 export {
   createRepoTemplate,
