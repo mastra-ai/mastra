@@ -1,5 +1,21 @@
 # mastra
 
+## 1.26.1-alpha.7
+
+### Patch Changes
+
+- Fixed Factory chat `/think` so selecting the command opens an inline thinking-level picker with the active choice marked. Direct commands can still set, inspect, and clear session reasoning overrides with the same semantics as the Mastra Code TUI. ([#22198](https://github.com/mastra-ai/mastra/pull/22198))
+
+  ```text
+  /think high
+  /think status
+  /think default
+  ```
+
+- Updated dependencies [[`ae8790c`](https://github.com/mastra-ai/mastra/commit/ae8790c4bfaa088d2ab279d1dcc06f326b9fd109), [`04a815f`](https://github.com/mastra-ai/mastra/commit/04a815fc8971d29e97fcdcc5008a1eb472fc00ff), [`cced745`](https://github.com/mastra-ai/mastra/commit/cced745a056ec2225c5bc702e32d848847aa8b65)]:
+  - @mastra/core@1.62.0-alpha.7
+  - @mastra/deployer@1.62.0-alpha.7
+
 ## 1.26.1-alpha.6
 
 ### Patch Changes

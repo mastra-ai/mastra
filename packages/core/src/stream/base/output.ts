@@ -30,6 +30,7 @@ import type {
 import { safeClose, safeEnqueue } from './input';
 import { createJsonTextStreamTransformer, createObjectStreamTransformer } from './output-format-handlers';
 import { getTransformedSchema } from './schema';
+import { packStepMessageMirrors, unpackStepMessageMirrors } from './step-message-mirrors';
 import { dedupeStepRequests, rehydrateStepRequests } from './step-request-dedupe';
 
 /**
@@ -1045,20 +1046,28 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     steps: [...self.#bufferedSteps] as LLMStepResult[],
                   };
 
-                  // Output processors must still run on failed streams so user-configured
-                  // processors (and onFinish consumers) observe error terminals. Only
-                  // canceled (aborted) streams skip the pass. Orphan-input protection for
-                  // failed turns lives in MessageHistory.processOutputResult.
-                  if (self.#status !== 'canceled') {
-                    self.messageList = await self.processorRunner.runOutputProcessors(
-                      self.messageList,
-                      resolveObservabilityContext(options),
-                      self.#options.requestContext,
-                      0,
-                      outputResultWriter,
-                      outputResult,
+                  // Canceled output bypasses the normal LLM-step response assembly. Add its
+                  // nonblank in-flight text to MessageList so every output processor receives
+                  // the same terminal transcript shape; persistence remains processor-owned.
+                  if (self.#status === 'canceled' && self.#bufferedByStep.text.trim().length > 0) {
+                    self.messageList.add(
+                      {
+                        role: 'assistant',
+                        content: [{ type: 'text', text: self.#bufferedByStep.text }],
+                      },
+                      'response',
+                      { merge: false },
                     );
                   }
+
+                  self.messageList = await self.processorRunner.runOutputProcessors(
+                    self.messageList,
+                    resolveObservabilityContext(options),
+                    self.#options.requestContext,
+                    0,
+                    outputResultWriter,
+                    outputResult,
+                  );
 
                   // Get text from the latest response message (the last assistant message)
                   const outputText = resolveOutputTextSkippingCompletionChecks(self.messageList);
@@ -1067,7 +1076,12 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   // This preserves text from retry scenarios where step.text is already correct.
                   // Compare against undefined, not truthiness, so a processor clearing the text
                   // to '' still overwrites the step text instead of leaking the original.
-                  if (lastStep && outputText !== undefined && outputText !== originalText) {
+                  if (
+                    self.#status !== 'canceled' &&
+                    lastStep &&
+                    outputText !== undefined &&
+                    outputText !== originalText
+                  ) {
                     lastStep.text = outputText;
                   }
 
@@ -2055,7 +2069,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   }
 
   serializeState() {
-    const { steps, requests } = dedupeStepRequests(this.#bufferedSteps);
+    const { steps, requests } = dedupeStepRequests(packStepMessageMirrors(this.#bufferedSteps));
     return {
       status: this.#status,
       bufferedSteps: steps,
@@ -2085,7 +2099,6 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
   deserializeState(state: any) {
     this.#status = state.status;
-    this.#bufferedSteps = rehydrateStepRequests(state.bufferedSteps, state.bufferedStepRequests);
     this.#bufferedReasoningDetails = state.bufferedReasoningDetails;
     this.#bufferedByStepReasoningDetails = state.bufferedByStepReasoningDetails ?? {};
     this.#bufferedByStep = state.bufferedByStep;
@@ -2106,5 +2119,12 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     this.#tripwire = state.tripwire;
     this.#wasSuspended = state.wasSuspended ?? state.status === 'suspended';
     this.messageList = this.messageList.deserialize(state.messageList);
+    // Buffered steps hold only the IDs of the response messages they had seen;
+    // rebuilding their lazy mirrors needs the restored message list, so this has
+    // to come last.
+    this.#bufferedSteps = unpackStepMessageMirrors(
+      rehydrateStepRequests(state.bufferedSteps, state.bufferedStepRequests),
+      this.messageList,
+    );
   }
 }

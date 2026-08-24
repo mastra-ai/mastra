@@ -212,6 +212,22 @@ export class ReflectorRunner {
   private readonly onReflectionCommitted?: (context: ReflectionCommittedContext) => Promise<void>;
   private mastra?: Mastra;
 
+  /**
+   * Per-lock-key observation-token count of the last unproductive synchronous
+   * reflection (failed, or committed while still over the reflection
+   * threshold). `call()` already runs the full bounded compression ladder for
+   * a given input, so re-running it against unchanged observations cannot
+   * succeed — threshold-triggered sync reflection is skipped while the count
+   * is unchanged and retried as soon as the input differs.
+   * Keyed by lock key (thread/resource), which is stable across generations —
+   * record ids change every time a generation is created.
+   *
+   * Lifecycle: an entry is deleted when a sync reflection finishes under
+   * threshold and replaced on each unproductive attempt. Entries are one
+   * number per active thread/resource key and live for the runner's lifetime.
+   */
+  private readonly syncReflectionSuppression = new Map<string, number>();
+
   constructor(opts: {
     reflectionConfig: ResolvedReflectionConfig;
     observationConfig: ResolvedObservationConfig;
@@ -370,8 +386,8 @@ export class ReflectorRunner {
     let parsed: ReturnType<typeof parseReflectorOutput> = { observations: '', suggestedContinuation: undefined };
     let reflectedTokens = 0;
     let attemptNumber = 0;
-    /** Observations from the previous attempt, used to detect a no-progress ladder. */
-    let previousObservations: string | undefined;
+    /** True when the latest attempt returned an empty block for non-empty input. */
+    let emptyOutput = false;
 
     while (currentLevel <= maxLevel) {
       attemptNumber++;
@@ -474,9 +490,18 @@ export class ReflectorRunner {
 
       parsed = parseReflectorOutput(result.text, observations, activeExtractors);
 
+      emptyOutput = !parsed.degenerate && observations.trim().length > 0 && parsed.observations.trim().length === 0;
       if (parsed.degenerate) {
         omDebug(
           `[OM:callReflector] attempt #${attemptNumber}: degenerate repetition detected, treating as compression failure. ${describeDegenerateOutput(result.text, 2000)}`,
+        );
+        reflectedTokens = originalTokens;
+      } else if (emptyOutput) {
+        // An empty block over non-empty input is never a valid compression —
+        // treat it like degenerate output so the ladder escalates instead of
+        // accepting 0 tokens as a successful result.
+        omDebug(
+          `[OM:callReflector] attempt #${attemptNumber}: empty observations block for non-empty input, treating as compression failure`,
         );
         reflectedTokens = originalTokens;
       } else {
@@ -486,26 +511,20 @@ export class ReflectorRunner {
         `[OM:callReflector] attempt #${attemptNumber} parsed: reflectedTokens=${reflectedTokens}, targetThreshold=${targetThreshold}, compressionValid=${validateCompression(reflectedTokens, targetThreshold)}, parsedObsLen=${parsed.observations?.length}, degenerate=${parsed.degenerate ?? false}`,
       );
 
-      if (!parsed.degenerate && (validateCompression(reflectedTokens, targetThreshold) || currentLevel >= maxLevel)) {
+      if (
+        !parsed.degenerate &&
+        !emptyOutput &&
+        (validateCompression(reflectedTokens, targetThreshold) || currentLevel >= maxLevel)
+      ) {
         break;
       }
 
-      if (parsed.degenerate && currentLevel >= maxLevel) {
-        omDebug(`[OM:callReflector] degenerate output persists at maxLevel=${maxLevel}, breaking`);
-        break;
-      }
-
-      // Escalating the level changes the prompt. If a changed prompt still produced
-      // byte-identical output, the model is not responding to the level knob and further
-      // attempts cannot improve the result — stop instead of burning the rest of the ladder
-      // on model calls, marker writes and nested runs that are known to be wasted.
-      if (!parsed.degenerate && previousObservations !== undefined && parsed.observations === previousObservations) {
+      if ((parsed.degenerate || emptyOutput) && currentLevel >= maxLevel) {
         omDebug(
-          `[OM:callReflector] attempt #${attemptNumber} returned output identical to the previous attempt; escalating cannot help, stopping the ladder`,
+          `[OM:callReflector] ${parsed.degenerate ? 'degenerate' : 'empty'} output persists at maxLevel=${maxLevel}, breaking`,
         );
         break;
       }
-      previousObservations = parsed.observations;
 
       // Emit failed marker and start marker for next retry
       if (streamContext?.writer) {
@@ -541,6 +560,18 @@ export class ReflectorRunner {
       }
 
       currentLevel = Math.min(currentLevel + 1, maxLevel) as CompressionLevel;
+    }
+
+    // A reflection of non-empty observations must never come back empty: the
+    // caller commits the result as the new activeObservations (sync path) or
+    // as the bufferedReflection replacing the reflected slice (buffered path),
+    // so returning '' here silently wipes memory. Empty output only happens
+    // when every ladder attempt was degenerate (parseReflectorOutput discards
+    // degenerate text) or the model returned nothing — both are failures.
+    if (observations.trim().length > 0 && parsed.observations.trim().length === 0) {
+      throw new Error(
+        `Reflector produced empty output after ${attemptNumber} attempt(s)${parsed.degenerate ? ' (degenerate repetition)' : ''} — refusing to commit an empty reflection over ${originalTokens} observation tokens`,
+      );
     }
 
     const structuredExtraction = await extractStructuredValues({
@@ -1188,6 +1219,24 @@ export class ReflectorRunner {
     // ════════════════════════════════════════════════════════════
     // SYNC PATH: Do synchronous reflection (blocking)
     // ════════════════════════════════════════════════════════════
+    // Suppress threshold-triggered sync reflection while the input is
+    // unchanged from the last unproductive attempt: shouldReflect stays true
+    // while observations remain over threshold, so without this every
+    // activation blocks on re-running the full compression ladder against the
+    // exact observations it just failed to compress. Any change to the
+    // observation count makes the input different and lifts the suppression.
+    // TTL and provider-change triggers are exempt — they reflect for
+    // activation semantics, not to shrink observations.
+    if (activationTriggeredBy === 'threshold') {
+      const suppressedAtTokens = this.syncReflectionSuppression.get(lockKey);
+      if (suppressedAtTokens !== undefined && observationTokens === suppressedAtTokens) {
+        omDebug(
+          `[OM:reflect] skipping sync reflection — observations unchanged at ${observationTokens} tokens since the last unproductive attempt; retrying once they change`,
+        );
+        return;
+      }
+    }
+
     await this.storage.setReflectingFlag(record.id, true);
     registerOp(record.id, 'reflecting');
 
@@ -1274,6 +1323,18 @@ export class ReflectorRunner {
         reflection: reflectResult.observations,
         tokenCount: reflectionTokenCount,
       });
+
+      // Best-effort results still over threshold are committed (they usually
+      // shrink observations somewhat), but shouldReflect remains true — record
+      // the committed count so the next activation doesn't immediately block
+      // on re-reflecting the identical observations. The committed reflection
+      // becomes the new active observations, so its token count is the input
+      // identity of any immediate retry.
+      if (reflectionTokenCount >= reflectThreshold) {
+        this.syncReflectionSuppression.set(lockKey, reflectionTokenCount);
+      } else {
+        this.syncReflectionSuppression.delete(lockKey);
+      }
       await this.notifyReflectionCommitted({
         parentThreadId: requestedThreadId ?? record.threadId ?? '',
         resourceId: record.resourceId ?? '',
@@ -1333,6 +1394,7 @@ export class ReflectorRunner {
       if (lifecycleError !== undefined || abortSignal?.aborted) {
         throw error;
       }
+      this.syncReflectionSuppression.set(lockKey, observationTokens);
       omError('[OM] Reflection failed', error);
     } finally {
       try {

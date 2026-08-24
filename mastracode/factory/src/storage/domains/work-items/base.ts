@@ -479,8 +479,8 @@ export const WORK_ITEMS_SCHEMA: CollectionSchema = {
   ],
   indexes: [
     {
-      name: 'work_items_org_project_updated_at_idx',
-      columns: ['org_id', 'factory_project_id', 'updated_at'],
+      name: 'work_items_org_project_created_at_id_idx',
+      columns: ['org_id', 'factory_project_id', 'created_at', 'id'],
     },
     {
       name: 'work_items_project_parent_idx',
@@ -1139,12 +1139,21 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     const rows = await ops.findMany<WorkItemDbRow>(
       'work_items',
       { org_id: orgId, factory_project_id: factoryProjectId },
-      { orderBy: [['updated_at', 'desc']] },
+      {
+        orderBy: [
+          ['created_at', 'desc'],
+          ['id', 'desc'],
+        ],
+      },
     );
     return rows.map(toWorkItem);
   }
 
-  /** List the org's work items for a project, newest first. */
+  /**
+   * List the org's work items for a project, newest first. Ordered on `created_at` with an id
+   * tiebreak so the order is stable: `updated_at` moves under every write, which makes it useless
+   * as a cursor and non-deterministic for the callers that iterate this list.
+   */
   async list({ orgId, factoryProjectId }: { orgId: string; factoryProjectId: string }): Promise<WorkItemRow[]> {
     return this.#listWithOps(this.#db, orgId, factoryProjectId);
   }
@@ -2533,6 +2542,34 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       updated_at: now,
     });
     return { item: toWorkItem(row), created: true, previous: emptyPrior() };
+  }
+
+  async setParentWorkItemIfMissing({
+    orgId,
+    id,
+    userId,
+    parentWorkItemId,
+  }: {
+    orgId: string;
+    id: string;
+    userId: string;
+    parentWorkItemId: string;
+  }): Promise<WorkItemRow | null> {
+    const candidate = await this.#db.findOne<WorkItemDbRow>('work_items', { org_id: orgId, id });
+    if (!candidate) return null;
+
+    return this.#withProjectRelationTransaction(orgId, candidate.factory_project_id, async ops => {
+      const row = await ops.updateAtomic<WorkItemDbRow>('work_items', { org_id: orgId, id }, async current => {
+        if (current.parent_work_item_id !== null) return current;
+        validateParentRelation(
+          await this.#listWithOps(ops, orgId, current.factory_project_id),
+          current.id,
+          parentWorkItemId,
+        );
+        return applyUpdate({ current, userId, input: { parentWorkItemId } });
+      });
+      return row ? toWorkItem(row) : null;
+    });
   }
 
   async update({

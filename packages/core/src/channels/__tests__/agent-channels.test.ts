@@ -355,6 +355,102 @@ describe('AgentChannels', () => {
     });
   });
 
+  describe('slash command handling', () => {
+    it('registers a catch-all slash command handler and routes commands to the agent', async () => {
+      const chatMod = await getChatModule();
+      let registeredHandler: ((event: any) => Promise<void>) | undefined;
+      const spy = vi.spyOn(chatMod.Chat.prototype as any, 'onSlashCommand').mockImplementation((handler: any) => {
+        registeredHandler = handler;
+      });
+      const db = new InMemoryDB();
+      const memoryStore = new InMemoryMemory({ db });
+      const mockMastra = {
+        getStorage: () => ({ getStore: () => memoryStore }),
+        getServer: () => null,
+      } as any;
+
+      try {
+        await agentChannels.initialize(mockMastra);
+        expect(registeredHandler).toBeDefined();
+
+        await registeredHandler!({
+          adapter: agentChannels.adapters.discord,
+          channel: { id: 'channel-1', isDM: false, channelVisibility: 'public' },
+          command: '/weather',
+          text: 'London',
+          triggerId: 'interaction-1',
+          user: {
+            userId: 'user-1',
+            userName: 'tyler',
+            fullName: 'Tyler Barnes',
+            isBot: false,
+            isMe: false,
+          },
+          raw: { id: 'interaction-1' },
+          openModal: vi.fn(),
+        });
+
+        expect(mockAgent.sendMessage).toHaveBeenCalledWith(
+          expect.objectContaining({ contents: '/weather London' }),
+          expect.objectContaining({ resourceId: 'discord:user-1' }),
+        );
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    it('supports custom slash command handlers', async () => {
+      const chatMod = await getChatModule();
+      let registeredHandler: ((event: any) => Promise<void>) | undefined;
+      const spy = vi.spyOn(chatMod.Chat.prototype as any, 'onSlashCommand').mockImplementation((handler: any) => {
+        registeredHandler = handler;
+      });
+      const customHandler = vi.fn().mockResolvedValue(undefined);
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+        handlers: { onSlashCommand: customHandler },
+      });
+      channels.__setAgent(mockAgent);
+      const db = new InMemoryDB();
+      const memoryStore = new InMemoryMemory({ db });
+      const mockMastra = { getStorage: () => ({ getStore: () => memoryStore }), getServer: () => null } as any;
+      const event = { command: '/help' } as any;
+
+      try {
+        await channels.initialize(mockMastra);
+        await registeredHandler!(event);
+        expect(customHandler).toHaveBeenCalledWith(
+          event,
+          expect.any(Function),
+          expect.objectContaining({ mastra: mockMastra }),
+        );
+        expect(mockAgent.sendMessage).not.toHaveBeenCalled();
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    it('does not register slash command handling when disabled', async () => {
+      const chatMod = await getChatModule();
+      const spy = vi.spyOn(chatMod.Chat.prototype as any, 'onSlashCommand');
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+        handlers: { onSlashCommand: false },
+      });
+      channels.__setAgent(mockAgent);
+      const db = new InMemoryDB();
+      const memoryStore = new InMemoryMemory({ db });
+      const mockMastra = { getStorage: () => ({ getStore: () => memoryStore }), getServer: () => null } as any;
+
+      try {
+        await channels.initialize(mockMastra);
+        expect(spy).not.toHaveBeenCalled();
+      } finally {
+        spy.mockRestore();
+      }
+    });
+  });
+
   describe('message routing', () => {
     it('routes inbound channel messages through sendMessage with channel metadata', async () => {
       const db = new InMemoryDB();
