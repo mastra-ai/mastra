@@ -1,8 +1,8 @@
 ---
-'@mastra/memory': patch
+'@mastra/memory': minor
 ---
 
-Trigger subconscious curation from volume and staleness, at every point in the turn that commits knowledge.
+Trigger subconscious curation from volume and staleness, at every point in the turn that can leave knowledge uncurated.
 
 Previously the curator only ran on a count of committed observation runs, and only from the
 synchronous observe path. A short conversation — one that captured knowledge and ended without ever

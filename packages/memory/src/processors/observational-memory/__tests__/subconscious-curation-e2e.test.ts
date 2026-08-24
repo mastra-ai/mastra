@@ -11,15 +11,15 @@ import { Memory, Subconscious } from '../../../index';
 /**
  * End-to-end proof for the curation triggers.
  *
- * Everything here is the real thing: a real `Memory`, the real knowledge store, the real
- * `Subconscious`, and the real observational-memory engine that `Memory` builds for itself.
- * Nothing calls `Memory.runCuration` by hand — the only way the curator can run is if a
- * lifecycle site evaluated the trigger and decided to run it, which is exactly the claim
- * under test (and the gap Tyler flagged: coverage of the *lifecycle*, not of a predicate).
+ * A real `Memory`, the real knowledge store, the real `Subconscious`, and the real
+ * observational-memory engine that `Memory` builds for itself. Nothing calls
+ * `Memory.runCuration` by hand — the only way the curator can run is if a lifecycle site
+ * evaluated the trigger and decided to run it, which is exactly the claim under test
+ * (coverage of the *lifecycle*, not of a predicate).
  *
- * Why this lives here and not in the replay simulator: the simulator drives capture through
- * `applyExtractorHooks` directly and never enters the observation lifecycle, so no arm it can
- * run is able to observe a lifecycle trigger firing. See the simulator gap issue.
+ * Model calls are mocked and the worklist is seeded straight into the store, so what this
+ * proves is the path from lifecycle entry to curator run to cursor advance — not the capture
+ * agent that would normally have written those records.
  */
 
 function createMockModel(text: string) {
@@ -181,6 +181,67 @@ describe('curation triggers, end to end on a real Memory', () => {
     await memory.settled();
 
     expect(result.observed).toBe(true);
+
+    expect(runCuration).not.toHaveBeenCalled();
+  });
+
+  it('curates from the lifecycle when the cursor is stale and new knowledge arrived', async () => {
+    // Age arm: no volume threshold at all, so the only thing that can fire is staleness.
+    const memory = createMemory(new Subconscious({ observation: [], curationMaxAgeMs: 1 }));
+    const alreadyCurated = await seedUncurated(memory, 1);
+
+    const store = (await memory.storage.getStore('knowledge'))!;
+    await store.advanceCurationCursor({
+      sourceThreadId: 'alpha',
+      agent: 'curate',
+      lastKnowledgeId: alreadyCurated.id,
+    });
+    await new Promise(resolve => setTimeout(resolve, 5));
+
+    const lastRecord = await seedUncurated(memory, 1);
+    vi.spyOn(Agent.prototype, 'generate').mockResolvedValue({
+      text: `<curation-complete through="${lastRecord.id}" />`,
+    } as any);
+    const runCuration = vi.spyOn(memory, 'runCuration');
+
+    const om = (await memory.omEngine)!;
+    await om.finalize({
+      threadId: 'alpha',
+      resourceId: 'user-42',
+      messages: createMessages(10),
+      requestContext: requestContext(),
+    });
+    await memory.settled();
+
+    expect(runCuration).toHaveBeenCalledOnce();
+    expect(await store.getCurationCursor({ sourceThreadId: 'alpha', agent: 'curate' })).toMatchObject({
+      lastKnowledgeId: lastRecord.id,
+    });
+  });
+
+  it('leaves a stale cursor alone while no new knowledge has arrived', async () => {
+    const memory = createMemory(new Subconscious({ observation: [], curationMaxAgeMs: 1 }));
+    const alreadyCurated = await seedUncurated(memory, 1);
+
+    const store = (await memory.storage.getStore('knowledge'))!;
+    await store.advanceCurationCursor({
+      sourceThreadId: 'alpha',
+      agent: 'curate',
+      lastKnowledgeId: alreadyCurated.id,
+    });
+    await new Promise(resolve => setTimeout(resolve, 5));
+
+    vi.spyOn(Agent.prototype, 'generate').mockResolvedValue({ text: '<curation-complete />' } as any);
+    const runCuration = vi.spyOn(memory, 'runCuration');
+
+    const om = (await memory.omEngine)!;
+    await om.finalize({
+      threadId: 'alpha',
+      resourceId: 'user-42',
+      messages: createMessages(10),
+      requestContext: requestContext(),
+    });
+    await memory.settled();
 
     expect(runCuration).not.toHaveBeenCalled();
   });
