@@ -1,5 +1,33 @@
 # @mastra/memory
 
+## 1.28.0-alpha.1
+
+### Minor Changes
+
+- Added opt-in awaited Observational Memory hooks for synchronous cycles. ([#22147](https://github.com/mastra-ai/mastra/pull/22147))
+
+  Set `hookExecution: "await"` to await lifecycle hooks, stop the observer or reflector when a start hook fails, and receive one paired end callback after cleanup. Async-buffer cycles remain fire-and-forget.
+
+  ```ts
+  const memory = new Memory({
+    options: {
+      observationalMemory: {
+        hookExecution: 'await',
+        hooks: {
+          onObservationStart: async context => {
+            await authorizeObservation(context);
+          },
+        },
+      },
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`65edab1`](https://github.com/mastra-ai/mastra/commit/65edab1c233d17b8f163bad12fca410d0e6f16b1), [`ab20a38`](https://github.com/mastra-ai/mastra/commit/ab20a38d0275f8d85e0f3833bd87ef487bcc609f), [`dbbfeb8`](https://github.com/mastra-ai/mastra/commit/dbbfeb85ec949dc9ebc0755e1ad262e4f5eba8db), [`3cc9d00`](https://github.com/mastra-ai/mastra/commit/3cc9d00b2b4333e0377a5e9df5eff92c17ce7630), [`733a537`](https://github.com/mastra-ai/mastra/commit/733a537489a858b5880b2e98809334fba895a221), [`9207dfa`](https://github.com/mastra-ai/mastra/commit/9207dfab8062e5fc68b751684797ff86fe0b4e70), [`12c61d2`](https://github.com/mastra-ai/mastra/commit/12c61d280c8cb208bc3c8dbcbe5dcc60cf9d1cd0), [`9a12ef3`](https://github.com/mastra-ai/mastra/commit/9a12ef3fccf3f4186db0f294f4ee1f02cf4d8db2)]:
+  - @mastra/core@1.62.0-alpha.5
+
 ## 1.27.1-alpha.0
 
 ### Patch Changes

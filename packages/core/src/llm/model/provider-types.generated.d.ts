@@ -1281,6 +1281,7 @@ export type ProviderModelsMap = {
     'wan2.7-image',
     'wan2.7-image-pro',
   ];
+  readonly agentrouter: readonly ['claude-opus-4-8', 'claude-opus-5', 'gpt-5.6-sol'];
   readonly google: readonly [
     'deep-research-max-preview-04-2026',
     'deep-research-preview-04-2026',

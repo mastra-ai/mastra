@@ -2213,12 +2213,21 @@ export class WorkflowEventProcessor extends EventProcessor {
           });
         }
 
-        // For foreach, store the full iteration result (including status, suspendPayload, etc.)
-        // not just the output, so suspend state is preserved
-        const iterationResult =
-          prevResult.status === 'suspended'
-            ? prevResult // Keep full result for suspended iterations
-            : (prevResult as any).output; // Just output for completed iterations
+        // For foreach, store the full suspended result so its resume state is preserved.
+        // Completed iterations keep the public output array shape.
+        const iterationResult = prevResult.status === 'suspended' ? prevResult : (prevResult as any).output;
+        const existingSuspendPayload = existingStepResult?.suspendPayload as any;
+        const iterationSuspendPayload = prevResult.suspendPayload as any;
+        const foreachOutput = [...(existingSuspendPayload?.__workflow_meta?.foreachOutput ?? [])];
+        foreachOutput[currentIdx] =
+          prevResult.status === 'suspended' ? prevResult : { ...prevResult, suspendPayload: {} };
+        const suspendPayload = {
+          ...(existingSuspendPayload ?? iterationSuspendPayload),
+          __workflow_meta: {
+            ...(existingSuspendPayload?.__workflow_meta ?? iterationSuspendPayload?.__workflow_meta),
+            foreachOutput,
+          },
+        };
 
         if (currentResult) {
           currentResult[currentIdx] = iterationResult;
@@ -2230,15 +2239,14 @@ export class WorkflowEventProcessor extends EventProcessor {
             ...prevResult, // Get iteration timing info
             output: currentResult,
             payload: originalPayload,
-            // Preserve suspend metadata from first suspension
-            suspendPayload: existingStepResult?.suspendPayload ?? prevResult.suspendPayload,
+            suspendPayload,
             suspendedAt: existingStepResult?.suspendedAt ?? (prevResult as any).suspendedAt,
             // Update resume metadata to most recent resume (new iteration takes precedence)
             resumePayload: (prevResult as any).resumePayload ?? existingStepResult?.resumePayload,
             resumedAt: (prevResult as any).resumedAt ?? existingStepResult?.resumedAt,
           } as any;
         } else {
-          newResult = { ...prevResult, output: [iterationResult], payload: originalPayload } as any;
+          newResult = { ...prevResult, output: [iterationResult], payload: originalPayload, suspendPayload } as any;
         }
       }
       const newStepResults = await workflowsStore?.updateWorkflowResults({

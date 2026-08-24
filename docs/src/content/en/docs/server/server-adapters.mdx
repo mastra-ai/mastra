@@ -226,10 +226,11 @@ Initialize your app as usual, then create a `MastraServer` by passing in the `ap
 
 ## Initialization flow
 
-Calling `init()` runs three steps in order. Understanding this flow helps when you need to insert your own middleware at specific points.
+Calling `init()` runs four steps in order. Understanding this flow helps when you need to insert your own middleware at specific points.
 
 1. `registerContextMiddleware()`: Attaches the Mastra instance, request context, tools, and abort signal to every request. This makes Mastra available to all subsequent middleware and route handlers.
 1. `registerAuthMiddleware()`: Runs the adapter auth hook during initialization. Official adapters enforce auth inline when Mastra registers built-in routes and `registerApiRoute()` routes, so raw framework routes should use the adapter's exported `createAuthMiddleware()` helper when they need Mastra auth.
+1. `registerUserMiddleware()`: Registers [middleware](/docs/server/middleware) from the `server.middleware` config and `mastra.setServerMiddleware()`. Middleware handlers use Hono's signature, so Hono-based adapters (`@mastra/hono` and the adapters built on it) mount them; other adapters log a warning instead of silently ignoring the config.
 1. `registerRoutes()`: Registers all Mastra API routes for agents, workflows, and other features. Also registers MCP routes if MCP servers are configured.
 
 ### Manual initialization
@@ -246,6 +247,9 @@ server.registerContextMiddleware();
 
 // Middleware that needs Mastra context
 app.use(customMiddleware);
+
+// Registers `server.middleware` and `setServerMiddleware()` middleware
+server.registerUserMiddleware();
 
 await server.registerRoutes();
 
@@ -377,6 +381,7 @@ The adapter reads these settings from `mastra.getServer()`:
 | `auth` | Authentication config, used by `registerAuthMiddleware()`. |
 | `bodySizeLimit` | Default body size limit in bytes. Can be overridden per-adapter via `bodyLimitOptions`. |
 | `onError` | Custom error handler called when an unhandled error occurs in a route handler. See [server.onError](/reference/configuration#serveronerror). |
+| `middleware` | User [middleware](/docs/server/middleware), registered by `registerUserMiddleware()`. Hono-based adapters run it; Express, Fastify, and Koa log a warning because Hono handlers can't run there. |
 
 ### Adapter constructor only
 
@@ -401,7 +406,6 @@ These `server` config options are only used by `mastra build` and have no effect
 | `cors` | `mastra build` adds CORS middleware |
 | `timeout` | `mastra build` |
 | `apiRoutes` | `registerApiRoute()` for `mastra build` |
-| `middleware` | Middleware config for `mastra build` |
 
 When using adapters, configure these features directly with your framework. For example, add CORS middleware using Hono's or Express's built-in CORS packages, and set the port when calling your framework's listen function.
 
