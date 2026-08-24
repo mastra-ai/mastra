@@ -60,6 +60,36 @@ describe('TaskList', () => {
       expect(screen.getByLabelText('Pending')).toBeTruthy();
     });
 
+    it('marks each task with an icon of its own', () => {
+      render(<TaskList tasks={mixedTasks} />);
+
+      for (const label of ['Completed', 'In progress', 'Pending']) {
+        expect(screen.getByLabelText(label).querySelector('svg')).toBeTruthy();
+      }
+
+      const icons = ['Completed', 'In progress', 'Pending'].map(
+        label => screen.getByLabelText(label).querySelector('svg')?.getAttribute('class') ?? '',
+      );
+      expect(new Set(icons).size).toBe(3);
+    });
+
+    it('strikes a completed task through and leans on the one in progress', () => {
+      render(<TaskList tasks={mixedTasks} />);
+
+      const labelOf = (status: string) => screen.getByLabelText(status).nextElementSibling as HTMLElement;
+
+      expect(labelOf('Completed').classList.contains('line-through')).toBe(true);
+      expect(labelOf('In progress').classList.contains('font-medium')).toBe(true);
+      expect(labelOf('Pending').classList.contains('line-through')).toBe(false);
+      expect(labelOf('Pending').classList.contains('font-medium')).toBe(false);
+    });
+
+    it('brings the active task no further into view than it needs', () => {
+      render(<TaskList tasks={mixedTasks} />);
+
+      expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' });
+    });
+
     it('scrolls the active task into view only when its identity changes', () => {
       const { rerender } = render(<TaskList tasks={mixedTasks} />);
       expect(Element.prototype.scrollIntoView).toHaveBeenCalledOnce();
