@@ -558,7 +558,7 @@ describe('MessageHistory', () => {
       });
     });
 
-    it('should persist an input-only failed run', async () => {
+    it('should not persist an input-only failed run', async () => {
       const mockStorage = {
         saveMessages: vi.fn().mockResolvedValue(undefined),
         getThreadById: vi.fn().mockResolvedValue({
@@ -601,10 +601,7 @@ describe('MessageHistory', () => {
       });
 
       expect(result).toBe(messageList);
-      expect(mockStorage.saveMessages).toHaveBeenCalledTimes(1);
-      expect(mockStorage.saveMessages).toHaveBeenCalledWith({
-        messages: [expect.objectContaining({ id: 'msg-2', role: 'user' })],
-      });
+      expect(mockStorage.saveMessages).not.toHaveBeenCalled();
     });
 
     it('should persist a failed run that produced output', async () => {
