@@ -29,6 +29,7 @@ import {
   OM_BUFFER_CLAIM_EXPIRES_AT,
   OM_BUFFER_CLAIM_TOKEN,
   OM_LAST_BUFFERED_AT_TIME,
+  OM_LAST_BUFFERED_AT_TOKENS,
   OM_LAST_OBSERVED_AT,
   OM_OBSERVATION_TOKEN_COUNT,
   OM_PENDING_MESSAGE_TOKENS,
@@ -127,6 +128,10 @@ export async function commitBufferedObservations(
         input.lastBufferedAtTime === undefined || input.lastBufferedAtTime === null
           ? ''
           : `,\n               ${OM_LAST_BUFFERED_AT_TIME} = :lastBufferedAtTime`;
+      const lastBufferedAtTokensSql =
+        input.lastBufferedAtTokens === undefined
+          ? ''
+          : `,\n               ${OM_LAST_BUFFERED_AT_TOKENS} = :lastBufferedAtTokens`;
       const binds: Record<string, unknown> = {
         id: input.id,
         ownerToken: input.ownerToken,
@@ -135,11 +140,14 @@ export async function commitBufferedObservations(
       if (input.lastBufferedAtTime !== undefined && input.lastBufferedAtTime !== null) {
         binds.lastBufferedAtTime = toDate(input.lastBufferedAtTime);
       }
+      if (input.lastBufferedAtTokens !== undefined) {
+        binds.lastBufferedAtTokens = input.lastBufferedAtTokens;
+      }
 
       const result = await connection.execute(
         `UPDATE ${table(ctx, TABLE_OBSERVATIONAL_MEMORY)}
            SET ${OM_BUFFERED_OBSERVATION_CHUNKS} = :bufferedObservationChunks,
-               ${OM_UPDATED_AT} = SYSTIMESTAMP${lastBufferedAtTimeSql}
+               ${OM_UPDATED_AT} = SYSTIMESTAMP${lastBufferedAtTimeSql}${lastBufferedAtTokensSql}
            WHERE id = :id
              AND ${OM_BUFFER_CLAIM_TOKEN} = :ownerToken
              AND ${OM_BUFFER_CLAIM_EXPIRES_AT} > SYSTIMESTAMP`,

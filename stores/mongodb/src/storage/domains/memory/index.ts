@@ -2171,6 +2171,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
                 $concatArrays: [{ $ifNull: ['$bufferedObservationChunks', []] }, [newChunk]],
               },
               lastBufferedAtTime: input.lastBufferedAtTime ?? '$lastBufferedAtTime',
+              lastBufferedAtTokens: input.lastBufferedAtTokens ?? '$lastBufferedAtTokens',
               updatedAt: '$$NOW',
             },
           },

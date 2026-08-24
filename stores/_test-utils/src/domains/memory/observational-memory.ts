@@ -1237,11 +1237,13 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
           ownerToken: 'owner-a',
           chunk: claimChunk(),
           lastBufferedAtTime,
+          lastBufferedAtTokens: 4321,
         });
         expect(res).toEqual({ committed: true });
 
         const updated = await memoryStorage.getObservationalMemory(input.threadId, input.resourceId);
         expect(updated?.bufferedObservationChunks).toHaveLength(1);
+        expect(updated?.lastBufferedAtTokens).toBe(4321);
       });
 
       it('a stale owner cannot persist buffered output after takeover; successor state is intact', async () => {

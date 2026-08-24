@@ -551,6 +551,9 @@ export async function handleObservationalMemoryOperation(
       if (request.lastBufferedAtTime) {
         patch.lastBufferedAtTime = request.lastBufferedAtTime;
       }
+      if (request.lastBufferedAtTokens !== undefined) {
+        patch.lastBufferedAtTokens = request.lastBufferedAtTokens;
+      }
       await ctx.db.patch(doc._id, patch);
       return { ok: true, result: { committed: true } };
     }

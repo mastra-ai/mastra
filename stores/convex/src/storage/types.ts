@@ -305,6 +305,7 @@ export type StorageRequest =
       chunk: SerializedOMChunk;
       /** ISO timestamp */
       lastBufferedAtTime?: string;
+      lastBufferedAtTokens?: number;
       /** ISO timestamp */
       updatedAt: string;
     }

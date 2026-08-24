@@ -503,6 +503,7 @@ export class ConvexDB extends MastraBase {
     ownerToken: string;
     chunk: SerializedOMChunk;
     lastBufferedAtTime?: string;
+    lastBufferedAtTokens?: number;
     updatedAt: string;
   }): Promise<R> {
     return this.client.callStorage<R>({

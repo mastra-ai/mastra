@@ -2269,11 +2269,12 @@ export class MemoryMySQL extends MemoryStorage {
               COALESCE(${omCol('bufferedObservationChunks')}, JSON_ARRAY()), '$', CAST(? AS JSON)
             ),
             ${omCol('lastBufferedAtTime')} = COALESCE(?, ${omCol('lastBufferedAtTime')}),
+            ${omCol('lastBufferedAtTokens')} = COALESCE(?, ${omCol('lastBufferedAtTokens')}),
             ${omCol('updatedAt')} = NOW(3)
           WHERE ${omCol('id')} = ?
             AND ${omCol('observationBufferClaimToken')} = ?
             AND ${omCol('observationBufferClaimExpiresAt')} > NOW(3)`,
-        [JSON.stringify(newChunk), lastBufferedAtTime, input.id, input.ownerToken],
+        [JSON.stringify(newChunk), lastBufferedAtTime, input.lastBufferedAtTokens ?? null, input.id, input.ownerToken],
       );
       if ((result as ResultSetHeader).affectedRows === 0) {
         await this.claimNotFoundOrLost(input.id, 'COMMIT_BUFFERED_OBSERVATIONS');

@@ -1321,6 +1321,7 @@ export class MemoryConvex extends MemoryStorage {
         ownerToken: input.ownerToken,
         chunk,
         lastBufferedAtTime: input.lastBufferedAtTime ? toISO(input.lastBufferedAtTime) : undefined,
+        lastBufferedAtTokens: input.lastBufferedAtTokens,
         updatedAt: new Date().toISOString(),
       }),
     );

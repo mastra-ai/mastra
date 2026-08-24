@@ -1367,6 +1367,10 @@ export class InMemoryMemory extends MemoryStorage {
     }
 
     await this.updateBufferedObservations(input);
+    if (input.lastBufferedAtTokens !== undefined) {
+      record.lastBufferedAtTokens = input.lastBufferedAtTokens;
+      record.updatedAt = now;
+    }
     return { committed: true };
   }
 

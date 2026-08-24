@@ -1429,6 +1429,11 @@ export interface ReleaseObservationBufferClaimInput {
  */
 export interface CommitBufferedObservationsInput extends UpdateBufferedObservationsInput {
   ownerToken: string;
+  /**
+   * Optional token boundary written in the same owner-conditioned operation as
+   * the chunk append, so the end-of-cycle boundary update is fenced too.
+   */
+  lastBufferedAtTokens?: number;
 }
 
 /** Narrow result for the owner-conditioned buffered-observation commit. */

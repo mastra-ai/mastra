@@ -2833,14 +2833,16 @@ export class MemoryPG extends MemoryStorage {
         `UPDATE ${this.#omTableName()} SET
             "bufferedObservationChunks" = COALESCE("bufferedObservationChunks", '[]'::jsonb) || $1::jsonb,
             "lastBufferedAtTime" = COALESCE($2, "lastBufferedAtTime"),
+            "lastBufferedAtTokens" = COALESCE($3, "lastBufferedAtTokens"),
             "updatedAt" = ${now},
             "updatedAtZ" = now()
-          WHERE id = $3
-            AND "observationBufferClaimToken" = $4
+          WHERE id = $4
+            AND "observationBufferClaimToken" = $5
             AND "observationBufferClaimExpiresAt" > ${now}`,
         [
           JSON.stringify([newChunk]),
           input.lastBufferedAtTime ? input.lastBufferedAtTime.toISOString() : null,
+          input.lastBufferedAtTokens ?? null,
           input.id,
           input.ownerToken,
         ],
