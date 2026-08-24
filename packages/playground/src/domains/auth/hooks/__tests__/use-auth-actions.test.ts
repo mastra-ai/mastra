@@ -188,4 +188,127 @@ describe('auth actions — apiPrefix support (issue #13901)', () => {
       expect((init.headers as Record<string, string>)['Content-Type']).toBe('application/json');
     });
   });
+  describe('prefix normalization', () => {
+    const ssoUrlFor = async (apiPrefix: string) => {
+      mockFetch.mockResolvedValue(createMockResponse({ url: 'https://sso.example.com' }));
+      const { makeSSOLoginRequest } = await import('../use-auth-actions');
+      await makeSSOLoginRequest({ options: { baseUrl: 'http://localhost:4000', apiPrefix } } as any, {});
+      return (mockFetch.mock.calls[0] as [string, RequestInit])[0];
+    };
+
+    const logoutUrlFor = async (apiPrefix: string) => {
+      mockFetch.mockResolvedValue(createMockResponse({ success: true }));
+      const { makeLogoutRequest } = await import('../use-auth-actions');
+      await makeLogoutRequest({ options: { baseUrl: 'http://localhost:4000', apiPrefix } } as any);
+      return (mockFetch.mock.calls[0] as [string, RequestInit])[0];
+    };
+
+    it('adds a missing leading slash on the SSO url', async () => {
+      expect(await ssoUrlFor('mastra')).toBe('http://localhost:4000/mastra/auth/sso/login');
+    });
+
+    it('drops a trailing slash on the SSO url', async () => {
+      expect(await ssoUrlFor('/mastra/')).toBe('http://localhost:4000/mastra/auth/sso/login');
+    });
+
+    it('trims whitespace on the SSO url', async () => {
+      expect(await ssoUrlFor('  /mastra  ')).toBe('http://localhost:4000/mastra/auth/sso/login');
+    });
+
+    it('adds a missing leading slash on the logout url', async () => {
+      expect(await logoutUrlFor('mastra')).toBe('http://localhost:4000/mastra/auth/logout');
+    });
+
+    it('drops a trailing slash on the logout url', async () => {
+      expect(await logoutUrlFor('/mastra/')).toBe('http://localhost:4000/mastra/auth/logout');
+    });
+
+    it('trims whitespace on the logout url', async () => {
+      expect(await logoutUrlFor('  /mastra  ')).toBe('http://localhost:4000/mastra/auth/logout');
+    });
+  });
+
+  describe('SSO login redirect', () => {
+    it('forwards the redirect target the caller asked for', async () => {
+      mockFetch.mockResolvedValue(createMockResponse({ url: 'https://sso.example.com' }));
+      const { makeSSOLoginRequest } = await import('../use-auth-actions');
+
+      await makeSSOLoginRequest({ options: { baseUrl: 'http://x' } } as any, {
+        redirectUri: 'http://x/agents?tab=chat',
+      });
+
+      const [url] = mockFetch.mock.calls[0] as [string, RequestInit];
+      expect(new URL(url).searchParams.get('redirect_uri')).toBe('http://x/agents?tab=chat');
+    });
+
+    it('omits the query string entirely when no redirect is given', async () => {
+      mockFetch.mockResolvedValue(createMockResponse({ url: 'https://sso.example.com' }));
+      const { makeSSOLoginRequest } = await import('../use-auth-actions');
+
+      await makeSSOLoginRequest({ options: { baseUrl: 'http://x' } } as any, {});
+
+      const [url] = mockFetch.mock.calls[0] as [string, RequestInit];
+      expect(url).toBe('http://x/api/auth/sso/login');
+    });
+
+    it('omits the query string for an empty redirect', async () => {
+      mockFetch.mockResolvedValue(createMockResponse({ url: 'https://sso.example.com' }));
+      const { makeSSOLoginRequest } = await import('../use-auth-actions');
+
+      await makeSSOLoginRequest({ options: { baseUrl: 'http://x' } } as any, { redirectUri: '' });
+
+      const [url] = mockFetch.mock.calls[0] as [string, RequestInit];
+      expect(url).toBe('http://x/api/auth/sso/login');
+    });
+
+    it('sends the session cookie', async () => {
+      mockFetch.mockResolvedValue(createMockResponse({ url: 'https://sso.example.com' }));
+      const { makeSSOLoginRequest } = await import('../use-auth-actions');
+
+      await makeSSOLoginRequest({ options: { baseUrl: 'http://x' } } as any, {});
+
+      const [, options] = mockFetch.mock.calls[0] as [string, RequestInit];
+      expect(options.credentials).toBe('include');
+    });
+  });
+
+  describe('logout request', () => {
+    it('posts, rather than reading', async () => {
+      mockFetch.mockResolvedValue(createMockResponse({ success: true }));
+      const { makeLogoutRequest } = await import('../use-auth-actions');
+
+      await makeLogoutRequest({ options: { baseUrl: 'http://x' } } as any);
+
+      const [, options] = mockFetch.mock.calls[0] as [string, RequestInit];
+      expect(options.method).toBe('POST');
+      expect(options.credentials).toBe('include');
+    });
+  });
+
+  describe('when the server rejects the request', () => {
+    it('reports the status on an SSO failure', async () => {
+      mockFetch.mockResolvedValue({ ok: false, status: 503, json: () => Promise.resolve({}) } as unknown as Response);
+      const { makeSSOLoginRequest } = await import('../use-auth-actions');
+
+      await expect(makeSSOLoginRequest({ options: {} } as any, {})).rejects.toThrow(
+        'Failed to initiate SSO login: 503',
+      );
+    });
+
+    it('reports the status on a logout failure', async () => {
+      mockFetch.mockResolvedValue({ ok: false, status: 401, json: () => Promise.resolve({}) } as unknown as Response);
+      const { makeLogoutRequest } = await import('../use-auth-actions');
+
+      await expect(makeLogoutRequest({ options: {} } as any)).rejects.toThrow('Failed to logout: 401');
+    });
+
+    it('does not fall through to parsing the body on failure', async () => {
+      const json = vi.fn();
+      mockFetch.mockResolvedValue({ ok: false, status: 500, json } as unknown as Response);
+      const { makeLogoutRequest } = await import('../use-auth-actions');
+
+      await expect(makeLogoutRequest({ options: {} } as any)).rejects.toThrow();
+      expect(json).not.toHaveBeenCalled();
+    });
+  });
 });
