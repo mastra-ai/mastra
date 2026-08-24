@@ -11,7 +11,15 @@ import { FactoryTransitionService } from './transition-service.js';
 
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
 
-function requestContext(overrides: Partial<{ threadId: string; scope: string; authenticated: boolean }> = {}) {
+function requestContext(
+  overrides: Partial<{
+    threadId: string;
+    scope: string;
+    authenticated: boolean;
+    modelId: string;
+    thinkingLevel: 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+  }> = {},
+) {
   const context = new RequestContext();
   if (overrides.authenticated !== false) {
     context.set('user', { workosId: 'user-1', organizationId: 'org-1' });
@@ -20,7 +28,9 @@ function requestContext(overrides: Partial<{ threadId: string; scope: string; au
     resourceId: 'resource-1',
     threadId: overrides.threadId ?? 'thread-1',
     scope: overrides.scope ?? '/worktree',
-    getState: () => ({ factoryProjectId: PROJECT_ID }),
+    state: { factoryProjectId: PROJECT_ID, thinkingLevel: overrides.thinkingLevel ?? 'high' },
+    getState: () => ({ factoryProjectId: PROJECT_ID, thinkingLevel: overrides.thinkingLevel ?? 'high' }),
+    session: { modelId: overrides.modelId ?? 'openai/gpt-5.6-sol', modeId: 'review' },
   });
   return context;
 }
@@ -362,8 +372,36 @@ describe('FactoryPhaseStateProcessor', () => {
 
     const signal = await processor.computeStateSignal(stateArgs(requestContext({ authenticated: false })));
 
-    expect(signal).toMatchObject({ attributes: { status: 'active', board: 'work', stage: 'planning', role: 'work' } });
+    expect(signal).toMatchObject({
+      attributes: {
+        status: 'active',
+        board: 'work',
+        stage: 'planning',
+        role: 'work',
+        modelId: 'openai/gpt-5.6-sol',
+        thinkingLevel: 'high',
+      },
+    });
     expect(signal?.contents).toContain('Revision: 1');
+    expect(signal?.contents).toContain('Runtime: model=openai/gpt-5.6-sol, reasoning=high');
+  });
+
+  it('re-emits phase state when the review runtime changes', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    await prepare(storage);
+    const rules = defaultFactoryRules({ version: 'rules-v1' });
+    const processor = new FactoryPhaseStateProcessor({ rules, storage });
+    const first = await processor.computeStateSignal(stateArgs(requestContext()));
+    const changed = await processor.computeStateSignal(
+      stateArgs(requestContext({ modelId: 'openai/gpt-5.5', thinkingLevel: 'xhigh' }), {
+        contextWindow: { hasSnapshot: true },
+        lastSnapshot: { metadata: { value: first?.metadata?.value } },
+        tracking: { currentCacheKey: first?.cacheKey },
+      }),
+    );
+
+    expect(changed?.cacheKey).not.toBe(first?.cacheKey);
+    expect(changed?.contents).toContain('Runtime: model=openai/gpt-5.5, reasoning=xhigh');
   });
 
   it('emits, suppresses, re-emits after compaction, and retracts a revoked phase snapshot', async () => {

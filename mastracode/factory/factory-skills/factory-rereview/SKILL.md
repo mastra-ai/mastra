@@ -129,6 +129,12 @@ First, compose the **re-review handoff** — don't send it to the conversation y
 - **Assumptions** — every recorded judgment call from this run.
 - **Open questions** — any decision that genuinely needs a human.
 
+End the handoff with this exact final line, replacing the placeholders with the `model` and `reasoning` values from the current `factory-phase` signal. Copy both values verbatim; never infer them from the model's own claims or hard-code a model name.
+
+```text
+Written by <model> with <reasoning> reasoning.
+```
+
 Next, publish the re-review on the PR itself — this is part of every pass, not something to wait to be asked for. Write the handoff body to `.artifacts/factory-rereview/pr-<number>.md` and submit a PR review matching the verdict:
 
 - approve → `gh pr review <number> --approve --body-file <file>`

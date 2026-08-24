@@ -1,6 +1,10 @@
 import { createHash } from 'node:crypto';
 
+import { resolveRequestThinkingLevel } from '@mastra/code-sdk/agents/model';
+import type { ThinkingLevel } from '@mastra/code-sdk/providers/openai-codex';
+import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { MastraDBMessage, MessageList } from '@mastra/core/agent/message-list';
+import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import type {
   ComputeStateSignalArgs,
   ComputeStateSignalResult,
@@ -71,13 +75,30 @@ type CompletedToolResult = {
 type PhaseSnapshotValue = {
   bindingId?: string;
   itemId?: string;
+  modelId?: string;
   revision?: number;
   stage?: string;
+  thinkingLevel?: ThinkingLevel;
   role?: string;
   board?: FactoryRuleBoard;
   ruleSetVersion?: string;
   status: 'active' | 'none';
 };
+
+type RuntimeSnapshot = {
+  modelId: string;
+  thinkingLevel: ThinkingLevel;
+};
+
+function runtimeFromRequestContext(
+  requestContext: ComputeStateSignalArgs['requestContext'],
+): RuntimeSnapshot | undefined {
+  if (!requestContext || typeof requestContext.get !== 'function') return;
+  const context = requestContext.get<'controller', AgentControllerRequestContext<MastraCodeState>>('controller');
+  const modelId = context?.session?.modelId.trim();
+  if (!modelId) return;
+  return { modelId, thinkingLevel: resolveRequestThinkingLevel(context) };
+}
 
 function workItemSourceKey(item: WorkItemRow): string | null {
   const source = item.externalSource;
@@ -272,6 +293,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       .filter(candidate => candidate.parentWorkItemId === item.id || item.parentWorkItemId === candidate.id)
       .slice(0, MAX_LINKED_ITEMS);
     const board = boardForItem(item);
+    const runtime = runtimeFromRequestContext(args.requestContext);
     const value: PhaseSnapshotValue = {
       status: 'active',
       bindingId: binding.id,
@@ -281,6 +303,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       role: binding.role,
       board,
       ruleSetVersion: this.options.rules.version,
+      ...runtime,
     };
     const cacheKey = phaseCacheKey(value, linked);
     if (hasBase && (args.tracking?.currentCacheKey ?? args.lastSnapshot?.metadata?.state?.cacheKey) === cacheKey)
@@ -293,6 +316,9 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       `Factory ${board} phase: ${PHASE_LABELS[stage]} (${escapeText(stage)})\n` +
       `Work item: ${escapeText(item.title)} (${item.id})\n` +
       `Role: ${escapeText(binding.role)}\nRevision: ${item.revision}\nRules: ${escapeText(this.options.rules.version)}\n` +
+      (runtime
+        ? `Runtime: model=${escapeText(runtime.modelId)}, reasoning=${escapeText(runtime.thinkingLevel)}\n`
+        : '') +
       `Use factory_transition_work_item with expectedRevision ${item.revision} to request a phase change.${escapeText(linkedText)}`;
     const isDelta = hasBase && prior?.status === 'active';
     return {
@@ -303,7 +329,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       contents: isDelta ? `Factory phase update:\n${snapshotContents}` : snapshotContents,
       value: { phase: value },
       ...(isDelta ? { delta: { phase: value } } : {}),
-      attributes: { status: 'active', board, stage, role: binding.role, revision: item.revision },
+      attributes: { status: 'active', board, stage, role: binding.role, revision: item.revision, ...runtime },
       metadata: { value: { phase: value } },
     };
   }
