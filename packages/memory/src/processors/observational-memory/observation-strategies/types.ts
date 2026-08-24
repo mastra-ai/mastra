@@ -26,6 +26,19 @@ export interface ObservationRunOpts {
   cycleId?: string;
   /** Pre-captured start timestamp (async buffer only). */
   startedAt?: string;
+  /**
+   * Durable observation-buffer claim token for this cycle (async buffer only).
+   * When set, buffered output is persisted through the owner-conditioned
+   * commit; a lost claim discards the output instead of overwriting a
+   * successor's state.
+   */
+  claimOwnerToken?: string;
+  /**
+   * Token boundary to persist alongside the buffered chunk (async buffer
+   * only). Rides the owner-conditioned commit so the end-of-cycle boundary
+   * update is fenced too.
+   */
+  claimBoundaryTokens?: number;
 
   writer?: ProcessorStreamWriter;
   abortSignal?: AbortSignal;

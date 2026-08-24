@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { coreFeatures } from '@mastra/core/features';
@@ -234,6 +236,8 @@ import {
 } from './message-utils';
 import { ModelByInputTokens } from './model-by-input-tokens';
 import { didProviderChange as hasProviderChanged } from './model-context';
+import { ObservationBufferLease, DEFAULT_OBSERVATION_BUFFER_LEASE_POLICY } from './observation-buffer-lease';
+import type { ObservationBufferLeasePolicy } from './observation-buffer-lease';
 import { renderObservationGroupsForReflection, wrapInObservationGroup } from './observation-groups';
 import { ObservationStrategy } from './observation-strategies/index';
 import type { ObservationRunResult } from './observation-strategies/types';
@@ -312,6 +316,11 @@ import type {
  */
 export class ObservationalMemory {
   private storage: MemoryStorage;
+  /**
+   * Internal, test-injectable observation-buffer lease policy. Never public
+   * configuration: tests override this to shorten lease/renewal timing.
+   */
+  private observationBufferLeasePolicy: ObservationBufferLeasePolicy = DEFAULT_OBSERVATION_BUFFER_LEASE_POLICY;
   private tokenCounter: TokenCounter;
   readonly scope: 'resource' | 'thread';
   /** Whether retrieval-mode observation groups are enabled. */
@@ -2133,11 +2142,10 @@ ${formattedMessages}
       (await this.tokenCounter.countMessagesAsync(unobservedMessages)) + (record.pendingMessageTokens ?? 0);
     BufferingCoordinator.lastBufferedBoundary.set(bufferKey, currentTokens);
 
-    // Set persistent flag so new instances (created per request) know buffering is in progress
+    // Register the op locally so same-process callers can join this cycle.
+    // The durable buffer claim (the cross-process authority) is acquired inside
+    // runAsyncBufferedObservation, after the mutex wait and candidate checks.
     registerOp(record.id, 'bufferingObservation');
-    this.storage.setBufferingObservationFlag(record.id, true, currentTokens).catch(err => {
-      omError('[OM] Failed to set buffering observation flag', err);
-    });
 
     // Start the async operation - waits for any existing op to complete first
     const asyncOp = this.runAsyncBufferedObservation(
@@ -2145,6 +2153,7 @@ ${formattedMessages}
       threadId,
       unobservedMessages,
       bufferKey,
+      currentTokens,
       writer,
       requestContext,
       observabilityContext,
@@ -2153,13 +2162,11 @@ ${formattedMessages}
         omError('[OM] async buffering observation failed', err);
       })
       .finally(() => {
-        // Clean up the operation tracking
+        // Clean up the process-local operation tracking. The durable claim is
+        // released owner-conditionally by the cycle itself; no unconditional
+        // storage clear happens here.
         BufferingCoordinator.asyncBufferingOps.delete(bufferKey);
-        // Clear persistent flag
         unregisterOp(record.id, 'bufferingObservation');
-        this.storage.setBufferingObservationFlag(record.id, false).catch(err => {
-          omError('[OM] Failed to clear buffering observation flag', err);
-        });
       });
 
     BufferingCoordinator.asyncBufferingOps.set(bufferKey, asyncOp);
@@ -2174,6 +2181,7 @@ ${formattedMessages}
     threadId: string,
     unobservedMessages: MastraDBMessage[],
     bufferKey: string,
+    currentTokens: number,
     writer?: ProcessorStreamWriter,
     requestContext?: RequestContext,
     observabilityContext?: ObservabilityContext,
@@ -2232,6 +2240,53 @@ ${formattedMessages}
       return; // Not enough new content to buffer
     }
 
+    // Acquire the durable buffer claim before sealing or model work. Losing
+    // the acquire means another process owns this record's buffering; back
+    // off without touching storage.
+    let lease: ObservationBufferLease | null = null;
+    try {
+      lease = await ObservationBufferLease.acquire({
+        storage: this.storage,
+        recordId: freshRecord.id,
+        policy: this.observationBufferLeasePolicy,
+        lastBufferedAtTokens: currentTokens,
+      });
+    } catch (err) {
+      omError('[OM] Failed to acquire observation buffer claim', err);
+    }
+    if (!lease) {
+      return;
+    }
+
+    try {
+      await this.runClaimedBufferedObservation({
+        lease,
+        freshRecord,
+        threadId,
+        bufferKey,
+        candidateMessages,
+        writer,
+        requestContext,
+        observabilityContext,
+      });
+    } finally {
+      await lease.release();
+    }
+  }
+
+  /** The claimed portion of a step-triggered buffering cycle. */
+  private async runClaimedBufferedObservation(args: {
+    lease: ObservationBufferLease;
+    freshRecord: ObservationalMemoryRecord;
+    threadId: string;
+    bufferKey: string;
+    candidateMessages: MastraDBMessage[];
+    writer?: ProcessorStreamWriter;
+    requestContext?: RequestContext;
+    observabilityContext?: ObservabilityContext;
+  }): Promise<void> {
+    const { lease, freshRecord, threadId, bufferKey, candidateMessages, writer, requestContext, observabilityContext } =
+      args;
     const messagesToBuffer = candidateMessages;
 
     // Seal the messages being buffered to prevent new parts from being added.
@@ -2295,13 +2350,18 @@ ${formattedMessages}
           writer,
           requestContext,
           observabilityContext,
+          claimOwnerToken: lease.ownerToken,
         }).run(),
     );
 
     // Update the buffer cursor so the next buffer only sees messages newer than this one.
-    const maxTs = this.getMaxMessageTimestamp(messagesToBuffer);
-    const cursor = new Date(maxTs.getTime() + 1);
-    BufferingCoordinator.lastBufferedAtTime.set(bufferKey, cursor);
+    // Skip when the lease was lost mid-cycle: the commit was fenced out, so the
+    // local cursor must not advance past messages that were never persisted.
+    if (!lease.lost) {
+      const maxTs = this.getMaxMessageTimestamp(messagesToBuffer);
+      const cursor = new Date(maxTs.getTime() + 1);
+      BufferingCoordinator.lastBufferedAtTime.set(bufferKey, cursor);
+    }
   }
 
   // ════════════════════════════════════════════════════════════════════════════
@@ -2616,10 +2676,41 @@ ${formattedMessages}
     const bufKey = this.buffering.getObservationBufferKey(lockKey);
 
     BufferingCoordinator.lastBufferedBoundary.set(bufKey, 0);
-    await this.storage.setBufferingObservationFlag(recordId, false, 0).catch(() => {});
+    await this.clearBufferingClaimIfNotLive(recordId, 0);
 
     if (activatedMessageIds && activatedMessageIds.length > 0) {
       this.buffering.cleanupStaticMaps(threadId, resourceId, activatedMessageIds);
+    }
+  }
+
+  /**
+   * Owner-safe reset of the durable buffering state.
+   *
+   * Uses the atomic claim acquire — which succeeds only for absent, expired,
+   * or legacy-grace-expired claims — as the conditional primitive, then
+   * immediately releases. A live foreign claim makes the acquire lose,
+   * leaving the current owner untouched. This is the only sanctioned way for
+   * lifecycle resets (resetBufferingState, activation's stale-boundary reset)
+   * to clear the flag/boundary.
+   */
+  private async clearBufferingClaimIfNotLive(recordId: string, lastBufferedAtTokens?: number): Promise<void> {
+    try {
+      const outcome = await this.storage.acquireObservationBufferClaim({
+        id: recordId,
+        ownerToken: randomUUID(),
+        leaseMs: this.observationBufferLeasePolicy.leaseMs,
+        lastBufferedAtTokens,
+      });
+      if (outcome.ok) {
+        await this.storage.releaseObservationBufferClaim({ id: recordId, ownerToken: outcome.claim.ownerToken });
+      }
+    } catch (err) {
+      // Best-effort reset: a missing record or transport failure is benign here.
+      omDebug(
+        `[OM] owner-safe buffering reset skipped for record ${recordId}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
     }
   }
 
@@ -3147,10 +3238,9 @@ ${formattedMessages}
     // This MUST happen before the first await when buffer() is called fire-and-forget.
     BufferingCoordinator.lastBufferedBoundary.set(bufferKey, currentTokens);
 
-    // Clear stale flag if it was set by a crashed process (non-blocking)
-    if (record.isBufferingObservation) {
-      await this.storage.setBufferingObservationFlag(record.id, false).catch(() => {});
-    }
+    // NOTE: a persisted isBufferingObservation with no local op is NOT proof of
+    // staleness — another process may legitimately own the claim. The durable
+    // claim acquire below (atomic, lease-bounded) is the only takeover path.
 
     // Wait for any existing buffering operation to complete first (mutex behavior).
     // IMPORTANT: read the existing op BEFORE overwriting the map entry.
@@ -3163,20 +3253,17 @@ ${formattedMessages}
       }
     }
 
-    // Set persistent flag and register op
-    registerOp(record.id, 'bufferingObservation');
-    inMemoryRecord.isBufferingObservation = true;
-    inMemoryRecord.lastBufferedAtTokens = currentTokens;
-    this.storage.setBufferingObservationFlag(record.id, true, currentTokens).catch(err => {
-      omError('[OM] Failed to set buffering observation flag', err);
-    });
-
-    // Register in asyncBufferingOps so callers (and tests) can await completion
-    let resolveOp: () => void;
+    // Register the joinable op promise BEFORE any further async work so
+    // same-process callers (and settled()/test waiters) can observe and await
+    // this in-flight attempt. This is process-local join bookkeeping only —
+    // the durable claim acquire below remains the ownership authority and is
+    // deferred until the read-only candidate checks decide there is work to do.
+    let resolveOp: (() => void) | undefined;
     const opPromise = new Promise<void>(resolve => {
       resolveOp = resolve;
     });
     BufferingCoordinator.asyncBufferingOps.set(bufferKey, opPromise);
+    let lease: ObservationBufferLease | null = null;
 
     // Keep the caller's turn-scoped record current while using a fresh storage snapshot
     // for the asynchronous write path.
@@ -3190,9 +3277,30 @@ ${formattedMessages}
       }
     };
 
-    let flagCleared = false;
-
     try {
+      // Acquire the durable buffer claim before any sealing or model work.
+      // Losing the acquire means another process owns this record's buffering;
+      // return a benign not-buffered result without touching storage. Early
+      // no-candidate exits below release the claim owner-conditionally in
+      // `finally`.
+      try {
+        lease = await ObservationBufferLease.acquire({
+          storage: this.storage,
+          recordId: record.id,
+          policy: this.observationBufferLeasePolicy,
+          lastBufferedAtTokens: currentTokens,
+        });
+      } catch (err) {
+        omError('[OM] Failed to acquire observation buffer claim', err);
+      }
+      if (!lease) {
+        return { buffered: false, record };
+      }
+      const activeLease = lease;
+
+      registerOp(record.id, 'bufferingObservation');
+      setBufferingState(true, currentTokens);
+
       // Load messages: use provided or load from storage
       let candidateMessages: MastraDBMessage[];
       if (opts.messages) {
@@ -3231,7 +3339,9 @@ ${formattedMessages}
       const newTokens = await this.tokenCounter.countMessagesAsync(candidateMessages);
 
       if (candidateMessages.length === 0 || (!opts.skipMinimumTokenCheck && newTokens < minNewTokens)) {
-        setBufferingState(false);
+        // Nothing to buffer; our own claim is released owner-conditionally in
+        // `finally` and a foreign claim was never touched (the acquire above
+        // would have lost against it).
         return { buffered: false, record };
       }
 
@@ -3285,6 +3395,8 @@ ${formattedMessages}
             requestContext,
             currentModel: opts.currentModel,
             observabilityContext,
+            claimOwnerToken: activeLease.ownerToken,
+            claimBoundaryTokens: newTokens,
           }).run(),
       );
 
@@ -3306,9 +3418,13 @@ ${formattedMessages}
         });
       }
 
-      // Update the boundary tokens in storage + in-memory cache for interval tracking
-      await this.storage.setBufferingObservationFlag(record.id, false, newTokens).catch(() => {});
-      flagCleared = true;
+      // The durable flag clears via the owner-conditioned release in `finally`;
+      // the token boundary was carried through the fenced commit. Only advance
+      // process-local caches when the cycle still owned its claim — a lost
+      // lease means the output was discarded and a successor owns the record.
+      if (activeLease.lost) {
+        return { buffered: false, record };
+      }
       setBufferingState(false, newTokens);
       BufferingCoordinator.lastBufferedBoundary.set(bufferKey, newTokens);
 
@@ -3323,14 +3439,21 @@ ${formattedMessages}
       omError('[OM] buffer() failed', error);
       return { buffered: false, record };
     } finally {
-      unregisterOp(record.id, 'bufferingObservation');
-      BufferingCoordinator.asyncBufferingOps.delete(bufferKey);
-      resolveOp!();
-      // Only clear the flag if the success path didn't already clear it (with token count)
-      if (!flagCleared) {
-        setBufferingState(false);
-        await this.storage.setBufferingObservationFlag(record.id, false).catch(() => {});
+      // Always clear the process-local join bookkeeping, whether or not a
+      // claim was acquired.
+      if (BufferingCoordinator.asyncBufferingOps.get(bufferKey) === opPromise) {
+        BufferingCoordinator.asyncBufferingOps.delete(bufferKey);
       }
+      resolveOp?.();
+      if (lease) {
+        unregisterOp(record.id, 'bufferingObservation');
+        setBufferingState(false);
+        // Owner-conditioned: releases only our still-current claim; a lost or
+        // taken-over claim is left for its new owner.
+        await lease.release();
+      }
+      // When no claim was acquired, nothing was registered or mirrored — a
+      // foreign owner's live flag stays untouched.
     }
   }
 
@@ -3394,7 +3517,7 @@ ${formattedMessages}
             `[OM:activate] resetting stale lastBufferedBoundary: dbBoundary=${dbBoundary}, currentContextTokens=${currentContextTokens}`,
           );
           BufferingCoordinator.lastBufferedBoundary.set(bufKey, 0);
-          await this.storage.setBufferingObservationFlag(record.id, false, 0).catch(() => {});
+          await this.clearBufferingClaimIfNotLive(record.id, 0);
         }
       }
     }
@@ -3503,9 +3626,10 @@ ${formattedMessages}
       bufferedChunks: freshChunks,
     });
 
-    // Clear buffering flag
-    await this.storage.setBufferingObservationFlag(freshRecord.id, false).catch(() => {});
-    unregisterOp(freshRecord.id, 'bufferingObservation');
+    // NOTE: activation no longer clears the buffering flag or steals the
+    // process-local op: a live claim is released by its owner's own cycle, a
+    // stale claim expires and is taken by the next atomic acquire, and legacy
+    // stale flags fall under the legacy grace policy.
 
     // Fetch updated record for marker emission
     const postSwapRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);

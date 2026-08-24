@@ -18232,3 +18232,291 @@ describe('filterObservedMessages — tool-call/result pair preservation', () => 
     expect(remainingIds).not.toContain('tool-call-msg-alone');
   });
 });
+
+// =============================================================================
+// Observation buffer claim ownership (cross-process fencing)
+// =============================================================================
+
+describe('Observation buffer claim ownership', () => {
+  const claimThreadId = 'claim-thread';
+  const claimResourceId = 'claim-resource';
+  const claimFiller = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
+
+  beforeEach(async () => {
+    const pending = [...BufferingCoordinator.asyncBufferingOps.values()];
+    if (pending.length > 0) await Promise.allSettled(pending);
+    BufferingCoordinator.asyncBufferingOps.clear();
+    BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.lastBufferedAtTime.clear();
+    BufferingCoordinator.reflectionBufferCycleIds.clear();
+  });
+
+  async function seedClaimThread(storage: InMemoryMemory, messageCount = 20) {
+    await storage.saveThread({
+      thread: {
+        id: claimThreadId,
+        resourceId: claimResourceId,
+        title: 'Claim Thread',
+        createdAt: new Date('2025-01-01T08:00:00Z'),
+        updatedAt: new Date('2025-01-01T08:00:00Z'),
+        metadata: {},
+      },
+    });
+    const messages: MastraDBMessage[] = [];
+    for (let i = 0; i < messageCount; i++) {
+      messages.push({
+        id: `claim-msg-${i}`,
+        role: i % 2 === 0 ? 'user' : 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: `Message ${i}: ${claimFiller}` }] },
+        type: 'text',
+        createdAt: new Date(Date.UTC(2025, 0, 1, 9, i)),
+        threadId: claimThreadId,
+        resourceId: claimResourceId,
+      } as MastraDBMessage);
+    }
+    if (messages.length > 0) await storage.saveMessages({ messages: messages as any });
+    return messages;
+  }
+
+  function createClaimOM(
+    storage: InMemoryMemory,
+    opts?: { onObserve?: () => Promise<void> },
+  ): { om: ObservationalMemory; observerCalls: number[] } {
+    const observerCalls: number[] = [];
+    const mockModel = createStreamCapableMockModel({
+      doGenerate: async () => {
+        observerCalls.push(observerCalls.length + 1);
+        if (opts?.onObserve) await opts.onObserve();
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+          content: [
+            {
+              type: 'text' as const,
+              text: `<observations>\nDate: Jan 1, 2025\n* 🔴 Observed by call ${observerCalls.length}\n</observations>`,
+            },
+          ],
+          warnings: [],
+        };
+      },
+    });
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      model: mockModel as any,
+      observation: { messageTokens: 10000, bufferTokens: 1000, bufferActivation: 0.7 },
+      reflection: { observationTokens: 50000 },
+    });
+    return { om, observerCalls };
+  }
+
+  it('direct buffer() cannot clear a foreign live buffer claim or start observer work', async () => {
+    const storage = createInMemoryStorage();
+    await seedClaimThread(storage);
+    const { om, observerCalls } = createClaimOM(storage);
+    const record = await om.getOrCreateRecord(claimThreadId, claimResourceId);
+
+    const foreign = await storage.acquireObservationBufferClaim({
+      id: record.id,
+      ownerToken: 'foreign-owner',
+      leaseMs: 60_000,
+    });
+    expect(foreign.ok).toBe(true);
+
+    const result = await om.buffer({ threadId: claimThreadId, resourceId: claimResourceId });
+
+    expect(result.buffered).toBe(false);
+    expect(observerCalls.length).toBe(0);
+    const after = await om.getOrCreateRecord(claimThreadId, claimResourceId);
+    expect(after.observationBufferClaimToken).toBe('foreign-owner');
+    expect(after.isBufferingObservation).toBe(true);
+    const status = await storage.getObservationBufferClaimStatus(record.id);
+    expect(status.live).toBe(true);
+  });
+
+  it('buffer() with no candidate messages releases its own buffer claim and leaves no owner behind', async () => {
+    const storage = createInMemoryStorage();
+    await seedClaimThread(storage, 0);
+    const { om, observerCalls } = createClaimOM(storage);
+    const record = await om.getOrCreateRecord(claimThreadId, claimResourceId);
+
+    const result = await om.buffer({ threadId: claimThreadId, resourceId: claimResourceId });
+
+    expect(result.buffered).toBe(false);
+    expect(observerCalls.length).toBe(0);
+    const after = await om.getOrCreateRecord(claimThreadId, claimResourceId);
+    expect(after.observationBufferClaimToken ?? null).toBeNull();
+    expect(after.isBufferingObservation).toBe(false);
+    const status = await storage.getObservationBufferClaimStatus(record.id);
+    expect(status.live).toBe(false);
+  });
+
+  it('step-triggered buffering backs off while a foreign live claim persists (foreign claim intact)', async () => {
+    const storage = createInMemoryStorage();
+    const messages = await seedClaimThread(storage);
+    const { om, observerCalls } = createClaimOM(storage);
+    const record = await om.getOrCreateRecord(claimThreadId, claimResourceId);
+
+    const foreign = await storage.acquireObservationBufferClaim({
+      id: record.id,
+      ownerToken: 'foreign-owner',
+      leaseMs: 60_000,
+    });
+    expect(foreign.ok).toBe(true);
+
+    const triggered = await om.triggerAsyncBuffering({
+      threadId: claimThreadId,
+      resourceId: claimResourceId,
+      record,
+      pendingTokens: 2214,
+      unbufferedPendingTokens: 2214,
+      unobservedMessages: messages,
+      threshold: 10000,
+    });
+    expect(triggered).toBe(true);
+    await om.waitForBuffering(claimThreadId, claimResourceId, 5000);
+
+    expect(observerCalls.length).toBe(0);
+    const after = await om.getOrCreateRecord(claimThreadId, claimResourceId);
+    expect(after.observationBufferClaimToken).toBe('foreign-owner');
+    expect(after.bufferedObservationChunks ?? []).toHaveLength(0);
+    const status = await storage.getObservationBufferClaimStatus(record.id);
+    expect(status.live).toBe(true);
+  });
+
+  it('an expired claim is taken over and the late owner cannot commit or release after takeover', async () => {
+    const storage = createInMemoryStorage();
+    await seedClaimThread(storage);
+    const { om, observerCalls } = createClaimOM(storage);
+    const record = await om.getOrCreateRecord(claimThreadId, claimResourceId);
+
+    let nowMs = Date.now();
+    storage.observationBufferClaimClock = () => new Date(nowMs);
+
+    const foreignA = await storage.acquireObservationBufferClaim({
+      id: record.id,
+      ownerToken: 'owner-a',
+      leaseMs: 1000,
+    });
+    expect(foreignA.ok).toBe(true);
+
+    // A's lease expires without renewal (crashed owner).
+    nowMs += 5000;
+
+    const result = await om.buffer({ threadId: claimThreadId, resourceId: claimResourceId });
+    expect(result.buffered).toBe(true);
+    expect(observerCalls.length).toBe(1);
+
+    // Late A resolves after the takeover: commit and release are both fenced.
+    const lateCommit = await storage.commitBufferedObservations({
+      id: record.id,
+      ownerToken: 'owner-a',
+      chunk: {
+        cycleId: 'late-a-cycle',
+        observations: '* stale output from the dead owner',
+        tokenCount: 10,
+        messageIds: [],
+        messageTokens: 0,
+        lastObservedAt: new Date(nowMs),
+      },
+    });
+    expect(lateCommit.committed).toBe(false);
+
+    const lateRelease = await storage.releaseObservationBufferClaim({ id: record.id, ownerToken: 'owner-a' });
+    expect(lateRelease.ok).toBe(false);
+
+    const after = await om.getOrCreateRecord(claimThreadId, claimResourceId);
+    const chunks = after.bufferedObservationChunks ?? [];
+    expect(chunks.length).toBeGreaterThan(0);
+    expect(chunks.some((c: any) => c.cycleId === 'late-a-cycle')).toBe(false);
+  });
+
+  it('a model call longer than the initial lease renews the claim and commits its output', async () => {
+    const storage = createInMemoryStorage();
+    await seedClaimThread(storage);
+    const { om, observerCalls } = createClaimOM(storage, {
+      onObserve: () => new Promise(r => setTimeout(r, 400)),
+    });
+    (om as any).observationBufferLeasePolicy = { leaseMs: 150, renewalIntervalMs: 40 };
+    const renewSpy = vi.spyOn(storage, 'renewObservationBufferClaim');
+
+    const record = await om.getOrCreateRecord(claimThreadId, claimResourceId);
+    const result = await om.buffer({ threadId: claimThreadId, resourceId: claimResourceId });
+
+    expect(result.buffered).toBe(true);
+    expect(observerCalls.length).toBe(1);
+    expect(renewSpy).toHaveBeenCalled();
+    const renewOutcomes = await Promise.all(renewSpy.mock.results.map(r => r.value));
+    expect(renewOutcomes.some((o: any) => o?.ok)).toBe(true);
+    const after = await om.getOrCreateRecord(claimThreadId, claimResourceId);
+    expect((after.bufferedObservationChunks ?? []).length).toBeGreaterThan(0);
+    // Cycle ended cleanly: claim released, no live renewal keeps running.
+    expect(after.observationBufferClaimToken ?? null).toBeNull();
+    const status = await storage.getObservationBufferClaimStatus(record.id);
+    expect(status.live).toBe(false);
+    renewSpy.mockRestore();
+  });
+
+  it('renewal loss after mid-flight takeover discards the late owner output and does not release the successor claim', async () => {
+    const storage = createInMemoryStorage();
+    await seedClaimThread(storage);
+
+    let releaseObserver: () => void = () => {};
+    const observerGate = new Promise<void>(r => (releaseObserver = r));
+    const { om, observerCalls } = createClaimOM(storage, { onObserve: () => observerGate });
+    (om as any).observationBufferLeasePolicy = { leaseMs: 100, renewalIntervalMs: 30 };
+
+    let nowMs = Date.now();
+    storage.observationBufferClaimClock = () => new Date(nowMs);
+
+    const record = await om.getOrCreateRecord(claimThreadId, claimResourceId);
+    const bufferPromise = om.buffer({ threadId: claimThreadId, resourceId: claimResourceId });
+
+    // Wait until A's observer is actually running (claim acquired, model blocked).
+    await vi.waitFor(() => expect(observerCalls.length).toBe(1), { timeout: 2000 });
+
+    // A's lease expires while the model call is stuck; successor B takes over.
+    nowMs += 60_000;
+    const foreignB = await storage.acquireObservationBufferClaim({
+      id: record.id,
+      ownerToken: 'owner-b',
+      leaseMs: 300_000,
+    });
+    expect(foreignB.ok).toBe(true);
+
+    // Give A's renewal loop time to observe the confirmed loss.
+    await new Promise(r => setTimeout(r, 120));
+
+    releaseObserver();
+    const result = await bufferPromise;
+
+    expect(result.buffered).toBe(false);
+    const after = await om.getOrCreateRecord(claimThreadId, claimResourceId);
+    // A's output was discarded and B's claim is untouched.
+    expect((after.bufferedObservationChunks ?? []).length).toBe(0);
+    expect(after.observationBufferClaimToken).toBe('owner-b');
+    const status = await storage.getObservationBufferClaimStatus(record.id);
+    expect(status.live).toBe(true);
+  });
+
+  it('same-process duplicate buffer() requests join the in-flight buffer claim cycle', async () => {
+    const storage = createInMemoryStorage();
+    await seedClaimThread(storage);
+
+    let releaseObserver: () => void = () => {};
+    const observerGate = new Promise<void>(r => (releaseObserver = r));
+    const { om, observerCalls } = createClaimOM(storage, { onObserve: () => observerGate });
+
+    const first = om.buffer({ threadId: claimThreadId, resourceId: claimResourceId });
+    await vi.waitFor(() => expect(observerCalls.length).toBe(1), { timeout: 2000 });
+
+    const second = await om.buffer({ threadId: claimThreadId, resourceId: claimResourceId });
+    expect(second.buffered).toBe(false);
+
+    releaseObserver();
+    const firstResult = await first;
+    expect(firstResult.buffered).toBe(true);
+    expect(observerCalls.length).toBe(1);
+  });
+});

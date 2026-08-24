@@ -109,15 +109,18 @@ export class BufferingCoordinator {
     currentTokens: number,
     lockKey: string,
     record: ObservationalMemoryRecord,
-    storage?: { setBufferingObservationFlag(id: string, flag: boolean): Promise<void> },
+    _storage?: { setBufferingObservationFlag(id: string, flag: boolean): Promise<void> },
     messageTokensThreshold?: number,
   ): boolean {
     if (!this.isAsyncObservationEnabled()) return false;
 
-    if (record.isBufferingObservation) {
-      if (isOpActiveInProcess(record.id, 'bufferingObservation')) return false;
-      omDebug(`[OM:shouldTriggerAsyncObs] isBufferingObservation=true but stale, clearing`);
-      storage?.setBufferingObservationFlag(record.id, false)?.catch(() => {});
+    // A persisted isBufferingObservation with no local op is NOT proof of
+    // staleness — another process may own the durable claim. If this process
+    // already runs the op, join it; otherwise let the attempt proceed: the
+    // durable claim acquire is atomic, so a live foreign claim turns the
+    // attempt into a cheap failed acquire instead of a foreign clear.
+    if (record.isBufferingObservation && isOpActiveInProcess(record.id, 'bufferingObservation')) {
+      return false;
     }
 
     const bufferKey = this.getObservationBufferKey(lockKey);

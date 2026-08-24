@@ -140,25 +140,45 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
   async persist(processed: ProcessedObservation) {
     if (!processed.observations) return;
 
-    const { record, threadId, resourceId, messages } = this.opts;
+    const { record, threadId, resourceId, messages, claimOwnerToken } = this.opts;
     const messageTokens = await this.tokenCounter.countMessagesAsync(messages);
-    await this.storage.updateBufferedObservations({
-      id: record.id,
-      chunk: {
-        cycleId: this.cycleId,
-        observations: processed.observations,
-        tokenCount: processed.observationTokens,
-        messageIds: processed.observedMessageIds,
-        messageTokens,
-        lastObservedAt: processed.lastObservedAt,
-        suggestedContinuation: processed.suggestedContinuation,
-        currentTask: processed.currentTask,
-        threadTitle: processed.threadTitle,
-        extractedValues: processed.extractedValues,
-        extractionFailures: processed.extractionFailures,
-      },
-      lastBufferedAtTime: processed.lastObservedAt,
-    });
+    const chunk = {
+      cycleId: this.cycleId,
+      observations: processed.observations,
+      tokenCount: processed.observationTokens,
+      messageIds: processed.observedMessageIds,
+      messageTokens,
+      lastObservedAt: processed.lastObservedAt,
+      suggestedContinuation: processed.suggestedContinuation,
+      currentTask: processed.currentTask,
+      threadTitle: processed.threadTitle,
+      extractedValues: processed.extractedValues,
+      extractionFailures: processed.extractionFailures,
+    };
+    if (claimOwnerToken) {
+      // Owner-conditioned commit: a lost claim means another process took over
+      // this record's buffering; discard the output and skip all side effects
+      // rather than overwriting the successor's state.
+      const result = await this.storage.commitBufferedObservations({
+        id: record.id,
+        ownerToken: claimOwnerToken,
+        chunk,
+        lastBufferedAtTime: processed.lastObservedAt,
+        lastBufferedAtTokens: this.opts.claimBoundaryTokens,
+      });
+      if (!result.committed) {
+        omDebug(
+          `[OM:asyncBuffer] buffer claim lost for record ${record.id} (cycle ${this.cycleId}); discarding buffered output`,
+        );
+        return;
+      }
+    } else {
+      await this.storage.updateBufferedObservations({
+        id: record.id,
+        chunk,
+        lastBufferedAtTime: processed.lastObservedAt,
+      });
+    }
 
     await this.indexObservationGroups(processed.observations, threadId, resourceId, processed.lastObservedAt);
 
