@@ -56,7 +56,21 @@ export class EditorScorerNamespace extends CrudEditorNamespace<
 
     return {
       create: input => store.create({ scorerDefinition: input }),
-      getByIdResolved: id => store.getByIdResolved(id),
+      getByIdResolved: async (id, options) => {
+        if (options?.versionId || options?.versionNumber !== undefined) {
+          const scorerDefinition = await store.getById(id);
+          if (!scorerDefinition) return null;
+
+          const version = options.versionId
+            ? await store.getVersion(options.versionId)
+            : await store.getVersionByNumber(id, options.versionNumber!);
+          if (!version || version.scorerDefinitionId !== id) return null;
+
+          const { scorerDefinitionId: _scorerDefinitionId, ...snapshot } = version;
+          return { ...scorerDefinition, ...snapshot } as StorageResolvedScorerDefinitionType;
+        }
+        return store.getByIdResolved(id, options?.status ? { status: options.status } : undefined);
+      },
       update: input => store.update(input),
       delete: id => store.delete(id),
       list: args => store.list(args),

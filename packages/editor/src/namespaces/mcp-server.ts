@@ -150,7 +150,21 @@ export class EditorMCPServerNamespace extends CrudEditorNamespace<
 
     return {
       create: input => store.create({ mcpServer: input }),
-      getByIdResolved: id => store.getByIdResolved(id),
+      getByIdResolved: async (id, options) => {
+        if (options?.versionId || options?.versionNumber !== undefined) {
+          const mcpServer = await store.getById(id);
+          if (!mcpServer) return null;
+
+          const version = options.versionId
+            ? await store.getVersion(options.versionId)
+            : await store.getVersionByNumber(id, options.versionNumber!);
+          if (!version || version.mcpServerId !== id) return null;
+
+          const { mcpServerId: _mcpServerId, ...snapshot } = version;
+          return { ...mcpServer, ...snapshot } as StorageResolvedMCPServerType;
+        }
+        return store.getByIdResolved(id, options?.status ? { status: options.status } : undefined);
+      },
       update: input => store.update(input),
       delete: id => store.delete(id),
       list: args => store.list(args),
