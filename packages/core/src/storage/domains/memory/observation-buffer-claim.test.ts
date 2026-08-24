@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { describe, it, expect, beforeEach } from 'vitest';
 
 import { InMemoryDB } from '../inmemory-db';
+import { MemoryStorage } from './base';
 import { InMemoryMemory } from './inmemory';
 
 const LEASE_MS = 10_000;
@@ -51,11 +52,24 @@ describe('Observation Buffer Claim (in-memory reference adapter)', () => {
 
   describe('capability flag', () => {
     it('the base default is false and the in-memory adapter opts in with true', () => {
-      // An adapter that never declares the flag resolves to the base default.
-      class UndeclaredAdapter extends InMemoryMemory {
-        override readonly supportsObservationBufferClaims: boolean = false;
+      // A bare MemoryStorage subclass that never mentions the flag proves the
+      // INHERITED default is false — an explicit `= false` override would stay
+      // green even if the base accidentally defaulted to true.
+      const notImplemented = () => Promise.reject(new Error('not implemented (test stub)'));
+      class BareAdapter extends MemoryStorage {
+        getThreadById = notImplemented as any;
+        saveThread = notImplemented as any;
+        updateThread = notImplemented as any;
+        deleteThread = notImplemented as any;
+        listMessages = notImplemented as any;
+        listMessagesById = notImplemented as any;
+        saveMessages = notImplemented as any;
+        updateMessages = notImplemented as any;
+        listThreads = notImplemented as any;
+        dangerouslyClearAll = notImplemented as any;
       }
-      expect(new UndeclaredAdapter({ db: new InMemoryDB() }).supportsObservationBufferClaims).toBe(false);
+      const bare = new BareAdapter();
+      expect(bare.supportsObservationBufferClaims).toBe(false);
       expect(storage.supportsObservationBufferClaims).toBe(true);
     });
   });

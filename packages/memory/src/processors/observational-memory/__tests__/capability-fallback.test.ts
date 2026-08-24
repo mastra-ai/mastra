@@ -28,7 +28,7 @@ import type {
   ObservationBufferClaimStatus,
   CommitBufferedObservationsResult,
 } from '@mastra/core/storage';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { BufferingCoordinator } from '../buffering-coordinator';
 import { ObservationalMemory } from '../observational-memory';
@@ -110,11 +110,15 @@ async function seedThread(storage: InMemoryMemory, messageCount = 20): Promise<M
   return messages;
 }
 
-function createOM(storage: InMemoryMemory): { om: ObservationalMemory; observerCalls: number[] } {
+function createOM(
+  storage: InMemoryMemory,
+  opts: { failObserver?: boolean } = {},
+): { om: ObservationalMemory; observerCalls: number[] } {
   const observerCalls: number[] = [];
   const mockModel = new MockLanguageModelV2({
     doStream: async () => {
       observerCalls.push(observerCalls.length + 1);
+      if (opts.failObserver) throw new Error('observer model failure (test)');
       const text = `<observations>\nDate: Jan 1, 2025\n* 🔴 Observed by call ${observerCalls.length}\n</observations>`;
       const stream = new ReadableStream({
         start(controller) {
@@ -263,5 +267,120 @@ describe('Storage capability fallback (observation buffer claims)', () => {
     const after = await om.getOrCreateRecord(threadId, resourceId);
     expect(after.observationBufferClaimToken).toBe('foreign-owner');
     expect(after.isBufferingObservation).toBe(true);
+  });
+
+  it('legacy adapter: zero claim storage methods are invoked across a full cycle, reset, and activation', async () => {
+    const storage = new LegacyMemoryStorage({ db: new InMemoryDB() });
+    await seedThread(storage);
+    const { om } = createOM(storage);
+    const record = await om.getOrCreateRecord(threadId, resourceId);
+
+    const spies = [
+      vi.spyOn(storage, 'acquireObservationBufferClaim'),
+      vi.spyOn(storage, 'renewObservationBufferClaim'),
+      vi.spyOn(storage, 'releaseObservationBufferClaim'),
+      vi.spyOn(storage, 'commitBufferedObservations'),
+      vi.spyOn(storage, 'getObservationBufferClaimStatus'),
+    ];
+
+    const result = await om.buffer({ threadId, resourceId });
+    expect(result.buffered).toBe(true);
+
+    await om.resetBufferingState({ threadId, resourceId, recordId: record.id });
+    await om.activate({ threadId, resourceId });
+
+    for (const spy of spies) expect(spy).toHaveBeenCalledTimes(0);
+  });
+
+  it('legacy adapter: an observer model failure still clears the buffering flag and persists nothing', async () => {
+    const storage = new LegacyMemoryStorage({ db: new InMemoryDB() });
+    await seedThread(storage);
+    const { om, observerCalls } = createOM(storage, { failObserver: true });
+
+    // Observer errors are swallowed inside the cycle (fire-and-forget
+    // contract); what matters is the exit leaves no stuck-true flag —
+    // that is the silent-disable failure mode this fallback exists to prevent.
+    await om.buffer({ threadId, resourceId });
+
+    expect(observerCalls.length).toBeGreaterThanOrEqual(1);
+    const after = await om.getOrCreateRecord(threadId, resourceId);
+    expect(after.bufferedObservationChunks ?? []).toHaveLength(0);
+    expect(after.isBufferingObservation).toBe(false);
+  });
+
+  it('legacy adapter: a thrown storage error (true error exit) returns buffered:false and clears the flag', async () => {
+    const storage = new LegacyMemoryStorage({ db: new InMemoryDB() });
+    await seedThread(storage);
+    const { om, observerCalls } = createOM(storage);
+    await om.getOrCreateRecord(threadId, resourceId);
+
+    // Candidate loading happens after the legacy flag write, so a rejecting
+    // listMessages drives the cycle through the outer catch + finally clear.
+    vi.spyOn(storage, 'listMessages').mockRejectedValueOnce(new Error('storage failure (test)'));
+
+    const result = await om.buffer({ threadId, resourceId });
+
+    expect(result.buffered).toBe(false);
+    expect(observerCalls.length).toBe(0);
+    const after = await om.getOrCreateRecord(threadId, resourceId);
+    expect(after.isBufferingObservation).toBe(false);
+  });
+
+  it('legacy adapter: activation resets a stale buffered boundary and clears the flag without claim operations', async () => {
+    const storage = new LegacyMemoryStorage({ db: new InMemoryDB() });
+    const messages = await seedThread(storage, 2);
+    const { om } = createOM(storage);
+    const record = await om.getOrCreateRecord(threadId, resourceId);
+
+    // A previous turn left a boundary far above the current context size,
+    // plus a stale persisted flag.
+    await storage.setBufferingObservationFlag(record.id, true, 100_000);
+
+    const acquireSpy = vi.spyOn(storage, 'acquireObservationBufferClaim');
+    const releaseSpy = vi.spyOn(storage, 'releaseObservationBufferClaim');
+
+    await om.activate({ threadId, resourceId, messages });
+
+    const after = await om.getOrCreateRecord(threadId, resourceId);
+    expect(after.isBufferingObservation).toBe(false);
+    expect(acquireSpy).toHaveBeenCalledTimes(0);
+    expect(releaseSpy).toHaveBeenCalledTimes(0);
+  });
+
+  it('shouldTriggerAsyncObservation: legacy storage clears a stale persisted flag; capable storage does not', async () => {
+    const legacy = new LegacyMemoryStorage({ db: new InMemoryDB() });
+    const capable = new ModernMemoryStorage({ db: new InMemoryDB() });
+    await seedThread(legacy);
+    const { om: legacyOm } = createOM(legacy);
+    const { om: capableOm } = createOM(capable);
+
+    const legacyRecord = await legacyOm.getOrCreateRecord(threadId, resourceId);
+    await legacy.setBufferingObservationFlag(legacyRecord.id, true);
+    const legacyFlagged = await legacyOm.getOrCreateRecord(threadId, resourceId);
+    expect(legacyFlagged.isBufferingObservation).toBe(true);
+
+    // Legacy: stale flag (no local op) is inferred stale, fire-and-forget cleared,
+    // and triggering proceeds.
+    expect(legacyOm.buffering.shouldTriggerAsyncObservation(10_000, 'thread:cap-legacy', legacyFlagged, legacy)).toBe(
+      true,
+    );
+    await vi.waitFor(async () => {
+      const cleared = await legacyOm.getOrCreateRecord(threadId, resourceId);
+      expect(cleared.isBufferingObservation).toBe(false);
+    });
+
+    // Capable: the durable claim is the authority — the persisted flag is NOT
+    // treated as stale and is never cleared here (the #22172 regression guard).
+    await seedThread(capable);
+    const capableRecord = await capableOm.getOrCreateRecord(threadId, resourceId);
+    await capable.setBufferingObservationFlag(capableRecord.id, true);
+    const capableFlagged = await capableOm.getOrCreateRecord(threadId, resourceId);
+    const flagSpy = vi.spyOn(capable, 'setBufferingObservationFlag');
+
+    capableOm.buffering.shouldTriggerAsyncObservation(10_000, 'thread:cap-capable', capableFlagged, capable);
+    await new Promise(resolve => setTimeout(resolve, 25));
+    expect(flagSpy).toHaveBeenCalledTimes(0);
+    const still = await capableOm.getOrCreateRecord(threadId, resourceId);
+    expect(still.isBufferingObservation).toBe(true);
   });
 });

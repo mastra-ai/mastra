@@ -2147,6 +2147,15 @@ ${formattedMessages}
     // The durable buffer claim (the cross-process authority) is acquired inside
     // runAsyncBufferedObservation, after the mutex wait and candidate checks.
     registerOp(record.id, 'bufferingObservation');
+    if (!this.storage.supportsObservationBufferClaims) {
+      // Legacy adapter (no claim contract): the pre-claim lifecycle sets the
+      // persisted flag at trigger time — before the mutex wait and candidate
+      // checks — fire-and-forget, and clears it unconditionally in the
+      // asyncOp finally below. Single-process semantics only.
+      this.storage.setBufferingObservationFlag(record.id, true, currentTokens).catch(err => {
+        omError('[OM] Failed to set buffering observation flag (legacy path)', err);
+      });
+    }
 
     // Start the async operation - waits for any existing op to complete first
     const asyncOp = this.runAsyncBufferedObservation(
@@ -2163,11 +2172,16 @@ ${formattedMessages}
         omError('[OM] async buffering observation failed', err);
       })
       .finally(() => {
-        // Clean up the process-local operation tracking. The durable claim is
-        // released owner-conditionally by the cycle itself; no unconditional
-        // storage clear happens here.
+        // Clean up the process-local operation tracking. On claim-capable
+        // storage the durable claim is released owner-conditionally by the
+        // cycle itself; no unconditional storage clear happens here. On legacy
+        // storage the pre-claim contract clears the persisted flag
+        // unconditionally on every exit (early return, error, or success).
         BufferingCoordinator.asyncBufferingOps.delete(bufferKey);
         unregisterOp(record.id, 'bufferingObservation');
+        if (!this.storage.supportsObservationBufferClaims) {
+          this.storage.setBufferingObservationFlag(record.id, false).catch(() => {});
+        }
       });
 
     BufferingCoordinator.asyncBufferingOps.set(bufferKey, asyncOp);
@@ -2244,9 +2258,9 @@ ${formattedMessages}
     // Claim-capable storage: acquire the durable buffer claim before sealing
     // or model work. Losing the acquire means another process owns this
     // record's buffering; back off without touching storage.
-    // Legacy storage (no claim contract): restore the pre-claim lifecycle —
-    // set the persisted boolean flag for the cycle and clear it
-    // unconditionally on exit. Single-process semantics only.
+    // Legacy storage (no claim contract): the persisted flag was already set
+    // at trigger time in startAsyncBufferedObservation and is cleared
+    // unconditionally in its asyncOp finally — nothing to do here.
     let lease: ObservationBufferLease | null = null;
     if (this.storage.supportsObservationBufferClaims) {
       try {
@@ -2262,10 +2276,6 @@ ${formattedMessages}
       if (!lease) {
         return;
       }
-    } else {
-      await this.storage
-        .setBufferingObservationFlag(freshRecord.id, true, currentTokens)
-        .catch(err => omError('[OM] Failed to set buffering flag (legacy path)', err));
     }
 
     try {
@@ -2282,9 +2292,10 @@ ${formattedMessages}
     } finally {
       if (lease) {
         await lease.release();
-      } else {
-        await this.storage.setBufferingObservationFlag(freshRecord.id, false).catch(() => {});
       }
+      // Legacy storage: the unconditional flag clear happens in
+      // startAsyncBufferedObservation's asyncOp finally, covering the early
+      // returns above this try block as well.
     }
   }
 
@@ -3268,8 +3279,9 @@ ${formattedMessages}
     // only takeover path.
     // Legacy storage (no claim contract) has no durable ownership authority, so
     // the pre-claim inference applies: a persisted flag with no local operation
-    // was left by a crashed process — clear it (non-blocking) so buffering can
-    // proceed. Single-process semantics only, by definition of the legacy path.
+    // was left by a crashed process — clear it (awaited here for determinism)
+    // so buffering can proceed. Single-process semantics only, by definition
+    // of the legacy path.
     if (!this.storage.supportsObservationBufferClaims && record.isBufferingObservation) {
       await this.storage.setBufferingObservationFlag(record.id, false).catch(() => {});
       record.isBufferingObservation = false;
@@ -3335,16 +3347,21 @@ ${formattedMessages}
         }
       } else {
         // Legacy adapter: no claim contract — restore the pre-claim lifecycle.
-        // Mark the persisted flag (fire-and-forget semantics preserved via
-        // catch) and rely on the unconditional clears on every exit below.
+        // Register the local op BEFORE the awaited persisted-flag write so a
+        // concurrent same-process check cannot classify this cycle as stale
+        // mid-write (pre-fence ordering: registry first, then flag). Rely on
+        // the unconditional clears on every exit below.
         legacyStarted = true;
+        registerOp(record.id, 'bufferingObservation');
         await this.storage
           .setBufferingObservationFlag(record.id, true, currentTokens)
           .catch(err => omError('[OM] Failed to set buffering flag (legacy path)', err));
       }
       const activeLease = lease;
 
-      registerOp(record.id, 'bufferingObservation');
+      if (!legacyStarted) {
+        registerOp(record.id, 'bufferingObservation');
+      }
       setBufferingState(true, currentTokens);
 
       // Load messages: use provided or load from storage
