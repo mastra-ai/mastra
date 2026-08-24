@@ -23,8 +23,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector, PgFactoryStorage } from '@mastra/pg';
 import { LocalSandbox } from '@mastra/core/workspace';
-import { E2BSandbox, createRepoTemplate } from '@mastra/e2b';
-import { InProcessSandboxAddressRegistry, PlatformSandbox } from '@mastra/platform-workspace';
+import { InProcessSandboxAddressRegistry } from '@mastra/platform-workspace';
 import { RedisStreamsPubSub } from '@mastra/redis-streams';
 import { getDatabasePath } from '@mastra/code-sdk/utils/project';
 import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
@@ -37,6 +36,7 @@ import { parseAuthorizedBotsEnv } from '@mastra/factory/integrations/github/webh
 import { LinearIntegration } from '@mastra/factory/integrations/linear/integration';
 import { SlackIntegration } from '@mastra/factory/integrations/slack/integration';
 import type { IMastraAuthProvider } from '@mastra/core/server';
+import { createRemoteFactorySandbox } from './sandbox-provider.js';
 
 /**
  * Parse a positive-integer env knob; anything else means "use the default".
@@ -284,50 +284,26 @@ export const factory = new MastraFactory({
   integrations,
   rules: factoryRules,
   sandbox: ctx => {
-    const provider = process.env.E2B_API_KEY?.trim() ? 'e2b' : hasPlatformSandboxEnv ? 'platform' : 'local';
-    console.info(`[sandbox] session ${ctx.sessionId} -> ${provider} sandbox`);
-    if (provider === 'e2b') {
-      // Lazy-built repo template pinned to the repo's current default-branch
-      // head at resolution time (one template per repo + setup command; a
-      // moved head builds fresh on the next new session; build failure ->
-      // fallback template + runtime cold clone). E2B pauses on its own idle
-      // timeout and resumes by id on the next start.
-      return new E2BSandbox({
-        id: ctx.sessionId,
-        ...(ctx.repoFullName
-          ? {
-              template: createRepoTemplate({
-                repoFullName: ctx.repoFullName,
-                ...(ctx.setupCommand ? { setupCommand: ctx.setupCommand } : {}),
-                // Short-lived installation token minted at template
-                // resolution — lets private repos resolve their head and
-                // build warm templates (token never touches the image
-                // filesystem; see createRepoTemplate docs).
-                ...(ctx.getGithubToken ? { getAuthToken: ctx.getGithubToken } : {}),
-              }),
-            }
-          : {}),
-        ...(ctx.onStart ? { onStart: ctx.onStart } : {}),
-      });
-    } else if (provider === 'platform') {
-      return new PlatformSandbox({
-        id: ctx.sessionId,
-        accessToken: platformSandboxToken,
-        addressRegistry,
-        ...(ctx.onStart ? { onStart: ctx.onStart } : {}),
-      });
-    } else {
-      return new LocalSandbox({
-        // Rooted at the per-session directory (parent of the checkout) so
-        // the setup marker sits beside the clone, not inside it.
-        workingDirectory: join(
-          process.env.MASTRACODE_LOCAL_SANDBOX_ROOT?.trim() || join(homedir(), '.mastracode', 'web', 'sandboxes'),
-          ctx.sessionId,
-        ),
-        env: localSandboxEnv(),
-        ...(ctx.onStart ? { onStart: ctx.onStart } : {}),
-      });
+    const remoteSandbox = createRemoteFactorySandbox(ctx, {
+      ...(hasPlatformSandboxEnv && platformSandboxToken ? { platformAccessToken: platformSandboxToken } : {}),
+      ...(addressRegistry ? { addressRegistry } : {}),
+    });
+    if (remoteSandbox) {
+      console.info(`[sandbox] session ${ctx.sessionId} -> ${remoteSandbox.provider} sandbox`);
+      return remoteSandbox;
     }
+    console.info(`[sandbox] session ${ctx.sessionId} -> local sandbox`);
+
+    return new LocalSandbox({
+      // Rooted at the per-session directory (parent of the checkout) so
+      // the setup marker sits beside the clone, not inside it.
+      workingDirectory: join(
+        process.env.MASTRACODE_LOCAL_SANDBOX_ROOT?.trim() || join(homedir(), '.mastracode', 'web', 'sandboxes'),
+        ctx.sessionId,
+      ),
+      env: localSandboxEnv(),
+      ...(ctx.onStart ? { onStart: ctx.onStart } : {}),
+    });
   },
   // Per-replica cap on concurrent Factory background dispatches. Unset means
   // the dispatcher default; invalid and non-positive values are ignored.

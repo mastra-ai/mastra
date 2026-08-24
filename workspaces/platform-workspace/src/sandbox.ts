@@ -18,7 +18,7 @@ import {
   SandboxNotReadyError,
   SandboxProcessManager,
 } from '@mastra/core/workspace';
-import type { PlatformClientOptions } from './client.js';
+import type { PlatformClientOptions, PlatformRequestOptions } from './client.js';
 import { PlatformApiError, PlatformClient } from './client.js';
 import type { DirectExecWebSocketFactory, ExecLease } from './direct-exec.js';
 import { execViaLease } from './direct-exec.js';
@@ -26,8 +26,14 @@ import type { E2BExecRunner } from './e2b-exec.js';
 import { execViaE2BLease } from './e2b-exec.js';
 import type { PrivateNetExecOptions, PrivateNetExecResult, PrivateNetFetch } from './private-net-exec.js';
 import { execViaPrivateNetwork, PrivateNetExecHttpError } from './private-net-exec.js';
+import type { SandboxTemplateBuilder, SerializedSandboxTemplate } from './template.js';
+import { serializeSandboxTemplate } from './template.js';
 
 export type PlatformSandboxNetworkIsolation = 'ISOLATED' | 'PRIVATE';
+
+export type PlatformSandboxTemplate =
+  | SandboxTemplateBuilder
+  | (() => SandboxTemplateBuilder | undefined | Promise<SandboxTemplateBuilder | undefined>);
 
 /**
  * In-process `sandboxId → instanceUrl` map that lets
@@ -59,6 +65,14 @@ export interface PlatformSandboxOptions extends Omit<MastraSandboxOptions, 'proc
   sandboxId?: string;
   /** Boot-only fallback checkpoint for a fresh sandbox whose primary recovery key has no state. */
   seedCheckpointName?: string;
+  /**
+   * Template builder or a lazy resolver for one. The resolver runs only when
+   * start() must provision a fresh sandbox. Platform derives the template's
+   * immutable identity, builds or reuses it, and retries sandbox creation while
+   * the provider build is pending. Resolver failures fall back to the provider's
+   * default template and are retried on the next fresh provision.
+   */
+  template?: PlatformSandboxTemplate;
   idleTimeoutMinutes?: number;
   networkIsolation?: PlatformSandboxNetworkIsolation;
   env?: Record<string, string>;
@@ -143,6 +157,25 @@ interface CreateSandboxResponse {
 const CREATE_MAX_ATTEMPTS = 3;
 /** Base delay between create retries; multiplied by the attempt number. */
 const CREATE_RETRY_BASE_DELAY_MS = 2_000;
+/** Maximum time to wait for a provider-owned template build before using the provider default. */
+const TEMPLATE_BUILD_TIMEOUT_MS = 15 * 60_000;
+/** Retry delay used when an older proxy omits `retryAfterMs` from `template_building`. */
+const TEMPLATE_BUILD_RETRY_DELAY_MS = 1_000;
+
+function readTemplateRetryDelay(error: unknown): number | undefined {
+  if (!(error instanceof PlatformApiError) || error.status !== 409 || error.code !== 'template_building') {
+    return undefined;
+  }
+
+  try {
+    const parsed = JSON.parse(error.body) as { error?: { retryAfterMs?: unknown } };
+    const retryAfterMs = parsed.error?.retryAfterMs;
+    if (typeof retryAfterMs === 'number' && Number.isFinite(retryAfterMs) && retryAfterMs >= 0) return retryAfterMs;
+  } catch {
+    // Older proxies may omit structured retry metadata.
+  }
+  return TEMPLATE_BUILD_RETRY_DELAY_MS;
+}
 
 /**
  * How long to wait for the in-sandbox sidecar's `/health` endpoint to respond
@@ -354,9 +387,14 @@ export class PlatformSandbox extends MastraSandbox {
   declare readonly processes: PlatformProcessManager;
 
   private readonly _client: PlatformClient;
+  private readonly _usesProviderRoutes: boolean;
   private readonly _environmentId: string;
   private _sandboxId?: string;
   private readonly _seedCheckpointName?: string;
+  private _templateId?: string;
+  private _templateDefinition?: SerializedSandboxTemplate;
+  private readonly _template?: PlatformSandboxTemplate;
+  private _templateResolutionInFlight?: Promise<void>;
   private readonly _idleTimeoutMinutes?: number;
   private readonly _networkIsolation?: PlatformSandboxNetworkIsolation;
   private readonly _env: Record<string, string>;
@@ -441,6 +479,8 @@ export class PlatformSandbox extends MastraSandbox {
     if (!this._environmentId && !options.sandboxId) throw new Error('environmentId is required');
     this._sandboxId = options.sandboxId;
     this._seedCheckpointName = options.seedCheckpointName;
+    this._usesProviderRoutes = options.template !== undefined;
+    this._template = options.template;
     this._idleTimeoutMinutes = options.idleTimeoutMinutes;
     this._networkIsolation = options.networkIsolation;
     this._env = options.env ?? {};
@@ -454,6 +494,10 @@ export class PlatformSandbox extends MastraSandbox {
 
   private generateId(): string {
     return `platform-sandbox-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  private _request(path: string, options: PlatformRequestOptions = {}): Promise<Response> {
+    return this._usesProviderRoutes ? this._client.requestProvider(path, options) : this._client.request(path, options);
   }
 
   /**
@@ -480,10 +524,13 @@ export class PlatformSandbox extends MastraSandbox {
       options.seedCheckpointName ??
       (this._client.sandboxProvider === 'e2b' ? options.checkpointName : undefined) ??
       this._seedCheckpointName;
-    return new PlatformSandbox({
+    const clone = new PlatformSandbox({
       ...(id !== undefined && { id }),
       accessToken: this._client.accessToken,
       projectId: this._client.projectId,
+      ...(this._usesProviderRoutes || this._client.sandboxProvider !== 'railway'
+        ? { sandboxProvider: this._client.sandboxProvider }
+        : {}),
       actingUserId: options.actingUserId ?? this._client.actingUserId,
       ...(this._client.sessionId !== undefined && { sessionId: this._client.sessionId }),
       ...(this._client.threadId !== undefined && { threadId: this._client.threadId }),
@@ -491,6 +538,7 @@ export class PlatformSandbox extends MastraSandbox {
       environmentId: this._environmentId,
       ...(options.sandboxId !== undefined && { sandboxId: options.sandboxId }),
       ...(seedCheckpointName !== undefined && { seedCheckpointName }),
+      ...(this._template !== undefined && { template: this._template }),
       idleTimeoutMinutes: options.idleTimeoutMinutes ?? this._idleTimeoutMinutes,
       ...(this._networkIsolation !== undefined && { networkIsolation: this._networkIsolation }),
       env: options.env ?? this._env,
@@ -505,6 +553,9 @@ export class PlatformSandbox extends MastraSandbox {
       // `.scratch/factory-deploy/issue-platform-sandbox-exec-via-private-network.md`.
       ...(this._addressRegistry !== undefined && { addressRegistry: this._addressRegistry }),
     });
+    clone._templateId = this._templateId;
+    clone._templateDefinition = this._templateDefinition ? structuredClone(this._templateDefinition) : undefined;
+    return clone;
   }
 
   /**
@@ -525,7 +576,7 @@ export class PlatformSandbox extends MastraSandbox {
     if (this._sandboxId) {
       try {
         const requestStartedAt = Date.now();
-        const response = await this._client.request(`/sandbox/${encodeURIComponent(this._sandboxId)}`);
+        const response = await this._request(`/sandbox/${encodeURIComponent(this._sandboxId)}`);
         const requestMs = Date.now() - requestStartedAt;
         const json = (await response.json()) as CreateSandboxResponse;
         // A destroyed record (idle GC, manual delete) is not reattachable —
@@ -546,37 +597,59 @@ export class PlatformSandbox extends MastraSandbox {
 
     if (!this._environmentId) throw new Error('environmentId is required');
 
-    const body = JSON.stringify({
-      // Sent so the platform can associate the provisioned resource with a
-      // caller-stable identifier (used for opt-in checkpoint recovery). The
-      // platform treats it as an advisory key: unknown values fall through
-      // to a fresh sandbox, matching pre-existing behavior.
-      id: this.id,
-      seedCheckpointName: this._seedCheckpointName,
-      environmentId: this._environmentId,
-      idleTimeoutMinutes: this._idleTimeoutMinutes,
-      networkIsolation: this._networkIsolation,
-      env: this._env,
-    });
+    await this._prepareLazyTemplate();
+
+    const createBody = () =>
+      JSON.stringify({
+        // Sent so the platform can associate the provisioned resource with a
+        // caller-stable identifier (used for opt-in checkpoint recovery). The
+        // platform treats it as an advisory key: unknown values fall through
+        // to a fresh sandbox, matching pre-existing behavior.
+        id: this.id,
+        seedCheckpointName: this._seedCheckpointName,
+        templateId: this._templateId,
+        templateDefinition: this._templateDefinition,
+        environmentId: this._environmentId,
+        idleTimeoutMinutes: this._idleTimeoutMinutes,
+        networkIsolation: this._networkIsolation,
+        env: this._env,
+      });
     // Provisioning is observed to fail intermittently with proxy 500s while
     // the provider is under load. A create either succeeds (201) or fails
     // without allocating a caller-visible resource, so retrying transient
     // 5xx responses with a short backoff is safe and keeps a single flaky
-    // window from killing the caller's whole workflow.
+    // window from killing the caller's whole workflow. A template-backed
+    // create can also return `template_building`; retrying the same idempotent
+    // request lets the proxy poll its durable provider build before provisioning.
     let response: Response | undefined;
+    let transientAttempts = 0;
     const requestStartedAt = Date.now();
-    for (let attempt = 1; ; attempt++) {
+    const templateDeadline = this._templateId ? requestStartedAt + TEMPLATE_BUILD_TIMEOUT_MS : undefined;
+    for (;;) {
       try {
-        response = await this._client.request('/sandbox', {
+        response = await this._request('/sandbox', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body,
+          body: createBody(),
         });
         break;
       } catch (error) {
+        const templateRetryDelay = readTemplateRetryDelay(error);
+        if (templateRetryDelay !== undefined && templateDeadline !== undefined) {
+          if (Date.now() + templateRetryDelay < templateDeadline) {
+            await new Promise(resolve => setTimeout(resolve, templateRetryDelay));
+            continue;
+          }
+          this.logger.warn('Platform sandbox template build timed out; using provider default template');
+          this._templateId = undefined;
+          this._templateDefinition = undefined;
+          continue;
+        }
+
         const transient = error instanceof PlatformApiError && error.status >= 500;
-        if (!transient || attempt >= CREATE_MAX_ATTEMPTS) throw error;
-        await new Promise(resolve => setTimeout(resolve, CREATE_RETRY_BASE_DELAY_MS * attempt));
+        transientAttempts += 1;
+        if (!transient || transientAttempts >= CREATE_MAX_ATTEMPTS) throw error;
+        await new Promise(resolve => setTimeout(resolve, CREATE_RETRY_BASE_DELAY_MS * transientAttempts));
       }
     }
     const requestMs = Date.now() - requestStartedAt;
@@ -586,6 +659,30 @@ export class PlatformSandbox extends MastraSandbox {
     this._populateAddressFromResponse(json);
     this._logStartComplete(json.id, startedAt, requestMs, 'provision');
     return { outcome: 'created' };
+  }
+
+  private async _prepareLazyTemplate(): Promise<void> {
+    if (this._templateId !== undefined || this._template === undefined) return;
+    if (!this._templateResolutionInFlight) {
+      const attempt = this._resolveTemplate();
+      this._templateResolutionInFlight = attempt.finally(() => {
+        this._templateResolutionInFlight = undefined;
+      });
+    }
+    await this._templateResolutionInFlight;
+  }
+
+  private async _resolveTemplate(): Promise<void> {
+    try {
+      const resolved = typeof this._template === 'function' ? await this._template() : this._template;
+      if (!resolved) return;
+      this._templateId = resolved.id();
+      this._templateDefinition = serializeSandboxTemplate(resolved);
+    } catch (error) {
+      this.logger.warn(
+        `Platform sandbox template resolution failed; using provider default template: ${String(error)}`,
+      );
+    }
   }
 
   /**
@@ -809,7 +906,7 @@ export class PlatformSandbox extends MastraSandbox {
       // teardown; other failures are surfaced in logs but do not abort
       // — the VM DELETE below is the operation the caller most needs.
       try {
-        await this._client.request(`/sandbox/${encodeURIComponent(destroyedSandboxId)}/checkpoint`, {
+        await this._request(`/sandbox/${encodeURIComponent(destroyedSandboxId)}/checkpoint`, {
           method: 'DELETE',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ id: this.id }),
@@ -846,7 +943,7 @@ export class PlatformSandbox extends MastraSandbox {
     this._probeGeneration++;
     this._probeTarget = null;
     this._transportReadyPromise = null;
-    await this._client.request(`/sandbox/${encodeURIComponent(destroyedSandboxId)}`, { method: 'DELETE' });
+    await this._request(`/sandbox/${encodeURIComponent(destroyedSandboxId)}`, { method: 'DELETE' });
     // Clear local state so a subsequent start() creates a fresh remote sandbox
     // instead of taking the reattach branch and pointing exec at a deleted resource.
     this._sandboxId = undefined;
@@ -953,7 +1050,7 @@ export class PlatformSandbox extends MastraSandbox {
   private async _doCaptureCheckpoint(sandboxId: string): Promise<CaptureCheckpointResult> {
     let response: Response;
     try {
-      response = await this._client.request(`/sandbox/${encodeURIComponent(sandboxId)}/checkpoint`, {
+      response = await this._request(`/sandbox/${encodeURIComponent(sandboxId)}/checkpoint`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ id: this.id }),
@@ -1324,7 +1421,7 @@ export class PlatformSandbox extends MastraSandbox {
     if (!this._sandboxId) throw new SandboxNotReadyError(this.id);
     const sandboxId = this._sandboxId;
     const inFlight = (async () => {
-      const response = await this._client.request(`/sandbox/${encodeURIComponent(sandboxId)}/exec-lease`, {
+      const response = await this._request(`/sandbox/${encodeURIComponent(sandboxId)}/exec-lease`, {
         method: 'POST',
       });
       const json = (await response.json()) as ExecLeaseResponse;
@@ -1389,7 +1486,7 @@ export class PlatformSandbox extends MastraSandbox {
         },
       };
     }
-    const response = await this._client.request(`/sandbox/${encodeURIComponent(this._sandboxId)}`);
+    const response = await this._request(`/sandbox/${encodeURIComponent(this._sandboxId)}`);
     const json = (await response.json()) as CreateSandboxResponse;
     return {
       id: json.id,
