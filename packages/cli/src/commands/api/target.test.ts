@@ -149,6 +149,23 @@ describe('resolveTarget', () => {
     expect(mocks.fetchServerProjects).not.toHaveBeenCalled();
   });
 
+  it('does not start interactive login when only an observability env token is available', async () => {
+    process.env.MASTRA_PLATFORM_ACCESS_TOKEN = 'env-token';
+    process.env.MASTRA_PROJECT_ID = 'env-project';
+    mocks.getToken.mockRejectedValueOnce(new Error('not logged in'));
+
+    await expect(resolveTarget(options(), fetchMock as typeof fetch, '/observability/traces')).resolves.toEqual({
+      baseUrl: 'https://observability.mastra.ai',
+      headers: {
+        Authorization: 'Bearer env-token',
+        'X-Mastra-Project-Id': 'env-project',
+      },
+      timeoutMs: 30_000,
+    });
+
+    expect(mocks.getToken).toHaveBeenCalledWith(undefined, { allowLogin: false });
+  });
+
   it('uses CLI auth and project config when observability env credentials are unavailable', async () => {
     mocks.loadProjectConfig.mockResolvedValueOnce(linkedProject);
 
