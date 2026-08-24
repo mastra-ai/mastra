@@ -142,7 +142,7 @@ Update the sandbox's runtime environment overlay. Overlay values are merged into
 sandbox.setEnv?.(env => ({ ...env, GH_TOKEN: token }))
 ```
 
-The updater receives a copy of the current overlay and returns the new one, so a single call can set, unset, or batch-update variables. Removing a key removes it from the overlay only, so env values a provider supplies on its own still apply. Sandboxes that extend `MastraSandbox` can seed the overlay with the `env` constructor option.
+The updater receives a copy of the current overlay and returns the new one, so a single call can set, unset, or batch-update variables. Removing a key removes it from the overlay only, so env values a provider supplies on its own still apply. Sandboxes that extend `MastraSandbox` can seed the overlay with the `env` constructor option and read the current values through the `runtimeEnv` getter, which returns a copy.
 
 The overlay applies to commands executed through the sandbox rather than the VM's own environment, so it's never written into the VM and survives provider pause and resume. When a command runs, provider defaults are applied first, overlay values override them, and the per-call `env` option on `executeCommand()` wins over both.
 

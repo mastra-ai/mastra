@@ -82,7 +82,7 @@ export abstract class SandboxProcessManager<TSandbox extends MastraSandbox = Mas
       // Per-call env wins over the overlay. When the overlay is empty, leave
       // the args untouched — provider spawn implementations branch on
       // `options.env !== undefined` and must not observe a new empty object.
-      const overlay = this.sandbox.getEnvOverlay();
+      const overlay = this.sandbox.runtimeEnv;
       if (Object.keys(overlay).length > 0) {
         args[1] = { ...args[1], env: { ...overlay, ...args[1]?.env } };
       }

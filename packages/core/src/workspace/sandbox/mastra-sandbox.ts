@@ -300,11 +300,11 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
   /**
    * Snapshot of the current runtime environment overlay.
    *
-   * @internal Exists so the process manager can read the overlay across
-   * module boundaries; not part of the documented user surface. Returns a
-   * fresh copy — mutating it never affects the stored overlay.
+   * Returns a fresh copy — mutating it never affects the stored overlay; use
+   * {@link setEnv} to change it. The process manager reads this per spawn to
+   * merge the overlay into command environments.
    */
-  getEnvOverlay(): Record<string, string | undefined> {
+  get runtimeEnv(): Record<string, string | undefined> {
     return { ...this.#env };
   }
 

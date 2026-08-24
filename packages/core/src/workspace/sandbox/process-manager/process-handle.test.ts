@@ -81,7 +81,7 @@ class TestProcessManager extends SandboxProcessManager {
       ensureRunning: async () => {
         this.ensureRunningCalls += 1;
       },
-      getEnvOverlay: () => ({}),
+      runtimeEnv: {},
     } as unknown as MastraSandbox;
   }
 
