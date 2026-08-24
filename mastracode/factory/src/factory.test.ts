@@ -364,7 +364,6 @@ describe('MastraFactory.prepare', () => {
       'model-credentials',
       'model-packs',
       'memory-settings',
-      'title-settings',
       'custom-providers',
       'queue-health',
       'integrations',

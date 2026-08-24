@@ -607,6 +607,7 @@ function buildApp(
   user: { workosId: string; organizationId?: string } | null,
   options: {
     controller?: NonNullable<Parameters<typeof buildGithubRoutes>[0]>['controller'];
+    memorySettings?: Parameters<typeof buildGithubRoutes>[0]['memorySettings'];
     stateSigner?: typeof stateSigner | null;
     sessionRetirement?: SessionRetirementCoordinator;
   } = {},
@@ -630,6 +631,7 @@ function buildApp(
       auth: testAuth,
       fleet,
       stateSigner: signerOverride === null ? undefined : (signerOverride ?? stateSigner),
+      memorySettings: { get: async () => null },
       emitAudit: async ({ context, input }) => {
         try {
           if (auditFailure) throw auditFailure;
@@ -2082,6 +2084,80 @@ describe('Factory session routes', () => {
 
     expect(response.status).toBe(404);
     expect(controller.deleteSession).not.toHaveBeenCalled();
+  });
+
+  it('names a session from its conversation and mirrors the title onto the row', async () => {
+    seedMaterializedProject();
+    const controller = {
+      queryThreads: vi.fn(async () => [{ id: 'thread-1', updatedAt: new Date() }]),
+      generateThreadTitle: vi.fn(async () => 'Log parser rewrite'),
+    } as any;
+    const memorySettings = { get: vi.fn(async () => ({ observerModelId: 'anthropic/claude-haiku-4-5' })) } as any;
+    const app = buildApp({ workosId: 'u1' }, { controller, memorySettings });
+    const created = await postJson(app, '/web/github/projects/p1/sessions', { title: 'rewrite the log parser' });
+    const sessionId = (await created.json()).session.sessionId;
+
+    const response = await app.request(`/web/user-sessions/${sessionId}/title`, { method: 'POST' });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ title: 'Log parser rewrite' });
+    const named = controller.generateThreadTitle.mock.calls[0][0];
+    expect(named.threadId).toBe('thread-1');
+    expect(named.resourceId).toBe(sessionId);
+    // Naming runs as the session's owner, so it bills their model credentials.
+    expect(named.requestContext.get('user')).toEqual({ workosId: 'u1', organizationId: 'org1' });
+    // A closed session has no live state, so the owner's stored observer model
+    // is what keeps a manual rename on the model that names threads on its own.
+    expect(named.model({ requestContext: named.requestContext }).modelId).toContain('claude-haiku-4-5');
+    expect(tables.sessions.find(row => row.sessionId === sessionId)?.title).toBe('Log parser rewrite');
+  });
+
+  it('names a session whose owner never configured a memory model', async () => {
+    seedMaterializedProject();
+    const controller = {
+      queryThreads: vi.fn(async () => [{ id: 'thread-1', updatedAt: new Date() }]),
+      generateThreadTitle: vi.fn(async () => 'Log parser rewrite'),
+    } as any;
+    const app = buildApp({ workosId: 'u1' }, { controller });
+    const created = await postJson(app, '/web/github/projects/p1/sessions', { title: 'rewrite the log parser' });
+    const sessionId = (await created.json()).session.sessionId;
+
+    const response = await app.request(`/web/user-sessions/${sessionId}/title`, { method: 'POST' });
+
+    expect(response.status).toBe(200);
+    // No stored model to override with, so naming runs on the memory's own title model.
+    expect(controller.generateThreadTitle.mock.calls[0][0].model).toBeUndefined();
+    expect(tables.sessions.find(row => row.sessionId === sessionId)?.title).toBe('Log parser rewrite');
+  });
+
+  it('explains that a session with no conversation cannot be named', async () => {
+    seedMaterializedProject();
+    const controller = { queryThreads: vi.fn(async () => []), generateThreadTitle: vi.fn() } as any;
+    const app = buildApp({ workosId: 'u1' }, { controller });
+    const created = await postJson(app, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
+    const sessionId = (await created.json()).session.sessionId;
+
+    const response = await app.request(`/web/user-sessions/${sessionId}/title`, { method: 'POST' });
+
+    expect(response.status).toBe(409);
+    expect((await response.json()).error).toBe('This session has no conversation to name yet.');
+    expect(controller.generateThreadTitle).not.toHaveBeenCalled();
+  });
+
+  it('does not name a session belonging to another user', async () => {
+    seedMaterializedProject();
+    const controller = { queryThreads: vi.fn(), generateThreadTitle: vi.fn() } as any;
+    const ownerApp = buildApp({ workosId: 'u1' }, { controller });
+    const created = await postJson(ownerApp, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
+    const sessionId = (await created.json()).session.sessionId;
+
+    const response = await buildApp({ workosId: 'u2' }, { controller }).request(
+      `/web/user-sessions/${sessionId}/title`,
+      { method: 'POST' },
+    );
+
+    expect(response.status).toBe(404);
+    expect(controller.generateThreadTitle).not.toHaveBeenCalled();
   });
 
   it('continues sandbox reclamation and returns success when controller teardown fails', async () => {

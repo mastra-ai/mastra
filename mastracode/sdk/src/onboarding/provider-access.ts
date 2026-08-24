@@ -10,7 +10,7 @@ function credentialAccessLevel(credential: AuthCredential | undefined): Provider
 
 function applyRegistryEnvKeys(access: ProviderAccess): void {
   for (const [provider, config] of Object.entries(PROVIDER_REGISTRY)) {
-    if (access[provider] !== false || provider === 'anthropic' || provider === 'openai') continue;
+    if (access[provider] || provider === 'anthropic' || provider === 'openai') continue;
     const envVars = config?.apiKeyEnvVar;
     const envVarList = Array.isArray(envVars) ? envVars : envVars ? [envVars] : [];
     if (envVarList.some(envVar => process.env[envVar])) {

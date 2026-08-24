@@ -19,7 +19,7 @@
  */
 
 import { MastraAuthStudio } from '@mastra/auth-studio';
-import { prepareAgentControllerMount, resolveTenantFromRequestContext } from '@mastra/code-sdk';
+import { prepareAgentControllerMount } from '@mastra/code-sdk';
 import { AgentControllerChannels } from '@mastra/core/channels';
 import type { PubSub } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
@@ -44,7 +44,6 @@ import { PlatformGithubIntegration } from './integrations/platform/github/integr
 import { PlatformLinearIntegration } from './integrations/platform/linear/integration.js';
 import { createCustomProvidersPrimer, registerCustomProvidersSource } from './routes/custom-provider-source.js';
 import { ProjectRoutes } from './routes/projects.js';
-import { tenantOrgId } from './routes/provider-credentials.js';
 import { assembleFactoryApiRoutes, buildIntegrationContext } from './routes/surface.js';
 import type { FactoryApiRoutesDeps } from './routes/surface.js';
 import {
@@ -73,7 +72,7 @@ import { observeSessionFirstExec } from './session/first-exec-capture.js';
 import { observeSessionFirstMessage } from './session/first-message-capture.js';
 import { hydrateSessionMemorySettings } from './session/memory-settings-hydration.js';
 import { hydrateSessionModelPack } from './session/model-pack-hydration.js';
-import { FactoryThreadTitleProcessor } from './session/thread-title.js';
+import { observeSessionThreadTitle } from './session/thread-title-mirror.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
 import { createStateSigner } from './state-signing.js';
 import { observeAgentGitAction } from './storage/domains/audit/agent-audit.js';
@@ -90,11 +89,6 @@ import { ModelPacksStorage } from './storage/domains/model-packs/base.js';
 import { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import { QueueHealthStorage } from './storage/domains/queue-health/base.js';
 import { SourceControlStorage } from './storage/domains/source-control/base.js';
-import {
-  LOCAL_TITLE_SETTINGS_ORG_ID,
-  resolveTitleGenerationSetting,
-  TitleSettingsStorage,
-} from './storage/domains/title-settings/base.js';
 import { WorkItemsStorage } from './storage/domains/work-items/base.js';
 import { timedPhase } from './timing.js';
 import { createWorkspaceFactory, FactoryWorkspaceRegistry } from './workspace.js';
@@ -391,7 +385,6 @@ export class MastraFactory {
     const modelCredentialsStorage = storage.registerDomain(new ModelCredentialsStorage());
     const modelPacksStorage = storage.registerDomain(new ModelPacksStorage());
     const memorySettingsStorage = storage.registerDomain(new MemorySettingsStorage());
-    const titleSettingsStorage = storage.registerDomain(new TitleSettingsStorage());
     const customProvidersStorage = storage.registerDomain(new CustomProvidersStorage());
     const queueHealthStorage = storage.registerDomain(new QueueHealthStorage());
     // Generic integration storage (connections/subscriptions/settings) — the
@@ -410,7 +403,6 @@ export class MastraFactory {
       modelCredentials: modelCredentialsStorage,
       modelPacks: modelPacksStorage,
       memorySettings: memorySettingsStorage,
-      titleSettings: titleSettingsStorage,
       customProviders: customProvidersStorage,
       filesystem: filesystemStorage,
       projects: factoryProjectsStorage,
@@ -670,24 +662,6 @@ export class MastraFactory {
       ({ integration }) => integration.agentTools || integration.sessionTools,
     );
 
-    // Thread naming rides the run pipeline (not a session observer) so the
-    // title request carries the run's request context and resolves model
-    // credentials exactly like the answering model does.
-    const threadTitleProcessor = new FactoryThreadTitleProcessor({
-      resolveSetting: async (requestContext?: RequestContext) => {
-        const tenant = resolveTenantFromRequestContext(requestContext);
-        await titleSettingsStorage.ensureReady();
-        return resolveTitleGenerationSetting(
-          await titleSettingsStorage.get({ orgId: tenant ? tenantOrgId(tenant) : LOCAL_TITLE_SETTINGS_ORG_ID }),
-        );
-      },
-      threads: () => storage.getMastraStorage().getStore('memory'),
-    });
-    const inputProcessors = [
-      ...(factoryProcessor ? [factoryProcessor] : []),
-      ...(threadTitleProcessor ? [threadTitleProcessor] : []),
-    ];
-
     // Build the real production controller (agents, modes, tools, memory, OM,
     // MCP, providers) — identical to the terminal app. Agent state lives in
     // the storage backend's Mastra store alongside the Factory app tables —
@@ -712,7 +686,7 @@ export class MastraFactory {
         initialState: { skipGlobalInstructions: true },
         storage: storage.getMastraStorage(),
         ...(mastraStorageBackend ? { storageBackend: mastraStorageBackend } : {}),
-        ...(inputProcessors.length > 0 ? { inputProcessors } : {}),
+        ...(factoryProcessor ? { inputProcessors: [factoryProcessor] } : {}),
         ...(vector ? { vector } : {}),
         ...(toolIntegrations.length > 0 || (workItemsStorage && transitionService)
           ? {
@@ -901,6 +875,9 @@ export class MastraFactory {
         sourceControl: sourceControlStorage.forIntegration('github'),
       });
       observeSessionFirstExec(session, {
+        sourceControl: sourceControlStorage.forIntegration('github'),
+      });
+      observeSessionThreadTitle(session, {
         sourceControl: sourceControlStorage.forIntegration('github'),
       });
     });

@@ -534,11 +534,8 @@ export interface SourceControlStorageHandle {
      */
     listByProjectRepository(args: { projectRepositoryId: string }): Promise<SourceControlSession[]>;
     getBySessionId(sessionId: string): Promise<SourceControlSession | null>;
-    /**
-     * Overwrite the session's display title (`null` clears it back to the
-     * branch fallback). Keyed by the controller-facing `sessionId`.
-     */
-    rename(args: { sessionId: string; title: string | null }): Promise<void>;
+    /** Overwrite the session's display title. Keyed by the controller-facing `sessionId`. */
+    rename(args: { sessionId: string; title: string }): Promise<void>;
     getForBranch(args: {
       projectRepositoryId: string;
       userId: string;

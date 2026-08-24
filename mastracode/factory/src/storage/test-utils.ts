@@ -18,7 +18,6 @@ import { ModelPacksStorage } from './domains/model-packs/base.js';
 import { FactoryProjectsStorage } from './domains/projects/base.js';
 import { QueueHealthStorage } from './domains/queue-health/base.js';
 import { SourceControlStorage } from './domains/source-control/base.js';
-import { TitleSettingsStorage } from './domains/title-settings/base.js';
 import { WorkItemsStorage } from './domains/work-items/base.js';
 
 export interface FactoryStorageTestSeed {
@@ -32,7 +31,6 @@ export interface FactoryStorageTestSeed {
   sourceControl: SourceControlStorage;
   modelPacks: ModelPacksStorage;
   memorySettings: MemorySettingsStorage;
-  titleSettings: TitleSettingsStorage;
   customProviders: CustomProvidersStorage;
   queueHealth: QueueHealthStorage;
   channelIdentity: ChannelIdentityStorage;
@@ -54,7 +52,6 @@ export async function createFactoryStorageForTests(): Promise<FactoryStorageTest
   const sourceControl = storage.registerDomain(new SourceControlStorage());
   const modelPacks = storage.registerDomain(new ModelPacksStorage());
   const memorySettings = storage.registerDomain(new MemorySettingsStorage());
-  const titleSettings = storage.registerDomain(new TitleSettingsStorage());
   const customProviders = storage.registerDomain(new CustomProvidersStorage());
   const queueHealth = storage.registerDomain(new QueueHealthStorage());
   const channelIdentity = storage.registerDomain(new ChannelIdentityStorage());
@@ -71,7 +68,6 @@ export async function createFactoryStorageForTests(): Promise<FactoryStorageTest
     sourceControl,
     modelPacks,
     memorySettings,
-    titleSettings,
     customProviders,
     queueHealth,
     channelIdentity,

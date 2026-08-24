@@ -39,7 +39,6 @@ import {
   SourceControlConnectionNotFoundError,
   type SourceControlStorage,
 } from '../storage/domains/source-control/base.js';
-import type { TitleSettingsStorage } from '../storage/domains/title-settings/base.js';
 import type { FactoryDispatchFailureCode, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { ConfigRoutes } from './config.js';
 import { invalidateCustomProvidersSnapshots } from './custom-provider-source.js';
@@ -91,7 +90,6 @@ export interface FactoryApiRoutesDeps {
     intake: IntakeStorage;
     modelCredentials: ModelCredentialsStorage;
     memorySettings: MemorySettingsStorage;
-    titleSettings: TitleSettingsStorage;
     customProviders: CustomProvidersStorage;
     filesystem: FilesystemStorage;
     modelPacks: ModelPacksStorage;
@@ -467,7 +465,6 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       modelPacks: deps.domains.modelPacks,
       sourceControlSessions: deps.sourceControlStorage.forIntegration('github').sessions,
       memorySettings: deps.domains.memorySettings,
-      titleSettings: deps.domains.titleSettings,
       factoryProjects: deps.domains.projects,
       customProviders: deps.domains.customProviders,
       features: { knowledge: deps.knowledgeEnabled },

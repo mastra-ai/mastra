@@ -133,6 +133,9 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
       vector: vector || false,
       embedder: vector ? fastembed.small : undefined,
       options: {
+        // Core names a thread on its first turn with the observer's cheap
+        // model; OM's `threadTitle` extractor refines it as the thread grows.
+        generateTitle: { model: getObserverModel },
         observationalMemory: {
           enabled: true,
           temporalMarkers: true,

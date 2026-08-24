@@ -13,6 +13,8 @@
 
 import { randomUUID } from 'node:crypto';
 import type { MountedMastraCode } from '@mastra/code-sdk';
+import { resolveModel } from '@mastra/code-sdk/agents/model';
+import { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import { UniqueViolationError } from '@mastra/core/storage';
@@ -25,6 +27,7 @@ import { SandboxBudgetError } from '../../sandbox/fleet.js';
 import type { MaterializationSandbox, PrepareProgress, ProgressFn, SandboxFleet } from '../../sandbox/fleet.js';
 import type { StateSigner } from '../../state-signing.js';
 import type { AuditEmitter } from '../../storage/domains/audit/domain.js';
+import type { MemorySettingsStorage } from '../../storage/domains/memory-settings/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type {
   ProjectRepository,
@@ -126,6 +129,8 @@ export interface MountGithubRoutesOptions {
   redirectUri?: string;
   /** Controller used to route verified webhook notifications to exact subscribed sessions. */
   controller?: MountedMastraCode['controller'];
+  /** Owner-scoped observational-memory settings — the source of the model that names a thread. */
+  memorySettings: Pick<MemorySettingsStorage, 'get'>;
   /** Best-effort audit emission supplied by the factory-owned audit domain. */
   emitAudit?: AuditEmitter['emit'];
   /** Factory projects domain — resolves a project's default triage model. */
@@ -359,7 +364,8 @@ async function ingestPolledEvents(
  */
 export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[] {
   const routes: ApiRoute[] = [];
-  const { auth, fleet, storage, github, stateSigner, controller, emitAudit, sessionRetirement } = options;
+  const { auth, fleet, storage, github, stateSigner, controller, memorySettings, emitAudit, sessionRetirement } =
+    options;
   const diagnostics = () =>
     getGithubFeatureDiagnostics({ github, auth, appDbConfigured: storage !== undefined, stateSigner, fleet });
 
@@ -961,7 +967,9 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
   );
 
   // ── Sessions / commit / push / PR ────────────────────────────────────────
-  routes.push(...buildProjectGitRoutes({ github, auth, fleet, controller, emitAudit, sessionRetirement }));
+  routes.push(
+    ...buildProjectGitRoutes({ github, auth, fleet, controller, memorySettings, emitAudit, sessionRetirement }),
+  );
 
   return routes;
 }
@@ -1191,11 +1199,22 @@ async function loadOwnedProject(options: {
   return { orgId, userId, project, sandboxRow };
 }
 
+/**
+ * Name a thread with a stored model id. Resolution has to go through
+ * mastracode's gateway: a bare id handed to core's model router looks for a
+ * process env key instead of the caller's stored provider credentials.
+ */
+function titleModel(modelId: string) {
+  return ({ requestContext }: { requestContext: RequestContext }) =>
+    resolveModel(modelId, { remapForCodexOAuth: true, requestContext });
+}
+
 function buildProjectGitRoutes({
   github,
   auth,
   fleet,
   controller,
+  memorySettings,
   emitAudit,
   sessionRetirement,
 }: {
@@ -1203,6 +1222,7 @@ function buildProjectGitRoutes({
   auth: RouteAuth;
   fleet: SandboxFleet;
   controller?: MountedMastraCode['controller'];
+  memorySettings: MountGithubRoutesOptions['memorySettings'];
   emitAudit?: AuditEmitter['emit'];
   sessionRetirement?: MountGithubRoutesOptions['sessionRetirement'];
 }): ApiRoute[] {
@@ -1382,6 +1402,46 @@ function buildProjectGitRoutes({
           });
         }
         return c.json({ removed: true });
+      },
+    }),
+
+    // ── Re-name a session's thread with the title model ────────────────────
+    registerApiRoute('/web/user-sessions/:sessionId/title', {
+      method: 'POST',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = await resolveOrgTenant(loose(c), auth);
+        if ('response' in resolved) return resolved.response;
+        const sessionId = c.req.param('sessionId');
+        const row = await github.sourceControlStorage.sessions.getBySessionId(sessionId);
+        if (!row || row.orgId !== resolved.tenant.orgId || row.userId !== resolved.tenant.userId) {
+          return c.json({ error: 'Session not found' }, 404);
+        }
+        if (!controller) return c.json({ error: 'Sessions are not available on this server.' }, 503);
+
+        const threads = await controller.queryThreads({ resourceId: sessionId });
+        const thread = threads.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0];
+        if (!thread) return c.json({ error: 'This session has no conversation to name yet.' }, 409);
+
+        // A session that is not live carries neither the observer model that names
+        // its threads nor the identity whose provider credentials pay for it.
+        const stored = await memorySettings.get({ orgId: row.orgId, userId: row.userId });
+        const requestContext = new RequestContext();
+        requestContext.set('user', { workosId: row.userId, organizationId: row.orgId });
+
+        try {
+          const title = await controller.generateThreadTitle({
+            threadId: thread.id,
+            resourceId: sessionId,
+            requestContext,
+            ...(stored?.observerModelId ? { model: titleModel(stored.observerModelId) } : {}),
+          });
+          if (!title) return c.json({ error: 'The model returned an empty title. Try again.' }, 502);
+          await github.sourceControlStorage.sessions.rename({ sessionId, title });
+          return c.json({ title });
+        } catch (error) {
+          return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+        }
       },
     }),
 
