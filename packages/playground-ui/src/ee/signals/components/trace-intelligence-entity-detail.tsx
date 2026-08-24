@@ -1,7 +1,7 @@
 import { Radar } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 
-import { useEntityLearningProgress, useThemeEntities } from '../hooks';
+import { useEntityLearningProgress, useThemeEntities, useThemeSnapshots } from '../hooks';
 import { SankeySignals } from '../sankey-signals';
 import { orderedSignals } from '../signal-formatting';
 import { SignalsErrorState } from '../signals-error-state';
@@ -28,6 +28,7 @@ export function TraceIntelligenceEntityDetail({
   dateRangePicker,
 }: TraceIntelligenceEntityDetailProps) {
   const [selectedThemeId, setSelectedThemeId] = useState<string>();
+  const [selectedFrameId, setSelectedFrameId] = useState<string>();
   const context = useTraceIntelligence();
   const entitiesQuery = useThemeEntities(entityType);
   const entity = entitiesQuery.data?.entities.find(
@@ -40,6 +41,13 @@ export function TraceIntelligenceEntityDetail({
     entityType,
     !entitiesQuery.isPending && !entitiesQuery.isError && entity !== undefined && signalNames.length < 2,
   );
+  const snapshotsQuery = useThemeSnapshots(entityId, entityType, signalNames, dateFrom, dateTo);
+  const snapshots = snapshotsQuery.data?.snapshots ?? [];
+  const firstSnapshotId = snapshots.toSorted((left, right) => left.ordinal - right.ordinal)[0]?.snapshotId;
+  const frameId = selectedFrameId ?? firstSnapshotId;
+  const pickerRow = dateRangePicker ? (
+    <div className="flex justify-end px-4 pt-4 lg:px-6 lg:pt-6">{dateRangePicker}</div>
+  ) : undefined;
 
   if (entitiesQuery.isPending) return <SignalsLoadingSkeleton />;
   if (entitiesQuery.isError) {
@@ -58,6 +66,44 @@ export function TraceIntelligenceEntityDetail({
       </NoDataPageLayout>
     );
   }
+  if (signalNames.length < 2) {
+    return (
+      <TraceIntelligenceProvider
+        cacheScope={context.cacheScope}
+        request={context.request}
+        LinkComponent={context.LinkComponent}
+        getTraceHref={context.getTraceHref}
+        signalCatalog={signalCatalog}
+        signalManagement={context.signalManagement}
+      >
+        <SignalsEmptyState LinkComponent={context.LinkComponent} progress={progressQuery.data} />
+      </TraceIntelligenceProvider>
+    );
+  }
+  if (snapshotsQuery.isPending) {
+    return (
+      <>
+        {pickerRow}
+        <SignalsLoadingSkeleton />
+      </>
+    );
+  }
+  if (snapshotsQuery.isError) {
+    return (
+      <>
+        {pickerRow}
+        <SignalsErrorState message="Unable to load trace signal flow." onRetry={() => void snapshotsQuery.refetch()} />
+      </>
+    );
+  }
+  if (!frameId) {
+    return (
+      <>
+        {pickerRow}
+        <SignalsEmptyState LinkComponent={context.LinkComponent} isRangeEmpty />
+      </>
+    );
+  }
 
   return (
     <TraceIntelligenceProvider
@@ -68,21 +114,19 @@ export function TraceIntelligenceEntityDetail({
       signalCatalog={signalCatalog}
       signalManagement={context.signalManagement}
     >
-      {signalNames.length < 2 ? (
-        <SignalsEmptyState LinkComponent={context.LinkComponent} progress={progressQuery.data} />
-      ) : (
-        <SankeySignals
-          key={`${entity.entityId}:${signalNames.join(',')}`}
-          entityId={entity.entityId}
-          entityType={entity.entityType}
-          signalNames={signalNames}
-          dateFrom={dateFrom}
-          dateTo={dateTo}
-          selectedThemeId={selectedThemeId}
-          onSelectedThemeIdChange={setSelectedThemeId}
-          dateRangePicker={dateRangePicker}
-        />
-      )}
+      <SankeySignals
+        key={`${entity.entityId}:${signalNames.join(',')}`}
+        entityId={entity.entityId}
+        entityType={entity.entityType}
+        signalNames={signalNames}
+        dateFrom={dateFrom}
+        dateTo={dateTo}
+        selectedThemeId={selectedThemeId}
+        onSelectedThemeIdChange={setSelectedThemeId}
+        selectedFrameId={frameId}
+        onFrameIdChange={setSelectedFrameId}
+        dateRangePicker={dateRangePicker}
+      />
     </TraceIntelligenceProvider>
   );
 }
