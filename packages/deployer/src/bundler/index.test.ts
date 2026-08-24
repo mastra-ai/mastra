@@ -3,7 +3,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { SourceDependencyConstraints } from './index';
-import { Bundler, applySourceDependencyRange, getSourceDependencyConstraints, isRegistryVersionSpec } from './index';
+import {
+  Bundler,
+  applySourceDependencyRange,
+  assertNoLocalPathDependencies,
+  getSourceDependencyConstraints,
+  isRegistryVersionSpec,
+} from './index';
 
 const tempDirs: string[] = [];
 
@@ -221,6 +227,40 @@ describe('isRegistryVersionSpec', () => {
     'npm:../vendor/zod@1.0.0',
   ])('rejects the npm alias %j whose target is not a registry package and range', spec => {
     expect(isRegistryVersionSpec(spec)).toBe(false);
+  });
+});
+
+describe('assertNoLocalPathDependencies', () => {
+  it.each(['link:../../packages/core', 'file:../core', '../core', './vendor/core', '../vendor/core.tgz'])(
+    'rejects a dependency declared as %j',
+    spec => {
+      expect(() =>
+        assertNoLocalPathDependencies(['@mastra/core'], constraints({ dependencies: { '@mastra/core': spec } })),
+      ).toThrow(/linked from outside the workspace/);
+    },
+  );
+
+  it('reports a subpath import under its package name, once', () => {
+    expect(() =>
+      assertNoLocalPathDependencies(['hono', 'hono/vercel'], constraints({ dependencies: { hono: 'link:../hono' } })),
+    ).toThrow(/"hono": "link:\.\.\/hono"[\s\S]*registry/);
+  });
+
+  it.each(['^4.3.6', 'catalog:', 'npm:zod@^4.3.6', 'latest'])('accepts a dependency declared as %j', spec => {
+    expect(() => assertNoLocalPathDependencies(['zod'], constraints({ dependencies: { zod: spec } }))).not.toThrow();
+  });
+
+  it('accepts a link an override replaces', () => {
+    expect(() =>
+      assertNoLocalPathDependencies(
+        ['@mastra/core'],
+        constraints({ dependencies: { '@mastra/core': 'link:../../packages/core' }, pinned: ['@mastra/core'] }),
+      ),
+    ).not.toThrow();
+  });
+
+  it('accepts a transitive dependency the app never declared', () => {
+    expect(() => assertNoLocalPathDependencies(['zod'], constraints())).not.toThrow();
   });
 });
 
