@@ -172,14 +172,6 @@ async function withAbortCheck<T>(fn: () => Promise<T>, abortSignal?: AbortSignal
 const EARLY_ACTIVATION_SIZE_FLOOR_RATIO = 0.75;
 
 /**
- * Lifetime bound for sync-reflection suppression entries whose thread/resource
- * key is abandoned (thread never active again). This is lifecycle hygiene
- * only — retry gating is purely input-identity based: suppression lifts the
- * moment the observation-token count differs from the unproductive attempt.
- */
-const SYNC_REFLECTION_SUPPRESSION_MAX_AGE_MS = 60 * 60_000;
-
-/**
  * Result of an attempt to activate a buffered reflection. The caller uses
  * this to decide whether to fall through to sync reflection or background
  * buffering, without re-deriving state that `tryActivateBufferedReflection`
@@ -231,19 +223,10 @@ export class ReflectorRunner {
    * record ids change every time a generation is created.
    *
    * Lifecycle: an entry is deleted when a sync reflection finishes under
-   * threshold, replaced on each unproductive attempt, and dropped by
-   * `pruneSyncReflectionSuppression` once older than
-   * SYNC_REFLECTION_SUPPRESSION_MAX_AGE_MS so abandoned keys don't accumulate.
+   * threshold and replaced on each unproductive attempt. Entries are one
+   * number per active thread/resource key and live for the runner's lifetime.
    */
-  private readonly syncReflectionSuppression = new Map<string, { atObservationTokens: number; recordedAt: number }>();
-
-  /** Drop stale suppression entries so abandoned lock keys don't accumulate. */
-  private pruneSyncReflectionSuppression() {
-    const cutoff = Date.now() - SYNC_REFLECTION_SUPPRESSION_MAX_AGE_MS;
-    for (const [key, entry] of this.syncReflectionSuppression) {
-      if (entry.recordedAt < cutoff) this.syncReflectionSuppression.delete(key);
-    }
-  }
+  private readonly syncReflectionSuppression = new Map<string, number>();
 
   constructor(opts: {
     reflectionConfig: ResolvedReflectionConfig;
@@ -1271,9 +1254,8 @@ export class ReflectorRunner {
     // TTL and provider-change triggers are exempt — they reflect for
     // activation semantics, not to shrink observations.
     if (activationTriggeredBy === 'threshold') {
-      this.pruneSyncReflectionSuppression();
-      const suppressed = this.syncReflectionSuppression.get(lockKey);
-      if (suppressed && observationTokens === suppressed.atObservationTokens) {
+      const suppressedAtTokens = this.syncReflectionSuppression.get(lockKey);
+      if (suppressedAtTokens !== undefined && observationTokens === suppressedAtTokens) {
         omDebug(
           `[OM:reflect] skipping sync reflection — observations unchanged at ${observationTokens} tokens since the last unproductive attempt; retrying once they change`,
         );
@@ -1370,10 +1352,7 @@ export class ReflectorRunner {
       // becomes the new active observations, so its token count is the input
       // identity of any immediate retry.
       if (reflectionTokenCount >= reflectThreshold) {
-        this.syncReflectionSuppression.set(lockKey, {
-          atObservationTokens: reflectionTokenCount,
-          recordedAt: Date.now(),
-        });
+        this.syncReflectionSuppression.set(lockKey, reflectionTokenCount);
       } else {
         this.syncReflectionSuppression.delete(lockKey);
       }
@@ -1436,10 +1415,7 @@ export class ReflectorRunner {
       if (abortSignal?.aborted) {
         throw error;
       }
-      this.syncReflectionSuppression.set(lockKey, {
-        atObservationTokens: observationTokens,
-        recordedAt: Date.now(),
-      });
+      this.syncReflectionSuppression.set(lockKey, observationTokens);
       omError('[OM] Reflection failed', error);
     } finally {
       await this.storage.setReflectingFlag(record.id, false);
