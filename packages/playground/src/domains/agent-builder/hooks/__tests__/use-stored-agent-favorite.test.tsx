@@ -126,6 +126,7 @@ describe('useToggleStoredAgentFavorite', () => {
       act(() => result.current.mutate({ favorited: true }));
       await release();
 
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(listOf(queryClient)).toBeUndefined();
     });
   });
@@ -271,7 +272,9 @@ describe('useToggleStoredAgentFavorite', () => {
         await result.current.mutateAsync({ favorited: true }).catch(() => {});
       });
 
-      expect(listOf(queryClient)).toEqual(before);
+      // Identity, not deep equality: rewriting the entry with an identical
+      // value would still be a write, and would still bump the cache.
+      expect(listOf(queryClient)).toBe(before);
     });
   });
 
@@ -284,6 +287,104 @@ describe('useToggleStoredAgentFavorite', () => {
       await release();
 
       expect(queryClient.getQueryData(['stored-agent', AGENT_ID])).toBeUndefined();
+    });
+  });
+
+  describe('the work it cancels before patching', () => {
+    it('keeps the optimistic patch even though a list refetch was already in flight', async () => {
+      let releaseList: () => void = () => {};
+      const listInFlight = new Promise<void>(resolve => {
+        releaseList = resolve;
+      });
+      server.use(
+        http.get(`${BASE_URL}/api/stored/agents`, async () => {
+          await listInFlight;
+          return HttpResponse.json(makeList([makeAgent({ favoriteCount: 0, isFavorited: false })]));
+        }),
+      );
+
+      const { result, queryClient } = setup({ lists: { all: makeList([makeAgent()]) } });
+      // Put a refetch of the list in flight, then toggle underneath it.
+      void queryClient.fetchQuery({
+        queryKey: ['stored-agents', 'all'],
+        queryFn: async () => {
+          const response = await fetch(`${BASE_URL}/api/stored/agents`);
+          return (await response.json()) as ListStoredAgentsResponse;
+        },
+      });
+      const release = pendingFavorite();
+
+      act(() => result.current.mutate({ favorited: true }));
+      await waitFor(() => expect(listOf(queryClient)?.agents[0].isFavorited).toBe(true));
+
+      await act(async () => releaseList());
+      await release();
+
+      // Without the cancel, the stale in-flight response would land on top of
+      // the optimistic patch and flip the star back off.
+      expect(listOf(queryClient)?.agents[0].isFavorited).toBe(true);
+    });
+
+    it('does not cancel unrelated work', async () => {
+      let releaseOther: () => void = () => {};
+      const otherInFlight = new Promise<void>(resolve => {
+        releaseOther = resolve;
+      });
+
+      const { result, queryClient } = setup({ detail: makeAgent() });
+      const other = queryClient.fetchQuery({
+        queryKey: ['stored-workflows'],
+        queryFn: async () => {
+          await otherInFlight;
+          return { ok: true };
+        },
+      });
+      const release = pendingFavorite();
+
+      act(() => result.current.mutate({ favorited: true }));
+      await act(async () => releaseOther());
+      await release();
+
+      await expect(other).resolves.toEqual({ ok: true });
+    });
+  });
+
+  describe('the caches it refreshes once the toggle settles', () => {
+    it('leaves unrelated caches alone', async () => {
+      server.use(http.put(FAVORITE_URL, () => HttpResponse.json({ favorited: true, favoriteCount: 1 })));
+      const { result, queryClient } = setup({ detail: makeAgent() });
+      queryClient.setQueryData(['stored-workflows'], { seeded: true });
+
+      await act(async () => {
+        await result.current.mutateAsync({ favorited: true });
+      });
+
+      expect(queryClient.getQueryState(['stored-workflows'])?.isInvalidated).toBe(false);
+    });
+  });
+
+  describe('when the toggle fails and there was no detail cached', () => {
+    it('does not leave an empty detail entry behind', async () => {
+      server.use(http.put(FAVORITE_URL, () => new HttpResponse(null, { status: 500 })));
+      const { result, queryClient } = setup({ lists: { all: makeList([makeAgent()]) } });
+
+      await act(async () => {
+        await result.current.mutateAsync({ favorited: true }).catch(() => {});
+      });
+
+      expect(queryClient.getQueryCache().find({ queryKey: ['stored-agent', AGENT_ID] })).toBeUndefined();
+    });
+
+    it('does not invent cache entries while rolling the lists back', async () => {
+      server.use(http.put(FAVORITE_URL, () => new HttpResponse(null, { status: 500 })));
+      const { result, queryClient } = setup({ lists: { all: makeList([makeAgent()]) } });
+      const before = queryClient.getQueryCache().getAll().length;
+
+      await act(async () => {
+        await result.current.mutateAsync({ favorited: true }).catch(() => {});
+      });
+
+      expect(queryClient.getQueryCache().getAll()).toHaveLength(before);
     });
   });
 });

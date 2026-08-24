@@ -127,6 +127,7 @@ describe('useToggleStoredSkillFavorite', () => {
       act(() => result.current.mutate({ favorited: true }));
       await release();
 
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(listOf(queryClient)).toBeUndefined();
     });
   });
@@ -272,7 +273,9 @@ describe('useToggleStoredSkillFavorite', () => {
         await result.current.mutateAsync({ favorited: true }).catch(() => {});
       });
 
-      expect(listOf(queryClient)).toEqual(before);
+      // Identity, not deep equality: rewriting the entry with an identical
+      // value would still be a write, and would still bump the cache.
+      expect(listOf(queryClient)).toBe(before);
     });
   });
 
@@ -285,6 +288,104 @@ describe('useToggleStoredSkillFavorite', () => {
       await release();
 
       expect(queryClient.getQueryData(['stored-skill', SKILL_ID])).toBeUndefined();
+    });
+  });
+
+  describe('the work it cancels before patching', () => {
+    it('keeps the optimistic patch even though a list refetch was already in flight', async () => {
+      let releaseList: () => void = () => {};
+      const listInFlight = new Promise<void>(resolve => {
+        releaseList = resolve;
+      });
+      server.use(
+        http.get(`${BASE_URL}/api/stored/skills`, async () => {
+          await listInFlight;
+          return HttpResponse.json(makeList([makeSkill({ favoriteCount: 0, isFavorited: false })]));
+        }),
+      );
+
+      const { result, queryClient } = setup({ lists: { all: makeList([makeSkill()]) } });
+      // Put a refetch of the list in flight, then toggle underneath it.
+      void queryClient.fetchQuery({
+        queryKey: ['stored-skills', 'all'],
+        queryFn: async () => {
+          const response = await fetch(`${BASE_URL}/api/stored/skills`);
+          return (await response.json()) as ListStoredSkillsResponse;
+        },
+      });
+      const release = pendingFavorite();
+
+      act(() => result.current.mutate({ favorited: true }));
+      await waitFor(() => expect(listOf(queryClient)?.skills[0].isFavorited).toBe(true));
+
+      await act(async () => releaseList());
+      await release();
+
+      // Without the cancel, the stale in-flight response would land on top of
+      // the optimistic patch and flip the star back off.
+      expect(listOf(queryClient)?.skills[0].isFavorited).toBe(true);
+    });
+
+    it('does not cancel unrelated work', async () => {
+      let releaseOther: () => void = () => {};
+      const otherInFlight = new Promise<void>(resolve => {
+        releaseOther = resolve;
+      });
+
+      const { result, queryClient } = setup({ detail: makeSkill() });
+      const other = queryClient.fetchQuery({
+        queryKey: ['stored-workflows'],
+        queryFn: async () => {
+          await otherInFlight;
+          return { ok: true };
+        },
+      });
+      const release = pendingFavorite();
+
+      act(() => result.current.mutate({ favorited: true }));
+      await act(async () => releaseOther());
+      await release();
+
+      await expect(other).resolves.toEqual({ ok: true });
+    });
+  });
+
+  describe('the caches it refreshes once the toggle settles', () => {
+    it('leaves unrelated caches alone', async () => {
+      server.use(http.put(FAVORITE_URL, () => HttpResponse.json({ favorited: true, favoriteCount: 1 })));
+      const { result, queryClient } = setup({ detail: makeSkill() });
+      queryClient.setQueryData(['stored-workflows'], { seeded: true });
+
+      await act(async () => {
+        await result.current.mutateAsync({ favorited: true });
+      });
+
+      expect(queryClient.getQueryState(['stored-workflows'])?.isInvalidated).toBe(false);
+    });
+  });
+
+  describe('when the toggle fails and there was no detail cached', () => {
+    it('does not leave an empty detail entry behind', async () => {
+      server.use(http.put(FAVORITE_URL, () => new HttpResponse(null, { status: 500 })));
+      const { result, queryClient } = setup({ lists: { all: makeList([makeSkill()]) } });
+
+      await act(async () => {
+        await result.current.mutateAsync({ favorited: true }).catch(() => {});
+      });
+
+      expect(queryClient.getQueryCache().find({ queryKey: ['stored-skill', SKILL_ID] })).toBeUndefined();
+    });
+
+    it('does not invent cache entries while rolling the lists back', async () => {
+      server.use(http.put(FAVORITE_URL, () => new HttpResponse(null, { status: 500 })));
+      const { result, queryClient } = setup({ lists: { all: makeList([makeSkill()]) } });
+      const before = queryClient.getQueryCache().getAll().length;
+
+      await act(async () => {
+        await result.current.mutateAsync({ favorited: true }).catch(() => {});
+      });
+
+      expect(queryClient.getQueryCache().getAll()).toHaveLength(before);
     });
   });
 });
