@@ -157,8 +157,10 @@ function DeviceCodeDialog({ provider, session, onClose, onComplete }: ProviderOA
         </DialogHeader>
         <DialogBody className="flex flex-col items-center gap-4 text-center">
           {session.userCode && (
-            <div className="flex items-center justify-center gap-2">
-              <span className="text-header-lg font-mono tracking-widest break-all select-all">{session.userCode}</span>
+            <div className="flex w-full min-w-0 items-center justify-center gap-2">
+              <span className="text-header-lg min-w-0 flex-1 font-mono tracking-widest break-all select-all">
+                {session.userCode}
+              </span>
               <CopyButton content={session.userCode} variant="ghost" size="icon-sm" tooltip="Copy code" />
             </div>
           )}
@@ -169,7 +171,7 @@ function DeviceCodeDialog({ provider, session, onClose, onComplete }: ProviderOA
         </DialogBody>
         <DialogFooter className="sm:justify-between">
           {flowError ? (
-            <Txt as="p" variant="ui-sm" className="text-notice-destructive-fg">
+            <Txt as="p" variant="ui-sm" className="text-notice-destructive-fg min-w-0 break-words">
               {flowError}
             </Txt>
           ) : (
