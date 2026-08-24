@@ -22,21 +22,12 @@ export interface EntityLearningProgressResponse {
   signalCatalog?: SignalCatalogEntry[];
 }
 
-export type TraceSignalArtifact =
-  | 'latestUserInput'
-  | 'minifiedTrace'
-  | 'summary'
-  | 'tags'
-  | 'entityIntent'
-  | 'entityIntentSummary';
-
 export interface TraceSignalDefinition {
   id: string;
   name: string;
   displayLabel: string;
   description: string;
   taskPrompt: string;
-  artifactAllowlist: TraceSignalArtifact[];
   version: number;
   status: 'active' | 'archived';
   enabled: boolean | null;
@@ -56,7 +47,6 @@ export interface CreateTraceSignalDefinitionInput {
   displayLabel: string;
   description: string;
   taskPrompt: string;
-  artifactAllowlist: TraceSignalArtifact[];
 }
 
 export type UpdateTraceSignalDefinitionInput = Omit<CreateTraceSignalDefinitionInput, 'name'>;

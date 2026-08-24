@@ -21,7 +21,6 @@ const activeDefinition: TraceSignalDefinition = {
   displayLabel: 'Handoff Quality',
   description: 'Whether the agent handed work off clearly.',
   taskPrompt: 'Describe the quality of any handoff in one sentence.',
-  artifactAllowlist: ['latestUserInput', 'minifiedTrace'],
   version: 1,
   status: 'active',
   enabled: false,
@@ -145,14 +144,6 @@ describe('TraceSignalSettingsButton', () => {
         displayLabel: 'Tool Usage',
         description: 'How the agent used tools.',
         taskPrompt: 'Describe how the agent used tools in one sentence.',
-        artifactAllowlist: [
-          'latestUserInput',
-          'minifiedTrace',
-          'summary',
-          'tags',
-          'entityIntent',
-          'entityIntentSummary',
-        ],
       }),
     );
 

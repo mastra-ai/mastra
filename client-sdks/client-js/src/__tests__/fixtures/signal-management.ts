@@ -1,18 +1,9 @@
-type TraceSignalArtifact =
-  | 'latestUserInput'
-  | 'minifiedTrace'
-  | 'summary'
-  | 'tags'
-  | 'entityIntent'
-  | 'entityIntentSummary';
-
 type TraceSignalDefinitionFixture = {
   id: string;
   name: string;
   displayLabel: string;
   description: string;
   taskPrompt: string;
-  artifactAllowlist: TraceSignalArtifact[];
   version: number;
   status: 'active' | 'archived';
   enabled: boolean | null;
@@ -27,7 +18,7 @@ type TraceSignalManagementListFixture = {
 
 type CreateTraceSignalDefinitionInputFixture = Pick<
   TraceSignalDefinitionFixture,
-  'name' | 'displayLabel' | 'description' | 'taskPrompt' | 'artifactAllowlist'
+  'name' | 'displayLabel' | 'description' | 'taskPrompt'
 >;
 
 type UpdateTraceSignalDefinitionInputFixture = Omit<CreateTraceSignalDefinitionInputFixture, 'name'>;
@@ -44,7 +35,6 @@ export const customSignalDefinitionFixture = {
   displayLabel: 'Handoff Quality',
   description: 'Whether the agent handed work off clearly.',
   taskPrompt: 'Describe the quality of any handoff in one sentence.',
-  artifactAllowlist: ['latestUserInput', 'minifiedTrace'],
   version: 1,
   status: 'active',
   enabled: false,
@@ -70,14 +60,12 @@ export const createSignalDefinitionInputFixture = {
   displayLabel: 'Tool Usage',
   description: 'How the agent used tools.',
   taskPrompt: 'Describe how the agent used tools in one sentence.',
-  artifactAllowlist: ['latestUserInput', 'minifiedTrace'],
 } satisfies CreateTraceSignalDefinitionInputFixture;
 
 export const updateSignalDefinitionInputFixture = {
   displayLabel: 'Handoff Clarity',
   description: customSignalDefinitionFixture.description,
   taskPrompt: customSignalDefinitionFixture.taskPrompt,
-  artifactAllowlist: ['latestUserInput', 'minifiedTrace'],
 } satisfies UpdateTraceSignalDefinitionInputFixture;
 
 export const projectSignalSettingFixture = {

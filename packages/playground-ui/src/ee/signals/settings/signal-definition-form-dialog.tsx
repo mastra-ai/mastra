@@ -1,6 +1,5 @@
 import type {
   CreateTraceSignalDefinitionInput,
-  TraceSignalArtifact,
   TraceSignalDefinition,
   UpdateTraceSignalDefinitionInput,
 } from '@mastra/client-js';
@@ -20,14 +19,6 @@ import { FieldBlock, TextFieldBlock } from '@/ds/components/FormFieldBlocks';
 import { Spinner } from '@/ds/components/Spinner';
 import { Textarea } from '@/ds/components/Textarea';
 
-const allTraceSignalArtifacts: TraceSignalArtifact[] = [
-  'latestUserInput',
-  'minifiedTrace',
-  'summary',
-  'tags',
-  'entityIntent',
-  'entityIntentSummary',
-];
 const reservedNames = new Set([
   'goal',
   'sentiment',
@@ -59,14 +50,12 @@ function initialValue(definition?: TraceSignalDefinition): FormValue {
         displayLabel: definition.displayLabel,
         description: definition.description,
         taskPrompt: definition.taskPrompt,
-        artifactAllowlist: allTraceSignalArtifacts,
       }
     : {
         name: '',
         displayLabel: '',
         description: '',
         taskPrompt: '',
-        artifactAllowlist: allTraceSignalArtifacts,
       };
 }
 
@@ -121,7 +110,6 @@ export function SignalDefinitionFormDialog({
                     displayLabel: value.displayLabel,
                     description: value.description,
                     taskPrompt: value.taskPrompt,
-                    artifactAllowlist: value.artifactAllowlist,
                   })
                 : onCreate(value);
               void action.then(() => onOpenChange(false)).catch(() => undefined);
