@@ -98,6 +98,10 @@ export interface FactoryDecisionDispatcherOptions {
   reconcileToolResults?: () => Promise<void>;
   prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
+  resolveLinkedWorkItemParentId?: (input: {
+    orgId: string;
+    decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>;
+  }) => Promise<string | null>;
   maxInFlight?: number;
   /** How often the stale-binding sweep runs. Defaults to 10 minutes. */
   staleBindingSweepIntervalMs?: number;
@@ -208,6 +212,7 @@ export class FactoryDecisionDispatcher {
   readonly #reconcileToolResults?: () => Promise<void>;
   readonly #prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   readonly #primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
+  readonly #resolveLinkedWorkItemParentId?: FactoryDecisionDispatcherOptions['resolveLinkedWorkItemParentId'];
   readonly #maxInFlight: number;
   readonly #staleBindingSweepIntervalMs: number;
   readonly #staleBindingTtlMs: number;
@@ -228,6 +233,7 @@ export class FactoryDecisionDispatcher {
     this.#reconcileToolResults = options.reconcileToolResults;
     this.#prepareBinding = options.prepareBinding;
     this.#primeCredentials = options.primeCredentials;
+    this.#resolveLinkedWorkItemParentId = options.resolveLinkedWorkItemParentId;
     const maxInFlight = options.maxInFlight ?? MAX_IN_FLIGHT;
     this.#maxInFlight = Number.isFinite(maxInFlight) && maxInFlight > 0 ? Math.floor(maxInFlight) : MAX_IN_FLIGHT;
     this.#staleBindingSweepIntervalMs = positiveMs(
@@ -698,13 +704,20 @@ export class FactoryDecisionDispatcher {
     decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>,
     causalChain: FactoryRuleCausalEntry[],
   ): Promise<void> {
+    const parentWorkItemId =
+      record.workItemId ??
+      (await this.#resolveLinkedWorkItemParentId?.({
+        orgId: record.orgId,
+        decision,
+      })) ??
+      null;
     let result = await this.#storage.upsert({
       orgId: record.orgId,
       userId: 'factory-rule-dispatcher',
       factoryProjectId: record.factoryProjectId,
       input: {
         externalSource: externalSourceForDecision(decision),
-        parentWorkItemId: record.workItemId,
+        parentWorkItemId,
         title: decision.title,
         stages: ['intake'],
         sessions: {},
@@ -712,12 +725,12 @@ export class FactoryDecisionDispatcher {
       },
       reuseMode: 'preserve',
     });
-    if (!result.item.parentWorkItemId && record.workItemId) {
+    if (!result.item.parentWorkItemId && parentWorkItemId) {
       const item = await this.#storage.setParentWorkItemIfMissing({
         orgId: record.orgId,
         id: result.item.id,
         userId: 'factory-rule-dispatcher',
-        parentWorkItemId: record.workItemId,
+        parentWorkItemId,
       });
       if (item) result = { ...result, item };
     }

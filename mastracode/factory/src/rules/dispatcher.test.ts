@@ -2126,6 +2126,61 @@ describe('FactoryDecisionDispatcher', () => {
     expect((await storage.get({ orgId: 'org-1', id: orphan.item.id }))?.parentWorkItemId).toBe(parent.id);
   });
 
+  it('resolves provenance recorded after a parentless PR decision was committed but before materialization', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const parent = await createItem(storage);
+    await storage.commitRuleEvaluation({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: null,
+      ingress: { identity: 'github:pull-request:2:opened', triggerType: 'pull_request.opened' },
+      ruleSetVersion: 'rules-v1',
+      expectedRevision: null,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [
+        {
+          type: 'upsertLinkedWorkItem',
+          idempotencyKey: 'linked-pr-late-provenance',
+          board: 'review',
+          source: 'github-pr',
+          sourceKey: 'github-pr:2',
+          title: 'Linked PR',
+          url: 'https://github.com/acme/repo/pull/2',
+          stage: 'intake',
+          metadata: { githubRepositoryId: 7, githubPullRequestNumber: 2 },
+        },
+      ],
+      causalChain: [],
+      now: new Date('2030-01-01T00:00:00Z'),
+    });
+    const resolveLinkedWorkItemParentId = vi.fn().mockResolvedValue(parent.id);
+    const transitionService = new FactoryTransitionService({
+      storage,
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+    });
+    const { controller } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      resolveLinkedWorkItemParentId,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:01Z'));
+
+    const linked = (await storage.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).find(
+      item => item.externalSource?.externalId === 'github-pr:2',
+    );
+    expect(resolveLinkedWorkItemParentId).toHaveBeenCalledWith({
+      orgId: 'org-1',
+      decision: expect.objectContaining({ source: 'github-pr', sourceKey: 'github-pr:2' }),
+    });
+    expect(linked?.parentWorkItemId).toBe(parent.id);
+  });
+
   it('recovers linked-item materialization after an upsert crash and fires Intake onEnter exactly once', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const parent = await createItem(storage);

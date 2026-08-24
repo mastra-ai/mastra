@@ -27,6 +27,21 @@ export interface FactoryPullRequestProvenanceData {
   toolCallId: string;
 }
 
+export async function resolveFactoryPullRequestParentWorkItemId(
+  integrationStorage: IntegrationStorageHandle<
+    Record<string, unknown>,
+    Record<string, unknown>,
+    FactoryPullRequestProvenanceData
+  >,
+  input: { orgId: string; repositoryId: number; pullRequestNumber: number },
+): Promise<string | null> {
+  const targetKey = `factory-pr-provenance:${input.repositoryId}:${input.pullRequestNumber}`;
+  const provenance = (await integrationStorage.subscriptions.listByTarget(targetKey, { status: 'active' })).find(
+    row => row.orgId === input.orgId && row.data?.kind === 'factory-pr-provenance',
+  );
+  return provenance?.data?.workItemId ?? null;
+}
+
 export async function recordFactoryPullRequestProvenance(
   github: GithubIntegration,
   sourceControl: SourceControlStorageHandle,
