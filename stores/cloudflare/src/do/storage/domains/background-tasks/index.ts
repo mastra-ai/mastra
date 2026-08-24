@@ -126,7 +126,15 @@ export class BackgroundTasksStorageDO extends BackgroundTasksStorage {
     }
   }
 
-  async updateTask(taskId: string, update: UpdateBackgroundTask): Promise<void> {
+  async updateTask(
+    taskId: string,
+    update: UpdateBackgroundTask,
+    options?: { expectedStatus?: BackgroundTask['status'] },
+  ): Promise<boolean> {
+    if (options?.expectedStatus) {
+      const existing = await this.getTask(taskId);
+      if (!existing || existing.status !== options.expectedStatus) return false;
+    }
     const columns: string[] = [];
     const values: SqlParam[] = [];
 
@@ -163,7 +171,7 @@ export class BackgroundTasksStorageDO extends BackgroundTasksStorage {
       values.push(update.completedAt?.toISOString() ?? null);
     }
 
-    if (columns.length === 0) return;
+    if (columns.length === 0) return false;
 
     try {
       const fullTableName = this.#db.getTableName(TABLE_BACKGROUND_TASKS);
@@ -180,8 +188,8 @@ export class BackgroundTasksStorageDO extends BackgroundTasksStorage {
         error,
       );
     }
+    return true;
   }
-
   async getTask(taskId: string): Promise<BackgroundTask | null> {
     try {
       const fullTableName = this.#db.getTableName(TABLE_BACKGROUND_TASKS);

@@ -73,9 +73,13 @@ export class BackgroundTasksStorageCloudflare extends BackgroundTasksStorage {
     await this.#db.putKV({ tableName: TABLE_BACKGROUND_TASKS, key: task.id, value: toRecord(task) });
   }
 
-  async updateTask(taskId: string, update: UpdateBackgroundTask): Promise<void> {
+  async updateTask(
+    taskId: string,
+    update: UpdateBackgroundTask,
+    options?: { expectedStatus?: BackgroundTask['status'] },
+  ): Promise<boolean> {
     const existing = await this.getTask(taskId);
-    if (!existing) return;
+    if (!existing || (options?.expectedStatus && existing.status !== options.expectedStatus)) return false;
     const merged = { ...existing };
     if ('status' in update) merged.status = update.status!;
     if ('result' in update) merged.result = update.result;
@@ -86,6 +90,7 @@ export class BackgroundTasksStorageCloudflare extends BackgroundTasksStorage {
     if ('suspendedAt' in update) merged.suspendedAt = update.suspendedAt;
     if ('completedAt' in update) merged.completedAt = update.completedAt;
     await this.#db.putKV({ tableName: TABLE_BACKGROUND_TASKS, key: taskId, value: toRecord(merged) });
+    return true;
   }
 
   async getTask(taskId: string): Promise<BackgroundTask | null> {

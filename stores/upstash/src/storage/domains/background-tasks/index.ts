@@ -74,9 +74,13 @@ export class BackgroundTasksUpstash extends BackgroundTasksStorage {
     await this.client.set(key, processedRecord);
   }
 
-  async updateTask(taskId: string, update: Partial<BackgroundTask>): Promise<void> {
+  async updateTask(
+    taskId: string,
+    update: Partial<BackgroundTask>,
+    options?: { expectedStatus?: BackgroundTask['status'] },
+  ): Promise<boolean> {
     const existing = await this.getTask(taskId);
-    if (!existing) return;
+    if (!existing || (options?.expectedStatus && existing.status !== options.expectedStatus)) return false;
 
     const merged = { ...existing };
 
@@ -92,6 +96,7 @@ export class BackgroundTasksUpstash extends BackgroundTasksStorage {
     const record = toStorageRecord(merged);
     const { key, processedRecord } = processRecord(TABLE_BACKGROUND_TASKS, record);
     await this.client.set(key, processedRecord);
+    return true;
   }
 
   async getTask(taskId: string): Promise<BackgroundTask | null> {

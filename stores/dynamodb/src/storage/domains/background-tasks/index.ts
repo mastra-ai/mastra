@@ -110,7 +110,15 @@ export class BackgroundTasksStorageDynamoDB extends BackgroundTasksStorage {
     }
   }
 
-  async updateTask(taskId: string, update: UpdateBackgroundTask): Promise<void> {
+  async updateTask(
+    taskId: string,
+    update: UpdateBackgroundTask,
+    options?: { expectedStatus?: BackgroundTask['status'] },
+  ): Promise<boolean> {
+    if (options?.expectedStatus) {
+      const existing = await this.getTask(taskId);
+      if (!existing || existing.status !== options.expectedStatus) return false;
+    }
     try {
       const setFields: Record<string, unknown> = {};
       // ElectroDB's .set() ignores undefined values, so any field explicitly set
@@ -166,7 +174,7 @@ export class BackgroundTasksStorageDynamoDB extends BackgroundTasksStorage {
         }
       }
 
-      if (Object.keys(setFields).length === 0 && removeFields.length === 0) return;
+      if (Object.keys(setFields).length === 0 && removeFields.length === 0) return false;
 
       let op = this.service.entities.background_task.patch({ entity: ENTITY, id: taskId }) as any;
       if (Object.keys(setFields).length > 0) op = op.set(setFields);
@@ -183,8 +191,8 @@ export class BackgroundTasksStorageDynamoDB extends BackgroundTasksStorage {
         error,
       );
     }
+    return true;
   }
-
   async getTask(taskId: string): Promise<BackgroundTask | null> {
     try {
       const result = await this.service.entities.background_task.get({ entity: ENTITY, id: taskId }).go();

@@ -186,7 +186,15 @@ export class BackgroundTasksMSSQL extends BackgroundTasksStorage {
     });
   }
 
-  async updateTask(taskId: string, update: UpdateBackgroundTask): Promise<void> {
+  async updateTask(
+    taskId: string,
+    update: UpdateBackgroundTask,
+    options?: { expectedStatus?: BackgroundTask['status'] },
+  ): Promise<boolean> {
+    if (options?.expectedStatus) {
+      const existing = await this.getTask(taskId);
+      if (!existing || existing.status !== options.expectedStatus) return false;
+    }
     const setClauses: string[] = [];
     const params: Record<string, any> = {};
     let idx = 1;
@@ -224,7 +232,7 @@ export class BackgroundTasksMSSQL extends BackgroundTasksStorage {
       params[`p${idx++}`] = update.completedAt?.toISOString() ?? null;
     }
 
-    if (setClauses.length === 0) return;
+    if (setClauses.length === 0) return false;
 
     setClauses.push(`[id] = [id]`); // no-op to ensure valid SET
     params[`p${idx}`] = taskId;
@@ -235,8 +243,8 @@ export class BackgroundTasksMSSQL extends BackgroundTasksStorage {
     }
 
     await request.query(`UPDATE ${this.tableName()} SET ${setClauses.join(', ')} WHERE [id] = @p${idx}`);
+    return true;
   }
-
   async getTask(taskId: string): Promise<BackgroundTask | null> {
     const request = this.pool.request();
     request.input('p1', taskId);

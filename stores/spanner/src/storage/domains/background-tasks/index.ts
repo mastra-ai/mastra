@@ -212,7 +212,15 @@ export class BackgroundTasksSpanner extends BackgroundTasksStorage {
     });
   }
 
-  async updateTask(taskId: string, update: UpdateBackgroundTask): Promise<void> {
+  async updateTask(
+    taskId: string,
+    update: UpdateBackgroundTask,
+    options?: { expectedStatus?: BackgroundTask['status'] },
+  ): Promise<boolean> {
+    if (options?.expectedStatus) {
+      const existing = await this.getTask(taskId);
+      if (!existing || existing.status !== options.expectedStatus) return false;
+    }
     const data: Record<string, any> = {};
     if ('status' in update) data.status = update.status;
     if ('result' in update) data.result = update.result ?? null;
@@ -222,10 +230,10 @@ export class BackgroundTasksSpanner extends BackgroundTasksStorage {
     if ('startedAt' in update) data.startedAt = update.startedAt ?? null;
     if ('suspendedAt' in update) data.suspendedAt = update.suspendedAt ?? null;
     if ('completedAt' in update) data.completedAt = update.completedAt ?? null;
-    if (Object.keys(data).length === 0) return;
+    if (Object.keys(data).length === 0) return false;
     await this.db.update({ tableName: TABLE_BACKGROUND_TASKS, keys: { id: taskId }, data });
+    return true;
   }
-
   async getTask(taskId: string): Promise<BackgroundTask | null> {
     const [rows] = await this.database.run({
       sql: `SELECT * FROM ${this.tableName()} WHERE id = @id LIMIT 1`,

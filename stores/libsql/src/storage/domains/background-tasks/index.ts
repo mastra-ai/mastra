@@ -129,7 +129,11 @@ export class BackgroundTasksLibSQL extends BackgroundTasksStorage {
     });
   }
 
-  async updateTask(taskId: string, update: UpdateBackgroundTask): Promise<void> {
+  async updateTask(
+    taskId: string,
+    update: UpdateBackgroundTask,
+    options?: { expectedStatus?: BackgroundTask['status'] },
+  ): Promise<boolean> {
     const setClauses: string[] = [];
     const params: InValue[] = [];
 
@@ -166,13 +170,19 @@ export class BackgroundTasksLibSQL extends BackgroundTasksStorage {
       params.push(update.completedAt?.toISOString() ?? null);
     }
 
-    if (setClauses.length === 0) return;
+    if (setClauses.length === 0) return false;
 
     params.push(taskId);
-    await this.#client.execute({
-      sql: `UPDATE ${TABLE_BACKGROUND_TASKS} SET ${setClauses.join(', ')} WHERE id = ?`,
+    let where = 'id = ?';
+    if (options?.expectedStatus) {
+      where += ' AND status = ?';
+      params.push(options.expectedStatus);
+    }
+    const result = await this.#client.execute({
+      sql: `UPDATE ${TABLE_BACKGROUND_TASKS} SET ${setClauses.join(', ')} WHERE ${where}`,
       args: params,
     });
+    return result.rowsAffected > 0;
   }
 
   async getTask(taskId: string): Promise<BackgroundTask | null> {
