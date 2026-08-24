@@ -18,7 +18,12 @@ export const useStarterUserMessage = (): string | undefined => {
 
   useEffect(() => {
     if (userMessage === undefined) return;
+    // Stryker disable next-line StringLiteral: react-router resolves '' and '.' to the
+    // same (current) path, so the two are indistinguishable from the outside.
     void navigate('.', { replace: true, state: null });
+    // Stryker disable next-line ArrayDeclaration: `userMessage` is captured once by
+    // useState and react-router's `navigate` is referentially stable, so an empty
+    // dependency list would schedule this effect exactly the same way.
   }, [userMessage, navigate]);
 
   return userMessage;

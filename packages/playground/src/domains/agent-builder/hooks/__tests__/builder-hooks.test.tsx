@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { PropsWithChildren } from 'react';
-import { MemoryRouter, useLocation } from 'react-router';
+import { MemoryRouter, useLocation, useNavigate } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { useAgentBuilderAllowedModels } from '../use-agent-builder-allowed-models';
@@ -483,6 +483,40 @@ describe('useStarterUserMessage', () => {
       const { result } = renderWithState(null);
 
       expect(result.current.message).toBeUndefined();
+      expect(result.current.locationState).toBeNull();
+    });
+
+    it('leaves unrelated location state alone', async () => {
+      const { result } = renderWithState({ from: 'agents-list' });
+
+      expect(result.current.message).toBeUndefined();
+      // Nothing was captured, so the hook must not rewrite the entry.
+      await waitFor(() => expect(result.current.locationState).toEqual({ from: 'agents-list' }));
+    });
+  });
+
+  describe('when the starter message has been captured', () => {
+    it('replaces the history entry so going back cannot resurrect the prompt', async () => {
+      const wrapper = ({ children }: PropsWithChildren) => (
+        <MemoryRouter initialEntries={[{ pathname: '/agent-builder/agents/a', state: { userMessage: 'start' } }]}>
+          {children}
+        </MemoryRouter>
+      );
+      const { result } = renderHook(
+        () => ({
+          message: useStarterUserMessage(),
+          locationState: useLocation().state,
+          navigate: useNavigate(),
+        }),
+        { wrapper },
+      );
+
+      await waitFor(() => expect(result.current.locationState).toBeNull());
+
+      await act(async () => {
+        void result.current.navigate(-1);
+      });
+
       expect(result.current.locationState).toBeNull();
     });
   });
