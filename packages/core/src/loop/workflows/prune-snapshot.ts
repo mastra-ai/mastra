@@ -192,7 +192,10 @@ function stripTerminalPayloadState<T>(value: T): T {
 }
 
 /** Applies the pruning rules to a single serialized step result. */
-function pruneStepResult(result: Record<string, any>): Record<string, any> {
+function pruneStepResult(
+  result: Record<string, any>,
+  { preserveTerminalPayloadState = false }: { preserveTerminalPayloadState?: boolean } = {},
+): Record<string, any> {
   if (!isPlainObject(result) || typeof result.status !== 'string') return result;
 
   const pruned: Record<string, any> = { ...result };
@@ -208,7 +211,7 @@ function pruneStepResult(result: Record<string, any>): Record<string, any> {
     delete pruned.suspendPayload;
     delete pruned.suspendOutput;
     delete pruned.resumePayload;
-    pruned.payload = stripTerminalPayloadState(pruned.payload);
+    if (!preserveTerminalPayloadState) pruned.payload = stripTerminalPayloadState(pruned.payload);
     if ('output' in pruned) pruned.output = stripTerminalOutputFields(pruned.output);
     return pruned;
   }
@@ -322,8 +325,8 @@ function stripRunningHistoryFields<T>(value: T): T {
  * Suspended/paused snapshots are untouched — they are the resume path and keep
  * exactly the bytes they keep today.
  */
-function pruneRunningHistory(snapshot: WorkflowRunState, context: WorkflowRunState['context']): void {
-  const activeStepIds = new Set(
+function getActiveStepIds(snapshot: WorkflowRunState): Set<string> {
+  return new Set(
     Object.entries(snapshot.activeStepsPath ?? {})
       .filter(
         ([, path]) =>
@@ -332,7 +335,9 @@ function pruneRunningHistory(snapshot: WorkflowRunState, context: WorkflowRunSta
       )
       .map(([stepId]) => stepId),
   );
+}
 
+function pruneRunningHistory(context: WorkflowRunState['context'], activeStepIds: ReadonlySet<string>): void {
   for (const [key, value] of Object.entries(context ?? {})) {
     if (key === 'input' || activeStepIds.has(key) || !isPlainObject(value)) continue;
     if (!TERMINAL_STEP_STATUSES.has((value as any).status)) continue;
@@ -358,6 +363,8 @@ export function pruneAgentLoopSnapshot({
   snapshot: WorkflowRunState;
   workflowStatus?: string;
 }): WorkflowRunState {
+  const isRunning = (workflowStatus ?? snapshot.status) === 'running';
+  const activeStepIds = isRunning ? getActiveStepIds(snapshot) : new Set<string>();
   const context: WorkflowRunState['context'] = {} as WorkflowRunState['context'];
   for (const [key, value] of Object.entries(snapshot.context ?? {})) {
     if (key === 'input') {
@@ -374,13 +381,15 @@ export function pruneAgentLoopSnapshot({
       }
       context.input = strippedInput;
     } else {
-      context[key] = pruneStepResult(value as Record<string, any>) as any;
+      context[key] = pruneStepResult(value as Record<string, any>, {
+        preserveTerminalPayloadState: activeStepIds.has(key),
+      }) as any;
     }
   }
 
   // `context` is freshly built above, so this is still copy-on-write with
   // respect to the caller's snapshot.
-  if ((workflowStatus ?? snapshot.status) === 'running') pruneRunningHistory(snapshot, context);
+  if (isRunning) pruneRunningHistory(context, activeStepIds);
 
   const result =
     isPlainObject(snapshot.result) && typeof snapshot.result.status === 'string'
