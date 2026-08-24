@@ -2451,8 +2451,14 @@ export class ProcessorRunner {
       messageList.removeByIds(deletedIds);
     }
 
+    const currentById = new Map(messageList.get.all.db().map(message => [message.id, message]));
+
     // Re-add messages with correct sources
     for (const message of messages) {
+      if (currentById.get(message.id) === message) {
+        continue;
+      }
+
       messageList.removeByIds([message.id]);
       if (message.role === 'system') {
         const systemText =

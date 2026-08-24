@@ -681,6 +681,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/opper',
+          label: 'Opper',
+        },
+        {
+          type: 'doc',
           id: 'providers/orcarouter',
           label: 'OrcaRouter',
         },

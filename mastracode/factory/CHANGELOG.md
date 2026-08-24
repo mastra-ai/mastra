@@ -1,5 +1,23 @@
 # @mastra/factory
 
+## 0.10.0-alpha.5
+
+### Patch Changes
+
+- Fixed automated runs for manually created board cards. Moving a manual card into Planning or Building no longer fails with 'Factory skill invocation requires a supported issue or pull request identifier'. Manual cards now start on a stable `factory/item-<id>` branch, even without a provider identity. ([#22114](https://github.com/mastra-ai/mastra/pull/22114))
+
+- Updated dependencies [[`65edab1`](https://github.com/mastra-ai/mastra/commit/65edab1c233d17b8f163bad12fca410d0e6f16b1), [`ab20a38`](https://github.com/mastra-ai/mastra/commit/ab20a38d0275f8d85e0f3833bd87ef487bcc609f), [`dbbfeb8`](https://github.com/mastra-ai/mastra/commit/dbbfeb85ec949dc9ebc0755e1ad262e4f5eba8db), [`3cc9d00`](https://github.com/mastra-ai/mastra/commit/3cc9d00b2b4333e0377a5e9df5eff92c17ce7630), [`733a537`](https://github.com/mastra-ai/mastra/commit/733a537489a858b5880b2e98809334fba895a221), [`9207dfa`](https://github.com/mastra-ai/mastra/commit/9207dfab8062e5fc68b751684797ff86fe0b4e70), [`12c61d2`](https://github.com/mastra-ai/mastra/commit/12c61d280c8cb208bc3c8dbcbe5dcc60cf9d1cd0), [`9a12ef3`](https://github.com/mastra-ai/mastra/commit/9a12ef3fccf3f4186db0f294f4ee1f02cf4d8db2)]:
+  - @mastra/core@1.62.0-alpha.5
+  - @mastra/code-sdk@1.5.0-alpha.5
+
+## 0.10.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`79f04a7`](https://github.com/mastra-ai/mastra/commit/79f04a7f6c6829da541139f638f2f1d267916e08), [`fd4d5fe`](https://github.com/mastra-ai/mastra/commit/fd4d5fe4f943699b85db5e74404f190d5a6b8c2a), [`f591643`](https://github.com/mastra-ai/mastra/commit/f591643becdf0be9bddce6ba1748e64bc30d77f1), [`b1ad324`](https://github.com/mastra-ai/mastra/commit/b1ad324d657f3544b0701332aef7eb10e9a36258), [`61c566d`](https://github.com/mastra-ai/mastra/commit/61c566dd2f2cde2b23ed8f139924e530d4202214)]:
+  - @mastra/core@1.62.0-alpha.4
+  - @mastra/code-sdk@1.5.0-alpha.4
+
 ## 0.10.0-alpha.3
 
 ### Minor Changes

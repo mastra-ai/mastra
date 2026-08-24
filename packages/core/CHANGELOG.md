@@ -1,5 +1,45 @@
 # @mastra/core
 
+## 1.62.0-alpha.5
+
+### Patch Changes
+
+- Fixed channel render failures crashing the host process before stream cleanup. ([#22165](https://github.com/mastra-ai/mastra/pull/22165))
+
+- Fixed nested workflow steps being omitted from foreach run details. ([#22144](https://github.com/mastra-ai/mastra/pull/22144))
+
+- Fixed cross-provider agent conversations leaking provider-hosted tool IDs into incompatible model requests. ([#22148](https://github.com/mastra-ai/mastra/pull/22148))
+
+- Preserve response message source tracking when processors return unchanged messages in multi-step agent runs ([#22146](https://github.com/mastra-ai/mastra/pull/22146))
+
+- Fixed durable agent runs ignoring aborts requested before execution starts. ([#22145](https://github.com/mastra-ai/mastra/pull/22145))
+
+- Add a `/context` command (alias `/ctx`) to Mastra Code that reports what is occupying the context window. ([#22131](https://github.com/mastra-ai/mastra/pull/22131))
+
+  The report separates the startup context — system prompt, AGENTS.md/CLAUDE.md instructions with their source paths, the skills catalog, and MCP tool definitions rolled up per server — from context that accumulates during the session, namely the conversation itself and any observation memory injected into it. Each line carries an estimated token count and its share of the audited total, so it is possible to see which server, instruction file, or skill set is worth pruning.
+
+  The audit reports only sizes and labels, never the audited content, and is printed to the terminal without being added to the conversation, so running it does not enlarge the context it describes.
+
+  To support exact measurement, `@mastra/core` now exports `formatSkillsCatalog`, the pure formatter behind the skills processor's `<available_skills>` block, and `@mastra/code-sdk` exposes the assembled system prompt as labeled sections.
+
+- Fixed suspended run cleanup so cross-instance resumes keep their active thread lease. ([#22150](https://github.com/mastra-ai/mastra/pull/22150))
+
+- Fixed agent model calls to honor `modelSettings.maxRetries` when no retry count is explicitly configured on the agent or fallback model. Agents with no retry configuration continue to make a single attempt by default, while explicit agent or fallback settings—including `maxRetries: 0`—continue to override call-time settings. ([#21947](https://github.com/mastra-ai/mastra/pull/21947))
+
+## 1.62.0-alpha.4
+
+### Patch Changes
+
+- Fixed DurableAgent runs losing live models and tools while waiting on long-running tool or model calls. ([#22141](https://github.com/mastra-ai/mastra/pull/22141))
+
+- Fixed the Mastra gateway so custom request headers can no longer replace the internal gateway authorization header (#21780). ([#22134](https://github.com/mastra-ai/mastra/pull/22134))
+
+- Fixed background tasks restarting after reaching a terminal or suspended state. ([#22140](https://github.com/mastra-ai/mastra/pull/22140))
+
+- Fixed background tasks failing to resume suspended sub-agent runs. ([#22139](https://github.com/mastra-ai/mastra/pull/22139))
+
+- Fixed nested workflows to preserve non-retryable failures across parent retry boundaries. ([#22138](https://github.com/mastra-ai/mastra/pull/22138))
+
 ## 1.62.0-alpha.3
 
 ### Minor Changes
