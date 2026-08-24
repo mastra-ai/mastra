@@ -216,6 +216,7 @@ describe('MCP Tool Tracing', () => {
     const mockToolSpan = {
       end: vi.fn(),
       error: vi.fn(),
+      update: vi.fn(),
     };
 
     const mockAgentSpan = {
@@ -250,13 +251,13 @@ describe('MCP Tool Tracing', () => {
           mcpServer: 'filesystem-server',
           serverVersion: '1.2.0',
           toolDescription: 'List files in a directory',
-          inputSchema: expect.any(String),
+          inputSchema: undefined,
           toolCallId: 'test-call-id',
         },
       }),
     );
-    const mcpSpanArgs = (mockAgentSpan.createChildSpan as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    expect(JSON.parse(mcpSpanArgs.attributes.inputSchema)).toMatchObject({
+    const updateArgs = mockToolSpan.update.mock.calls[0][0];
+    expect(JSON.parse(updateArgs.attributes.inputSchema)).toMatchObject({
       type: 'object',
       properties: { path: { type: 'string' } },
       required: ['path'],
@@ -276,6 +277,7 @@ describe('MCP Tool Tracing', () => {
     const mockToolSpan = {
       end: vi.fn(),
       error: vi.fn(),
+      update: vi.fn(),
     };
 
     const mockAgentSpan = {
@@ -308,14 +310,14 @@ describe('MCP Tool Tracing', () => {
         input: { value: 'test' },
         attributes: {
           toolDescription: 'A regular tool',
-          inputSchema: expect.any(String),
+          inputSchema: undefined,
           toolType: 'tool',
           toolCallId: 'test-call-id',
         },
       }),
     );
-    const toolSpanArgs = (mockAgentSpan.createChildSpan as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    expect(JSON.parse(toolSpanArgs.attributes.inputSchema)).toMatchObject({
+    const updateArgs = mockToolSpan.update.mock.calls[0][0];
+    expect(JSON.parse(updateArgs.attributes.inputSchema)).toMatchObject({
       type: 'object',
       properties: { value: { type: 'string' } },
       required: ['value'],
@@ -337,6 +339,7 @@ describe('MCP Tool Tracing', () => {
     const mockToolSpan = {
       end: vi.fn(),
       error: vi.fn(),
+      update: vi.fn(),
     };
     const mockAgentSpan = {
       createChildSpan: vi.fn().mockReturnValue(mockToolSpan),
@@ -362,11 +365,66 @@ describe('MCP Tool Tracing', () => {
       expect.objectContaining({ toolCallId: 'test-call-id' }),
     );
     const spanArgs = (mockAgentSpan.createChildSpan as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    expect(JSON.parse(spanArgs.attributes.inputSchema)).toMatchObject({
+    expect(spanArgs.attributes.inputSchema).toBeUndefined();
+    expect(mockToolSpan.update).toHaveBeenCalledTimes(1);
+    const updateArgs = mockToolSpan.update.mock.calls[0][0];
+    expect(JSON.parse(updateArgs.attributes.inputSchema)).toMatchObject({
       type: 'object',
       properties: { invocation: { type: 'string' } },
       required: ['invocation'],
     });
+  });
+
+  it('should trace errors from callable schema resolution', async () => {
+    const schemaError = new Error('schema resolution failed');
+    const getInputSchema = vi
+      .fn()
+      .mockReturnValueOnce(z.object({ buildTime: z.string() }))
+      .mockImplementationOnce(() => {
+        throw schemaError;
+      });
+    const mockToolSpan = {
+      end: vi.fn(),
+      error: vi.fn(),
+      update: vi.fn(),
+    };
+    const mockAgentSpan = {
+      createChildSpan: vi.fn().mockReturnValue(mockToolSpan),
+    } as unknown as AnySpan;
+    const logger = {
+      debug: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      trackException: vi.fn(),
+    };
+    const builder = new CoreToolBuilder({
+      originalTool: {
+        description: 'A tool with a failing dynamic schema',
+        parameters: getInputSchema,
+        execute: vi.fn(),
+      } as any,
+      options: {
+        name: 'failing-dynamic-schema-tool',
+        logger: logger as any,
+        requestContext: new RequestContext(),
+        tracingContext: { currentSpan: mockAgentSpan },
+      },
+    });
+
+    const builtTool = builder.build();
+    await expect(builtTool.execute!({}, { toolCallId: 'test-call-id', messages: [] })).rejects.toMatchObject({
+      id: 'TOOL_EXECUTION_FAILED',
+    });
+
+    expect(mockAgentSpan.createChildSpan).toHaveBeenCalledTimes(1);
+    expect(mockToolSpan.error).toHaveBeenCalledWith({
+      error: expect.objectContaining({ id: 'TOOL_EXECUTION_FAILED' }),
+      attributes: { success: false },
+    });
+    expect(logger.trackException).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'TOOL_EXECUTION_FAILED' }),
+      expect.any(Object),
+    );
   });
 
   it('should handle mcpMetadata with missing serverVersion', async () => {
@@ -383,6 +441,7 @@ describe('MCP Tool Tracing', () => {
     const mockToolSpan = {
       end: vi.fn(),
       error: vi.fn(),
+      update: vi.fn(),
     };
 
     const mockAgentSpan = {
@@ -414,8 +473,11 @@ describe('MCP Tool Tracing', () => {
       mcpServer: 'my-mcp-server',
       serverVersion: undefined,
       toolDescription: 'Read a resource',
-      inputSchema: expect.any(String),
+      inputSchema: undefined,
       toolCallId: 'test-call-id',
+    });
+    expect(mockToolSpan.update).toHaveBeenCalledWith({
+      attributes: { inputSchema: expect.any(String) },
     });
     expect(spanArgs.name).toBe("mcp_tool: 'mcp_read-resource' on 'my-mcp-server'");
   });
@@ -431,6 +493,7 @@ describe('MCP Tool Tracing', () => {
     const mockToolSpan = {
       end: vi.fn(),
       error: vi.fn(),
+      update: vi.fn(),
     };
 
     const mockAgentSpan = {

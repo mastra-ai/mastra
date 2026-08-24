@@ -569,6 +569,7 @@ describe('Tool Tracing Context Injection', () => {
 
     // Mock agent span
     const mockToolSpan = {
+      update: vi.fn(),
       end: vi.fn(),
       error: vi.fn(),
     };
@@ -605,7 +606,7 @@ describe('Tool Tracing Context Injection', () => {
       attributes: {
         toolCallId: 'test-call-id',
         toolDescription: 'Test tool that captures tracing context',
-        inputSchema: expect.any(String),
+        inputSchema: undefined,
         toolType: 'tool',
       },
       entityId: 'tracing-test-tool',
@@ -615,6 +616,9 @@ describe('Tool Tracing Context Injection', () => {
       tracingPolicy: undefined,
       mastra: undefined,
       metadata: {},
+    });
+    expect(mockToolSpan.update).toHaveBeenCalledWith({
+      attributes: { inputSchema: expect.any(String) },
     });
 
     // Verify tracingContext was injected with the tool span
@@ -681,6 +685,7 @@ describe('Tool Tracing Context Injection', () => {
 
     // Mock agent span
     const mockToolSpan = {
+      update: vi.fn(),
       end: vi.fn(),
       error: vi.fn(),
     };
@@ -716,7 +721,7 @@ describe('Tool Tracing Context Injection', () => {
       attributes: {
         toolCallId: 'test-call-id',
         toolDescription: 'Vercel tool test',
-        inputSchema: expect.any(String),
+        inputSchema: undefined,
         toolType: 'tool',
       },
       entityId: 'vercel-tool',
@@ -726,6 +731,9 @@ describe('Tool Tracing Context Injection', () => {
       tracingPolicy: undefined,
       mastra: undefined,
       metadata: {},
+    });
+    expect(mockToolSpan.update).toHaveBeenCalledWith({
+      attributes: { inputSchema: expect.any(String) },
     });
 
     // Verify Vercel tool execute was called (without tracingContext)
@@ -753,6 +761,7 @@ describe('Tool Tracing Context Injection', () => {
 
     // Mock agent span
     const mockToolSpan = {
+      update: vi.fn(),
       end: vi.fn(),
       error: vi.fn(),
     };
@@ -808,6 +817,7 @@ describe('Tool Tracing Context Injection', () => {
 
     // Mock agent span
     const mockToolSpan = {
+      update: vi.fn(),
       end: vi.fn(),
       error: vi.fn(),
     };
@@ -847,9 +857,12 @@ describe('Tool Tracing Context Injection', () => {
         type: SpanType.TOOL_CALL,
         name: "tool: 'input-validation-span-tool'",
         input: { name: 'A', age: 25 },
-        attributes: expect.objectContaining({ inputSchema: expect.any(String) }),
+        attributes: expect.objectContaining({ inputSchema: undefined }),
       }),
     );
+    expect(mockToolSpan.update).toHaveBeenCalledWith({
+      attributes: { inputSchema: expect.any(String) },
+    });
 
     // Verify span was ended with failure attributes
     expect(mockToolSpan.end).toHaveBeenCalledWith({
@@ -872,6 +885,7 @@ describe('Tool Tracing Context Injection', () => {
     });
 
     const mockToolSpan = {
+      update: vi.fn(),
       end: vi.fn(),
       error: vi.fn(),
     };
@@ -927,6 +941,7 @@ describe('Tool Tracing Context Injection', () => {
     };
 
     const mockToolSpan = {
+      update: vi.fn(),
       end: vi.fn(),
       error: vi.fn(),
     };
@@ -981,6 +996,7 @@ describe('Tool Tracing Context Injection', () => {
 
     // Mock agent span
     const mockToolSpan = {
+      update: vi.fn(),
       end: vi.fn(),
       error: vi.fn(),
     };
@@ -1017,7 +1033,7 @@ describe('Tool Tracing Context Injection', () => {
       attributes: {
         toolCallId: 'test-call-id',
         toolDescription: 'Tool from a toolset',
-        inputSchema: expect.any(String),
+        inputSchema: undefined,
         toolType: 'toolset',
       },
       entityId: 'toolset-tool',
@@ -1027,6 +1043,9 @@ describe('Tool Tracing Context Injection', () => {
       tracingPolicy: undefined,
       mastra: undefined,
       metadata: {},
+    });
+    expect(mockToolSpan.update).toHaveBeenCalledWith({
+      attributes: { inputSchema: expect.any(String) },
     });
   });
 });

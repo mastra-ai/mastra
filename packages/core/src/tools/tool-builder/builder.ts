@@ -812,8 +812,8 @@ export class CoreToolBuilder extends MastraBase {
       // Fall back to build-time context for Legacy methods (AI SDK v4 doesn't support passing custom options)
       const tracingContext = execOptions?.tracingContext || options.tracingContext;
       const toolRequestContext = execOptions?.requestContext ?? options.requestContext;
-      const parameters = inputValidationSchema ?? this.getParameters();
-      const inputSchema = this.serializeInputSchema(parameters as StandardSchemaWithJSON | undefined);
+      let parameters = inputValidationSchema;
+      const inputSchema = this.serializeInputSchema(parameters);
       const toolSpan = getOrCreateSpan({
         type: mcpMeta ? SpanType.MCP_TOOL_CALL : SpanType.TOOL_CALL,
         name: mcpMeta ? `mcp_tool: '${options.name}' on '${mcpMeta.serverName}'` : `tool: '${options.name}'`,
@@ -875,6 +875,11 @@ export class CoreToolBuilder extends MastraBase {
 
       try {
         logger.debug(start, { ...logData, ...rest, model: logModelObject, args });
+
+        if (!parameters) {
+          parameters = this.getParameters();
+          toolSpan?.update({ attributes: { inputSchema: this.serializeInputSchema(parameters) } });
+        }
 
         // When a tool is being resumed (resumeData present in execOptions), skip input
         // validation. The original args were already validated during the initial
