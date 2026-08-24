@@ -639,8 +639,8 @@ async function runStudioDeploy(dir: string | undefined, opts: StudioDeployOption
     throw new Error('.mastra/output/index.mjs not found — did the build succeed?');
   }
 
-  // Platform-workers rollout gate. If the user's org is not opted into the
-  // `platform-workers` PostHog flag, overwrite `.mastra/output/workers.json`
+  // Platform-workers rollout gate. If the deploying user is not opted into
+  // the `platform-workers` PostHog flag, overwrite `.mastra/output/workers.json`
   // with `null` so the platform receives no manifest and provisions no
   // dedicated worker service. The app still runs its BackgroundTaskWorker
   // in-process (mode: 'full' default), so background tasks execute — just
@@ -651,7 +651,7 @@ async function runStudioDeploy(dir: string | undefined, opts: StudioDeployOption
     analytics: getAnalytics(),
   });
   if (workersGuard.status === 'downgraded') {
-    p.log.warn('Background workers not yet enabled for your org — deploy will run in single-process mode.');
+    p.log.warn('Background workers not yet enabled for your account — deploy will run in single-process mode.');
   }
 
   // If the user didn't pass --env-file and no ambient .env* file exists,
