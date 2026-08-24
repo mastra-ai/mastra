@@ -3826,7 +3826,7 @@ ${formattedMessages}
 
     if (observed) {
       // Fire-and-forget; a curation failure must never fail the observation.
-      void this.maybeCurate(threadId, resourceId, record, requestContext).catch(error => {
+      void this.trackBackgroundWork(this.maybeCurate(threadId, resourceId, record, requestContext)).catch(error => {
         omDebug(`[OM:observe] curation failed: ${error instanceof Error ? error.message : String(error)}`);
       });
     }

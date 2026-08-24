@@ -389,7 +389,11 @@ export class ObservationStep {
    */
   private evaluateCuration(): void {
     const { om, threadId, resourceId } = this.turn;
-    void om.maybeCurate(threadId, resourceId, this.turn.record, this.turn.requestContext).catch(() => {});
+    void om
+      .trackBackgroundWork(om.maybeCurate(threadId, resourceId, this.turn.record, this.turn.requestContext))
+      .catch(error => {
+        omDebug(`[OM:step] activation curation failed: ${error instanceof Error ? error.message : String(error)}`);
+      });
   }
 
   /**

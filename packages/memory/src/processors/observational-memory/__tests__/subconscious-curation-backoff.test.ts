@@ -200,6 +200,7 @@ describe('curation backoff in the lifecycle', () => {
     await settle();
 
     const record = await om.getRecord(threadId);
+    expect(memory.runCuration).toHaveBeenCalledTimes(1);
     expect(readAttemptState(record?.config)).toBeUndefined();
   });
 

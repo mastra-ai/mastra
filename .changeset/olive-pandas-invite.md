@@ -34,7 +34,7 @@ Known limitation: two live instances sharing one storage can still both decide t
 no atomic claim for this state today. The curation cursor keeps acknowledged input out of later
 worklists, but it does not serialize concurrent model calls or guarantee conflict-free mutations.
 
-### Migrating from `curationCadence`
+**Migrating from `curationCadence`**
 
 `curationCadence` is deprecated but still honoured as the volume trigger, and it warns once per
 process. `curationThreshold` takes precedence when both are set.
