@@ -1144,6 +1144,16 @@ describe('resolveRequestThinkingLevel', () => {
     expect(level).toBe('medium');
   });
 
+  it('treats a null session value as a cleared override', () => {
+    mockLoadSettings.mockImplementation(() =>
+      settingsWithThinking({ modeThinkingDefaults: { build: 'high' }, thinkingLevel: 'medium' }),
+    );
+
+    const level = resolveRequestThinkingLevel({ state: { thinkingLevel: null }, session: { modeId: 'build' } });
+
+    expect(level).toBe('high');
+  });
+
   it('resolves defaults when no controller context exists at all', () => {
     mockLoadSettings.mockImplementation(() => settingsWithThinking({ thinkingLevel: 'low' }));
 
