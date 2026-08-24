@@ -10,6 +10,10 @@ import StepItem from "@site/src/components/StepItem";
 
 Deploy the Mastra platform — **Mastra Server** (your agent runtime) and **Mastra Studio** (the management UI) — on any Kubernetes cluster using the official `mastra-projects` Helm chart. The chart works on GKE, EKS, AKS, and generic or local clusters, and handles service exposure, TLS, and secret wiring for you.
 
+:::info Enterprise only
+The Helm chart is available exclusively to Mastra Enterprise customers. It is distributed from a private registry: your Enterprise license is exchanged for short-lived pull credentials. [Contact us](https://mastra.ai/contact) to get an Enterprise license.
+:::
+
 The chart follows two design principles:
 
 - **Bring your own images.** You build your Mastra project image with `mastra build` and push it to a registry. The chart never builds images.
@@ -27,7 +31,7 @@ You'll need:
 - [Helm](https://helm.sh/docs/intro/install/) 3.8+ (OCI registry support)
 - A container registry your cluster can pull from
 - A PostgreSQL database reachable from the cluster
-- A Mastra Enterprise license key for production use
+- A Mastra Enterprise license key — required both to pull the chart and at runtime in production
 - For `ingress` mode: an ingress controller, or let the chart install one
 - For `gateway` mode: Gateway API CRDs and a Gateway controller (for example GKE's managed Gateway)
 
@@ -114,13 +118,22 @@ You'll need:
   </StepItem>
 
   <StepItem>
-    Install the chart from the OCI registry:
+    Exchange your Enterprise license key for a short-lived registry access token, log in to the private chart registry, then install the chart:
 
     ```bash
+    TOKEN=$(curl -s https://license.mastra.ai/v1/registry-token \
+      -H "Authorization: Bearer $MASTRA_EE_LICENSE" | jq -r .token)
+
+    helm registry login us-central1-docker.pkg.dev \
+      --username oauth2accesstoken \
+      --password "$TOKEN"
+
     helm install mastra \
-      oci://us-central1-docker.pkg.dev/mastra-cloud/mastra-helm/mastra-projects \
+      oci://us-central1-docker.pkg.dev/mastra-cloud/mastra-helm-ee/mastra-projects \
       -n mastra -f mastra-values.yaml
     ```
+
+    Tokens expire after a short period; if an upgrade later fails with an authorization error, request a fresh token and log in again.
 
     By default each component is exposed through a Service of type `LoadBalancer`.
   </StepItem>
@@ -250,7 +263,7 @@ Upgrade to a new chart version or roll out a new image tag with the same command
 
 ```bash
 helm upgrade mastra \
-  oci://us-central1-docker.pkg.dev/mastra-cloud/mastra-helm/mastra-projects \
+  oci://us-central1-docker.pkg.dev/mastra-cloud/mastra-helm-ee/mastra-projects \
   -n mastra -f mastra-values.yaml
 ```
 
@@ -266,6 +279,7 @@ Your database and object store are unaffected, because the chart never manages s
 
 ## Troubleshooting
 
+- **`helm install`/`upgrade` fails with `401 Unauthorized` or `UNAUTHORIZED`.** Your registry access token is missing or expired. Request a fresh token from `https://license.mastra.ai/v1/registry-token` using your Enterprise license and run `helm registry login` again.
 - **Pods crash with `Cannot find module '@libsql/linux-x64-gnu'` (or similar).** The image contains `node_modules` built for a different platform. Install dependencies inside the image and exclude host-built `node_modules` via `.dockerignore`, then rebuild with `--platform` matching your nodes.
 - **Pods crash-loop with a license error.** Production mode requires a valid `MASTRA_EE_LICENSE` in your secret when enterprise features are configured.
 - **Studio shows the server API instead of the UI.** The image was built without Studio assets. Rebuild with `mastra build --studio`.
