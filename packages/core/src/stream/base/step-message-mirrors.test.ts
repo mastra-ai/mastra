@@ -7,7 +7,7 @@ describe('step message mirrors', () => {
    * Mirrors what `step-finish` buffers: after each assistant turn the step
    * records the whole response conversation so far, not just its own message.
    */
-  function runSteps(count: number, { requestBody }: { requestBody?: (i: number) => string } = {}) {
+  function runSteps(count: number) {
     const messageList = new MessageList({ threadId: 't', resourceId: 'r' });
     const steps = Array.from({ length: count }, (_, i) => {
       // An agentic turn appends an assistant message and the tool message that
@@ -29,7 +29,7 @@ describe('step message mirrors', () => {
       return {
         stepType: i === 0 ? 'initial' : 'tool-result',
         text: `turn ${i}`,
-        request: { body: requestBody?.(i) ?? 'prompt', headers: { 'x-step': String(i) } },
+        request: { body: 'prompt', headers: { 'x-step': String(i) } },
         response: {
           id: `res-${i}`,
           modelId: 'mock',
@@ -95,12 +95,23 @@ describe('step message mirrors', () => {
     expect(size(16) / size(8)).toBeLessThan(2.5);
   });
 
-  it('drops the per-step request body but keeps the rest of the request', () => {
-    const { steps } = runSteps(4, { requestBody: i => `prompt-${i}-${'x'.repeat(1000)}` });
+  it('preserves each step request unchanged', () => {
+    const { steps } = runSteps(4);
     const packed = packStepMessageMirrors(steps);
 
-    expect(JSON.stringify(packed)).not.toContain('xxxx');
-    expect(packed.map(s => (s.request as any).headers['x-step'])).toEqual(['0', '1', '2', '3']);
+    expect(packed.map(step => step.request)).toEqual(steps.map(step => step.request));
+  });
+
+  it('rebuilds mirrors lazily and caches each conversion', () => {
+    const { messageList, steps } = runSteps(3);
+    const restored = unpackStepMessageMirrors(packStepMessageMirrors(steps), messageList);
+    const response = restored[0]!.response;
+
+    expect(Object.getOwnPropertyDescriptor(response, 'dbMessages')?.get).toBeTypeOf('function');
+    expect(Object.getOwnPropertyDescriptor(response, 'uiMessages')?.get).toBeTypeOf('function');
+    expect(response.dbMessages).toBe(response.dbMessages);
+    expect(response.uiMessages).toBe(response.uiMessages);
+    expect(response.messages).toBe(response.messages);
   });
 
   it('leaves snapshots written before this change untouched', () => {

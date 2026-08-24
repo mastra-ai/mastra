@@ -9,9 +9,9 @@
  *
  * The full conversation is already persisted once, in the serialized
  * `messageList` that sits alongside the buffered steps. So the snapshot stores
- * only the stable IDs of the messages each step referenced, and rebuilds all
- * three mirrors from that list on the way back in. IDs are used instead of a
- * prefix length because processors can promote messages between sources or
+ * only the stable IDs of the messages each step referenced, and rebuilds the
+ * three mirrors lazily from that list on the way back in. IDs are used instead
+ * of a prefix length because processors can promote messages between sources or
  * remove messages after an earlier step was buffered.
  *
  * One behavioural note. A step's `dbMessages` share message objects with the
@@ -23,14 +23,10 @@
  * content its `dbMessages` always did. The steps stay internally consistent,
  * and the last step — the one a resume continues from — is unchanged.
  *
- * The same pass drops `request.body`, which holds a copy of the prompt and the
- * tool catalog per step. Nothing reads a buffered step's request back on
- * resume (the next request is rebuilt from the message list), and the terminal
- * step history is already pruned the same way — see `pruneStepResult` in
- * `workflows/prune-snapshot`.
- *
- * All of this is purely a storage representation: callers still see populated
- * message mirrors on every step after rehydration.
+ * This is purely a storage representation: callers still see populated message
+ * mirrors on every step after rehydration. Each mirror is rebuilt and cached
+ * only if a caller reads it, so restoring a long run does not eagerly convert
+ * every historical prefix.
  */
 
 import type { AIV5Type, MastraDBMessage, MessageList } from '../../agent/message-list';
@@ -41,47 +37,41 @@ const RESPONSE_MESSAGE_IDS = '__responseMessageIds' as const;
 type ResponseLike = {
   dbMessages?: unknown;
   uiMessages?: unknown;
+  messages?: unknown;
   [RESPONSE_MESSAGE_IDS]?: string[];
 };
 
-type StepLike = { response?: unknown; request?: unknown };
+type StepLike = { response?: unknown };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function withoutMessageMirrors(response: Record<string, unknown>): Record<string, unknown> {
+  const rest: Record<string, unknown> = {};
+  for (const key of Object.keys(response)) {
+    if (key === 'dbMessages' || key === 'uiMessages' || key === 'messages' || key === RESPONSE_MESSAGE_IDS) continue;
+    rest[key] = response[key];
+  }
+  return rest;
 }
 
 export function packStepMessageMirrors<T extends StepLike>(steps: T[]): T[] {
   if (!Array.isArray(steps)) return steps;
 
   return steps.map(step => {
-    if (!isRecord(step)) return step;
-
-    let next: Record<string, unknown> | undefined;
-
-    if (isRecord(step.response) && Array.isArray((step.response as ResponseLike).dbMessages)) {
-      const {
-        dbMessages,
-        uiMessages: _uiMessages,
-        messages: _messages,
-        ...restResponse
-      } = step.response as Record<string, unknown>;
-      next = {
-        ...step,
-        response: {
-          ...restResponse,
-          [RESPONSE_MESSAGE_IDS]: (dbMessages as MastraDBMessage[]).map(message => message.id),
-        },
-      };
+    if (!isRecord(step) || !isRecord(step.response) || !Array.isArray((step.response as ResponseLike).dbMessages)) {
+      return step;
     }
 
-    // The prompt and tool catalog are reconstructed on resume, so a persisted
-    // copy per step is pure weight.
-    if (isRecord(step.request) && 'body' in step.request) {
-      const { body: _body, ...restRequest } = step.request;
-      next = { ...(next ?? step), request: restRequest };
-    }
-
-    return (next ?? step) as T;
+    const dbMessages = (step.response as ResponseLike).dbMessages as MastraDBMessage[];
+    return {
+      ...step,
+      response: {
+        ...withoutMessageMirrors(step.response),
+        [RESPONSE_MESSAGE_IDS]: dbMessages.map(message => message.id),
+      },
+    } as T;
   });
 }
 
@@ -100,29 +90,48 @@ export function unpackStepMessageMirrors<T extends StepLike>(steps: T[], message
   return steps.map(step => {
     if (!isRecord(step) || !isRecord(step.response) || !(RESPONSE_MESSAGE_IDS in step.response)) return step;
 
-    const { [RESPONSE_MESSAGE_IDS]: messageIds, ...restResponse } = step.response as ResponseLike &
-      Record<string, unknown>;
+    const messageIds = (step.response as ResponseLike)[RESPONSE_MESSAGE_IDS] as string[];
+    const response = withoutMessageMirrors(step.response);
+    let dbMessages: MastraDBMessage[] | undefined;
+    let uiMessages: AIV5Type.UIMessage[] | undefined;
+    let messages: unknown;
 
-    messagesById ??= new Map(messageList.get.all.db().map(message => [message.id, message]));
-    const dbMessages = (messageIds as string[]).flatMap(id => {
-      const message = messagesById!.get(id);
-      return message ? [message] : [];
+    const getDbMessages = () => {
+      if (!dbMessages) {
+        messagesById ??= new Map(messageList.get.all.db().map(message => [message.id, message]));
+        dbMessages = messageIds.flatMap(id => {
+          const message = messagesById!.get(id);
+          return message ? [message] : [];
+        });
+      }
+      return dbMessages;
+    };
+
+    Object.defineProperties(response, {
+      dbMessages: {
+        enumerable: true,
+        get: getDbMessages,
+      },
+      uiMessages: {
+        enumerable: true,
+        get() {
+          // Converting this step's messages — rather than slicing a conversion
+          // of the whole run — is what makes this faithful: conversions merge
+          // adjacent assistant messages, so later messages can change how
+          // earlier ones render.
+          return (uiMessages ??= convertMessages(getDbMessages()).to('AIV5.UI') as AIV5Type.UIMessage[]);
+        },
+      },
+      messages: {
+        enumerable: true,
+        get() {
+          // The model-format view of the same response messages that existed
+          // when the step finished.
+          return (messages ??= convertMessages(getDbMessages()).to('AIV5.Model'));
+        },
+      },
     });
 
-    return {
-      ...step,
-      response: {
-        ...restResponse,
-        dbMessages,
-        // Converting the slice — rather than slicing a conversion of the whole
-        // run — is what makes this faithful: the conversions merge adjacent
-        // assistant messages, so later messages can change how earlier ones
-        // render.
-        uiMessages: convertMessages(dbMessages).to('AIV5.UI') as AIV5Type.UIMessage[],
-        // `messages` is the model-format view of the same response messages —
-        // `messageList.get.response.aiV5.model()` at the time the step finished.
-        messages: convertMessages(dbMessages).to('AIV5.Model'),
-      },
-    } as unknown as T;
+    return { ...step, response } as unknown as T;
   });
 }

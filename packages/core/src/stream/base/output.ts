@@ -2106,8 +2106,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     this.#tripwire = state.tripwire;
     this.#wasSuspended = state.wasSuspended ?? state.status === 'suspended';
     this.messageList = this.messageList.deserialize(state.messageList);
-    // Buffered steps hold only a count of the response messages they had seen;
-    // rebuilding them needs the restored message list, so this has to come last.
+    // Buffered steps hold only the IDs of the response messages they had seen;
+    // rebuilding their lazy mirrors needs the restored message list, so this has
+    // to come last.
     this.#bufferedSteps = unpackStepMessageMirrors(
       rehydrateStepRequests(state.bufferedSteps, state.bufferedStepRequests),
       this.messageList,

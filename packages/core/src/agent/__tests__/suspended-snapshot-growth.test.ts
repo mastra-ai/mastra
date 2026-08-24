@@ -114,13 +114,4 @@ describe('suspended snapshot growth', () => {
     );
     expect(more.largestSnapshotBytes / fewer.largestSnapshotBytes).toBeLessThan(2.3);
   }, 60_000);
-
-  it('does not persist the prompt echoed back on each step', async () => {
-    const { persisted } = await runToSuspend(8);
-    const suspended = persisted.reduce((max, s) => (s.length > max.length ? s : max), '');
-
-    // The run-level request survives; the per-step copies do not.
-    const promptCopies = suspended.split('PROMPT-').length - 1;
-    expect(promptCopies).toBeLessThanOrEqual(4);
-  }, 60_000);
 });
