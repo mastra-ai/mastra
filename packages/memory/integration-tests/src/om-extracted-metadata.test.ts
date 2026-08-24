@@ -267,12 +267,24 @@ describe('Observational Memory extracted metadata persistence', () => {
     const secondThreadId = randomUUID();
     const seededValue = 'format-a; format-b';
     let observerInput = '';
+    let observerHistory = '';
+    const extractObserverHistory = (value: unknown): string => {
+      if (typeof value === 'string') {
+        const historyStart = value.indexOf('## New Message History to Observe');
+        if (historyStart === -1) return '';
+        const historyEnd = value.indexOf('\n\n---\n\n', historyStart);
+        return value.slice(historyStart, historyEnd === -1 ? undefined : historyEnd);
+      }
+      if (Array.isArray(value)) return value.map(extractObserverHistory).find(Boolean) ?? '';
+      if (value && typeof value === 'object') {
+        return Object.values(value).map(extractObserverHistory).find(Boolean) ?? '';
+      }
+      return '';
+    };
     const model = new MockLanguageModelV2({
       doStream: async ({ prompt }) => {
         observerInput = JSON.stringify(prompt);
-        const historyStart = observerInput.indexOf('## New Message History to Observe');
-        const historyEnd = observerInput.indexOf('\n\n---\n\n', historyStart);
-        const observerHistory = observerInput.slice(historyStart, historyEnd === -1 ? undefined : historyEnd);
+        observerHistory = extractObserverHistory(prompt);
         const observerSawSeed = observerHistory.includes(seededValue);
         const observerOutput = observerSawSeed
           ? `<observations>\n- unrelated task\n</observations>\n<working-memory>rewritten-by-observer</working-memory>`
@@ -345,7 +357,7 @@ describe('Observational Memory extracted metadata persistence', () => {
     await omEngine!.observe({ threadId: secondThreadId, resourceId });
     expect(observerInput).toContain('## New Message History to Observe');
     expect(observerInput).toContain('Summarize the current project status.');
-    expect(observerInput).not.toContain(seededValue);
+    expect(observerHistory).not.toContain(seededValue);
     await expect(workingMemory.getWorkingMemory({ threadId: seededThreadId, resourceId })).resolves.toBe(seededValue);
     expect((await memory.storage.listMessagesByResourceId({ resourceId, perPage: false })).messages).toHaveLength(2);
     await expect(
