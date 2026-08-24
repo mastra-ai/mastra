@@ -1,5 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "installCommand": "pnpm install --frozen-lockfile",
-  "buildCommand": "MASTRA_AGENT_SIGNALS=false pnpm build"
+  "installCommand": "pnpm install --frozen-lockfile --filter studio-preview...",
+  "buildCommand": "MASTRA_AGENT_SIGNALS=false pnpm turbo build:vercel --filter studio-preview --concurrency=2"
 }
