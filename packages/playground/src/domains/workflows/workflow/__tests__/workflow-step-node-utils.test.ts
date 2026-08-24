@@ -343,4 +343,62 @@ describe('resolveWorkflowGraphStep', () => {
     expect(conditionNodes).toHaveLength(1);
     expect(conditionNodes[0].data.conditions).toEqual([{ type: 'dountil', fnString: 'inputData.count >= 3' }]);
   });
+  describe('ids the graph keys nodes by', () => {
+    it('labels a parallel entry by its kind, since it has no id of its own', () => {
+      const resolved = resolveWorkflowGraphStep({
+        type: 'parallel',
+        steps: [stepEntry('a'), stepEntry('b')],
+      } as SerializedStepFlowEntry);
+
+      expect(resolved).toMatchObject({ kind: 'parallel-step', id: 'parallel' });
+    });
+
+    it('names a conditional after its first condition', () => {
+      const resolved = resolveWorkflowGraphStep({
+        type: 'conditional',
+        steps: [stepEntry('yes')],
+        serializedConditions: [{ id: 'is-ready', fn: '() => true' }],
+      } as unknown as SerializedStepFlowEntry);
+
+      expect(resolved).toMatchObject({ kind: 'conditional', id: 'is-ready' });
+    });
+
+    it('falls back to a generic id when a conditional declares none', () => {
+      const resolved = resolveWorkflowGraphStep({
+        type: 'conditional',
+        steps: [stepEntry('yes')],
+        serializedConditions: [],
+      } as unknown as SerializedStepFlowEntry);
+
+      expect(resolved).toMatchObject({ kind: 'conditional', id: 'conditional' });
+    });
+
+    it('takes a foreach id from the step it wraps', () => {
+      const resolved = resolveWorkflowGraphStep({
+        type: 'foreach',
+        step: stepEntry('inner-step'),
+        opts: { concurrency: 1 },
+      } as SerializedStepFlowEntry);
+
+      expect(resolved).toMatchObject({ kind: 'foreach-step', id: 'inner-step' });
+    });
+
+    it('takes a loop id from the workflow it wraps', () => {
+      const resolved = resolveWorkflowGraphStep({
+        type: 'loop',
+        step: { type: 'workflow', id: 'inner-workflow', description: 'nested' },
+        opts: {},
+      } as unknown as SerializedStepFlowEntry);
+
+      expect(resolved).toMatchObject({ kind: 'loop-step', id: 'inner-workflow' });
+    });
+  });
+
+  describe('the React Flow node types it registers', () => {
+    it('keeps the step and boundary types distinct and non-empty', () => {
+      expect(WORKFLOW_STEP_NODE_TYPE).toBeTruthy();
+      expect(WORKFLOW_BOUNDARY_NODE_TYPE).toBeTruthy();
+      expect(WORKFLOW_STEP_NODE_TYPE).not.toBe(WORKFLOW_BOUNDARY_NODE_TYPE);
+    });
+  });
 });
