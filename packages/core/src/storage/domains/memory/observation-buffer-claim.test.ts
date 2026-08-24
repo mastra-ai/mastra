@@ -49,6 +49,17 @@ describe('Observation Buffer Claim (in-memory reference adapter)', () => {
     storage.observationBufferClaimClock = clock;
   });
 
+  describe('capability flag', () => {
+    it('the base default is false and the in-memory adapter opts in with true', () => {
+      // An adapter that never declares the flag resolves to the base default.
+      class UndeclaredAdapter extends InMemoryMemory {
+        override readonly supportsObservationBufferClaims: boolean = false;
+      }
+      expect(new UndeclaredAdapter({ db: new InMemoryDB() }).supportsObservationBufferClaims).toBe(false);
+      expect(storage.supportsObservationBufferClaims).toBe(true);
+    });
+  });
+
   describe('acquire', () => {
     it('first claim succeeds and persists owner, expiry, boolean, and token boundary', async () => {
       await init();

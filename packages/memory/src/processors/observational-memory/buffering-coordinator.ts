@@ -1,4 +1,4 @@
-import type { ObservationalMemoryRecord } from '@mastra/core/storage';
+import type { MemoryStorage, ObservationalMemoryRecord } from '@mastra/core/storage';
 
 import { omDebug } from './debug';
 import { isOpActiveInProcess } from './operation-registry';
@@ -109,20 +109,29 @@ export class BufferingCoordinator {
     currentTokens: number,
     lockKey: string,
     record: ObservationalMemoryRecord,
-    // Unused since the durable-claim refactor (kept positionally so existing
-    // call sites passing storage stay valid); triggering never writes storage.
-    _storage?: unknown,
+    // Used only on legacy (non-claim-capable) storage for the stale-flag
+    // inference below; claim-capable triggering never writes storage.
+    storage?: MemoryStorage,
     messageTokensThreshold?: number,
   ): boolean {
     if (!this.isAsyncObservationEnabled()) return false;
 
-    // A persisted isBufferingObservation with no local op is NOT proof of
-    // staleness — another process may own the durable claim. If this process
-    // already runs the op, join it; otherwise let the attempt proceed: the
-    // durable claim acquire is atomic, so a live foreign claim turns the
-    // attempt into a cheap failed acquire instead of a foreign clear.
-    if (record.isBufferingObservation && isOpActiveInProcess(record.id, 'bufferingObservation')) {
-      return false;
+    if (record.isBufferingObservation) {
+      // If this process already runs the op, join it.
+      if (isOpActiveInProcess(record.id, 'bufferingObservation')) {
+        return false;
+      }
+      if (storage && !storage.supportsObservationBufferClaims) {
+        // Legacy storage has no durable claim: a persisted flag with no local
+        // op was left by a crashed process — clear it (fire-and-forget) so a
+        // new cycle can proceed. Single-process semantics by definition.
+        omDebug('[OM:shouldTriggerAsyncObs] isBufferingObservation=true but stale (legacy storage), clearing');
+        storage.setBufferingObservationFlag(record.id, false)?.catch(() => {});
+      }
+      // Claim-capable storage: a persisted flag with no local op is NOT proof
+      // of staleness — another process may own the durable claim. Let the
+      // attempt proceed: the atomic claim acquire turns a live foreign claim
+      // into a cheap failed acquire instead of a foreign clear.
     }
 
     const bufferKey = this.getObservationBufferKey(lockKey);

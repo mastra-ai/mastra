@@ -108,6 +108,17 @@ export abstract class MemoryStorage extends StorageDomain {
    */
   readonly supportsPartialThreadUpdate?: boolean = false;
 
+  /**
+   * Whether this adapter implements the fenced observation-buffer claim
+   * contract (acquire/renew/release/commit/status).
+   *
+   * Adapters compiled before the claim contract existed inherit throwing
+   * defaults for the claim methods and won't set this flag, so consumers
+   * must branch to the legacy (single-process) buffering path when false.
+   * Claim-capable adapters must set this to true.
+   */
+  readonly supportsObservationBufferClaims?: boolean = false;
+
   constructor() {
     super({
       component: 'STORAGE',

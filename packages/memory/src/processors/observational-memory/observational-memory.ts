@@ -2241,22 +2241,31 @@ ${formattedMessages}
       return; // Not enough new content to buffer
     }
 
-    // Acquire the durable buffer claim before sealing or model work. Losing
-    // the acquire means another process owns this record's buffering; back
-    // off without touching storage.
+    // Claim-capable storage: acquire the durable buffer claim before sealing
+    // or model work. Losing the acquire means another process owns this
+    // record's buffering; back off without touching storage.
+    // Legacy storage (no claim contract): restore the pre-claim lifecycle —
+    // set the persisted boolean flag for the cycle and clear it
+    // unconditionally on exit. Single-process semantics only.
     let lease: ObservationBufferLease | null = null;
-    try {
-      lease = await ObservationBufferLease.acquire({
-        storage: this.storage,
-        recordId: freshRecord.id,
-        policy: this.observationBufferLeasePolicy,
-        lastBufferedAtTokens: currentTokens,
-      });
-    } catch (err) {
-      omError('[OM] Failed to acquire observation buffer claim', err);
-    }
-    if (!lease) {
-      return;
+    if (this.storage.supportsObservationBufferClaims) {
+      try {
+        lease = await ObservationBufferLease.acquire({
+          storage: this.storage,
+          recordId: freshRecord.id,
+          policy: this.observationBufferLeasePolicy,
+          lastBufferedAtTokens: currentTokens,
+        });
+      } catch (err) {
+        omError('[OM] Failed to acquire observation buffer claim', err);
+      }
+      if (!lease) {
+        return;
+      }
+    } else {
+      await this.storage
+        .setBufferingObservationFlag(freshRecord.id, true, currentTokens)
+        .catch(err => omError('[OM] Failed to set buffering flag (legacy path)', err));
     }
 
     try {
@@ -2271,13 +2280,17 @@ ${formattedMessages}
         observabilityContext,
       });
     } finally {
-      await lease.release();
+      if (lease) {
+        await lease.release();
+      } else {
+        await this.storage.setBufferingObservationFlag(freshRecord.id, false).catch(() => {});
+      }
     }
   }
 
-  /** The claimed portion of a step-triggered buffering cycle. */
+  /** The claimed portion of a step-triggered buffering cycle (lease is null on legacy, non-claim-capable storage). */
   private async runClaimedBufferedObservation(args: {
-    lease: ObservationBufferLease;
+    lease: ObservationBufferLease | null;
     freshRecord: ObservationalMemoryRecord;
     threadId: string;
     bufferKey: string;
@@ -2351,15 +2364,16 @@ ${formattedMessages}
           writer,
           requestContext,
           observabilityContext,
-          claimOwnerToken: lease.ownerToken,
-          onClaimLost: () => lease.markLost(),
+          claimOwnerToken: lease?.ownerToken,
+          onClaimLost: lease ? () => lease.markLost() : undefined,
         }).run(),
     );
 
     // Update the buffer cursor so the next buffer only sees messages newer than this one.
     // Skip when the lease was lost mid-cycle: the commit was fenced out, so the
     // local cursor must not advance past messages that were never persisted.
-    if (!lease.lost) {
+    // (A legacy cycle has no lease to lose — always advance.)
+    if (!lease?.lost) {
       const maxTs = this.getMaxMessageTimestamp(messagesToBuffer);
       const cursor = new Date(maxTs.getTime() + 1);
       BufferingCoordinator.lastBufferedAtTime.set(bufferKey, cursor);
@@ -2696,6 +2710,12 @@ ${formattedMessages}
    * to clear the flag/boundary.
    */
   private async clearBufferingClaimIfNotLive(recordId: string, lastBufferedAtTokens?: number): Promise<void> {
+    if (!this.storage.supportsObservationBufferClaims) {
+      // Legacy adapter: no claim contract exists — clear the plain boolean flag
+      // like the pre-claim lifecycle did. Single-process only, by definition.
+      await this.storage.setBufferingObservationFlag(recordId, false, lastBufferedAtTokens).catch(() => {});
+      return;
+    }
     try {
       const outcome = await this.storage.acquireObservationBufferClaim({
         id: recordId,
@@ -3242,9 +3262,19 @@ ${formattedMessages}
     // This MUST happen before the first await when buffer() is called fire-and-forget.
     BufferingCoordinator.lastBufferedBoundary.set(bufferKey, currentTokens);
 
-    // NOTE: a persisted isBufferingObservation with no local op is NOT proof of
-    // staleness — another process may legitimately own the claim. The durable
-    // claim acquire below (atomic, lease-bounded) is the only takeover path.
+    // NOTE (claim-capable storage): a persisted isBufferingObservation with no
+    // local op is NOT proof of staleness — another process may legitimately own
+    // the claim. The durable claim acquire below (atomic, lease-bounded) is the
+    // only takeover path.
+    // Legacy storage (no claim contract) has no durable ownership authority, so
+    // the pre-claim inference applies: a persisted flag with no local operation
+    // was left by a crashed process — clear it (non-blocking) so buffering can
+    // proceed. Single-process semantics only, by definition of the legacy path.
+    if (!this.storage.supportsObservationBufferClaims && record.isBufferingObservation) {
+      await this.storage.setBufferingObservationFlag(record.id, false).catch(() => {});
+      record.isBufferingObservation = false;
+      inMemoryRecord.isBufferingObservation = false;
+    }
 
     // Wait for any existing buffering operation to complete first (mutex behavior).
     // IMPORTANT: read the existing op BEFORE overwriting the map entry.
@@ -3281,24 +3311,36 @@ ${formattedMessages}
       }
     };
 
+    let legacyStarted = false;
+    let legacyFlagCleared = false;
     try {
-      // Acquire the durable buffer claim before any sealing or model work.
-      // Losing the acquire means another process owns this record's buffering;
-      // return a benign not-buffered result without touching storage. Early
-      // no-candidate exits below release the claim owner-conditionally in
-      // `finally`.
-      try {
-        lease = await ObservationBufferLease.acquire({
-          storage: this.storage,
-          recordId: record.id,
-          policy: this.observationBufferLeasePolicy,
-          lastBufferedAtTokens: currentTokens,
-        });
-      } catch (err) {
-        omError('[OM] Failed to acquire observation buffer claim', err);
-      }
-      if (!lease) {
-        return { buffered: false, record };
+      if (this.storage.supportsObservationBufferClaims) {
+        // Acquire the durable buffer claim before any sealing or model work.
+        // Losing the acquire means another process owns this record's buffering;
+        // return a benign not-buffered result without touching storage. Early
+        // no-candidate exits below release the claim owner-conditionally in
+        // `finally`.
+        try {
+          lease = await ObservationBufferLease.acquire({
+            storage: this.storage,
+            recordId: record.id,
+            policy: this.observationBufferLeasePolicy,
+            lastBufferedAtTokens: currentTokens,
+          });
+        } catch (err) {
+          omError('[OM] Failed to acquire observation buffer claim', err);
+        }
+        if (!lease) {
+          return { buffered: false, record };
+        }
+      } else {
+        // Legacy adapter: no claim contract — restore the pre-claim lifecycle.
+        // Mark the persisted flag (fire-and-forget semantics preserved via
+        // catch) and rely on the unconditional clears on every exit below.
+        legacyStarted = true;
+        await this.storage
+          .setBufferingObservationFlag(record.id, true, currentTokens)
+          .catch(err => omError('[OM] Failed to set buffering flag (legacy path)', err));
       }
       const activeLease = lease;
 
@@ -3399,9 +3441,9 @@ ${formattedMessages}
             requestContext,
             currentModel: opts.currentModel,
             observabilityContext,
-            claimOwnerToken: activeLease.ownerToken,
+            claimOwnerToken: activeLease?.ownerToken,
             claimBoundaryTokens: newTokens,
-            onClaimLost: () => activeLease.markLost(),
+            onClaimLost: activeLease ? () => activeLease.markLost() : undefined,
           }).run(),
       );
 
@@ -3423,12 +3465,19 @@ ${formattedMessages}
         });
       }
 
-      // The durable flag clears via the owner-conditioned release in `finally`;
-      // the token boundary was carried through the fenced commit. Only advance
-      // process-local caches when the cycle still owned its claim — a lost
-      // lease means the output was discarded and a successor owns the record.
-      if (activeLease.lost) {
+      // Claim-capable: the durable flag clears via the owner-conditioned
+      // release in `finally`; the token boundary was carried through the
+      // fenced commit. Only advance process-local caches when the cycle still
+      // owned its claim — a lost lease means the output was discarded and a
+      // successor owns the record.
+      if (activeLease?.lost) {
         return { buffered: false, record };
+      }
+      if (!activeLease) {
+        // Legacy adapter: clear the persisted flag explicitly on success,
+        // carrying the new boundary (pre-claim lifecycle contract).
+        await this.storage.setBufferingObservationFlag(record.id, false, newTokens).catch(() => {});
+        legacyFlagCleared = true;
       }
       setBufferingState(false, newTokens);
       BufferingCoordinator.lastBufferedBoundary.set(bufferKey, newTokens);
@@ -3463,9 +3512,18 @@ ${formattedMessages}
         // Owner-conditioned: releases only our still-current claim; a lost or
         // taken-over claim is left for its new owner.
         await lease.release();
+      } else if (legacyStarted) {
+        // Legacy adapter: unconditional clear on every exit (success already
+        // cleared with the new boundary above; error/no-candidate paths clear
+        // here) — the pre-claim single-process lifecycle contract.
+        unregisterOp(record.id, 'bufferingObservation');
+        setBufferingState(false);
+        if (!legacyFlagCleared) {
+          await this.storage.setBufferingObservationFlag(record.id, false).catch(() => {});
+        }
       }
-      // When no claim was acquired, nothing was registered or mirrored — a
-      // foreign owner's live flag stays untouched.
+      // Claim-capable with no claim acquired: nothing was registered or
+      // mirrored — a foreign owner's live flag stays untouched.
     }
   }
 
