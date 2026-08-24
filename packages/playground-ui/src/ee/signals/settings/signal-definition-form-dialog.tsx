@@ -59,7 +59,6 @@ function initialValue(definition?: TraceSignalDefinition): FormValue {
         displayLabel: definition.displayLabel,
         description: definition.description,
         taskPrompt: definition.taskPrompt,
-        extraOutputRules: definition.extraOutputRules,
         artifactAllowlist: allTraceSignalArtifacts,
       }
     : {
@@ -67,7 +66,6 @@ function initialValue(definition?: TraceSignalDefinition): FormValue {
         displayLabel: '',
         description: '',
         taskPrompt: '',
-        extraOutputRules: [],
         artifactAllowlist: allTraceSignalArtifacts,
       };
 }
@@ -123,7 +121,6 @@ export function SignalDefinitionFormDialog({
                     displayLabel: value.displayLabel,
                     description: value.description,
                     taskPrompt: value.taskPrompt,
-                    extraOutputRules: value.extraOutputRules,
                     artifactAllowlist: value.artifactAllowlist,
                   })
                 : onCreate(value);

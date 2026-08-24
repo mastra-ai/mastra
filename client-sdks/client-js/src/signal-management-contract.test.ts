@@ -15,7 +15,6 @@ describe('trace signal management contracts', () => {
       'displayLabel',
       'description',
       'taskPrompt',
-      'extraOutputRules',
       'artifactAllowlist',
       'version',
       'status',

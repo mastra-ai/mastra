@@ -21,7 +21,6 @@ const activeDefinition: TraceSignalDefinition = {
   displayLabel: 'Handoff Quality',
   description: 'Whether the agent handed work off clearly.',
   taskPrompt: 'Describe the quality of any handoff in one sentence.',
-  extraOutputRules: ['Mention unclear ownership.'],
   artifactAllowlist: ['latestUserInput', 'minifiedTrace'],
   version: 1,
   status: 'active',
@@ -146,7 +145,6 @@ describe('TraceSignalSettingsButton', () => {
         displayLabel: 'Tool Usage',
         description: 'How the agent used tools.',
         taskPrompt: 'Describe how the agent used tools in one sentence.',
-        extraOutputRules: [],
         artifactAllowlist: [
           'latestUserInput',
           'minifiedTrace',
@@ -169,7 +167,6 @@ describe('TraceSignalSettingsButton', () => {
         activeDefinition.id,
         expect.objectContaining({
           displayLabel: 'Handoff Clarity',
-          extraOutputRules: ['Mention unclear ownership.'],
         }),
       ),
     );

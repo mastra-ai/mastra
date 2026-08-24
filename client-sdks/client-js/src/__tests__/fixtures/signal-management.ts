@@ -4,7 +4,6 @@ export const customSignalDefinitionFixture = {
   displayLabel: 'Handoff Quality',
   description: 'Whether the agent handed work off clearly.',
   taskPrompt: 'Describe the quality of any handoff in one sentence.',
-  extraOutputRules: [],
   artifactAllowlist: ['latestUserInput', 'minifiedTrace'],
   version: 1,
   status: 'active',
@@ -31,7 +30,6 @@ export const createSignalDefinitionInputFixture = {
   displayLabel: 'Tool Usage',
   description: 'How the agent used tools.',
   taskPrompt: 'Describe how the agent used tools in one sentence.',
-  extraOutputRules: [],
   artifactAllowlist: ['latestUserInput', 'minifiedTrace'],
 };
 
@@ -39,7 +37,6 @@ export const updateSignalDefinitionInputFixture = {
   displayLabel: 'Handoff Clarity',
   description: customSignalDefinitionFixture.description,
   taskPrompt: customSignalDefinitionFixture.taskPrompt,
-  extraOutputRules: [],
   artifactAllowlist: ['latestUserInput', 'minifiedTrace'],
 };
 

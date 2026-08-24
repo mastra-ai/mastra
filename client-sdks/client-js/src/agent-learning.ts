@@ -36,7 +36,6 @@ export interface TraceSignalDefinition {
   displayLabel: string;
   description: string;
   taskPrompt: string;
-  extraOutputRules: string[];
   artifactAllowlist: TraceSignalArtifact[];
   version: number;
   status: 'active' | 'archived';
@@ -57,7 +56,6 @@ export interface CreateTraceSignalDefinitionInput {
   displayLabel: string;
   description: string;
   taskPrompt: string;
-  extraOutputRules: string[];
   artifactAllowlist: TraceSignalArtifact[];
 }
 
