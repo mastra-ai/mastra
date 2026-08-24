@@ -574,6 +574,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         stateSigner: ctx.stateSigner,
         baseUrl: ctx.baseUrl,
         controller: ctx.controller,
+        memorySettings: ctx.storage.memorySettings,
         projects: ctx.storage.projects,
         emitAudit: ctx.hooks?.emitAudit,
         ingestFactoryEvent,

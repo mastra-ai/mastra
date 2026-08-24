@@ -162,6 +162,29 @@ describe('WorkItemsStorage', () => {
     expect(await storage.delete({ orgId: 'org1', id: a.item.id })).toBeNull();
   });
 
+  it('holds list order when a later write touches an older card', async () => {
+    const storage = await makeStorage();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      vi.setSystemTime(new Date('2026-08-01T00:00:00.000Z'));
+      const older = await storage.upsert({ orgId: 'org1', userId: 'u', factoryProjectId: 'p1', input });
+      vi.setSystemTime(new Date('2026-08-02T00:00:00.000Z'));
+      const newer = await storage.upsert({
+        orgId: 'org1',
+        userId: 'u',
+        factoryProjectId: 'p1',
+        input: { ...input, externalSource: { ...input.externalSource, externalId: '43' } },
+      });
+      vi.setSystemTime(new Date('2026-08-03T00:00:00.000Z'));
+      await storage.update({ orgId: 'org1', id: older.item.id, userId: 'u', patch: { title: 'Touched' } });
+
+      const listed = await storage.list({ orgId: 'org1', factoryProjectId: 'p1' });
+      expect(listed.map(item => item.id)).toEqual([newer.item.id, older.item.id]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('validates parent relationships within a project and prevents cycles', async () => {
     const storage = await makeStorage();
     const parent = await storage.upsert({ orgId: 'org1', userId: 'u', factoryProjectId: 'p1', input });
@@ -197,6 +220,42 @@ describe('WorkItemsStorage', () => {
         },
       }),
     ).rejects.toBeInstanceOf(WorkItemRelationError);
+  });
+
+  it('fills a missing parent relationship without replacing an existing one', async () => {
+    const storage = await makeStorage();
+    const firstParent = await storage.upsert({ orgId: 'org1', userId: 'u', factoryProjectId: 'p1', input });
+    const secondParent = await storage.upsert({
+      orgId: 'org1',
+      userId: 'u',
+      factoryProjectId: 'p1',
+      input: { ...input, externalSource: { integrationId: 'github', type: 'issue', externalId: '43' } },
+    });
+    const child = await storage.upsert({
+      orgId: 'org1',
+      userId: 'u',
+      factoryProjectId: 'p1',
+      input: {
+        ...input,
+        externalSource: { integrationId: 'github', type: 'pull-request', externalId: '44' },
+      },
+    });
+
+    const linked = await storage.setParentWorkItemIfMissing({
+      orgId: 'org1',
+      id: child.item.id,
+      userId: 'u',
+      parentWorkItemId: firstParent.item.id,
+    });
+    const preserved = await storage.setParentWorkItemIfMissing({
+      orgId: 'org1',
+      id: child.item.id,
+      userId: 'u',
+      parentWorkItemId: secondParent.item.id,
+    });
+
+    expect(linked?.parentWorkItemId).toBe(firstParent.item.id);
+    expect(preserved?.parentWorkItemId).toBe(firstParent.item.id);
   });
 
   it('clears child relationships when deleting a parent', async () => {

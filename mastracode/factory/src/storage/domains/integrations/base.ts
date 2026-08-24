@@ -21,6 +21,8 @@
 
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
+import { createPlaintextFactorySecretEncryption } from '../../../secret-encryption.js';
+import type { FactorySecretEncryption } from '../../../secret-encryption.js';
 
 export const INTEGRATION_CONNECTIONS_SCHEMA: CollectionSchema = {
   name: 'integration_connections',
@@ -193,7 +195,9 @@ interface SubscriptionRow extends Record<string, unknown> {
  * `FactoryStorageOps` surface — works on any `FactoryStorage` backend.
  */
 export class IntegrationStorage extends FactoryStorageDomain {
-  constructor() {
+  constructor(
+    private readonly encryption: FactorySecretEncryption = createPlaintextFactorySecretEncryption(),
+  ) {
     super('integrations');
   }
 
@@ -202,6 +206,14 @@ export class IntegrationStorage extends FactoryStorageDomain {
       INTEGRATION_CONNECTIONS_SCHEMA,
       INTEGRATION_SUBSCRIPTIONS_SCHEMA,
       INTEGRATION_SETTINGS_SCHEMA,
+    ]);
+    const [connections, settings] = await Promise.all([
+      this.ops.findMany<ConnectionRow>('integration_connections', {}),
+      this.ops.findMany<{ id: string; config: unknown }>('integration_settings', {}),
+    ]);
+    await Promise.all([
+      ...connections.map(row => this.#migrateValue('integration_connections', row.id, 'data')),
+      ...settings.map(row => this.#migrateValue('integration_settings', row.id, 'config')),
     ]);
   }
 
@@ -215,6 +227,13 @@ export class IntegrationStorage extends FactoryStorageDomain {
     return this.ops;
   }
 
+  async #migrateValue(collection: string, id: string, column: 'data' | 'config'): Promise<void> {
+    await this.#db.updateAtomic<Record<string, unknown>>(collection, { id }, async row => {
+      const decrypted = await this.encryption.decrypt(row[column]);
+      return decrypted.needsReencryption ? { [column]: await this.encryption.encrypt(decrypted.value) } : null;
+    });
+  }
+
   /** A typed handle pre-scoped to `integrationId`. */
   forIntegration<
     TConnection = Record<string, unknown>,
@@ -225,11 +244,11 @@ export class IntegrationStorage extends FactoryStorageDomain {
     const db = () => this.#db;
     const scoped = { integration_id: integrationId };
 
-    const mapConnection = (row: ConnectionRow): IntegrationConnection<TConnection> => ({
+    const mapConnection = async (row: ConnectionRow): Promise<IntegrationConnection<TConnection>> => ({
       id: row.id,
       orgId: row.org_id,
       userId: row.user_id,
-      data: row.data as TConnection,
+      data: (await this.encryption.decrypt<TConnection>(row.data)).value,
       metadata: row.metadata ?? {},
       createdAt: row.created_at,
       updatedAt: row.updated_at,
@@ -258,10 +277,11 @@ export class IntegrationStorage extends FactoryStorageDomain {
         },
         upsert: async (orgId, input) => {
           const where = { ...scoped, org_id: orgId };
+          const encrypted = await this.encryption.encrypt(input.data);
           const update = async () =>
             db().updateMany('integration_connections', where, {
               user_id: input.userId ?? null,
-              data: input.data,
+              data: encrypted,
               metadata: input.metadata ?? {},
               updated_at: new Date(),
             });
@@ -275,7 +295,7 @@ export class IntegrationStorage extends FactoryStorageDomain {
               await db().insertOne<ConnectionRow>('integration_connections', {
                 ...where,
                 user_id: input.userId ?? null,
-                data: input.data,
+                data: encrypted,
                 metadata: input.metadata ?? {},
                 created_at: now,
                 updated_at: now,
@@ -292,7 +312,10 @@ export class IntegrationStorage extends FactoryStorageDomain {
           const row = await db().updateAtomic<ConnectionRow>(
             'integration_connections',
             { ...scoped, org_id: orgId },
-            current => ({ data: fn(current.data as TConnection), updated_at: new Date() }),
+            async current => {
+              const data = (await this.encryption.decrypt<TConnection>(current.data)).value;
+              return { data: await this.encryption.encrypt(fn(data)), updated_at: new Date() };
+            },
           );
           return row ? mapConnection(row) : null;
         },
@@ -361,18 +384,19 @@ export class IntegrationStorage extends FactoryStorageDomain {
       },
       settings: {
         get: async (orgId, userId) => {
-          const row = await db().findOne<{ config: TSettings }>('integration_settings', {
+          const row = await db().findOne<{ config: unknown }>('integration_settings', {
             ...scoped,
             org_id: orgId,
             user_id: userId,
           });
-          return row ? structuredClone(row.config) : null;
+          return row ? (await this.encryption.decrypt<TSettings>(row.config)).value : null;
         },
         save: async (orgId, userId, config) => {
           const where = { ...scoped, org_id: orgId, user_id: userId };
+          const encrypted = await this.encryption.encrypt(config);
           const update = async () =>
             db().updateMany('integration_settings', where, {
-              config,
+              config: encrypted,
               updated_at: new Date(),
             });
 
@@ -384,7 +408,7 @@ export class IntegrationStorage extends FactoryStorageDomain {
             try {
               await db().insertOne('integration_settings', {
                 ...where,
-                config,
+                config: encrypted,
                 created_at: now,
                 updated_at: now,
               });

@@ -218,7 +218,6 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
   private _isRetrying = false;
   private readonly timeout: number;
   private readonly templateSpec?: TemplateSpec;
-  private readonly env: Record<string, string>;
   private readonly metadata: Record<string, unknown>;
   private readonly network?: SandboxNetworkOpts;
   private readonly lifecycle: SandboxLifecycle;
@@ -241,20 +240,15 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
   private _resolvedNamedSpec?: NamedTemplateSpec;
 
   constructor(options: E2BSandboxOptions = {}) {
-    // One shared object: `setEnvironmentVariable` mutates it and the process
-    // manager reads it per spawn, so runtime env changes reach every
-    // subsequent command.
-    const env = options.env ?? {};
     super({
       ...options,
       name: 'E2BSandbox',
-      processes: new E2BProcessManager({ env }),
+      processes: new E2BProcessManager(),
     });
 
     this.id = options.id ?? this.generateId();
     this.timeout = options.timeout ?? 300_000; // 5 minutes;
     this.templateSpec = options.template;
-    this.env = env;
     this.metadata = options.metadata ?? {};
     this.network = options.network;
     // Always sent explicitly: the E2B API defaults to 'kill' when lifecycle is omitted.
@@ -540,16 +534,6 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
     }
 
     this.mounts.clear();
-  }
-
-  /**
-   * Set an environment variable for all subsequent commands and spawned
-   * processes. Merged into each exec's env (never written into the VM), so
-   * it applies immediately, survives pause/resume, and a replacement VM gets
-   * it too. Used by hosts to install rotating credentials (e.g. `GH_TOKEN`).
-   */
-  setEnvironmentVariable(name: string, value: string): void {
-    this.env[name] = value;
   }
 
   async getInfo(): Promise<SandboxInfo> {
@@ -1238,9 +1222,8 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
     if (!error) return false;
     const errorStr = String(error);
     return (
-      errorStr.includes('sandbox was not found') ||
+      /\b(?:paused\s+)?sandbox(?:\s+\S+)?\s+(?:was\s+)?not found\b/i.test(errorStr) ||
       errorStr.includes('Sandbox is probably not running') ||
-      errorStr.includes('Sandbox not found') ||
       errorStr.includes('sandbox has been killed')
     );
   }

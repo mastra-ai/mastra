@@ -674,32 +674,27 @@ describe('E2BSandbox', () => {
       );
     });
 
-    it('setEnvironmentVariable reaches subsequent commands (rotating credential seam)', async () => {
+    it('setEnv after construction reaches subsequent commands', async () => {
       // Regression: hosts install rotating credentials (e.g. GH_TOKEN) at
       // runtime; the value must reach every later exec, including when no
-      // constructor env was passed (the env object must be shared with the
-      // process manager, not a second `?? {}` copy).
+      // constructor env was passed.
       const sandbox = new E2BSandbox();
       await sandbox._start();
 
-      sandbox.setEnvironmentVariable('GH_TOKEN', 'ghs_fresh');
-      await sandbox.executeCommand('gh', ['auth', 'status']);
+      sandbox.setEnv(env => ({ ...env, GH_TOKEN: 'tok_1' }));
+      await sandbox.executeCommand('echo', ['test']);
 
       expect(mockSandbox.commands.run).toHaveBeenLastCalledWith(
         expect.any(String),
-        expect.objectContaining({
-          envs: expect.objectContaining({ GH_TOKEN: 'ghs_fresh' }),
-        }),
+        expect.objectContaining({ envs: expect.objectContaining({ GH_TOKEN: 'tok_1' }) }),
       );
 
-      sandbox.setEnvironmentVariable('GH_TOKEN', 'ghs_rotated');
-      await sandbox.executeCommand('gh', ['auth', 'status']);
+      sandbox.setEnv(env => ({ ...env, GH_TOKEN: 'tok_2' }));
+      await sandbox.executeCommand('echo', ['test']);
 
       expect(mockSandbox.commands.run).toHaveBeenLastCalledWith(
         expect.any(String),
-        expect.objectContaining({
-          envs: expect.objectContaining({ GH_TOKEN: 'ghs_rotated' }),
-        }),
+        expect.objectContaining({ envs: expect.objectContaining({ GH_TOKEN: 'tok_2' }) }),
       );
     });
   });
@@ -2520,24 +2515,16 @@ describe('E2BSandbox Internal Methods', () => {
   });
 
   describe('isSandboxDeadError()', () => {
-    it('returns true for "sandbox was not found"', () => {
+    it.each([
+      'sandbox was not found',
+      'Sandbox not found',
+      'Sandbox sbx_123 not found',
+      'Paused sandbox sbx_123 not found',
+      'Sandbox is probably not running',
+      'sandbox has been killed',
+    ])('returns true for "%s"', errorMessage => {
       const sandbox = new E2BSandbox();
-      expect((sandbox as any).isSandboxDeadError(new Error('sandbox was not found'))).toBe(true);
-    });
-
-    it('returns true for "Sandbox is probably not running"', () => {
-      const sandbox = new E2BSandbox();
-      expect((sandbox as any).isSandboxDeadError(new Error('Sandbox is probably not running'))).toBe(true);
-    });
-
-    it('returns true for "Sandbox not found"', () => {
-      const sandbox = new E2BSandbox();
-      expect((sandbox as any).isSandboxDeadError(new Error('Sandbox not found'))).toBe(true);
-    });
-
-    it('returns true for "sandbox has been killed"', () => {
-      const sandbox = new E2BSandbox();
-      expect((sandbox as any).isSandboxDeadError(new Error('sandbox has been killed'))).toBe(true);
+      expect((sandbox as any).isSandboxDeadError(new Error(errorMessage))).toBe(true);
     });
 
     it('returns false for regular errors', () => {
@@ -2626,7 +2613,7 @@ describe('E2BSandbox Internal Methods', () => {
       mockSandbox.commands.run.mockImplementation((_cmd: string, opts?: any) => {
         callCount++;
         if (callCount === 1) {
-          throw new Error('sandbox was not found');
+          throw new Error('Sandbox sbx_123 not found');
         }
         const result = { exitCode: 0, stdout: 'ok', stderr: '' };
         if (opts?.background) {

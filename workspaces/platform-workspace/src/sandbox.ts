@@ -398,14 +398,6 @@ export class PlatformSandbox extends MastraSandbox {
   private readonly _idleTimeoutMinutes?: number;
   private readonly _networkIsolation?: PlatformSandboxNetworkIsolation;
   private readonly _env: Record<string, string>;
-  /**
-   * Environment variables set at runtime via `setEnvironmentVariable`.
-   * Overlaid onto every exec's env (the remote VM's own environment cannot be
-   * mutated after creation), so values apply immediately and reach a
-   * replacement VM too. Used by hosts to install rotating credentials
-   * (e.g. `GH_TOKEN`).
-   */
-  private readonly _runtimeEnv: Record<string, string> = {};
   private readonly _timeout?: number;
   private readonly _instructionsOverride?: InstructionsOption;
   private _createdAt: Date | null = null;
@@ -1134,6 +1126,13 @@ export class PlatformSandbox extends MastraSandbox {
     // the value is 0, which disables the client-side timer entirely.
     const effectiveTimeout = options?.timeout ?? this._timeout;
 
+    // Merge the sandbox env under per-call env once, up front — every exec
+    // transport below (private network, WebSocket lease, E2B lease) receives
+    // these options, and none of them route through the process manager.
+    const sandboxEnv = this.getEnv();
+    const execCallOptions =
+      Object.keys(sandboxEnv).length > 0 ? { ...options, env: { ...sandboxEnv, ...options?.env } } : options;
+
     // Wait for the transport to become ready before proceeding. During the
     // sidecar boot window (immediately after start()), concurrent execs all
     // await the same probe promise rather than each independently racing to
@@ -1154,7 +1153,12 @@ export class PlatformSandbox extends MastraSandbox {
     // `.scratch/factory-deploy/issue-platform-sandbox-exec-via-private-network.md`.
     const instanceUrl = this._addressRegistry?.get(this._sandboxId);
     if (instanceUrl) {
-      const privateNet = await this._tryExecViaPrivateNetwork(instanceUrl, fullCommand, effectiveTimeout, options);
+      const privateNet = await this._tryExecViaPrivateNetwork(
+        instanceUrl,
+        fullCommand,
+        effectiveTimeout,
+        execCallOptions,
+      );
       if (privateNet) {
         const privateExit = privateNet.exitCode ?? 124;
         return {
@@ -1179,7 +1183,7 @@ export class PlatformSandbox extends MastraSandbox {
     // `PlatformApiError` for other `/exec-lease` errors (404/500/501).
     // See ./direct-exec.ts and `docs/factory/direct-sandbox-connection.md`
     // in the Platform repo.
-    const result = await this._runDirectExec(fullCommand, effectiveTimeout, options);
+    const result = await this._runDirectExec(fullCommand, effectiveTimeout, execCallOptions);
     // `_runDirectExec` throws on transport failure (see its jsdoc), so a
     // `null` exitCode here can only mean `timedOut: true` — the sandbox
     // never got to send an exit frame because we cut the command short.
@@ -1219,29 +1223,18 @@ export class PlatformSandbox extends MastraSandbox {
    * returns `{ exitCode: null, timedOut: false }` — that case throws.
    */
   /**
-   * Set an environment variable for all subsequent commands. Overlaid onto
-   * each exec's env rather than written into the VM, so it applies
-   * immediately and survives VM replacement.
+   * Drop undefined values so the result matches the Record<string, string>
+   * shape the exec transports expect (`ExecuteCommandOptions.env` is
+   * NodeJS.ProcessEnv). The sandbox's own env is already merged in by
+   * `executeCommand` before a transport sees these options. Returns undefined
+   * when there is nothing to send.
    */
-  setEnvironmentVariable(name: string, value: string): void {
-    this._runtimeEnv[name] = value;
-  }
-
-  /**
-   * Merge the runtime env overlay with a call's own env, filtering undefined
-   * values so the result matches the Record<string, string> shape the exec
-   * transports expect (`ExecuteCommandOptions.env` is NodeJS.ProcessEnv).
-   * Per-call env wins over the runtime overlay. Returns undefined when there
-   * is nothing to send.
-   */
-  private _execEnvOverlay(options: ExecuteCommandOptions | undefined): Record<string, string> | undefined {
-    const fromOptions = options?.env
-      ? Object.fromEntries(
-          Object.entries(options.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
-        )
-      : undefined;
-    const merged = { ...this._runtimeEnv, ...fromOptions };
-    return Object.keys(merged).length > 0 ? merged : undefined;
+  private _execEnv(options: ExecuteCommandOptions | undefined): Record<string, string> | undefined {
+    if (!options?.env) return undefined;
+    const filtered = Object.fromEntries(
+      Object.entries(options.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
+    );
+    return Object.keys(filtered).length > 0 ? filtered : undefined;
   }
 
   private async _runDirectExec(
@@ -1249,7 +1242,7 @@ export class PlatformSandbox extends MastraSandbox {
     effectiveTimeout: number | undefined,
     options: ExecuteCommandOptions | undefined,
   ): Promise<{ exitCode: number | null; stdout: string; stderr: string; timedOut: boolean }> {
-    const filteredEnv = this._execEnvOverlay(options);
+    const filteredEnv = this._execEnv(options);
 
     let lastResult: Awaited<ReturnType<typeof execViaLease>> | undefined;
     let lastLease: CachedExecLease | undefined;
@@ -1359,7 +1352,7 @@ export class PlatformSandbox extends MastraSandbox {
     effectiveTimeout: number | undefined,
     options: ExecuteCommandOptions | undefined,
   ): Promise<PrivateNetExecResult | undefined> {
-    const filteredEnv = this._execEnvOverlay(options);
+    const filteredEnv = this._execEnv(options);
 
     const execOptions: PrivateNetExecOptions = {
       command: fullCommand,

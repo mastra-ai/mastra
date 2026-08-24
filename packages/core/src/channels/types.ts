@@ -1,4 +1,13 @@
-import type { Adapter, CardElement, ChatConfig, Message, StateAdapter, StreamChunk, Thread } from 'chat';
+import type {
+  Adapter,
+  CardElement,
+  ChatConfig,
+  Message,
+  SlashCommandEvent,
+  StateAdapter,
+  StreamChunk,
+  Thread,
+} from 'chat';
 
 import type { Mastra } from '../mastra';
 import type { RequestContext } from '../request-context';
@@ -375,6 +384,20 @@ export type ChannelHandler = (
 export type ChannelHandlerConfig = ChannelHandler | false | undefined;
 
 /**
+ * Handler function for slash command events.
+ * Receives the original Chat SDK event, the default handler implementation,
+ * and a runtime context carrying the resolved Mastra instance.
+ */
+export type SlashCommandChannelHandler = (
+  event: SlashCommandEvent,
+  defaultHandler: () => Promise<void>,
+  ctx: ChannelHandlerContext,
+) => Promise<void>;
+
+/** Configuration for slash command handling. */
+export type SlashCommandChannelHandlerConfig = SlashCommandChannelHandler | false | undefined;
+
+/**
  * Context passed to {@link ChannelConfig.resolveResourceId}.
  * Lets an app decide who owns resource-level memory for a channel thread,
  * separately from who sent the message (`message.author`).
@@ -440,6 +463,12 @@ export interface ChannelHandlers {
    * Default: Routes to agent.stream and posts the response.
    */
   onSubscribedMessage?: ChannelHandlerConfig;
+
+  /**
+   * Handler for slash commands.
+   * Default: Routes the command and its arguments to agent.stream and posts the response.
+   */
+  onSlashCommand?: SlashCommandChannelHandlerConfig;
 }
 
 /** Configuration for agent chat channels. */
