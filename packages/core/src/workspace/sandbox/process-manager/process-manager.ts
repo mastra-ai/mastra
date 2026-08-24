@@ -76,15 +76,16 @@ export abstract class SandboxProcessManager<TSandbox extends MastraSandbox = Mas
       }
       await this.sandbox.ensureRunning();
 
-      // Merge the sandbox's runtime env overlay into the spawn options.
+      // Merge the sandbox's runtime env into the spawn options.
       // Read per spawn (never captured at construction) so values installed
       // via setEnv() after construction reach every subsequent process.
-      // Per-call env wins over the overlay. When the overlay is empty, leave
-      // the args untouched — provider spawn implementations branch on
-      // `options.env !== undefined` and must not observe a new empty object.
-      const overlay = this.sandbox.getEnv();
-      if (Object.keys(overlay).length > 0) {
-        args[1] = { ...args[1], env: { ...overlay, ...args[1]?.env } };
+      // Per-call env wins over the sandbox env. When the sandbox env is
+      // empty, leave the args untouched — provider spawn implementations
+      // branch on `options.env !== undefined` and must not observe a new
+      // empty object.
+      const sandboxEnv = this.sandbox.getEnv();
+      if (Object.keys(sandboxEnv).length > 0) {
+        args[1] = { ...args[1], env: { ...sandboxEnv, ...args[1]?.env } };
       }
 
       const handle = await impl.spawn(...args);
