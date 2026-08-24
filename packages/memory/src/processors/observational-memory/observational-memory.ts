@@ -2712,7 +2712,7 @@ ${formattedMessages}
       });
 
       const filtered = result.messages.filter(
-        m => m.role !== 'system' && !isWorkingMemoryStateSignalMessage(m) && !this.observedMessageIds.has(m.id),
+        m => !isWorkingMemoryStateSignalMessage(m) && !this.observedMessageIds.has(m.id),
       );
 
       if (filtered.length > 0) {

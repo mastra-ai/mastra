@@ -274,13 +274,20 @@ describe('Observational Memory extracted metadata persistence', () => {
       if (value && typeof value === 'object') return Object.values(value).map(flattenPromptText).join('');
       return '';
     };
+    const findHistoryMessage = (value: unknown): string => {
+      if (!Array.isArray(value)) return flattenPromptText(value);
+      for (const item of value) {
+        const text = flattenPromptText(item);
+        if (text.includes('## New Message History to Observe')) return text;
+      }
+      return flattenPromptText(value);
+    };
     const model = new MockLanguageModelV2({
       doStream: async ({ prompt }) => {
         observerInput = JSON.stringify(prompt);
-        const promptText = flattenPromptText(prompt);
+        const promptText = findHistoryMessage(prompt);
         const historyStart = promptText.indexOf('## New Message History to Observe');
-        const historyEnd = promptText.indexOf('\n\n---\n\n', historyStart);
-        observerHistory = promptText.slice(historyStart, historyEnd === -1 ? undefined : historyEnd);
+        observerHistory = promptText.slice(historyStart);
         const observerSawSeed = observerHistory.includes(seededValue);
         const observerOutput = observerSawSeed
           ? `<observations>\n- unrelated task\n</observations>\n<working-memory>rewritten-by-observer</working-memory>`
