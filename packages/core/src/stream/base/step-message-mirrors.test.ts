@@ -42,21 +42,16 @@ describe('step message mirrors', () => {
     return { messageList, steps };
   }
 
-  it('replaces the cumulative mirrors with a count and rebuilds them exactly', () => {
+  it('replaces the cumulative mirrors with message IDs and rebuilds them exactly', () => {
     const { messageList, steps } = runSteps(6);
 
     const packed = packStepMessageMirrors(structuredClone(steps));
     expect(
       packed.every(s => !('dbMessages' in s.response) && !('uiMessages' in s.response) && !('messages' in s.response)),
     ).toBe(true);
-    expect(packed.map(s => (s.response as any).__responseMessageCount)).toEqual(
-      steps.map(s => s.response.dbMessages.length),
+    expect(packed.map(s => (s.response as any).__responseMessageIds)).toEqual(
+      steps.map(s => s.response.dbMessages.map(message => message.id)),
     );
-    // The message list merges an agentic turn into a single growing message, so
-    // the count can repeat — it only has to be non-decreasing for the slice to
-    // reconstruct each step.
-    const counts = packed.map(s => (s.response as any).__responseMessageCount as number);
-    expect(counts).toEqual([...counts].sort((a, b) => a - b));
 
     const restored = unpackStepMessageMirrors(packed, messageList);
     restored.forEach((step, i) => {
@@ -67,6 +62,27 @@ describe('step message mirrors', () => {
     });
     expect(restored.at(-1)!.response.uiMessages).toEqual(steps.at(-1)!.response.uiMessages);
     expect(restored.at(-1)!.response.messages).toEqual(steps.at(-1)!.response.messages);
+  });
+
+  it('uses stable message identities when messages move between sources or are removed', () => {
+    const { messageList, steps } = runSteps(3);
+    const packed = packStepMessageMirrors(structuredClone(steps));
+    const finalStepIds = steps.at(-1)!.response.dbMessages.map(message => message.id);
+    const promotedId = finalStepIds[0]!;
+    const removedId = finalStepIds[1]!;
+
+    const responseMessages = messageList.clear.response.db();
+    for (const message of responseMessages) {
+      if (message.id === removedId) continue;
+      messageList.add(message, message.id === promotedId ? 'memory' : 'response');
+    }
+
+    const restored = unpackStepMessageMirrors(packed, messageList);
+    const restoredIds = restored.at(-1)!.response.dbMessages.map(message => message.id);
+
+    expect(restoredIds).toContain(promotedId);
+    expect(restoredIds).not.toContain(removedId);
+    expect(restoredIds).toEqual(finalStepIds.filter(id => id !== removedId));
   });
 
   it('keeps the serialized snapshot linear in step count', () => {

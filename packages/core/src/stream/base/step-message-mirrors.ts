@@ -9,11 +9,10 @@
  *
  * The full conversation is already persisted once, in the serialized
  * `messageList` that sits alongside the buffered steps. So the snapshot stores
- * only how many response messages existed when each step finished, and rebuilds
- * all three mirrors from that list on the way back in. This is safe because
- * `messageList.get.response.db()` is append-only — it filters the run's
- * messages down to the response ones in order, so its value at step `i` is
- * exactly the first `n` entries of its value now.
+ * only the stable IDs of the messages each step referenced, and rebuilds all
+ * three mirrors from that list on the way back in. IDs are used instead of a
+ * prefix length because processors can promote messages between sources or
+ * remove messages after an earlier step was buffered.
  *
  * One behavioural note. A step's `dbMessages` share message objects with the
  * list, and an agentic turn keeps appending parts to the same message, so the
@@ -37,12 +36,12 @@
 import type { AIV5Type, MastraDBMessage, MessageList } from '../../agent/message-list';
 import { convertMessages } from '../../agent/message-list';
 
-const RESPONSE_MESSAGE_COUNT = '__responseMessageCount' as const;
+const RESPONSE_MESSAGE_IDS = '__responseMessageIds' as const;
 
 type ResponseLike = {
   dbMessages?: unknown;
   uiMessages?: unknown;
-  [RESPONSE_MESSAGE_COUNT]?: number;
+  [RESPONSE_MESSAGE_IDS]?: string[];
 };
 
 type StepLike = { response?: unknown; request?: unknown };
@@ -68,7 +67,10 @@ export function packStepMessageMirrors<T extends StepLike>(steps: T[]): T[] {
       } = step.response as Record<string, unknown>;
       next = {
         ...step,
-        response: { ...restResponse, [RESPONSE_MESSAGE_COUNT]: (dbMessages as unknown[]).length },
+        response: {
+          ...restResponse,
+          [RESPONSE_MESSAGE_IDS]: (dbMessages as MastraDBMessage[]).map(message => message.id),
+        },
       };
     }
 
@@ -89,20 +91,23 @@ export function unpackStepMessageMirrors<T extends StepLike>(steps: T[], message
   // Snapshots written before this change carry the mirrors inline and need no
   // rehydration — do not pay for the message list read in that case.
   const needsRehydration = steps.some(
-    step => isRecord(step) && isRecord(step.response) && RESPONSE_MESSAGE_COUNT in step.response,
+    step => isRecord(step) && isRecord(step.response) && RESPONSE_MESSAGE_IDS in step.response,
   );
   if (!needsRehydration) return steps;
 
-  let responseMessages: MastraDBMessage[] | undefined;
+  let messagesById: Map<string, MastraDBMessage> | undefined;
 
   return steps.map(step => {
-    if (!isRecord(step) || !isRecord(step.response) || !(RESPONSE_MESSAGE_COUNT in step.response)) return step;
+    if (!isRecord(step) || !isRecord(step.response) || !(RESPONSE_MESSAGE_IDS in step.response)) return step;
 
-    const { [RESPONSE_MESSAGE_COUNT]: count, ...restResponse } = step.response as ResponseLike &
+    const { [RESPONSE_MESSAGE_IDS]: messageIds, ...restResponse } = step.response as ResponseLike &
       Record<string, unknown>;
 
-    responseMessages ??= messageList.get.response.db();
-    const dbMessages = responseMessages.slice(0, count as number);
+    messagesById ??= new Map(messageList.get.all.db().map(message => [message.id, message]));
+    const dbMessages = (messageIds as string[]).flatMap(id => {
+      const message = messagesById!.get(id);
+      return message ? [message] : [];
+    });
 
     return {
       ...step,
