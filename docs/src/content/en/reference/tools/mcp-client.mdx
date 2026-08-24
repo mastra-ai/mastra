@@ -351,15 +351,17 @@ Retrieves all tools from all configured servers, with tool names namespaced by t
 Set `perServerTimeoutMs` to limit how long discovery waits for each server. Servers that finish within the limit remain in `tools`. Timed-out servers appear in `errors`, and `durations` reports each server's discovery time in milliseconds.
 
 ```typescript
-const { tools, errors, durations } = await mcp.listToolsWithErrors({
+const { tools, errors, errorDetails, durations } = await mcp.listToolsWithErrors({
   perServerTimeoutMs: 3_000,
 })
 
 new Agent({ id: 'agent', tools })
-console.log(errors, durations)
+console.log(errors, errorDetails, durations)
 ```
 
-When called without options, the method returns only `tools` and `errors`.
+`errors` remains a string map for backward compatibility. `errorDetails` provides the same message plus machine-readable `httpStatus` and transport `code` fields when the underlying error exposes them. When an HTTP status is available, the legacy message also includes an `(HTTP nnn)` suffix.
+
+When called without options, the method omits only `durations`; `tools`, `errors`, and `errorDetails` are always returned.
 
 ### `listToolsets()`
 
@@ -377,15 +379,15 @@ const res = await agent.stream(prompt, {
 Returns toolsets grouped by server name, along with per-server discovery errors. Set `perServerTimeoutMs` to limit each server independently and include per-server `durations` in milliseconds.
 
 ```typescript
-const { toolsets, errors, durations } = await mcp.listToolsetsWithErrors({
+const { toolsets, errors, errorDetails, durations } = await mcp.listToolsetsWithErrors({
   perServerTimeoutMs: 3_000,
 })
 
 const res = await agent.stream(prompt, { toolsets })
-console.log(errors, durations)
+console.log(errors, errorDetails, durations)
 ```
 
-When called without options, the method returns only `toolsets` and `errors`.
+When called without options, the method omits only `durations`; `toolsets`, `errors`, and `errorDetails` are always returned.
 
 ### `listToolDefinitions()`
 
@@ -406,7 +408,7 @@ Like `listToolDefinitions()`, but also returns per-server errors for servers tha
 Set `perServerTimeoutMs` to limit each server independently. When options are provided, `durations` reports each server's discovery time in milliseconds.
 
 ```typescript
-const { definitions, errors, durations } = await mcp.listToolDefinitionsWithErrors({
+const { definitions, errors, errorDetails, durations } = await mcp.listToolDefinitionsWithErrors({
   perServerTimeoutMs: 3_000,
 })
 
@@ -414,10 +416,10 @@ if (Object.keys(errors).length === 0) {
   await cache.set('mcp-tools', JSON.stringify(definitions))
 }
 
-console.log(durations)
+console.log(errorDetails, durations)
 ```
 
-When called without options, the method returns only `definitions` and `errors`.
+When called without options, the method omits only `durations`; `definitions`, `errors`, and `errorDetails` are always returned.
 
 ### `toolFromDefinition()`
 

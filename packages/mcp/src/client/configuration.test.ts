@@ -61,6 +61,7 @@ describe('MCPClient tool discovery retries', () => {
         weather_getWeather: toolset.getWeather,
       },
       errors: {},
+      errorDetails: {},
     });
     expect(internalClient.tools).toHaveBeenCalledTimes(1);
   });
@@ -88,9 +89,39 @@ describe('MCPClient tool discovery retries', () => {
       errors: {
         stock: 'Validation failed',
       },
+      errorDetails: {
+        stock: { message: 'Validation failed' },
+      },
     });
     expect(weatherClient.tools).toHaveBeenCalledTimes(1);
     expect(stockClient.tools).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns structured transport details without removing legacy string errors', async () => {
+    const client = createClient();
+    const transportError = Object.assign(new Error('Error POSTing to endpoint'), {
+      status: 503,
+      code: 'CLIENT_HTTP_NOT_IMPLEMENTED',
+    });
+    const connectError = new Error('Failed to connect to MCP server weather', { cause: transportError });
+
+    vi.spyOn(client as any, 'getConnectedClientForServer').mockRejectedValue(connectError);
+
+    const result = await client.listToolDefinitionsWithErrors();
+
+    expect(result).toEqual({
+      definitions: {},
+      errors: {
+        weather: 'Failed to connect to MCP server weather (HTTP 503)',
+      },
+      errorDetails: {
+        weather: {
+          message: 'Failed to connect to MCP server weather (HTTP 503)',
+          httpStatus: 503,
+          code: 'CLIENT_HTTP_NOT_IMPLEMENTED',
+        },
+      },
+    });
   });
 
   it('returns healthy tools and timing diagnostics when another server exceeds its discovery budget', async () => {
@@ -119,6 +150,9 @@ describe('MCPClient tool discovery retries', () => {
       errors: {
         stock: 'Discovery timed out after 50ms',
       },
+      errorDetails: {
+        stock: { message: 'Discovery timed out after 50ms' },
+      },
       durations: {
         weather: 0,
         stock: 50,
@@ -145,11 +179,13 @@ describe('MCPClient tool discovery retries', () => {
     expect(toolsetsResult).toEqual({
       toolsets: { weather: toolset },
       errors: {},
+      errorDetails: {},
       durations: { weather: 0 },
     });
     expect(definitionsResult).toEqual({
       definitions: { weather: definitions },
       errors: {},
+      errorDetails: {},
       durations: { weather: 0 },
     });
     expect(vi.getTimerCount()).toBe(0);
@@ -172,6 +208,7 @@ describe('MCPClient tool discovery retries', () => {
         weather_getWeather: toolset.getWeather,
       },
       errors: {},
+      errorDetails: {},
     });
     expect(internalClient.tools).toHaveBeenCalledTimes(2);
     expect(reconnectSpy).toHaveBeenCalledTimes(1);
@@ -201,6 +238,7 @@ describe('MCPClient tool discovery retries', () => {
         stock_search: stockTools.search,
       },
       errors: {},
+      errorDetails: {},
     });
   });
 
@@ -221,6 +259,7 @@ describe('MCPClient tool discovery retries', () => {
         weather: toolset,
       },
       errors: {},
+      errorDetails: {},
     });
     expect(internalClient.tools).toHaveBeenCalledTimes(2);
     expect(reconnectSpy).toHaveBeenCalledTimes(1);
@@ -242,6 +281,9 @@ describe('MCPClient tool discovery retries', () => {
       toolsets: {},
       errors: {
         weather: 'Validation failed',
+      },
+      errorDetails: {
+        weather: { message: 'Validation failed' },
       },
     });
     expect(internalClient.tools).toHaveBeenCalledTimes(1);

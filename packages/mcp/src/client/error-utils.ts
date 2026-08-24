@@ -22,3 +22,87 @@ export function isReconnectableMCPError(error: unknown): boolean {
     errorMessage.includes('typeerror: terminated')
   );
 }
+
+/** Structured transport metadata for a failed aggregate MCP discovery. */
+export interface MCPDiscoveryErrorDetails {
+  /** Human-readable failure message. Includes `(HTTP nnn)` when an HTTP status is available. */
+  message: string;
+  /** HTTP response status reported by the MCP transport. */
+  httpStatus?: number;
+  /** Deepest non-HTTP error code in the cause chain, such as an MCP SDK or network error code. */
+  code?: string | number;
+}
+
+const MAX_DISCOVERY_ERROR_CAUSE_DEPTH = 8;
+
+function isHttpStatus(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 100 && value <= 599;
+}
+
+function asErrorRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : undefined;
+}
+
+/**
+ * Preserve machine-readable transport metadata before aggregate discovery turns
+ * a thrown error into its legacy per-server string.
+ *
+ * MCP SDK 2 keeps an HTTP response status on `SdkHttpError.status` while
+ * `code` is a string SDK code. Older transports and wrappers have also used
+ * `statusCode` or a numeric `code`, so all three shapes are recognized. The
+ * walk is bounded and cycle-safe because application errors may wrap arbitrary
+ * third-party causes.
+ */
+export function getMCPDiscoveryErrorDetails(error: unknown): MCPDiscoveryErrorDetails {
+  let message = error instanceof Error ? error.message : String(error);
+  let httpStatus: number | undefined;
+  let code: string | number | undefined;
+  let current: unknown = error;
+  const seen = new Set<unknown>();
+
+  for (
+    let depth = 0;
+    depth < MAX_DISCOVERY_ERROR_CAUSE_DEPTH && current !== undefined && current !== null && !seen.has(current);
+    depth++
+  ) {
+    seen.add(current);
+    const record = asErrorRecord(current);
+    if (!record) break;
+
+    const data = asErrorRecord(record.data);
+    if (httpStatus === undefined) {
+      for (const candidate of [
+        record.status,
+        record.statusCode,
+        record.code,
+        data?.status,
+        data?.statusCode,
+      ]) {
+        if (isHttpStatus(candidate)) {
+          httpStatus = candidate;
+          break;
+        }
+      }
+    }
+
+    for (const candidate of [record.code, data?.code]) {
+      if ((typeof candidate === 'string' || typeof candidate === 'number') && !isHttpStatus(candidate)) {
+        // Prefer the deepest code: outer Mastra errors describe the aggregate
+        // operation, while the innermost SDK/network code classifies the cause.
+        code = candidate;
+      }
+    }
+
+    current = record.cause;
+  }
+
+  if (httpStatus !== undefined && !message.includes(`(HTTP ${httpStatus})`)) {
+    message += ` (HTTP ${httpStatus})`;
+  }
+
+  return {
+    message,
+    ...(httpStatus !== undefined ? { httpStatus } : {}),
+    ...(code !== undefined ? { code } : {}),
+  };
+}
