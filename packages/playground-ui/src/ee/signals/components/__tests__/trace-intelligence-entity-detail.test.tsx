@@ -52,6 +52,10 @@ describe('TraceIntelligenceEntityDetail', () => {
         await screen.findByRole('heading', { name: 'Understand what drives every agent interaction' }),
       ).toBeTruthy();
       expect(requestedSignalNames).toBe('tool_usage,response_quality');
+      expect(screen.getAllByText('Tool usage')).toHaveLength(2);
+      expect(screen.getByText('How effectively the agent uses tools.')).toBeTruthy();
+      expect(screen.getAllByText('Response quality')).toHaveLength(2);
+      expect(screen.queryByText('Goal')).not.toBeTruthy();
     });
   });
 });

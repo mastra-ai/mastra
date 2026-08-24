@@ -94,6 +94,10 @@ export function SankeySignals({
   const [pendingSignalNames, setPendingSignalNames] = useState<TraceSignalName[]>();
   const snapshotsQuery = useThemeSnapshots(entityId, entityType, signalNames, dateFrom, dateTo);
   const effectiveSignalCatalog = snapshotsQuery.data?.signalCatalog ?? signalCatalog;
+  const traceIntelligenceContext = useMemo(
+    () => ({ ...traceIntelligence, signalCatalog: effectiveSignalCatalog }),
+    [effectiveSignalCatalog, traceIntelligence],
+  );
   const snapshots = [...(snapshotsQuery.data?.snapshots ?? [])].sort((left, right) => left.ordinal - right.ordinal);
   const [isPlaying, setIsPlaying] = useState(false);
   const [viewMode, setViewMode] = useState<SignalsViewMode>('flow');
@@ -343,10 +347,7 @@ export function SankeySignals({
     ? findSelectionStats(flow, drillStack, noiseSignalName ? { kind: 'noise', signalName: noiseSignalName } : undefined)
     : undefined;
   const filterKey = serializeThemeFilters(drillStack);
-  const catalogSignalNames = orderedSignals(
-    effectiveSignalCatalog,
-    effectiveSignalCatalog.filter(signal => signal.enabled).map(signal => signal.name),
-  );
+  const catalogSignalNames = orderedSignals(effectiveSignalCatalog, signalNames);
   const viewDescription =
     viewMode === 'flow'
       ? `How this agent's traces distribute across ${formatSignalList(catalogSignalNames.map(name => signalLabel(effectiveSignalCatalog, name).toLocaleLowerCase()))} themes at this point in time.`
@@ -357,7 +358,7 @@ export function SankeySignals({
   }));
 
   return (
-    <TraceIntelligenceContext.Provider value={{ ...traceIntelligence, signalCatalog: effectiveSignalCatalog }}>
+    <TraceIntelligenceContext.Provider value={traceIntelligenceContext}>
       <main className="min-w-0 space-y-5 p-4 lg:p-6">
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
           <div className="flex min-w-0 flex-wrap items-center gap-4">

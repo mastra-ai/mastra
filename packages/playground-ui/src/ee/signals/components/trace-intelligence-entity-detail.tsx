@@ -76,7 +76,11 @@ export function TraceIntelligenceEntityDetail({
         signalCatalog={signalCatalog}
         signalManagement={context.signalManagement}
       >
-        <SignalsEmptyState LinkComponent={context.LinkComponent} progress={progressQuery.data} />
+        <SignalsEmptyState
+          LinkComponent={context.LinkComponent}
+          progress={progressQuery.data}
+          signalCatalog={signalCatalog}
+        />
       </TraceIntelligenceProvider>
     );
   }
@@ -100,7 +104,7 @@ export function TraceIntelligenceEntityDetail({
     return (
       <>
         {pickerRow}
-        <SignalsEmptyState LinkComponent={context.LinkComponent} isRangeEmpty />
+        <SignalsEmptyState LinkComponent={context.LinkComponent} signalCatalog={signalCatalog} isRangeEmpty />
       </>
     );
   }

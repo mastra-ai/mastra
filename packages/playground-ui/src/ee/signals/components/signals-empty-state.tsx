@@ -1,4 +1,4 @@
-import type { EntityLearningProgressResponse, SignalCatalogEntry, TraceSignalName } from '@mastra/client-js';
+import type { EntityLearningProgressResponse, SignalCatalogEntry } from '@mastra/client-js';
 import { CpuIcon } from 'lucide-react';
 import type { CSSProperties, ReactNode } from 'react';
 
@@ -9,25 +9,6 @@ import { nodeColor } from '../../../ds/components/SankeyChart/sankeyColor';
 import type { LinkComponent } from '../../../ds/types/link-component';
 import { getSignalHue } from '../signal-colors';
 import { BUILT_IN_SIGNAL_CATALOG, orderedSignals, signalDescription, signalLabel } from '../signal-formatting';
-
-type SignalDefinition = {
-  key: TraceSignalName;
-  label: string;
-  description: string;
-};
-
-const signalDefinitions: SignalDefinition[] = [
-  { key: 'goal', label: 'Goal', description: 'What the user is trying to achieve.' },
-  { key: 'outcome', label: 'Outcome', description: 'Whether the interaction was completed, unresolved, or blocked.' },
-  {
-    key: 'behavior',
-    label: 'Behavior',
-    description:
-      'The observable actions and patterns in the trace, including tool use, retries, failures, and recovery.',
-  },
-  { key: 'sentiment', label: 'Sentiment', description: "The user's emotional state or attitude." },
-];
-const signalLabels = signalDefinitions.map(signal => signal.label);
 
 const traceRows = [
   ['chat.completion', '1.2s'],
@@ -52,6 +33,7 @@ export type SignalsEmptyStateProps = {
   actionSlot?: ReactNode;
   LinkComponent?: LinkComponent;
   progress?: TraceIntelligenceProgress;
+  signalCatalog?: readonly SignalCatalogEntry[];
   isRangeEmpty?: boolean;
 };
 
@@ -188,9 +170,20 @@ export const SignalsEmptyState = ({
   actionSlot,
   LinkComponent = 'a',
   progress,
+  signalCatalog,
   isRangeEmpty,
 }: SignalsEmptyStateProps) => {
   const copy = statusCopy(progress, isRangeEmpty);
+  const catalog = signalCatalog ?? progress?.signalCatalog ?? BUILT_IN_SIGNAL_CATALOG;
+  const enabledSignalNames = orderedSignals(
+    catalog,
+    catalog.filter(signal => signal.enabled).map(signal => signal.name),
+  );
+  const signalDefinitions = enabledSignalNames.map(name => ({
+    key: name,
+    label: signalLabel(catalog, name),
+    description: signalDescription(catalog, name),
+  }));
 
   return (
     <section className="bg-surface1 min-h-full w-full p-6 md:px-10 lg:px-12 xl:px-[4.375rem]">
@@ -258,14 +251,14 @@ export const SignalsEmptyState = ({
             <p className="text-neutral3 mt-0.5 text-xs">How recurring patterns connect</p>
             <p className="text-neutral3 mt-5 font-mono text-[0.6875rem] tracking-[0.18em] uppercase">Output</p>
             <div className="mt-3 flex flex-wrap gap-2">
-              {signalLabels.map(label => (
+              {signalDefinitions.map(signal => (
                 <span
                   className="signals-chip bg-surface3 inline-flex items-center gap-2 rounded border border-current/25 px-2.5 py-1.5 text-xs font-medium shadow-[0_0_14px_color-mix(in_oklch,currentColor_12%,transparent)]"
-                  key={label}
-                  style={signalStyle(label)}
+                  key={signal.key}
+                  style={signalStyle(signal.key)}
                 >
                   <span aria-hidden="true" className="size-1.5 rounded-full bg-current shadow-[0_0_7px_currentColor]" />
-                  {label}
+                  {signal.label}
                 </span>
               ))}
             </div>
@@ -278,11 +271,13 @@ export const SignalsEmptyState = ({
           </h2>
           <ul aria-label="Trace signal definitions" className="mt-4 grid gap-3 sm:grid-cols-2">
             {signalDefinitions.map(signal => (
-              <li className="px-1 py-2" key={signal.label}>
-                <h3 className="text-sm font-semibold" style={signalStyle(signal.label)}>
+              <li className="px-1 py-2" key={signal.key}>
+                <h3 className="text-sm font-semibold" style={signalStyle(signal.key)}>
                   {signal.label}
                 </h3>
-                <p className="text-neutral3 mt-1.5 text-xs leading-5">{signal.description}</p>
+                {signal.description ? (
+                  <p className="text-neutral3 mt-1.5 text-xs leading-5">{signal.description}</p>
+                ) : null}
               </li>
             ))}
           </ul>
