@@ -8,6 +8,8 @@ export { fastModePrompt } from './fast.js';
 
 import { buildBasePrompt } from '@mastra/core/coding-agent';
 import type { PromptContext as BasePromptContext } from '@mastra/core/coding-agent';
+import { loadSettings, resolveLspSetting } from '../../onboarding/settings.js';
+import { MC_TOOLS } from '../../tool-names.js';
 import { hasTavilyKey } from '../../tools/index.js';
 import { getLocalPlansRelativeDir } from '../../utils/plans.js';
 import { loadAgentInstructions, formatAgentInstructions, createGitRefInstructionReader } from './agent-instructions.js';
@@ -48,6 +50,10 @@ export function buildFullPrompt(ctx: PromptContext): string {
       if (policy === 'deny') deniedTools.add(name);
     }
   }
+
+  // LSP is opt-in — when it is off the tool is never registered, so its
+  // guidance must not be advertised either.
+  if (resolveLspSetting(loadSettings().lsp) === false) deniedTools.add(MC_TOOLS.LSP_INSPECT);
 
   // Build mode-aware tool guidance
   const factoryProjectId = typeof ctx.state?.factoryProjectId === 'string' ? ctx.state.factoryProjectId : undefined;
