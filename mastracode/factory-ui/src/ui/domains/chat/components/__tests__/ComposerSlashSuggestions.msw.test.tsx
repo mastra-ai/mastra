@@ -3,9 +3,26 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { renderWithProviders } from '../../../../../../e2e/ui/render';
-import { SLASH_COMMANDS } from '../../services/commands';
 import { Composer } from '../Composer';
 import { OverlayTestProviders, useOverlayControllerHandlers } from './overlay-test-utils';
+
+const COMMAND_NAMES = [
+  'model',
+  'goal',
+  'goal-clear',
+  'goal-pause',
+  'goal-resume',
+  'permissions',
+  'yolo',
+  'cost',
+  'think',
+  'om',
+  'settings',
+  'login',
+  'follow-up',
+  'abort',
+  'help',
+];
 
 function renderComposer() {
   return renderWithProviders(
@@ -33,8 +50,8 @@ describe('Composer slash-command suggestions', () => {
       const input = await findReadyInput();
       await user.type(input, '/');
 
-      for (const command of SLASH_COMMANDS) {
-        expect(await screen.findByRole('button', { name: new RegExp(`^/${command.name}\\s`) })).toBeInTheDocument();
+      for (const name of COMMAND_NAMES) {
+        expect(await screen.findByRole('button', { name: new RegExp(`^/${name}\\s`) })).toBeInTheDocument();
       }
     });
   });

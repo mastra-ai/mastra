@@ -71,7 +71,13 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const { busy, localUser, failLocalUser, reset, clearPending, pushNotice } = useChatTranscript();
   const { modes, activeModeId, isLoading: modesLoading, error: modesError, setMode } = useChatModes();
   const { activeModelId, isLoading: modelLoading, error: modelError } = useChatModels();
-  const { composerDraft: draft, composerInputRef: inputRef, setComposerDraft, runComposerCommand } = useChatCommands();
+  const {
+    commands,
+    composerDraft: draft,
+    composerInputRef: inputRef,
+    setComposerDraft,
+    runComposerCommand,
+  } = useChatCommands();
   const modeColorClass = getModeColorClass(activeModeId ?? modes[0]?.id);
 
   const hookArgs = {
@@ -98,7 +104,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   });
   const spotlightRef = useComposerSpotlight();
   const modeSwitchPendingRef = useRef(false);
-  const suggestions = planFeedback.pending ? [] : matchCommands(draft);
+  const suggestions = planFeedback.pending ? [] : matchCommands(commands, draft);
   const showSuggestions = suggestions.length > 0;
   const [activeSuggestion, setActiveSuggestion] = useState(0);
   const composerDisabled = createDraftSessionMutation.isPending || blocked || planFeedback.isSubmitting;
@@ -252,7 +258,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
       return;
     }
     if (onUserDraft && text.startsWith('/')) {
-      if (commandRequiresReadySession(text)) {
+      if (commandRequiresReadySession(commands, text)) {
         updateDraft(text);
         pushNotice('This command needs a session. Send a prompt to create one first.');
       } else {
@@ -269,7 +275,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
       }
       return;
     }
-    if (preparingThreadId && text.startsWith('/') && commandRequiresReadySession(text)) {
+    if (preparingThreadId && text.startsWith('/') && commandRequiresReadySession(commands, text)) {
       updateDraft(text);
       pushNotice('Commands run once the session is ready.');
       return;
