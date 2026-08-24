@@ -485,6 +485,9 @@ describe('AgentChannels', () => {
       const { agent, channels } = await createInitializedSlashChannels({ handlers: { onSlashCommand: false } });
       (channels.adapters.discord as any).isDM = vi.fn(() => true);
 
+      await processSlashCommand(channels);
+      expect(agent.sendMessage).not.toHaveBeenCalled();
+
       await (channels.sdk as any).processMessage(
         channels.adapters.discord,
         'discord:C1',
@@ -499,6 +502,17 @@ describe('AgentChannels', () => {
 
       expect(agent.sendMessage).toHaveBeenCalledWith(
         expect.objectContaining({ contents: 'hello from a direct message' }),
+        expect.anything(),
+      );
+    });
+
+    it('keeps slash handling enabled when mention handling is disabled', async () => {
+      const { agent, channels } = await createInitializedSlashChannels({ handlers: { onMention: false } });
+
+      await processSlashCommand(channels, {}, () => expect(agent.sendMessage).toHaveBeenCalledTimes(1));
+
+      expect(agent.sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ contents: '/ask hello' }),
         expect.anything(),
       );
     });
