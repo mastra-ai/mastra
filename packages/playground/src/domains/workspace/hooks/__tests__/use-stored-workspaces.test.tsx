@@ -6,6 +6,7 @@ import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { useStoredWorkspaces } from '../use-stored-workspaces';
+import { makeStoredWorkspace, storedWorkspacesPage } from './fixtures/stored-workspaces';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -27,13 +28,7 @@ describe('useStoredWorkspaces', () => {
     server.use(
       http.get(`${BASE_URL}/api/stored/workspaces`, ({ request }) => {
         receivedUrl = new URL(request.url);
-        return HttpResponse.json({
-          workspaces: [{ id: 'ws-1', name: 'WS', status: 'active', createdAt: '', updatedAt: '' }],
-          total: 1,
-          page: 2,
-          perPage: 10,
-          hasMore: false,
-        });
+        return HttpResponse.json(storedWorkspacesPage([makeStoredWorkspace({ name: 'WS' })], { page: 2, perPage: 10 }));
       }),
     );
 
@@ -53,7 +48,7 @@ describe('useStoredWorkspaces', () => {
     server.use(
       http.get(`${BASE_URL}/api/stored/workspaces`, () => {
         onFetch();
-        return HttpResponse.json({ workspaces: [], total: 0, page: 1, perPage: 50, hasMore: false });
+        return HttpResponse.json(storedWorkspacesPage([]));
       }),
     );
 
@@ -70,13 +65,14 @@ describe('useStoredWorkspaces', () => {
     server.use(
       http.get(`${BASE_URL}/api/stored/workspaces`, ({ request }) => {
         const page = new URL(request.url).searchParams.get('page');
-        return HttpResponse.json({
-          workspaces: [{ id: `ws-page-${page}`, name: `WS ${page}`, status: 'active', createdAt: '', updatedAt: '' }],
-          total: 2,
-          page: Number(page),
-          perPage: 1,
-          hasMore: page === '1',
-        });
+        return HttpResponse.json(
+          storedWorkspacesPage([makeStoredWorkspace({ id: `ws-page-${page}`, name: `WS ${page}` })], {
+            total: 2,
+            page: Number(page),
+            perPage: 1,
+            hasMore: page === '1',
+          }),
+        );
       }),
     );
     const sharedWrapper = wrapper();

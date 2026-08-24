@@ -3,6 +3,7 @@ import React from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
 import { describe, expect, it } from 'vitest';
 
+import { z } from 'zod';
 import type { AgentBuilderEditFormValues } from '../../schemas';
 import { SET_AGENT_WORKSPACE_ID_TOOL_NAME, useSetAgentWorkspaceIdTool } from '../use-set-agent-workspace-id-tool';
 
@@ -13,7 +14,7 @@ const availableWorkspaces = [
 
 /** Reads the `.describe()` text a tool exposes to the model for one input field. */
 const fieldDescription = (schema: unknown, field: string) =>
-  (schema as { shape: Record<string, { description?: string }> }).shape[field]?.description;
+  (schema as z.ZodObject<z.ZodRawShape>).shape[field]?.description;
 
 const runTool = async (tool: { execute?: (input: unknown) => Promise<unknown> }, input: unknown) => {
   let output: unknown;

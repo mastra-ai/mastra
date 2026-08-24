@@ -2,6 +2,7 @@ import { act, renderHook } from '@testing-library/react';
 import React from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
 import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
 
 import type { AgentBuilderEditFormValues } from '../../schemas';
 import {
@@ -11,7 +12,7 @@ import {
 
 /** Reads the `.describe()` text a tool exposes to the model for one input field. */
 const fieldDescription = (schema: unknown, field: string) =>
-  (schema as { shape: Record<string, { description?: string }> }).shape[field]?.description;
+  (schema as z.ZodObject<z.ZodRawShape>).shape[field]?.description;
 
 /**
  * Runs a tool inside `act` so the `setValue` re-render flushes before assertions.

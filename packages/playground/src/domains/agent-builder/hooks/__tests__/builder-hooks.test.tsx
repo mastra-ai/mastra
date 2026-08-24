@@ -1,6 +1,6 @@
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { PropsWithChildren } from 'react';
 import { MemoryRouter, useLocation, useNavigate } from 'react-router';
@@ -399,13 +399,53 @@ describe('useAutoScroll', () => {
   });
 });
 
+/**
+ * Drives the draft handlers through a real form and textarea, so the Enter
+ * key path is exercised end to end (`requestSubmit` really does reach the
+ * form's submit handler) rather than through hand-built event objects.
+ */
+const renderChatDraft = ({ withForm = true }: { withForm?: boolean } = {}) => {
+  const onSubmit = vi.fn();
+
+  const Harness = () => {
+    const draft = useChatDraft({ onSubmit });
+    const textarea = (
+      <textarea
+        data-testid="draft"
+        value={draft.draft}
+        onChange={event => draft.setDraft(event.target.value)}
+        onKeyDown={draft.handleKeyDown}
+      />
+    );
+
+    return withForm ? (
+      <form data-testid="form" onSubmit={draft.handleFormSubmit}>
+        {textarea}
+      </form>
+    ) : (
+      textarea
+    );
+  };
+
+  render(<Harness />);
+
+  const textarea = () => screen.getByTestId('draft') as HTMLTextAreaElement;
+  return {
+    onSubmit,
+    textarea,
+    type: (value: string) => fireEvent.change(textarea(), { target: { value } }),
+    /** `fireEvent` returns false when the handler called `preventDefault`. */
+    pressKey: (init: Partial<KeyboardEventInit> & { key: string }) => !fireEvent.keyDown(textarea(), init),
+    submit: () => !fireEvent.submit(screen.getByTestId('form')),
+  };
+};
+
 describe('useChatDraft', () => {
   describe('when the draft is blank', () => {
     it('does not submit', () => {
-      const onSubmit = vi.fn();
-      const { result } = renderHook(() => useChatDraft({ onSubmit }));
+      const { submit, onSubmit } = renderChatDraft();
 
-      act(() => result.current.handleFormSubmit({ preventDefault: vi.fn() } as any));
+      submit();
 
       expect(onSubmit).not.toHaveBeenCalled();
     });
@@ -413,143 +453,99 @@ describe('useChatDraft', () => {
 
   describe('when the draft has surrounding whitespace', () => {
     it('submits the trimmed value and clears the draft', () => {
-      const onSubmit = vi.fn();
-      const { result } = renderHook(() => useChatDraft({ onSubmit }));
+      const { type, submit, onSubmit, textarea } = renderChatDraft();
 
-      act(() => result.current.setDraft('  hello  '));
-      act(() => result.current.handleFormSubmit({ preventDefault: vi.fn() } as any));
+      type('  hello  ');
+      submit();
 
       expect(onSubmit).toHaveBeenCalledWith('hello');
-      expect(result.current.draft).toBe('');
+      expect(textarea().value).toBe('');
+    });
+  });
+
+  describe('when the draft is only whitespace', () => {
+    it('does not submit, and leaves the draft alone', () => {
+      const { type, submit, onSubmit, textarea } = renderChatDraft();
+
+      type('   ');
+      submit();
+
+      expect(onSubmit).not.toHaveBeenCalled();
+      expect(textarea().value).toBe('   ');
     });
   });
 
   describe('when Enter is pressed without Shift', () => {
-    it('requests form submission', () => {
-      const { result } = renderHook(() => useChatDraft({ onSubmit: vi.fn() }));
-      const requestSubmit = vi.fn();
+    it('submits the draft through the form', () => {
+      const { type, pressKey, onSubmit } = renderChatDraft();
 
-      act(() => result.current.setDraft('next'));
-      result.current.handleKeyDown({
-        key: 'Enter',
-        shiftKey: false,
-        nativeEvent: { isComposing: false },
-        preventDefault: vi.fn(),
-        currentTarget: { form: { requestSubmit } },
-      } as any);
+      type('next');
+      const prevented = pressKey({ key: 'Enter', shiftKey: false });
 
-      expect(requestSubmit).toHaveBeenCalled();
+      expect(prevented).toBe(true);
+      expect(onSubmit).toHaveBeenCalledWith('next');
     });
   });
 
   describe('when Enter is pressed with Shift held', () => {
-    it('does not request form submission', () => {
-      const { result } = renderHook(() => useChatDraft({ onSubmit: vi.fn() }));
-      const requestSubmit = vi.fn();
+    it('lets the newline through instead of submitting', () => {
+      const { type, pressKey, onSubmit } = renderChatDraft();
 
-      act(() => result.current.setDraft('next'));
-      result.current.handleKeyDown({
-        key: 'Enter',
-        shiftKey: true,
-        nativeEvent: { isComposing: false },
-        preventDefault: vi.fn(),
-        currentTarget: { form: { requestSubmit } },
-      } as any);
+      type('next');
+      const prevented = pressKey({ key: 'Enter', shiftKey: true });
 
-      expect(requestSubmit).not.toHaveBeenCalled();
-    });
-
-    it('lets the newline through', () => {
-      const { result } = renderHook(() => useChatDraft({ onSubmit: vi.fn() }));
-      const preventDefault = vi.fn();
-
-      result.current.handleKeyDown({
-        key: 'Enter',
-        shiftKey: true,
-        nativeEvent: { isComposing: false },
-        preventDefault,
-        currentTarget: { form: { requestSubmit: vi.fn() } },
-      } as any);
-
-      expect(preventDefault).not.toHaveBeenCalled();
+      expect(prevented).toBe(false);
+      expect(onSubmit).not.toHaveBeenCalled();
     });
   });
 
   describe('when Enter is pressed while an IME composition is active', () => {
-    it('does not request form submission', () => {
-      const { result } = renderHook(() => useChatDraft({ onSubmit: vi.fn() }));
-      const requestSubmit = vi.fn();
-      const preventDefault = vi.fn();
+    it('lets the composition finish instead of submitting', () => {
+      const { type, pressKey, onSubmit } = renderChatDraft();
 
-      act(() => result.current.setDraft('next'));
-      result.current.handleKeyDown({
-        key: 'Enter',
-        shiftKey: false,
-        nativeEvent: { isComposing: true },
-        preventDefault,
-        currentTarget: { form: { requestSubmit } },
-      } as any);
+      type('next');
+      const prevented = pressKey({ key: 'Enter', shiftKey: false, isComposing: true });
 
-      expect(requestSubmit).not.toHaveBeenCalled();
-      expect(preventDefault).not.toHaveBeenCalled();
+      expect(prevented).toBe(false);
+      expect(onSubmit).not.toHaveBeenCalled();
     });
   });
 
   describe('when a key other than Enter is pressed', () => {
     it('lets it through untouched', () => {
-      const { result } = renderHook(() => useChatDraft({ onSubmit: vi.fn() }));
-      const requestSubmit = vi.fn();
-      const preventDefault = vi.fn();
+      const { type, pressKey, onSubmit } = renderChatDraft();
 
-      result.current.handleKeyDown({
-        key: 'a',
-        shiftKey: false,
-        nativeEvent: { isComposing: false },
-        preventDefault,
-        currentTarget: { form: { requestSubmit } },
-      } as any);
+      type('next');
+      const prevented = pressKey({ key: 'a', shiftKey: false });
 
-      expect(requestSubmit).not.toHaveBeenCalled();
-      expect(preventDefault).not.toHaveBeenCalled();
+      expect(prevented).toBe(false);
+      expect(onSubmit).not.toHaveBeenCalled();
     });
   });
 
   describe('when Enter is pressed on a textarea outside any form', () => {
     it('swallows the newline without throwing', () => {
-      const { result } = renderHook(() => useChatDraft({ onSubmit: vi.fn() }));
-      const preventDefault = vi.fn();
+      const { type, pressKey } = renderChatDraft({ withForm: false });
 
-      expect(() =>
-        result.current.handleKeyDown({
-          key: 'Enter',
-          shiftKey: false,
-          nativeEvent: { isComposing: false },
-          preventDefault,
-          currentTarget: { form: null },
-        } as any),
-      ).not.toThrow();
-      expect(preventDefault).toHaveBeenCalled();
+      type('next');
+
+      expect(() => pressKey({ key: 'Enter', shiftKey: false })).not.toThrow();
     });
   });
 
   describe('when the draft is submitted', () => {
     it('stops the browser from navigating away', () => {
-      const preventDefault = vi.fn();
-      const { result } = renderHook(() => useChatDraft({ onSubmit: vi.fn() }));
+      const { type, submit } = renderChatDraft();
 
-      act(() => result.current.setDraft('hello'));
-      act(() => result.current.handleFormSubmit({ preventDefault } as any));
+      type('hello');
 
-      expect(preventDefault).toHaveBeenCalled();
+      expect(submit()).toBe(true);
     });
 
     it('stops the browser from navigating away even when the draft is blank', () => {
-      const preventDefault = vi.fn();
-      const { result } = renderHook(() => useChatDraft({ onSubmit: vi.fn() }));
+      const { submit } = renderChatDraft();
 
-      act(() => result.current.handleFormSubmit({ preventDefault } as any));
-
-      expect(preventDefault).toHaveBeenCalled();
+      expect(submit()).toBe(true);
     });
   });
 });

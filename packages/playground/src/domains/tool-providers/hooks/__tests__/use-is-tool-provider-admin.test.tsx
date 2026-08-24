@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 
 import { useIsToolProviderAdmin } from '../use-is-tool-provider-admin';
 
+import type { CurrentUser } from '@/domains/auth/types';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -27,8 +28,11 @@ const makeWrapper = () => {
 const waitForAuthSettled = (queryClient: QueryClient) =>
   waitFor(() => expect(queryClient.getQueryState(['auth', 'me'])?.status).toBe('success'));
 
+/** The caller `useCurrentUser` resolves, typed off the studio's own contract. */
 const withPermissions = (permissions: string[]) =>
-  http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'tester', permissions }));
+  http.get(`${BASE_URL}/api/auth/me`, () =>
+    HttpResponse.json({ id: 'tester', permissions } satisfies NonNullable<CurrentUser>),
+  );
 
 // Mirrors the server-side `hasAdminBypass(requestContext, 'tool-providers')`
 // in packages/server/src/server/handlers/authorship.ts.

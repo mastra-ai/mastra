@@ -1,3 +1,5 @@
+import type { DatasetVersionResponse } from '@mastra/client-js';
+import type { PaginationInfo } from '@mastra/core/storage';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
@@ -24,7 +26,7 @@ const createWrapper = () => {
 
 const settle = () => new Promise(resolve => setTimeout(resolve, 50));
 
-const versionRow = (version: number) => ({
+const versionRow = (version: number): DatasetVersionResponse => ({
   id: `version-${version}`,
   datasetId: 'dataset-1',
   version,
@@ -32,7 +34,11 @@ const versionRow = (version: number) => ({
 });
 
 /** Ten rows per page, newest first — the shape the versions endpoint returns. */
-const pageOf = (versions: number[], hasMore: boolean, page: number) => ({
+const pageOf = (
+  versions: number[],
+  hasMore: boolean,
+  page: number,
+): { versions: DatasetVersionResponse[]; pagination: PaginationInfo } => ({
   versions: versions.map(versionRow),
   pagination: { total: 20, page, perPage: 10, hasMore },
 });
