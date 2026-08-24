@@ -105,12 +105,44 @@ For the step-level `scorers` API, see the [Step class reference](/reference/work
 
 **Asynchronous execution**: Live evaluations run in the background without blocking your agent responses or workflow execution. Your AI systems remain responsive while live evaluations monitor them.
 
-**Sampling control**: The `sampling.rate` parameter (0-1) controls what percentage of outputs get scored:
+**Sampling control**: The `sampling.rate` parameter (0-1) controls what fraction of outputs get scored:
 
 - `1.0`: Score every single response (100%)
 - `0.5`: Score half of all responses (50%)
 - `0.1`: Score 10% of responses
 - `0.0`: Disable scoring
+
+Sampling is deterministic per trace: the decision is derived from the trace ID, not drawn at random. In practice:
+
+- Scorers configured at the same rate score the same traces, so their scores are comparable on shared traffic.
+- Re-running the same trace produces the same sampling decision, so sampled coverage is reproducible.
+
+When a run has no trace (observability not configured), the decision is derived from the run ID instead. If [trace sampling](../observability/tracing/overview) declined the trace, scorers skip that run entirely, so scores aren't created for traces that were never stored.
+
+**Eligibility filters**: The optional `filter` parameter restricts which runs a scorer is eligible for, using a declarative predicate over the run's context. Filters are evaluated before sampling, so `sampling.rate` applies only to runs that match the filter:
+
+```typescript title="src/mastra/agents/evaluated-agent.ts"
+export const myAgent = new Agent({
+  // ...
+  scorers: {
+    relevancy: {
+      scorer: createAnswerRelevancyScorer({ model: '__GATEWAY_OPENAI_MODEL_MINI__' }),
+      filter: {
+        op: 'eq',
+        left: { path: 'requestContext.plan' },
+        right: { literal: 'enterprise' },
+      },
+      sampling: { type: 'ratio', rate: 0.1 },
+    },
+  },
+})
+```
+
+This scores 10% of enterprise-plan traffic and none of the rest. To score different segments at different rates, bind the same scorer twice with complementary filters.
+
+Predicates can reference `requestContext.*`, `entity.*`, `entityType`, `source`, `threadId`, `resourceId`, and `projectId`. They support comparisons (`eq`, `ne`, `lt`, `lte`, `gt`, `gte`), membership (`in`, `notIn`), existence (`exists`, `notExists`), truthiness (`truthy`, `falsy`), and boolean composition (`and`, `or`, `not`). A filter that references an unknown root fails at agent construction rather than silently skipping scoring at runtime. Filters are plain JSON, so they're unaffected by durable agent state serialization.
+
+Eligibility filters decide _whether a scorer runs_; to filter _which messages a scorer sees_ once it runs, use [`filterRun()`](/reference/evals/filter-run).
 
 **Automatic storage**: All scoring results are automatically stored in the `mastra_scorers` table in your configured database, allowing you to analyze performance trends over time.
 

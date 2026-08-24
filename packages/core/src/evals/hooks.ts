@@ -5,6 +5,7 @@ import type { Mastra } from '../mastra';
 import type { ObservabilityContext } from '../observability';
 import { MASTRA_AUTH_TOKEN_KEY } from '../request-context';
 import type { MastraScorerEntry } from './base';
+import { evaluateScoringPredicate } from './predicate';
 import type { ScoringEntityType, ScoringHookInput, ScoringSource } from './types';
 
 /**
@@ -61,34 +62,6 @@ export function runScorer({
     return;
   }
 
-  let shouldExecute = false;
-
-  if (!scorerObject?.sampling || scorerObject?.sampling?.type === 'none') {
-    shouldExecute = true;
-  }
-
-  if (scorerObject?.sampling?.type) {
-    switch (scorerObject?.sampling?.type) {
-      case 'ratio': {
-        // Key on the trace so that every scorer at a given rate selects the same traces,
-        // making scores on sampled traffic comparable across scorers. Falls back to runId
-        // when untraced so the decision stays reproducible without observability configured.
-        // Safe to read traceId here only because declined spans returned above — a NoOpSpan's
-        // traceId is a shared constant and would collapse the whole declined population into
-        // one all-or-nothing decision.
-        const samplingKey = currentSpan?.traceId ?? runId;
-        shouldExecute = hashToUnitInterval(samplingKey) < scorerObject?.sampling?.rate;
-        break;
-      }
-      default:
-        shouldExecute = true;
-    }
-  }
-
-  if (!shouldExecute) {
-    return;
-  }
-
   // Extract all primitive (string | number | boolean) values from requestContext,
   // flattening nested objects so scorers can access any key regardless of depth.
   // Non-primitive values (objects with circular refs, buffers, functions, env vars)
@@ -116,6 +89,66 @@ export function runScorer({
       }
     };
     flatten(requestContext as Record<string, unknown>);
+  }
+
+  // Eligibility filter runs before sampling (filter → sample), so the sampling
+  // rate applies to qualifying traffic only. It evaluates against the same
+  // flattened requestContext that gets persisted on score rows, so a filter is
+  // answerable later against stored records. Fail closed: an invalid filter
+  // skips scoring rather than scoring everything.
+  if (scorerObject?.filter) {
+    let qualifies = false;
+    try {
+      qualifies = evaluateScoringPredicate(scorerObject.filter, {
+        requestContext: safeContext,
+        entity,
+        entityType,
+        source,
+        threadId,
+        resourceId,
+        projectId,
+      });
+    } catch (error) {
+      mastra?.getLogger?.()?.warn?.('Scoring filter evaluation failed; skipping scoring', { scorerId, runId, error });
+    }
+    if (!qualifies) {
+      return;
+    }
+  }
+
+  let shouldExecute = false;
+
+  if (!scorerObject?.sampling || scorerObject?.sampling?.type === 'none') {
+    shouldExecute = true;
+  }
+
+  if (scorerObject?.sampling?.type) {
+    switch (scorerObject?.sampling?.type) {
+      case 'ratio': {
+        // Key on the trace so that every scorer at a given rate selects the same traces,
+        // making scores on sampled traffic comparable across scorers. Falls back to runId
+        // when untraced so the decision stays reproducible without observability configured.
+        // Safe to read traceId here only because declined spans returned above — a NoOpSpan's
+        // traceId is a shared constant and would collapse the whole declined population into
+        // one all-or-nothing decision.
+        const samplingKey = currentSpan?.traceId ?? runId;
+        shouldExecute = hashToUnitInterval(samplingKey) < scorerObject?.sampling?.rate;
+        break;
+      }
+      case 'none':
+        shouldExecute = true;
+        break;
+      default:
+        // Fail closed. An unrecognized sampling type most likely means config
+        // written by a newer version (or a serialization round-trip that
+        // dropped fields) — scoring 100% of traffic on bad config is the
+        // wrong surprise.
+        shouldExecute = false;
+    }
+  }
+
+  if (!shouldExecute) {
+    return;
   }
 
   const payload: ScoringHookInput = {

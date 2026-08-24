@@ -108,6 +108,7 @@ function BoardContent({
   const review = kind === 'review';
   const stages = boardStages(kind);
   const [searchParams, setSearchParams] = useSearchParams();
+  const targetItemId = searchParams.get('item') || undefined;
   const selectedParticipantId = searchParams.get('teammate') || undefined;
   const selectedRelevanceTypes = boardRelevanceFromQuery(searchParams.get('relevance'), kind);
   const selectedLabels = boardLabelsFromQuery(searchParams.getAll('label'));
@@ -143,6 +144,7 @@ function BoardContent({
   );
   const setParticipant = (participantId: string | undefined) => {
     const next = new URLSearchParams(searchParams);
+    next.delete('item');
     if (participantId) next.set('teammate', participantId);
     else {
       next.delete('teammate');
@@ -155,6 +157,7 @@ function BoardContent({
     if (selected) nextTypes.add(type);
     else nextTypes.delete(type);
     const next = new URLSearchParams(searchParams);
+    next.delete('item');
     const value = boardRelevanceQueryValue(nextTypes, kind);
     if (value) next.set('relevance', value);
     else next.delete('relevance');
@@ -165,6 +168,7 @@ function BoardContent({
     if (selected) nextLabels.add(label);
     else nextLabels.delete(label);
     const next = new URLSearchParams(searchParams);
+    next.delete('item');
     next.delete('label');
     for (const value of boardLabelsQueryValues(nextLabels)) next.append('label', value);
     setSearchParams(next, { replace: true });
@@ -174,39 +178,21 @@ function BoardContent({
     next.delete('teammate');
     next.delete('relevance');
     next.delete('label');
+    next.delete('item');
     setSearchParams(next, { replace: true });
   };
-  const loadingStages = boardLoadingStages({
-    stages,
-    itemsPending: items.isPending,
-    intakePending: intake.isPending,
-    triagePending: intake.isTriagePending,
-  });
-  const scroll = useBoardScroll({
-    boardKey: `${factoryProjectId}:${kind}`,
-    settled: loadingStages.size === 0,
-    stages,
-    workItems: items.visible.filter(item => {
-      const liveCandidate = item.sourceKey ? participantCandidateBySourceKey.get(item.sourceKey) : undefined;
-      return (
-        workItemMatchesRelevance(item, activityPage, selectedParticipantId, selectedRelevanceTypes, liveCandidate) &&
-        workItemMatchesLabels(item, selectedLabels, liveCandidate)
-      );
-    }),
-    candidates: filteredCandidates,
-  });
-
-  if (items.error !== undefined) {
-    return (
-      <Notice variant="destructive">
-        {items.error instanceof Error ? items.error.message : 'Failed to load the board'}
-      </Notice>
-    );
-  }
-
+  const setIntakeSource = (source: IntakeSource) => {
+    if (targetItemId) {
+      const next = new URLSearchParams(searchParams);
+      next.delete('item');
+      setSearchParams(next, { replace: true });
+    }
+    intake.select(source);
+  };
   const unfilteredWorkItemsForStage = (stage: (typeof stages)[number]['id']) =>
     items.visible.filter(item => {
       if (!itemAppearsInStage(item, stage, stages)) return false;
+      if (item.id === targetItemId) return true;
       if (stage !== 'intake' || review || item.source === 'manual') return true;
       if (intake.active === 'github') return item.source === 'github-issue';
       if (intake.active === 'linear') return item.source === 'linear-issue';
@@ -220,8 +206,34 @@ function BoardContent({
         workItemMatchesLabels(item, selectedLabels, liveCandidate)
       );
     });
+  const boardWorkItems = stages.flatMap(stage => workItemsForStage(stage.id));
+  const targetReady = !items.isPending && (!targetItemId || boardWorkItems.some(item => item.id === targetItemId));
+  const loadingStages = boardLoadingStages({
+    stages,
+    itemsPending: items.isPending,
+    intakePending: intake.isPending,
+    triagePending: intake.isTriagePending,
+  });
+  const scroll = useBoardScroll({
+    boardKey: `${factoryProjectId}:${kind}`,
+    settled: loadingStages.size === 0,
+    stages,
+    targetItemId,
+    targetReady,
+    workItems: boardWorkItems,
+    candidates: filteredCandidates,
+  });
+
+  if (items.error !== undefined) {
+    return (
+      <Notice variant="destructive">
+        {items.error instanceof Error ? items.error.message : 'Failed to load the board'}
+      </Notice>
+    );
+  }
+
   const mutationError = runs.error ?? decisions.error ?? items.mutationError;
-  const visibleWorkItems = new Set(stages.flatMap(stage => workItemsForStage(stage.id)));
+  const visibleWorkItems = new Set(boardWorkItems);
   const unfilteredVisibleWorkItems = new Set(stages.flatMap(stage => unfilteredWorkItemsForStage(stage.id)));
   const totalTaskCount = visibleWorkItems.size + filteredCandidates.length;
   const unfilteredTaskCount = unfilteredVisibleWorkItems.size + intake.candidates.length;
@@ -235,7 +247,7 @@ function BoardContent({
           {mutationError instanceof Error ? mutationError.message : 'Board action failed'}
         </Notice>
       )}
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex flex-col items-stretch gap-3 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between lg:gap-2">
         <BoardRelevanceFilters
           kind={kind}
           participants={participants}
@@ -249,18 +261,20 @@ function BoardContent({
           onLabelChange={setLabel}
           onReset={resetFilters}
         />
-        <BoardAutoRunToggle factoryProjectId={factoryProjectId} enabled={factory.autoRunEnabled ?? false} />
+        <div className="w-full lg:w-auto [&>div]:w-full [&>div]:justify-between lg:[&>div]:w-auto lg:[&>div]:justify-start">
+          <BoardAutoRunToggle factoryProjectId={factoryProjectId} enabled={factory.autoRunEnabled ?? false} />
+        </div>
       </div>
       <ScrollArea
         viewportRef={scroll.containerRef}
         orientation="horizontal"
         className="min-h-0 flex-1 [&_[data-hovering]:not([data-scrolling])]:opacity-0"
-        viewPortClassName="pb-2 *:h-full"
+        viewPortClassName="overscroll-x-contain pb-2 *:h-full [container-type:inline-size] lg:overscroll-x-auto"
         aria-label="Board columns"
         onPointerDown={scroll.claimForUser}
         onWheel={scroll.claimForUser}
       >
-        <div className="flex h-full min-h-0 gap-3">
+        <div className="flex h-full min-h-0 gap-2 px-3 lg:gap-3 lg:px-0">
           {stages.map(stage => {
             const loading = loadingStages.has(stage.id);
             const stageWorkItems = workItemsForStage(stage.id);
@@ -300,7 +314,11 @@ function BoardContent({
                 }
                 headerExtras={
                   stage.id === 'intake' && intake.showSwitch ? (
-                    <IntakeSourceSwitch available={intake.available} active={intake.active} onSelect={intake.select} />
+                    <IntakeSourceSwitch
+                      available={intake.available}
+                      active={intake.active}
+                      onSelect={setIntakeSource}
+                    />
                   ) : undefined
                 }
               >
@@ -316,6 +334,7 @@ function BoardContent({
                   <WorkItemCard
                     key={`${item.id}:${stage.id}`}
                     item={item}
+                    highlighted={targetItemId === item.id}
                     columnStage={stage.id}
                     allItems={items.all}
                     activityPage={activityPage}

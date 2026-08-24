@@ -15,7 +15,7 @@ import type { CallToolResult } from '@modelcontextprotocol/server';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 
-import { InternalMastraMCPClient } from './client.js';
+import { InternalMastraMCPClient, getMcpCallToolContent, getMcpCallToolMeta } from './client.js';
 
 describe('InternalMastraMCPClient - server instructions', () => {
   afterEach(() => {
@@ -963,6 +963,79 @@ describe('MastraMCPClient - outputSchema with structuredContent', () => {
       type: 'json',
       value: fullResult,
     });
+  });
+
+  it('should preserve result _meta (with serverId stamped into ui) on structured results', async () => {
+    const sdkClient = (client as any).client as Client;
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'ui_tool',
+          description: 'Returns an MCP App resource',
+          inputSchema: { type: 'object' as const, properties: {} },
+          outputSchema: {
+            type: 'object' as const,
+            properties: { count: { type: 'number' } },
+          },
+        },
+      ],
+    });
+
+    const structured = { count: 2 };
+    const content = [{ type: 'text', text: 'Found 2 items' }];
+
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      structuredContent: structured,
+      content,
+      _meta: { ui: { resourceUri: 'ui://ui_tool/app.html' }, traceId: 'trace-9' },
+      isError: false,
+    });
+
+    const tools = await client.tools();
+    const result = await tools['ui_tool'].execute?.({});
+
+    // execute() return shape is unchanged: enumerable keys are only the structured output
+    expect(result).toEqual(structured);
+    expect(Object.keys(result)).toEqual(['count']);
+    expect(JSON.stringify(result)).toBe(JSON.stringify(structured));
+
+    // Hidden channels expose the rest of the CallToolResult envelope
+    expect(getMcpCallToolContent(result)).toEqual(content);
+    expect(getMcpCallToolMeta(result)).toEqual({
+      ui: { resourceUri: 'ui://ui_tool/app.html', serverId: 'structured-content-test-client' },
+      traceId: 'trace-9',
+    });
+  });
+
+  it('should return undefined from getMcpCallToolMeta when the result has no _meta', async () => {
+    const sdkClient = (client as any).client as Client;
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'plain_tool',
+          description: 'No _meta',
+          inputSchema: { type: 'object' as const, properties: {} },
+          outputSchema: {
+            type: 'object' as const,
+            properties: { count: { type: 'number' } },
+          },
+        },
+      ],
+    });
+
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      structuredContent: { count: 0 },
+      content: [{ type: 'text', text: 'none' }],
+      isError: false,
+    });
+
+    const tools = await client.tools();
+    const result = await tools['plain_tool'].execute?.({});
+
+    expect(getMcpCallToolMeta(result)).toBeUndefined();
+    expect(getMcpCallToolContent(result)).toEqual([{ type: 'text', text: 'none' }]);
   });
 
   it('should use JSON content text in toModelOutput when the server mirrors structuredContent in content', async () => {

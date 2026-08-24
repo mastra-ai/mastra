@@ -69,10 +69,11 @@ describe('runScorer requestContext flattening', () => {
   });
 });
 
-function makeScorer(sampling?: MastraScorerEntry['sampling']): MastraScorerEntry {
+function makeScorer(sampling?: MastraScorerEntry['sampling'], filter?: MastraScorerEntry['filter']): MastraScorerEntry {
   return {
     scorer: { id: 'scorer-1', name: 'scorer-1', description: 'test scorer' },
     sampling,
+    filter,
   } as unknown as MastraScorerEntry;
 }
 
@@ -87,20 +88,24 @@ function makeObservabilityContext(span?: { isValid: boolean; traceId: string }):
 
 function invoke({
   sampling,
+  filter,
   span,
   runId = 'run-1',
+  requestContext = {},
 }: {
   sampling?: MastraScorerEntry['sampling'];
+  filter?: MastraScorerEntry['filter'];
   span?: { isValid: boolean; traceId: string };
   runId?: string;
+  requestContext?: Record<string, any>;
 }) {
   runScorer({
     runId,
     scorerId: 'scorer-1',
-    scorerObject: makeScorer(sampling),
+    scorerObject: makeScorer(sampling, filter),
     input: {},
     output: {},
-    requestContext: {},
+    requestContext,
     entity: {},
     structuredOutput: false,
     source: 'LIVE',
@@ -250,6 +255,51 @@ describe('runScorer sampling', () => {
         traceIds.every(traceId => didScore({ sampling: { type: 'ratio', rate: 1 }, span: validSpan(traceId) })),
       ).toBe(true);
     });
+  });
+});
+
+describe('runScorer eligibility filter', () => {
+  const matchAll = { op: 'exists', path: 'source' } as const;
+  const matchNone = { op: 'eq', left: { path: 'requestContext.tier' }, right: { literal: 'pro' } } as const;
+
+  it('scores when the filter matches', () => {
+    expect(didScore({ filter: matchAll })).toBe(true);
+    expect(didScore({ filter: matchNone, requestContext: { tier: 'pro' } })).toBe(true);
+  });
+
+  it('skips scoring when the filter does not match (fail closed)', () => {
+    expect(didScore({ filter: matchNone })).toBe(false);
+    expect(didScore({ filter: matchNone, requestContext: { tier: 'free' } })).toBe(false);
+  });
+
+  it('evaluates the filter against the flattened requestContext view', () => {
+    // Nested `user.tier` flattens to the single key "user.tier" before persistence;
+    // the filter must see the same view so it is answerable against stored rows.
+    expect(
+      didScore({
+        filter: { op: 'eq', left: { path: 'requestContext.user.tier' }, right: { literal: 'pro' } },
+        requestContext: { user: { tier: 'pro' } },
+      }),
+    ).toBe(true);
+  });
+
+  it('applies filter before sampling: non-qualifying traffic never reaches the rate', () => {
+    // rate 1 would score everything — the filter must be the reason it skips.
+    expect(didScore({ filter: matchNone, sampling: { type: 'ratio', rate: 1 } })).toBe(false);
+    // Qualifying traffic still respects the rate.
+    expect(didScore({ filter: matchAll, requestContext: {}, sampling: { type: 'ratio', rate: 0 } })).toBe(false);
+  });
+
+  it('survives a JSON round-trip (durable serialization)', () => {
+    const roundTripped = JSON.parse(JSON.stringify(matchNone));
+    expect(didScore({ filter: roundTripped, requestContext: { tier: 'pro' } })).toBe(true);
+    expect(didScore({ filter: roundTripped, requestContext: { tier: 'free' } })).toBe(false);
+  });
+});
+
+describe('runScorer unrecognized sampling type', () => {
+  it('fails closed instead of scoring 100% of traffic', () => {
+    expect(didScore({ sampling: { type: 'mystery' } as any })).toBe(false);
   });
 });
 

@@ -1,5 +1,6 @@
 {
   "attachment": [
+    "deepseek-v4-flash-vision-exp",
     "gpt-5.6-luna",
     "grok-4.5",
     "kimi-k2.5",
@@ -19,6 +20,7 @@
   ],
   "temperature": [
     "deepseek-v4-flash",
+    "deepseek-v4-flash-vision-exp",
     "deepseek-v4-pro",
     "glm-5",
     "glm-5.1",
@@ -28,6 +30,7 @@
     "hy3",
     "kimi-k2.5",
     "kimi-k2.6",
+    "longcat-2.0",
     "mimo-v2-omni",
     "mimo-v2-pro",
     "mimo-v2.5",
@@ -45,6 +48,7 @@
   ],
   "structuredOutput": [
     "deepseek-v4-flash",
+    "deepseek-v4-flash-vision-exp",
     "deepseek-v4-pro",
     "glm-5.2",
     "glm-5.3",

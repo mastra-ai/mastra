@@ -7,6 +7,8 @@ import { TabList } from '../../../ds/components/Tabs/tabs-list';
 import { Tabs } from '../../../ds/components/Tabs/tabs-root';
 import { Tab } from '../../../ds/components/Tabs/tabs-tab';
 import type { LatencyPoint } from '../hooks/use-latency-metrics';
+import { averageLatency, isDrillablePoint, isLatencyTab } from './latency-card-view.utils';
+import type { LatencyTab } from './latency-card-view.utils';
 import { CHART_COLORS } from './metrics-utils';
 
 const latencySeries = [
@@ -15,7 +17,7 @@ const latencySeries = [
     label: 'p50',
     color: CHART_COLORS.blue,
     aggregate: (data: Record<string, unknown>[]) => ({
-      value: data.length > 0 ? `${Math.round(data.reduce((s, d) => s + (d.p50 as number), 0) / data.length)}` : '0',
+      value: averageLatency(data, 'p50'),
       suffix: 'avg ms',
     }),
   },
@@ -24,17 +26,13 @@ const latencySeries = [
     label: 'p95',
     color: CHART_COLORS.yellow,
     aggregate: (data: Record<string, unknown>[]) => ({
-      value: data.length > 0 ? `${Math.round(data.reduce((s, d) => s + (d.p95 as number), 0) / data.length)}` : '0',
+      value: averageLatency(data, 'p95'),
       suffix: 'avg ms',
     }),
   },
 ];
 
-export type LatencyTab = 'agents' | 'workflows' | 'tools';
-
-function isLatencyTab(value: string): value is LatencyTab {
-  return value === 'agents' || value === 'workflows' || value === 'tools';
-}
+export type { LatencyTab };
 
 function LatencyChart({ data, onPointClick }: { data: LatencyPoint[]; onPointClick?: (point: LatencyPoint) => void }) {
   if (data.length === 0) {
@@ -44,14 +42,7 @@ function LatencyChart({ data, onPointClick }: { data: LatencyPoint[]; onPointCli
     <MetricsLineChart
       data={data}
       series={latencySeries}
-      onPointClick={
-        onPointClick
-          ? point => {
-              const p = point as LatencyPoint;
-              if (typeof p?.tsMs === 'number' && Number.isFinite(p.tsMs)) onPointClick(p);
-            }
-          : undefined
-      }
+      onPointClick={onPointClick ? point => (isDrillablePoint(point) ? onPointClick(point) : undefined) : undefined}
     />
   );
 }
