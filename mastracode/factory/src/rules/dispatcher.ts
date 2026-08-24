@@ -698,7 +698,7 @@ export class FactoryDecisionDispatcher {
     decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>,
     causalChain: FactoryRuleCausalEntry[],
   ): Promise<void> {
-    const result = await this.#storage.upsert({
+    let result = await this.#storage.upsert({
       orgId: record.orgId,
       userId: 'factory-rule-dispatcher',
       factoryProjectId: record.factoryProjectId,
@@ -712,6 +712,15 @@ export class FactoryDecisionDispatcher {
       },
       reuseMode: 'preserve',
     });
+    if (!result.item.parentWorkItemId && record.workItemId) {
+      const item = await this.#storage.setParentWorkItemIfMissing({
+        orgId: record.orgId,
+        id: result.item.id,
+        userId: 'factory-rule-dispatcher',
+        parentWorkItemId: record.workItemId,
+      });
+      if (item) result = { ...result, item };
+    }
     const materializedByDecision = result.item.metadata?.[FACTORY_RULE_MATERIALIZATION_KEY] === record.idempotencyKey;
     if (!materializedByDecision && (decision.stage === 'intake' || !result.item.stages.includes('intake'))) return;
 

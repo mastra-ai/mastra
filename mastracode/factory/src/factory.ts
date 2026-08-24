@@ -611,11 +611,12 @@ export class MastraFactory {
           ...(transitionService ? { transitionService } : {}),
           ...(githubIntegration
             ? {
-                recordPullRequestProvenance: (input: Parameters<typeof recordFactoryPullRequestProvenance>[3]) =>
+                recordPullRequestProvenance: (input: Parameters<typeof recordFactoryPullRequestProvenance>[4]) =>
                   recordFactoryPullRequestProvenance(
                     githubIntegration,
                     sourceControlStorage.forIntegration('github'),
                     integrationStorage.forIntegration('github'),
+                    workItemsStorage,
                     input,
                   ),
               }
