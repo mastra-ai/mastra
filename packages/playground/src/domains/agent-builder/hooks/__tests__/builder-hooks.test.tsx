@@ -458,6 +458,99 @@ describe('useChatDraft', () => {
 
       expect(requestSubmit).not.toHaveBeenCalled();
     });
+
+    it('lets the newline through', () => {
+      const { result } = renderHook(() => useChatDraft({ onSubmit: vi.fn() }));
+      const preventDefault = vi.fn();
+
+      result.current.handleKeyDown({
+        key: 'Enter',
+        shiftKey: true,
+        nativeEvent: { isComposing: false },
+        preventDefault,
+        currentTarget: { form: { requestSubmit: vi.fn() } },
+      } as any);
+
+      expect(preventDefault).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when Enter is pressed while an IME composition is active', () => {
+    it('does not request form submission', () => {
+      const { result } = renderHook(() => useChatDraft({ onSubmit: vi.fn() }));
+      const requestSubmit = vi.fn();
+      const preventDefault = vi.fn();
+
+      act(() => result.current.setDraft('next'));
+      result.current.handleKeyDown({
+        key: 'Enter',
+        shiftKey: false,
+        nativeEvent: { isComposing: true },
+        preventDefault,
+        currentTarget: { form: { requestSubmit } },
+      } as any);
+
+      expect(requestSubmit).not.toHaveBeenCalled();
+      expect(preventDefault).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when a key other than Enter is pressed', () => {
+    it('lets it through untouched', () => {
+      const { result } = renderHook(() => useChatDraft({ onSubmit: vi.fn() }));
+      const requestSubmit = vi.fn();
+      const preventDefault = vi.fn();
+
+      result.current.handleKeyDown({
+        key: 'a',
+        shiftKey: false,
+        nativeEvent: { isComposing: false },
+        preventDefault,
+        currentTarget: { form: { requestSubmit } },
+      } as any);
+
+      expect(requestSubmit).not.toHaveBeenCalled();
+      expect(preventDefault).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when Enter is pressed on a textarea outside any form', () => {
+    it('swallows the newline without throwing', () => {
+      const { result } = renderHook(() => useChatDraft({ onSubmit: vi.fn() }));
+      const preventDefault = vi.fn();
+
+      expect(() =>
+        result.current.handleKeyDown({
+          key: 'Enter',
+          shiftKey: false,
+          nativeEvent: { isComposing: false },
+          preventDefault,
+          currentTarget: { form: null },
+        } as any),
+      ).not.toThrow();
+      expect(preventDefault).toHaveBeenCalled();
+    });
+  });
+
+  describe('when the draft is submitted', () => {
+    it('stops the browser from navigating away', () => {
+      const preventDefault = vi.fn();
+      const { result } = renderHook(() => useChatDraft({ onSubmit: vi.fn() }));
+
+      act(() => result.current.setDraft('hello'));
+      act(() => result.current.handleFormSubmit({ preventDefault } as any));
+
+      expect(preventDefault).toHaveBeenCalled();
+    });
+
+    it('stops the browser from navigating away even when the draft is blank', () => {
+      const preventDefault = vi.fn();
+      const { result } = renderHook(() => useChatDraft({ onSubmit: vi.fn() }));
+
+      act(() => result.current.handleFormSubmit({ preventDefault } as any));
+
+      expect(preventDefault).toHaveBeenCalled();
+    });
   });
 });
 

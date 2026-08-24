@@ -21,6 +21,14 @@ describe('cleanProviderId', () => {
   it('should return unchanged for gateway/provider format', () => {
     expect(cleanProviderId('acme/custom')).toBe('acme/custom');
   });
+
+  it('should only split on a dot, not on other punctuation', () => {
+    expect(cleanProviderId('acme-custom_v2')).toBe('acme-custom_v2');
+  });
+
+  it('should keep only the segment before the first dot', () => {
+    expect(cleanProviderId('acme.custom.chat')).toBe('acme');
+  });
 });
 
 describe('findProviderById', () => {
@@ -85,6 +93,22 @@ describe('findProviderById', () => {
     it('should handle empty providers array', () => {
       const result = findProviderById([], 'openai');
       expect(result).toBeUndefined();
+    });
+  });
+
+  describe('gateway prefix guards', () => {
+    it('does not fall back for a lookup id that already carries a gateway prefix', () => {
+      const registry = [{ id: 'acme/custom' }, { id: 'other/custom' }];
+
+      expect(findProviderById(registry, 'zzz/custom')).toBeUndefined();
+    });
+
+    it('does not match a registry id with more than two segments', () => {
+      expect(findProviderById([{ id: 'acme/eu/custom' }], 'custom')).toBeUndefined();
+    });
+
+    it('does not match when only the gateway segment matches', () => {
+      expect(findProviderById([{ id: 'custom/other' }], 'custom')).toBeUndefined();
     });
   });
 });

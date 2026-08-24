@@ -203,4 +203,124 @@ describe('useBuilderAgentAccess', () => {
       expect(result.current.canUseFavorites).toBe(false);
     });
   });
+
+  describe('settings the caller may not read', () => {
+    // The settings query is only *disabled* once capabilities land — before that
+    // RBAC is unknown and permission checks pass through. So the contract worth
+    // pinning is what the hook reports once it knows, not the very first request.
+
+    it('does not report loading for a caller without stored-agent permissions', async () => {
+      const { result } = renderAccess({
+        capabilities: rbacCapabilities([]),
+        settings: { enabled: true, features: { agent: { tools: true } } },
+        settingsDelayMs: 120,
+      });
+
+      await waitFor(() => expect(result.current.hasRequiredPermissions).toBe(false));
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    it('reports loading for a caller who may read the settings', async () => {
+      const { result } = renderAccess({
+        capabilities: rbacCapabilities(['stored-agents:read']),
+        settings: { enabled: true, features: { agent: { tools: true } } },
+        settingsDelayMs: 120,
+      });
+
+      await waitFor(() => expect(result.current.isLoading).toBe(true));
+      await waitFor(() => expect(result.current.isBuilderEnabled).toBe(true));
+    });
+
+    it('reports loading for a write-only caller too', async () => {
+      const { result } = renderAccess({
+        capabilities: rbacCapabilities(['stored-agents:write']),
+        settings: { enabled: true, features: { agent: { tools: true } } },
+        settingsDelayMs: 120,
+      });
+
+      await waitFor(() => expect(result.current.isLoading).toBe(true));
+      await waitFor(() => expect(result.current.isBuilderEnabled).toBe(true));
+    });
+
+    it('hides a settings error behind permission-denied rather than surfacing it', async () => {
+      const { result } = renderAccess({
+        capabilities: rbacCapabilities([]),
+        settingsStatus: 500,
+      });
+
+      await waitFor(() => expect(result.current.denialReason).toBe('permission-denied'));
+      expect(result.current.error).toBeNull();
+    });
+  });
+
+  describe('granular capabilities under RBAC', () => {
+    it('grants execute to a write-only holder', async () => {
+      const { result } = renderAccess({
+        capabilities: rbacCapabilities(['stored-agents:write']),
+        settings: { enabled: true, features: { agent: { tools: true } } },
+      });
+
+      await waitFor(() => expect(result.current.canAccessAgentBuilder).toBe(true));
+      expect(result.current.canExecute).toBe(true);
+    });
+
+    it('grants execute to a read-only holder', async () => {
+      const { result } = renderAccess({
+        capabilities: rbacCapabilities(['stored-agents:read']),
+        settings: { enabled: true, features: { agent: { tools: true } } },
+      });
+
+      await waitFor(() => expect(result.current.canAccessAgentBuilder).toBe(true));
+      expect(result.current.canExecute).toBe(true);
+    });
+
+    it('withholds execute, skills and favorites from a holder of none', async () => {
+      const { result } = renderAccess({ capabilities: rbacCapabilities([]) });
+
+      await waitFor(() => expect(result.current.canExecute).toBe(false));
+      expect(result.current.hasRequiredPermissions).toBe(false);
+      expect(result.current.canExecute).toBe(false);
+      expect(result.current.canManageSkills).toBe(false);
+      expect(result.current.canUseFavorites).toBe(false);
+      expect(result.current.canWrite).toBe(false);
+    });
+
+    it('grants skills and favorites to a stored-skills:read holder', async () => {
+      const { result } = renderAccess({
+        capabilities: rbacCapabilities(['stored-skills:read']),
+        settings: { enabled: true, features: { agent: { tools: true } } },
+      });
+
+      // Permission checks pass through until capabilities land, so wait for the
+      // first value that must flip to false before asserting the rest.
+      await waitFor(() => expect(result.current.hasRequiredPermissions).toBe(false));
+      expect(result.current.canManageSkills).toBe(true);
+      expect(result.current.canUseFavorites).toBe(true);
+      expect(result.current.canExecute).toBe(false);
+    });
+
+    it('grants favorites but not skill management to a stored-agents:read holder', async () => {
+      const { result } = renderAccess({
+        capabilities: rbacCapabilities(['stored-agents:read']),
+        settings: { enabled: true, features: { agent: { tools: true } } },
+      });
+
+      await waitFor(() => expect(result.current.canManageSkills).toBe(false));
+      expect(result.current.canUseFavorites).toBe(true);
+      expect(result.current.canWrite).toBe(false);
+    });
+  });
+
+  describe('when the builder is enabled but exposes no agent feature', () => {
+    it('still denies access as not-configured', async () => {
+      const { result } = renderAccess({
+        capabilities: authDisabledCapabilities,
+        settings: { enabled: true, features: { agent: undefined } },
+      });
+
+      await waitFor(() => expect(result.current.isBuilderEnabled).toBe(true));
+      expect(result.current.hasAgentFeature).toBe(false);
+      expect(result.current.denialReason).toBe('not-configured');
+    });
+  });
 });

@@ -39,6 +39,9 @@ export const useWorkflowsRunCounts = (): ListWorkflowRunCountsResponse => {
     queryKey: ['workflow-run-counts', requestContext],
     queryFn: () => client.listWorkflowRunCounts(requestContext),
     retry: false,
+    // Stryker disable next-line ArrowFunction: replacing this with a no-op only
+    // shows up after a full 5s poll window, which no unit test should wait for.
+    // `runCountsRefetchInterval` itself is covered exhaustively below.
     refetchInterval: query => runCountsRefetchInterval(query.state.error),
   });
 

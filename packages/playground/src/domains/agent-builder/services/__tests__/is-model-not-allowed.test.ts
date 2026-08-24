@@ -44,4 +44,28 @@ describe('isModelNotAllowedError', () => {
     const result = isModelNotAllowedError({ status: 422, body: { error: { code: MODEL_NOT_ALLOWED_CODE } } });
     expect(result?.message).toBe('Model not allowed by admin policy');
   });
+
+  describe('when the error is not an object at all', () => {
+    it.each([null, undefined, 'boom', 422])('returns null for %p', value => {
+      expect(isModelNotAllowedError(value)).toBeNull();
+    });
+  });
+
+  describe('when the 422 body is missing or malformed', () => {
+    it('returns null when there is no body', () => {
+      expect(isModelNotAllowedError({ status: 422 })).toBeNull();
+    });
+
+    it('returns null when the body is null', () => {
+      expect(isModelNotAllowedError({ status: 422, body: null })).toBeNull();
+    });
+
+    it('returns null when the body carries no error object', () => {
+      expect(isModelNotAllowedError({ status: 422, body: {} })).toBeNull();
+    });
+
+    it('returns null when the error object carries no code', () => {
+      expect(isModelNotAllowedError({ status: 422, body: { error: {} } })).toBeNull();
+    });
+  });
 });
