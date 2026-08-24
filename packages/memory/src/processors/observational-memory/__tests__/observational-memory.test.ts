@@ -3,10 +3,11 @@ import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { coreFeatures } from '@mastra/core/features';
 import { MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
-import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
+import { InMemoryMemory, InMemoryDB, isObservationBufferClaimLive } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 
+import { Memory } from '../../../index';
 import { injectAnchorIds, parseAnchorId, stripEphemeralAnchorIds } from '../anchor-ids';
 import { BufferingCoordinator } from '../buffering-coordinator';
 import {
@@ -18518,5 +18519,150 @@ describe('Observation buffer claim ownership', () => {
     const firstResult = await first;
     expect(firstResult.buffered).toBe(true);
     expect(observerCalls.length).toBe(1);
+  });
+
+  it('status liveness: a valid unexpired buffer claim is live, an expired or absent claim is not', () => {
+    const base = {
+      isBufferingObservation: true,
+      updatedAt: new Date(),
+    } as any;
+
+    expect(
+      isObservationBufferClaimLive({
+        ...base,
+        observationBufferClaimToken: 'owner-a',
+        observationBufferClaimExpiresAt: new Date(Date.now() + 60_000),
+      }),
+    ).toBe(true);
+
+    expect(
+      isObservationBufferClaimLive({
+        ...base,
+        observationBufferClaimToken: 'owner-a',
+        observationBufferClaimExpiresAt: new Date(Date.now() - 1),
+      }),
+    ).toBe(false);
+
+    expect(
+      isObservationBufferClaimLive({
+        isBufferingObservation: false,
+        updatedAt: new Date(),
+        observationBufferClaimToken: null,
+        observationBufferClaimExpiresAt: null,
+      } as any),
+    ).toBe(false);
+  });
+
+  it('legacy buffering flag without a claim token is live only within the bounded grace window', () => {
+    // Legacy marker: flag true, no owner metadata. Respected from updatedAt for
+    // one lease (120s), never live forever, never cleared from local absence.
+    const legacyFresh = {
+      isBufferingObservation: true,
+      updatedAt: new Date(),
+      observationBufferClaimToken: null,
+      observationBufferClaimExpiresAt: null,
+    } as any;
+    expect(isObservationBufferClaimLive(legacyFresh)).toBe(true);
+
+    const legacyStale = {
+      ...legacyFresh,
+      updatedAt: new Date(Date.now() - 121_000),
+    };
+    expect(isObservationBufferClaimLive(legacyStale)).toBe(false);
+  });
+
+  it('a new reflection generation does not inherit buffer claim ownership', async () => {
+    const storage = createInMemoryStorage();
+    await seedClaimThread(storage);
+    const { om } = createClaimOM(storage);
+    const record = await om.getOrCreateRecord(claimThreadId, claimResourceId);
+
+    const acquired = await storage.acquireObservationBufferClaim({
+      id: record.id,
+      ownerToken: 'gen-owner',
+      leaseMs: 60_000,
+    });
+    expect(acquired.ok).toBe(true);
+    const claimed = await om.getOrCreateRecord(claimThreadId, claimResourceId);
+
+    const next = await storage.createReflectionGeneration({
+      currentRecord: claimed,
+      reflection: 'Reflected observations',
+      tokenCount: 42,
+    });
+
+    expect(next.generationCount).toBe(claimed.generationCount + 1);
+    expect(next.observationBufferClaimToken ?? null).toBeNull();
+    expect(next.observationBufferClaimExpiresAt ?? null).toBeNull();
+    expect(next.isBufferingObservation).toBe(false);
+  });
+
+  it('cloned records reset buffer claim ownership during clone remap', () => {
+    const source = {
+      id: 'src-record',
+      scope: 'thread',
+      threadId: 'src-thread',
+      resourceId: 'src-resource',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      originType: 'initial',
+      generationCount: 0,
+      activeObservations: '',
+      totalTokensObserved: 0,
+      observationTokenCount: 0,
+      pendingMessageTokens: 0,
+      isObserving: true,
+      isReflecting: true,
+      isBufferingObservation: true,
+      isBufferingReflection: true,
+      lastBufferedAtTokens: 500,
+      observationBufferClaimToken: 'live-owner',
+      observationBufferClaimAcquiredAt: new Date(),
+      observationBufferClaimRenewedAt: new Date(),
+      observationBufferClaimExpiresAt: new Date(Date.now() + 60_000),
+    } as any;
+
+    const cloned = (Memory.prototype as any).remapObservationalMemoryRecord.call(null, source, {
+      newThreadId: 'clone-thread',
+      newResourceId: 'clone-resource',
+      messageIdMap: {},
+    });
+
+    expect(cloned.isBufferingObservation).toBe(false);
+    expect(cloned.observationBufferClaimToken).toBeNull();
+    expect(cloned.observationBufferClaimAcquiredAt).toBeNull();
+    expect(cloned.observationBufferClaimRenewedAt).toBeNull();
+    expect(cloned.observationBufferClaimExpiresAt).toBeNull();
+    // Source record untouched — the live owner keeps its claim.
+    expect(source.observationBufferClaimToken).toBe('live-owner');
+  });
+
+  it('resetBufferingState leaves a foreign live buffer claim intact but clears an expired buffer claim', async () => {
+    const storage = createInMemoryStorage();
+    await seedClaimThread(storage);
+    const { om } = createClaimOM(storage);
+    const record = await om.getOrCreateRecord(claimThreadId, claimResourceId);
+
+    // Foreign live claim: reset must not steal it.
+    const live = await storage.acquireObservationBufferClaim({
+      id: record.id,
+      ownerToken: 'live-foreign',
+      leaseMs: 60_000,
+    });
+    expect(live.ok).toBe(true);
+    await om.resetBufferingState({ threadId: claimThreadId, resourceId: claimResourceId, recordId: record.id });
+    let after = await om.getOrCreateRecord(claimThreadId, claimResourceId);
+    expect(after.observationBufferClaimToken).toBe('live-foreign');
+    expect(after.isBufferingObservation).toBe(true);
+
+    // Expired claim: reset may take over atomically and clear it.
+    const clock = { now: Date.now() };
+    storage.observationBufferClaimClock = () => new Date(clock.now);
+    clock.now += 120_000;
+    await om.resetBufferingState({ threadId: claimThreadId, resourceId: claimResourceId, recordId: record.id });
+    after = await om.getOrCreateRecord(claimThreadId, claimResourceId);
+    expect(after.observationBufferClaimToken ?? null).toBeNull();
+    expect(after.isBufferingObservation).toBe(false);
+    expect(after.lastBufferedAtTokens).toBe(0);
   });
 });

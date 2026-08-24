@@ -57,6 +57,11 @@ interface GatewayOMRecord {
   isObserving: boolean;
   isBufferingObservation: boolean;
   isBufferingReflection: boolean;
+  /** Durable observation-buffer claim fields; older gateways omit them. */
+  observationBufferClaimToken?: string | null;
+  observationBufferClaimAcquiredAt?: string | null;
+  observationBufferClaimRenewedAt?: string | null;
+  observationBufferClaimExpiresAt?: string | null;
   config?: Record<string, unknown>;
   bufferedObservationChunks?: GatewayBufferedObservationChunk[];
   bufferedReflection?: string | null;
@@ -276,6 +281,16 @@ export function toLocalOMRecord(gr: GatewayOMRecord) {
     isObserving: gr.isObserving,
     isBufferingObservation: gr.isBufferingObservation,
     isBufferingReflection: gr.isBufferingReflection,
+    observationBufferClaimToken: gr.observationBufferClaimToken ?? null,
+    observationBufferClaimAcquiredAt: gr.observationBufferClaimAcquiredAt
+      ? new Date(gr.observationBufferClaimAcquiredAt)
+      : null,
+    observationBufferClaimRenewedAt: gr.observationBufferClaimRenewedAt
+      ? new Date(gr.observationBufferClaimRenewedAt)
+      : null,
+    observationBufferClaimExpiresAt: gr.observationBufferClaimExpiresAt
+      ? new Date(gr.observationBufferClaimExpiresAt)
+      : null,
     config: gr.config ?? {},
     bufferedObservationChunks: gr.bufferedObservationChunks?.map(chunk => ({
       ...chunk,

@@ -12,6 +12,7 @@ import type { ProcessorContext, ProcessorStreamWriter } from '@mastra/core/proce
 import { MessageHistory } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage, ObservationalMemoryRecord, ObservationalMemoryHistoryOptions } from '@mastra/core/storage';
+import { isObservationBufferClaimLive } from '@mastra/core/storage';
 import type { ProviderMetadata } from '@mastra/core/stream';
 import xxhash from 'xxhash-wasm';
 
@@ -2891,7 +2892,9 @@ ${formattedMessages}
       );
 
       let obsBufferStatus: 'idle' | 'running' | 'complete' = 'idle';
-      if (record.isBufferingObservation) obsBufferStatus = 'running';
+      // `running` requires a valid unexpired durable claim (or a bounded legacy
+      // marker), never a bare persisted boolean left behind by a dead process.
+      if (isObservationBufferClaimLive(record)) obsBufferStatus = 'running';
       else if (bufferedChunks.length > 0) obsBufferStatus = 'complete';
 
       let refBufferStatus: 'idle' | 'running' | 'complete' = 'idle';

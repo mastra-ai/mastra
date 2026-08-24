@@ -3131,6 +3131,12 @@ Notes:
     cloned.isReflecting = false;
     cloned.isBufferingObservation = false;
     cloned.isBufferingReflection = false;
+    // A clone must never inherit the source record's observation-buffer claim:
+    // the owner token belongs to a cycle running against the source record only.
+    cloned.observationBufferClaimToken = null;
+    cloned.observationBufferClaimAcquiredAt = null;
+    cloned.observationBufferClaimRenewedAt = null;
+    cloned.observationBufferClaimExpiresAt = null;
 
     return cloned;
   }

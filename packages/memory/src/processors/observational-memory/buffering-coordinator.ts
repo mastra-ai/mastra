@@ -109,7 +109,9 @@ export class BufferingCoordinator {
     currentTokens: number,
     lockKey: string,
     record: ObservationalMemoryRecord,
-    _storage?: { setBufferingObservationFlag(id: string, flag: boolean): Promise<void> },
+    // Unused since the durable-claim refactor (kept positionally so existing
+    // call sites passing storage stay valid); triggering never writes storage.
+    _storage?: unknown,
     messageTokensThreshold?: number,
   ): boolean {
     if (!this.isAsyncObservationEnabled()) return false;

@@ -43,6 +43,43 @@ import { StorageDomain } from '../base';
 export const OBSERVATION_BUFFER_CLAIM_LEASE_MS = 120_000;
 export const OBSERVATION_BUFFER_CLAIM_RENEW_INTERVAL_MS = 30_000;
 
+/**
+ * Client-side view of observation-buffer claim liveness for status rendering.
+ *
+ * Storage adapters remain the authority for fencing (their predicates evaluate
+ * the backend clock atomically); this helper only decides whether a record
+ * snapshot should be *rendered* as a running buffering operation:
+ * - a claim token with an unexpired lease is live;
+ * - a claim token with a missing/expired lease is not live;
+ * - a legacy `isBufferingObservation=true` row with no token is respected for
+ *   at most one lease from its `updatedAt` (the same bounded grace the acquire
+ *   predicate uses), then rendered as not running;
+ * - everything else is not live.
+ *
+ * The comparison uses the caller's clock because status readers only have a
+ * record snapshot; the bounded grace keeps clock skew from turning an unowned
+ * boolean into a forever-running status.
+ */
+export function isObservationBufferClaimLive(
+  record: Pick<
+    ObservationalMemoryRecord,
+    'isBufferingObservation' | 'observationBufferClaimToken' | 'observationBufferClaimExpiresAt' | 'updatedAt'
+  >,
+  now: number = Date.now(),
+): boolean {
+  const token = record.observationBufferClaimToken ?? null;
+  if (token) {
+    const expiresAt = record.observationBufferClaimExpiresAt;
+    const expiresMs = expiresAt ? new Date(expiresAt).getTime() : Number.NaN;
+    return Number.isFinite(expiresMs) && expiresMs > now;
+  }
+  if (record.isBufferingObservation) {
+    const updatedMs = record.updatedAt ? new Date(record.updatedAt).getTime() : Number.NaN;
+    return Number.isFinite(updatedMs) && now < updatedMs + OBSERVATION_BUFFER_CLAIM_LEASE_MS;
+  }
+  return false;
+}
+
 function isPlainObj(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

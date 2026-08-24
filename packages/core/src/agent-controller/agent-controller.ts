@@ -18,6 +18,7 @@ import type { TracingContext, TracingOptions } from '../observability';
 import { RequestContext } from '../request-context';
 import type { MastraCompositeStore } from '../storage/base';
 import type { MemoryStorage } from '../storage/domains/memory/base';
+import { isObservationBufferClaimLive } from '../storage/domains/memory/base';
 import type { ObservationalMemoryRecord } from '../storage/types';
 import type { DynamicArgument } from '../types';
 import { Workspace } from '../workspace/workspace';
@@ -1754,7 +1755,10 @@ export class AgentController<TState = {}> {
       );
       const bufferedObservationTokens = bufferedChunks.reduce((sum, chunk) => sum + (chunk.tokenCount ?? 0), 0);
       const bufferedObs = {
-        status: record.isBufferingObservation
+        // `running` requires a valid unexpired durable claim (or a bounded legacy
+        // marker), never a bare persisted boolean — an unowned flag from a dead
+        // process must not render as a live operation.
+        status: isObservationBufferClaimLive(record)
           ? ('running' as const)
           : bufferedChunks.length
             ? ('complete' as const)

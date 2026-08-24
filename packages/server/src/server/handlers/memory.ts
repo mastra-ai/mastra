@@ -3,6 +3,7 @@ import type { MastraDBMessage } from '@mastra/core/agent';
 import type { RequestContext } from '@mastra/core/di';
 import type { MastraMemory, StorageThreadType } from '@mastra/core/memory';
 import type { MastraStorage, MemoryStorage, StorageListThreadsOutput } from '@mastra/core/storage';
+import { isObservationBufferClaimLive } from '@mastra/core/storage';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
 import { MastraFGAPermissions } from '../fga-permissions';
 import { HTTPException } from '../http-exception';
@@ -766,7 +767,10 @@ export const AWAIT_BUFFER_STATUS_ROUTE = createRoute({
           while (Date.now() < deadline) {
             const result = await gwClient.getObservationRecord(threadId, resourceId);
             record = result.record ? toLocalOMRecord(result.record) : null;
-            if (!record || (!record.isBufferingObservation && !record.isBufferingReflection)) {
+            // Observation buffering is considered in-flight only while a valid
+            // unexpired durable claim (or a bounded legacy marker) is live; an
+            // unowned stale boolean must not pin this poll to its full timeout.
+            if (!record || (!isObservationBufferClaimLive(record) && !record.isBufferingReflection)) {
               break;
             }
             await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
