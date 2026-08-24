@@ -93,6 +93,9 @@ export function useUpdateSkill(options: UseUpdateSkillOptions = {}) {
     },
     onError: error => {
       if (!silent) {
+        // React Query types this callback's `error` as `Error`, so the fallback
+        // only satisfies the narrowing — it can never be reached.
+        // Stryker disable next-line StringLiteral
         toast.error(`Failed to update skill: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
     },

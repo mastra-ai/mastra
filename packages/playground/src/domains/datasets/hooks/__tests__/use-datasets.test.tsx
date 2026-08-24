@@ -12,13 +12,17 @@ import { server } from '@/test/msw-server';
 const BASE_URL = 'http://localhost:4111';
 const DATASETS_URL = `${BASE_URL}/api/datasets`;
 
-const createWrapper = () => {
+const createWrapper = () => makeHarness().wrapper;
+
+/** Same wrapper, but hands back the query client so cache keys can be asserted. */
+const makeHarness = () => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return ({ children }: { children: ReactNode }) => (
+  const wrapper = ({ children }: { children: ReactNode }) => (
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     </MastraReactProvider>
   );
+  return { wrapper, queryClient };
 };
 
 /** Let react-query settle so "no request was made" is a real observation. */
@@ -179,5 +183,41 @@ describe('useDataset', () => {
       await waitFor(() => expect(detail.result.current.data?.id).toBe('from-detail'));
       expect(list.result.current.data?.datasets[0]?.id).toBe('from-list');
     });
+  });
+});
+
+describe('the cache entries the dataset hooks write', () => {
+  it('files a dataset list under a key that carries its pagination', async () => {
+    server.use(http.get(DATASETS_URL, () => HttpResponse.json(makeDatasetsPage([makeDataset({ id: 'ds-1' })]))));
+    const { wrapper, queryClient } = makeHarness();
+
+    const { result } = renderHook(() => useDatasets({ page: 2, perPage: 10 }), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(queryClient.getQueryData(['datasets', { page: 2, perPage: 10 }])).toBeDefined();
+  });
+
+  it('files an unpaginated list under the bare list key', async () => {
+    server.use(http.get(DATASETS_URL, () => HttpResponse.json(makeDatasetsPage([makeDataset({ id: 'ds-1' })]))));
+    const { wrapper, queryClient } = makeHarness();
+
+    const { result } = renderHook(() => useDatasets(), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(queryClient.getQueryData(['datasets', undefined])).toBeDefined();
+  });
+
+  it('files a single dataset under a key of its own, separate from the list', async () => {
+    server.use(
+      http.get(DATASETS_URL, () => HttpResponse.json(makeDatasetsPage([makeDataset({ id: 'ds-1' })]))),
+      http.get(`${DATASETS_URL}/ds-1`, () => HttpResponse.json(makeDataset({ id: 'ds-1' }))),
+    );
+    const { wrapper, queryClient } = makeHarness();
+
+    const { result } = renderHook(() => useDataset('ds-1'), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(queryClient.getQueryData(['dataset', 'ds-1'])).toMatchObject({ id: 'ds-1' });
+    expect(queryClient.getQueryData(['datasets', 'ds-1'])).toBeUndefined();
   });
 });

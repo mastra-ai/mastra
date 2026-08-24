@@ -69,6 +69,10 @@ export async function makeCredentialsSignUpRequest(
 ): Promise<CredentialsSignUpResponse> {
   const { baseUrl = '', apiPrefix, headers: clientHeaders = {} } = client.options || {};
   const raw = (apiPrefix ?? '/api').trim();
+  // The empty-prefix branch only spells out the intent: `''` does not start
+  // with a slash, so the fallback would build `'/'`, which the trailing-slash
+  // strip below reduces back to `''`.
+  // Stryker disable next-line ConditionalExpression,StringLiteral
   const normalized = raw === '' ? '' : raw.startsWith('/') ? raw : `/${raw}`;
   const prefix = normalized.replace(/\/+$/, '');
 

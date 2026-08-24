@@ -56,6 +56,9 @@ export function useCopySkill() {
       toast.success('Skill copied');
     },
     onError: error => {
+      // React Query types this callback's `error` as `Error`, so the fallback
+      // only satisfies the narrowing — it can never be reached.
+      // Stryker disable next-line StringLiteral
       toast.error(`Failed to copy skill: ${error instanceof Error ? error.message : 'Unknown error'}`);
     },
   });

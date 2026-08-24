@@ -109,7 +109,7 @@ describe('usePermissionPatterns', () => {
       const { wrapper } = makeHarness();
       const { result } = renderHook(() => usePermissionPatterns(), { wrapper });
 
-      await waitFor(() => expect(result.current.error).not.toBeNull());
+      await waitFor(() => expect(result.current.error).toBeInstanceOf(Error));
       await settlePastFirstRetry();
       expect(onFetch).toHaveBeenCalledTimes(1);
       expect(result.current.patterns.size).toBe(0);
@@ -169,8 +169,31 @@ describe('usePermissionPatterns', () => {
       const { wrapper } = makeHarness();
       const { result } = renderHook(() => usePermissionPatterns(), { wrapper });
 
-      await waitFor(() => expect(result.current.error).not.toBeNull());
+      await waitFor(() => expect(result.current.error).toBeInstanceOf(Error));
       expect(result.current.patterns.size).toBe(0);
+    });
+  });
+
+  describe('the cache entry it writes', () => {
+    it('files the vocabulary under a key of its own, shared across callers', async () => {
+      let calls = 0;
+      server.use(
+        http.get(CAPABILITIES_URL, () => HttpResponse.json(rbacOn)),
+        http.get(PATTERNS_URL, () => {
+          calls += 1;
+          return HttpResponse.json({ patterns: ['agents:read'] });
+        }),
+      );
+
+      const { wrapper, queryClient } = makeHarness();
+      const first = renderHook(() => usePermissionPatterns(), { wrapper });
+      await waitFor(() => expect(first.result.current.patterns.size).toBe(1));
+
+      expect(queryClient.getQueryData(['permission-patterns'])).toEqual({ patterns: ['agents:read'] });
+
+      const second = renderHook(() => usePermissionPatterns(), { wrapper });
+      await waitFor(() => expect(second.result.current.patterns.size).toBe(1));
+      expect(calls).toBe(1);
     });
   });
 });

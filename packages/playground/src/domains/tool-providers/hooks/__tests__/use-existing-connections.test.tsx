@@ -147,6 +147,32 @@ describe('useExistingConnections — request shape and gating', () => {
     expect(seen[0]?.searchParams.get('authorId')).toBeNull();
   });
 
+  it('leaves the author filter off even when the caller is already known', async () => {
+    const seen = captureConnections();
+
+    const { wrapper, queryClient } = makeWrapper();
+    // Without a resolved user the filter would be omitted anyway; seeding the
+    // cache makes this an assertion about scoping, not about timing.
+    queryClient.setQueryData(['auth', 'me'], { id: 'tester', permissions: [] });
+
+    const { result } = renderHook(() => useExistingConnections('composio', 'gmail'), { wrapper });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(seen[0]?.searchParams.get('authorId')).toBeNull();
+  });
+
+  it('files a self-scoped read under a key that names the caller', async () => {
+    captureConnections();
+
+    const { wrapper, queryClient } = makeWrapper();
+    const { result } = renderHook(() => useExistingConnections('composio', 'gmail', { scopeToSelf: true }), {
+      wrapper,
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(queryClient.getQueryData(['tool-integration-connections', 'composio', 'gmail', 'tester'])).toBeDefined();
+  });
+
   it.each([
     ['the provider is not chosen yet', null, 'gmail'],
     ['the toolkit is not chosen yet', 'composio', null],

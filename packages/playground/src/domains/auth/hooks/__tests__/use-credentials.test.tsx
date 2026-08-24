@@ -4,8 +4,8 @@ import { renderHook, act, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import React from 'react';
 import { describe, expect, it } from 'vitest';
-import { useCredentialsLogin } from '../use-credentials-login';
-import { useCredentialsSignUp } from '../use-credentials-signup';
+import { makeCredentialsLoginRequest, useCredentialsLogin } from '../use-credentials-login';
+import { makeCredentialsSignUpRequest, useCredentialsSignUp } from '../use-credentials-signup';
 import { server } from '@/test/msw-server';
 
 /**
@@ -274,6 +274,16 @@ describe('useCredentialsSignUp', () => {
     });
   });
 
+  describe('when the apiPrefix has no leading slash', () => {
+    it('adds a leading slash to the sign-up endpoint', async () => {
+      const captured = captureSignUp({ user: { id: '1', email: 'a@b.c' } });
+
+      await signUp({ apiPrefix: 'mastra' });
+
+      expect(captured.url).toBe('http://localhost:4000/mastra/auth/credentials/sign-up');
+    });
+  });
+
   describe('when the apiPrefix has a trailing slash', () => {
     it('strips the trailing slash from the sign-up endpoint', async () => {
       const captured = captureSignUp({ user: { id: '1', email: 'a@b.c' } });
@@ -389,5 +399,47 @@ describe('useCredentialsSignUp', () => {
       await waitFor(() => expect(queryClient.getQueryState(['auth', 'capabilities'])?.isInvalidated).toBe(true));
       expect(queryClient.getQueryState(['stored-agents'])?.isInvalidated).toBe(false);
     });
+  });
+});
+
+describe('the credentials requests, when the client carries no base url', () => {
+  /**
+   * `MastraReactProvider` always supplies a base url, so the request builders'
+   * own fallback is only reachable by calling them directly — which is what
+   * they are exported for.
+   */
+  const captureRelative = (path: string) => {
+    const captured = { url: '' };
+    server.use(
+      http.post(`*${path}`, ({ request }) => {
+        captured.url = request.url;
+        return HttpResponse.json({ user: { id: '1', email: 'a@b.c' } });
+      }),
+    );
+    return captured;
+  };
+
+  it('sends the sign-in to a path relative to the current origin', async () => {
+    const captured = captureRelative('/api/auth/credentials/sign-in');
+
+    await makeCredentialsLoginRequest({ options: {} } as never, { email: 'a@b.c', password: 'pw' });
+
+    expect(new URL(captured.url).pathname).toBe('/api/auth/credentials/sign-in');
+  });
+
+  it('sends the sign-up to a path relative to the current origin', async () => {
+    const captured = captureRelative('/api/auth/credentials/sign-up');
+
+    await makeCredentialsSignUpRequest({ options: {} } as never, { email: 'a@b.c', password: 'pw', name: 'A' });
+
+    expect(new URL(captured.url).pathname).toBe('/api/auth/credentials/sign-up');
+  });
+
+  it('still works when the client exposes no options at all', async () => {
+    const captured = captureRelative('/api/auth/credentials/sign-in');
+
+    await makeCredentialsLoginRequest({} as never, { email: 'a@b.c', password: 'pw' });
+
+    expect(new URL(captured.url).pathname).toBe('/api/auth/credentials/sign-in');
   });
 });
