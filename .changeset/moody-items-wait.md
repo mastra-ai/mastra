@@ -9,4 +9,4 @@
 '@mastra/pg': patch
 ---
 
-Round-trip dataset item metadata in experiment results.
+Experiment results now include isolated metadata snapshots from the dataset items that ran.
