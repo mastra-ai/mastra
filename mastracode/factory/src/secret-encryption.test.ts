@@ -77,4 +77,29 @@ describe('createPlaintextFactorySecretEncryption', () => {
       needsReencryption: false,
     });
   });
+
+  it('treats pre-encryption raw secret strings as legacy values needing rewrite', async () => {
+    const encryption = createPlaintextFactorySecretEncryption();
+
+    // Pre-encryption rows stored bare secrets (e.g. `custom_providers.api_key`),
+    // which are not valid JSON. They must round-trip instead of failing boot.
+    await expect(encryption.decrypt('sk-ant-api03-abc123')).resolves.toEqual({
+      value: 'sk-ant-api03-abc123',
+      needsReencryption: true,
+    });
+
+    // And the migration rewrite converges: encrypt → decrypt is stable JSON.
+    const migrated = await encryption.encrypt('sk-ant-api03-abc123');
+    await expect(encryption.decrypt(migrated)).resolves.toEqual({
+      value: 'sk-ant-api03-abc123',
+      needsReencryption: false,
+    });
+  });
+
+  it('passes through legacy non-string values untouched', async () => {
+    const encryption = createPlaintextFactorySecretEncryption();
+    const legacy = { type: 'api-key', key: 'legacy' };
+
+    await expect(encryption.decrypt(legacy)).resolves.toEqual({ value: legacy, needsReencryption: false });
+  });
 });

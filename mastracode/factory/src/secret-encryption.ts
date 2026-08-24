@@ -123,7 +123,14 @@ export function createPlaintextFactorySecretEncryption(): FactorySecretEncryptio
     },
     async decrypt<T>(value: unknown): Promise<DecryptedFactorySecret<T>> {
       if (typeof value !== 'string') return { value: structuredClone(value) as T, needsReencryption: false };
-      return { value: JSON.parse(value) as T, needsReencryption: false };
+      try {
+        return { value: JSON.parse(value) as T, needsReencryption: false };
+      } catch {
+        // Pre-encryption rows stored raw secret strings (e.g. a bare
+        // `custom_providers.api_key`), not JSON. Treat the raw string as the
+        // value and flag it so migration rewrites it in the current format.
+        return { value: value as T, needsReencryption: true };
+      }
     },
   };
 }
