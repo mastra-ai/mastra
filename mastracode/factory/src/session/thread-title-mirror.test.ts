@@ -98,6 +98,51 @@ describe('observeSessionThreadTitle', () => {
     );
   });
 
+  it('ignores a title for a thread the session has moved off', async () => {
+    const { session, emit } = createSession();
+    const dependencies = createDependencies(null);
+    observeSessionThreadTitle(session, dependencies);
+
+    emit({ type: 'thread_changed', threadId: 'thread-2', previousThreadId: 'thread-1' });
+    emit({ type: 'thread_title_updated', threadId: 'thread-1', title: 'What thread one was doing' });
+    // Writes run in order, so the bound thread's rename landing alone is what
+    // proves the stale one was dropped rather than merely still in flight.
+    emit({ type: 'thread_title_updated', threadId: 'thread-2', title: 'What thread two is doing' });
+
+    await vi.waitFor(() =>
+      expect(dependencies.sourceControl.sessions.rename).toHaveBeenCalledExactlyOnceWith({
+        sessionId: 'resource-1',
+        title: 'What thread two is doing',
+      }),
+    );
+  });
+
+  it('leaves the newest title standing when an earlier write finishes last', async () => {
+    const { session, emit } = createSession();
+    const dependencies = createDependencies(null);
+    let releaseFirstRead = () => {};
+    const firstRead = new Promise<void>(resolve => {
+      releaseFirstRead = resolve;
+    });
+    let reads = 0;
+    dependencies.sourceControl.sessions.getBySessionId = vi.fn(async () => {
+      reads += 1;
+      if (reads === 1) await firstRead;
+      return createRow(null);
+    });
+
+    observeSessionThreadTitle(session, dependencies);
+    emit({ type: 'thread_title_updated', threadId: 'thread-1', title: 'First name' });
+    emit({ type: 'om_thread_title_updated', cycleId: 'cycle-1', threadId: 'thread-1', newTitle: 'Refined name' });
+    releaseFirstRead();
+
+    await vi.waitFor(() => expect(dependencies.sourceControl.sessions.rename).toHaveBeenCalledTimes(2));
+    expect(dependencies.sourceControl.sessions.rename).toHaveBeenLastCalledWith({
+      sessionId: 'resource-1',
+      title: 'Refined name',
+    });
+  });
+
   it('renames the session row when observational memory refines the title', async () => {
     const { session, emit } = createSession();
     const dependencies = createDependencies('Log format parser');

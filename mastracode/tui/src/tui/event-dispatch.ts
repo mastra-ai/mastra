@@ -238,13 +238,6 @@ export async function dispatchEvent(
       break;
     }
 
-    case 'thread_title_updated':
-      // A session names any of its threads, the status line only speaks for the open one.
-      if (event.threadId !== state.session.thread.getId()) break;
-      state.currentThreadTitle = event.title;
-      ectx.updateStatusLine();
-      break;
-
     case 'thread_created': {
       ectx.showInfo(`Created thread: ${event.thread.id}`);
       state.latestRequestPromptTokens = undefined;

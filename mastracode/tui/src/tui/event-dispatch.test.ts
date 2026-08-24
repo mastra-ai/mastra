@@ -193,19 +193,9 @@ describe('dispatchEvent thread lifecycle', () => {
     expect((state.taskProgress as any).updateTasks).toHaveBeenCalledWith([]);
   });
 
-  it('renames the status line when the thread is titled mid-run', async () => {
+  it('leaves the status line alone when the observer renames another thread of the session', async () => {
     await dispatchEvent(
-      { type: 'thread_title_updated', threadId: 'thread-1', title: 'Log parser rewrite' },
-      ectx,
-      state,
-    );
-
-    expect(state.currentThreadTitle).toBe('Log parser rewrite');
-  });
-
-  it('leaves the status line alone when another thread of the session is named', async () => {
-    await dispatchEvent(
-      { type: 'thread_title_updated', threadId: 'other-thread', title: 'Log parser rewrite' },
+      { type: 'om_thread_title_updated', cycleId: 'cycle-1', threadId: 'other-thread', newTitle: 'Log parser rewrite' },
       ectx,
       state,
     );
