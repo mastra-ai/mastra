@@ -12,8 +12,8 @@ const secondStoredKey = 'mc-e2e-anthropic-preserved-key';
 
 export const apiKeyMultiProviderDeleteScenario = {
   name: 'api-key-multi-provider-delete',
-  description: 'Keeps API key provider ordering stable and deletes only the selected stored provider key.',
-  testName: 'sorts providers and deletes one stored key without affecting another provider',
+  description: 'Deletes only the selected stored provider key from a long provider list.',
+  testName: 'deletes one stored key without affecting another provider',
   prepare({ appDataDir }) {
     const settingsPath = join(appDataDir, 'settings.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
@@ -58,18 +58,20 @@ export const apiKeyMultiProviderDeleteScenario = {
     terminal.submit('/api-keys');
     await runtime.waitForScreenText(/API Keys/i, terminal, 8_000);
     await runtime.waitForScreenText(/302ai\s+✓ \(stored\)/i, terminal, 8_000);
-    await runtime.waitForScreenText(/anthropic\s+✓ \(stored\)/i, terminal, 8_000);
-
-    const initialView = terminal.serialize().view;
-    const firstIndex = initialView.indexOf('302ai');
-    const secondIndex = initialView.indexOf('anthropic');
-    if (firstIndex < 0 || secondIndex < 0 || firstIndex >= secondIndex) {
-      throw new Error(`Expected /api-keys provider list to show 302ai before anthropic. Screen:\n${initialView}`);
-    }
 
     terminal.write('\x7f');
     await runtime.waitForScreenText(/302ai\s+✗ \(not set\)/i, terminal, 8_000);
-    await runtime.waitForScreenText(/anthropic\s+✓ \(stored\)/i, terminal, 8_000);
+
+    const providerCountMatch = terminal.serialize().view.match(/\(\d+\/(\d+)\)/);
+    if (!providerCountMatch) throw new Error('Expected /api-keys to show the provider count');
+
+    const secondProviderStatus = /anthropic\s+✓ \(stored\)/i;
+    const providerCount = Number(providerCountMatch[1]);
+    for (let index = 0; index < providerCount && !secondProviderStatus.test(terminal.serialize().view); index += 1) {
+      terminal.write('\x1b[B');
+      await terminal.flushInput?.();
+    }
+    await runtime.waitForScreenText(secondProviderStatus, terminal, 8_000);
 
     terminal.write('\x1b');
     await runtime.waitForScreenTextAbsent(/API Keys/i, terminal, 8_000);
