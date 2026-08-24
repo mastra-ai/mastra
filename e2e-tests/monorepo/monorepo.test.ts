@@ -740,7 +740,7 @@ export const environmentRoute = registerApiRoute('/environment', {
             manifestPath,
             manifest.replace('"unicorn-magic": "0.4.0"', '"unicorn-magic": "link:../../external/unicorn-magic"'),
           );
-          await execa(pkgManager, ['install', '--config.minimum-release-age=0'], {
+          await execa(pkgManager, ['install', '--config.minimum-release-age=0', '--no-frozen-lockfile'], {
             cwd: isolatedFixturePath,
             env: process.env,
           });
