@@ -187,7 +187,7 @@ function MemorySettingsSection({ factoryId, models, sessionResourceId, sessionSc
           title="Factory observational memory"
           description="Models and token thresholds used to summarize and retain context in Factory runs."
         >
-          <SettingsCard>
+          <SettingsCard className="p-4">
             <OMSection factoryId={factoryId} models={models} />
           </SettingsCard>
         </SettingsSubsection>
@@ -196,7 +196,7 @@ function MemorySettingsSection({ factoryId, models, sessionResourceId, sessionSc
         title="Your observational memory"
         description="Models and token thresholds used to summarize and retain context in your interactive chats."
       >
-        <SettingsCard>
+        <SettingsCard className="p-4">
           <OMSection resourceId={sessionResourceId} scope={sessionScope} models={models} />
         </SettingsCard>
       </SettingsSubsection>
@@ -225,7 +225,9 @@ function ModelsSettingsSection({ models, settings, updating, onBehaviorChange }:
           anyConnected ? undefined : 'Connect a provider to unlock model selection and observational-memory settings.'
         }
       >
-        <ProviderAccessSection />
+        <SettingsCard className="p-4">
+          <ProviderAccessSection />
+        </SettingsCard>
       </SettingsSubsection>
       <SettingsSubsection title="Custom providers">
         <SettingsCard className="p-4">

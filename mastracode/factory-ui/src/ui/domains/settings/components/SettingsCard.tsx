@@ -12,10 +12,7 @@ export function SettingsCard({ className, children }: { className?: string; chil
 
 export function SettingsRow({ label, hint, children }: { label: ReactNode; hint?: ReactNode; children?: ReactNode }) {
   return (
-    <div
-      data-slot="settings-row"
-      className="flex flex-col gap-2 px-4 py-3 lg:flex-row lg:items-center lg:justify-between lg:gap-4"
-    >
+    <div className="flex flex-col gap-2 px-4 py-3 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
       <div className="flex min-w-0 flex-col gap-0.5">
         <Txt as="span" variant="ui-md" className="text-icon5">
           {label}
