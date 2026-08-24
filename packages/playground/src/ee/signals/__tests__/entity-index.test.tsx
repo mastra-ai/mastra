@@ -7,7 +7,6 @@ import { MemoryRouter, useLocation } from 'react-router';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import SignalsOverviewPage from '..';
-import { intelligenceIndexLoader } from '../intelligence-index-loader';
 import { populatedThemeEntitiesResponse } from './fixtures/theme-flow';
 import { server } from '@/test/msw-server';
 
@@ -40,14 +39,13 @@ function renderIndex(initialEntry = '/intelligence') {
 
 describe('Trace Intelligence index route', () => {
   describe('when a legacy agent query parameter is present', () => {
-    it('redirects to the canonical entity path and preserves other search parameters', () => {
-      const response = intelligenceIndexLoader({
-        request: new Request('http://localhost/intelligence?agent=support-agent&datePreset=last-14d&search=support'),
-      });
+    it('redirects to the canonical entity path and preserves other search parameters', async () => {
+      renderIndex('/intelligence?agent=support-agent&datePreset=last-14d&search=support');
 
-      expect(response).toBeInstanceOf(Response);
-      expect((response as Response).headers.get('Location')).toBe(
-        '/intelligence/entities/agent/support-agent?datePreset=last-14d&search=support',
+      await waitFor(() =>
+        expect(screen.getByRole('status', { name: 'Current URL' }).textContent).toBe(
+          '/intelligence/entities/agent/support-agent?datePreset=last-14d&search=support',
+        ),
       );
     });
   });

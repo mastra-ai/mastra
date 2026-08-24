@@ -10,7 +10,6 @@ import { RoutePermissionsGate } from './domains/auth/components/route-permission
 import { DatasetCrumb } from './domains/datasets/dataset-crumb';
 import { WorkflowLayout } from './domains/workflows/workflow-layout';
 import SignalsOverviewPage from './ee/signals';
-import { intelligenceIndexLoader } from './ee/signals/intelligence-index-loader';
 import { SignalsEntityCrumb } from './ee/signals/signals-entity-crumb';
 import { SignalsEntityDetailPage } from './ee/signals/signals-entity-detail-page';
 import { PostHogProvider } from './lib/analytics';
@@ -348,7 +347,6 @@ export const routes: RouteObject[] = [
       {
         path: '/intelligence',
         element: <SignalsOverviewPage />,
-        loader: intelligenceIndexLoader,
         handle: navHandle('/intelligence'),
       },
       {

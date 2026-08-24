@@ -77,10 +77,23 @@ A theme can persist, disappear, split, merge, or return across snapshots. Treat 
 
 ## Use the Trace Intelligence page
 
-1. Use the **Agent** selector to switch between agents after their first themes are ready and analysis becomes available.
+1. Open **Intelligence** to see the entity index. Search or sort the index, then select an entity to open its analysis.
 1. Select a theme in the flow to open its details and filter every column to traces containing that theme.
 1. The details panel shows the theme's description, its share of the snapshot, paged example summaries, and a trend of its trace count over time.
 1. Select **Clear filter** to restore the complete flow.
+
+Entities appear while their signals are still collecting or processing. The index shows each entity's analyzed trace count, ready and enabled signal counts, lifecycle status, and last update.
+
+### Configure a custom signal
+
+Users with project management permission can configure custom signals without leaving Intelligence:
+
+1. Return to the entity index and select **Signal settings**.
+1. Select **Create signal**, provide a stable signal name, display label, description, and signal instructions, then save it. Definitions and their versions are shared across the organization.
+1. Enable the signal under **Current project**. Project enablement affects only the current project and applies to newly processed traces.
+1. Open an entity from the index and follow its signal status as it moves from collecting to processing and ready.
+
+You can edit a custom signal's label, description, or instructions. Instruction changes create a new version and apply only to new traces. You can also archive definitions that should no longer be available or restore archived definitions later.
 
 You can also:
 
@@ -99,7 +112,7 @@ Confirm that Mastra enrolled the correct project, that you use the beta-compatib
 
 ### An agent is missing
 
-Confirm that its completed traces are listed under **Traces**. The agent is listed only after its first themes are ready. If it recently reached 100 traces, allow time for asynchronous processing.
+Confirm that its completed traces are listed under **Traces** and that the project is enrolled. An entity appears after Trace Intelligence begins generating signal data, before its first themes are ready. If it recently reached 100 traces, allow time for asynchronous processing.
 
 ### The relationship flow is unavailable
 

@@ -8,7 +8,7 @@ import { SignalsErrorState } from '../signals-error-state';
 import { SignalsLoadingSkeleton } from '../signals-loading-skeleton';
 import { TraceIntelligenceProvider } from '../trace-intelligence-provider';
 import { useTraceIntelligence } from '../use-trace-intelligence';
-import { SignalsOverviewPage as SignalsEmptyState } from './signals-overview-page';
+import { SignalsEmptyState } from './signals-empty-state';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { NoDataPageLayout } from '@/ds/components/PageLayout';
 

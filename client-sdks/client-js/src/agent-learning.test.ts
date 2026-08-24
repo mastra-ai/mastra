@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import type { ThemeLearningEntity } from '../agent-learning';
-import { enrichedThemeLearningEntity } from './fixtures/agent-learning-index';
+import { enrichedThemeLearningEntity } from './__tests__/fixtures/agent-learning-index';
+import type { ThemeLearningEntity } from './agent-learning';
 
 const legacyThemeLearningEntity = {
   entityId: 'legacy-agent',

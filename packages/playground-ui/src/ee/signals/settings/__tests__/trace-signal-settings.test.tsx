@@ -202,7 +202,7 @@ describe('TraceSignalSettingsButton', () => {
     const closeButton = screen.getAllByRole('button', { name: 'Close' }).at(-1);
     if (!closeButton) throw new Error('Expected the signal form close button');
     fireEvent.click(closeButton);
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Create trace signal' })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Create custom signal' })).toBeNull());
     fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
 
     expect(await screen.findByDisplayValue('Handoff Quality')).toBeTruthy();

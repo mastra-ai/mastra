@@ -70,6 +70,7 @@ const VIEW_DESCRIPTIONS: Omit<Record<SignalsViewMode, string>, 'flow'> = {
 
 function formatSignalList(labels: string[]): string {
   if (labels.length < 2) return labels[0] ?? 'trace signal';
+  if (labels.length === 2) return labels.join(' and ');
   return `${labels.slice(0, -1).join(', ')}, and ${labels.at(-1)}`;
 }
 

@@ -74,6 +74,8 @@ export function ThemeDetailPanel({
   );
   const title = detailQuery.data?.theme?.label ?? selection?.label ?? 'Theme details';
   const signalName = selection?.signalName;
+  const signalDisplayLabel = signalName ? signalLabel(signalCatalog, signalName) : undefined;
+  const signalDisplayDescription = signalName ? signalDescription(signalCatalog, signalName) : undefined;
   const historyPoints = historyQuery.data ? chronologicalHistoryPoints(historyQuery.data.points) : [];
   const oldestHistoryPoint = historyPoints[0];
 
@@ -98,12 +100,16 @@ export function ThemeDetailPanel({
               className="font-mono text-xs font-semibold tracking-widest"
               style={{ color: nodeColor(getSignalHue(signalName)) }}
             >
-              <Tooltip>
-                <TooltipTrigger aria-label={signalName} className="cursor-default uppercase">
-                  {signalLabel(signalCatalog, signalName)}
-                </TooltipTrigger>
-                <TooltipContent>{signalDescription(signalCatalog, signalName)}</TooltipContent>
-              </Tooltip>
+              {signalDisplayDescription ? (
+                <Tooltip>
+                  <TooltipTrigger aria-label={signalDisplayLabel} className="cursor-default uppercase">
+                    {signalDisplayLabel}
+                  </TooltipTrigger>
+                  <TooltipContent>{signalDisplayDescription}</TooltipContent>
+                </Tooltip>
+              ) : (
+                <span className="uppercase">{signalDisplayLabel}</span>
+              )}
             </span>
           )}
           <DrawerTitle>{title}</DrawerTitle>

@@ -1,5 +1,5 @@
 import { TraceIntelligenceEntityIndex, TraceIntelligenceProvider } from '@mastra/playground-ui/ee/signals';
-import { useSearchParams } from 'react-router';
+import { Navigate, useSearchParams } from 'react-router';
 
 import { Link } from '../../lib/link';
 import { useEntityIndexUrlState } from './use-entity-index-url-state';
@@ -15,6 +15,19 @@ export function SignalsOverviewPage() {
 function SignalsOverviewContent() {
   const urlState = useEntityIndexUrlState();
   const [searchParams] = useSearchParams();
+  const legacyEntityId = searchParams.get('agent');
+
+  if (legacyEntityId) {
+    const detailSearch = new URLSearchParams(searchParams);
+    detailSearch.delete('agent');
+    const query = detailSearch.toString();
+    return (
+      <Navigate
+        replace
+        to={`/intelligence/entities/agent/${encodeURIComponent(legacyEntityId)}${query ? `?${query}` : ''}`}
+      />
+    );
+  }
 
   return (
     <TraceIntelligenceEntityIndex

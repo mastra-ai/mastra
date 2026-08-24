@@ -196,7 +196,9 @@ export function TraceIntelligenceEntityIndex({
       </PageLayout.TopArea>
       <div
         className={
-          settingsOpen ? 'grid max-h-full min-h-0 grid-cols-[1fr_1fr] items-start gap-4' : 'grid min-h-0 grid-cols-1'
+          settingsOpen
+            ? 'grid max-h-full min-h-0 grid-cols-1 items-start gap-4 lg:grid-cols-[1fr_1fr]'
+            : 'grid min-h-0 grid-cols-1'
         }
       >
         <div className="min-h-0 min-w-0">{body}</div>

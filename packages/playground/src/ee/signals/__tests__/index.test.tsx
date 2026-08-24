@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { navHandleWithChildren } from '../../../lib/nav';
 import { RouteHeader } from '../../../lib/route-header/route-header';
 import { SignalsEntityCrumb } from '../signals-entity-crumb';
-import SignalsOverviewPage from '../signals-entity-detail-page';
+import { SignalsEntityDetailPage } from '../signals-entity-detail-page';
 import {
   allThemePathsResponse,
   drilldownThemeFlowResponse,
@@ -67,7 +67,7 @@ function renderSignalsPage(initialEntry = '/intelligence/entities/agent/support-
     <MemoryRouter initialEntries={[resolvedEntry]}>
       <QueryClientProvider client={queryClient}>
         <Routes>
-          <Route path="/intelligence/entities/:entityType/:entityId" element={<SignalsOverviewPage />} />
+          <Route path="/intelligence/entities/:entityType/:entityId" element={<SignalsEntityDetailPage />} />
         </Routes>
       </QueryClientProvider>
     </MemoryRouter>,
@@ -86,7 +86,7 @@ function renderSignalsPageWithShell(entityId = 'support-agent') {
         element: (
           <QueryClientProvider client={queryClient}>
             <RouteHeader />
-            <SignalsOverviewPage />
+            <SignalsEntityDetailPage />
           </QueryClientProvider>
         ),
       },
