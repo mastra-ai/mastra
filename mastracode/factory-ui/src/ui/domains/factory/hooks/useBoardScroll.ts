@@ -15,17 +15,37 @@ export function useBoardScroll({
   stages,
   workItems,
   candidates,
+  targetItemId,
+  targetReady,
 }: {
   boardKey: string;
   settled: boolean;
   stages: ReadonlyArray<{ id: BoardStageId }>;
   workItems: readonly WorkItem[];
   candidates: readonly BoardCandidate[];
+  targetItemId: string | undefined;
+  targetReady: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const laneRefs = useRef(new Map<BoardStageId, HTMLElement>());
   const autoPositionedRef = useRef<string | undefined>(undefined);
   const userPositionedRef = useRef<string | undefined>(undefined);
+  const targetPositionedRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!targetReady || !targetItemId) return;
+    const targetKey = `${boardKey}:${targetItemId}`;
+    if (targetPositionedRef.current === targetKey) return;
+    const cards = containerRef.current?.querySelectorAll<HTMLElement>('[data-work-item-id]');
+    if (!cards) return;
+    for (const card of cards) {
+      if (card.dataset.workItemId !== targetItemId) continue;
+      targetPositionedRef.current = targetKey;
+      userPositionedRef.current = boardKey;
+      card.scrollIntoView?.({ behavior: 'auto', block: 'center', inline: 'center' });
+      card.querySelector<HTMLElement>('a[href], button:not(:disabled)')?.focus({ preventScroll: true });
+      return;
+    }
+  }, [boardKey, targetItemId, targetReady]);
 
   useEffect(() => {
     if (!settled || autoPositionedRef.current === boardKey || userPositionedRef.current === boardKey) return;

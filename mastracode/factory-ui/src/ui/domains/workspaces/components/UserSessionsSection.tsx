@@ -13,7 +13,7 @@ import { queryKeys } from '../../../../api/keys';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useActiveRunResources } from '../../../../hooks/useActiveRunResources';
-import { useWorkspaceAttention } from '../../../../hooks/useWorkspaceAttention';
+import { useWorkspaceAttentionState } from '../../../../hooks/useWorkspaceAttention';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { removeCachedSession, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { usePinnedSessions } from '../hooks/usePinnedSessions';
@@ -70,16 +70,13 @@ export function UserSessionsSection() {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceIds: sessions.map(session => session.sessionId),
   });
+  const { attentionByPath: attentionBySessionId, clearAttention } = useWorkspaceAttentionState({
+    projectRepositoryId: repository?.projectRepositoryId,
+    sessionKind: 'user',
+  });
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.sessions(repository?.projectRepositoryId) });
   };
-  // Refetch on run end (same as WorkspacesSection): the first run materializes
-  // the session's sandbox, and without this the cached `materializedAt: null`
-  // kept the row's status dot stuck on "initializing".
-  const { attentionByPath: attentionBySessionId, clearAttention } = useWorkspaceAttention(
-    runningBySessionId,
-    invalidate,
-  );
 
   const deleteSession = useMutation({
     mutationFn: async (session: FactoryUserSession) => {

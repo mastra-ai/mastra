@@ -63,7 +63,7 @@ export function boardCardStatus(input: BoardCardStatusInput): BoardCardStatus {
     return {
       kind: 'error',
       label: automationCopy(decision.type).failed,
-      retryDecisionId: decision.id,
+      ...(decision.canRetry ? { retryDecisionId: decision.id } : {}),
       detail: decision.lastError ?? undefined,
     };
   }

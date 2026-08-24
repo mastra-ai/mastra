@@ -1,130 +1,122 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { E2BSandbox } from '@mastra/e2b';
-import { PlatformSandbox } from '@mastra/platform-workspace';
-import { createRemoteFactorySandbox } from './sandbox-provider.js';
+import type * as factoryModule from '@mastra/factory';
 
-describe('createRemoteFactorySandbox', () => {
+const factoryConfigs = vi.hoisted(() => [] as Array<ConstructorParameters<typeof factoryModule.MastraFactory>[0]>);
+vi.mock('@mastra/factory', async importOriginal => {
+  const actual = await importOriginal<typeof factoryModule>();
+  class TrackedMastraFactory extends actual.MastraFactory {
+    constructor(config: ConstructorParameters<typeof actual.MastraFactory>[0]) {
+      super(config);
+      factoryConfigs.push(config);
+    }
+  }
+  return { ...actual, MastraFactory: TrackedMastraFactory };
+});
+
+/**
+ * Sandbox selection lives inline in the entry's `sandbox` callback because
+ * `src/mastra/index.ts` is copied verbatim into the create-factory template
+ * (scripts/sync-template.mjs) — the entry must stay a single self-contained
+ * file. These tests boot the real entry and exercise that callback directly.
+ *
+ * Provider precedence: Platform > E2B > Local. Template *definitions* are
+ * covered by `@mastra/platform-workspace` repo-template tests; here we pin
+ * which provider is selected and what session context is forwarded.
+ */
+describe('entry sandbox callback (src/mastra/index.ts)', () => {
   beforeEach(() => {
-    vi.stubEnv('E2B_API_KEY', '');
-    vi.stubEnv('SANDBOX_PROVIDER', 'e2b');
-    vi.stubEnv('MASTRA_PROJECT_ID', 'project-1');
-    vi.stubEnv('MASTRA_ENVIRONMENT_ID', 'environment-1');
+    for (const name of [
+      'MASTRACODE_AUTH_DISABLED',
+      'WORKOS_API_KEY',
+      'WORKOS_CLIENT_ID',
+      'WORKOS_COOKIE_PASSWORD',
+      'MASTRA_SHARED_API_URL',
+      'MASTRA_PLATFORM_SECRET_KEY',
+      'MASTRA_PLATFORM_ACCESS_TOKEN',
+      'MASTRA_CLOUD_ACCESS_TOKEN',
+      'MASTRA_ENVIRONMENT_ID',
+      'DATABASE_URL',
+      'APP_DATABASE_URL',
+      'REDIS_URL',
+      'GITHUB_APP_ID',
+      'GITHUB_APP_PRIVATE_KEY',
+      'GITHUB_APP_CLIENT_ID',
+      'GITHUB_APP_CLIENT_SECRET',
+      'GITHUB_APP_SLUG',
+      'GITHUB_APP_WEBHOOK_SECRET',
+      'LINEAR_CLIENT_ID',
+      'LINEAR_CLIENT_SECRET',
+      'SLACK_APP_SIGNING_SECRET',
+      'MASTRACODE_DISPATCH_MAX_IN_FLIGHT',
+      'E2B_API_KEY',
+    ]) {
+      vi.stubEnv(name, '');
+    }
+    vi.stubEnv('MASTRA_PROJECT_ID', 'test-project');
+    factoryConfigs.length = 0;
+    vi.resetModules();
   });
 
   afterEach(() => {
     vi.unstubAllEnvs();
-    vi.unstubAllGlobals();
+    vi.resetModules();
   });
 
-  it('prefers PlatformSandbox and forwards a credential-free, commit-addressed Factory template', async () => {
+  async function importSandboxCallback() {
+    await import('./index.js');
+    expect(factoryConfigs).toHaveLength(1);
+    const sandbox = factoryConfigs[0]?.sandbox;
+    if (typeof sandbox !== 'function') throw new Error('entry factory config has no sandbox callback');
+    return sandbox;
+  }
+
+  it('prefers PlatformSandbox over direct E2B and forwards session context', { timeout: 60_000 }, async () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'sk_platform');
+    vi.stubEnv('MASTRA_ENVIRONMENT_ID', 'environment-1');
     vi.stubEnv('E2B_API_KEY', 'direct-e2b-must-not-win');
+    const callback = await importSandboxCallback();
+
     const onStart = vi.fn();
-    const getGithubToken = vi.fn();
-    const resolveRepoHead = vi.fn().mockResolvedValue('0123456789abcdef0123456789abcdef01234567');
-    const fetchMock = vi.fn().mockResolvedValueOnce(
-      new Response(JSON.stringify({ id: 'sandbox-1', createdAt: '2026-08-22T00:00:00.000Z' }), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      }),
-    );
-    vi.stubGlobal('fetch', fetchMock);
-    const sandbox = createRemoteFactorySandbox(
-      {
-        sessionId: 'session-1',
-        repoFullName: 'acme/widgets',
-        setupCommand: 'pnpm install',
-        onStart,
-        getGithubToken,
-        actingUserId: 'user-1',
-      },
-      { platformAccessToken: 'sk_platform', resolveRepoHead },
-    );
-
-    expect(sandbox).toBeInstanceOf(PlatformSandbox);
-    expect(sandbox).toMatchObject({ id: 'session-1' });
-    await (sandbox as PlatformSandbox).start();
-
-    expect(resolveRepoHead).toHaveBeenCalledWith('acme/widgets');
-    expect(getGithubToken).not.toHaveBeenCalled();
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(String(fetchMock.mock.calls[0]![0])).toContain('/v1/e2b/projects/project-1/sandbox');
-    const createBody = JSON.parse(fetchMock.mock.calls[0]![1].body as string);
-    expect(createBody).not.toHaveProperty('templateId');
-    expect(createBody.templateDefinition).toEqual({
-      schemaVersion: 1,
-      operations: [
-        {
-          method: 'runCmd',
-          args: [
-            [
-              'git clone https://github.com/acme/widgets.git "$HOME/widgets"',
-              'git -C "$HOME/widgets" fetch origin 0123456789abcdef0123456789abcdef01234567',
-              'git -C "$HOME/widgets" checkout 0123456789abcdef0123456789abcdef01234567',
-              'cd "$HOME/widgets" && pnpm install',
-            ],
-          ],
-        },
-      ],
-      // Commit-independent lineage key from createRepoTemplate — Platform uses
-      // it to warm-start a new commit on the prior ready template.
-      lineageId: 'repo:acme/widgets:$HOME/widgets',
-    });
-    expect(JSON.stringify(createBody)).not.toContain('token');
-    expect((sandbox as unknown as { _onStart?: unknown })._onStart).toBe(onStart);
-    expect(
-      (sandbox as unknown as { _client?: { actingUserId?: string; sandboxProvider?: string } })._client,
-    ).toMatchObject({
+    const sandbox = callback({
+      sessionId: 'session-1',
+      repoFullName: 'acme/widgets',
+      setupCommand: 'pnpm install',
+      onStart,
       actingUserId: 'user-1',
-      sandboxProvider: 'e2b',
     });
+
+    // `vi.resetModules()` reloads the entry's module graph, so provider classes
+    // have a fresh identity — assert on the stable `provider` discriminator.
+    expect(sandbox).toMatchObject({ provider: 'platform' });
+    expect(sandbox).toMatchObject({ id: 'session-1' });
+    expect((sandbox as unknown as { _onStart?: unknown })._onStart).toBe(onStart);
+    expect((sandbox as unknown as { _client?: { actingUserId?: string } })._client).toMatchObject({
+      actingUserId: 'user-1',
+    });
+    // A repo-backed session carries a lazy template resolver; no work happens
+    // until start().
+    expect((sandbox as unknown as { _template?: unknown })._template).toBeDefined();
   });
 
-  it('leaves inaccessible repositories to the authenticated runtime fallback without requesting a build token', async () => {
-    const getGithubToken = vi.fn();
-    const fetchMock = vi.fn().mockResolvedValueOnce(
-      new Response(JSON.stringify({ id: 'sandbox-private', createdAt: '2026-08-22T00:00:00.000Z' }), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      }),
-    );
-    vi.stubGlobal('fetch', fetchMock);
-    const sandbox = createRemoteFactorySandbox(
-      {
-        sessionId: 'session-private',
-        repoFullName: 'acme/private-widgets',
-        getGithubToken,
-      },
-      {
-        platformAccessToken: 'sk_platform',
-        resolveRepoHead: vi.fn().mockResolvedValue(undefined),
-      },
-    );
-
-    await (sandbox as PlatformSandbox).start();
-
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(String(fetchMock.mock.calls[0]![0])).toContain('/v1/e2b/projects/project-1/sandbox');
-    expect(JSON.parse(fetchMock.mock.calls[0]![1].body as string)).not.toHaveProperty('templateDefinition');
-    expect(getGithubToken).not.toHaveBeenCalled();
-  });
-
-  it('retains direct E2BSandbox for non-Platform remote deployments', () => {
+  it('selects direct E2BSandbox when only E2B_API_KEY is configured', { timeout: 60_000 }, async () => {
     vi.stubEnv('E2B_API_KEY', 'direct-e2b');
-    const getGithubToken = vi.fn();
-    const sandbox = createRemoteFactorySandbox(
-      {
-        sessionId: 'session-2',
-        repoFullName: 'acme/widgets',
-        getGithubToken,
-      },
-      {},
-    );
+    const callback = await importSandboxCallback();
 
-    expect(sandbox).toBeInstanceOf(E2BSandbox);
+    const sandbox = callback({ sessionId: 'session-2', repoFullName: 'acme/widgets' });
+
+    expect(sandbox).toMatchObject({ provider: 'e2b' });
     expect(sandbox).toMatchObject({ id: 'session-2' });
   });
 
-  it('returns undefined when no remote provider is configured', () => {
-    expect(createRemoteFactorySandbox({ sessionId: 'session-3' }, {})).toBeUndefined();
-  });
+  it(
+    'falls back to a per-session LocalSandbox when no remote provider is configured',
+    { timeout: 60_000 },
+    async () => {
+      const callback = await importSandboxCallback();
+
+      const sandbox = callback({ sessionId: 'session-3' });
+
+      expect(sandbox).toMatchObject({ provider: 'local' });
+    },
+  );
 });

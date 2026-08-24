@@ -308,6 +308,76 @@ describe('WorkItemsStorage', () => {
     expect((await storage.get({ orgId: 'org1', id: child.item.id }))?.parentWorkItemId).toBeNull();
   });
 
+  it('treats a concurrently deleted attention receipt as stale', async () => {
+    const backend = new LibSQLFactoryStorage({ id: 'attention-receipt-race-test', url: ':memory:' });
+    const storage = backend.registerDomain(new WorkItemsStorage());
+    await backend.init();
+    const scope = { orgId: 'org1', factoryProjectId: 'p1' };
+    const created = await storage.upsert({ ...scope, userId: 'u', input });
+    const now = new Date('2030-01-01T00:00:00.000Z');
+    await storage.commitRuleEvaluation({
+      ...scope,
+      workItemId: created.item.id,
+      ingress: { identity: 'receipt-race', triggerType: 'test' },
+      ruleSetVersion: 'rules-v1',
+      expectedRevision: created.item.revision,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [
+        {
+          type: 'sendMessage',
+          role: 'work',
+          message: 'Notify the session.',
+          idempotencyKey: 'receipt-race',
+        },
+      ],
+      causalChain: [],
+      now,
+    });
+    const [claimed] = await storage.claimDeferredDecisions({
+      ownerId: 'worker-1',
+      now,
+      leaseExpiresAt: new Date(now.getTime() + 30_000),
+      limit: 1,
+    });
+    if (!claimed) throw new Error('Expected a deferred decision');
+    const failed = await storage.failDeferredDecision({
+      id: claimed.id,
+      orgId: claimed.orgId,
+      factoryProjectId: claimed.factoryProjectId,
+      ownerId: 'worker-1',
+      now,
+      availableAt: now,
+      lastError: 'Session unavailable.',
+      failureCode: 'session_unavailable',
+      terminal: true,
+    });
+    if (!failed) throw new Error('Expected a failed decision');
+    await storage.setAttentionReceipt({
+      ...scope,
+      userId: 'u',
+      decisionId: failed.id,
+      failureOccurrence: failed.failureOccurrence,
+      action: 'read',
+      now,
+    });
+    interceptTransactionOps(backend, ops => ({
+      updateAtomic: (collection: string, where: unknown, updater: unknown) =>
+        collection === 'factory_attention_receipts' ? null : ops.updateAtomic(collection, where, updater),
+    }));
+
+    await expect(
+      storage.setAttentionReceipt({
+        ...scope,
+        userId: 'u',
+        decisionId: failed.id,
+        failureOccurrence: failed.failureOccurrence,
+        action: 'archive',
+        now,
+      }),
+    ).resolves.toBeNull();
+  });
+
   it('uses serializable transactions for relationship writes and deletion', async () => {
     const backend = new LibSQLFactoryStorage({ id: 'work-items-relation-test', url: ':memory:' });
     const withTransaction = vi.spyOn(backend, 'withTransaction');

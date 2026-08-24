@@ -3,13 +3,16 @@ import { APICallError } from '@internal/ai-sdk-v5';
 import { describe, expect, it } from 'vitest';
 import { MessageList } from '../agent/message-list';
 import {
+  anthropicStripEmptySignedReasoningContent,
   anthropicStripForeignReasoningContent,
   azureSystemReminderTransform,
   cerebrasStripReasoningContent,
   isMaybeAnthropic,
+  isMaybeAnthropicWithoutAssistantPrefill,
   isMaybeAzure,
   isMaybeCerebras,
   ProviderHistoryCompat,
+  stripForeignProviderExecutedTools,
 } from './provider-history-compat';
 import type { CompatRule } from './provider-history-compat';
 import { ProcessorRunner } from './runner';
@@ -325,6 +328,41 @@ describe('isMaybeAnthropic', () => {
   });
 });
 
+describe('isMaybeAnthropicWithoutAssistantPrefill', () => {
+  it('matches Claude 4.6 and later Anthropic models', () => {
+    expect(isMaybeAnthropicWithoutAssistantPrefill('anthropic/claude-opus-4-6')).toBe(true);
+    expect(isMaybeAnthropicWithoutAssistantPrefill('anthropic/claude-opus-5')).toBe(true);
+    expect(
+      isMaybeAnthropicWithoutAssistantPrefill({ provider: 'anthropic.messages', modelId: 'claude-sonnet-4.6' }),
+    ).toBe(true);
+    expect(
+      isMaybeAnthropicWithoutAssistantPrefill({
+        provider: 'openai-compatible.chat',
+        modelId: 'anthropic/claude-opus-5',
+      }),
+    ).toBe(true);
+  });
+
+  it('does not match older Claude models or non-Anthropic models', () => {
+    expect(isMaybeAnthropicWithoutAssistantPrefill('anthropic/claude-haiku-4-5-20251001')).toBe(false);
+    expect(
+      isMaybeAnthropicWithoutAssistantPrefill({ provider: 'anthropic.messages', modelId: 'claude-sonnet-4.5' }),
+    ).toBe(false);
+    expect(isMaybeAnthropicWithoutAssistantPrefill('openai/gpt-5')).toBe(false);
+  });
+
+  it('uses a conservative result for unresolved Anthropic model versions and fallback arrays', () => {
+    expect(isMaybeAnthropicWithoutAssistantPrefill({ provider: 'anthropic.messages' })).toBe(true);
+    expect(isMaybeAnthropicWithoutAssistantPrefill(() => 'anthropic/claude-opus-5')).toBe(true);
+    expect(
+      isMaybeAnthropicWithoutAssistantPrefill([
+        { model: 'anthropic/claude-haiku-4-5-20251001' },
+        { model: 'anthropic/claude-opus-5' },
+      ]),
+    ).toBe(true);
+  });
+});
+
 describe('isMaybeAzure', () => {
   it('matches Azure provider and gateway model forms', () => {
     expect(isMaybeAzure('azure/gpt-4o')).toBe(true);
@@ -425,6 +463,101 @@ const mockLogger = {
   trackException: () => {},
 } as any;
 
+describe('stripForeignProviderExecutedTools', () => {
+  const hostedToolPrompt = (provider: 'anthropic' | 'openai', toolCallId: string): LanguageModelV2Prompt => [
+    { role: 'user', content: [{ type: 'text', text: 'search for this' }] },
+    {
+      role: 'assistant',
+      content: [
+        { type: 'text', text: 'I will search.' },
+        {
+          type: 'tool-call',
+          toolCallId,
+          toolName: 'web_search',
+          input: { query: 'Mastra' },
+          providerExecuted: true,
+          providerOptions: { [provider]: { itemId: toolCallId } },
+        } as any,
+        { type: 'text', text: 'Search complete.' },
+      ],
+    },
+    {
+      role: 'tool',
+      content: [
+        {
+          type: 'tool-result',
+          toolCallId,
+          toolName: 'web_search',
+          output: { type: 'text', value: 'result' },
+          providerOptions: { [provider]: { itemId: toolCallId } },
+        } as any,
+      ],
+    },
+    { role: 'user', content: [{ type: 'text', text: 'summarize it' }] },
+  ];
+
+  it('strips Anthropic hosted-tool pairs before an OpenAI Responses request', () => {
+    const result = stripForeignProviderExecutedTools.applyToPrompt!({
+      prompt: hostedToolPrompt('anthropic', 'srvtoolu_abc123'),
+      model: { provider: 'openai.responses', modelId: 'gpt-5' },
+    });
+
+    expect(result).toEqual([
+      { role: 'user', content: [{ type: 'text', text: 'search for this' }] },
+      {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'I will search.' },
+          { type: 'text', text: 'Search complete.' },
+        ],
+      },
+      { role: 'user', content: [{ type: 'text', text: 'summarize it' }] },
+    ]);
+  });
+
+  it('strips OpenAI hosted-tool pairs before an Anthropic request', () => {
+    const result = stripForeignProviderExecutedTools.applyToPrompt!({
+      prompt: hostedToolPrompt('openai', 'ws_abc123'),
+      model: { provider: 'anthropic.messages', modelId: 'claude-sonnet-4-5' },
+    });
+
+    expect(result?.some(message => message.role === 'tool')).toBe(false);
+    expect((result?.[1]?.content as any[]).map(part => part.type)).toEqual(['text', 'text']);
+  });
+
+  it('preserves same-provider hosted-tool history', () => {
+    const prompt = hostedToolPrompt('anthropic', 'srvtoolu_abc123');
+    const result = stripForeignProviderExecutedTools.applyToPrompt!({
+      prompt,
+      model: { provider: 'anthropic.messages', modelId: 'claude-sonnet-4-5' },
+    });
+
+    expect(result).toBeUndefined();
+  });
+
+  it('preserves OpenAI hosted-tool history for OpenAI-compatible destinations', () => {
+    const prompt = hostedToolPrompt('openai', 'ws_abc123');
+    const result = stripForeignProviderExecutedTools.applyToPrompt!({
+      prompt,
+      model: { provider: 'azure-openai.responses', modelId: 'gpt-5' },
+    });
+
+    expect(result).toBeUndefined();
+  });
+
+  it('does not remove client-executed tool pairs', () => {
+    const prompt = hostedToolPrompt('anthropic', 'call_abc123');
+    delete (prompt[1].content as any[])[1].providerExecuted;
+
+    const result = stripForeignProviderExecutedTools.applyToPrompt!({
+      prompt,
+      model: { provider: 'openai.responses', modelId: 'gpt-5' },
+    });
+
+    expect(result).toBeUndefined();
+  });
+});
+
 describe('anthropicStripForeignReasoningContent', () => {
   it('strips foreign reasoning parts from assistant messages when model is Anthropic', () => {
     const result = anthropicStripForeignReasoningContent.applyToPrompt!({
@@ -466,6 +599,95 @@ describe('anthropicStripForeignReasoningContent', () => {
       model: { provider: 'openai.chat', modelId: 'gpt-4o' },
     });
     expect(result).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Trailing assistant protection (Anthropic "thinking blocks in the latest
+// assistant message cannot be modified")
+// ---------------------------------------------------------------------------
+
+describe('trailing assistant message protection', () => {
+  const anthropicModel = { provider: 'anthropic.messages', modelId: 'claude-opus-4-6' };
+
+  /** Active tool-use continuation: last assistant is followed only by tool messages. */
+  function toolContinuationPrompt(): LanguageModelV2Prompt {
+    return [
+      { role: 'user', content: [{ type: 'text', text: 'hi' }] },
+      {
+        role: 'assistant',
+        content: [
+          // Historical assistant turn with a strippable part
+          { type: 'reasoning', text: 'old foreign reasoning' },
+          { type: 'text', text: 'earlier answer' },
+        ],
+      },
+      { role: 'user', content: [{ type: 'text', text: 'do the thing' }] },
+      {
+        role: 'assistant',
+        content: [
+          // Unsigned interleaved thinking (no anthropic metadata) — must NOT be
+          // stripped from the latest assistant message.
+          { type: 'reasoning', text: 'live thinking' },
+          // Signed-but-empty block — must also survive untouched.
+          { type: 'reasoning', text: '', providerOptions: { anthropic: { signature: 'sig-live' } } },
+          { type: 'tool-call', toolCallId: 'call-1', toolName: 'doThing', input: {} },
+        ],
+      },
+      {
+        role: 'tool',
+        content: [
+          { type: 'tool-result', toolCallId: 'call-1', toolName: 'doThing', output: { type: 'text', value: 'ok' } },
+        ],
+      },
+    ];
+  }
+
+  it('foreign-reasoning strip skips the trailing assistant of a tool continuation', () => {
+    const result = anthropicStripForeignReasoningContent.applyToPrompt!({
+      prompt: toolContinuationPrompt(),
+      model: anthropicModel,
+    });
+
+    expect(result).toBeDefined();
+    // Historical assistant stripped
+    expect((result![1].content as any[]).map(p => p.type)).toEqual(['text']);
+    // Trailing assistant untouched
+    expect((result![3].content as any[]).map(p => p.type)).toEqual(['reasoning', 'reasoning', 'tool-call']);
+  });
+
+  it('empty-signed strip skips the trailing assistant of a tool continuation', () => {
+    const prompt = toolContinuationPrompt();
+    // Give the historical assistant an empty signed block so the rule has
+    // something to strip outside the protected message.
+    (prompt[1].content as any[]).unshift({
+      type: 'reasoning',
+      text: '',
+      providerOptions: { anthropic: { signature: 'sig-legacy' } },
+    });
+
+    const result = anthropicStripEmptySignedReasoningContent.applyToPrompt!({
+      prompt,
+      model: anthropicModel,
+    });
+
+    expect(result).toBeDefined();
+    expect((result![1].content as any[]).map(p => p.type)).toEqual(['reasoning', 'text']);
+    // Trailing assistant keeps its empty signed block untouched
+    expect((result![3].content as any[]).map(p => p.type)).toEqual(['reasoning', 'reasoning', 'tool-call']);
+  });
+
+  it('still strips the last assistant message when a new user turn follows it', () => {
+    const prompt = toolContinuationPrompt();
+    prompt.push({ role: 'user', content: [{ type: 'text', text: 'next question' }] });
+
+    const result = anthropicStripForeignReasoningContent.applyToPrompt!({
+      prompt,
+      model: anthropicModel,
+    });
+
+    expect(result).toBeDefined();
+    expect((result![3].content as any[]).map(p => p.type)).toEqual(['reasoning', 'tool-call']);
   });
 });
 
@@ -677,6 +899,55 @@ describe('ProviderHistoryCompat.processLLMRequest', () => {
     expect(result).toEqual({ prompt: expect.any(Array) });
     const assistant = (result as { prompt: LanguageModelV2Prompt }).prompt.find(m => m.role === 'assistant')!;
     expect((assistant.content as any[]).map(p => p.type)).toEqual(['text']);
+  });
+
+  it('strips foreign provider-executed tool pairs through the built-in rule set', async () => {
+    const handler = new ProviderHistoryCompat();
+    const prompt: LanguageModelV2Prompt = [
+      {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'Before' },
+          {
+            type: 'tool-call',
+            toolCallId: 'srvtoolu_123',
+            toolName: 'web_search',
+            input: { query: 'weather' },
+            providerExecuted: true,
+            providerOptions: { anthropic: { type: 'server_tool_use' } },
+          },
+          { type: 'text', text: 'After' },
+        ],
+      },
+      {
+        role: 'tool',
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'srvtoolu_123',
+            toolName: 'web_search',
+            output: { type: 'json', value: { temperature: 72 } },
+            providerOptions: { anthropic: { type: 'web_search_tool_result' } },
+          },
+        ],
+      },
+    ];
+
+    const result = await handler.processLLMRequest(
+      makeRequestArgs(prompt, { provider: 'openai.responses', modelId: 'gpt-5' }),
+    );
+
+    expect(result).toEqual({
+      prompt: [
+        {
+          role: 'assistant',
+          content: [
+            { type: 'text', text: 'Before' },
+            { type: 'text', text: 'After' },
+          ],
+        },
+      ],
+    });
   });
 
   it('returns undefined when nothing needs to change', async () => {

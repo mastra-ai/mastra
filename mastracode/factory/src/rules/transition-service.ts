@@ -96,7 +96,7 @@ export function currentStage(stages: readonly string[]): FactoryRuleStage | unde
   return isFactoryRuleStage(stage) ? stage : undefined;
 }
 
-function workItemSource(source: ExternalWorkItemSource | null) {
+export function workItemSource(source: ExternalWorkItemSource | null) {
   if (!source) return 'manual' as const;
   if (source.integrationId === 'linear') return 'linear-issue' as const;
   // Only GitHub and Linear have provider-specific rules. Anything else (a Slack
