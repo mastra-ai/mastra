@@ -65,6 +65,9 @@ describe('createRemoteFactorySandbox', () => {
           ],
         },
       ],
+      // Commit-independent lineage key from createRepoTemplate — Platform uses
+      // it to warm-start a new commit on the prior ready template.
+      lineageId: 'repo:acme/widgets:$HOME/widgets',
     });
     expect(JSON.stringify(createBody)).not.toContain('token');
     expect((sandbox as unknown as { _onStart?: unknown })._onStart).toBe(onStart);
