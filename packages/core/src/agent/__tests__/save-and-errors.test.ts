@@ -365,9 +365,9 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
       expect(onFinishCalls).toBe(0);
     });
 
-    it('should save the thread and submitted input if error occurs during LLM generation', async () => {
-      // Threads are created upfront so storage backends that validate thread existence can
-      // persist the submitted input even when the provider fails before producing output.
+    it('should create the thread on provider error and persist submitted input in the current pipeline', async () => {
+      // The current pipeline persists submitted input on provider failure. The legacy AI SDK v4
+      // handler is a separate execution path and retains its existing thread-only behavior.
       const mockMemory = new MockMemory();
       const saveMessagesSpy = vi.spyOn(mockMemory, 'saveMessages');
 
@@ -1880,6 +1880,7 @@ describe('message persistence across completed steps', () => {
       persistedBatches.push(structuredClone(args.messages));
       return originalSaveMessages(args);
     };
+    let outputProcessorCalls = 0;
 
     const echoTool = createTool({
       id: 'echo-tool',
@@ -1895,6 +1896,15 @@ describe('message persistence across completed steps', () => {
       model: toolCallModel,
       memory: mockMemory,
       tools: { 'echo-tool': echoTool },
+      outputProcessors: [
+        {
+          id: 'completed-step-abort-output-processor',
+          processOutputResult: async ({ messageList }) => {
+            outputProcessorCalls++;
+            return messageList;
+          },
+        },
+      ],
     });
 
     const abortController = new AbortController();
@@ -1926,6 +1936,7 @@ describe('message persistence across completed steps', () => {
     }
 
     expect(stepFinishCount).toBe(1);
+    expect(outputProcessorCalls).toBe(0);
 
     const recalled = await mockMemory.recall({
       threadId: 'thread-save-per-step-abort',
