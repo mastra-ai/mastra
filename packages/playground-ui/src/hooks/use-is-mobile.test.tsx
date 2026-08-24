@@ -105,4 +105,43 @@ describe('useIsMobile', () => {
 
     expect(result.current).toBe(true);
   });
+
+  it('uses a 1024px breakpoint by default', () => {
+    renderHook(() => useIsMobile());
+
+    expect(mediaQueries.has('(max-width: 1023px)')).toBe(true);
+  });
+
+  it('reports a viewport that already matches at mount', () => {
+    window.matchMedia('(max-width: 1023px)');
+    mediaQueries.get('(max-width: 1023px)')?.setMatches(true);
+
+    const { result } = renderHook(() => useIsMobile());
+
+    expect(result.current).toBe(true);
+  });
+
+  it('subscribes to the change event', () => {
+    renderHook(() => useIsMobile());
+
+    expect(mediaQueries.get('(max-width: 1023px)')?.addEventListener).toHaveBeenCalledWith(
+      'change',
+      expect.any(Function),
+    );
+  });
+
+  it('stops reporting once the viewport no longer matches', () => {
+    const { result } = renderHook(() => useIsMobile());
+    const mql = mediaQueries.get('(max-width: 1023px)');
+
+    act(() => {
+      mql?.setMatches(true);
+    });
+    expect(result.current).toBe(true);
+
+    act(() => {
+      mql?.setMatches(false);
+    });
+    expect(result.current).toBe(false);
+  });
 });
