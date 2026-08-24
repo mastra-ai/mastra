@@ -179,6 +179,17 @@ describe('writePnpmConfig patch handling', () => {
     expect(fs.existsSync(path.join(outputDir, 'pnpm-patches'))).toBe(false);
   });
 
+  it('skips declarations whose patch file is outside the workspace', async () => {
+    const outsidePatch = path.join(sourceRoot, '..', 'outside.patch');
+    await fsPromises.writeFile(outsidePatch, 'OUTSIDE');
+    await writeWorkspace(`patchedDependencies:\n  foo@1.0.0: ../outside.patch\n`);
+
+    const output = await run();
+
+    expect(output).not.toContain('patchedDependencies');
+    expect(fs.existsSync(path.join(outputDir, 'pnpm-patches'))).toBe(false);
+  });
+
   it('leaves output untouched when the source declares no patches', async () => {
     await writeWorkspace(`packages:\n  - packages/*\n\nminimumReleaseAge: 1440\n`);
 

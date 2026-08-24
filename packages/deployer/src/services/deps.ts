@@ -328,9 +328,14 @@ export class Deps extends MastraBase {
     const declared = parsePnpmPatchedDependencies(sourceWorkspaceYaml);
     const rewritten: Record<string, string> = {};
     const usedFileNames = new Set<string>();
+    const resolvedWorkspaceRoot = path.resolve(sourceWorkspaceRoot);
 
     for (const [key, declaredPath] of Object.entries(declared)) {
-      const sourcePath = path.resolve(sourceWorkspaceRoot, declaredPath);
+      const sourcePath = path.resolve(resolvedWorkspaceRoot, declaredPath);
+      if (!sourcePath.startsWith(`${resolvedWorkspaceRoot}${path.sep}`)) {
+        this.logger.warn(`Skipping pnpm patch for "${key}": patch file is outside the workspace at ${sourcePath}`);
+        continue;
+      }
       if (!fs.existsSync(sourcePath)) {
         this.logger.warn(`Skipping pnpm patch for "${key}": patch file not found at ${sourcePath}`);
         continue;
