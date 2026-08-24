@@ -210,13 +210,13 @@ Available properties on `res.locals`:
 
 ## Adding middleware
 
-Add Express middleware before or after `init()`:
+Add Express middleware before `init()` to run it on every request. Mastra context isn't available at that point:
 
 ```typescript title="server.ts"
 const app = express()
 app.use(express.json())
 
-// Middleware before init
+// Runs on every request, before Mastra context exists
 app.use((req, res, next) => {
   console.log(`${req.method} ${req.url}`)
   next()
@@ -224,13 +224,11 @@ app.use((req, res, next) => {
 
 const server = new MastraServer({ app, mastra })
 await server.init()
-
-// Middleware after init has access to Mastra context
-app.use((req, res, next) => {
-  const mastra = res.locals.mastra
-  next()
-})
 ```
+
+Middleware added after `init()` never runs for Mastra's routes. Express dispatches handlers in registration order, so middleware registered after the routes only applies to routes added later.
+
+This adapter can't run [`server.middleware`](/docs/server/middleware) handlers because they use Hono's signature, and it logs a warning when that option is set. If you need Express middleware between Mastra's context step and its routes, use the manual initialization flow below.
 
 ## Manual initialization
 

@@ -1147,16 +1147,21 @@ export async function executeForeach(
       // clear it to keep the snapshot small.
       prevForeachOutput[k] = result.status === 'suspended' ? result : { ...result, suspendPayload: {} };
     } catch (err) {
+      const errorObj = err instanceof Error ? err : new Error(String(err));
+      const thrownResult: PersistedForeachStepResult = {
+        status: 'failed',
+        error: errorObj,
+        payload: undefined,
+        startedAt: Date.now(),
+        endedAt: Date.now(),
+      };
       if (!errorResult) {
-        const errorObj = err instanceof Error ? err : new Error(String(err));
-        errorResult = {
-          status: 'failed',
-          error: errorObj,
-          payload: undefined,
-          startedAt: Date.now(),
-          endedAt: Date.now(),
-        };
+        errorResult = thrownResult as StepFailure<any, any, any, any>;
       }
+      // Record the iteration that threw so the failure result below reports it
+      // as failed (and therefore retried) rather than leaving a hole in the
+      // per-iteration progress array.
+      prevForeachOutput[k] = thrownResult;
       killQueue();
     }
 
@@ -1295,7 +1300,22 @@ export async function executeForeach(
       },
     });
 
-    return finalErrorResult;
+    // Persist the per-iteration progress accumulated before the failure, using
+    // the same `__workflow_meta.foreachOutput` channel the suspend path below
+    // uses. Re-entering this foreach (via time travel, or any other path that
+    // replays the step) then skips the iterations that already succeeded
+    // instead of running their side effects a second time. See issue #21749.
+    return {
+      ...finalErrorResult,
+      suspendPayload: {
+        ...finalErrorResult.suspendPayload,
+        __workflow_meta: {
+          ...(finalErrorResult.suspendPayload as any)?.__workflow_meta,
+          foreachOutput: prevForeachOutput,
+          resumeLabels: executionContext.resumeLabels,
+        },
+      },
+    } as StepFailure<any, any, any, any>;
   }
 
   if (exitResult) {

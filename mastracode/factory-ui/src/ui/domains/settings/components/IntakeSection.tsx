@@ -310,7 +310,7 @@ export function IntakeSection() {
         </SettingsRow>
 
         {!linearConnected ? (
-          <div className="flex items-center gap-3 px-4 py-3">
+          <div className="flex flex-col items-start gap-2 px-4 py-3 lg:flex-row lg:items-center lg:gap-3">
             <Txt as="span" variant="ui-sm" className="text-icon3">
               {linearStatus?.enabled === false
                 ? 'Linear is not configured on this server.'
@@ -324,7 +324,7 @@ export function IntakeSection() {
           </div>
         ) : config.linear.enabled && isLinearReauthError(linearProjectsQuery.error) ? (
           // Expired token still reports connected; offer OAuth again.
-          <div className="flex items-center gap-3 px-4 py-3">
+          <div className="flex flex-col items-start gap-2 px-4 py-3 lg:flex-row lg:items-center lg:gap-3">
             <Txt as="span" variant="ui-sm" className="text-icon3">
               Linear authorization expired. Reconnect to keep syncing issues.
             </Txt>

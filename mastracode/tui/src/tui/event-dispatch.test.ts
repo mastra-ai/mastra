@@ -84,13 +84,16 @@ describe('dispatchEvent thread lifecycle', () => {
     ectx = createMockEctx();
   });
 
-  it('clears tasks, activePlan, and sandboxAllowedPaths on thread_changed', async () => {
+  it('clears per-thread state on thread_changed', async () => {
+    state.latestRequestPromptTokens = 90_000;
+
     await dispatchEvent(
       { type: 'thread_changed', threadId: 'new-thread', previousThreadId: 'old-thread' } as any,
       ectx,
       state,
     );
 
+    expect(state.latestRequestPromptTokens).toBeUndefined();
     expect(state.session.state.set).toHaveBeenCalledWith(
       expect.objectContaining({
         tasks: [],
@@ -100,13 +103,16 @@ describe('dispatchEvent thread lifecycle', () => {
     );
   });
 
-  it('clears tasks, activePlan, and sandboxAllowedPaths on thread_created', async () => {
+  it('clears per-thread state on thread_created', async () => {
+    state.latestRequestPromptTokens = 90_000;
+
     await dispatchEvent(
       { type: 'thread_created', thread: { id: 'brand-new', title: 'Brand New' } } as any,
       ectx,
       state,
     );
 
+    expect(state.latestRequestPromptTokens).toBeUndefined();
     expect(state.session.state.set).toHaveBeenCalledWith(
       expect.objectContaining({
         tasks: [],
