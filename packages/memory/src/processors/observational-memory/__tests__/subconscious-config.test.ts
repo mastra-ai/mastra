@@ -28,11 +28,11 @@ describe('Subconscious configuration', () => {
     expect(subconscious.resolved).toMatchObject({
       observation: [
         { name: 'capture', builtIn: true },
-        { name: 'remind', builtIn: true, maxSteps: 5 },
+        { name: 'remind', builtIn: true, maxSteps: 50 },
       ],
       reflection: [
         { name: 'curate', builtIn: true, maxSteps: 200 },
-        { name: 'learn', builtIn: true, maxSteps: 5 },
+        { name: 'learn', builtIn: true, maxSteps: 50 },
       ],
       defaultScope: 'resource',
       learnedGuidance: true,

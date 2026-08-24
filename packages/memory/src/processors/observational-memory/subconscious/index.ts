@@ -15,7 +15,7 @@ import type {
 
 const BUILT_IN_OBSERVATION = new Set(['capture', 'remind']);
 const BUILT_IN_REFLECTION = new Set(['curate', 'learn']);
-const DEFAULT_MAX_STEPS = 5;
+const DEFAULT_MAX_STEPS = 50;
 /**
  * Curation walks a worklist that can reach hundreds of records, and its completion marker is
  * fail-closed: a curator that runs out of steps advances no cursor at all. It gets a much larger
