@@ -61,6 +61,40 @@ describe('runExperiment lifecycle hooks', () => {
     );
   });
 
+  it('protects result metadata from callback mutations', async () => {
+    const sourceMetadata = { nested: { value: 'original' } };
+    const events: unknown[] = [];
+
+    const summary = await runExperiment(createMastra(), {
+      data: [{ id: 'a', input: 'one', metadata: sourceMetadata }],
+      beforeEach: ({ item }) => {
+        (item.metadata!.nested as { value: string }).value = 'beforeEach';
+      },
+      task: ({ input, metadata }) => {
+        expect(metadata).toEqual({ nested: { value: 'original' } });
+        (metadata!.nested as { value: string }).value = 'task';
+        return input;
+      },
+      afterEach: ({ item, result }) => {
+        (item.metadata!.nested as { value: string }).value = 'afterEach-item';
+        (result.metadata!.nested as { value: string }).value = 'afterEach-result';
+      },
+      onEvent: event => {
+        events.push(event);
+      },
+    });
+
+    expect(sourceMetadata).toEqual({ nested: { value: 'original' } });
+    expect(summary.results[0]?.metadata).toEqual({ nested: { value: 'original' } });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'experiment.item.completed',
+        itemId: 'a',
+        metadata: { nested: { value: 'original' } },
+      }),
+    );
+  });
+
   it('passes experimentId and mastra to run-level hooks', async () => {
     const mastra = createMastra();
     const beforeAll = vi.fn();
