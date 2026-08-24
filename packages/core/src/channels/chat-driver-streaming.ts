@@ -439,7 +439,7 @@ export async function runStreamingDriver({
 
     if (chunk.type === 'text-delta') {
       const piece = chunk.payload.text;
-      if (!piece) continue;
+      if (!piece || (!sessionRef.current && !piece.replace(/[\u200B-\u200D\uFEFF]/g, '').trim())) continue;
       pushToSession(piece);
       continue;
     }
