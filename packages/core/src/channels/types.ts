@@ -460,6 +460,10 @@ export interface ChannelHandlers {
    * Handler for slash commands delivered by the adapter webhook.
    * Default: Routes the command and arguments to the agent and posts the response
    * to the invoking channel.
+   * The built-in handler uses the platform and invoking user id for resource
+   * ownership and does not invoke the message-specific resource or thread
+   * resolver hooks. Use a custom handler when slash commands need different
+   * ownership or thread mapping.
    */
   onSlashCommand?: ChannelSlashCommandHandlerConfig;
 }

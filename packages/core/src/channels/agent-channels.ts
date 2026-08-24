@@ -44,7 +44,6 @@ import type {
   ChannelPostTarget,
   ChannelHandlerContext,
   ChannelHandlers,
-  ChannelSlashCommandHandler,
   PostableMessage,
   ResolveResourceId,
   ResolveThreadId,
@@ -482,7 +481,7 @@ export class AgentChannels {
             this.handleSlashCommand(slashEvent, mastra, requestContext, signalMetadata);
           const handlerContext: ChannelHandlerContext = { mastra, requestContext, signalMetadata };
           if (typeof onSlashCommand === 'function') {
-            return (onSlashCommand as ChannelSlashCommandHandler)(event, defaultHandler, handlerContext);
+            return onSlashCommand(event, defaultHandler, handlerContext);
           }
           return defaultHandler(event);
         });
@@ -1099,20 +1098,7 @@ export class AgentChannels {
       requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, this._buildRenderContext(channel, platform));
 
       const commandText = [event.command, event.text].filter(Boolean).join(' ');
-      const adapterConfig = this.adapterConfigs[platform];
-      const { resolved: toolDisplay, fn: toolDisplayFn } = this.resolveToolDisplay(
-        platform,
-        adapterConfig?.toolDisplay,
-        this.resolveStreaming(adapterConfig?.streaming).enabled,
-        adapterConfig?.cards,
-        adapterConfig?.formatToolCall,
-      );
-      const canRenderApprovalButtons =
-        toolDisplayFn !== undefined ||
-        toolDisplay === 'cards' ||
-        toolDisplay === 'timeline' ||
-        toolDisplay === 'grouped' ||
-        toolDisplay === 'hidden';
+      const { canRenderApprovalButtons } = this.resolveToolApprovalConfig(platform);
       await this.dispatchInboundMessage({
         signalContents: commandText,
         attributes,
@@ -1307,24 +1293,11 @@ export class AgentChannels {
     // same thread — render through a single consumer. sendSignal then either delivers the
     // message into an already-running agent loop or wakes the thread with an idle stream
     // using the same options we used to pass to agent.stream().
-    const adapterConfig = this.adapterConfigs[platform];
     // Auto-approve suspended tools when there's no way to render an
     // approval card with buttons. Block Kit cards have buttons; plain
     // `'text'` mode has only a "reply approve/deny" hint with no
     // first-class affordance, so we auto-approve to avoid getting stuck.
-    const { resolved: toolDisplay, fn: toolDisplayFn } = this.resolveToolDisplay(
-      platform,
-      adapterConfig?.toolDisplay,
-      this.resolveStreaming(adapterConfig?.streaming).enabled,
-      adapterConfig?.cards,
-      adapterConfig?.formatToolCall,
-    );
-    const canRenderApprovalButtons =
-      toolDisplayFn !== undefined ||
-      toolDisplay === 'cards' ||
-      toolDisplay === 'timeline' ||
-      toolDisplay === 'grouped' ||
-      toolDisplay === 'hidden';
+    const { toolDisplay, toolDisplayFn, canRenderApprovalButtons } = this.resolveToolApprovalConfig(platform);
 
     this.log('info', '[processChatMessage] tool approval config', {
       platform,
@@ -1831,6 +1804,24 @@ export class AgentChannels {
     };
 
     void reconnect();
+  }
+
+  private resolveToolApprovalConfig(platform: string) {
+    const adapterConfig = this.adapterConfigs[platform];
+    const { resolved: toolDisplay, fn: toolDisplayFn } = this.resolveToolDisplay(
+      platform,
+      adapterConfig?.toolDisplay,
+      this.resolveStreaming(adapterConfig?.streaming).enabled,
+      adapterConfig?.cards,
+      adapterConfig?.formatToolCall,
+    );
+    const canRenderApprovalButtons =
+      toolDisplayFn !== undefined ||
+      toolDisplay === 'cards' ||
+      toolDisplay === 'timeline' ||
+      toolDisplay === 'grouped' ||
+      toolDisplay === 'hidden';
+    return { toolDisplay, toolDisplayFn, canRenderApprovalButtons };
   }
 
   /**

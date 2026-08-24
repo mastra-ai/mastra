@@ -9,8 +9,7 @@ import type { AgentChannels } from './agent-channels';
 import { runStaticDriver } from './chat-driver-static';
 import { runStreamingDriver } from './chat-driver-streaming';
 import type { PendingApprovalRecord } from './stream-helpers';
-import type { ToolDisplay, ToolDisplayFn } from './types';
-import type { ChannelPostTarget } from './types';
+import type { ChannelPostTarget, ToolDisplay, ToolDisplayFn } from './types';
 
 /**
  * Per-run render dependencies stashed onto `requestContext` by
