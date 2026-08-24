@@ -82,9 +82,10 @@ export abstract class SandboxProcessManager<TSandbox extends MastraSandbox = Mas
       // Per-call env wins over the sandbox env. When the sandbox env is
       // empty, leave the args untouched — provider spawn implementations
       // branch on `options.env !== undefined` and must not observe a new
-      // empty object.
-      const sandboxEnv = this.sandbox.getEnv();
-      if (Object.keys(sandboxEnv).length > 0) {
+      // empty object. The optional call tolerates hand-rolled sandbox
+      // stubs (common in provider tests) that don't extend MastraSandbox.
+      const sandboxEnv = this.sandbox.getEnv?.();
+      if (sandboxEnv && Object.keys(sandboxEnv).length > 0) {
         args[1] = { ...args[1], env: { ...sandboxEnv, ...args[1]?.env } };
       }
 
