@@ -18495,9 +18495,11 @@ describe('Observation buffer claim ownership', () => {
 
     expect(result.buffered).toBe(false);
     const after = await om.getOrCreateRecord(claimThreadId, claimResourceId);
-    // A's output was discarded and B's claim is untouched.
+    // A's output was discarded and B's claim is untouched — including the
+    // durable buffering flag, which late-A cleanup must not clear.
     expect((after.bufferedObservationChunks ?? []).length).toBe(0);
     expect(after.observationBufferClaimToken).toBe('owner-b');
+    expect(after.isBufferingObservation).toBe(true);
     const status = await storage.getObservationBufferClaimStatus(record.id);
     expect(status.live).toBe(true);
   });
@@ -18536,8 +18538,11 @@ describe('Observation buffer claim ownership', () => {
     const after = await om.getOrCreateRecord(claimThreadId, claimResourceId);
     expect((after.bufferedObservationChunks ?? []).length).toBe(0);
     expect(after.observationBufferClaimToken).toBe('owner-b');
+    expect(after.isBufferingObservation).toBe(true);
 
     // No successful buffering-end marker may be persisted for the fenced cycle.
+    // Policy: the start marker persists without a terminal marker, exactly as
+    // it would if the process had crashed mid-cycle.
     const persisted = await storage.listMessages({
       threadId: claimThreadId,
       orderBy: { field: 'createdAt', direction: 'ASC' },
@@ -18547,6 +18552,10 @@ describe('Observation buffer claim ownership', () => {
       message.content.parts?.some((part: any) => part.type === 'data-om-buffering-end'),
     );
     expect(endMarkers).toHaveLength(0);
+    const startMarkers = persisted.messages.filter(message =>
+      message.content.parts?.some((part: any) => part.type === 'data-om-buffering-start'),
+    );
+    expect(startMarkers).toHaveLength(1);
 
     // The process-local cursor must not advance past messages that were never
     // persisted, and the boundary must not advance to the success-path value.

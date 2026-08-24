@@ -3452,7 +3452,14 @@ ${formattedMessages}
       resolveOp?.();
       if (lease) {
         unregisterOp(record.id, 'bufferingObservation');
-        setBufferingState(false);
+        // Only mirror the flag down when we still own the cycle. On a lost
+        // lease a successor's claim is live (flag legitimately true), and the
+        // record objects may alias storage (in-memory adapter returns live
+        // references), so an unconditional write here would clear the
+        // successor's durable flag.
+        if (!lease.lost) {
+          setBufferingState(false);
+        }
         // Owner-conditioned: releases only our still-current claim; a lost or
         // taken-over claim is left for its new owner.
         await lease.release();
