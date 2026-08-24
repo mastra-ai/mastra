@@ -2586,6 +2586,9 @@ importers:
       '@mastra/observability':
         specifier: workspace:*
         version: link:../../observability/mastra
+      '@mastra/parallel':
+        specifier: workspace:*
+        version: link:../../integrations/parallel
       '@mastra/pg':
         specifier: workspace:*
         version: link:../../stores/pg

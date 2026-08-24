@@ -63,6 +63,7 @@
     "@mastra/mcp": "workspace:*",
     "@mastra/memory": "workspace:*",
     "@mastra/observability": "workspace:*",
+    "@mastra/parallel": "workspace:*",
     "@mastra/pg": "workspace:*",
     "@mastra/schema-compat": "workspace:*",
     "@mastra/stagehand": "workspace:*",

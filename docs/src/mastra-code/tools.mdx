@@ -151,11 +151,16 @@ Request access to directories outside the project root. The user is prompted to 
 
 Search the web for documentation, error messages, package APIs, and other information.
 
-This tool is available through three providers:
+Mastra Code selects the first available provider in this order:
 
-- **Tavily**: When the `TAVILY_API_KEY` environment variable is set (takes priority).
-- **Anthropic web search**: Built into Anthropic models, used when no Tavily key is configured.
-- **OpenAI web search**: Built into OpenAI models, used when no Tavily key is configured.
+- **Parallel**: Used when `PARALLEL_API_KEY` is set.
+- **Tavily**: Used when `TAVILY_API_KEY` is set and no Parallel key is configured.
+- **Anthropic web search**: Built into Anthropic models and used when no provider key is configured.
+- **OpenAI web search**: Built into OpenAI models and used when no provider key is configured.
+
+Parallel search accepts one or more `searchQueries` and optional controls such as `objective`, `mode`, `maxResults`, domain filters, date filters, and location. Tavily and model-native providers accept a single `query`; their optional parameters vary by provider.
+
+Tavily parameters:
 
 | Parameter | Type | Required | Description |
 | - | - | - | - |
@@ -166,7 +171,11 @@ This tool is available through three providers:
 
 ### `web_extract`
 
-Extract the full content of one or more web pages. Requires a Tavily API key (`TAVILY_API_KEY`).
+Extract content from one or more web pages. Mastra Code uses Parallel when `PARALLEL_API_KEY` is set, then Tavily when `TAVILY_API_KEY` is set.
+
+Parallel extract accepts `urls` plus optional controls such as `objective`, `searchQueries`, `fullContent`, and character limits. Tavily accepts `urls`, `extractDepth`, and `includeImages`.
+
+Tavily parameters:
 
 | Parameter | Type | Required | Description |
 | - | - | - | - |
