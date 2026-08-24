@@ -1446,7 +1446,12 @@ export class ObservationalMemory {
       if (msg.role === 'system') {
         continue;
       }
-      if (!opts?.includeWorkingMemoryStateSignals && isWorkingMemoryStateSignalMessage(msg)) {
+      const isWorkingMemoryStateSignal = isWorkingMemoryStateSignalMessage(msg);
+      if (!opts?.includeWorkingMemoryStateSignals && isWorkingMemoryStateSignal) {
+        continue;
+      }
+      if (opts?.includeWorkingMemoryStateSignals && isWorkingMemoryStateSignal) {
+        result.push(msg);
         continue;
       }
 
@@ -2706,7 +2711,9 @@ ${formattedMessages}
         filter: startDate ? { dateRange: { start: startDate } } : undefined,
       });
 
-      const filtered = result.messages.filter(m => !this.observedMessageIds.has(m.id));
+      const filtered = result.messages.filter(
+        m => m.role !== 'system' && !isWorkingMemoryStateSignalMessage(m) && !this.observedMessageIds.has(m.id),
+      );
 
       if (filtered.length > 0) {
         messagesByThread.set(thread.id, filtered);

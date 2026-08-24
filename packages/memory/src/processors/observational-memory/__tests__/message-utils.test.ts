@@ -60,11 +60,14 @@ describe('isWorkingMemoryStateSignalMessage', () => {
   it('preserves other state, lookalike, ordinary, and malformed messages', () => {
     expect(isWorkingMemoryStateSignalMessage(signal('browser-context'))).toBe(false);
     expect(
+      isWorkingMemoryStateSignalMessage(createMessage('ordinary-lookalike', '<working-memory>format-a; format-b')),
+    ).toBe(false);
+    expect(
       isWorkingMemoryStateSignalMessage({
         ...signal('working-memory'),
         content: {
           ...signal('working-memory').content,
-          metadata: { signal: { type: 'text', metadata: { state: { id: 'working-memory' } } } },
+          metadata: { signal: { type: 'reactive', metadata: { state: { id: 'working-memory' } } } },
         },
       } as MastraDBMessage),
     ).toBe(false);

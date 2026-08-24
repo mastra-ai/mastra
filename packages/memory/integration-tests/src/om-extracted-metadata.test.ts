@@ -301,7 +301,7 @@ describe('Observational Memory extracted metadata persistence', () => {
           scope: 'resource',
           observation: {
             model,
-            manageWorkingMemory: true,
+            manageWorkingMemory: false,
             messageTokens: 1,
             bufferTokens: false,
             previousObserverTokens: 1000,

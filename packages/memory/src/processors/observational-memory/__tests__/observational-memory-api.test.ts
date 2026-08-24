@@ -3053,7 +3053,44 @@ describe('getUnobservedMessages filtering', () => {
 
     (record as any).bufferedObservationChunks = [{ messageIds: ['ordinary'] }];
     expect(om.getUnobservedMessages([workingMemory, ordinary], record, { excludeBuffered: true })).toEqual([]);
+    (record as any).lastObservedAt = new Date(Date.now() + 1_000);
+    workingMemory.createdAt = new Date(Date.now() - 1_000);
+    vi.spyOn(om, 'getOrCreateRecord').mockResolvedValue(record);
     await expect(om.pruneObserved({ threadId, messages: [workingMemory] })).resolves.toEqual([workingMemory]);
+  });
+
+  it('excludes working-memory state signals from other-thread context', async () => {
+    const resourceId = 'other-context-resource';
+    const currentThreadId = 'other-context-current';
+    const otherThreadId = 'other-context-source';
+    const om = createOM(storage, { scope: 'resource' });
+    const now = new Date();
+
+    for (const id of [currentThreadId, otherThreadId]) {
+      await storage.saveThread({
+        thread: {
+          id,
+          resourceId,
+          title: id,
+          createdAt: now,
+          updatedAt: now,
+          metadata: {},
+        },
+      });
+    }
+
+    const workingMemory = createWorkingMemorySignal('other-thread-working-memory');
+    workingMemory.threadId = otherThreadId;
+    workingMemory.resourceId = resourceId;
+    workingMemory.createdAt = new Date(now.getTime() - 1_000);
+    const ordinary = createTestMessage('ordinary other-thread message', 'user', 'other-thread-ordinary', now);
+    ordinary.threadId = otherThreadId;
+    ordinary.resourceId = resourceId;
+    await storage.saveMessages({ messages: [workingMemory, ordinary] });
+
+    const context = await om.getOtherThreadsContext(resourceId, currentThreadId);
+    expect(context).toContain('ordinary other-thread message');
+    expect(context).not.toContain('format-a; format-b');
   });
 });
 
