@@ -409,7 +409,7 @@ export class AgentChannels {
         this.log('info', 'Using MastraStateAdapter (subscriptions persist across restarts)');
       }
 
-      const { Chat } = await getChatModule();
+      const { Chat, Message: ChatMessage, ThreadImpl } = await getChatModule();
       const chat = new Chat({
         adapters: this.adapters,
         state: this.stateAdapter,
@@ -424,7 +424,7 @@ export class AgentChannels {
       });
 
       // Register handlers with optional overrides
-      const { onDirectMessage, onMention, onSubscribedMessage } = this.handlerOverrides;
+      const { onDirectMessage, onMention, onSubscribedMessage, onSlashCommand } = this.handlerOverrides;
 
       // Per-message dispatch scope. The request context and the handler context
       // MUST be built per message, never once at initialize() time: a custom
@@ -469,6 +469,44 @@ export class AgentChannels {
             return onSubscribedMessage(thread, message, defaultHandler, handlerContext);
           }
           return defaultHandler(thread, message);
+        });
+      }
+
+      if (onSlashCommand !== false) {
+        chat.onSlashCommand(event => {
+          const { defaultHandler: handleMessage, handlerContext } = beginMessage();
+          const defaultHandler = async () => {
+            const text = `${event.command} ${event.text}`.trim();
+            const threadId = event.channel.id;
+            const message = new ChatMessage({
+              attachments: [],
+              author: event.user,
+              formatted: {
+                type: 'root',
+                children: [{ type: 'paragraph', children: [{ type: 'text', value: text }] }],
+              },
+              id: event.triggerId ?? crypto.randomUUID(),
+              metadata: { dateSent: new Date(), edited: false },
+              raw: event.raw,
+              text,
+              threadId,
+            });
+            const thread = new ThreadImpl({
+              adapter: event.adapter,
+              channelId: event.channel.id,
+              channelVisibility: event.channel.channelVisibility,
+              currentMessage: message,
+              id: threadId,
+              isDM: event.channel.isDM,
+              stateAdapter: this.stateAdapter,
+            });
+            return handleMessage(thread, message);
+          };
+
+          if (typeof onSlashCommand === 'function') {
+            return onSlashCommand(event, defaultHandler, handlerContext);
+          }
+          return defaultHandler();
         });
       }
 
