@@ -280,4 +280,54 @@ describe('useSetAgentToolsTool', () => {
     expect(tool.outputSchema!.safeParse({ success: 'yes' }).success).toBe(false);
     expect(tool.outputSchema!.safeParse({}).success).toBe(false);
   });
+
+  it('gives a provider it has never seen before an empty connections map', async () => {
+    const { tool, form } = renderTool();
+
+    await runTool(tool, { tools: [{ id: 'composio:GMAIL_SEND_EMAIL', name: 'GMAIL_SEND_EMAIL' }] });
+
+    // The form schema expects both maps on every provider entry; writing only
+    // `tools` would leave the entry half-built.
+    expect(form().getValues('toolProviders')?.composio).toEqual({
+      tools: { GMAIL_SEND_EMAIL: { toolkit: 'gmail' } },
+      connections: {},
+    });
+  });
+
+  it('keeps the connections already pinned on a provider it rewrites', async () => {
+    const { tool, form } = renderTool({
+      toolProviders: {
+        composio: {
+          tools: {},
+          connections: { gmail: [{ kind: 'author', toolkit: 'gmail', connectionId: 'conn-1', scope: 'per-author' }] },
+        },
+      },
+    });
+
+    await runTool(tool, { tools: [{ id: 'composio:GMAIL_SEND_EMAIL', name: 'GMAIL_SEND_EMAIL' }] });
+
+    expect(form().getValues('toolProviders')?.composio.connections?.gmail).toHaveLength(1);
+  });
+
+  it('rebuilds itself when the available tools change', async () => {
+    const formRef: { current: ReturnType<typeof useForm<AgentBuilderEditFormValues>> | null } = { current: null };
+
+    const Wrapper = ({ children }: { children: React.ReactNode }) => {
+      const methods = useForm<AgentBuilderEditFormValues>({ defaultValues: { name: '' } });
+      formRef.current = methods;
+      return React.createElement(FormProvider, methods, children);
+    };
+
+    const { result, rerender } = renderHook(
+      ({ tools }: { tools: AgentTool[] }) => useSetAgentToolsTool({ availableAgentTools: tools }),
+      { wrapper: Wrapper, initialProps: { tools: availableAgentTools } },
+    );
+
+    expect(result.current.description).toContain('web-search');
+
+    rerender({ tools: [{ id: 'calendar', name: 'calendar', type: 'tool', isChecked: false }] });
+
+    expect(result.current.description).toContain('calendar');
+    expect(result.current.description).not.toContain('web-search');
+  });
 });

@@ -9,6 +9,9 @@
  * cleanProviderId('openai') // returns 'openai'
  */
 export const cleanProviderId = (providerId: string): string => {
+  // The `includes` guard only spells out the intent: splitting a string with no
+  // dot yields the whole string back, so both branches agree.
+  // Stryker disable next-line StringLiteral
   return providerId.includes(`.`) ? providerId.split(`.`)[0] : providerId;
 };
 
@@ -40,6 +43,10 @@ export const findProviderById = <T extends { id: string }>(providers: T[], provi
 
   // If not found and doesn't contain a slash, check for gateway prefix pattern
   // This handles custom gateway providers stored as "gateway/provider" in the registry
+  // The guard only avoids pointless work: a `cleanId` containing a slash can
+  // never equal a single `gateway/provider` segment, so the search below would
+  // come back empty anyway.
+  // Stryker disable next-line ConditionalExpression
   if (!cleanId.includes('/')) {
     return providers.find(p => {
       const parts = p.id.split('/');

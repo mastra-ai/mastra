@@ -149,4 +149,48 @@ describe('useAgentSettingsState', () => {
       expect(localStorage.getItem(storageKey('agent-2'))).not.toBeNull();
     });
   });
+
+  describe('the shipped defaults themselves', () => {
+    it('leaves every chat-transport flag off, so nothing opts in by accident', () => {
+      const { result } = renderHook(() => useAgentSettingsState({ agentId: 'agent-1' }));
+
+      expect(result.current.settings?.modelSettings).toMatchObject({
+        maxRetries: 2,
+        maxSteps: 15,
+        chatWithGenerateLegacy: false,
+        chatWithGenerate: false,
+        chatWithLegacyStream: false,
+      });
+    });
+  });
+
+  describe('when the stored entry is the literal null', () => {
+    it('falls back to the shipped defaults rather than crashing', () => {
+      // `JSON.parse('null')` is null, not an object — the read has to survive it.
+      localStorage.setItem(storageKey('agent-1'), 'null');
+
+      const { result } = renderHook(() => useAgentSettingsState({ agentId: 'agent-1' }));
+
+      expect(result.current.settings?.modelSettings).toEqual(defaultSettings.modelSettings);
+    });
+  });
+
+  describe('when the caller switches to another agent', () => {
+    it('re-reads storage under the new agent key', () => {
+      localStorage.setItem(storageKey('agent-1'), JSON.stringify({ modelSettings: { maxSteps: 7 } }));
+      localStorage.setItem(storageKey('agent-2'), JSON.stringify({ modelSettings: { maxSteps: 99 } }));
+
+      const { result, rerender } = renderHook(
+        ({ agentId }: { agentId: string }) => useAgentSettingsState({ agentId }),
+        {
+          initialProps: { agentId: 'agent-1' },
+        },
+      );
+      expect(result.current.settings?.modelSettings?.maxSteps).toBe(7);
+
+      rerender({ agentId: 'agent-2' });
+
+      expect(result.current.settings?.modelSettings?.maxSteps).toBe(99);
+    });
+  });
 });

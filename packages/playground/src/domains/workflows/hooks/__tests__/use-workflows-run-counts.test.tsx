@@ -1,7 +1,9 @@
+import type { ListWorkflowRunCountsResponse } from '@mastra/client-js';
 import { MastraClientError } from '@mastra/client-js';
+import { usePlaygroundStore } from '@mastra/playground-ui/store/playground-store';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { describe, expect, it } from 'vitest';
@@ -44,11 +46,14 @@ describe('runCountsRefetchInterval', () => {
 });
 
 describe('useWorkflowsRunCounts', () => {
+  let lastQueryClient: QueryClient | undefined;
+
   const BASE_URL = 'http://localhost:4111';
   const RUN_COUNTS_URL = `${BASE_URL}/api/workflows/run-counts`;
 
   const createWrapper = () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    lastQueryClient = queryClient;
     return ({ children }: { children: ReactNode }) => (
       <MastraReactProvider baseUrl={BASE_URL}>
         <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
@@ -59,7 +64,11 @@ describe('useWorkflowsRunCounts', () => {
   describe('when the server aggregates counts', () => {
     it('exposes them keyed by workflow', async () => {
       server.use(
-        http.get(RUN_COUNTS_URL, () => HttpResponse.json({ 'weather-workflow': { running: 2, suspended: 1 } })),
+        http.get(RUN_COUNTS_URL, () =>
+          HttpResponse.json({
+            'weather-workflow': { running: 2, suspended: 1 },
+          } satisfies ListWorkflowRunCountsResponse),
+        ),
       );
 
       const { result } = renderHook(() => useWorkflowsRunCounts(), { wrapper: createWrapper() });
@@ -85,6 +94,24 @@ describe('useWorkflowsRunCounts', () => {
       const { result } = renderHook(() => useWorkflowsRunCounts(), { wrapper: createWrapper() });
 
       expect(result.current).toEqual({});
+    });
+  });
+
+  describe('the cache entry it writes', () => {
+    it('scopes the counts to the request context they were read under', async () => {
+      act(() => usePlaygroundStore.setState({ requestContext: { tenant: 'acme' } }));
+      const empty: ListWorkflowRunCountsResponse = {};
+      server.use(http.get(RUN_COUNTS_URL, () => HttpResponse.json(empty)));
+
+      const { result } = renderHook(() => useWorkflowsRunCounts(), { wrapper: createWrapper() });
+      await waitFor(() => expect(result.current).toBeDefined());
+
+      await waitFor(() =>
+        expect(lastQueryClient!.getQueryData(['workflow-run-counts', { tenant: 'acme' }])).toBeDefined(),
+      );
+      expect(lastQueryClient!.getQueryData(['workflow-run-counts', {}])).toBeUndefined();
+
+      act(() => usePlaygroundStore.setState({ requestContext: {} }));
     });
   });
 });

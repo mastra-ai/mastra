@@ -111,4 +111,16 @@ describe('findProviderById', () => {
       expect(findProviderById([{ id: 'custom/other' }], 'custom')).toBeUndefined();
     });
   });
+
+  describe('ids with more than one slash', () => {
+    it('does not match a middle segment of a deeper path', () => {
+      // Only a plain `gateway/provider` id is eligible for the fallback; a
+      // deeper path would otherwise match on an interior segment.
+      expect(findProviderById([{ id: 'acme/team/custom' }], 'team')).toBeUndefined();
+    });
+
+    it('still matches a plain gateway/provider id', () => {
+      expect(findProviderById([{ id: 'acme/custom' }], 'custom')).toEqual({ id: 'acme/custom' });
+    });
+  });
 });

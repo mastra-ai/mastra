@@ -17,6 +17,9 @@ export interface ModelNotAllowedDetails {
  * details when matched, or `null` otherwise.
  */
 export function isModelNotAllowedError(err: unknown): ModelNotAllowedDetails | null {
+  // The `typeof` half is defensive only: a truthy primitive has no `status`, so
+  // the 422 check below already rejects it.
+  // Stryker disable next-line ConditionalExpression
   if (!err || typeof err !== 'object') return null;
   const candidate = err as { status?: number; body?: unknown; message?: string };
   if (candidate.status !== 422) return null;
