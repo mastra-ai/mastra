@@ -375,6 +375,8 @@ export function setupAutocomplete(state: TUIState): void {
     { name: 'skills', description: 'List available skills' },
     { name: 'skill/', description: 'Activate a skill by name' },
     { name: 'cost', description: 'Show token usage and estimated costs' },
+    { name: 'context', description: 'Audit what is using the context window' },
+    { name: 'ctx', description: 'Alias for /context' },
     { name: 'diff', description: 'Show modified files or git diff' },
     { name: 'name', description: 'Rename current thread' },
     {

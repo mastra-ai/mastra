@@ -28,7 +28,13 @@ import type {
 type InstructionsOption = string | ((opts: { defaultInstructions: string; requestContext?: RequestContext }) => string);
 import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
 import { Sandbox, Template } from 'e2b';
-import type { SandboxInfo as E2BSandboxListInfo, SandboxNetworkOpts, TemplateBuilder, TemplateClass } from 'e2b';
+import type {
+  SandboxInfo as E2BSandboxListInfo,
+  SandboxLifecycle,
+  SandboxNetworkOpts,
+  TemplateBuilder,
+  TemplateClass,
+} from 'e2b';
 import { createDefaultMountableTemplate } from '../utils/template';
 import type { TemplateSpec } from '../utils/template';
 import { mountS3, mountGCS, mountAzure, LOG_PREFIX } from './mounts';
@@ -89,6 +95,18 @@ export interface E2BSandboxOptions extends Omit<MastraSandboxOptions, 'processes
   metadata?: Record<string, unknown>;
   /** Network configuration to use when creating the E2B sandbox */
   network?: SandboxNetworkOpts;
+  /**
+   * Sandbox lifecycle behavior when the `timeout` is reached.
+   *
+   * Defaults to `{ onTimeout: 'pause' }`, which snapshots the sandbox so the
+   * next `start()` reconnects and resumes it. Pass `{ onTimeout: 'kill' }` for
+   * stateless workspaces whose data lives outside the sandbox (e.g. mounted
+   * from S3) — idle sandboxes are then destroyed and recreated on next use
+   * instead of retained as paused snapshots.
+   *
+   * Note: an explicit `stop()` always pauses, regardless of this setting.
+   */
+  lifecycle?: SandboxLifecycle;
 
   /** Domain for self-hosted E2B. Falls back to E2B_DOMAIN env var. */
   domain?: string;
@@ -194,6 +212,7 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
   private readonly env: Record<string, string>;
   private readonly metadata: Record<string, unknown>;
   private readonly network?: SandboxNetworkOpts;
+  private readonly lifecycle: SandboxLifecycle;
   private readonly connectionOpts: Record<string, string>;
   private readonly _instructionsOverride?: InstructionsOption;
   private readonly _constructorOptions: E2BSandboxOptions;
@@ -217,6 +236,8 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
     this.env = options.env ?? {};
     this.metadata = options.metadata ?? {};
     this.network = options.network;
+    // Always sent explicitly: the E2B API defaults to 'kill' when lifecycle is omitted.
+    this.lifecycle = options.lifecycle ?? { onTimeout: 'pause' };
     this.connectionOpts = {
       ...(options.domain && { domain: options.domain }),
       ...(options.apiUrl && { apiUrl: options.apiUrl }),
@@ -334,13 +355,14 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
     }
 
     // Create a new sandbox with our logical ID in metadata.
-    // lifecycle.onTimeout: 'pause' makes the sandbox pause on timeout instead of being destroyed.
+    // lifecycle defaults to onTimeout: 'pause', which pauses the sandbox on timeout instead of
+    // destroying it so the next start() can resume it. Callers can override it (e.g. 'kill').
     this.logger.debug(`${LOG_PREFIX} Creating new sandbox for: ${this.id} with template: ${resolvedTemplateId}`);
 
     try {
       this._sandbox = await Sandbox.create(resolvedTemplateId, {
         ...this.connectionOpts,
-        lifecycle: { onTimeout: 'pause' },
+        lifecycle: this.lifecycle,
         metadata: {
           ...this.metadata,
           'mastra-sandbox-id': this.id,
@@ -359,7 +381,7 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
         this.logger.debug(`${LOG_PREFIX} Retrying sandbox creation with rebuilt template: ${rebuiltTemplateId}`);
         this._sandbox = await Sandbox.create(rebuiltTemplateId, {
           ...this.connectionOpts,
-          lifecycle: { onTimeout: 'pause' },
+          lifecycle: this.lifecycle,
           metadata: {
             ...this.metadata,
             'mastra-sandbox-id': this.id,
@@ -1033,10 +1055,12 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
   private handleSandboxTimeout(): void {
     this._sandbox = null;
 
-    // Reset mounted entries to pending so they get re-mounted on restart
+    // Reset retryable entries to pending so they get re-mounted on restart.
+    // A mount error belongs to the dead physical sandbox and must not prevent
+    // the configured filesystem from being attempted in its replacement.
     for (const [path, entry] of this.mounts.entries) {
-      if (entry.state === 'mounted' || entry.state === 'mounting') {
-        this.mounts.set(path, { state: 'pending' });
+      if (entry.state === 'mounted' || entry.state === 'mounting' || entry.state === 'error') {
+        this.mounts.set(path, { state: 'pending', error: undefined });
       }
     }
 

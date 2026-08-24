@@ -943,6 +943,64 @@ describe('Workflow (Evented Engine Specific)', () => {
     // (streaming domain: should preserve error details in streaming workflow)
   });
 
+  describe('foreach failure progress (issue #21749)', () => {
+    it('does not re-execute successful iterations when time travelling to a failed foreach', async () => {
+      const executions = [0, 0];
+
+      const seed = createStep({
+        id: 'evented-foreach-seed',
+        inputSchema: z.object({}),
+        outputSchema: z.array(z.number()),
+        execute: async () => [0, 1],
+      });
+
+      const processItem = createStep({
+        id: 'evented-process-item',
+        inputSchema: z.number(),
+        outputSchema: z.number(),
+        execute: async ({ inputData }) => {
+          executions[inputData]! += 1;
+          if (inputData === 1 && executions[inputData] === 1) {
+            throw new Error('transient failure');
+          }
+          return inputData;
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'evented-foreach-failure-progress',
+        inputSchema: z.object({}),
+        outputSchema: z.array(z.number()),
+        retryConfig: { attempts: 0 },
+      });
+      workflow.then(seed).foreach(processItem, { concurrency: 1 }).commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+        workflows: { 'evented-foreach-failure-progress': workflow },
+      });
+      await mastra.startWorkers();
+
+      try {
+        const run = await workflow.createRun();
+        const first = await run.start({ inputData: {} });
+
+        expect(first.status).toBe('failed');
+        expect(executions).toEqual([1, 1]);
+
+        const result = await run.timeTravel({ step: 'evented-process-item' });
+
+        // Iteration 0 already succeeded and must not run a second time.
+        expect(executions).toEqual([1, 2]);
+        expect(result.status).toBe('success');
+      } finally {
+        await mastra.stopWorkers();
+      }
+    });
+  });
+
   describe('non-retryable workflow failures', () => {
     it('does not retry workflow steps that throw MastraNonRetryableError', async () => {
       let calls = 0;
@@ -982,6 +1040,59 @@ describe('Workflow (Evented Engine Specific)', () => {
         expect(calls).toBe(1);
 
         const stepResult = result.steps['evented-fatal-step'];
+        expect(stepResult?.status).toBe('failed');
+        expect(stepResult?.nonRetryable).toBe(true);
+      } finally {
+        await mastra.stopWorkers();
+      }
+    });
+
+    it('does not retry nested workflows with non-retryable step failures', async () => {
+      let calls = 0;
+
+      const fatalStep = createStep({
+        id: 'evented-nested-fatal-step',
+        execute: async () => {
+          calls++;
+          throw new MastraNonRetryableError('permanent failure');
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const nestedWorkflow = createWorkflow({
+        id: 'evented-nested-fatal-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [fatalStep],
+      });
+      nestedWorkflow.then(fatalStep).commit();
+
+      const workflow = createWorkflow({
+        id: 'evented-non-retryable-parent-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        retryConfig: { attempts: 3, delay: 0 },
+        steps: [nestedWorkflow],
+      });
+      workflow.then(nestedWorkflow).commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+        workflows: { 'evented-non-retryable-parent-workflow': workflow },
+      });
+      await mastra.startWorkers();
+
+      try {
+        const run = await workflow.createRun();
+        const result = await run.start({ inputData: {} });
+
+        expect(result.status).toBe('failed');
+        expect(calls).toBe(1);
+
+        const stepResult = result.steps['evented-nested-fatal-workflow'];
         expect(stepResult?.status).toBe('failed');
         expect(stepResult?.nonRetryable).toBe(true);
       } finally {
