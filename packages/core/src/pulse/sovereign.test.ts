@@ -280,6 +280,43 @@ describe('sovereignty: observability OFF, pulse alone', () => {
     }
   });
 
+  it('a callback failure does not rewrite the generation as failed — same id must stay the same fact', async () => {
+    const c = collector();
+    try {
+      const agent = new Agent({
+        id: 'sov-cbfail',
+        name: 'Sovereign CbFail',
+        instructions: 'Test',
+        model: model(),
+        memory: new MockMemory(),
+      });
+      const stream = await agent.stream('Hello', {
+        memory: { thread: 'cb-t', resource: 'cb-u' },
+        onFinish: () => {
+          throw new Error('user callback exploded');
+        },
+      });
+      const runId = stream.runId!;
+      await stream.consumeStream().catch(() => {});
+      await settle();
+
+      // The generation truly finished before the callback ran: exactly ONE
+      // end fact at the ended slot, and it says completed — never two rows
+      // with the same id and conflicting actions.
+      const genEnds = c.facts.filter(f => f.id === factIds.generation(runId, 'ended'));
+      expect(genEnds).toHaveLength(1);
+      expect(genEnds[0]!.action).toBe('generate_completed');
+      // The run terminal also stays single: one fact at its ended slot.
+      // (Whether a post-completion callback failure should flip the RUN's
+      // vocabulary to failed is an open maintainer decision — this test
+      // pins only the identity invariant, not that answer.)
+      const runEnds = c.facts.filter(f => f.id === factIds.run(runId, 'ended'));
+      expect(runEnds).toHaveLength(1);
+    } finally {
+      c.done();
+    }
+  });
+
   it('minted ids are deterministic across a replay', async () => {
     // Two independent runs of the same logical runId mint identical ids —
     // the readers collapse a replay to one logical record set.

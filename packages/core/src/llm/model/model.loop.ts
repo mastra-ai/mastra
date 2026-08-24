@@ -372,7 +372,11 @@ export class MastraLLMVNext extends MastraBase {
                 e,
               );
               modelSpanTracker?.reportGenerationError({ error: mastraError });
-              emitSpanFact(modelSpan as any, 'ended', { runId, surface: 'model', base: 'generate', error: true });
+              // No pulse re-emit here: the generation's completed end fact was
+              // already written above, and re-minting the SAME ended id with a
+              // failed action would be two facts claiming one identity — the
+              // reader would pick one arbitrarily. The onFinish failure is the
+              // RUN's failure; the run terminal records it.
               this.logger.trackException(mastraError);
               throw mastraError;
             }
