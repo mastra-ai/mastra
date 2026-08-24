@@ -1,0 +1,289 @@
+import type { ListStoredAgentsResponse, StoredAgentResponse } from '@mastra/client-js';
+import { MastraReactProvider } from '@mastra/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { act, renderHook, waitFor } from '@testing-library/react';
+import { http, HttpResponse } from 'msw';
+import type { ReactNode } from 'react';
+import { describe, expect, it } from 'vitest';
+
+import { useToggleStoredAgentFavorite } from '../use-stored-agent-favorite';
+import { server } from '@/test/msw-server';
+
+const BASE_URL = 'http://localhost:4111';
+const AGENT_ID = 'agent-1';
+const FAVORITE_URL = `${BASE_URL}/api/stored/agents/${AGENT_ID}/favorite`;
+
+const makeAgent = (overrides: Partial<StoredAgentResponse> = {}): StoredAgentResponse =>
+  ({
+    id: AGENT_ID,
+    status: 'published',
+    name: 'Researcher',
+    instructions: '',
+    model: { provider: 'google', name: 'gemini-2.5-flash' },
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+    isFavorited: false,
+    favoriteCount: 0,
+    ...overrides,
+  }) as StoredAgentResponse;
+
+const makeList = (agents: StoredAgentResponse[]): ListStoredAgentsResponse =>
+  ({ agents, total: agents.length, page: 1, perPage: 50, hasMore: false }) as ListStoredAgentsResponse;
+
+const setup = ({
+  omitAgentId = false,
+  detail,
+  lists = {},
+}: {
+  omitAgentId?: boolean;
+  detail?: StoredAgentResponse | null;
+  lists?: Record<string, ListStoredAgentsResponse | undefined>;
+} = {}) => {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+
+  if (detail !== undefined) queryClient.setQueryData(['stored-agent', AGENT_ID], detail);
+  for (const [suffix, value] of Object.entries(lists)) {
+    queryClient.setQueryData(['stored-agents', suffix], value);
+  }
+
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <MastraReactProvider baseUrl={BASE_URL}>
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    </MastraReactProvider>
+  );
+
+  const { result } = renderHook(() => useToggleStoredAgentFavorite(omitAgentId ? undefined : AGENT_ID), { wrapper });
+  return { result, queryClient };
+};
+
+const detailOf = (queryClient: QueryClient) =>
+  queryClient.getQueryData<StoredAgentResponse>(['stored-agent', AGENT_ID]);
+const listOf = (queryClient: QueryClient, suffix = 'all') =>
+  queryClient.getQueryData<ListStoredAgentsResponse>(['stored-agents', suffix]);
+
+/** Holds the server response open so the optimistic cache state can be observed. */
+const pendingFavorite = () => {
+  let release: () => void = () => {};
+  const gate = new Promise<void>(resolve => {
+    release = resolve;
+  });
+  server.use(
+    http.put(FAVORITE_URL, async () => {
+      await gate;
+      return HttpResponse.json({ favorited: true, favoriteCount: 1 });
+    }),
+  );
+  return () => act(async () => release());
+};
+
+describe('useToggleStoredAgentFavorite', () => {
+  describe('while the request is in flight', () => {
+    it('shows the agent as favorited before the server answers', async () => {
+      const { result, queryClient } = setup({ detail: makeAgent() });
+      const release = pendingFavorite();
+
+      act(() => result.current.mutate({ favorited: true }));
+
+      await waitFor(() => expect(detailOf(queryClient)?.isFavorited).toBe(true));
+      expect(detailOf(queryClient)?.favoriteCount).toBe(1);
+
+      await release();
+    });
+
+    it('patches only the agent that was toggled in a list', async () => {
+      const other = makeAgent({ id: 'agent-2', favoriteCount: 7 });
+      const { result, queryClient } = setup({ lists: { all: makeList([makeAgent(), other]) } });
+      const release = pendingFavorite();
+
+      act(() => result.current.mutate({ favorited: true }));
+
+      await waitFor(() => expect(listOf(queryClient)?.agents[0].isFavorited).toBe(true));
+      expect(listOf(queryClient)?.agents[1]).toEqual(other);
+
+      await release();
+    });
+
+    it('patches every list cache, not just the first', async () => {
+      const { result, queryClient } = setup({
+        lists: { all: makeList([makeAgent()]), favorites: makeList([makeAgent()]) },
+      });
+      const release = pendingFavorite();
+
+      act(() => result.current.mutate({ favorited: true }));
+
+      await waitFor(() => expect(listOf(queryClient, 'all')?.agents[0].isFavorited).toBe(true));
+      expect(listOf(queryClient, 'favorites')?.agents[0].isFavorited).toBe(true);
+
+      await release();
+    });
+
+    it('leaves a list cache that has no agents alone', async () => {
+      const { result, queryClient } = setup({ lists: { all: undefined } });
+      const release = pendingFavorite();
+
+      act(() => result.current.mutate({ favorited: true }));
+      await release();
+
+      expect(listOf(queryClient)).toBeUndefined();
+    });
+  });
+
+  describe('the favourite count it predicts', () => {
+    it('does not double-count an agent that is already favorited', async () => {
+      const { result, queryClient } = setup({ detail: makeAgent({ isFavorited: true, favoriteCount: 3 }) });
+      const release = pendingFavorite();
+
+      act(() => result.current.mutate({ favorited: true }));
+
+      await waitFor(() => expect(detailOf(queryClient)?.isFavorited).toBe(true));
+      expect(detailOf(queryClient)?.favoriteCount).toBe(3);
+
+      await release();
+    });
+
+    it('decrements when a favorited agent is unfavorited', async () => {
+      server.use(http.delete(FAVORITE_URL, () => HttpResponse.json({ favorited: false, favoriteCount: 2 })));
+      const { result, queryClient } = setup({ detail: makeAgent({ isFavorited: true, favoriteCount: 3 }) });
+
+      await act(async () => {
+        await result.current.mutateAsync({ favorited: false });
+      });
+
+      expect(detailOf(queryClient)?.favoriteCount).toBe(2);
+    });
+
+    it('never predicts a negative count', async () => {
+      server.use(http.delete(FAVORITE_URL, () => HttpResponse.json({ favorited: false, favoriteCount: 0 })));
+      const { result, queryClient } = setup({ detail: makeAgent({ isFavorited: true, favoriteCount: 0 }) });
+
+      await act(async () => {
+        await result.current.mutateAsync({ favorited: false });
+      });
+
+      expect(detailOf(queryClient)?.favoriteCount).toBe(0);
+    });
+
+    it('leaves the count alone when unfavoriting something that was not favorited', async () => {
+      server.use(http.delete(FAVORITE_URL, () => HttpResponse.json({ favorited: false, favoriteCount: 5 })));
+      const { result, queryClient } = setup({ detail: makeAgent({ isFavorited: false, favoriteCount: 5 }) });
+
+      await act(async () => {
+        await result.current.mutateAsync({ favorited: false });
+      });
+
+      expect(detailOf(queryClient)?.favoriteCount).toBe(5);
+    });
+
+    it('treats a missing count as zero', async () => {
+      const { result, queryClient } = setup({ detail: makeAgent({ favoriteCount: undefined }) });
+      const release = pendingFavorite();
+
+      act(() => result.current.mutate({ favorited: true }));
+
+      await waitFor(() => expect(detailOf(queryClient)?.favoriteCount).toBe(1));
+
+      await release();
+    });
+  });
+
+  describe('when the server rejects the toggle', () => {
+    it('puts the detail cache back the way it was', async () => {
+      server.use(http.put(FAVORITE_URL, () => new HttpResponse(null, { status: 500 })));
+      const before = makeAgent({ isFavorited: false, favoriteCount: 4 });
+      const { result, queryClient } = setup({ detail: before });
+
+      await act(async () => {
+        await result.current.mutateAsync({ favorited: true }).catch(() => {});
+      });
+
+      await waitFor(() => expect(detailOf(queryClient)).toEqual(before));
+    });
+
+    it('puts every list cache back the way it was', async () => {
+      server.use(http.put(FAVORITE_URL, () => new HttpResponse(null, { status: 500 })));
+      const before = makeList([makeAgent({ favoriteCount: 4 })]);
+      const { result, queryClient } = setup({ lists: { all: before } });
+
+      await act(async () => {
+        await result.current.mutateAsync({ favorited: true }).catch(() => {});
+      });
+
+      await waitFor(() => expect(listOf(queryClient)).toEqual(before));
+    });
+
+    it('reports the failure to the caller', async () => {
+      server.use(http.put(FAVORITE_URL, () => new HttpResponse(null, { status: 500 })));
+      const { result } = setup({ detail: makeAgent() });
+
+      await act(async () => {
+        await result.current.mutateAsync({ favorited: true }).catch(() => {});
+      });
+
+      await waitFor(() => expect(result.current.isError).toBe(true));
+    });
+  });
+
+  describe('once the toggle settles', () => {
+    it('re-reads the detail and the lists from the server', async () => {
+      server.use(http.put(FAVORITE_URL, () => HttpResponse.json({ favorited: true, favoriteCount: 1 })));
+      const { result, queryClient } = setup({ detail: makeAgent(), lists: { all: makeList([makeAgent()]) } });
+
+      await act(async () => {
+        await result.current.mutateAsync({ favorited: true });
+      });
+
+      await waitFor(() => {
+        expect(queryClient.getQueryState(['stored-agent', AGENT_ID])?.isInvalidated).toBe(true);
+        expect(queryClient.getQueryState(['stored-agents', 'all'])?.isInvalidated).toBe(true);
+      });
+    });
+  });
+
+  describe('when the hook has no agent id', () => {
+    it('refuses to send anything', async () => {
+      let requested = false;
+      server.use(
+        http.put(`${BASE_URL}/api/stored/agents/:id/favorite`, () => {
+          requested = true;
+          return HttpResponse.json({ favorited: true, favoriteCount: 1 });
+        }),
+      );
+      const { result } = setup({ omitAgentId: true });
+
+      let thrown: unknown;
+      await act(async () => {
+        await result.current.mutateAsync({ favorited: true }).catch((error: unknown) => {
+          thrown = error;
+        });
+      });
+
+      expect((thrown as Error)?.message).toContain('agentId is required');
+      expect(requested).toBe(false);
+    });
+
+    it('leaves the caches untouched', async () => {
+      const before = makeList([makeAgent()]);
+      const { result, queryClient } = setup({ omitAgentId: true, lists: { all: before } });
+
+      await act(async () => {
+        await result.current.mutateAsync({ favorited: true }).catch(() => {});
+      });
+
+      expect(listOf(queryClient)).toEqual(before);
+    });
+  });
+
+  describe('when the detail cache is empty', () => {
+    it('does not invent a detail entry from the optimistic update', async () => {
+      const { result, queryClient } = setup({});
+      const release = pendingFavorite();
+
+      act(() => result.current.mutate({ favorited: true }));
+      await release();
+
+      expect(queryClient.getQueryData(['stored-agent', AGENT_ID])).toBeUndefined();
+    });
+  });
+});
