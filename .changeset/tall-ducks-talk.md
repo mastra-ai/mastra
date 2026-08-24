@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed agent memory so aborted and failed runs retain transcript history produced before termination. Removed the accidental partial-abort persistence option because this persistence is now mandatory.
+Fixed built-in memory processors so canceled and failed agent runs retain transcript history through normal output processing. Removed the accidental partial-abort persistence option because cancellation persistence is no longer opt-in.
