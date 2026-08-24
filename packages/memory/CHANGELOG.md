@@ -1,5 +1,16 @@
 # @mastra/memory
 
+## 1.28.0-alpha.2
+
+### Patch Changes
+
+- Observational memory now detects observer/reflector output where a multi-line block repeats many times (a model repetition loop). Previously such output could slip past the degenerate-output check and balloon stored observations, causing constant synchronous reflection churn; it is now rejected and retried like other degenerate output. ([#22072](https://github.com/mastra-ai/mastra/pull/22072))
+
+- Fixed observational memory reflection to keep retrying with stronger compression when a result remains above the token threshold. ([#22232](https://github.com/mastra-ai/mastra/pull/22232))
+
+- Updated dependencies [[`ae8790c`](https://github.com/mastra-ai/mastra/commit/ae8790c4bfaa088d2ab279d1dcc06f326b9fd109), [`04a815f`](https://github.com/mastra-ai/mastra/commit/04a815fc8971d29e97fcdcc5008a1eb472fc00ff), [`cced745`](https://github.com/mastra-ai/mastra/commit/cced745a056ec2225c5bc702e32d848847aa8b65)]:
+  - @mastra/core@1.62.0-alpha.7
+
 ## 1.28.0-alpha.1
 
 ### Minor Changes

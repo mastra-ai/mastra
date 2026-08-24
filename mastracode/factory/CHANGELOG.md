@@ -1,5 +1,29 @@
 # @mastra/factory
 
+## 0.10.0-alpha.7
+
+### Patch Changes
+
+- Factory pull request review reports now show their selected model and reasoning setting: ([#22238](https://github.com/mastra-ai/mastra/pull/22238))
+
+  ```text
+  Review runtime: openai/gpt-5.6-sol, reasoning setting: high.
+  ```
+
+- Fixed retried Factory skill runs so they deliver a fresh kickoff after execution errors while preserving duplicate protection during lease recovery. ([#21926](https://github.com/mastra-ai/mastra/pull/21926))
+
+- Fixed session timing measurements that started too early or missed workspace tool activity. ([#22213](https://github.com/mastra-ai/mastra/pull/22213))
+
+  **First interaction time**
+  Starts on the first user or assistant message. Signal-only messages (skill loads, phase markers, memory reminders) and sessions that fail before a message no longer affect this metric.
+
+  **First meaningful tool time**
+  Starts when the first workspace tool completes successfully. File operations and workspace searches count even when no shell command runs. Approval-denied and abort-while-parked tool completions are excluded because the tool never actually ran.
+
+- Updated dependencies [[`ae8790c`](https://github.com/mastra-ai/mastra/commit/ae8790c4bfaa088d2ab279d1dcc06f326b9fd109), [`04a815f`](https://github.com/mastra-ai/mastra/commit/04a815fc8971d29e97fcdcc5008a1eb472fc00ff), [`04a815f`](https://github.com/mastra-ai/mastra/commit/04a815fc8971d29e97fcdcc5008a1eb472fc00ff), [`cced745`](https://github.com/mastra-ai/mastra/commit/cced745a056ec2225c5bc702e32d848847aa8b65)]:
+  - @mastra/core@1.62.0-alpha.7
+  - @mastra/code-sdk@1.5.0-alpha.7
+
 ## 0.10.0-alpha.6
 
 ### Patch Changes

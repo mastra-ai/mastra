@@ -1,5 +1,22 @@
 # @mastra/valkey
 
+## 0.2.0-alpha.0
+
+### Minor Changes
+
+- Add a GLIDE-backed Valkey storage and server cache integration. ([#22176](https://github.com/mastra-ai/mastra/pull/22176))
+
+  ```typescript
+  import { ValkeyStore } from '@mastra/valkey';
+
+  const storage = new ValkeyStore({ id: 'storage', host: 'localhost' });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`ae8790c`](https://github.com/mastra-ai/mastra/commit/ae8790c4bfaa088d2ab279d1dcc06f326b9fd109), [`04a815f`](https://github.com/mastra-ai/mastra/commit/04a815fc8971d29e97fcdcc5008a1eb472fc00ff), [`cced745`](https://github.com/mastra-ai/mastra/commit/cced745a056ec2225c5bc702e32d848847aa8b65)]:
+  - @mastra/core@1.62.0-alpha.7
+
 ## 1.4.2
 
 ### Patch Changes
