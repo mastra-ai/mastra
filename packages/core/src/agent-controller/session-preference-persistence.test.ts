@@ -92,7 +92,7 @@ describe('AgentController session preference persistence (thinkingLevel, notific
 
     const memory = await storage.getStore('memory');
     const savedThread = await memory?.getThreadById({ threadId: thread.id });
-    expect(savedThread?.metadata?.thinkingLevel).toBeUndefined();
+    expect(Object.hasOwn(savedThread?.metadata ?? {}, 'thinkingLevel')).toBe(false);
 
     const restarted = createController(storage, {}, stateSchema);
     await restarted.init();
