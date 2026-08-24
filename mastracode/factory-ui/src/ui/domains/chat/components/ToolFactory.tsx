@@ -1,27 +1,11 @@
 import type { PlanResume } from '@mastra/client-js';
 import { AskUser } from '@mastra/playground-ui/components/ai/ask-user';
 import type { AskUserAnswer, AskUserOption, AskUserPayload } from '@mastra/playground-ui/components/ai/ask-user';
-import { Button } from '@mastra/playground-ui/components/Button';
-import {
-  Plan,
-  PlanActionGroup,
-  PlanBody,
-  PlanContent,
-  PlanControls,
-  PlanCopyButton,
-  PlanExpandButton,
-  PlanHeader,
-  PlanHeaderActions,
-  PlanIntro,
-  PlanLabel,
-  PlanMain,
-  PlanPath,
-  PlanTitle,
-} from '@mastra/playground-ui/components/ai/plan';
 import { memo } from 'react';
 import type { ReactNode } from 'react';
 
 import { SkillMessage } from './SkillMessage';
+import { SubmitPlanCard } from './SubmitPlanCard';
 
 type ToolStatus = 'running' | 'done' | 'error';
 
@@ -86,25 +70,9 @@ function askUserPayload(input: unknown): AskUserPayload | undefined {
   return { question, ...(options ? { options, selectionMode } : {}) };
 }
 
-interface PlanData {
-  title: string;
-  path?: string;
-  content: string;
-}
-
-function planData(input: unknown): PlanData {
-  const payload = record(input);
-  const plan = record(payload?.plan) ?? payload;
-  const path = stringValue(plan?.path) ?? stringValue(payload?.path);
-  return {
-    title: stringValue(plan?.title) ?? 'Plan',
-    ...(path ? { path } : {}),
-    content: stringValue(plan?.content) ?? stringValue(plan?.summary) ?? '',
-  };
-}
-
 function ToolFactoryComponent({
   toolName,
+  toolCallId,
   input,
   output,
   status,
@@ -140,55 +108,14 @@ function ToolFactoryComponent({
   }
 
   if (toolName === 'submit_plan') {
-    const plan = planData(input);
     return (
-      <Plan role="group" aria-label="Plan approval">
-        <PlanHeader>
-          <PlanLabel />
-          <PlanHeaderActions>
-            <PlanCopyButton content={plan.content} />
-          </PlanHeaderActions>
-        </PlanHeader>
-        <PlanBody>
-          <PlanIntro>
-            <PlanTitle>{plan.title}</PlanTitle>
-            {plan.path ? <PlanPath>{plan.path}</PlanPath> : null}
-          </PlanIntro>
-          <PlanMain>
-            <PlanContent>{plan.content}</PlanContent>
-            <PlanControls>
-              {onRespond ? (
-                <>
-                  <PlanActionGroup>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="primary"
-                      aria-label="Approve the plan and switch to build"
-                      disabled={isSubmitting}
-                      onClick={() => onRespond({ action: 'approved' })}
-                    >
-                      Approve & build
-                    </Button>
-                  </PlanActionGroup>
-                  <PlanExpandButton />
-                  <PlanActionGroup>
-                    <Button
-                      type="button"
-                      size="sm"
-                      aria-label="Reject the plan"
-                      disabled={isSubmitting}
-                      onClick={() => onRespond({ action: 'rejected' })}
-                    >
-                      Reject
-                    </Button>
-                  </PlanActionGroup>
-                </>
-              ) : null}
-            </PlanControls>
-          </PlanMain>
-        </PlanBody>
-      </Plan>
+      <SubmitPlanCard
+        toolCallId={toolCallId}
+        input={input}
+        output={output}
+        isSubmitting={isSubmitting}
+        onRespond={onRespond}
+      />
     );
   }
 

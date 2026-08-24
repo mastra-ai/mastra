@@ -152,6 +152,11 @@ describe('Score Schemas', () => {
       const filter = scoresFilterSchema.parse({});
       expect(filter).toEqual({});
     });
+
+    it('accepts metadata filter', () => {
+      const filter = scoresFilterSchema.parse({ metadata: { env: 'prod', attempt: 2 } });
+      expect(filter.metadata).toEqual({ env: 'prod', attempt: 2 });
+    });
   });
 
   describe('listScoresArgsSchema', () => {

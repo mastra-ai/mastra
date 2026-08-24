@@ -392,7 +392,7 @@ describe('Trace Intelligence page', () => {
   });
 
   describe('when a snapshot range changes with theme details open', () => {
-    it('clears the range-local theme selection', async () => {
+    it('keeps the selected theme open', async () => {
       server.use(
         http.get(`${BASE_URL}/api/learning/entities`, () => HttpResponse.json(populatedThemeEntitiesResponse)),
         http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
@@ -416,13 +416,12 @@ describe('Trace Intelligence page', () => {
       );
       renderSignalsPage();
       fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
-      fireEvent.click(await screen.findByRole('button', { name: 'View theme details for Add transcript' }));
       await screen.findByRole('dialog', { name: 'Add transcript' });
 
       fireEvent.click(screen.getByRole('button', { name: 'Last 7 days' }));
       fireEvent.click(await screen.findByText('Last 24 hours'));
 
-      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add transcript' })).toBeNull());
+      expect(await screen.findByRole('dialog', { name: 'Add transcript' })).not.toBeNull();
     });
   });
 
@@ -453,7 +452,6 @@ describe('Trace Intelligence page', () => {
       renderSignalsPage();
 
       fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
-      fireEvent.click(await screen.findByRole('button', { name: 'View theme details for Add transcript' }));
       await screen.findByRole('dialog', { name: 'Add transcript' });
       fireEvent.click(
         await screen.findByRole('button', { name: 'View trace insight for Add this transcript to my workspace.' }),

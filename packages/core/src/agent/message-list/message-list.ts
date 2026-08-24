@@ -7,7 +7,7 @@ import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { IMastraLogger } from '../../logger';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../../tools/payload-transform';
 import type { IdGeneratorContext } from '../../types';
-import { createSignal, isCreatedAgentSignal, mastraDBMessageToSignal } from '../signals';
+import { createSignal, isCreatedAgentSignal, isTransientSignalMessage, mastraDBMessageToSignal } from '../signals';
 import type { CreatedAgentSignal } from '../signals';
 import { AIV4Adapter, AIV5Adapter, AIV6Adapter } from './adapters';
 import { CacheKeyGenerator } from './cache/CacheKeyGenerator';
@@ -259,8 +259,50 @@ export class MessageList {
         ? createSignal({ ...signalInput, type: signal.type })
         : createSignal({ ...signalInput, type: signal.type, transient: signal.transient });
 
-    this.addOne(signalForTranscript.toDBMessage(this.memoryInfo ?? undefined), source);
+    const dbMessage = signalForTranscript.toDBMessage(this.memoryInfo ?? undefined);
+    // Transient signals are delivery-only: when the same logical signal is re-sent within a
+    // turn (e.g. from processInputStep, which runs once per model call), drop the previous
+    // in-memory copy so the prompt keeps a single fresh copy near the latest message instead
+    // of accumulating one copy per step. Matching is by signal id, or — for the documented
+    // no-id pattern where each re-send mints a fresh UUID — by (type, tagName, contents).
+    if (signalForTranscript.type !== 'state' && signalForTranscript.transient) {
+      this.removeMatchingTransientSignals(dbMessage);
+    }
+    this.addOne(dbMessage, source);
     return signalForTranscript;
+  }
+
+  private removeMatchingTransientSignals(incoming: MastraDBMessage): void {
+    const incomingMeta = incoming.content.metadata?.signal as
+      | { id?: string; type?: string; tagName?: string }
+      | undefined;
+    // The stored copy's parts gain bookkeeping fields (e.g. a per-part `createdAt` stamp)
+    // during conversion, so compare contents with those stripped.
+    const serializeParts = (parts: MastraDBMessage['content']['parts']) =>
+      JSON.stringify(parts.map(part => ({ ...part, createdAt: undefined })));
+    const incomingParts = serializeParts(incoming.content.parts);
+
+    for (let i = this.messages.length - 1; i >= 0; i--) {
+      const existing = this.messages[i]!;
+      if (!isTransientSignalMessage(existing)) continue;
+
+      const existingMeta = existing.content.metadata?.signal as
+        | { id?: string; type?: string; tagName?: string }
+        | undefined;
+
+      const sameId = existing.id === incoming.id;
+      const sameLogicalSignal =
+        !!incomingMeta &&
+        !!existingMeta &&
+        existingMeta.type === incomingMeta.type &&
+        existingMeta.tagName === incomingMeta.tagName &&
+        serializeParts(existing.content.parts) === incomingParts;
+
+      if (sameId || sameLogicalSignal) {
+        this.messages.splice(i, 1);
+        this.stateManager.removeMessage(existing);
+      }
+    }
   }
 
   public add(messages: MessageListInput, messageSource: MessageSource, options: MessageListAddOptions = {}) {

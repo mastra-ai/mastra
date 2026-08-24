@@ -13,7 +13,7 @@
 
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
@@ -193,6 +193,62 @@ describe('DurableAgent abort signal', () => {
     expect(finishReason).toBe('abort');
 
     source.cleanup();
+  });
+
+  it('abortRunStream() before stream() short-circuits the run', async () => {
+    const doStream = vi.fn(async ({ abortSignal }: { abortSignal?: AbortSignal }) => {
+      if (abortSignal?.aborted) {
+        const err = new Error('Aborted');
+        err.name = 'AbortError';
+        throw err;
+      }
+
+      return {
+        stream: new ReadableStream({
+          start(controller) {
+            controller.enqueue({ type: 'text-start', id: 'text-1' });
+            controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'completed' });
+            controller.enqueue({ type: 'text-end', id: 'text-1' });
+            controller.enqueue({
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            });
+            controller.close();
+          },
+        }),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+      };
+    });
+    const baseAgent = new Agent({
+      id: 'abort-before-start-agent',
+      name: 'Abort Before Start Agent',
+      instructions: 'Test',
+      model: new MockLanguageModelV2({ doStream }) as LanguageModelV2,
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+    const runId = 'abort-before-start-run';
+
+    durableAgent.abortRunStream(runId);
+
+    let abortPayload: unknown;
+    const { output, cleanup } = await durableAgent.stream('Go', {
+      runId,
+      onAbort: data => {
+        abortPayload = data;
+      },
+    });
+
+    try {
+      await output.consumeStream();
+    } catch {
+      // expected — the run starts with an already-aborted signal
+    }
+
+    expect(abortPayload).toBeDefined();
+    expect(doStream).not.toHaveBeenCalled();
+
+    cleanup();
   });
 
   it('pre-aborted external abortSignal short-circuits the run', async () => {

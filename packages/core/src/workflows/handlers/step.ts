@@ -99,6 +99,8 @@ export async function executeStep(
   const observabilityContext = resolveObservabilityContext(rest);
 
   const stepCallId = randomUUID();
+  const nestedRunId =
+    step.component === 'WORKFLOW' && executionContext.foreachIndex !== undefined ? randomUUID() : undefined;
 
   const { inputData, validationError: inputValidationError } = await validateStepInput({
     prevOutput,
@@ -342,7 +344,7 @@ export async function executeStep(
         : undefined;
 
       const output = await runStep({
-        runId,
+        runId: nestedRunId ?? runId,
         resourceId,
         workflowId,
         mastra: mastraForStep,
@@ -543,6 +545,10 @@ export async function executeStep(
         },
       },
     });
+  }
+
+  if (nestedRunId) {
+    execResults.metadata = { ...execResults.metadata, nestedRunId };
   }
 
   const stepResult = {

@@ -203,6 +203,8 @@ PostgreSQL supports observability and can handle low trace volumes. Throughput c
 - Setting up table partitioning for efficient data retention
 - Migrating observability to [ClickHouse via composite storage](/reference/storage/composite#specialized-storage-for-observability) if you need to scale further
 
+`PostgresStoreVNext` uses the `event-sourced` [tracing strategy](/docs/observability/integrations/exporters/mastra-storage#tracing-strategies) instead. It writes one row when a span starts and another when it ends, never updating a row in place, and collapses those rows when a trace is read. Writes stay append-only, and traces appear in Studio while the run is still executing.
+
 ### Initialization
 
 When you pass storage to the Mastra class, `init()` is called automatically before any storage operation:

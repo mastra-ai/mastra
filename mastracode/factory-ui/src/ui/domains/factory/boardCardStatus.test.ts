@@ -14,6 +14,9 @@ function decision(overrides: Partial<FactoryDecisionSummary> = {}): FactoryDecis
     role: null,
     status: 'leased',
     attempts: 1,
+    failureOccurrence: 0,
+    failureCode: null,
+    canRetry: true,
     lastError: null,
     createdAt: '2026-08-01T00:00:00.000Z',
     updatedAt: '2026-08-01T00:00:00.000Z',
@@ -57,6 +60,24 @@ describe('boardCardStatus', () => {
       label: 'Automated run could not start',
       detail: 'ENOENT: no such file',
       retryDecisionId: 'decision-1',
+    });
+  });
+
+  it('does not offer Retry for a deterministic failure', () => {
+    expect(
+      boardCardStatus({
+        idle: IDLE,
+        decision: decision({
+          status: 'failed',
+          failureCode: 'unsupported_provider_item',
+          canRetry: false,
+          lastError: 'Factory skill invocation requires a supported provider item.',
+        }),
+      }),
+    ).toEqual({
+      kind: 'error',
+      label: 'Automated run could not start',
+      detail: 'Factory skill invocation requires a supported provider item.',
     });
   });
 
