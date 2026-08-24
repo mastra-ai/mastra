@@ -23,7 +23,12 @@ import { Mastra } from '@mastra/core/mastra';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector, PgFactoryStorage } from '@mastra/pg';
 import { LocalSandbox } from '@mastra/core/workspace';
-import { InProcessSandboxAddressRegistry } from '@mastra/platform-workspace';
+import {
+  InProcessSandboxAddressRegistry,
+  PlatformSandbox,
+  createRepoTemplate as createPlatformRepoTemplate,
+} from '@mastra/platform-workspace';
+import { E2BSandbox, createRepoTemplate as createE2BRepoTemplate } from '@mastra/e2b';
 import { RedisStreamsPubSub } from '@mastra/redis-streams';
 import { getDatabasePath } from '@mastra/code-sdk/utils/project';
 import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
@@ -36,7 +41,6 @@ import { parseAuthorizedBotsEnv } from '@mastra/factory/integrations/github/webh
 import { LinearIntegration } from '@mastra/factory/integrations/linear/integration';
 import { SlackIntegration } from '@mastra/factory/integrations/slack/integration';
 import type { IMastraAuthProvider } from '@mastra/core/server';
-import { createRemoteFactorySandbox } from './sandbox-provider.js';
 
 /**
  * Parse a positive-integer env knob; anything else means "use the default".
@@ -284,14 +288,43 @@ export const factory = new MastraFactory({
   integrations,
   rules: factoryRules,
   sandbox: ctx => {
-    const remoteSandbox = createRemoteFactorySandbox(ctx, {
-      ...(hasPlatformSandboxEnv && platformSandboxToken ? { platformAccessToken: platformSandboxToken } : {}),
-      ...(addressRegistry ? { addressRegistry } : {}),
-    });
-    if (remoteSandbox) {
-      console.info(`[sandbox] session ${ctx.sessionId} -> ${remoteSandbox.provider} sandbox`);
-      return remoteSandbox;
+    // Provider precedence: Platform > E2B > Local.
+    if (hasPlatformSandboxEnv && platformSandboxToken) {
+      console.info(`[sandbox] session ${ctx.sessionId} -> platform sandbox`);
+      return new PlatformSandbox({
+        id: ctx.sessionId,
+        accessToken: platformSandboxToken,
+        ...(ctx.actingUserId ? { actingUserId: ctx.actingUserId } : {}),
+        ...(addressRegistry ? { addressRegistry } : {}),
+        ...(ctx.repoFullName
+          ? {
+              template: createPlatformRepoTemplate({
+                repoFullName: ctx.repoFullName,
+                ...(ctx.setupCommand ? { setupCommand: ctx.setupCommand } : {}),
+              }),
+            }
+          : {}),
+        ...(ctx.onStart ? { onStart: ctx.onStart } : {}),
+      });
     }
+
+    if (process.env.E2B_API_KEY?.trim()) {
+      console.info(`[sandbox] session ${ctx.sessionId} -> e2b sandbox`);
+      return new E2BSandbox({
+        id: ctx.sessionId,
+        ...(ctx.repoFullName
+          ? {
+              template: createE2BRepoTemplate({
+                repoFullName: ctx.repoFullName,
+                ...(ctx.setupCommand ? { setupCommand: ctx.setupCommand } : {}),
+                ...(ctx.getGithubToken ? { getAuthToken: ctx.getGithubToken } : {}),
+              }),
+            }
+          : {}),
+        ...(ctx.onStart ? { onStart: ctx.onStart } : {}),
+      });
+    }
+
     console.info(`[sandbox] session ${ctx.sessionId} -> local sandbox`);
 
     return new LocalSandbox({
