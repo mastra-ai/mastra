@@ -24,6 +24,13 @@ import {
  */
 const OM_TABLE = 'mastra_observational_memory' as const;
 import type {
+  AcquireObservationBufferClaimInput,
+  CommitBufferedObservationsInput,
+  CommitBufferedObservationsResult,
+  ObservationBufferClaimOutcome,
+  ObservationBufferClaimStatus,
+  ReleaseObservationBufferClaimInput,
+  RenewObservationBufferClaimInput,
   PruneOptions,
   PruneResult,
   RetentionTablesDescriptor,
@@ -1511,6 +1518,16 @@ export class MemoryStorageMongoDB extends MemoryStorage {
           ? doc.lastBufferedAtTokens
           : parseInt(String(doc.lastBufferedAtTokens ?? '0'), 10) || 0,
       lastBufferedAtTime: doc.lastBufferedAtTime ? new Date(doc.lastBufferedAtTime) : null,
+      observationBufferClaimToken: doc.observationBufferClaimToken ?? null,
+      observationBufferClaimAcquiredAt: doc.observationBufferClaimAcquiredAt
+        ? new Date(doc.observationBufferClaimAcquiredAt)
+        : null,
+      observationBufferClaimRenewedAt: doc.observationBufferClaimRenewedAt
+        ? new Date(doc.observationBufferClaimRenewedAt)
+        : null,
+      observationBufferClaimExpiresAt: doc.observationBufferClaimExpiresAt
+        ? new Date(doc.observationBufferClaimExpiresAt)
+        : null,
       config: doc.config || {},
       metadata: doc.metadata || undefined,
       observedMessageIds: doc.observedMessageIds || undefined,
@@ -1914,6 +1931,308 @@ export class MemoryStorageMongoDB extends MemoryStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { id, isBuffering, lastBufferedAtTokens: lastBufferedAtTokens ?? null },
+        },
+        error,
+      );
+    }
+  }
+
+  /** Classify a zero-match conditional claim update: missing record vs lost claim. */
+  private async claimNotFoundOrLost(id: string, op: string): Promise<{ ok: false; reason: 'lost' }> {
+    const collection = await this.getCollection(OM_TABLE);
+    const exists = await collection.findOne({ id }, { projection: { id: 1 } });
+    if (!exists) {
+      throw new MastraError({
+        id: createStorageErrorId('MONGODB', op, 'NOT_FOUND'),
+        text: `Observational memory record not found: ${id}`,
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.THIRD_PARTY,
+        details: { id },
+      });
+    }
+    return { ok: false, reason: 'lost' };
+  }
+
+  private claimFromDoc(doc: any, ownerToken: string): ObservationBufferClaimOutcome {
+    return {
+      ok: true,
+      claim: {
+        ownerToken,
+        acquiredAt: new Date(doc.observationBufferClaimAcquiredAt),
+        renewedAt: new Date(doc.observationBufferClaimRenewedAt),
+        expiresAt: new Date(doc.observationBufferClaimExpiresAt),
+      },
+    };
+  }
+
+  async acquireObservationBufferClaim(
+    input: AcquireObservationBufferClaimInput,
+  ): Promise<ObservationBufferClaimOutcome> {
+    try {
+      const collection = await this.getCollection(OM_TABLE);
+      // One atomic findOneAndUpdate: the ownership predicate (unclaimed,
+      // expired, or legacy-grace-expired) is evaluated server-side via $expr
+      // against $$NOW, and the pipeline update writes $$NOW timestamps in the
+      // same single-document operation (the backend-authoritative clock).
+      const doc = await collection.findOneAndUpdate(
+        {
+          id: input.id,
+          $expr: {
+            $or: [
+              {
+                $and: [
+                  { $ne: [{ $ifNull: ['$observationBufferClaimToken', null] }, null] },
+                  {
+                    $or: [
+                      { $eq: [{ $ifNull: ['$observationBufferClaimExpiresAt', null] }, null] },
+                      { $lte: ['$observationBufferClaimExpiresAt', '$$NOW'] },
+                    ],
+                  },
+                ],
+              },
+              {
+                $and: [
+                  { $eq: [{ $ifNull: ['$observationBufferClaimToken', null] }, null] },
+                  {
+                    $or: [
+                      { $ne: ['$isBufferingObservation', true] },
+                      {
+                        $lte: [
+                          '$updatedAt',
+                          { $dateSubtract: { startDate: '$$NOW', unit: 'millisecond', amount: input.leaseMs } },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        },
+        [
+          {
+            $set: {
+              observationBufferClaimToken: input.ownerToken,
+              observationBufferClaimAcquiredAt: '$$NOW',
+              observationBufferClaimRenewedAt: '$$NOW',
+              observationBufferClaimExpiresAt: {
+                $dateAdd: { startDate: '$$NOW', unit: 'millisecond', amount: input.leaseMs },
+              },
+              isBufferingObservation: true,
+              lastBufferedAtTokens:
+                input.lastBufferedAtTokens !== undefined ? input.lastBufferedAtTokens : '$lastBufferedAtTokens',
+              updatedAt: '$$NOW',
+            },
+          },
+        ],
+        { returnDocument: 'after' },
+      );
+      if (!doc) {
+        return await this.claimNotFoundOrLost(input.id, 'ACQUIRE_OBSERVATION_BUFFER_CLAIM');
+      }
+      return this.claimFromDoc(doc, input.ownerToken);
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'ACQUIRE_OBSERVATION_BUFFER_CLAIM', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        },
+        error,
+      );
+    }
+  }
+
+  async renewObservationBufferClaim(input: RenewObservationBufferClaimInput): Promise<ObservationBufferClaimOutcome> {
+    try {
+      const collection = await this.getCollection(OM_TABLE);
+      // Strictly advancing expiry: never move the lease backwards, and always
+      // advance by at least 1ms so a same-instant renewal is still an
+      // observable write.
+      const doc = await collection.findOneAndUpdate(
+        {
+          id: input.id,
+          observationBufferClaimToken: input.ownerToken,
+          $expr: { $gt: ['$observationBufferClaimExpiresAt', '$$NOW'] },
+        },
+        [
+          {
+            $set: {
+              observationBufferClaimRenewedAt: '$$NOW',
+              observationBufferClaimExpiresAt: {
+                $max: [
+                  { $dateAdd: { startDate: '$$NOW', unit: 'millisecond', amount: input.leaseMs } },
+                  { $dateAdd: { startDate: '$observationBufferClaimExpiresAt', unit: 'millisecond', amount: 1 } },
+                ],
+              },
+              updatedAt: '$$NOW',
+            },
+          },
+        ],
+        { returnDocument: 'after' },
+      );
+      if (!doc) {
+        return await this.claimNotFoundOrLost(input.id, 'RENEW_OBSERVATION_BUFFER_CLAIM');
+      }
+      return this.claimFromDoc(doc, input.ownerToken);
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'RENEW_OBSERVATION_BUFFER_CLAIM', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        },
+        error,
+      );
+    }
+  }
+
+  async releaseObservationBufferClaim(
+    input: ReleaseObservationBufferClaimInput,
+  ): Promise<ObservationBufferClaimOutcome> {
+    try {
+      const collection = await this.getCollection(OM_TABLE);
+      const doc = await collection.findOneAndUpdate(
+        {
+          id: input.id,
+          observationBufferClaimToken: input.ownerToken,
+          $expr: { $gt: ['$observationBufferClaimExpiresAt', '$$NOW'] },
+        },
+        [
+          {
+            $set: {
+              observationBufferClaimToken: null,
+              observationBufferClaimAcquiredAt: null,
+              observationBufferClaimRenewedAt: null,
+              observationBufferClaimExpiresAt: null,
+              isBufferingObservation: false,
+              updatedAt: '$$NOW',
+            },
+          },
+        ],
+        { returnDocument: 'after' },
+      );
+      if (!doc) {
+        return await this.claimNotFoundOrLost(input.id, 'RELEASE_OBSERVATION_BUFFER_CLAIM');
+      }
+      // Fields were cleared by the release; report the token the caller owned.
+      return {
+        ok: true,
+        claim: { ownerToken: input.ownerToken, acquiredAt: new Date(), renewedAt: new Date(), expiresAt: new Date() },
+      };
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'RELEASE_OBSERVATION_BUFFER_CLAIM', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        },
+        error,
+      );
+    }
+  }
+
+  async commitBufferedObservations(input: CommitBufferedObservationsInput): Promise<CommitBufferedObservationsResult> {
+    try {
+      const collection = await this.getCollection(OM_TABLE);
+      const newChunk: BufferedObservationChunk = {
+        id: `ombuf-${randomUUID()}`,
+        cycleId: input.chunk.cycleId,
+        observations: input.chunk.observations,
+        tokenCount: input.chunk.tokenCount,
+        messageIds: input.chunk.messageIds,
+        messageTokens: input.chunk.messageTokens,
+        lastObservedAt: input.chunk.lastObservedAt,
+        createdAt: new Date(),
+        suggestedContinuation: input.chunk.suggestedContinuation,
+        currentTask: input.chunk.currentTask,
+        threadTitle: input.chunk.threadTitle,
+        extractedValues: input.chunk.extractedValues,
+        extractionFailures: input.chunk.extractionFailures,
+      };
+      // Single atomic operation: the chunk append and the owner/lease
+      // predicate are evaluated server-side in one findOneAndUpdate.
+      const doc = await collection.findOneAndUpdate(
+        {
+          id: input.id,
+          observationBufferClaimToken: input.ownerToken,
+          $expr: { $gt: ['$observationBufferClaimExpiresAt', '$$NOW'] },
+        },
+        [
+          {
+            $set: {
+              bufferedObservationChunks: {
+                $concatArrays: [{ $ifNull: ['$bufferedObservationChunks', []] }, [newChunk]],
+              },
+              lastBufferedAtTime: input.lastBufferedAtTime ?? '$lastBufferedAtTime',
+              updatedAt: '$$NOW',
+            },
+          },
+        ],
+        { returnDocument: 'after' },
+      );
+      if (!doc) {
+        await this.claimNotFoundOrLost(input.id, 'COMMIT_BUFFERED_OBSERVATIONS');
+        return { committed: false, reason: 'lost' };
+      }
+      return { committed: true };
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'COMMIT_BUFFERED_OBSERVATIONS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        },
+        error,
+      );
+    }
+  }
+
+  async getObservationBufferClaimStatus(id: string): Promise<ObservationBufferClaimStatus> {
+    try {
+      const collection = await this.getCollection(OM_TABLE);
+      // Evaluate liveness with the backend clock in one aggregation.
+      const docs = await collection
+        .aggregate([
+          { $match: { id } },
+          {
+            $project: {
+              live: {
+                $and: [
+                  { $ne: [{ $ifNull: ['$observationBufferClaimToken', null] }, null] },
+                  { $gt: [{ $ifNull: ['$observationBufferClaimExpiresAt', null] }, '$$NOW'] },
+                ],
+              },
+            },
+          },
+        ])
+        .toArray();
+      if (!docs || docs.length === 0) {
+        throw new MastraError({
+          id: createStorageErrorId('MONGODB', 'GET_OBSERVATION_BUFFER_CLAIM_STATUS', 'NOT_FOUND'),
+          text: `Observational memory record not found: ${id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id },
+        });
+      }
+      return { live: docs[0]!.live === true };
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'GET_OBSERVATION_BUFFER_CLAIM_STATUS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id },
         },
         error,
       );

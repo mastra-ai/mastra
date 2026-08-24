@@ -53,6 +53,10 @@ export const OM_MIGRATION_COLUMNS: string[] = [
   'lastBufferedAtTokens',
   'lastBufferedAtTime',
   'metadata',
+  'observationBufferClaimToken',
+  'observationBufferClaimAcquiredAt',
+  'observationBufferClaimRenewedAt',
+  'observationBufferClaimExpiresAt',
 ];
 
 /**
@@ -76,6 +80,13 @@ import type {
   StorageCloneThreadOutput,
   ThreadCloneMetadata,
   ObservationalMemoryRecord,
+  AcquireObservationBufferClaimInput,
+  RenewObservationBufferClaimInput,
+  ReleaseObservationBufferClaimInput,
+  CommitBufferedObservationsInput,
+  CommitBufferedObservationsResult,
+  ObservationBufferClaimOutcome,
+  ObservationBufferClaimStatus,
   ObservationalMemoryHistoryOptions,
   BufferedObservationChunk,
   CreateObservationalMemoryInput,
@@ -2093,6 +2104,16 @@ export class MemoryPG extends MemoryStorage {
           ? row.lastBufferedAtTokens
           : parseInt(String(row.lastBufferedAtTokens ?? '0'), 10) || 0,
       lastBufferedAtTime: row.lastBufferedAtTime ? new Date(String(row.lastBufferedAtTime)) : null,
+      observationBufferClaimToken: row.observationBufferClaimToken ?? null,
+      observationBufferClaimAcquiredAt: row.observationBufferClaimAcquiredAt
+        ? new Date(String(row.observationBufferClaimAcquiredAt))
+        : null,
+      observationBufferClaimRenewedAt: row.observationBufferClaimRenewedAt
+        ? new Date(String(row.observationBufferClaimRenewedAt))
+        : null,
+      observationBufferClaimExpiresAt: row.observationBufferClaimExpiresAt
+        ? new Date(String(row.observationBufferClaimExpiresAt))
+        : null,
       config: row.config ? (typeof row.config === 'string' ? JSON.parse(row.config) : row.config) : {},
       metadata: row.metadata ? (typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata) : undefined,
       observedMessageIds: row.observedMessageIds
@@ -2614,6 +2635,261 @@ export class MemoryPG extends MemoryStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { id, isBuffering, lastBufferedAtTokens: lastBufferedAtTokens ?? null },
+        },
+        error,
+      );
+    }
+  }
+
+  /**
+   * Backend-authoritative clock for observation-buffer claim predicates.
+   * `now() at time zone 'utc'` yields a session-timezone-independent
+   * TIMESTAMP that is written to and compared against the plain claim
+   * timestamp columns inside the same atomic statement.
+   */
+  static readonly #PG_NOW = `(now() at time zone 'utc')`;
+
+  #omTableName(): string {
+    return getTableName({ indexName: OM_TABLE, schemaName: getSchemaName(this.#schema) });
+  }
+
+  /** Classify a zero-row conditional claim update: missing record vs lost claim. */
+  async #claimNotFoundOrLost(id: string, op: string): Promise<{ ok: false; reason: 'lost' }> {
+    const exists = await this.#db.client.oneOrNone(`SELECT id FROM ${this.#omTableName()} WHERE id = $1`, [id]);
+    if (!exists) {
+      throw new MastraError({
+        id: createStorageErrorId('PG', op, 'NOT_FOUND'),
+        text: `Observational memory record not found: ${id}`,
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.THIRD_PARTY,
+        details: { id },
+      });
+    }
+    return { ok: false, reason: 'lost' };
+  }
+
+  #claimFromRow(row: any, ownerToken: string): ObservationBufferClaimOutcome {
+    return {
+      ok: true,
+      claim: {
+        ownerToken,
+        acquiredAt: new Date(String(row.observationBufferClaimAcquiredAt)),
+        renewedAt: new Date(String(row.observationBufferClaimRenewedAt)),
+        expiresAt: new Date(String(row.observationBufferClaimExpiresAt)),
+      },
+    };
+  }
+
+  async acquireObservationBufferClaim(
+    input: AcquireObservationBufferClaimInput,
+  ): Promise<ObservationBufferClaimOutcome> {
+    try {
+      const now = MemoryPG.#PG_NOW;
+      const leaseSeconds = input.leaseMs / 1000;
+      // One conditional UPDATE: the ownership predicate (unclaimed, expired,
+      // or legacy-grace-expired) and the claim write are evaluated atomically
+      // by the backend against its own clock.
+      const row = await this.#db.client.oneOrNone(
+        `UPDATE ${this.#omTableName()} SET
+            "observationBufferClaimToken" = $1,
+            "observationBufferClaimAcquiredAt" = ${now},
+            "observationBufferClaimRenewedAt" = ${now},
+            "observationBufferClaimExpiresAt" = ${now} + make_interval(secs => $2),
+            "isBufferingObservation" = true,
+            "lastBufferedAtTokens" = COALESCE($3, "lastBufferedAtTokens"),
+            "updatedAt" = ${now},
+            "updatedAtZ" = now()
+          WHERE id = $4
+            AND (
+              ("observationBufferClaimToken" IS NOT NULL
+                AND ("observationBufferClaimExpiresAt" IS NULL OR "observationBufferClaimExpiresAt" <= ${now}))
+              OR ("observationBufferClaimToken" IS NULL
+                AND ("isBufferingObservation" IS NOT true
+                  OR "updatedAtZ" <= now() - make_interval(secs => $2)))
+            )
+          RETURNING "observationBufferClaimAcquiredAt", "observationBufferClaimRenewedAt", "observationBufferClaimExpiresAt"`,
+        [input.ownerToken, leaseSeconds, input.lastBufferedAtTokens ?? null, input.id],
+      );
+      if (!row) {
+        return await this.#claimNotFoundOrLost(input.id, 'ACQUIRE_OBSERVATION_BUFFER_CLAIM');
+      }
+      return this.#claimFromRow(row, input.ownerToken);
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'ACQUIRE_OBSERVATION_BUFFER_CLAIM', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        },
+        error,
+      );
+    }
+  }
+
+  async renewObservationBufferClaim(input: RenewObservationBufferClaimInput): Promise<ObservationBufferClaimOutcome> {
+    try {
+      const now = MemoryPG.#PG_NOW;
+      // Strictly advancing expiry: never move the lease backwards, and always
+      // advance by at least 1ms so a same-instant renewal is still an
+      // observable write (independent of affected-rows semantics).
+      const row = await this.#db.client.oneOrNone(
+        `UPDATE ${this.#omTableName()} SET
+            "observationBufferClaimRenewedAt" = ${now},
+            "observationBufferClaimExpiresAt" = GREATEST(
+              ${now} + make_interval(secs => $1),
+              "observationBufferClaimExpiresAt" + interval '1 millisecond'
+            ),
+            "updatedAt" = ${now},
+            "updatedAtZ" = now()
+          WHERE id = $2
+            AND "observationBufferClaimToken" = $3
+            AND "observationBufferClaimExpiresAt" > ${now}
+          RETURNING "observationBufferClaimAcquiredAt", "observationBufferClaimRenewedAt", "observationBufferClaimExpiresAt"`,
+        [input.leaseMs / 1000, input.id, input.ownerToken],
+      );
+      if (!row) {
+        return await this.#claimNotFoundOrLost(input.id, 'RENEW_OBSERVATION_BUFFER_CLAIM');
+      }
+      return this.#claimFromRow(row, input.ownerToken);
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'RENEW_OBSERVATION_BUFFER_CLAIM', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        },
+        error,
+      );
+    }
+  }
+
+  async releaseObservationBufferClaim(
+    input: ReleaseObservationBufferClaimInput,
+  ): Promise<ObservationBufferClaimOutcome> {
+    try {
+      const now = MemoryPG.#PG_NOW;
+      const row = await this.#db.client.oneOrNone(
+        `UPDATE ${this.#omTableName()} SET
+            "observationBufferClaimToken" = NULL,
+            "observationBufferClaimAcquiredAt" = NULL,
+            "observationBufferClaimRenewedAt" = NULL,
+            "observationBufferClaimExpiresAt" = NULL,
+            "isBufferingObservation" = false,
+            "updatedAt" = ${now},
+            "updatedAtZ" = now()
+          WHERE id = $1
+            AND "observationBufferClaimToken" = $2
+            AND "observationBufferClaimExpiresAt" > ${now}
+          RETURNING id`,
+        [input.id, input.ownerToken],
+      );
+      if (!row) {
+        return await this.#claimNotFoundOrLost(input.id, 'RELEASE_OBSERVATION_BUFFER_CLAIM');
+      }
+      // Fields were cleared by the release; report the token the caller owned.
+      return {
+        ok: true,
+        claim: { ownerToken: input.ownerToken, acquiredAt: new Date(), renewedAt: new Date(), expiresAt: new Date() },
+      };
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'RELEASE_OBSERVATION_BUFFER_CLAIM', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        },
+        error,
+      );
+    }
+  }
+
+  async commitBufferedObservations(input: CommitBufferedObservationsInput): Promise<CommitBufferedObservationsResult> {
+    try {
+      const now = MemoryPG.#PG_NOW;
+      const newChunk: BufferedObservationChunk = {
+        id: `ombuf-${randomUUID()}`,
+        cycleId: input.chunk.cycleId,
+        observations: input.chunk.observations,
+        tokenCount: input.chunk.tokenCount,
+        messageIds: input.chunk.messageIds,
+        messageTokens: input.chunk.messageTokens,
+        lastObservedAt: input.chunk.lastObservedAt,
+        createdAt: new Date(),
+        suggestedContinuation: input.chunk.suggestedContinuation,
+        currentTask: input.chunk.currentTask,
+        threadTitle: input.chunk.threadTitle,
+        extractedValues: input.chunk.extractedValues,
+        extractionFailures: input.chunk.extractionFailures,
+      };
+      // Single conditional statement: the JSON append and the owner/lease
+      // predicate are evaluated atomically by the backend.
+      const result = await this.#db.client.query(
+        `UPDATE ${this.#omTableName()} SET
+            "bufferedObservationChunks" = COALESCE("bufferedObservationChunks", '[]'::jsonb) || $1::jsonb,
+            "lastBufferedAtTime" = COALESCE($2, "lastBufferedAtTime"),
+            "updatedAt" = ${now},
+            "updatedAtZ" = now()
+          WHERE id = $3
+            AND "observationBufferClaimToken" = $4
+            AND "observationBufferClaimExpiresAt" > ${now}`,
+        [
+          JSON.stringify([newChunk]),
+          input.lastBufferedAtTime ? input.lastBufferedAtTime.toISOString() : null,
+          input.id,
+          input.ownerToken,
+        ],
+      );
+      if (result.rowCount === 0) {
+        await this.#claimNotFoundOrLost(input.id, 'COMMIT_BUFFERED_OBSERVATIONS');
+        return { committed: false, reason: 'lost' };
+      }
+      return { committed: true };
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'COMMIT_BUFFERED_OBSERVATIONS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        },
+        error,
+      );
+    }
+  }
+
+  async getObservationBufferClaimStatus(id: string): Promise<ObservationBufferClaimStatus> {
+    try {
+      const now = MemoryPG.#PG_NOW;
+      const row = await this.#db.client.oneOrNone(
+        `SELECT ("observationBufferClaimToken" IS NOT NULL AND "observationBufferClaimExpiresAt" > ${now}) AS live
+          FROM ${this.#omTableName()} WHERE id = $1`,
+        [id],
+      );
+      if (!row) {
+        throw new MastraError({
+          id: createStorageErrorId('PG', 'GET_OBSERVATION_BUFFER_CLAIM_STATUS', 'NOT_FOUND'),
+          text: `Observational memory record not found: ${id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id },
+        });
+      }
+      return { live: row.live === true };
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'GET_OBSERVATION_BUFFER_CLAIM_STATUS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id },
         },
         error,
       );

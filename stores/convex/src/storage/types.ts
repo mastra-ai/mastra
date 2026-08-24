@@ -275,6 +275,43 @@ export type StorageRequest =
       config: string;
       /** ISO timestamp */
       updatedAt: string;
+    }
+  | {
+      op: 'omAcquireBufferClaim';
+      tableName: TABLE_NAMES | string;
+      id: string;
+      ownerToken: string;
+      leaseMs: number;
+      lastBufferedAtTokens?: number;
+    }
+  | {
+      op: 'omRenewBufferClaim';
+      tableName: TABLE_NAMES | string;
+      id: string;
+      ownerToken: string;
+      leaseMs: number;
+    }
+  | {
+      op: 'omReleaseBufferClaim';
+      tableName: TABLE_NAMES | string;
+      id: string;
+      ownerToken: string;
+    }
+  | {
+      op: 'omCommitBufferedChunk';
+      tableName: TABLE_NAMES | string;
+      id: string;
+      ownerToken: string;
+      chunk: SerializedOMChunk;
+      /** ISO timestamp */
+      lastBufferedAtTime?: string;
+      /** ISO timestamp */
+      updatedAt: string;
+    }
+  | {
+      op: 'omBufferClaimStatus';
+      tableName: TABLE_NAMES | string;
+      id: string;
     };
 
 export type StorageResponse =

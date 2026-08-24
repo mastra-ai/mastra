@@ -3,10 +3,16 @@ import { randomUUID } from 'node:crypto';
 import { ErrorCategory, MastraError } from '@mastra/core/error';
 import { TABLE_OBSERVATIONAL_MEMORY } from '@mastra/core/storage';
 import type {
+  AcquireObservationBufferClaimInput,
   CreateObservationalMemoryInput,
   CreateReflectionGenerationInput,
+  ObservationBufferClaim,
+  ObservationBufferClaimOutcome,
+  ObservationBufferClaimStatus,
   ObservationalMemoryHistoryOptions,
   ObservationalMemoryRecord,
+  ReleaseObservationBufferClaimInput,
+  RenewObservationBufferClaimInput,
   UpdateActiveObservationsInput,
   UpdateObservationalMemoryConfigInput,
 } from '@mastra/core/storage';
@@ -32,6 +38,10 @@ import {
   OM_BUFFERED_REFLECTION,
   OM_BUFFERED_REFLECTION_INPUT_TOKENS,
   OM_BUFFERED_REFLECTION_TOKENS,
+  OM_BUFFER_CLAIM_ACQUIRED_AT,
+  OM_BUFFER_CLAIM_EXPIRES_AT,
+  OM_BUFFER_CLAIM_RENEWED_AT,
+  OM_BUFFER_CLAIM_TOKEN,
   OM_CREATED_AT,
   OM_GENERATION_COUNT,
   OM_IS_BUFFERING_OBSERVATION,
@@ -106,6 +116,10 @@ export type ObservationalMemoryRow = {
   isBufferingReflection?: number | boolean | string | null;
   lastBufferedAtTokens?: number | string | null;
   lastBufferedAtTime?: Date | string | null;
+  observationBufferClaimToken?: string | null;
+  observationBufferClaimAcquiredAt?: Date | string | null;
+  observationBufferClaimRenewedAt?: Date | string | null;
+  observationBufferClaimExpiresAt?: Date | string | null;
   metadata?: unknown;
   createdAt: Date | string;
   updatedAt: Date | string;
@@ -378,6 +392,204 @@ export async function setBufferingObservationFlag(
   }
 }
 
+// --- Observation buffer claim (owner-token lease with fencing) ---
+// Every predicate is evaluated inside a single conditional UPDATE using the
+// Oracle server clock (SYSTIMESTAMP), so acquisition, renewal, commit, and
+// release are atomic compare-and-set operations. rowsAffected === 0 is
+// disambiguated into "record missing" (established not-found error) versus
+// "claim lost" by a follow-up existence check.
+
+const CLAIM_SET_TIMESTAMPS = `SET ${OM_BUFFER_CLAIM_RENEWED_AT} = SYSTIMESTAMP, ${OM_UPDATED_AT} = SYSTIMESTAMP`;
+
+async function claimNotFoundOrLost(
+  ctx: MemoryContext,
+  connection: Connection,
+  id: string,
+  operation: string,
+): Promise<{ ok: false; reason: 'lost' }> {
+  const existing = await connection.execute<ObjectRow>(
+    `SELECT id FROM ${table(ctx, TABLE_OBSERVATIONAL_MEMORY)} WHERE id = :id`,
+    asBindParameters({ id }),
+    executeOptions(),
+  );
+  if (rows(existing).length === 0) {
+    throw storageError(operation, 'NOT_FOUND', { id }, new Error(`Observational memory record not found: ${id}`));
+  }
+  return { ok: false, reason: 'lost' };
+}
+
+async function readOwnedClaim(
+  ctx: MemoryContext,
+  connection: Connection,
+  id: string,
+  ownerToken: string,
+): Promise<ObservationBufferClaim | null> {
+  // Token-scoped read-back inside the same transaction: we only report
+  // timestamps for a row our own conditional UPDATE just claimed.
+  const result = await connection.execute<ObjectRow>(
+    `SELECT ${OM_BUFFER_CLAIM_ACQUIRED_AT} AS "acquiredAt",
+            ${OM_BUFFER_CLAIM_RENEWED_AT} AS "renewedAt",
+            ${OM_BUFFER_CLAIM_EXPIRES_AT} AS "expiresAt"
+       FROM ${table(ctx, TABLE_OBSERVATIONAL_MEMORY)}
+      WHERE id = :id AND ${OM_BUFFER_CLAIM_TOKEN} = :ownerToken`,
+    asBindParameters({ id, ownerToken }),
+    executeOptions(),
+  );
+  const row = rows(result)[0] as
+    { acquiredAt?: Date | string; renewedAt?: Date | string; expiresAt?: Date | string } | undefined;
+  if (!row) return null;
+  return {
+    ownerToken,
+    acquiredAt: toDate(row.acquiredAt ?? new Date()),
+    renewedAt: toDate(row.renewedAt ?? new Date()),
+    expiresAt: toDate(row.expiresAt ?? new Date()),
+  };
+}
+
+export async function acquireObservationBufferClaim(
+  ctx: MemoryContext,
+  input: AcquireObservationBufferClaimInput,
+): Promise<ObservationBufferClaimOutcome> {
+  try {
+    return await ctx.db.tx(async (_client, connection) => {
+      const leaseSeconds = input.leaseMs / 1000;
+      const setTokens =
+        input.lastBufferedAtTokens !== undefined ? `, ${OM_LAST_BUFFERED_AT_TOKENS} = :lastBufferedAtTokens` : '';
+      const binds: Record<string, unknown> = { id: input.id, ownerToken: input.ownerToken, leaseSeconds };
+      if (input.lastBufferedAtTokens !== undefined) {
+        binds.lastBufferedAtTokens = Math.round(input.lastBufferedAtTokens);
+      }
+      const result = await connection.execute(
+        `UPDATE ${table(ctx, TABLE_OBSERVATIONAL_MEMORY)}
+            SET ${OM_BUFFER_CLAIM_TOKEN} = :ownerToken,
+                ${OM_BUFFER_CLAIM_ACQUIRED_AT} = SYSTIMESTAMP,
+                ${OM_BUFFER_CLAIM_RENEWED_AT} = SYSTIMESTAMP,
+                ${OM_BUFFER_CLAIM_EXPIRES_AT} = SYSTIMESTAMP + NUMTODSINTERVAL(:leaseSeconds, 'SECOND'),
+                ${OM_IS_BUFFERING_OBSERVATION} = 1,
+                ${OM_UPDATED_AT} = SYSTIMESTAMP${setTokens}
+          WHERE id = :id
+            AND (
+              (${OM_BUFFER_CLAIM_TOKEN} IS NOT NULL
+                AND (${OM_BUFFER_CLAIM_EXPIRES_AT} IS NULL OR ${OM_BUFFER_CLAIM_EXPIRES_AT} <= SYSTIMESTAMP))
+              OR (${OM_BUFFER_CLAIM_TOKEN} IS NULL
+                AND (${OM_IS_BUFFERING_OBSERVATION} <> 1
+                  OR ${OM_UPDATED_AT} <= SYSTIMESTAMP - NUMTODSINTERVAL(:leaseSeconds, 'SECOND')))
+            )`,
+        asBindParameters(binds),
+      );
+      if (!result.rowsAffected) {
+        return claimNotFoundOrLost(ctx, connection, input.id, 'ACQUIRE_OBSERVATION_BUFFER_CLAIM');
+      }
+      const claim = await readOwnedClaim(ctx, connection, input.id, input.ownerToken);
+      if (!claim) return { ok: false as const, reason: 'lost' as const };
+      return { ok: true as const, claim };
+    });
+  } catch (error) {
+    if (error instanceof MastraError) throw error;
+    throw storageError('ACQUIRE_OBSERVATION_BUFFER_CLAIM', 'FAILED', { id: input.id }, error);
+  }
+}
+
+export async function renewObservationBufferClaim(
+  ctx: MemoryContext,
+  input: RenewObservationBufferClaimInput,
+): Promise<ObservationBufferClaimOutcome> {
+  try {
+    return await ctx.db.tx(async (_client, connection) => {
+      const leaseSeconds = input.leaseMs / 1000;
+      const result = await connection.execute(
+        `UPDATE ${table(ctx, TABLE_OBSERVATIONAL_MEMORY)}
+            ${CLAIM_SET_TIMESTAMPS},
+                ${OM_BUFFER_CLAIM_EXPIRES_AT} = GREATEST(
+                  SYSTIMESTAMP + NUMTODSINTERVAL(:leaseSeconds, 'SECOND'),
+                  ${OM_BUFFER_CLAIM_EXPIRES_AT} + INTERVAL '0.001' SECOND)
+          WHERE id = :id
+            AND ${OM_BUFFER_CLAIM_TOKEN} = :ownerToken
+            AND ${OM_BUFFER_CLAIM_EXPIRES_AT} > SYSTIMESTAMP`,
+        asBindParameters({ id: input.id, ownerToken: input.ownerToken, leaseSeconds }),
+      );
+      if (!result.rowsAffected) {
+        return claimNotFoundOrLost(ctx, connection, input.id, 'RENEW_OBSERVATION_BUFFER_CLAIM');
+      }
+      const claim = await readOwnedClaim(ctx, connection, input.id, input.ownerToken);
+      if (!claim) return { ok: false as const, reason: 'lost' as const };
+      return { ok: true as const, claim };
+    });
+  } catch (error) {
+    if (error instanceof MastraError) throw error;
+    throw storageError('RENEW_OBSERVATION_BUFFER_CLAIM', 'FAILED', { id: input.id }, error);
+  }
+}
+
+export async function releaseObservationBufferClaim(
+  ctx: MemoryContext,
+  input: ReleaseObservationBufferClaimInput,
+): Promise<ObservationBufferClaimOutcome> {
+  try {
+    return await ctx.db.tx(async (_client, connection) => {
+      const result = await connection.execute(
+        `UPDATE ${table(ctx, TABLE_OBSERVATIONAL_MEMORY)}
+            SET ${OM_BUFFER_CLAIM_TOKEN} = NULL,
+                ${OM_BUFFER_CLAIM_ACQUIRED_AT} = NULL,
+                ${OM_BUFFER_CLAIM_RENEWED_AT} = NULL,
+                ${OM_BUFFER_CLAIM_EXPIRES_AT} = NULL,
+                ${OM_IS_BUFFERING_OBSERVATION} = 0,
+                ${OM_UPDATED_AT} = SYSTIMESTAMP
+          WHERE id = :id
+            AND ${OM_BUFFER_CLAIM_TOKEN} = :ownerToken
+            AND ${OM_BUFFER_CLAIM_EXPIRES_AT} > SYSTIMESTAMP`,
+        asBindParameters({ id: input.id, ownerToken: input.ownerToken }),
+      );
+      if (!result.rowsAffected) {
+        return claimNotFoundOrLost(ctx, connection, input.id, 'RELEASE_OBSERVATION_BUFFER_CLAIM');
+      }
+      // Claim fields are cleared by the release itself; report the releasing
+      // owner with current timestamps (same compromise as the LibSQL adapter).
+      const now = new Date();
+      return {
+        ok: true as const,
+        claim: { ownerToken: input.ownerToken, acquiredAt: now, renewedAt: now, expiresAt: now },
+      };
+    });
+  } catch (error) {
+    if (error instanceof MastraError) throw error;
+    throw storageError('RELEASE_OBSERVATION_BUFFER_CLAIM', 'FAILED', { id: input.id }, error);
+  }
+}
+
+export async function getObservationBufferClaimStatus(
+  ctx: MemoryContext,
+  id: string,
+): Promise<ObservationBufferClaimStatus> {
+  try {
+    return await ctx.db.withConnection(async connection => {
+      const result = await connection.execute<ObjectRow>(
+        `SELECT CASE
+                  WHEN ${OM_BUFFER_CLAIM_TOKEN} IS NOT NULL AND ${OM_BUFFER_CLAIM_EXPIRES_AT} > SYSTIMESTAMP THEN 1
+                  ELSE 0
+                END AS "live"
+           FROM ${table(ctx, TABLE_OBSERVATIONAL_MEMORY)}
+          WHERE id = :id`,
+        asBindParameters({ id }),
+        executeOptions(),
+      );
+      const row = rows(result)[0] as { live?: number | string } | undefined;
+      if (!row) {
+        throw storageError(
+          'GET_OBSERVATION_BUFFER_CLAIM_STATUS',
+          'NOT_FOUND',
+          { id },
+          new Error(`Observational memory record not found: ${id}`),
+        );
+      }
+      return { live: Number(row.live) === 1 };
+    });
+  } catch (error) {
+    if (error instanceof MastraError) throw error;
+    throw storageError('GET_OBSERVATION_BUFFER_CLAIM_STATUS', 'FAILED', { id }, error);
+  }
+}
+
 export async function setBufferingReflectionFlag(ctx: MemoryContext, id: string, isBuffering: boolean): Promise<void> {
   await updateOMFlag(ctx, id, OM_IS_BUFFERING_REFLECTION, isBuffering, 'SET_BUFFERING_REFLECTION_FLAG');
 }
@@ -635,6 +847,10 @@ export function omSelect(): string {
     ${OM_IS_BUFFERING_REFLECTION} AS "isBufferingReflection",
     ${OM_LAST_BUFFERED_AT_TOKENS} AS "lastBufferedAtTokens",
     ${OM_LAST_BUFFERED_AT_TIME} AS "lastBufferedAtTime",
+    ${OM_BUFFER_CLAIM_TOKEN} AS "observationBufferClaimToken",
+    ${OM_BUFFER_CLAIM_ACQUIRED_AT} AS "observationBufferClaimAcquiredAt",
+    ${OM_BUFFER_CLAIM_RENEWED_AT} AS "observationBufferClaimRenewedAt",
+    ${OM_BUFFER_CLAIM_EXPIRES_AT} AS "observationBufferClaimExpiresAt",
     metadata AS "metadata",
     ${OM_CREATED_AT} AS "createdAt",
     ${OM_UPDATED_AT} AS "updatedAt"`;
@@ -669,6 +885,16 @@ export function parseOMRow(row: ObservationalMemoryRow): ObservationalMemoryReco
     isBufferingReflection: toBoolean(row.isBufferingReflection),
     lastBufferedAtTokens: numberOrZero(row.lastBufferedAtTokens),
     lastBufferedAtTime: row.lastBufferedAtTime ? toDate(row.lastBufferedAtTime) : null,
+    observationBufferClaimToken: row.observationBufferClaimToken ? String(row.observationBufferClaimToken) : null,
+    observationBufferClaimAcquiredAt: row.observationBufferClaimAcquiredAt
+      ? toDate(row.observationBufferClaimAcquiredAt)
+      : null,
+    observationBufferClaimRenewedAt: row.observationBufferClaimRenewedAt
+      ? toDate(row.observationBufferClaimRenewedAt)
+      : null,
+    observationBufferClaimExpiresAt: row.observationBufferClaimExpiresAt
+      ? toDate(row.observationBufferClaimExpiresAt)
+      : null,
     config: parseJson(row.config),
     metadata: parseOptionalJsonObject(row.metadata, { emptyObjectAsUndefined: true }),
     observedMessageIds: parseOptionalStringArray(row.observedMessageIds),

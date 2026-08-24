@@ -50,6 +50,10 @@ export const OM_IS_BUFFERING_OBSERVATION = '"isBufferingObservation"';
 export const OM_IS_BUFFERING_REFLECTION = '"isBufferingReflection"';
 export const OM_LAST_BUFFERED_AT_TOKENS = '"lastBufferedAtTokens"';
 export const OM_LAST_BUFFERED_AT_TIME = '"lastBufferedAtTime"';
+export const OM_BUFFER_CLAIM_TOKEN = '"observationBufferClaimToken"';
+export const OM_BUFFER_CLAIM_ACQUIRED_AT = '"observationBufferClaimAcquiredAt"';
+export const OM_BUFFER_CLAIM_RENEWED_AT = '"observationBufferClaimRenewedAt"';
+export const OM_BUFFER_CLAIM_EXPIRES_AT = '"observationBufferClaimExpiresAt"';
 export const OM_CREATED_AT = '"createdAt"';
 export const OM_UPDATED_AT = '"updatedAt"';
 
@@ -158,6 +162,10 @@ async function createTables(ctx: MemoryContext, connection: Connection): Promise
       ${OM_IS_BUFFERING_REFLECTION} NUMBER(1) DEFAULT 0 NOT NULL,
       ${OM_LAST_BUFFERED_AT_TOKENS} NUMBER(20) DEFAULT 0 NOT NULL,
       ${OM_LAST_BUFFERED_AT_TIME} TIMESTAMP WITH TIME ZONE,
+      ${OM_BUFFER_CLAIM_TOKEN} VARCHAR2(512),
+      ${OM_BUFFER_CLAIM_ACQUIRED_AT} TIMESTAMP WITH TIME ZONE,
+      ${OM_BUFFER_CLAIM_RENEWED_AT} TIMESTAMP WITH TIME ZONE,
+      ${OM_BUFFER_CLAIM_EXPIRES_AT} TIMESTAMP WITH TIME ZONE,
       metadata JSON,
       ${OM_CREATED_AT} TIMESTAMP WITH TIME ZONE NOT NULL,
       ${OM_UPDATED_AT} TIMESTAMP WITH TIME ZONE NOT NULL
@@ -203,6 +211,10 @@ async function ensureObservationalMemoryColumns(ctx: MemoryContext, connection: 
     { name: OM_IS_BUFFERING_REFLECTION, type: 'NUMBER(1) DEFAULT 0' },
     { name: OM_LAST_BUFFERED_AT_TOKENS, type: 'NUMBER(20) DEFAULT 0' },
     { name: OM_LAST_BUFFERED_AT_TIME, type: 'TIMESTAMP WITH TIME ZONE' },
+    { name: OM_BUFFER_CLAIM_TOKEN, type: 'VARCHAR2(512)' },
+    { name: OM_BUFFER_CLAIM_ACQUIRED_AT, type: 'TIMESTAMP WITH TIME ZONE' },
+    { name: OM_BUFFER_CLAIM_RENEWED_AT, type: 'TIMESTAMP WITH TIME ZONE' },
+    { name: OM_BUFFER_CLAIM_EXPIRES_AT, type: 'TIMESTAMP WITH TIME ZONE' },
     { name: 'metadata', type: 'JSON' },
     { name: OM_CREATED_AT, type: 'TIMESTAMP WITH TIME ZONE' },
     { name: OM_UPDATED_AT, type: 'TIMESTAMP WITH TIME ZONE' },

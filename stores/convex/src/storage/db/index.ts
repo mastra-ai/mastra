@@ -469,6 +469,57 @@ export class ConvexDB extends MastraBase {
     });
   }
 
+  public async omAcquireBufferClaim<R>(args: {
+    id: string;
+    ownerToken: string;
+    leaseMs: number;
+    lastBufferedAtTokens?: number;
+  }): Promise<R> {
+    return this.client.callStorage<R>({
+      op: 'omAcquireBufferClaim',
+      tableName: TABLE_OBSERVATIONAL_MEMORY,
+      ...args,
+    });
+  }
+
+  public async omRenewBufferClaim<R>(args: { id: string; ownerToken: string; leaseMs: number }): Promise<R> {
+    return this.client.callStorage<R>({
+      op: 'omRenewBufferClaim',
+      tableName: TABLE_OBSERVATIONAL_MEMORY,
+      ...args,
+    });
+  }
+
+  public async omReleaseBufferClaim<R>(args: { id: string; ownerToken: string }): Promise<R> {
+    return this.client.callStorage<R>({
+      op: 'omReleaseBufferClaim',
+      tableName: TABLE_OBSERVATIONAL_MEMORY,
+      ...args,
+    });
+  }
+
+  public async omCommitBufferedChunk<R>(args: {
+    id: string;
+    ownerToken: string;
+    chunk: SerializedOMChunk;
+    lastBufferedAtTime?: string;
+    updatedAt: string;
+  }): Promise<R> {
+    return this.client.callStorage<R>({
+      op: 'omCommitBufferedChunk',
+      tableName: TABLE_OBSERVATIONAL_MEMORY,
+      ...args,
+    });
+  }
+
+  public async omBufferClaimStatus<R>(args: { id: string }): Promise<R> {
+    return this.client.callStorage<R>({
+      op: 'omBufferClaimStatus',
+      tableName: TABLE_OBSERVATIONAL_MEMORY,
+      ...args,
+    });
+  }
+
   public async omSwapBuffered<R>(args: {
     id: string;
     activationRatio: number;

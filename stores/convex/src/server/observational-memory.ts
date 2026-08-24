@@ -25,7 +25,12 @@ type OMRequest = Extract<
       | 'omSwapBuffered'
       | 'omUpdateBufferedReflection'
       | 'omSwapBufferedReflection'
-      | 'omUpdateConfig';
+      | 'omUpdateConfig'
+      | 'omAcquireBufferClaim'
+      | 'omRenewBufferClaim'
+      | 'omReleaseBufferClaim'
+      | 'omCommitBufferedChunk'
+      | 'omBufferClaimStatus';
   }
 >;
 
@@ -436,5 +441,153 @@ export async function handleObservationalMemoryOperation(
       });
       return { ok: true };
     }
+
+    // ------------------------------------------------------------------
+    // Observation buffer claim operations.
+    //
+    // Convex mutations are serializable transactions, so read-and-patch
+    // inside one mutation is atomic. The mutation's Date.now() is the
+    // authoritative clock (Convex evaluates it deterministically at
+    // mutation execution time); this is a documented limitation versus a
+    // dedicated database clock. expiresAt <= now is expired.
+    // ------------------------------------------------------------------
+
+    case 'omAcquireBufferClaim': {
+      const doc = requireRecord(await findRecordById(ctx, convexTable, request.id), request.id);
+      const now = Date.now();
+      if (!isClaimAcquirable(doc, now, request.leaseMs)) {
+        return { ok: true, result: { ok: false, reason: 'lost' } };
+      }
+      const nowIso = new Date(now).toISOString();
+      const expiresIso = new Date(now + request.leaseMs).toISOString();
+      await ctx.db.patch(doc._id, {
+        observationBufferClaimToken: request.ownerToken,
+        observationBufferClaimAcquiredAt: nowIso,
+        observationBufferClaimRenewedAt: nowIso,
+        observationBufferClaimExpiresAt: expiresIso,
+        isBufferingObservation: true,
+        ...(request.lastBufferedAtTokens !== undefined ? { lastBufferedAtTokens: request.lastBufferedAtTokens } : {}),
+        updatedAt: nowIso,
+      });
+      return {
+        ok: true,
+        result: {
+          ok: true,
+          claim: { ownerToken: request.ownerToken, acquiredAt: nowIso, renewedAt: nowIso, expiresAt: expiresIso },
+        },
+      };
+    }
+
+    case 'omRenewBufferClaim': {
+      const doc = requireRecord(await findRecordById(ctx, convexTable, request.id), request.id);
+      const now = Date.now();
+      if (!isClaimOwnedLive(doc, request.ownerToken, now)) {
+        return { ok: true, result: { ok: false, reason: 'lost' } };
+      }
+      const nowIso = new Date(now).toISOString();
+      // Strictly advancing expiry: the lease never moves backwards.
+      const currentExpiry = Date.parse(String(doc.observationBufferClaimExpiresAt));
+      const expiresIso = new Date(Math.max(now + request.leaseMs, currentExpiry + 1)).toISOString();
+      await ctx.db.patch(doc._id, {
+        observationBufferClaimRenewedAt: nowIso,
+        observationBufferClaimExpiresAt: expiresIso,
+        updatedAt: nowIso,
+      });
+      return {
+        ok: true,
+        result: {
+          ok: true,
+          claim: {
+            ownerToken: request.ownerToken,
+            acquiredAt: doc.observationBufferClaimAcquiredAt ?? nowIso,
+            renewedAt: nowIso,
+            expiresAt: expiresIso,
+          },
+        },
+      };
+    }
+
+    case 'omReleaseBufferClaim': {
+      const doc = requireRecord(await findRecordById(ctx, convexTable, request.id), request.id);
+      const now = Date.now();
+      if (!isClaimOwnedLive(doc, request.ownerToken, now)) {
+        return { ok: true, result: { ok: false, reason: 'lost' } };
+      }
+      const nowIso = new Date(now).toISOString();
+      await ctx.db.patch(doc._id, {
+        observationBufferClaimToken: null,
+        observationBufferClaimAcquiredAt: null,
+        observationBufferClaimRenewedAt: null,
+        observationBufferClaimExpiresAt: null,
+        isBufferingObservation: false,
+        updatedAt: nowIso,
+      });
+      return {
+        ok: true,
+        result: {
+          ok: true,
+          claim: {
+            ownerToken: request.ownerToken,
+            acquiredAt: doc.observationBufferClaimAcquiredAt ?? nowIso,
+            renewedAt: doc.observationBufferClaimRenewedAt ?? nowIso,
+            expiresAt: doc.observationBufferClaimExpiresAt ?? nowIso,
+          },
+        },
+      };
+    }
+
+    case 'omCommitBufferedChunk': {
+      const doc = requireRecord(await findRecordById(ctx, convexTable, request.id), request.id);
+      const now = Date.now();
+      if (!isClaimOwnedLive(doc, request.ownerToken, now)) {
+        return { ok: true, result: { committed: false, reason: 'lost' } };
+      }
+      const chunks = parseStoredChunks(doc.bufferedObservationChunks);
+      chunks.push(request.chunk);
+      const patch: Record<string, unknown> = {
+        bufferedObservationChunks: JSON.stringify(chunks),
+        updatedAt: request.updatedAt,
+      };
+      if (request.lastBufferedAtTime) {
+        patch.lastBufferedAtTime = request.lastBufferedAtTime;
+      }
+      await ctx.db.patch(doc._id, patch);
+      return { ok: true, result: { committed: true } };
+    }
+
+    case 'omBufferClaimStatus': {
+      const doc = requireRecord(await findRecordById(ctx, convexTable, request.id), request.id);
+      const now = Date.now();
+      const live =
+        typeof doc.observationBufferClaimToken === 'string' &&
+        doc.observationBufferClaimToken.length > 0 &&
+        claimExpiry(doc) > now;
+      return { ok: true, result: { live } };
+    }
   }
+}
+
+/** Parse the stored claim expiry; missing/invalid values count as expired. */
+function claimExpiry(doc: Record<string, any>): number {
+  const parsed = Date.parse(String(doc.observationBufferClaimExpiresAt ?? ''));
+  return Number.isNaN(parsed) ? Number.NEGATIVE_INFINITY : parsed;
+}
+
+/** Matching token with an unexpired lease. expiresAt <= now is expired. */
+function isClaimOwnedLive(doc: Record<string, any>, ownerToken: string, now: number): boolean {
+  return doc.observationBufferClaimToken === ownerToken && claimExpiry(doc) > now;
+}
+
+/**
+ * Acquirable when unclaimed, expired, or a legacy true/null-owner row past
+ * the grace window (updatedAt + leaseMs, mirroring the core reference).
+ */
+function isClaimAcquirable(doc: Record<string, any>, now: number, leaseMs: number): boolean {
+  if (typeof doc.observationBufferClaimToken === 'string' && doc.observationBufferClaimToken.length > 0) {
+    // A claim with a token but no parseable expiry is malformed and treated as expired.
+    return claimExpiry(doc) <= now;
+  }
+  if (doc.isBufferingObservation !== true) return true;
+  const updatedAt = Date.parse(String(doc.updatedAt ?? ''));
+  return Number.isNaN(updatedAt) || updatedAt + leaseMs <= now;
 }

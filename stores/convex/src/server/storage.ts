@@ -347,7 +347,12 @@ export async function handleTypedOperation(
     case 'omSwapBuffered':
     case 'omUpdateBufferedReflection':
     case 'omSwapBufferedReflection':
-    case 'omUpdateConfig': {
+    case 'omUpdateConfig':
+    case 'omAcquireBufferClaim':
+    case 'omRenewBufferClaim':
+    case 'omReleaseBufferClaim':
+    case 'omCommitBufferedChunk':
+    case 'omBufferClaimStatus': {
       if (convexTable !== CONVEX_TABLE_OBSERVATIONAL_MEMORY) {
         throw new Error(`${request.op} is only supported for ${CONVEX_TABLE_OBSERVATIONAL_MEMORY}`);
       }

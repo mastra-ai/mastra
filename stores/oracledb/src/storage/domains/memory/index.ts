@@ -11,10 +11,17 @@ import {
   TABLE_THREADS,
 } from '@mastra/core/storage';
 import type {
+  AcquireObservationBufferClaimInput,
+  CommitBufferedObservationsInput,
+  CommitBufferedObservationsResult,
   CreateObservationalMemoryInput,
   CreateReflectionGenerationInput,
+  ObservationBufferClaimOutcome,
+  ObservationBufferClaimStatus,
   ObservationalMemoryHistoryOptions,
   ObservationalMemoryRecord,
+  ReleaseObservationBufferClaimInput,
+  RenewObservationBufferClaimInput,
   StorageCloneThreadInput,
   StorageCloneThreadOutput,
   StorageListMessagesByResourceIdInput,
@@ -48,12 +55,16 @@ import {
   updateMessages,
 } from './messages';
 import {
+  acquireObservationBufferClaim,
   clearObservationalMemory,
   createReflectionGeneration,
+  getObservationBufferClaimStatus,
   getObservationalMemory,
   getObservationalMemoryHistory,
   initializeObservationalMemory,
   insertObservationalMemoryRecord,
+  releaseObservationBufferClaim,
+  renewObservationBufferClaim,
   setBufferingObservationFlag,
   setBufferingReflectionFlag,
   setObservingFlag,
@@ -63,6 +74,7 @@ import {
   updateObservationalMemoryConfig,
 } from './observational';
 import {
+  commitBufferedObservations,
   swapBufferedReflectionToActive,
   swapBufferedToActive,
   updateBufferedObservations,
@@ -372,6 +384,30 @@ export class MemoryOracle extends MemoryStorage {
 
   async setBufferingObservationFlag(id: string, isBuffering: boolean, lastBufferedAtTokens?: number): Promise<void> {
     return setBufferingObservationFlag(this.ctx, id, isBuffering, lastBufferedAtTokens);
+  }
+
+  async acquireObservationBufferClaim(
+    input: AcquireObservationBufferClaimInput,
+  ): Promise<ObservationBufferClaimOutcome> {
+    return acquireObservationBufferClaim(this.ctx, input);
+  }
+
+  async renewObservationBufferClaim(input: RenewObservationBufferClaimInput): Promise<ObservationBufferClaimOutcome> {
+    return renewObservationBufferClaim(this.ctx, input);
+  }
+
+  async releaseObservationBufferClaim(
+    input: ReleaseObservationBufferClaimInput,
+  ): Promise<ObservationBufferClaimOutcome> {
+    return releaseObservationBufferClaim(this.ctx, input);
+  }
+
+  async commitBufferedObservations(input: CommitBufferedObservationsInput): Promise<CommitBufferedObservationsResult> {
+    return commitBufferedObservations(this.ctx, input);
+  }
+
+  async getObservationBufferClaimStatus(id: string): Promise<ObservationBufferClaimStatus> {
+    return getObservationBufferClaimStatus(this.ctx, id);
   }
 
   async setBufferingReflectionFlag(id: string, isBuffering: boolean): Promise<void> {

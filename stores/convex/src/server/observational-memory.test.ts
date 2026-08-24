@@ -574,3 +574,160 @@ describe('mastraStorage routing for observational memory', () => {
     ).rejects.toThrow('omGetLatest is only supported for mastra_observational_memory');
   });
 });
+
+describe('Observation Buffer Claim', () => {
+  const LEASE_MS = 30_000;
+  const T0 = new Date('2026-06-01T12:00:00.000Z');
+
+  function withNow(now: Date, fn: () => Promise<void>) {
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+    return fn().finally(() => vi.useRealTimers());
+  }
+
+  const acquire = (ctx: OMOperationCtx, ownerToken: string, leaseMs = LEASE_MS, lastBufferedAtTokens?: number) =>
+    handleObservationalMemoryOperation(ctx, OM_TABLE, {
+      op: 'omAcquireBufferClaim',
+      tableName: OM_TABLE,
+      id: 'om-1',
+      ownerToken,
+      leaseMs,
+      ...(lastBufferedAtTokens !== undefined ? { lastBufferedAtTokens } : {}),
+    });
+  const renew = (ctx: OMOperationCtx, ownerToken: string, leaseMs = LEASE_MS) =>
+    handleObservationalMemoryOperation(ctx, OM_TABLE, {
+      op: 'omRenewBufferClaim',
+      tableName: OM_TABLE,
+      id: 'om-1',
+      ownerToken,
+      leaseMs,
+    });
+  const release = (ctx: OMOperationCtx, ownerToken: string) =>
+    handleObservationalMemoryOperation(ctx, OM_TABLE, {
+      op: 'omReleaseBufferClaim',
+      tableName: OM_TABLE,
+      id: 'om-1',
+      ownerToken,
+    });
+  const commit = (ctx: OMOperationCtx, ownerToken: string, chunkId = 'ombuf-c1') =>
+    handleObservationalMemoryOperation(ctx, OM_TABLE, {
+      op: 'omCommitBufferedChunk',
+      tableName: OM_TABLE,
+      id: 'om-1',
+      ownerToken,
+      chunk: serializedChunk({ id: chunkId }),
+      updatedAt: new Date().toISOString(),
+    });
+  const status = (ctx: OMOperationCtx) =>
+    handleObservationalMemoryOperation(ctx, OM_TABLE, {
+      op: 'omBufferClaimStatus',
+      tableName: OM_TABLE,
+      id: 'om-1',
+    });
+
+  it('first claim succeeds and persists owner, expiry, and legacy boolean', () =>
+    withNow(T0, async () => {
+      const { ctx, docs } = createFakeOMDb([storedOMDoc()]);
+      const result = await acquire(ctx, 'owner-a', LEASE_MS, 4321);
+      expect((result as any).result).toMatchObject({
+        ok: true,
+        claim: {
+          ownerToken: 'owner-a',
+          acquiredAt: T0.toISOString(),
+          expiresAt: new Date(T0.getTime() + LEASE_MS).toISOString(),
+        },
+      });
+      expect(docs[0] as any).toMatchObject({
+        observationBufferClaimToken: 'owner-a',
+        observationBufferClaimExpiresAt: new Date(T0.getTime() + LEASE_MS).toISOString(),
+        isBufferingObservation: true,
+        lastBufferedAtTokens: 4321,
+      });
+    }));
+
+  it('second claimant loses while the first claim is live', () =>
+    withNow(T0, async () => {
+      const { ctx, docs } = createFakeOMDb([storedOMDoc()]);
+      await acquire(ctx, 'owner-a');
+      const result = await acquire(ctx, 'owner-b');
+      expect((result as any).result).toEqual({ ok: false, reason: 'lost' });
+      expect((docs[0] as any).observationBufferClaimToken).toBe('owner-a');
+    }));
+
+  it('matching unexpired owner renews with a strictly advancing expiry; foreign owner cannot renew', () =>
+    withNow(T0, async () => {
+      const { ctx, docs } = createFakeOMDb([storedOMDoc()]);
+      await acquire(ctx, 'owner-a');
+      const firstExpiry = (docs[0] as any).observationBufferClaimExpiresAt;
+      const renewed = await renew(ctx, 'owner-a');
+      expect((renewed as any).result.ok).toBe(true);
+      expect((docs[0] as any).observationBufferClaimExpiresAt > firstExpiry).toBe(true);
+      const foreign = await renew(ctx, 'owner-b');
+      expect((foreign as any).result).toEqual({ ok: false, reason: 'lost' });
+    }));
+
+  it('an expired owner cannot renew, commit, or release; expiresAt == now is expired', () =>
+    withNow(T0, async () => {
+      const { ctx, docs } = createFakeOMDb([storedOMDoc()]);
+      await acquire(ctx, 'owner-a');
+      vi.setSystemTime(new Date(T0.getTime() + LEASE_MS)); // exactly the boundary
+      expect(((await renew(ctx, 'owner-a')) as any).result).toEqual({ ok: false, reason: 'lost' });
+      expect(((await commit(ctx, 'owner-a')) as any).result).toEqual({ committed: false, reason: 'lost' });
+      expect(((await release(ctx, 'owner-a')) as any).result).toEqual({ ok: false, reason: 'lost' });
+      expect((docs[0] as any).observationBufferClaimToken).toBe('owner-a');
+    }));
+
+  it('an expired claim can be atomically replaced, and the stale owner is fenced afterwards', () =>
+    withNow(T0, async () => {
+      const { ctx, docs } = createFakeOMDb([storedOMDoc()]);
+      await acquire(ctx, 'owner-a');
+      vi.setSystemTime(new Date(T0.getTime() + LEASE_MS + 1));
+      expect(((await acquire(ctx, 'owner-b')) as any).result.ok).toBe(true);
+      // Successor commits; stale owner cannot commit or release.
+      expect(((await commit(ctx, 'owner-b', 'ombuf-b')) as any).result).toEqual({ committed: true });
+      expect(((await commit(ctx, 'owner-a', 'ombuf-a')) as any).result).toEqual({ committed: false, reason: 'lost' });
+      expect(((await release(ctx, 'owner-a')) as any).result).toEqual({ ok: false, reason: 'lost' });
+      const chunks = JSON.parse((docs[0] as any).bufferedObservationChunks);
+      expect(chunks.map((c: any) => c.id)).toEqual(['ombuf-b']);
+      expect((docs[0] as any).observationBufferClaimToken).toBe('owner-b');
+    }));
+
+  it('matching owner releases; claim and legacy boolean are cleared', () =>
+    withNow(T0, async () => {
+      const { ctx, docs } = createFakeOMDb([storedOMDoc()]);
+      await acquire(ctx, 'owner-a');
+      expect(((await release(ctx, 'owner-a')) as any).result.ok).toBe(true);
+      expect(docs[0] as any).toMatchObject({
+        observationBufferClaimToken: null,
+        observationBufferClaimExpiresAt: null,
+        isBufferingObservation: false,
+      });
+    }));
+
+  it('legacy true/null-owner rows are respected during the grace window then become claimable', () =>
+    withNow(T0, async () => {
+      const legacy = storedOMDoc({ isBufferingObservation: true, updatedAt: T0.toISOString() });
+      const { ctx, docs } = createFakeOMDb([legacy]);
+      expect(((await acquire(ctx, 'owner-b')) as any).result).toEqual({ ok: false, reason: 'lost' });
+      vi.setSystemTime(new Date(T0.getTime() + LEASE_MS)); // exact grace boundary is claimable
+      expect(((await acquire(ctx, 'owner-b')) as any).result.ok).toBe(true);
+      expect((docs[0] as any).observationBufferClaimToken).toBe('owner-b');
+    }));
+
+  it('status reports backend-evaluated liveness; a bare legacy boolean is not live', () =>
+    withNow(T0, async () => {
+      const { ctx } = createFakeOMDb([storedOMDoc({ isBufferingObservation: true })]);
+      expect(((await status(ctx)) as any).result).toEqual({ live: false });
+      await acquire(ctx, 'owner-a');
+      expect(((await status(ctx)) as any).result).toEqual({ live: true });
+      vi.setSystemTime(new Date(T0.getTime() + LEASE_MS + 1));
+      expect(((await status(ctx)) as any).result).toEqual({ live: false });
+    }));
+
+  it('missing record keeps the established not-found behavior', () =>
+    withNow(T0, async () => {
+      const { ctx } = createFakeOMDb([]);
+      await expect(acquire(ctx, 'owner-a')).rejects.toThrow(/not found/i);
+      await expect(status(ctx)).rejects.toThrow(/not found/i);
+    }));
+});

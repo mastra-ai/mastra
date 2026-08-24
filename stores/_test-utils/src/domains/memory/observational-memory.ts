@@ -1296,10 +1296,12 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
         expect(duringGrace).toEqual({ ok: false, reason: 'lost' });
 
         await sleep(SHORT_LEASE_MS * 2);
+        // The acquire's leaseMs is also the legacy grace window; the row is
+        // now older than SHORT_LEASE_MS, so takeover succeeds.
         const afterGrace = await memoryStorage.acquireObservationBufferClaim({
           id: record.id,
           ownerToken: 'owner-b',
-          leaseMs: LEASE_MS,
+          leaseMs: SHORT_LEASE_MS,
         });
         expect(afterGrace.ok).toBe(true);
 

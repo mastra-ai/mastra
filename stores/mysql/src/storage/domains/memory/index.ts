@@ -16,8 +16,15 @@ import {
   createStorageErrorId,
 } from '@mastra/core/storage';
 import type {
+  AcquireObservationBufferClaimInput,
   BufferedObservationChunk,
+  CommitBufferedObservationsInput,
+  CommitBufferedObservationsResult,
   CreateIndexOptions,
+  ObservationBufferClaimOutcome,
+  ObservationBufferClaimStatus,
+  ReleaseObservationBufferClaimInput,
+  RenewObservationBufferClaimInput,
   CreateObservationalMemoryInput,
   CreateReflectionGenerationInput,
   ObservationalMemoryHistoryOptions,
@@ -237,6 +244,10 @@ export class MemoryMySQL extends MemoryStorage {
           'isBufferingReflection',
           'lastBufferedAtTokens',
           'lastBufferedAtTime',
+          'observationBufferClaimToken',
+          'observationBufferClaimAcquiredAt',
+          'observationBufferClaimRenewedAt',
+          'observationBufferClaimExpiresAt',
         ],
       });
     }
@@ -2097,6 +2108,200 @@ export class MemoryMySQL extends MemoryStorage {
     }
   }
 
+  /**
+   * Read back the claim row after a successful conditional UPDATE (MySQL has
+   * no UPDATE ... RETURNING). The conditional UPDATE is the atomic operation;
+   * this read is informational only. If the row was taken over between the
+   * UPDATE and this read, fall back to client-side timestamps rather than
+   * exposing the successor's lease.
+   */
+  private async readClaimOutcome(id: string, ownerToken: string): Promise<ObservationBufferClaimOutcome> {
+    const [rows] = await this.pool.execute<RowDataPacket[]>(
+      `SELECT ${omCol('observationBufferClaimAcquiredAt')} AS acquiredAt,
+              ${omCol('observationBufferClaimRenewedAt')} AS renewedAt,
+              ${omCol('observationBufferClaimExpiresAt')} AS expiresAt
+        FROM ${OM_TABLE_QUOTED}
+        WHERE ${omCol('id')} = ? AND ${omCol('observationBufferClaimToken')} = ?`,
+      [id, ownerToken],
+    );
+    const row = rows?.[0];
+    return {
+      ok: true,
+      claim: {
+        ownerToken,
+        acquiredAt: (row && parseDateTime(row.acquiredAt)) || new Date(),
+        renewedAt: (row && parseDateTime(row.renewedAt)) || new Date(),
+        expiresAt: (row && parseDateTime(row.expiresAt)) || new Date(),
+      },
+    };
+  }
+
+  /** Classify a zero-row conditional claim update: missing record vs lost claim. */
+  private async claimNotFoundOrLost(id: string, op: string): Promise<{ ok: false; reason: 'lost' }> {
+    const [rows] = await this.pool.execute<RowDataPacket[]>(
+      `SELECT ${omCol('id')} FROM ${OM_TABLE_QUOTED} WHERE ${omCol('id')} = ?`,
+      [id],
+    );
+    if (!rows || rows.length === 0) {
+      throwOMNotFound(id, op);
+    }
+    return { ok: false, reason: 'lost' };
+  }
+
+  async acquireObservationBufferClaim(
+    input: AcquireObservationBufferClaimInput,
+  ): Promise<ObservationBufferClaimOutcome> {
+    try {
+      const leaseMicros = Math.round(input.leaseMs * 1000);
+      // One conditional UPDATE: the ownership predicate (unclaimed, expired,
+      // or legacy-grace-expired) and the claim write are evaluated atomically
+      // by the backend against its own NOW(3) clock.
+      const [result] = await this.pool.execute(
+        `UPDATE ${OM_TABLE_QUOTED} SET
+            ${omCol('observationBufferClaimToken')} = ?,
+            ${omCol('observationBufferClaimAcquiredAt')} = NOW(3),
+            ${omCol('observationBufferClaimRenewedAt')} = NOW(3),
+            ${omCol('observationBufferClaimExpiresAt')} = NOW(3) + INTERVAL ? MICROSECOND,
+            ${omCol('isBufferingObservation')} = true,
+            ${omCol('lastBufferedAtTokens')} = COALESCE(?, ${omCol('lastBufferedAtTokens')}),
+            ${omCol('updatedAt')} = NOW(3)
+          WHERE ${omCol('id')} = ?
+            AND (
+              (${omCol('observationBufferClaimToken')} IS NOT NULL
+                AND (${omCol('observationBufferClaimExpiresAt')} IS NULL
+                  OR ${omCol('observationBufferClaimExpiresAt')} <= NOW(3)))
+              OR (${omCol('observationBufferClaimToken')} IS NULL
+                AND (${omCol('isBufferingObservation')} != true
+                  OR ${omCol('updatedAt')} <= NOW(3) - INTERVAL ? MICROSECOND))
+            )`,
+        [input.ownerToken, leaseMicros, input.lastBufferedAtTokens ?? null, input.id, leaseMicros],
+      );
+      if ((result as ResultSetHeader).affectedRows === 0) {
+        return await this.claimNotFoundOrLost(input.id, 'ACQUIRE_OBSERVATION_BUFFER_CLAIM');
+      }
+      return await this.readClaimOutcome(input.id, input.ownerToken);
+    } catch (error) {
+      rethrowOrWrapOM(error, input.id, 'ACQUIRE_OBSERVATION_BUFFER_CLAIM');
+    }
+  }
+
+  async renewObservationBufferClaim(input: RenewObservationBufferClaimInput): Promise<ObservationBufferClaimOutcome> {
+    try {
+      const leaseMicros = Math.round(input.leaseMs * 1000);
+      // Strictly advancing expiry: never move the lease backwards, and always
+      // advance by at least 1ms, so a same-instant renewal is still a real
+      // write and affectedRows cannot misclassify it as loss.
+      const [result] = await this.pool.execute(
+        `UPDATE ${OM_TABLE_QUOTED} SET
+            ${omCol('observationBufferClaimRenewedAt')} = NOW(3),
+            ${omCol('observationBufferClaimExpiresAt')} = GREATEST(
+              NOW(3) + INTERVAL ? MICROSECOND,
+              ${omCol('observationBufferClaimExpiresAt')} + INTERVAL 1000 MICROSECOND
+            ),
+            ${omCol('updatedAt')} = NOW(3)
+          WHERE ${omCol('id')} = ?
+            AND ${omCol('observationBufferClaimToken')} = ?
+            AND ${omCol('observationBufferClaimExpiresAt')} > NOW(3)`,
+        [leaseMicros, input.id, input.ownerToken],
+      );
+      if ((result as ResultSetHeader).affectedRows === 0) {
+        return await this.claimNotFoundOrLost(input.id, 'RENEW_OBSERVATION_BUFFER_CLAIM');
+      }
+      return await this.readClaimOutcome(input.id, input.ownerToken);
+    } catch (error) {
+      rethrowOrWrapOM(error, input.id, 'RENEW_OBSERVATION_BUFFER_CLAIM');
+    }
+  }
+
+  async releaseObservationBufferClaim(
+    input: ReleaseObservationBufferClaimInput,
+  ): Promise<ObservationBufferClaimOutcome> {
+    try {
+      const [result] = await this.pool.execute(
+        `UPDATE ${OM_TABLE_QUOTED} SET
+            ${omCol('observationBufferClaimToken')} = NULL,
+            ${omCol('observationBufferClaimAcquiredAt')} = NULL,
+            ${omCol('observationBufferClaimRenewedAt')} = NULL,
+            ${omCol('observationBufferClaimExpiresAt')} = NULL,
+            ${omCol('isBufferingObservation')} = false,
+            ${omCol('updatedAt')} = NOW(3)
+          WHERE ${omCol('id')} = ?
+            AND ${omCol('observationBufferClaimToken')} = ?
+            AND ${omCol('observationBufferClaimExpiresAt')} > NOW(3)`,
+        [input.id, input.ownerToken],
+      );
+      if ((result as ResultSetHeader).affectedRows === 0) {
+        return await this.claimNotFoundOrLost(input.id, 'RELEASE_OBSERVATION_BUFFER_CLAIM');
+      }
+      // Fields were cleared by the release; report the token the caller owned.
+      return {
+        ok: true,
+        claim: { ownerToken: input.ownerToken, acquiredAt: new Date(), renewedAt: new Date(), expiresAt: new Date() },
+      };
+    } catch (error) {
+      rethrowOrWrapOM(error, input.id, 'RELEASE_OBSERVATION_BUFFER_CLAIM');
+    }
+  }
+
+  async commitBufferedObservations(input: CommitBufferedObservationsInput): Promise<CommitBufferedObservationsResult> {
+    try {
+      const newChunk: BufferedObservationChunk = {
+        id: `ombuf-${randomUUID()}`,
+        cycleId: input.chunk.cycleId,
+        observations: input.chunk.observations,
+        tokenCount: input.chunk.tokenCount,
+        messageIds: input.chunk.messageIds,
+        messageTokens: input.chunk.messageTokens,
+        lastObservedAt: input.chunk.lastObservedAt,
+        createdAt: new Date(),
+        suggestedContinuation: input.chunk.suggestedContinuation,
+        currentTask: input.chunk.currentTask,
+        threadTitle: input.chunk.threadTitle,
+        extractedValues: input.chunk.extractedValues,
+        extractionFailures: input.chunk.extractionFailures,
+      };
+      const lastBufferedAtTime = input.lastBufferedAtTime ? transformToSqlValue(input.lastBufferedAtTime) : null;
+      // Single conditional statement: the JSON append and the owner/lease
+      // predicate are evaluated atomically by the backend.
+      const [result] = await this.pool.execute(
+        `UPDATE ${OM_TABLE_QUOTED} SET
+            ${omCol('bufferedObservationChunks')} = JSON_ARRAY_APPEND(
+              COALESCE(${omCol('bufferedObservationChunks')}, JSON_ARRAY()), '$', CAST(? AS JSON)
+            ),
+            ${omCol('lastBufferedAtTime')} = COALESCE(?, ${omCol('lastBufferedAtTime')}),
+            ${omCol('updatedAt')} = NOW(3)
+          WHERE ${omCol('id')} = ?
+            AND ${omCol('observationBufferClaimToken')} = ?
+            AND ${omCol('observationBufferClaimExpiresAt')} > NOW(3)`,
+        [JSON.stringify(newChunk), lastBufferedAtTime, input.id, input.ownerToken],
+      );
+      if ((result as ResultSetHeader).affectedRows === 0) {
+        await this.claimNotFoundOrLost(input.id, 'COMMIT_BUFFERED_OBSERVATIONS');
+        return { committed: false, reason: 'lost' };
+      }
+      return { committed: true };
+    } catch (error) {
+      rethrowOrWrapOM(error, input.id, 'COMMIT_BUFFERED_OBSERVATIONS');
+    }
+  }
+
+  async getObservationBufferClaimStatus(id: string): Promise<ObservationBufferClaimStatus> {
+    try {
+      const [rows] = await this.pool.execute<RowDataPacket[]>(
+        `SELECT (${omCol('observationBufferClaimToken')} IS NOT NULL
+            AND ${omCol('observationBufferClaimExpiresAt')} > NOW(3)) AS live
+          FROM ${OM_TABLE_QUOTED} WHERE ${omCol('id')} = ?`,
+        [id],
+      );
+      if (!rows || rows.length === 0) {
+        throwOMNotFound(id, 'GET_OBSERVATION_BUFFER_CLAIM_STATUS');
+      }
+      return { live: Number(rows[0]!.live) === 1 };
+    } catch (error) {
+      rethrowOrWrapOM(error, id, 'GET_OBSERVATION_BUFFER_CLAIM_STATUS');
+    }
+  }
+
   async setBufferingReflectionFlag(id: string, isBuffering: boolean): Promise<void> {
     await this.updateOMFlag(id, 'isBufferingReflection', isBuffering, 'SET_BUFFERING_REFLECTION_FLAG');
   }
@@ -2496,6 +2701,16 @@ export class MemoryMySQL extends MemoryStorage {
           ? row.lastBufferedAtTokens
           : parseInt(String(row.lastBufferedAtTokens ?? '0'), 10) || 0,
       lastBufferedAtTime: row.lastBufferedAtTime ? (parseDateTime(row.lastBufferedAtTime) ?? null) : null,
+      observationBufferClaimToken: row.observationBufferClaimToken ?? null,
+      observationBufferClaimAcquiredAt: row.observationBufferClaimAcquiredAt
+        ? (parseDateTime(row.observationBufferClaimAcquiredAt) ?? null)
+        : null,
+      observationBufferClaimRenewedAt: row.observationBufferClaimRenewedAt
+        ? (parseDateTime(row.observationBufferClaimRenewedAt) ?? null)
+        : null,
+      observationBufferClaimExpiresAt: row.observationBufferClaimExpiresAt
+        ? (parseDateTime(row.observationBufferClaimExpiresAt) ?? null)
+        : null,
       config: parseJSONColumn(row.config) ?? {},
       metadata: parseJSONColumn(row.metadata),
       observedMessageIds: parseJSONColumn<string[]>(row.observedMessageIds),

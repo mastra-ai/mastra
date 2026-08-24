@@ -4,6 +4,8 @@ import { ErrorCategory, MastraError } from '@mastra/core/error';
 import { TABLE_OBSERVATIONAL_MEMORY } from '@mastra/core/storage';
 import type {
   BufferedObservationChunk,
+  CommitBufferedObservationsInput,
+  CommitBufferedObservationsResult,
   ObservationalMemoryRecord,
   SwapBufferedReflectionToActiveInput,
   SwapBufferedToActiveInput,
@@ -24,6 +26,8 @@ import {
   OM_BUFFERED_REFLECTION,
   OM_BUFFERED_REFLECTION_INPUT_TOKENS,
   OM_BUFFERED_REFLECTION_TOKENS,
+  OM_BUFFER_CLAIM_EXPIRES_AT,
+  OM_BUFFER_CLAIM_TOKEN,
   OM_LAST_BUFFERED_AT_TIME,
   OM_LAST_OBSERVED_AT,
   OM_OBSERVATION_TOKEN_COUNT,
@@ -89,6 +93,66 @@ export async function updateBufferedObservations(
   } catch (error) {
     if (error instanceof MastraError) throw error;
     throw storageError('UPDATE_BUFFERED_OBSERVATIONS', 'FAILED', { id: input.id }, error);
+  }
+}
+
+export async function commitBufferedObservations(
+  ctx: MemoryContext,
+  input: CommitBufferedObservationsInput,
+): Promise<CommitBufferedObservationsResult> {
+  try {
+    return await ctx.db.tx(async (_client, connection) => {
+      // Lock the row so no takeover can slip between reading the existing
+      // chunks and the owner-conditioned append; the UPDATE's own predicate
+      // re-verifies token + unexpired lease against the Oracle server clock.
+      const row = await lockOMRow(ctx, connection, input.id, 'COMMIT_BUFFERED_OBSERVATIONS');
+      const existingChunks = parseBufferedChunks(row.bufferedObservationChunks);
+      const newChunk: BufferedObservationChunk = {
+        id: `ombuf-${randomUUID()}`,
+        cycleId: input.chunk.cycleId,
+        observations: input.chunk.observations,
+        tokenCount: Math.round(input.chunk.tokenCount),
+        messageIds: input.chunk.messageIds,
+        messageTokens: Math.round(input.chunk.messageTokens ?? 0),
+        lastObservedAt: input.chunk.lastObservedAt,
+        createdAt: new Date(),
+        suggestedContinuation: input.chunk.suggestedContinuation,
+        currentTask: input.chunk.currentTask,
+        threadTitle: input.chunk.threadTitle,
+        extractedValues: input.chunk.extractedValues,
+        extractionFailures: input.chunk.extractionFailures,
+      };
+      const updatedChunks = [...existingChunks, newChunk];
+      const lastBufferedAtTimeSql =
+        input.lastBufferedAtTime === undefined || input.lastBufferedAtTime === null
+          ? ''
+          : `,\n               ${OM_LAST_BUFFERED_AT_TIME} = :lastBufferedAtTime`;
+      const binds: Record<string, unknown> = {
+        id: input.id,
+        ownerToken: input.ownerToken,
+        bufferedObservationChunks: nullableJsonBind(updatedChunks),
+      };
+      if (input.lastBufferedAtTime !== undefined && input.lastBufferedAtTime !== null) {
+        binds.lastBufferedAtTime = toDate(input.lastBufferedAtTime);
+      }
+
+      const result = await connection.execute(
+        `UPDATE ${table(ctx, TABLE_OBSERVATIONAL_MEMORY)}
+           SET ${OM_BUFFERED_OBSERVATION_CHUNKS} = :bufferedObservationChunks,
+               ${OM_UPDATED_AT} = SYSTIMESTAMP${lastBufferedAtTimeSql}
+           WHERE id = :id
+             AND ${OM_BUFFER_CLAIM_TOKEN} = :ownerToken
+             AND ${OM_BUFFER_CLAIM_EXPIRES_AT} > SYSTIMESTAMP`,
+        asBindParameters(binds),
+      );
+      if (!result.rowsAffected) {
+        return { committed: false as const, reason: 'lost' as const };
+      }
+      return { committed: true as const };
+    });
+  } catch (error) {
+    if (error instanceof MastraError) throw error;
+    throw storageError('COMMIT_BUFFERED_OBSERVATIONS', 'FAILED', { id: input.id }, error);
   }
 }
 

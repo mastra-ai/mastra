@@ -21,6 +21,13 @@ import type {
   CreateObservationalMemoryInput,
   UpdateActiveObservationsInput,
   UpdateBufferedObservationsInput,
+  AcquireObservationBufferClaimInput,
+  RenewObservationBufferClaimInput,
+  ReleaseObservationBufferClaimInput,
+  CommitBufferedObservationsInput,
+  CommitBufferedObservationsResult,
+  ObservationBufferClaimOutcome,
+  ObservationBufferClaimStatus,
   SwapBufferedToActiveInput,
   SwapBufferedToActiveResult,
   UpdateBufferedReflectionInput,
@@ -177,6 +184,10 @@ export class MemoryLibSQL extends MemoryStorage {
           'lastBufferedAtTokens',
           'lastBufferedAtTime',
           'metadata',
+          'observationBufferClaimToken',
+          'observationBufferClaimAcquiredAt',
+          'observationBufferClaimRenewedAt',
+          'observationBufferClaimExpiresAt',
         ],
       });
     }
@@ -1633,6 +1644,16 @@ export class MemoryLibSQL extends MemoryStorage {
           ? row.lastBufferedAtTokens
           : parseInt(String(row.lastBufferedAtTokens ?? '0'), 10) || 0,
       lastBufferedAtTime: row.lastBufferedAtTime ? new Date(String(row.lastBufferedAtTime)) : null,
+      observationBufferClaimToken: row.observationBufferClaimToken ? String(row.observationBufferClaimToken) : null,
+      observationBufferClaimAcquiredAt: row.observationBufferClaimAcquiredAt
+        ? new Date(String(row.observationBufferClaimAcquiredAt))
+        : null,
+      observationBufferClaimRenewedAt: row.observationBufferClaimRenewedAt
+        ? new Date(String(row.observationBufferClaimRenewedAt))
+        : null,
+      observationBufferClaimExpiresAt: row.observationBufferClaimExpiresAt
+        ? new Date(String(row.observationBufferClaimExpiresAt))
+        : null,
       config: row.config ? JSON.parse(row.config) : {},
       metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
       observedMessageIds: row.observedMessageIds ? JSON.parse(row.observedMessageIds) : undefined,
@@ -2122,6 +2143,261 @@ export class MemoryLibSQL extends MemoryStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { id, isBuffering, lastBufferedAtTokens: lastBufferedAtTokens ?? null },
+        },
+        error,
+      );
+    }
+  }
+
+  /**
+   * SQLite ISO-8601 UTC timestamp with millisecond precision, matching
+   * `Date.prototype.toISOString()` so lexicographic comparison against stored
+   * timestamps is chronological. Evaluated by the backend inside the same
+   * statement as the claim predicate (the authoritative clock).
+   */
+  static readonly #SQL_NOW = `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`;
+
+  /** Classify a zero-row conditional claim update: missing record vs lost claim. */
+  async #claimNotFoundOrLost(id: string, op: string): Promise<{ ok: false; reason: 'lost' }> {
+    const exists = await this.#client.execute({
+      sql: `SELECT id FROM "${OM_TABLE}" WHERE id = ?`,
+      args: [id],
+    });
+    if (!exists.rows || exists.rows.length === 0) {
+      throw new MastraError({
+        id: createStorageErrorId('LIBSQL', op, 'NOT_FOUND'),
+        text: `Observational memory record not found: ${id}`,
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.THIRD_PARTY,
+        details: { id },
+      });
+    }
+    return { ok: false, reason: 'lost' };
+  }
+
+  #claimFromRow(row: any, ownerToken: string): ObservationBufferClaimOutcome {
+    return {
+      ok: true,
+      claim: {
+        ownerToken,
+        acquiredAt: new Date(String(row.observationBufferClaimAcquiredAt)),
+        renewedAt: new Date(String(row.observationBufferClaimRenewedAt)),
+        expiresAt: new Date(String(row.observationBufferClaimExpiresAt)),
+      },
+    };
+  }
+
+  async acquireObservationBufferClaim(
+    input: AcquireObservationBufferClaimInput,
+  ): Promise<ObservationBufferClaimOutcome> {
+    try {
+      const now = MemoryLibSQL.#SQL_NOW;
+      const leaseSeconds = input.leaseMs / 1000;
+      const result = await withClientWriteLock(this.#client, () =>
+        this.#client.execute({
+          sql: `UPDATE "${OM_TABLE}" SET
+              "observationBufferClaimToken" = ?,
+              "observationBufferClaimAcquiredAt" = ${now},
+              "observationBufferClaimRenewedAt" = ${now},
+              "observationBufferClaimExpiresAt" = strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '+' || ? || ' seconds'),
+              "isBufferingObservation" = 1,
+              "lastBufferedAtTokens" = COALESCE(?, "lastBufferedAtTokens"),
+              "updatedAt" = ${now}
+            WHERE id = ?
+              AND (
+                ("observationBufferClaimToken" IS NOT NULL
+                  AND ("observationBufferClaimExpiresAt" IS NULL OR "observationBufferClaimExpiresAt" <= ${now}))
+                OR ("observationBufferClaimToken" IS NULL
+                  AND ("isBufferingObservation" IS NOT 1
+                    OR "updatedAt" <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-' || ? || ' seconds')))
+              )
+            RETURNING "observationBufferClaimAcquiredAt", "observationBufferClaimRenewedAt", "observationBufferClaimExpiresAt"`,
+          args: [input.ownerToken, leaseSeconds, input.lastBufferedAtTokens ?? null, input.id, leaseSeconds],
+        }),
+      );
+      if (!result.rows || result.rows.length === 0) {
+        return await this.#claimNotFoundOrLost(input.id, 'ACQUIRE_OBSERVATION_BUFFER_CLAIM');
+      }
+      return this.#claimFromRow(result.rows[0], input.ownerToken);
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'ACQUIRE_OBSERVATION_BUFFER_CLAIM', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        },
+        error,
+      );
+    }
+  }
+
+  async renewObservationBufferClaim(input: RenewObservationBufferClaimInput): Promise<ObservationBufferClaimOutcome> {
+    try {
+      const now = MemoryLibSQL.#SQL_NOW;
+      const result = await withClientWriteLock(this.#client, () =>
+        this.#client.execute({
+          // Strictly advancing expiry: never move the lease backwards, and
+          // always advance by at least 1ms so a same-instant renewal is still
+          // an observable write.
+          sql: `UPDATE "${OM_TABLE}" SET
+              "observationBufferClaimRenewedAt" = ${now},
+              "observationBufferClaimExpiresAt" = MAX(
+                strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '+' || ? || ' seconds'),
+                strftime('%Y-%m-%dT%H:%M:%fZ', "observationBufferClaimExpiresAt", '+0.001 seconds')
+              ),
+              "updatedAt" = ${now}
+            WHERE id = ?
+              AND "observationBufferClaimToken" = ?
+              AND "observationBufferClaimExpiresAt" > ${now}
+            RETURNING "observationBufferClaimAcquiredAt", "observationBufferClaimRenewedAt", "observationBufferClaimExpiresAt"`,
+          args: [input.leaseMs / 1000, input.id, input.ownerToken],
+        }),
+      );
+      if (!result.rows || result.rows.length === 0) {
+        return await this.#claimNotFoundOrLost(input.id, 'RENEW_OBSERVATION_BUFFER_CLAIM');
+      }
+      return this.#claimFromRow(result.rows[0], input.ownerToken);
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'RENEW_OBSERVATION_BUFFER_CLAIM', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        },
+        error,
+      );
+    }
+  }
+
+  async releaseObservationBufferClaim(
+    input: ReleaseObservationBufferClaimInput,
+  ): Promise<ObservationBufferClaimOutcome> {
+    try {
+      const now = MemoryLibSQL.#SQL_NOW;
+      const result = await withClientWriteLock(this.#client, () =>
+        this.#client.execute({
+          sql: `UPDATE "${OM_TABLE}" SET
+              "observationBufferClaimToken" = NULL,
+              "observationBufferClaimAcquiredAt" = NULL,
+              "observationBufferClaimRenewedAt" = NULL,
+              "observationBufferClaimExpiresAt" = NULL,
+              "isBufferingObservation" = 0,
+              "updatedAt" = ${now}
+            WHERE id = ?
+              AND "observationBufferClaimToken" = ?
+              AND "observationBufferClaimExpiresAt" > ${now}
+            RETURNING "observationBufferClaimAcquiredAt"`,
+          args: [input.id, input.ownerToken],
+        }),
+      );
+      if (!result.rows || result.rows.length === 0) {
+        return await this.#claimNotFoundOrLost(input.id, 'RELEASE_OBSERVATION_BUFFER_CLAIM');
+      }
+      // Fields were cleared by the release; report the token the caller owned.
+      return {
+        ok: true,
+        claim: { ownerToken: input.ownerToken, acquiredAt: new Date(), renewedAt: new Date(), expiresAt: new Date() },
+      };
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'RELEASE_OBSERVATION_BUFFER_CLAIM', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        },
+        error,
+      );
+    }
+  }
+
+  async commitBufferedObservations(input: CommitBufferedObservationsInput): Promise<CommitBufferedObservationsResult> {
+    try {
+      const now = MemoryLibSQL.#SQL_NOW;
+      const newChunk: BufferedObservationChunk = {
+        id: `ombuf-${randomUUID()}`,
+        cycleId: input.chunk.cycleId,
+        observations: input.chunk.observations,
+        tokenCount: input.chunk.tokenCount,
+        messageIds: input.chunk.messageIds,
+        messageTokens: input.chunk.messageTokens,
+        lastObservedAt: input.chunk.lastObservedAt,
+        createdAt: new Date(),
+        suggestedContinuation: input.chunk.suggestedContinuation,
+        currentTask: input.chunk.currentTask,
+        threadTitle: input.chunk.threadTitle,
+        extractedValues: input.chunk.extractedValues,
+        extractionFailures: input.chunk.extractionFailures,
+      };
+      const result = await withClientWriteLock(this.#client, () =>
+        this.#client.execute({
+          // Single conditional statement: the JSON append and the owner/lease
+          // predicate are evaluated atomically by the backend.
+          sql: `UPDATE "${OM_TABLE}" SET
+              "bufferedObservationChunks" = json_insert(COALESCE("bufferedObservationChunks", '[]'), '$[#]', json(?)),
+              "lastBufferedAtTime" = COALESCE(?, "lastBufferedAtTime"),
+              "updatedAt" = ${now}
+            WHERE id = ?
+              AND "observationBufferClaimToken" = ?
+              AND "observationBufferClaimExpiresAt" > ${now}`,
+          args: [
+            JSON.stringify(newChunk),
+            input.lastBufferedAtTime ? input.lastBufferedAtTime.toISOString() : null,
+            input.id,
+            input.ownerToken,
+          ],
+        }),
+      );
+      if (result.rowsAffected === 0) {
+        await this.#claimNotFoundOrLost(input.id, 'COMMIT_BUFFERED_OBSERVATIONS');
+        return { committed: false, reason: 'lost' };
+      }
+      return { committed: true };
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'COMMIT_BUFFERED_OBSERVATIONS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        },
+        error,
+      );
+    }
+  }
+
+  async getObservationBufferClaimStatus(id: string): Promise<ObservationBufferClaimStatus> {
+    try {
+      const now = MemoryLibSQL.#SQL_NOW;
+      const result = await this.#client.execute({
+        sql: `SELECT ("observationBufferClaimToken" IS NOT NULL AND "observationBufferClaimExpiresAt" > ${now}) AS live
+            FROM "${OM_TABLE}" WHERE id = ?`,
+        args: [id],
+      });
+      if (!result.rows || result.rows.length === 0) {
+        throw new MastraError({
+          id: createStorageErrorId('LIBSQL', 'GET_OBSERVATION_BUFFER_CLAIM_STATUS', 'NOT_FOUND'),
+          text: `Observational memory record not found: ${id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id },
+        });
+      }
+      return { live: Number(result.rows[0]!.live) === 1 };
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'GET_OBSERVATION_BUFFER_CLAIM_STATUS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id },
         },
         error,
       );

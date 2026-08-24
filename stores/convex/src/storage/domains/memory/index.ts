@@ -31,6 +31,13 @@ import type {
   SwapBufferedToActiveInput,
   SwapBufferedToActiveResult,
   UpdateActiveObservationsInput,
+  AcquireObservationBufferClaimInput,
+  CommitBufferedObservationsInput,
+  CommitBufferedObservationsResult,
+  ObservationBufferClaimOutcome,
+  ObservationBufferClaimStatus,
+  ReleaseObservationBufferClaimInput,
+  RenewObservationBufferClaimInput,
   UpdateBufferedObservationsInput,
   UpdateBufferedReflectionInput,
   UpdateObservationalMemoryConfigInput,
@@ -119,6 +126,10 @@ type StoredOMRecord = {
   isBufferingReflection: boolean;
   lastBufferedAtTokens: number;
   lastBufferedAtTime?: string | null;
+  observationBufferClaimToken?: string | null;
+  observationBufferClaimAcquiredAt?: string | null;
+  observationBufferClaimRenewedAt?: string | null;
+  observationBufferClaimExpiresAt?: string | null;
   metadata?: string | null;
   createdAt: string;
   updatedAt: string;
@@ -187,10 +198,38 @@ function parseStoredOMRecord(doc: StoredOMRecord): ObservationalMemoryRecord {
     isBufferingReflection: Boolean(doc.isBufferingReflection),
     lastBufferedAtTokens: Number(doc.lastBufferedAtTokens || 0),
     lastBufferedAtTime: doc.lastBufferedAtTime ? new Date(doc.lastBufferedAtTime) : null,
+    observationBufferClaimToken: doc.observationBufferClaimToken ?? null,
+    observationBufferClaimAcquiredAt: doc.observationBufferClaimAcquiredAt
+      ? new Date(doc.observationBufferClaimAcquiredAt)
+      : null,
+    observationBufferClaimRenewedAt: doc.observationBufferClaimRenewedAt
+      ? new Date(doc.observationBufferClaimRenewedAt)
+      : null,
+    observationBufferClaimExpiresAt: doc.observationBufferClaimExpiresAt
+      ? new Date(doc.observationBufferClaimExpiresAt)
+      : null,
     config: (config as Record<string, unknown>) ?? {},
     metadata: (metadata as Record<string, unknown>) ?? undefined,
     observedMessageIds: doc.observedMessageIds || undefined,
     observedTimezone: doc.observedTimezone || undefined,
+  };
+}
+
+/** Wire shape of a claim outcome returned by the Convex server mutation. */
+type SerializedClaimOutcome =
+  | { ok: true; claim: { ownerToken: string; acquiredAt: string; renewedAt: string; expiresAt: string } }
+  | { ok: false; reason: 'lost' };
+
+function parseClaimOutcome(result: SerializedClaimOutcome): ObservationBufferClaimOutcome {
+  if (!result.ok) return result;
+  return {
+    ok: true,
+    claim: {
+      ownerToken: result.claim.ownerToken,
+      acquiredAt: new Date(result.claim.acquiredAt),
+      renewedAt: new Date(result.claim.renewedAt),
+      expiresAt: new Date(result.claim.expiresAt),
+    },
   };
 }
 
@@ -1223,6 +1262,88 @@ export class MemoryConvex extends MemoryStorage {
     });
     if (!found) {
       throw this.omRecordNotFound('SET_BUFFERING_OBSERVATION_FLAG', id);
+    }
+  }
+
+  async acquireObservationBufferClaim(
+    input: AcquireObservationBufferClaimInput,
+  ): Promise<ObservationBufferClaimOutcome> {
+    const result = await this.#omClaimCall('ACQUIRE_OBSERVATION_BUFFER_CLAIM', input.id, () =>
+      this.#db.omAcquireBufferClaim<SerializedClaimOutcome>({
+        id: input.id,
+        ownerToken: input.ownerToken,
+        leaseMs: input.leaseMs,
+        lastBufferedAtTokens: input.lastBufferedAtTokens,
+      }),
+    );
+    return parseClaimOutcome(result);
+  }
+
+  async renewObservationBufferClaim(input: RenewObservationBufferClaimInput): Promise<ObservationBufferClaimOutcome> {
+    const result = await this.#omClaimCall('RENEW_OBSERVATION_BUFFER_CLAIM', input.id, () =>
+      this.#db.omRenewBufferClaim<SerializedClaimOutcome>({
+        id: input.id,
+        ownerToken: input.ownerToken,
+        leaseMs: input.leaseMs,
+      }),
+    );
+    return parseClaimOutcome(result);
+  }
+
+  async releaseObservationBufferClaim(
+    input: ReleaseObservationBufferClaimInput,
+  ): Promise<ObservationBufferClaimOutcome> {
+    const result = await this.#omClaimCall('RELEASE_OBSERVATION_BUFFER_CLAIM', input.id, () =>
+      this.#db.omReleaseBufferClaim<SerializedClaimOutcome>({ id: input.id, ownerToken: input.ownerToken }),
+    );
+    return parseClaimOutcome(result);
+  }
+
+  async commitBufferedObservations(input: CommitBufferedObservationsInput): Promise<CommitBufferedObservationsResult> {
+    const chunk: SerializedOMChunk = {
+      id: `ombuf-${crypto.randomUUID()}`,
+      cycleId: input.chunk.cycleId,
+      observations: input.chunk.observations,
+      tokenCount: input.chunk.tokenCount,
+      messageIds: input.chunk.messageIds,
+      messageTokens: input.chunk.messageTokens,
+      lastObservedAt: toISO(input.chunk.lastObservedAt),
+      createdAt: new Date().toISOString(),
+      suggestedContinuation: input.chunk.suggestedContinuation,
+      currentTask: input.chunk.currentTask,
+      threadTitle: input.chunk.threadTitle,
+      extractedValues: input.chunk.extractedValues,
+      extractionFailures: input.chunk.extractionFailures,
+    };
+    return this.#omClaimCall('COMMIT_BUFFERED_OBSERVATIONS', input.id, () =>
+      this.#db.omCommitBufferedChunk<CommitBufferedObservationsResult>({
+        id: input.id,
+        ownerToken: input.ownerToken,
+        chunk,
+        lastBufferedAtTime: input.lastBufferedAtTime ? toISO(input.lastBufferedAtTime) : undefined,
+        updatedAt: new Date().toISOString(),
+      }),
+    );
+  }
+
+  async getObservationBufferClaimStatus(id: string): Promise<ObservationBufferClaimStatus> {
+    return this.#omClaimCall('GET_OBSERVATION_BUFFER_CLAIM_STATUS', id, () =>
+      this.#db.omBufferClaimStatus<ObservationBufferClaimStatus>({ id }),
+    );
+  }
+
+  /**
+   * Runs a claim operation and maps the server's "record not found" error to
+   * the adapter's established not-found MastraError shape.
+   */
+  async #omClaimCall<R>(operation: string, id: string, fn: () => Promise<R>): Promise<R> {
+    try {
+      return await fn();
+    } catch (error) {
+      if (error instanceof Error && /record not found/i.test(error.message)) {
+        throw this.omRecordNotFound(operation, id);
+      }
+      throw error;
     }
   }
 
