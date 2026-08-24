@@ -4,6 +4,7 @@ import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 import { Pool } from 'pg';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
+import { buildConstraintName } from '../../db/constraint-utils';
 import { connectionString } from '../../test-utils';
 import { MemoryPG } from './index';
 
@@ -58,6 +59,26 @@ describe('MemoryPG observational-memory generation invariants', () => {
     expect(stored.rows[0]?.id).toBe(records[0]?.id);
   });
 
+  it('uses one canonical index name during concurrent init with a long schema name', async () => {
+    const indexName = buildConstraintName({ baseName: UNIQUE_INDEX, schemaName });
+    await pool.query(`DROP INDEX "${schemaName}"."${indexName}"`);
+
+    const stores = Array.from({ length: 4 }, () => new MemoryPG({ pool, schemaName, skipDefaultIndexes: true }));
+    await expect(Promise.all(stores.map(store => store.init()))).resolves.toHaveLength(4);
+
+    const indexes = await pool.query<{ indexname: string; indexdef: string }>(
+      `SELECT indexname, indexdef FROM pg_indexes WHERE schemaname = $1 AND indexname = $2`,
+      [schemaName, indexName],
+    );
+    expect(Buffer.byteLength(indexName, 'utf8')).toBeLessThanOrEqual(63);
+    expect(indexes.rows).toEqual([
+      expect.objectContaining({
+        indexname: indexName,
+        indexdef: expect.stringContaining('UNIQUE INDEX'),
+      }),
+    ]);
+  });
+
   it('rejects colliding reflections instead of creating an ambiguous history', async () => {
     const initial = await memory.initializeObservationalMemory({
       threadId: null,
@@ -85,7 +106,8 @@ describe('MemoryPG observational-memory generation invariants', () => {
       config: {},
     });
 
-    await pool.query(`DROP INDEX "${schemaName}"."${schemaName}_${UNIQUE_INDEX}"`);
+    const indexName = buildConstraintName({ baseName: UNIQUE_INDEX, schemaName });
+    await pool.query(`DROP INDEX "${schemaName}"."${indexName}"`);
 
     const columns = await pool.query<{ column_name: string }>(
       `SELECT column_name

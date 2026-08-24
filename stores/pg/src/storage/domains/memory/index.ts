@@ -104,6 +104,7 @@ import {
   getTableName as dbGetTableName,
 } from '../../db';
 import type { PgDomainConfig } from '../../db';
+import { buildConstraintName } from '../../db/constraint-utils';
 import { isDuplicateRelationError } from '../../db/pg-errors';
 import { runPrune, runBatchedDelete, resolveTargets } from '../../retention';
 
@@ -158,6 +159,14 @@ function hasPostgresErrorCode(error: unknown, code: string): boolean {
   }
 
   return false;
+}
+
+function getOMGenerationUniqueIndexName(schemaName?: string): string {
+  const parsedSchema = schemaName ? parseSqlIdentifier(schemaName, 'schema name') : '';
+  return buildConstraintName({
+    baseName: OM_GENERATION_UNIQUE_INDEX,
+    schemaName: parsedSchema && parsedSchema !== 'public' ? parsedSchema : undefined,
+  });
 }
 
 function dedupeMessagesForSave(messages: MastraDBMessage[]): MastraDBMessage[] {
@@ -344,7 +353,7 @@ export class MemoryPG extends MemoryStorage {
         `CREATE INDEX IF NOT EXISTS "${idxPrefix}idx_om_lookup_key" ON ${fullOmTableName} ("lookupKey");`,
       );
       statements.push(
-        `CREATE UNIQUE INDEX IF NOT EXISTS "${idxPrefix}${OM_GENERATION_UNIQUE_INDEX}" ON ${fullOmTableName} ("lookupKey", "generationCount");`,
+        `CREATE UNIQUE INDEX IF NOT EXISTS "${getOMGenerationUniqueIndexName(parsedSchema)}" ON ${fullOmTableName} ("lookupKey", "generationCount");`,
       );
     }
 
@@ -357,8 +366,7 @@ export class MemoryPG extends MemoryStorage {
   }
 
   private async ensureOMGenerationUniqueness(tableName: string): Promise<void> {
-    const indexPrefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
-    const indexName = `${indexPrefix}${OM_GENERATION_UNIQUE_INDEX}`;
+    const indexName = getOMGenerationUniqueIndexName(this.#schema);
 
     try {
       await this.#db.createIndexFromStatement(
