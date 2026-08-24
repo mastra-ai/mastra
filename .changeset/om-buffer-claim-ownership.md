@@ -10,16 +10,24 @@
 '@mastra/oracledb': patch
 ---
 
-Fixed Observational Memory buffering so independent Mastra processes sharing one storage backend can no longer clear or overwrite each other's active buffering work. Each observation-buffer cycle now acquires an atomic storage-owned claim: a unique cycle token with a bounded lease that is renewed while the model call runs. Buffered output, lease renewal, and release are all owner-conditioned. A crashed owner's claim expires and can be taken over atomically. A late completion from a replaced owner is fenced out instead of overwriting the successor's state. Status rendering now reports `running` only for a valid unexpired claim (or a bounded legacy marker), never for a bare boolean left behind by a dead process.
+Observational Memory buffering is now safe when independent Mastra processes share one storage backend. On claim-capable storage adapters, each buffering cycle holds an exclusive, expiring ownership claim, so one process can no longer clear or overwrite another process's in-flight buffering work, and a crashed process's claim recovers automatically. The bundled LibSQL, PostgreSQL, MySQL, MongoDB, Convex, and OracleDB stores are all claim-capable.
 
-**Notes for custom store implementers:** `ObservationalMemoryRecord` gains four nullable claim fields (`observationBufferClaimToken`, `observationBufferClaimAcquiredAt`, `observationBufferClaimRenewedAt`, `observationBufferClaimExpiresAt`). The memory storage domain gains five claim operations, each with a throwing default:
+Storage adapters that predate this change (including custom ones) keep working unchanged: `@mastra/memory` detects that the adapter does not support buffer claims and falls back to the previous single-process buffering behavior instead of failing.
 
-- `acquireObservationBufferClaim`
-- `renewObservationBufferClaim`
-- `releaseObservationBufferClaim`
-- `commitBufferedObservations`
-- `getObservationBufferClaimStatus`
+**For custom store implementers:** to opt into cross-process-safe buffering, implement the five observation-buffer-claim methods on your memory storage domain and declare the capability:
 
-`setBufferingObservationFlag` is deprecated to a migration/test-only compatibility helper. Existing rows remain readable without backfill; a legacy `isBufferingObservation=true` row without claim metadata is respected for a bounded grace window and then becomes atomically claimable.
+```ts
+class MyMemoryStorage extends MemoryStorage {
+  override readonly supportsObservationBufferClaims = true;
 
-**Limitations:** this does not provide exactly-once model execution. Duplicate model work can still occur around lease expiry; the guarantee is owner-safe commit/release. During a rolling upgrade, binaries older than this change can still perform unconditional flag writes because they do not know the claim token, so fully safe upgrades require quiescing old writers first. A healthy but paused worker that exceeds its lease without renewing can lose ownership and have its output discarded.
+  async acquireObservationBufferClaim(/* ... */) {/* ... */}
+  async renewObservationBufferClaim(/* ... */) {/* ... */}
+  async releaseObservationBufferClaim(/* ... */) {/* ... */}
+  async commitBufferedObservations(/* ... */) {/* ... */}
+  async getObservationBufferClaimStatus(/* ... */) {/* ... */}
+}
+```
+
+Until you do, the flag defaults to `false` and the legacy buffering path is used. `ObservationalMemoryRecord` gains four nullable claim fields; existing rows remain readable without any backfill or migration.
+
+**Limitations:** this does not provide exactly-once model execution — duplicate model work can still occur around claim expiry; the guarantee is that only the current owner can commit or release. The legacy fallback path is not cross-process safe. During a rolling upgrade, binaries older than this change can still perform unconditional writes, so fully safe upgrades require quiescing old writers first.
