@@ -69,4 +69,110 @@ describe('useCurrentUser', () => {
       expect(calls).toBeGreaterThanOrEqual(2);
     });
   });
+  describe('when the server keeps returning 503', () => {
+    it('gives up after the transient retry budget', async () => {
+      let calls = 0;
+      server.use(
+        http.get('*/api/auth/me', () => {
+          calls += 1;
+          return new HttpResponse(null, { status: 503 });
+        }),
+      );
+
+      const { result } = renderHook(() => useCurrentUser(), { wrapper: makeWrapper() });
+
+      await waitFor(() => expect(result.current.isError).toBe(true), { timeout: 20000 });
+      // One initial attempt plus three retries.
+      expect(calls).toBe(4);
+    }, 25000);
+  });
+
+  describe('when the request fails for a reason other than an HTTP status', () => {
+    it('fails fast rather than burning the retry budget', async () => {
+      let calls = 0;
+      server.use(
+        http.get('*/api/auth/me', () => {
+          calls += 1;
+          return HttpResponse.json('not-an-object-with-status', { status: 200 });
+        }),
+      );
+
+      const { result } = renderHook(() => useCurrentUser(), { wrapper: makeWrapper() });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(calls).toBe(1);
+    });
+  });
+
+  describe('when the server responds 500', () => {
+    it('fails fast, because only 503 is treated as transient', async () => {
+      let calls = 0;
+      server.use(
+        http.get('*/api/auth/me', () => {
+          calls += 1;
+          return new HttpResponse(null, { status: 500 });
+        }),
+      );
+
+      const { result } = renderHook(() => useCurrentUser(), { wrapper: makeWrapper() });
+
+      await waitFor(() => expect(result.current.isError).toBe(true));
+      expect(calls).toBe(1);
+    });
+  });
+
+  describe('the error it raises', () => {
+    it('names the failing status so callers can branch on it', async () => {
+      server.use(http.get('*/api/auth/me', () => new HttpResponse(null, { status: 401 })));
+
+      const { result } = renderHook(() => useCurrentUser(), { wrapper: makeWrapper() });
+
+      await waitFor(() => expect(result.current.isError).toBe(true));
+      expect(result.current.error).toMatchObject({ name: 'CurrentUserError', status: 401 });
+      expect(result.current.error?.message).toBe('Failed to fetch current user: 401');
+    });
+  });
+
+  describe('the request it sends', () => {
+    it('asks the configured base url for the current user as JSON', async () => {
+      let seen: Request | undefined;
+      server.use(
+        http.get('*/api/auth/me', ({ request }) => {
+          seen = request;
+          return HttpResponse.json({ id: 'u_1', email: 'a@b.c' });
+        }),
+      );
+
+      const { result } = renderHook(() => useCurrentUser(), { wrapper: makeWrapper() });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(seen?.url).toBe(`${BASE_URL}/api/auth/me`);
+      expect(seen?.headers.get('Content-Type')).toBe('application/json');
+    });
+  });
+
+  describe('when a second consumer mounts within the stale window', () => {
+    it('serves the cached user without a second request', async () => {
+      let calls = 0;
+      server.use(
+        http.get('*/api/auth/me', () => {
+          calls += 1;
+          return HttpResponse.json({ id: 'u_1', email: 'a@b.c' });
+        }),
+      );
+      const wrapper = makeWrapper();
+
+      const first = renderHook(() => useCurrentUser(), { wrapper });
+      await waitFor(() => expect(first.result.current.isSuccess).toBe(true));
+
+      // A stale window measured in milliseconds would have expired by now.
+      await new Promise(resolve => setTimeout(resolve, 250));
+
+      const second = renderHook(() => useCurrentUser(), { wrapper });
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      expect(second.result.current.isSuccess).toBe(true);
+      expect(calls).toBe(1);
+    });
+  });
 });

@@ -1,4 +1,4 @@
-import { renderHook } from '@testing-library/react';
+import { act, renderHook } from '@testing-library/react';
 import React from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
 import { describe, expect, it } from 'vitest';
@@ -21,7 +21,23 @@ const availableAgentTools: AgentTool[] = [
   },
 ];
 
-const renderTool = (defaultValues?: Partial<AgentBuilderEditFormValues>) => {
+/** Reads the `.describe()` text a tool exposes to the model for one input field. */
+const fieldDescription = (schema: unknown, field: string) =>
+  (schema as { shape: Record<string, { description?: string }> }).shape[field]?.description;
+
+/**
+ * Runs a tool inside `act` so the `setValue` re-render flushes before assertions.
+ * The wrapper subscribes to `formState`, so every write re-renders.
+ */
+const runTool = async (tool: { execute?: (input: unknown) => Promise<unknown> }, input: unknown) => {
+  let output: unknown;
+  await act(async () => {
+    output = await tool.execute!(input);
+  });
+  return output;
+};
+
+const renderTool = (defaultValues?: Partial<AgentBuilderEditFormValues>, tools: AgentTool[] = availableAgentTools) => {
   const formRef: { current: ReturnType<typeof useForm<AgentBuilderEditFormValues>> | null } = { current: null };
 
   const Wrapper = ({ children }: { children: React.ReactNode }) => {
@@ -37,10 +53,13 @@ const renderTool = (defaultValues?: Partial<AgentBuilderEditFormValues>) => {
       },
     });
     formRef.current = methods;
+    // RHF's formState is a proxy: a field is only tracked when it is read during
+    // render, so subscribe here before the tool writes to the form.
+    void methods.formState.dirtyFields;
     return React.createElement(FormProvider, methods, children);
   };
 
-  const { result } = renderHook(() => useSetAgentToolsTool({ availableAgentTools }), { wrapper: Wrapper });
+  const { result } = renderHook(() => useSetAgentToolsTool({ availableAgentTools: tools }), { wrapper: Wrapper });
   return { tool: result.current, form: () => formRef.current! };
 };
 
@@ -53,13 +72,13 @@ describe('useSetAgentToolsTool', () => {
 
   it('routes tools/agents/workflows into the correct form keys', async () => {
     const { tool, form } = renderTool();
-    await tool.execute!({
+    await runTool(tool, {
       tools: [
         { id: 'web-search', name: 'Web Search' },
         { id: 'agent-helper', name: 'Helper' },
         { id: 'wf-build', name: 'Build' },
       ],
-    } as any);
+    });
 
     expect(form().getValues('tools')).toEqual({ 'web-search': true });
     expect(form().getValues('agents')).toEqual({ 'agent-helper': true });
@@ -72,7 +91,7 @@ describe('useSetAgentToolsTool', () => {
     form().setValue('agents', { 'agent-helper': true });
     form().setValue('workflows', { 'wf-build': true });
 
-    await tool.execute!({ tools: [] } as any);
+    await runTool(tool, { tools: [] });
 
     expect(form().getValues('tools')).toEqual({});
     expect(form().getValues('agents')).toEqual({});
@@ -81,12 +100,12 @@ describe('useSetAgentToolsTool', () => {
 
   it('ignores ids not present in availableAgentTools', async () => {
     const { tool, form } = renderTool();
-    await tool.execute!({
+    await runTool(tool, {
       tools: [
         { id: 'web-search', name: 'Web Search' },
         { id: 'unknown', name: 'Unknown' },
       ],
-    } as any);
+    });
 
     expect(form().getValues('tools')).toEqual({ 'web-search': true });
     expect(form().getValues('agents')).toEqual({});
@@ -96,7 +115,7 @@ describe('useSetAgentToolsTool', () => {
   it('does nothing when input is missing or not an array', async () => {
     const { tool, form } = renderTool();
     form().setValue('tools', { 'web-search': true });
-    await tool.execute!({} as any);
+    await runTool(tool, {});
     expect(form().getValues('tools')).toEqual({ 'web-search': true });
   });
 
@@ -106,7 +125,7 @@ describe('useSetAgentToolsTool', () => {
       toolProviders: { composio: { tools: {}, connections: { gmail: gmailConnections } } },
     });
 
-    await tool.execute!({ tools: [{ id: 'composio:GMAIL_SEND_EMAIL', name: 'Send Email' }] } as any);
+    await runTool(tool, { tools: [{ id: 'composio:GMAIL_SEND_EMAIL', name: 'Send Email' }] });
 
     expect(form().getValues('toolProviders')).toEqual({
       composio: {
@@ -127,11 +146,138 @@ describe('useSetAgentToolsTool', () => {
       },
     });
 
-    await tool.execute!({ tools: [{ id: 'web-search', name: 'Web Search' }] } as any);
+    await runTool(tool, { tools: [{ id: 'web-search', name: 'Web Search' }] });
 
     expect(form().getValues('tools')).toEqual({ 'web-search': true });
     expect(form().getValues('toolProviders')).toEqual({
       composio: { tools: {}, connections: { gmail: gmailConnections } },
     });
+  });
+  it('survives being called with no input at all', async () => {
+    const { tool, form } = renderTool();
+
+    await expect(runTool(tool, undefined)).resolves.toEqual({ success: true });
+    expect(form().getValues('tools')).toEqual({});
+  });
+
+  it('reports success back to the model', async () => {
+    const { tool } = renderTool();
+
+    await expect(runTool(tool, { tools: [{ id: 'web-search', name: 'Web Search' }] })).resolves.toEqual({
+      success: true,
+    });
+  });
+
+  it('marks every routed field dirty so the form knows there are unsaved edits', async () => {
+    const { tool, form } = renderTool();
+
+    await runTool(tool, {
+      tools: [
+        { id: 'web-search', name: 'Web Search' },
+        { id: 'agent-helper', name: 'Helper' },
+        { id: 'wf-build', name: 'Build' },
+      ],
+    });
+
+    expect(form().formState.dirtyFields.tools).toBeTruthy();
+    expect(form().formState.dirtyFields.agents).toBeTruthy();
+    expect(form().formState.dirtyFields.workflows).toBeTruthy();
+  });
+
+  it('leaves a field clean when nothing routes to it', async () => {
+    const { tool, form } = renderTool();
+
+    await runTool(tool, { tools: [{ id: 'web-search', name: 'Web Search' }] });
+
+    expect(form().formState.dirtyFields.tools).toBeTruthy();
+    // `agents` was already {} and stays {}, so RHF sees no change.
+    expect(form().formState.dirtyFields.agents).toBeUndefined();
+  });
+
+  it('marks the tool providers dirty when an integration is routed', async () => {
+    const { tool, form } = renderTool();
+
+    await runTool(tool, { tools: [{ id: 'composio:GMAIL_SEND_EMAIL', name: 'Send Email' }] });
+
+    expect(form().formState.dirtyFields.toolProviders).toBeTruthy();
+  });
+
+  it('ignores a tools value that is not an array', async () => {
+    const { tool, form } = renderTool();
+    await runTool(tool, { tools: [{ id: 'web-search', name: 'Web Search' }] });
+
+    await runTool(tool, { tools: 'web-search' });
+
+    expect(form().getValues('tools')).toEqual({ 'web-search': true });
+  });
+
+  it('lists the available tools in the description the model reads', () => {
+    const { tool } = renderTool();
+
+    expect(tool.description).toContain('Set the tools, agents, and workflows enabled on the agent');
+    expect(tool.description).toContain('- web-search');
+    expect(tool.description).toContain('- agent-helper');
+  });
+
+  it('lists each tool on its own line', () => {
+    const { tool } = renderTool();
+
+    expect(tool.description).toContain('- web-search\n- agent-helper');
+  });
+
+  it('appends a tool description after a colon when there is one', () => {
+    const { tool } = renderTool(undefined, [
+      { id: 'web-search', name: 'web-search', type: 'tool', isChecked: false, description: 'Searches the web' },
+    ]);
+
+    expect(tool.description).toContain('- web-search: Searches the web');
+  });
+
+  it('says nothing about tools when none are available', () => {
+    const { tool } = renderTool(undefined, []);
+
+    expect(tool.description).toBe(
+      'Set the tools, agents, and workflows enabled on the agent. Each entry MUST include both `id` (from the ' +
+        'available tools list) and `name` (a concise Title Case display label, e.g. "Web Search"). The `name` is ' +
+        'shown to the user in chat.',
+    );
+  });
+
+  it('restricts the input schema to the available tool ids', () => {
+    const { tool } = renderTool();
+
+    expect(tool.inputSchema!.safeParse({ tools: [{ id: 'web-search', name: 'Web Search' }] }).success).toBe(true);
+    expect(tool.inputSchema!.safeParse({ tools: [{ id: 'unknown', name: 'Unknown' }] }).success).toBe(false);
+    expect(tool.inputSchema!.safeParse({}).success).toBe(false);
+  });
+
+  it('requires a non-empty display name on every entry', () => {
+    const { tool } = renderTool();
+
+    expect(tool.inputSchema!.safeParse({ tools: [{ id: 'web-search', name: '' }] }).success).toBe(false);
+    expect(tool.inputSchema!.safeParse({ tools: [{ id: 'web-search' }] }).success).toBe(false);
+  });
+
+  it('accepts any id when no tools are known', () => {
+    const { tool } = renderTool(undefined, []);
+
+    expect(tool.inputSchema!.safeParse({ tools: [{ id: 'anything', name: 'Anything' }] }).success).toBe(true);
+  });
+
+  it('documents the tools field and each entry for the model', () => {
+    const { tool } = renderTool();
+    const entry = (tool.inputSchema as { shape: { tools: { element: unknown } } }).shape.tools.element;
+
+    expect(fieldDescription(tool.inputSchema, 'tools')).toContain('Tools to enable on the agent');
+    expect(fieldDescription(entry, 'id')).toContain('available tools list');
+    expect(fieldDescription(entry, 'name')).toContain('Title Case');
+  });
+
+  it('declares a boolean success in its output schema', () => {
+    const { tool } = renderTool();
+
+    expect(tool.outputSchema!.safeParse({ success: true }).success).toBe(true);
+    expect(tool.outputSchema!.safeParse({ success: 'yes' }).success).toBe(false);
+    expect(tool.outputSchema!.safeParse({}).success).toBe(false);
   });
 });
