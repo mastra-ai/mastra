@@ -52,8 +52,8 @@ function warnCurationCadenceDeprecated(thresholdAlsoSet: boolean): void {
   console.warn(
     '[mastra:memory] `curationCadence` is deprecated; use `curationThreshold`. Note the meaning changed: ' +
       '`curationCadence` counted committed observation runs, while `curationThreshold` counts uncurated ' +
-      'knowledge records since the last curation. Curation now also runs from activation and end-of-turn, ' +
-      'not only the synchronous observe path.' +
+      'knowledge records since the last curation. These options now translate into a `curate` agent entry ' +
+      'whose placement sets when it is evaluated.' +
       (thresholdAlsoSet ? ' `curationThreshold` is set, so `curationCadence` is ignored.' : ''),
   );
 }
