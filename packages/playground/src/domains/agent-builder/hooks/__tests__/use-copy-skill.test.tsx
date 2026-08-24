@@ -1,3 +1,4 @@
+import type { CreateStoredSkillParams } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react';
@@ -42,10 +43,10 @@ describe('useCopySkill', () => {
       visibility: 'public',
     });
 
-    let receivedBody: any = null;
+    let receivedBody: CreateStoredSkillParams | null = null;
     server.use(
       http.post(`${BASE_URL}/api/stored/skills`, async ({ request }) => {
-        receivedBody = await request.json();
+        receivedBody = (await request.json()) as CreateStoredSkillParams;
         return HttpResponse.json(makeStoredSkill({ id: 'copy-1', name: 'My Copy' }));
       }),
     );
@@ -82,14 +83,14 @@ describe('useCopySkill', () => {
   it('omits null license and files from the create payload', async () => {
     const source = makeStoredSkill({
       id: 'src-2',
-      license: null as any,
-      files: null as any,
+      license: null,
+      files: null,
     });
 
-    let receivedBody: any = null;
+    let receivedBody: CreateStoredSkillParams | null = null;
     server.use(
       http.post(`${BASE_URL}/api/stored/skills`, async ({ request }) => {
-        receivedBody = await request.json();
+        receivedBody = (await request.json()) as CreateStoredSkillParams;
         return HttpResponse.json(makeStoredSkill({ id: 'copy-2' }));
       }),
     );
@@ -106,14 +107,14 @@ describe('useCopySkill', () => {
   it('carries a non-null license and files through to the create payload', async () => {
     const source = makeStoredSkill({
       id: 'src-3',
-      license: { type: 'MIT' } as never,
-      files: [{ path: 'README.md', content: '# Hi' }] as never,
+      license: 'MIT',
+      files: [{ id: 'readme', name: 'README.md', type: 'file', content: '# Hi' }],
     });
 
-    let receivedBody: any = null;
+    let receivedBody: CreateStoredSkillParams | null = null;
     server.use(
       http.post(`${BASE_URL}/api/stored/skills`, async ({ request }) => {
-        receivedBody = await request.json();
+        receivedBody = (await request.json()) as CreateStoredSkillParams;
         return HttpResponse.json(makeStoredSkill({ id: 'copy-3' }));
       }),
     );
@@ -123,17 +124,17 @@ describe('useCopySkill', () => {
 
     await result.current.mutateAsync({ source, name: 'Copy' });
 
-    expect(receivedBody.license).toEqual({ type: 'MIT' });
-    expect(receivedBody.files).toEqual([{ path: 'README.md', content: '# Hi' }]);
+    expect(receivedBody!.license).toBe('MIT');
+    expect(receivedBody!.files).toEqual([{ id: 'readme', name: 'README.md', type: 'file', content: '# Hi' }]);
   });
 
   it('prefers an explicit description over the source one', async () => {
     const source = makeStoredSkill({ id: 'src-4', description: 'From source' });
 
-    let receivedBody: any = null;
+    let receivedBody: CreateStoredSkillParams | null = null;
     server.use(
       http.post(`${BASE_URL}/api/stored/skills`, async ({ request }) => {
-        receivedBody = await request.json();
+        receivedBody = (await request.json()) as CreateStoredSkillParams;
         return HttpResponse.json(makeStoredSkill({ id: 'copy-4' }));
       }),
     );
@@ -149,10 +150,10 @@ describe('useCopySkill', () => {
   it('falls back to an empty description when neither is set', async () => {
     const source = makeStoredSkill({ id: 'src-5', description: undefined });
 
-    let receivedBody: any = null;
+    let receivedBody: CreateStoredSkillParams | null = null;
     server.use(
       http.post(`${BASE_URL}/api/stored/skills`, async ({ request }) => {
-        receivedBody = await request.json();
+        receivedBody = (await request.json()) as CreateStoredSkillParams;
         return HttpResponse.json(makeStoredSkill({ id: 'copy-5' }));
       }),
     );
@@ -168,10 +169,10 @@ describe('useCopySkill', () => {
   it('omits the source author when the source has none', async () => {
     const source = makeStoredSkill({ id: 'src-6', authorId: undefined });
 
-    let receivedBody: any = null;
+    let receivedBody: CreateStoredSkillParams | null = null;
     server.use(
       http.post(`${BASE_URL}/api/stored/skills`, async ({ request }) => {
-        receivedBody = await request.json();
+        receivedBody = (await request.json()) as CreateStoredSkillParams;
         return HttpResponse.json(makeStoredSkill({ id: 'copy-6' }));
       }),
     );
@@ -207,8 +208,12 @@ describe('useCopySkill', () => {
 
     await expect(result.current.mutateAsync({ source: makeStoredSkill(), name: 'Copy' })).rejects.toThrow();
 
-    await waitFor(() => expect(toast.error).toHaveBeenCalled());
-    expect(vi.mocked(toast.error).mock.calls[0]?.[0]).toContain('Failed to copy skill:');
+    await waitFor(() => expect(toast.error).toHaveBeenCalledTimes(1));
+    const message = String(vi.mocked(toast.error).mock.calls[0]?.[0]);
+    expect(message).toContain('Failed to copy skill:');
+    // The server's reason has to survive into the toast, or the user is told
+    // only that something went wrong.
+    expect(message).toContain('name already taken');
   });
 
   it('leaves other caches alone when it invalidates the skills list', async () => {

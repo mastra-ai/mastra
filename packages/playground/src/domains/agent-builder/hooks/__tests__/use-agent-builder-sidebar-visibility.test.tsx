@@ -52,6 +52,17 @@ const renderVisibility = ({
   return { ...renderHook(() => useAgentBuilderSidebarVisibility(), { wrapper }), queryClient };
 };
 
+/**
+ * The hook reports `isVisible: false` while either query is in flight, so a
+ * negative assertion made too early cannot fail. Every negative case waits for
+ * both reads to land first.
+ */
+const bothReadsLanded = (queryClient: QueryClient) =>
+  waitFor(() => {
+    expect(queryClient.getQueryData(['auth', 'capabilities'])).toBeDefined();
+    expect(queryClient.getQueryData(['builder-settings'])).toBeDefined();
+  });
+
 describe('useAgentBuilderSidebarVisibility', () => {
   describe('when auth is disabled and the builder is configured', () => {
     it('shows the shortcut', async () => {
@@ -71,18 +82,23 @@ describe('useAgentBuilderSidebarVisibility', () => {
 
   describe('when the builder is not configured', () => {
     it('hides the shortcut', async () => {
-      const { result } = renderVisibility({ builderEnabled: false });
+      const { result, queryClient } = renderVisibility({ builderEnabled: false });
 
-      await waitFor(() => expect(result.current.isVisible).toBe(false));
+      await bothReadsLanded(queryClient);
       expect(result.current.isVisible).toBe(false);
     });
   });
 
   describe('when the signed-in user lacks stored-agent permissions', () => {
     it('hides the shortcut', async () => {
-      const { result } = renderVisibility({ capabilities: rbacCapabilities(['agents:read']) });
+      const { result, queryClient } = renderVisibility({ capabilities: rbacCapabilities(['agents:read']) });
 
-      await waitFor(() => expect(result.current.isVisible).toBe(false));
+      // This caller may not read the settings at all, so only the capabilities
+      // land; waiting on those is what takes the assertion past the guard.
+      await waitFor(() => expect(queryClient.getQueryData(['auth', 'capabilities'])).toBeDefined());
+      await new Promise(resolve => setTimeout(resolve, 60));
+
+      expect(result.current.isVisible).toBe(false);
     });
   });
 
@@ -90,10 +106,9 @@ describe('useAgentBuilderSidebarVisibility', () => {
     it('keeps the shortcut hidden even once the builder reports itself enabled', async () => {
       const { result, queryClient } = renderVisibility({ capabilities: signedOutCapabilities });
 
-      // Wait past the loading guard: the interesting decision is the one the
-      // hook makes with both queries resolved and the builder switched on.
-      await waitFor(() => expect(queryClient.getQueryData(['builder-settings'])).toBeDefined());
-      await waitFor(() => expect(queryClient.getQueryData(['auth', 'capabilities'])).toBeDefined());
+      // The interesting decision is the one the hook makes with both queries
+      // resolved and the builder switched on.
+      await bothReadsLanded(queryClient);
 
       expect(result.current.isVisible).toBe(false);
     });

@@ -14,8 +14,13 @@ const CAPABILITIES_URL = `${BASE_URL}/api/auth/capabilities`;
 
 const capabilities: AuthCapabilities = { enabled: false, login: null };
 
-const makeWrapper = () => {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+/**
+ * `retry` defaults to off so unrelated specs stay fast. The retry assertions
+ * pass `retry: true` instead, so what they observe is the hook's own
+ * `retry: false` rather than the client default masking it.
+ */
+const makeWrapper = ({ retry = false }: { retry?: boolean } = {}) => {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry } } });
   return ({ children }: { children: ReactNode }) => (
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
@@ -68,7 +73,7 @@ describe('useAuthCapabilities', () => {
         }),
       );
 
-      const { result } = renderHook(() => useAuthCapabilities(), { wrapper: makeWrapper() });
+      const { result } = renderHook(() => useAuthCapabilities(), { wrapper: makeWrapper({ retry: true }) });
 
       await waitFor(() => expect(result.current.isError).toBe(true));
       await settlePastFirstRetry();

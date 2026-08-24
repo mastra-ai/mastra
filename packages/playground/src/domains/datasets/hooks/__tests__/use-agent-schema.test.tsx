@@ -30,6 +30,15 @@ const describedEntries = (schema: JSONSchema7) => [
 
 const schemas = () => renderHook(() => useAgentSchema()).result.current;
 
+/**
+ * A description is only useful to the model if it is a non-blank string.
+ * `not.toBe('')` would also pass for `undefined` or whitespace.
+ */
+const expectMeaningfulText = (value: unknown) => {
+  expect(typeof value).toBe('string');
+  expect((value as string).trim().length).toBeGreaterThan(0);
+};
+
 describe('useAgentSchema', () => {
   describe('when the caller reads the hook', () => {
     it('resolves immediately with no error', () => {
@@ -118,15 +127,15 @@ describe('useAgentSchema', () => {
 
       expect(branches.length).toBeGreaterThan(0);
       for (const branch of branches) {
-        expect(branch.description ?? '').not.toBe('');
+        expectMeaningfulText(branch.description);
       }
     });
 
     it('declares the JSON Schema dialect it is written against', () => {
       const { inputSchema } = schemas();
 
-      expect(inputSchema.$schema ?? '').not.toBe('');
-      expect(inputSchema.description ?? '').not.toBe('');
+      expectMeaningfulText(inputSchema.$schema);
+      expectMeaningfulText(inputSchema.description);
     });
   });
 
@@ -205,15 +214,15 @@ describe('useAgentSchema', () => {
 
       expect(fields.length).toBeGreaterThan(0);
       for (const field of fields) {
-        expect(field.description ?? '').not.toBe('');
+        expectMeaningfulText(field.description);
       }
     });
 
     it('declares the JSON Schema dialect it is written against', () => {
       const { outputSchema } = schemas();
 
-      expect(outputSchema.$schema ?? '').not.toBe('');
-      expect(outputSchema.description ?? '').not.toBe('');
+      expectMeaningfulText(outputSchema.$schema);
+      expectMeaningfulText(outputSchema.description);
     });
   });
 });

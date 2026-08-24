@@ -52,6 +52,15 @@ const agentScoringInput = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
+/**
+ * A description is only useful to the model if it is a non-blank string.
+ * `not.toBe('')` would also pass for `undefined` or whitespace.
+ */
+const expectMeaningfulText = (value: unknown) => {
+  expect(typeof value).toBe('string');
+  expect((value as string).trim().length).toBeGreaterThan(0);
+};
+
 describe('useScorerSchema', () => {
   describe('when the caller reads the hook', () => {
     it('resolves immediately with no error', () => {
@@ -172,7 +181,7 @@ describe('useScorerSchema', () => {
 
       expect(nodes.length).toBeGreaterThan(5);
       for (const node of nodes) {
-        expect(node.description).not.toBe('');
+        expectMeaningfulText(node.description);
       }
     });
 
@@ -211,8 +220,8 @@ describe('useScorerSchema', () => {
     it('declares the JSON Schema dialect it is written against', () => {
       const { agentInputSchema } = schemas();
 
-      expect(agentInputSchema.$schema ?? '').not.toBe('');
-      expect(agentInputSchema.description ?? '').not.toBe('');
+      expectMeaningfulText(agentInputSchema.$schema);
+      expectMeaningfulText(agentInputSchema.description);
     });
   });
 
@@ -253,7 +262,7 @@ describe('useScorerSchema', () => {
 
       expect(nodes.length).toBeGreaterThan(5);
       for (const node of nodes) {
-        expect(node.description).not.toBe('');
+        expectMeaningfulText(node.description);
       }
     });
 
@@ -270,8 +279,8 @@ describe('useScorerSchema', () => {
     it('declares the JSON Schema dialect it is written against', () => {
       const { customInputSchema } = schemas();
 
-      expect(customInputSchema.$schema ?? '').not.toBe('');
-      expect(customInputSchema.description ?? '').not.toBe('');
+      expectMeaningfulText(customInputSchema.$schema);
+      expectMeaningfulText(customInputSchema.description);
     });
   });
 
@@ -287,8 +296,8 @@ describe('useScorerSchema', () => {
     it('stays self-describing in the schema editor', () => {
       const { outputSchema } = schemas();
 
-      expect(outputSchema.$schema ?? '').not.toBe('');
-      expect(outputSchema.description ?? '').not.toBe('');
+      expectMeaningfulText(outputSchema.$schema);
+      expectMeaningfulText(outputSchema.description);
     });
   });
 });

@@ -31,8 +31,13 @@ const rbacOff: AuthCapabilities = {
 
 const authOff: AuthCapabilities = { enabled: false, login: null };
 
-const makeHarness = () => {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+/**
+ * `retry` defaults to off so unrelated specs stay fast. The no-retry assertion
+ * passes `retry: true` instead, so what it observes is the hook's own
+ * `retry: false` rather than the client default masking it.
+ */
+const makeHarness = ({ retry = false }: { retry?: boolean } = {}) => {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry } } });
   const wrapper = ({ children }: { children: ReactNode }) => (
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
@@ -106,7 +111,7 @@ describe('usePermissionPatterns', () => {
         }),
       );
 
-      const { wrapper } = makeHarness();
+      const { wrapper } = makeHarness({ retry: true });
       const { result } = renderHook(() => usePermissionPatterns(), { wrapper });
 
       await waitFor(() => expect(result.current.error).toBeInstanceOf(Error));

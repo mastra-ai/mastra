@@ -1,3 +1,4 @@
+import type { MastraClient } from '@mastra/client-js';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 
 /**
@@ -15,6 +16,12 @@ const createMockResponse = (data: unknown): Response =>
     ok: true,
     json: () => Promise.resolve(data),
   }) as unknown as Response;
+
+/**
+ * `makeAuthCapabilitiesRequest` reads only `client.options`, so a stub narrowed
+ * to that field is enough — and it keeps the options themselves type-checked.
+ */
+const clientWith = (options: MastraClient['options']) => ({ options }) as Pick<MastraClient, 'options'> as MastraClient;
 
 describe('useAuthCapabilities', () => {
   let originalFetch: typeof globalThis.fetch;
@@ -34,15 +41,13 @@ describe('useAuthCapabilities', () => {
   describe('client headers are passed to fetch', () => {
     it('should include x-mastra-dev-playground header from client in fetch request', async () => {
       // Mock the client with headers that include x-mastra-dev-playground
-      const mockClient = {
-        options: {
-          baseUrl: 'http://localhost:3000',
-          headers: {
-            'x-mastra-dev-playground': 'true',
-            'x-custom-header': 'custom-value',
-          },
+      const mockClient = clientWith({
+        baseUrl: 'http://localhost:3000',
+        headers: {
+          'x-mastra-dev-playground': 'true',
+          'x-custom-header': 'custom-value',
         },
-      };
+      });
 
       // Mock response
       mockFetch.mockResolvedValue(createMockResponse({ enabled: false, login: null }));
@@ -50,7 +55,7 @@ describe('useAuthCapabilities', () => {
       // We need to test the actual fetch call logic
       // Since the hook uses react-query, we'll extract and test the queryFn directly
       const { makeAuthCapabilitiesRequest } = await import('../use-auth-capabilities');
-      await makeAuthCapabilitiesRequest(mockClient as any);
+      await makeAuthCapabilitiesRequest(mockClient);
 
       // Verify fetch was called with the client's headers
       expect(mockFetch).toHaveBeenCalledTimes(1);
@@ -68,16 +73,14 @@ describe('useAuthCapabilities', () => {
     });
 
     it('should work when client has no custom headers', async () => {
-      const mockClient = {
-        options: {
-          baseUrl: 'http://localhost:3000',
-        },
-      };
+      const mockClient = clientWith({
+        baseUrl: 'http://localhost:3000',
+      });
 
       mockFetch.mockResolvedValue(createMockResponse({ enabled: false, login: null }));
 
       const { makeAuthCapabilitiesRequest } = await import('../use-auth-capabilities');
-      await makeAuthCapabilitiesRequest(mockClient as any);
+      await makeAuthCapabilitiesRequest(mockClient);
 
       expect(mockFetch).toHaveBeenCalledTimes(1);
       const [, options] = mockFetch.mock.calls[0] as [string, RequestInit];
@@ -91,14 +94,12 @@ describe('useAuthCapabilities', () => {
     });
 
     it('should work when client options has no baseUrl or headers', async () => {
-      const mockClient = {
-        options: {},
-      };
+      const mockClient = clientWith({});
 
       mockFetch.mockResolvedValue(createMockResponse({ enabled: false, login: null }));
 
       const { makeAuthCapabilitiesRequest } = await import('../use-auth-capabilities');
-      await makeAuthCapabilitiesRequest(mockClient as any);
+      await makeAuthCapabilitiesRequest(mockClient);
 
       expect(mockFetch).toHaveBeenCalledTimes(1);
       const [url, options] = mockFetch.mock.calls[0] as [string, RequestInit];
@@ -116,17 +117,15 @@ describe('useAuthCapabilities', () => {
 
   describe('apiPrefix support (issue #13901)', () => {
     it('should use custom apiPrefix instead of hardcoded /api', async () => {
-      const mockClient = {
-        options: {
-          baseUrl: 'http://localhost:4000',
-          apiPrefix: '/mastra',
-        },
-      };
+      const mockClient = clientWith({
+        baseUrl: 'http://localhost:4000',
+        apiPrefix: '/mastra',
+      });
 
       mockFetch.mockResolvedValue(createMockResponse({ enabled: false, login: null }));
 
       const { makeAuthCapabilitiesRequest } = await import('../use-auth-capabilities');
-      await makeAuthCapabilitiesRequest(mockClient as any);
+      await makeAuthCapabilitiesRequest(mockClient);
 
       expect(mockFetch).toHaveBeenCalledTimes(1);
       const [url] = mockFetch.mock.calls[0] as [string, RequestInit];
@@ -135,16 +134,14 @@ describe('useAuthCapabilities', () => {
     });
 
     it('should default to /api when apiPrefix is not set', async () => {
-      const mockClient = {
-        options: {
-          baseUrl: 'http://localhost:4000',
-        },
-      };
+      const mockClient = clientWith({
+        baseUrl: 'http://localhost:4000',
+      });
 
       mockFetch.mockResolvedValue(createMockResponse({ enabled: false, login: null }));
 
       const { makeAuthCapabilitiesRequest } = await import('../use-auth-capabilities');
-      await makeAuthCapabilitiesRequest(mockClient as any);
+      await makeAuthCapabilitiesRequest(mockClient);
 
       const [url] = mockFetch.mock.calls[0] as [string, RequestInit];
       expect(url).toBe('http://localhost:4000/api/auth/capabilities');
@@ -155,7 +152,7 @@ describe('useAuthCapabilities', () => {
     const urlForPrefix = async (apiPrefix: string) => {
       mockFetch.mockResolvedValue(createMockResponse({ enabled: false, login: null }));
       const { makeAuthCapabilitiesRequest } = await import('../use-auth-capabilities');
-      await makeAuthCapabilitiesRequest({ options: { baseUrl: 'http://localhost:4000', apiPrefix } } as any);
+      await makeAuthCapabilitiesRequest(clientWith({ baseUrl: 'http://localhost:4000', apiPrefix }));
       const [url] = mockFetch.mock.calls[0] as [string, RequestInit];
       return url;
     };
@@ -172,7 +169,10 @@ describe('useAuthCapabilities', () => {
       expect(await urlForPrefix('  /mastra  ')).toBe('http://localhost:4000/mastra/auth/capabilities');
     });
 
-    it('falls back to /api for a whitespace-only prefix', async () => {
+    // A whitespace-only prefix is truthy, so it never reaches the `/api`
+    // fallback: it trims to '', becomes '/', and the trailing slash is dropped.
+    // An explicitly empty prefix is falsy and does fall back — the two differ.
+    it('resolves a whitespace-only prefix to no prefix at all', async () => {
       expect(await urlForPrefix('   ')).toBe('http://localhost:4000/auth/capabilities');
     });
 
@@ -187,7 +187,7 @@ describe('useAuthCapabilities', () => {
 
       const { makeAuthCapabilitiesRequest } = await import('../use-auth-capabilities');
 
-      await expect(makeAuthCapabilitiesRequest({ options: {} } as any)).rejects.toThrow(
+      await expect(makeAuthCapabilitiesRequest(clientWith({}))).rejects.toThrow(
         'Failed to fetch auth capabilities: 403',
       );
     });
@@ -198,7 +198,7 @@ describe('useAuthCapabilities', () => {
 
       const { makeAuthCapabilitiesRequest } = await import('../use-auth-capabilities');
 
-      await expect(makeAuthCapabilitiesRequest({ options: {} } as any)).rejects.toThrow();
+      await expect(makeAuthCapabilitiesRequest(clientWith({}))).rejects.toThrow();
       expect(json).not.toHaveBeenCalled();
     });
   });

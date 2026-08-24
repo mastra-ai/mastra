@@ -1,6 +1,16 @@
 import type { ListStoredSkillsResponse, StoredSkillResponse } from '@mastra/client-js';
 
-export const makeStoredSkill = (overrides: Partial<StoredSkillResponse> = {}): StoredSkillResponse => ({
+/**
+ * The server stores `license` and `files` in nullable columns and serialises an
+ * unset one as `null`, while the response type models them as optional. Tests
+ * that need that shape pass it here rather than casting at the call site.
+ */
+export type StoredSkillOverrides = Partial<Omit<StoredSkillResponse, 'license' | 'files'>> & {
+  license?: StoredSkillResponse['license'] | null;
+  files?: StoredSkillResponse['files'] | null;
+};
+
+export const makeStoredSkill = (overrides: StoredSkillOverrides = {}): StoredSkillResponse => ({
   id: overrides.id ?? 'skill-1',
   status: overrides.status ?? 'active',
   name: overrides.name ?? 'My Skill',
