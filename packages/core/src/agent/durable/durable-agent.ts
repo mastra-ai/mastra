@@ -24,7 +24,7 @@ import type { MessageListInput } from '../message-list';
 import { SaveQueueManager } from '../save-queue';
 import { AgentThreadLeaseConflictError, agentThreadStreamRuntime } from '../thread-stream-runtime';
 import type { AgentThreadRunRegistration } from '../thread-stream-runtime';
-import type { ToolsInput } from '../types';
+import type { AgentSubscribeToThreadOptions, ToolsInput } from '../types';
 
 import { publishAbortRequest } from './abort-transport';
 import { AGENT_STREAM_TOPIC, DurableStepIds } from './constants';
@@ -1552,6 +1552,65 @@ export class DurableAgent<
     await emitErrorEvent(this.pubsub, runId, error);
   }
 
+  /**
+   * Abort the thread's active run.
+   *
+   * The base implementation flips the run's prepared `AbortController`, which a
+   * durable run never has: its controller lives on this agent's run registry,
+   * and the steps reading it may execute in another process. Without the abort
+   * request below, aborting a thread whose active run is durable records an
+   * intent nothing reads and lets the run stream on.
+   */
+  abortThreadStream(options: AgentSubscribeToThreadOptions): boolean {
+    // Resolve the run before the base call: aborting releases the thread lease,
+    // after which the thread no longer has an active run to look up.
+    const runId = agentThreadStreamRuntime.getActiveThreadRunId(options, this.getPubSub());
+    const aborted = super.abortThreadStream(options);
+    if (!runId) return aborted;
+
+    this.#abortDurableRun(runId);
+    return true;
+  }
+
+  /**
+   * Abort a run by id.
+   *
+   * Same gap as {@link abortThreadStream}. A run that has not started yet is
+   * left to the base implementation, which records the intent the durable entry
+   * points consult when the run starts.
+   */
+  abortRunStream(runId: string): boolean {
+    const aborted = super.abortRunStream(runId);
+    if (!this.#isRunExecuting(runId)) return aborted;
+
+    this.#abortDurableRun(runId);
+    return true;
+  }
+
+  /** Whether `runId` is under way rather than queued, started or not by this process. */
+  #isRunExecuting(runId: string): boolean {
+    return (
+      this.#runRegistry.get(runId) !== undefined ||
+      globalRunRegistry.get(runId) !== undefined ||
+      agentThreadStreamRuntime.hasThreadRun(runId, this.getPubSub())
+    );
+  }
+
+  /**
+   * Stop `runId` wherever it is executing: the controller this process holds
+   * for it, if it holds one, plus the abort request that reaches the process
+   * actually running the steps. Mirrors the `abort()` handed out with a stream
+   * result.
+   */
+  #abortDurableRun(runId: string): void {
+    const controller = (this.#runRegistry.get(runId) ?? globalRunRegistry.get(runId))?.abortController;
+    if (controller && !controller.signal.aborted) {
+      controller.abort(new Error('Aborted'));
+    }
+    // Best-effort, like `requestRemoteAbort` itself: the caller gets the local
+    // abort synchronously and a failed publish is logged, not thrown.
+    void this.requestRemoteAbort(runId);
+  }
   /**
    * Abort a durable run, in this process and in whichever process is executing it.
    *
