@@ -382,9 +382,8 @@ export class CoreToolBuilder extends MastraBase {
     return schema;
   };
 
-  private serializeInputSchema(inputValidationSchema?: StandardSchemaWithJSON): string | undefined {
+  private serializeInputSchema(schema?: StandardSchemaWithJSON): string | undefined {
     try {
-      const schema = inputValidationSchema ?? this.getParameters();
       if (!schema) return undefined;
 
       return JSON.stringify(standardSchemaToJSONSchema(toStandardSchema(schema), { io: 'input' }));
@@ -813,7 +812,8 @@ export class CoreToolBuilder extends MastraBase {
       // Fall back to build-time context for Legacy methods (AI SDK v4 doesn't support passing custom options)
       const tracingContext = execOptions?.tracingContext || options.tracingContext;
       const toolRequestContext = execOptions?.requestContext ?? options.requestContext;
-      const inputSchema = this.serializeInputSchema(inputValidationSchema);
+      const parameters = inputValidationSchema ?? this.getParameters();
+      const inputSchema = this.serializeInputSchema(parameters as StandardSchemaWithJSON | undefined);
       const toolSpan = getOrCreateSpan({
         type: mcpMeta ? SpanType.MCP_TOOL_CALL : SpanType.TOOL_CALL,
         name: mcpMeta ? `mcp_tool: '${options.name}' on '${mcpMeta.serverName}'` : `tool: '${options.name}'`,
@@ -882,7 +882,6 @@ export class CoreToolBuilder extends MastraBase {
         // and returns early without using the input args.
         const isResuming = !!execOptions?.resumeData;
 
-        const parameters = inputValidationSchema ?? this.getParameters();
         if (!isResuming) {
           const { data, error } = validateToolInput(
             parameters as StandardSchemaWithJSON | undefined,

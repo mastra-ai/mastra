@@ -322,6 +322,53 @@ describe('MCP Tool Tracing', () => {
     });
   });
 
+  it('should reuse the traced schema for input validation', async () => {
+    const execute = vi.fn().mockResolvedValue({ result: 'ok' });
+    const getInputSchema = vi
+      .fn()
+      .mockReturnValueOnce(z.object({ buildTime: z.string() }))
+      .mockReturnValueOnce(z.object({ invocation: z.string() }))
+      .mockReturnValue(z.object({ mismatch: z.number() }));
+    const vercelTool = {
+      description: 'A tool with a dynamic schema',
+      parameters: getInputSchema,
+      execute,
+    };
+    const mockToolSpan = {
+      end: vi.fn(),
+      error: vi.fn(),
+    };
+    const mockAgentSpan = {
+      createChildSpan: vi.fn().mockReturnValue(mockToolSpan),
+    } as unknown as AnySpan;
+    const builder = new CoreToolBuilder({
+      originalTool: vercelTool as any,
+      options: {
+        name: 'dynamic-schema-tool',
+        logger: noopLogger,
+        requestContext: new RequestContext(),
+        tracingContext: { currentSpan: mockAgentSpan },
+      },
+    });
+
+    const builtTool = builder.build();
+    await expect(
+      builtTool.execute!({ invocation: 'value' }, { toolCallId: 'test-call-id', messages: [] }),
+    ).resolves.toEqual({ result: 'ok' });
+
+    expect(getInputSchema).toHaveBeenCalledTimes(2);
+    expect(execute).toHaveBeenCalledWith(
+      { invocation: 'value' },
+      expect.objectContaining({ toolCallId: 'test-call-id' }),
+    );
+    const spanArgs = (mockAgentSpan.createChildSpan as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(JSON.parse(spanArgs.attributes.inputSchema)).toMatchObject({
+      type: 'object',
+      properties: { invocation: { type: 'string' } },
+      required: ['invocation'],
+    });
+  });
+
   it('should handle mcpMetadata with missing serverVersion', async () => {
     const testTool = createTool({
       id: 'mcp_read-resource',
