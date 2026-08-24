@@ -1492,6 +1492,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
         const abortedStream = await agent.stream('message before abort', {
           abortSignal: abortController.signal,
           memory,
+          modelSettings: { maxRetries: 0 },
           onAbort: () => {
             onAbortCalls++;
           },
@@ -1523,9 +1524,13 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
         expect(onAbortCalls).toBe(1);
         expect(onFinishCalls).toBe(0);
 
-        const nextStream = await agent.stream('message after abort', { memory });
+        const nextStream = await agent.stream('message after abort', {
+          memory,
+          modelSettings: { maxRetries: 0 },
+        });
         await nextStream.consumeStream();
 
+        expect(streamCallCount).toBe(2);
         expect(JSON.stringify(prompts[1])).toContain('message before abort');
         expect(JSON.stringify(prompts[1])).toContain('message after abort');
         const afterNextTurn = await mockMemory.recall({
@@ -1590,6 +1595,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
                         const textDeltaCount = index - 3;
                         if (chunk.type === 'text-delta' && textDeltaCount === abortAfterChunks) {
                           abortController.abort();
+                          await new Promise(resolve => setTimeout(resolve, 0));
                         }
 
                         try {

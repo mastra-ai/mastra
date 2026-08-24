@@ -68,11 +68,11 @@ function createSlowModel(delayMs: number) {
           controller.enqueue({ type: 'text-start', id: 'text-1' });
 
           for (let i = 0; i < 10; i++) {
+            await new Promise(resolve => setTimeout(resolve, delayMs / 10));
             if (abortSignal?.aborted) {
               controller.error(new DOMException('The operation was aborted.', 'AbortError'));
               return;
             }
-            await new Promise(resolve => setTimeout(resolve, delayMs / 10));
             controller.enqueue({ type: 'text-delta', id: 'text-1', delta: `chunk-${i} ` });
           }
 
