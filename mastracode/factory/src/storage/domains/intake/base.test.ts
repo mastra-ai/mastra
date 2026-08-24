@@ -95,13 +95,18 @@ describe('IntakeStorage', () => {
       expect(await storage.listBoundSourceIds({ ...binding, factoryProjectId: 'proj-1' })).toEqual([]);
     });
 
-    it('clears a binding when the project is null', async () => {
+    it('clears a binding and returns its project', async () => {
       const storage = await makeStorage();
       const binding = { orgId: 'org1', integrationId: 'linear', sourceId: 'src-a' };
 
       await storage.setBinding({ ...binding, factoryProjectId: 'proj-1' });
-      await storage.setBinding({ ...binding, factoryProjectId: null });
+      expect(await storage.clearBinding(binding)).toEqual({
+        integrationId: 'linear',
+        sourceId: 'src-a',
+        factoryProjectId: 'proj-1',
+      });
 
+      expect(await storage.clearBinding(binding)).toBeNull();
       expect(await storage.listBindings({ orgId: 'org1' })).toEqual([]);
     });
 

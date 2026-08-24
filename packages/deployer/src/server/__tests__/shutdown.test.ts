@@ -169,6 +169,30 @@ describe('createNodeServer graceful shutdown', () => {
     expect(logger.warn).not.toHaveBeenCalled();
   });
 
+  it('sweeps idle connections periodically so keep-alive sockets that go idle mid-drain do not stall the drain', async () => {
+    vi.useFakeTimers();
+    await createNodeServer(mockMastra, { tools: {} });
+
+    process.emit('SIGTERM', 'SIGTERM');
+    await flushMicrotasks();
+
+    // Initial eager sweep.
+    expect(fakeServer.closeIdleConnections).toHaveBeenCalledOnce();
+
+    // A keep-alive socket whose in-flight response finishes after the initial
+    // sweep only becomes idle later — the periodic sweep must pick it up
+    // instead of waiting for the full drain timeout.
+    await vi.advanceTimersByTimeAsync(300);
+    expect(fakeServer.closeIdleConnections.mock.calls.length).toBeGreaterThan(1);
+
+    // Sweep closed the last socket -> close callback fires -> clean exit
+    // without hitting the drain timeout.
+    closeCallbacks.forEach(cb => cb());
+    await vi.waitFor(() => expect(exitSpy).toHaveBeenCalledWith(0));
+    expect(fakeServer.closeAllConnections).not.toHaveBeenCalled();
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
   it('closes remaining connections and still runs mastra.shutdown() when the drain hangs past the default 5s', async () => {
     vi.useFakeTimers();
     await createNodeServer(mockMastra, { tools: {} });

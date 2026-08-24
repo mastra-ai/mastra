@@ -143,5 +143,22 @@ describe('registry-generator', () => {
       await expect(fs.stat(legacyPath)).rejects.toMatchObject({ code: 'ENOENT' });
       await expect(fs.readFile(path.join(dir, 'capabilities', 'openai.json'), 'utf8')).resolves.toContain('gpt-4o');
     });
+
+    it('removes capability files when regenerated without capability data', async () => {
+      const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-capabilities-'));
+      tempDirs.push(dir);
+      const jsonPath = path.join(dir, 'provider-registry.json');
+      const typesPath = path.join(dir, 'provider-types.generated.d.ts');
+      const capabilityDir = path.join(dir, 'capabilities');
+      const capabilityPath = path.join(capabilityDir, 'openai.json');
+
+      await writeRegistryFiles(jsonPath, typesPath, {}, {}, undefined, undefined, { openai: ['gpt-4o'] });
+      await expect(fs.readFile(capabilityPath, 'utf8')).resolves.toContain('gpt-4o');
+
+      await writeRegistryFiles(jsonPath, typesPath, {}, {}, {}, {}, {});
+
+      await expect(fs.stat(capabilityPath)).rejects.toMatchObject({ code: 'ENOENT' });
+      await expect(fs.stat(capabilityDir)).rejects.toMatchObject({ code: 'ENOENT' });
+    });
   });
 });

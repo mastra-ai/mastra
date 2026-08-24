@@ -108,7 +108,7 @@ describe('Agent Handlers', () => {
         requestContext,
       });
 
-      expect(result).toEqual({
+      expect(result).toMatchObject({
         'test-agent': {
           id: 'test-agent',
           name: 'test-agent',

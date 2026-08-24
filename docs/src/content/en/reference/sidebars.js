@@ -95,6 +95,7 @@ const sidebars = {
         { type: 'doc', id: 'ai-sdk/to-ai-sdk-v4-messages', label: 'toAISdkV4Messages()' },
         { type: 'doc', id: 'ai-sdk/to-ai-sdk-v5-messages', label: 'toAISdkV5Messages()' },
         { type: 'doc', id: 'ai-sdk/with-mastra', label: 'withMastra()' },
+        { type: 'doc', id: 'ai-sdk/with-sse-heartbeat', label: 'withSseHeartbeat()' },
         { type: 'doc', id: 'ai-sdk/workflow-route', label: 'workflowRoute()' },
         {
           type: 'doc',
@@ -316,6 +317,7 @@ const sidebars = {
             { type: 'doc', id: 'evals/faithfulness', label: 'Faithfulness' },
             { type: 'doc', id: 'evals/hallucination', label: 'Hallucination' },
             { type: 'doc', id: 'evals/keyword-coverage', label: 'Keyword Coverage Scorer' },
+            { type: 'doc', id: 'evals/multi-turn-judge', label: 'Multi-turn Judge Scorer' },
             { type: 'doc', id: 'evals/noise-sensitivity', label: 'Noise Sensitivity Scorer' },
             { type: 'doc', id: 'evals/prompt-alignment', label: 'Prompt Alignment Scorer' },
             { type: 'doc', id: 'evals/rubric', label: 'Rubric Scorer' },
@@ -784,6 +786,7 @@ const sidebars = {
         { type: 'doc', id: 'storage/overview', label: 'Overview' },
         { type: 'doc', id: 'storage/composite', label: 'Composite Storage' },
         { type: 'doc', id: 'storage/retention', label: 'Retention (prune)' },
+        { type: 'doc', id: 'storage/turso', label: 'Turso Storage' },
       ],
     },
     {

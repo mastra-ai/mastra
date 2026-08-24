@@ -1,5 +1,6 @@
 import { MastraError } from '../../error/index.js';
 import type { MastraScorer } from '../../evals/base';
+import type { TrajectoryExpectation } from '../../evals/types';
 import type { Mastra } from '../../mastra';
 import type { Experiment, ExperimentResult } from '../../storage/types';
 import { executeTarget } from './executor';
@@ -20,6 +21,8 @@ export interface ExperimentItemInput {
   datasetVersion: number | null;
   input: unknown;
   groundTruth?: unknown;
+  /** Per-item expected trajectory forwarded to trajectory scorers as `run.expectedTrajectory` */
+  expectedTrajectory?: TrajectoryExpectation;
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   /** Item-level scorer IDs. An empty array explicitly disables scoring. */

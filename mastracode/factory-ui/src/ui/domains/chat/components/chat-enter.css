@@ -5,6 +5,46 @@
   animation: chat-surface-in 300ms cubic-bezier(0.2, 0, 0, 1) backwards;
 }
 
+.session-preparation-veil {
+  --session-reveal-overhang: calc(clamp(10rem, 28cqh, 20rem) + 15cqw);
+  --session-reveal-travel: calc(100cqh + var(--session-reveal-overhang));
+
+  top: calc(-1 * var(--session-reveal-overhang));
+  height: var(--session-reveal-travel);
+  background: linear-gradient(
+    172deg,
+    transparent,
+    var(--chat-surface) var(--session-reveal-overhang),
+    var(--chat-surface)
+  );
+  translate: 0 var(--session-reveal-travel);
+}
+
+.session-preparation-overlay[data-preparing='false'] .session-preparation-veil {
+  animation: session-transcript-reveal 900ms linear 48ms both;
+}
+
+.session-preparation-loader {
+  transition:
+    opacity 140ms linear,
+    translate 180ms cubic-bezier(0.2, 0.7, 0.2, 1),
+    visibility 0s linear 180ms;
+}
+
+.session-preparation-overlay[data-preparing='true'] .session-preparation-loader {
+  opacity: 1;
+  visibility: visible;
+  translate: 0;
+  transition-delay: 80ms, 80ms, 0s;
+}
+
+@starting-style {
+  .session-preparation-overlay[data-preparing='true'] .session-preparation-loader {
+    opacity: 0;
+    translate: 0 0.25rem;
+  }
+}
+
 @keyframes chat-surface-in {
   from {
     opacity: 0;
@@ -15,21 +55,19 @@
   }
 }
 
-@keyframes transcript-history-in {
+@keyframes session-transcript-reveal {
   from {
-    opacity: 0;
-    transform: translate3d(0, 10px, 0);
+    opacity: 1;
+    translate: 0;
+  }
+
+  99.9% {
+    opacity: 1;
   }
 
   to {
-    opacity: 1;
-    transform: translate3d(0, 0, 0);
-  }
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .transcript-history-enter {
-    animation: transcript-history-in 480ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+    opacity: 0;
+    translate: 0 var(--session-reveal-travel);
   }
 }
 
@@ -77,6 +115,11 @@
   transition: min-height 440ms cubic-bezier(0.2, 0, 0.2, 1);
 }
 
+.turn-room-restored-open {
+  min-height: 70cqh;
+  transition: none;
+}
+
 /* A turn mounts with its room already due, and a transition alone has nothing to move from. */
 @starting-style {
   .turn-room-open {
@@ -86,12 +129,15 @@
 
 @media (prefers-reduced-motion: reduce) {
   .chat-surface-enter,
-  .composer-enter {
+  .composer-enter,
+  .session-preparation-overlay[data-preparing='false'] .session-preparation-veil {
     animation: none;
   }
 
+  .session-preparation-loader,
   .turn-room,
-  .turn-room-open {
+  .turn-room-open,
+  .turn-room-restored-open {
     transition: none;
   }
 }

@@ -21,11 +21,12 @@ import { GoalPanel } from '../domains/chat/components/GoalPanel';
 import { TaskPanel } from '../domains/chat/components/TaskPanel';
 import { PageTitle } from '../domains/chat/components/PageTitle';
 import { SessionFavicon } from '../domains/chat/components/SessionFavicon';
-import { SessionPrepareSteps } from '../domains/chat/components/SessionPrepareSteps';
+import { SessionPreparationOverlay } from '../domains/chat/components/SessionPreparationOverlay';
 import { Transcript } from '../domains/chat/components/Transcript';
 import { TranscriptHistoryLoader } from '../domains/chat/components/TranscriptHistoryLoader';
 import { ThreadRailLayer } from '../domains/chat/components/ThreadRailLayer';
 import { ChatMessageBoundary, ChatSessionBoundary } from '../domains/chat/context/ChatSessionProvider';
+import { useChatMessagePreparation } from '../domains/chat/context/useChatMessagePreparation';
 import { useChatTranscript } from '../domains/chat/context/useChatTranscript';
 import { useGlobalShortcuts } from '../domains/chat/hooks/useGlobalShortcuts';
 import { useHandoffPrompt } from '../domains/chat/hooks/useHandoffPrompt';
@@ -106,11 +107,12 @@ function ThreadPageMain({
       </ChatShell.Bar>
       <ChatShell.Stage>
         <ChatShell.Viewport>
+          <ThreadPreparationOverlay />
           <div ref={railBoxRef} className="relative flex min-h-full min-w-0 flex-1 flex-col">
             {railFits && <ThreadRailLayer />}
             <ChatShell.Content className="gap-0 pt-6">
               <ChatShell.Column className="flex-1">
-                <ChatMessageBoundary>
+                <ChatMessageBoundary showPreparation={false}>
                   <ThreadTranscript />
                 </ChatMessageBoundary>
               </ChatShell.Column>
@@ -162,11 +164,13 @@ function ThreadShell({
   );
 }
 
+function ThreadPreparationOverlay() {
+  const { historyInitializing, preparing } = useChatMessagePreparation();
+  return <SessionPreparationOverlay historyInitializing={historyInitializing} preparing={preparing} />;
+}
+
 function ThreadTranscript() {
-  const { transcript, initialHistoryReady } = useChatTranscript();
-
-  if (!initialHistoryReady) return <SessionPrepareSteps />;
-
+  const { transcript } = useChatTranscript();
   return (
     <>
       <TranscriptHistoryLoader />

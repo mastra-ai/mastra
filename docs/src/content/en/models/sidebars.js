@@ -126,6 +126,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/agentrouter',
+          label: 'AgentRouter',
+        },
+        {
+          type: 'doc',
           id: 'providers/ai-router',
           label: 'AI-ROUTER',
         },
@@ -331,6 +336,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/llmgateway',
+          label: 'DevPass (LLM Gateway)',
+        },
+        {
+          type: 'doc',
           id: 'providers/digitalocean',
           label: 'DigitalOcean',
         },
@@ -511,7 +521,7 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/llmgateway',
+          id: 'providers/llmgateway-providers',
           label: 'LLM Gateway',
         },
         {
@@ -673,6 +683,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/opencode',
           label: 'OpenCode Zen',
+        },
+        {
+          type: 'doc',
+          id: 'providers/opper',
+          label: 'Opper',
         },
         {
           type: 'doc',

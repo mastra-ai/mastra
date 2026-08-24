@@ -5,6 +5,8 @@ import { http, HttpResponse } from 'msw';
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { SignalsOverviewPage as SignalsEmptyState } from '../components/signals-overview-page';
+import { useThemeSnapshots } from '../hooks/use-theme-snapshots';
 import { SankeySignals } from '../sankey-signals';
 import {
   getSignalRecordNodeId,
@@ -14,6 +16,8 @@ import {
   themeFlowToSankeyData,
 } from '../sankey-signals-data';
 import { formatSnapshotCutoff, formatSnapshotWindow } from '../signal-formatting';
+import { SignalsErrorState } from '../signals-error-state';
+import { SignalsLoadingSkeleton } from '../signals-loading-skeleton';
 import type { ThemeFlowResponse } from '../types';
 import {
   duplicateLabelThemeFlowResponse,
@@ -57,8 +61,35 @@ class ChartResizeObserver implements ResizeObserver {
   disconnect() {}
 }
 
-function ControlledSankeySignals({ dateFrom, dateTo }: { dateFrom?: Date; dateTo?: Date }) {
+function ControlledSankeySignals({
+  dateFrom,
+  dateTo,
+  onFrameIdChange,
+}: {
+  dateFrom?: Date;
+  dateTo?: Date;
+  onFrameIdChange?: (frameId: string) => void;
+}) {
   const [selectedThemeId, setSelectedThemeId] = useState<string>();
+  const [selectedFrameId, setSelectedFrameId] = useState<string>();
+  const snapshotsQuery = useThemeSnapshots(
+    'support-agent',
+    'agent',
+    ['goal', 'outcome', 'behavior', 'sentiment'],
+    dateFrom,
+    dateTo,
+  );
+  const snapshots = [...(snapshotsQuery.data?.snapshots ?? [])].sort((left, right) => left.ordinal - right.ordinal);
+  // Mirror the real parent: derive the frame without membership filtering and
+  // only mount SankeySignals once a real snapshot id exists.
+  const frameId = selectedFrameId ?? snapshots[0]?.snapshotId;
+  if (snapshotsQuery.isPending) return <SignalsLoadingSkeleton />;
+  if (snapshotsQuery.isError) {
+    return (
+      <SignalsErrorState message="Unable to load trace signal flow." onRetry={() => void snapshotsQuery.refetch()} />
+    );
+  }
+  if (!frameId) return <SignalsEmptyState isRangeEmpty />;
   return (
     <SankeySignals
       entityId="support-agent"
@@ -67,15 +98,24 @@ function ControlledSankeySignals({ dateFrom, dateTo }: { dateFrom?: Date; dateTo
       dateTo={dateTo}
       selectedThemeId={selectedThemeId}
       onSelectedThemeIdChange={setSelectedThemeId}
+      selectedFrameId={frameId}
+      onFrameIdChange={nextFrameId => {
+        setSelectedFrameId(nextFrameId);
+        onFrameIdChange?.(nextFrameId);
+      }}
     />
   );
 }
 
-function renderSankeySignals({ dateFrom, dateTo }: { dateFrom?: Date; dateTo?: Date } = {}) {
+function renderSankeySignals({
+  dateFrom,
+  dateTo,
+  onFrameIdChange,
+}: { dateFrom?: Date; dateTo?: Date; onFrameIdChange?: (frameId: string) => void } = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <ControlledSankeySignals dateFrom={dateFrom} dateTo={dateTo} />
+      <ControlledSankeySignals dateFrom={dateFrom} dateTo={dateTo} onFrameIdChange={onFrameIdChange} />
     </QueryClientProvider>,
   );
 }
@@ -994,6 +1034,46 @@ describe('SankeySignals', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Snapshot 3 of 4' }));
 
       expect(await screen.findByText('Snapshot 3/4 · Jun 24–Jul 1, 2026 · 40 traces')).not.toBeNull();
+    });
+
+    it('reports timeline snapshot clicks through onFrameIdChange with the snapshot id', async () => {
+      const onFrameIdChange = vi.fn();
+      renderSankeySignals({ onFrameIdChange });
+
+      await screen.findByRole('group', { name: 'Snapshot landmarks' });
+      fireEvent.click(screen.getByRole('button', { name: 'Snapshot 4 of 4' }));
+
+      expect(onFrameIdChange).toHaveBeenCalledWith('snapshot-1');
+      fireEvent.click(screen.getByRole('button', { name: 'Snapshot 3 of 4' }));
+      expect(onFrameIdChange).toHaveBeenCalledWith('snapshot-3');
+    });
+
+    it('renders the snapshot matching the controlled selectedFrameId', async () => {
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      render(
+        <QueryClientProvider client={queryClient}>
+          <SankeySignals
+            entityId="support-agent"
+            signalNames={['goal', 'outcome', 'behavior', 'sentiment']}
+            selectedThemeId={undefined}
+            onSelectedThemeIdChange={() => {}}
+            selectedFrameId="snapshot-1"
+            onFrameIdChange={() => {}}
+          />
+        </QueryClientProvider>,
+      );
+
+      expect(await screen.findByText('Snapshot 4/4 · Jul 1–8, 2026 · 50 traces')).not.toBeNull();
+    });
+
+    it('reports playback advancement through onFrameIdChange', async () => {
+      const onFrameIdChange = vi.fn();
+      renderSankeySignals({ onFrameIdChange });
+      await screen.findByText('Snapshot 3/4 · Jun 24–Jul 1, 2026 · 40 traces');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Play snapshots' }));
+
+      await waitFor(() => expect(onFrameIdChange).toHaveBeenCalledWith('snapshot-1'), { timeout: 2000 });
     });
 
     it('stops playback at the final snapshot instead of looping', async () => {

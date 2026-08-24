@@ -18,7 +18,9 @@ import type { WorkflowRunState } from '../../workflows/types';
  *    iteration fields from `payload`/`output` — except the AI SDK step
  *    history (`output.output.steps`), which the evented engine re-reads as
  *    `inputData` for the next LLM execution when a sibling step resumes in
- *    the same run.
+ *    the same run. A terminal `payload` additionally loses the durable
+ *    loop's threaded iteration state (`messageListState`, `accumulatedSteps`,
+ *    `lastStepResult`) — see `stripTerminalPayloadState`.
  *  - non-terminal (suspended/waiting/paused/running) steps keep their
  *    `suspendPayload` **intact** — it is the resume state (`__streamState`,
  *    `__agentId`, tool-approval info, `__workflow_meta` nested-run ids). Their
@@ -159,6 +161,33 @@ function stripStepResultRequest<T>(value: T): T {
   return { ...value, stepResult } as T;
 }
 
+/**
+ * Iteration state the durable agent loop threads through every step as that
+ * step's *input*: the full serialized conversation, every step record so far,
+ * and the previous step result. A step's `payload` is the input it was called
+ * with, so each completed iteration pins another conversation-sized copy that
+ * the evented engine re-persists at every later step boundary.
+ *
+ * A terminal step is never re-invoked, so its copy has no reader left:
+ *  - resume feeds forward the **suspended** step's payload
+ *    (`workflows/evented/execution-engine.ts` reads
+ *    `stepResults[getStepId(resumePath)]?.payload`), and suspended steps are
+ *    non-terminal, so this strip never touches them;
+ *  - a same-run continuation reads the last completed iteration's `output`,
+ *    which `stripTerminalOutputFields` deliberately keeps;
+ *  - recovery rebuilds the conversation from `snapshot.context.input`.
+ * All three are left intact.
+ */
+const DEAD_TERMINAL_PAYLOAD_FIELDS = ['messageListState', 'accumulatedSteps', 'lastStepResult'] as const;
+
+function stripTerminalPayloadState<T>(value: T): T {
+  if (!isPlainObject(value)) return value;
+  if (!DEAD_TERMINAL_PAYLOAD_FIELDS.some(field => field in value)) return value;
+  const pruned: Record<string, any> = { ...value };
+  for (const field of DEAD_TERMINAL_PAYLOAD_FIELDS) delete pruned[field];
+  return pruned as T;
+}
+
 /** Applies the pruning rules to a single serialized step result. */
 function pruneStepResult(result: Record<string, any>): Record<string, any> {
   if (!isPlainObject(result) || typeof result.status !== 'string') return result;
@@ -176,6 +205,7 @@ function pruneStepResult(result: Record<string, any>): Record<string, any> {
     delete pruned.suspendPayload;
     delete pruned.suspendOutput;
     delete pruned.resumePayload;
+    pruned.payload = stripTerminalPayloadState(pruned.payload);
     if ('output' in pruned) pruned.output = stripTerminalOutputFields(pruned.output);
     return pruned;
   }
