@@ -16,7 +16,11 @@ import {
   createObservationStartMarker,
   createThreadUpdateMarker,
 } from '../markers';
-import { getLastObservedMessageCursor, sortThreadsByOldestMessage } from '../message-utils';
+import {
+  getLastObservedMessageCursor,
+  isWorkingMemoryStateSignalMessage,
+  sortThreadsByOldestMessage,
+} from '../message-utils';
 import { buildMessageRange } from '../observational-memory';
 import { formatMessagesForObserver } from '../observer-agent';
 import { getMaxThreshold } from '../thresholds';
@@ -104,7 +108,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
         filter: startDate ? { dateRange: { start: startDate } } : undefined,
       });
 
-      const messages = result.messages.filter(msg => msg.role !== 'system');
+      const messages = result.messages.filter(msg => msg.role !== 'system' && !isWorkingMemoryStateSignalMessage(msg));
       if (messages.length > 0) {
         this.messagesByThread.set(thread.id, messages);
       }
@@ -125,7 +129,9 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
     }
 
     for (const [tid, msgs] of this.messagesByThread) {
-      const filtered = msgs.filter(m => !this.deps.observedMessageIds.has(m.id));
+      const filtered = msgs.filter(
+        m => !isWorkingMemoryStateSignalMessage(m) && !this.deps.observedMessageIds.has(m.id),
+      );
       if (filtered.length > 0) {
         this.messagesByThread.set(tid, filtered);
       } else {

@@ -270,7 +270,10 @@ describe('Observational Memory extracted metadata persistence', () => {
     const model = new MockLanguageModelV2({
       doStream: async ({ prompt }) => {
         observerInput = JSON.stringify(prompt);
-        const observerSawSeed = observerInput.includes(seededValue);
+        const historyStart = observerInput.indexOf('## New Message History to Observe');
+        const historyEnd = observerInput.indexOf('\n\n---\n\n', historyStart);
+        const observerHistory = observerInput.slice(historyStart, historyEnd === -1 ? undefined : historyEnd);
+        const observerSawSeed = observerHistory.includes(seededValue);
         const observerOutput = observerSawSeed
           ? `<observations>\n- unrelated task\n</observations>\n<working-memory>rewritten-by-observer</working-memory>`
           : '<observations>\n- unrelated task\n</observations>';
@@ -301,7 +304,7 @@ describe('Observational Memory extracted metadata persistence', () => {
           scope: 'resource',
           observation: {
             model,
-            manageWorkingMemory: false,
+            manageWorkingMemory: true,
             messageTokens: 1,
             bufferTokens: false,
             previousObserverTokens: 1000,
