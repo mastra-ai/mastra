@@ -28,6 +28,7 @@ import { useBoardIntake } from '../domains/factory/hooks/useBoardIntake';
 import { useBoardItems } from '../domains/factory/hooks/useBoardItems';
 import { useBoardRuns } from '../domains/factory/hooks/useBoardRuns';
 import { useBoardScroll } from '../domains/factory/hooks/useBoardScroll';
+import { isTerminalStage } from '../domains/factory/stages';
 import {
   boardLabels,
   boardLabelsFromQuery,
@@ -294,8 +295,7 @@ function BoardContent({
                 headerAction={
                   !review &&
                   !loading &&
-                  stage.id !== 'done' &&
-                  stage.id !== 'canceled' &&
+                  !isTerminalStage(stage.id) &&
                   (composer.stage === undefined || composerOpen) ? (
                     <Button
                       ref={composer.registerTrigger(stage.id)}

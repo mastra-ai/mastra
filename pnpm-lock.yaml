@@ -190,6 +190,8 @@ overrides:
 packageExtensionsChecksum: sha256-X3Zr4GyJHI7VYFoABa31xmp1/sKZKfdC4gshMq145ns=
 
 patchedDependencies:
+  '@ai-sdk/provider-utils@3.0.31': b013703c9b8c0bd8727a10737e7c1a1b587587f8595b7fa390d61cc07f8dcbd1
+  '@ai-sdk/provider-utils@4.0.41': dcd93ee2bf81e1596191307af25dcb920664f363b8ec526168b0ec7627ce0d93
   '@changesets/get-dependents-graph@2.1.4': eb65c5cbf43c61ce6dcb0c77fa30d9aebcdffa3a70dee1faefc4cde4125f28fa
   '@earendil-works/pi-tui@0.80.6': 143464b7be6f7b88d7fdecf41bbb2f10b48be0bb8b69fc378f27932d403e5e7c
   '@manypkg/tools@2.1.1': 6d493cdb757f34ceacd3b1a081f91d3c2bbe777930133424ef34d222b7fcfd7b
@@ -32987,7 +32989,7 @@ snapshots:
     dependencies:
       '@ai-sdk/anthropic': 2.0.93(zod@4.4.3)
       '@ai-sdk/provider': 2.0.3
-      '@ai-sdk/provider-utils': 3.0.31(zod@4.4.3)
+      '@ai-sdk/provider-utils': 3.0.31(patch_hash=b013703c9b8c0bd8727a10737e7c1a1b587587f8595b7fa390d61cc07f8dcbd1)(zod@4.4.3)
       '@smithy/eventstream-codec': 4.2.14
       '@smithy/util-utf8': 4.4.6
       aws4fetch: 1.0.20
@@ -33036,7 +33038,7 @@ snapshots:
   '@ai-sdk/anthropic@2.0.93(zod@4.4.3)':
     dependencies:
       '@ai-sdk/provider': 2.0.3
-      '@ai-sdk/provider-utils': 3.0.31(zod@4.4.3)
+      '@ai-sdk/provider-utils': 3.0.31(patch_hash=b013703c9b8c0bd8727a10737e7c1a1b587587f8595b7fa390d61cc07f8dcbd1)(zod@4.4.3)
       zod: 4.4.3
 
   '@ai-sdk/anthropic@3.0.103(zod@4.4.3)':
@@ -33048,7 +33050,7 @@ snapshots:
   '@ai-sdk/anthropic@3.0.105(zod@4.4.3)':
     dependencies:
       '@ai-sdk/provider': 3.0.14
-      '@ai-sdk/provider-utils': 4.0.41(zod@4.4.3)
+      '@ai-sdk/provider-utils': 4.0.41(patch_hash=dcd93ee2bf81e1596191307af25dcb920664f363b8ec526168b0ec7627ce0d93)(zod@4.4.3)
       zod: 4.4.3
 
   '@ai-sdk/anthropic@4.0.22(zod@4.4.3)':
@@ -33071,7 +33073,7 @@ snapshots:
       '@ai-sdk/deepseek': 1.0.49(zod@4.4.3)
       '@ai-sdk/openai': 2.0.117(zod@4.4.3)
       '@ai-sdk/provider': 2.0.3
-      '@ai-sdk/provider-utils': 3.0.31(zod@4.4.3)
+      '@ai-sdk/provider-utils': 3.0.31(patch_hash=b013703c9b8c0bd8727a10737e7c1a1b587587f8595b7fa390d61cc07f8dcbd1)(zod@4.4.3)
       zod: 4.4.3
 
   '@ai-sdk/cerebras@1.0.47(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.10)(@vitest/ui@4.1.10)(jsdom@27.4.0(@noble/hashes@2.2.0)(bufferutil@4.1.0)(supports-color@10.2.2))(typescript@6.0.3)(vite@7.3.6(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.23.1)(yaml@2.9.0))(zod@4.4.3)':
@@ -33126,7 +33128,7 @@ snapshots:
   '@ai-sdk/deepseek@1.0.49(zod@4.4.3)':
     dependencies:
       '@ai-sdk/provider': 2.0.3
-      '@ai-sdk/provider-utils': 3.0.31(zod@4.4.3)
+      '@ai-sdk/provider-utils': 3.0.31(patch_hash=b013703c9b8c0bd8727a10737e7c1a1b587587f8595b7fa390d61cc07f8dcbd1)(zod@4.4.3)
       zod: 4.4.3
 
   '@ai-sdk/deepseek@2.0.50(zod@4.4.3)':
@@ -33159,7 +33161,7 @@ snapshots:
   '@ai-sdk/gateway@2.0.125(zod@4.4.3)':
     dependencies:
       '@ai-sdk/provider': 2.0.3
-      '@ai-sdk/provider-utils': 3.0.31(zod@4.4.3)
+      '@ai-sdk/provider-utils': 3.0.31(patch_hash=b013703c9b8c0bd8727a10737e7c1a1b587587f8595b7fa390d61cc07f8dcbd1)(zod@4.4.3)
       '@vercel/oidc': 3.1.0
       zod: 4.4.3
 
@@ -33173,14 +33175,14 @@ snapshots:
   '@ai-sdk/gateway@3.0.163(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 3.0.14
-      '@ai-sdk/provider-utils': 4.0.41(zod@3.25.76)
+      '@ai-sdk/provider-utils': 4.0.41(patch_hash=dcd93ee2bf81e1596191307af25dcb920664f363b8ec526168b0ec7627ce0d93)(zod@3.25.76)
       '@vercel/oidc': 3.2.0
       zod: 3.25.76
 
   '@ai-sdk/gateway@3.0.163(zod@4.4.3)':
     dependencies:
       '@ai-sdk/provider': 3.0.14
-      '@ai-sdk/provider-utils': 4.0.41(zod@4.4.3)
+      '@ai-sdk/provider-utils': 4.0.41(patch_hash=dcd93ee2bf81e1596191307af25dcb920664f363b8ec526168b0ec7627ce0d93)(zod@4.4.3)
       '@vercel/oidc': 3.2.0
       zod: 4.4.3
 
@@ -33287,7 +33289,7 @@ snapshots:
   '@ai-sdk/google@3.0.103(zod@4.4.3)':
     dependencies:
       '@ai-sdk/provider': 3.0.14
-      '@ai-sdk/provider-utils': 4.0.41(zod@4.4.3)
+      '@ai-sdk/provider-utils': 4.0.41(patch_hash=dcd93ee2bf81e1596191307af25dcb920664f363b8ec526168b0ec7627ce0d93)(zod@4.4.3)
       zod: 4.4.3
 
   '@ai-sdk/google@4.0.25(zod@4.4.3)':
@@ -33429,13 +33431,13 @@ snapshots:
   '@ai-sdk/openai@2.0.117(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 2.0.3
-      '@ai-sdk/provider-utils': 3.0.31(zod@3.25.76)
+      '@ai-sdk/provider-utils': 3.0.31(patch_hash=b013703c9b8c0bd8727a10737e7c1a1b587587f8595b7fa390d61cc07f8dcbd1)(zod@3.25.76)
       zod: 3.25.76
 
   '@ai-sdk/openai@2.0.117(zod@4.4.3)':
     dependencies:
       '@ai-sdk/provider': 2.0.3
-      '@ai-sdk/provider-utils': 3.0.31(zod@4.4.3)
+      '@ai-sdk/provider-utils': 3.0.31(patch_hash=b013703c9b8c0bd8727a10737e7c1a1b587587f8595b7fa390d61cc07f8dcbd1)(zod@4.4.3)
       zod: 4.4.3
 
   '@ai-sdk/openai@3.0.88(zod@4.4.3)':
@@ -33447,7 +33449,7 @@ snapshots:
   '@ai-sdk/openai@3.0.90(zod@4.4.3)':
     dependencies:
       '@ai-sdk/provider': 3.0.14
-      '@ai-sdk/provider-utils': 4.0.41(zod@4.4.3)
+      '@ai-sdk/provider-utils': 4.0.41(patch_hash=dcd93ee2bf81e1596191307af25dcb920664f363b8ec526168b0ec7627ce0d93)(zod@4.4.3)
       zod: 4.4.3
 
   '@ai-sdk/openai@4.0.21(zod@4.4.3)':
@@ -33559,7 +33561,7 @@ snapshots:
       eventsource-parser: 3.0.8
       zod: 4.4.3
 
-  '@ai-sdk/provider-utils@3.0.31(zod@3.25.76)':
+  '@ai-sdk/provider-utils@3.0.31(patch_hash=b013703c9b8c0bd8727a10737e7c1a1b587587f8595b7fa390d61cc07f8dcbd1)(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 2.0.3
       '@standard-schema/spec': 1.1.0
@@ -33567,7 +33569,7 @@ snapshots:
       undici: 6.27.0
       zod: 3.25.76
 
-  '@ai-sdk/provider-utils@3.0.31(zod@4.4.3)':
+  '@ai-sdk/provider-utils@3.0.31(patch_hash=b013703c9b8c0bd8727a10737e7c1a1b587587f8595b7fa390d61cc07f8dcbd1)(zod@4.4.3)':
     dependencies:
       '@ai-sdk/provider': 2.0.3
       '@standard-schema/spec': 1.1.0
@@ -33589,7 +33591,7 @@ snapshots:
       eventsource-parser: 3.0.8
       zod: 4.4.3
 
-  '@ai-sdk/provider-utils@4.0.41(zod@3.25.76)':
+  '@ai-sdk/provider-utils@4.0.41(patch_hash=dcd93ee2bf81e1596191307af25dcb920664f363b8ec526168b0ec7627ce0d93)(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 3.0.14
       '@standard-schema/spec': 1.1.0
@@ -33597,7 +33599,7 @@ snapshots:
       undici: 6.27.0
       zod: 3.25.76
 
-  '@ai-sdk/provider-utils@4.0.41(zod@4.4.3)':
+  '@ai-sdk/provider-utils@4.0.41(patch_hash=dcd93ee2bf81e1596191307af25dcb920664f363b8ec526168b0ec7627ce0d93)(zod@4.4.3)':
     dependencies:
       '@ai-sdk/provider': 3.0.14
       '@standard-schema/spec': 1.1.0
@@ -47731,7 +47733,7 @@ snapshots:
     dependencies:
       '@ai-sdk/gateway': 2.0.125(zod@4.4.3)
       '@ai-sdk/provider': 2.0.3
-      '@ai-sdk/provider-utils': 3.0.31(zod@4.4.3)
+      '@ai-sdk/provider-utils': 3.0.31(patch_hash=b013703c9b8c0bd8727a10737e7c1a1b587587f8595b7fa390d61cc07f8dcbd1)(zod@4.4.3)
       '@opentelemetry/api': 1.9.0
       zod: 4.4.3
 
@@ -47739,7 +47741,7 @@ snapshots:
     dependencies:
       '@ai-sdk/gateway': 3.0.163(zod@3.25.76)
       '@ai-sdk/provider': 3.0.14
-      '@ai-sdk/provider-utils': 4.0.41(zod@3.25.76)
+      '@ai-sdk/provider-utils': 4.0.41(patch_hash=dcd93ee2bf81e1596191307af25dcb920664f363b8ec526168b0ec7627ce0d93)(zod@3.25.76)
       '@opentelemetry/api': 1.9.1
       zod: 3.25.76
 
@@ -47747,7 +47749,7 @@ snapshots:
     dependencies:
       '@ai-sdk/gateway': 3.0.163(zod@4.4.3)
       '@ai-sdk/provider': 3.0.14
-      '@ai-sdk/provider-utils': 4.0.41(zod@4.4.3)
+      '@ai-sdk/provider-utils': 4.0.41(patch_hash=dcd93ee2bf81e1596191307af25dcb920664f363b8ec526168b0ec7627ce0d93)(zod@4.4.3)
       '@opentelemetry/api': 1.9.1
       zod: 4.4.3
 
