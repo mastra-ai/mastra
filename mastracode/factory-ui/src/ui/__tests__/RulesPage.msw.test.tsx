@@ -23,6 +23,9 @@ const proposedDecision: FactoryDecisionSummary = {
   createdAt: '2026-08-10T00:00:00.000Z',
   updatedAt: '2026-08-10T00:00:00.000Z',
   completedAt: null,
+  failureOccurrence: 0,
+  failureCode: null,
+  canRetry: false,
 };
 
 function renderRulesPage(onDecisionRequest: (statuses: string | null) => void) {

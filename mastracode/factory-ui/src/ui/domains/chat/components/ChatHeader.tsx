@@ -4,7 +4,6 @@ import type { ComponentPropsWithoutRef, ReactNode } from 'react';
 
 import { GlobalSearchButton } from '../../search/components/GlobalSearchButton';
 import { ChatHeaderSidebarTrigger } from './ChatHeaderSidebarTrigger';
-import { MobilePageTitle } from './MobilePageTitle';
 
 type ChatHeaderProps = ComponentPropsWithoutRef<'header'> & {
   mobileContent?: ReactNode;
@@ -20,7 +19,7 @@ export function ChatHeader({ mobileContent, children, className, ...props }: Cha
   const { isMobile, desktopState } = useMainSidebar();
   const sidebarCollapsed = desktopState === 'collapsed';
   const showHeaderControls = isMobile || sidebarCollapsed;
-  const content = isMobile ? (mobileContent ?? (!children ? <MobilePageTitle /> : undefined)) : undefined;
+  const content = isMobile ? mobileContent : undefined;
 
   if (!showHeaderControls && !content && !children) return null;
 

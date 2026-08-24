@@ -51,35 +51,7 @@ function renderMobileHeader() {
   );
 }
 
-function renderDefaultMobileHeader(pathname: string) {
-  mockMobileViewport(true);
-  render(
-    <MemoryRouter initialEntries={[pathname]}>
-      <MainSidebarProvider storageKey="chat-header-test" mobileBreakpoint={10_000}>
-        <OverlaysProvider>
-          <ChatHeader />
-        </OverlaysProvider>
-      </MainSidebarProvider>
-    </MemoryRouter>,
-  );
-}
-
 describe('ChatHeader', () => {
-  it.each([
-    ['/factories/factory-1/overview', 'Overview'],
-    ['/factories/factory-1/work', 'Work'],
-    ['/factories/factory-1/review', 'Review'],
-    ['/factories/factory-1/rules', 'Rules'],
-    ['/factories/factory-1/audit', 'Audit log'],
-    ['/factories/factory-1/knowledge', 'Knowledge'],
-    ['/factories/factory-1/new', 'New session'],
-    ['/factories/factory-1/new-factory', 'New factory'],
-  ])('renders the shared mobile page title for %s', (pathname, title) => {
-    renderDefaultMobileHeader(pathname);
-
-    expect(within(screen.getByRole('banner')).getByRole('heading', { name: title })).toBeInTheDocument();
-  });
-
   it('renders and focuses the mobile content passed by the page', () => {
     renderMobileHeader();
 
