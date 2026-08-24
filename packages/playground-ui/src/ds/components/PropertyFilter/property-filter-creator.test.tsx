@@ -243,6 +243,42 @@ describe('PropertyFilterCreator — choosing a multi-select value', () => {
     expect(screen.queryByText('Tags · is')).toBeNull();
   });
 
+  it('invites a choice in its own words', async () => {
+    render(<PropertyFilterCreator fields={MULTI_FIELDS} tokens={[]} onTokensChange={vi.fn()} />);
+
+    openMenu();
+    fireEvent.click(screen.getByRole('menuitem', { name: /Tags/i }));
+    expect(screen.getByRole('combobox').textContent).toContain('Choose Tags');
+
+    fireEvent.click(screen.getByRole('combobox'));
+    fireEvent.change(await screen.findByPlaceholderText('Search tags...'), { target: { value: 'no such tag' } });
+
+    expect(await screen.findByText('No option found.')).toBeTruthy();
+  });
+
+  it('invites a choice in the caller’s words when there are any', async () => {
+    const wordy: PropertyFilterField[] = [
+      {
+        id: 'tags',
+        label: 'Tags',
+        kind: 'multi-select',
+        placeholder: 'Pick some tags',
+        emptyText: 'No tags yet',
+        options: [{ label: 'Prod', value: 'prod' }],
+      },
+    ];
+    render(<PropertyFilterCreator fields={wordy} tokens={[]} onTokensChange={vi.fn()} />);
+
+    openMenu();
+    fireEvent.click(screen.getByRole('menuitem', { name: /Tags/i }));
+    expect(screen.getByRole('combobox').textContent).toContain('Pick some tags');
+
+    fireEvent.click(screen.getByRole('combobox'));
+    fireEvent.change(await screen.findByPlaceholderText('Search tags...'), { target: { value: 'zzz' } });
+
+    expect(await screen.findByText('No tags yet')).toBeTruthy();
+  });
+
   it('will not commit without a value chosen', () => {
     const onTokensChange = vi.fn();
     render(<PropertyFilterCreator fields={MULTI_FIELDS} tokens={[]} onTokensChange={onTokensChange} />);
@@ -519,7 +555,14 @@ describe('PropertyFilterCreator — a pick-multi property', () => {
 });
 
 describe('PropertyFilterCreator — moving through the property list', () => {
-  const focusedLabel = () => (document.activeElement as HTMLElement | null)?.textContent;
+  /** The row the keyboard is on. Reading `document.body` would match anything. */
+  const focusedRow = () => {
+    const active = document.activeElement;
+    if (!(active instanceof HTMLElement) || active.getAttribute('role') !== 'menuitem') {
+      throw new Error(`Expected a menu row to hold focus, found <${active?.nodeName.toLowerCase()}>`);
+    }
+    return active.textContent;
+  };
 
   it('walks down and wraps around', () => {
     render(<PropertyFilterCreator fields={MULTI_FIELDS} tokens={[]} onTokensChange={vi.fn()} />);
@@ -527,13 +570,13 @@ describe('PropertyFilterCreator — moving through the property list', () => {
     const menu = screen.getByRole('menu');
 
     fireEvent.keyDown(menu, { key: 'ArrowDown' });
-    expect(focusedLabel()).toContain('Primitive ID');
+    expect(focusedRow()).toContain('Primitive ID');
 
     fireEvent.keyDown(menu, { key: 'ArrowDown' });
-    expect(focusedLabel()).toContain('Tags');
+    expect(focusedRow()).toContain('Tags');
 
     fireEvent.keyDown(menu, { key: 'ArrowDown' });
-    expect(focusedLabel()).toContain('Primitive ID');
+    expect(focusedRow()).toContain('Primitive ID');
   });
 
   it('walks up from the end', () => {
@@ -542,10 +585,10 @@ describe('PropertyFilterCreator — moving through the property list', () => {
     const menu = screen.getByRole('menu');
 
     fireEvent.keyDown(menu, { key: 'ArrowUp' });
-    expect(focusedLabel()).toContain('Tags');
+    expect(focusedRow()).toContain('Tags');
 
     fireEvent.keyDown(menu, { key: 'ArrowUp' });
-    expect(focusedLabel()).toContain('Primitive ID');
+    expect(focusedRow()).toContain('Primitive ID');
   });
 
   it('jumps to either end', () => {
@@ -554,10 +597,49 @@ describe('PropertyFilterCreator — moving through the property list', () => {
     const menu = screen.getByRole('menu');
 
     fireEvent.keyDown(menu, { key: 'End' });
-    expect(focusedLabel()).toContain('Tags');
+    expect(focusedRow()).toContain('Tags');
 
     fireEvent.keyDown(menu, { key: 'Home' });
-    expect(focusedLabel()).toContain('Primitive ID');
+    expect(focusedRow()).toContain('Primitive ID');
+  });
+
+  it('jumps to either end of a longer list', () => {
+    render(<PropertyFilterCreator fields={FIELDS} tokens={[]} onTokensChange={vi.fn()} />);
+    openMenu();
+    const menu = screen.getByRole('menu');
+
+    fireEvent.keyDown(menu, { key: 'ArrowDown' });
+    fireEvent.keyDown(menu, { key: 'ArrowDown' });
+    expect(focusedRow()).toContain('Primitive ID');
+
+    fireEvent.keyDown(menu, { key: 'End' });
+    expect(focusedRow()).toContain('Trace ID');
+
+    fireEvent.keyDown(menu, { key: 'Home' });
+    expect(focusedRow()).toContain('Primitive Type');
+  });
+
+  it('wraps back round to the end from the first row', () => {
+    render(<PropertyFilterCreator fields={FIELDS} tokens={[]} onTokensChange={vi.fn()} />);
+    openMenu();
+    const menu = screen.getByRole('menu');
+
+    fireEvent.keyDown(menu, { key: 'ArrowDown' });
+    expect(focusedRow()).toContain('Primitive Type');
+
+    fireEvent.keyDown(menu, { key: 'ArrowUp' });
+
+    expect(focusedRow()).toContain('Trace ID');
+  });
+
+  it('takes the keys it moves on for itself', () => {
+    render(<PropertyFilterCreator fields={MULTI_FIELDS} tokens={[]} onTokensChange={vi.fn()} />);
+    openMenu();
+    const menu = screen.getByRole('menu');
+
+    for (const key of ['ArrowDown', 'ArrowUp', 'Home', 'End']) {
+      expect(fireEvent.keyDown(menu, { key })).toBe(false);
+    }
   });
 
   it('steps over a property already in use', () => {
@@ -572,7 +654,7 @@ describe('PropertyFilterCreator — moving through the property list', () => {
 
     fireEvent.keyDown(screen.getByRole('menu'), { key: 'ArrowDown' });
 
-    expect(focusedLabel()).toContain('Tags');
+    expect(focusedRow()).toContain('Tags');
   });
 
   it('leaves other keys to the browser', () => {
@@ -597,8 +679,8 @@ describe('PropertyFilterCreator — moving through the property list', () => {
     openMenu();
     const before = document.activeElement;
 
-    fireEvent.keyDown(screen.getByRole('menu'), { key: 'ArrowDown' });
-
+    // Nothing to move to, so the key is left to the browser.
+    expect(fireEvent.keyDown(screen.getByRole('menu'), { key: 'ArrowDown' })).toBe(true);
     expect(document.activeElement).toBe(before);
   });
 });
