@@ -1083,8 +1083,12 @@ function collectToolGroups(
   };
 
   for (const part of parts) {
-    // Draws nothing, so it neither joins a run nor breaks one.
-    if (part.type === 'tool-invocation' && awaitsPrompt(part, suspensions, runtimeTools)) continue;
+    // Draws nothing yet, but the prompt that will fill the slot breaks the run —
+    // so break it now rather than regroup under the reader when it lands.
+    if (part.type === 'tool-invocation' && awaitsPrompt(part, suspensions, runtimeTools)) {
+      flush();
+      continue;
+    }
 
     const joins =
       part.type === 'tool-invocation' &&

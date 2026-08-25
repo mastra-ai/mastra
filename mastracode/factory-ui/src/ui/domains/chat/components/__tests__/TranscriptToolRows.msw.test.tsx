@@ -337,18 +337,41 @@ describe('TranscriptEntries tool rows', () => {
     expect(within(question).getByText('Which file should I edit?')).toBeInTheDocument();
   });
 
-  it('ignores an ask_user still waiting for its prompt so the run around it stays one group', () => {
-    renderEntries([
-      assistantMessage('msg-1', [
-        doneTool('call-1', 'view'),
-        doneTool('call-2', 'view'),
-        runningTool('call-3', 'ask_user', {}),
-        doneTool('call-4', 'view'),
-      ]),
+  it('breaks the run at a waiting ask_user so nothing regroups when its prompt lands', () => {
+    const message = assistantMessage('msg-1', [
+      doneTool('call-1', 'view'),
+      doneTool('call-2', 'view'),
+      doneTool('call-3', 'view'),
+      runningTool('call-4', 'ask_user', {}),
+      doneTool('call-5', 'view'),
     ]);
+    const { rerender } = renderEntries([message]);
 
     expect(screen.getByRole('group', { name: 'Tool group: 3 steps' })).toBeInTheDocument();
     expect(screen.queryByRole('group', { name: 'Question from the agent' })).not.toBeInTheDocument();
+
+    rerender(
+      <MemoryRouter>
+        <TranscriptEntries
+          entries={[
+            message,
+            {
+              kind: 'suspension',
+              id: 'susp-1',
+              toolCallId: 'call-4',
+              toolName: 'ask_user',
+              args: {},
+              suspendPayload: { question: 'Which file should I edit?' },
+            },
+          ]}
+          onApprove={() => {}}
+          onRespond={() => {}}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('group', { name: 'Tool group: 3 steps' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Question from the agent' })).toBeInTheDocument();
   });
 
   it('trusts the persisted result over a stale running overlay — a lost tool_end must not spin forever', () => {
