@@ -6,7 +6,7 @@
 '@mastra/railway': patch
 ---
 
-**BREAKING**: `onStart` errors are now fatal. A thrown hook rejects `start()` and marks the sandbox `error`, where previously the error was logged and swallowed and the caller got a running sandbox whose setup had failed. This makes `onStart` the seam for once-per-VM setup that must fail loudly. `onStop` and `onDestroy` remain non-fatal, since teardown proceeds best-effort.
+`onStart` errors are now fatal. A thrown hook rejects `start()` and marks the sandbox `error`, where previously the error was logged and swallowed and the caller got a running sandbox whose setup had failed. This makes `onStart` the seam for once-per-VM setup that must fail loudly. `onStop` and `onDestroy` remain non-fatal, since teardown proceeds best-effort.
 
 `MastraSandbox` now owns the start lifecycle. Subclass `start()` is constructor-wrapped, so direct calls get the same in-flight coalescing (cleared on settle, so a failed attempt is never latched), status transitions, and mount processing that `ensureRunning()` already had.
 
