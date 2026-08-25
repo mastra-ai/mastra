@@ -36,9 +36,13 @@ new MySandbox({
 })
 ```
 
-**Added `setOnStart()` for attaching setup to a sandbox you didn't build**
+**Improved concurrent starts**
 
-Useful when a runtime is handed a sandbox and needs setup on it without every caller passing a hook to the constructor. It takes an updater over the installed hook, so a second caller composes rather than replacing one it didn't know about:
+Two starts at once now share one attempt for every provider rather than only some, and a failed start is never cached, so the next call retries it. Starting a sandbox that implements neither `start()` nor `create()` throws instead of reporting itself `running` having provisioned nothing.
+
+**Added `setOnStart()`**
+
+For code handed a sandbox it didn't construct, this attaches a start hook after the fact. It takes an updater over the installed hook, so it composes with one already there instead of replacing it:
 
 ```typescript
 sandbox.setOnStart?.(previous => async args => {
@@ -46,7 +50,3 @@ sandbox.setOnStart?.(previous => async args => {
   await previous?.(args)
 })
 ```
-
-**Improved concurrent starts**
-
-Two starts at once now share one attempt for every provider rather than only some, and a failed start is never cached, so the next call retries it. Starting a sandbox that implements neither `start()` nor `create()` throws instead of reporting itself `running` having provisioned nothing.
