@@ -45,7 +45,10 @@ function matchesPermission(userPermission: string, requiredPermission: string): 
   const grantedParts = userPermission.split(':');
   const requiredParts = requiredPermission.split(':');
 
-  // Must have at least resource:action
+  // Must have at least resource:action.
+  // A shortcut only: the general path below reaches the same verdict for a
+  // one-segment permission (resource matches, both actions are `undefined`).
+  // Stryker disable next-line ConditionalExpression,LogicalOperator,BlockStatement
   if (grantedParts.length < 2 || requiredParts.length < 2) {
     return userPermission === requiredPermission;
   }
@@ -156,7 +159,11 @@ export function usePermissions(): UsePermissionsResult {
   const rbacEnabled = authenticated ? capabilities.capabilities.rbac : false;
 
   // When impersonating, use the overridden role and permissions
+  // `isImpersonating` is defined as `impersonatedRole !== null`, and the two
+  // impersonated values are set together, so neither half can be true alone.
+  // Stryker disable next-line LogicalOperator
   const roles = isImpersonating && impersonatedRole ? [impersonatedRole.id] : (access?.roles ?? []);
+  // Stryker disable next-line LogicalOperator
   const permissions =
     isImpersonating && impersonatedPermissions ? impersonatedPermissions : (access?.permissions ?? []);
 

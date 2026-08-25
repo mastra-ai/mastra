@@ -188,6 +188,14 @@ describe('usePermissions, when RBAC is on', () => {
       expect(result.current.hasPermission('agents:delete:agent-2')).toBe(false);
     });
 
+    it('lets an unscoped resource wildcard cover a scoped request', async () => {
+      const { result, queryClient } = render(['*:execute']);
+      await settled(queryClient);
+
+      expect(result.current.hasPermission('agents:execute:agent-1')).toBe(true);
+      expect(result.current.hasPermission('tools:execute:tool-9')).toBe(true);
+    });
+
     it('holds a scoped resource wildcard to its own resource', async () => {
       const { result, queryClient } = render(['*:execute:agent-1']);
       await settled(queryClient);
@@ -250,6 +258,15 @@ describe('usePermissions, when RBAC is on', () => {
       expect(result.current.canDelete('agents')).toBe(false);
       expect(result.current.canExecute('agents')).toBe(false);
       expect(result.current.canExecute('tools')).toBe(true);
+    });
+
+    it('reads a granted delete', async () => {
+      const { result, queryClient } = render(['agents:delete']);
+      await settled(queryClient);
+
+      expect(result.current.canDelete('agents')).toBe(true);
+      expect(result.current.canDelete('workflows')).toBe(false);
+      expect(result.current.canEdit('agents')).toBe(false);
     });
   });
 

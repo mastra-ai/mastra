@@ -48,6 +48,9 @@ export function isUnauthenticatedError(error: unknown): boolean {
  */
 export function useCurrentUser() {
   const client = useMastraClient();
+  // `MastraReactProvider` always supplies a base url, so neither the optional
+  // chain nor the empty-string fallback is reachable through the hook.
+  // Stryker disable next-line OptionalChaining,StringLiteral
   const baseUrl = client.options?.baseUrl || '';
 
   return useQuery<CurrentUser>({
@@ -72,10 +75,15 @@ export function useCurrentUser() {
     // triggering login — that redirect is what fed the WorkOS 429 lockout loop
     // (PLTFRM-1270). 401 (terminal) still fails fast.
     retry: (failureCount, error) => {
+      // Stryker disable next-line ConditionalExpression: an error of another
+      // kind has no `status`, so the 503 check below already rejects it.
       if (!(error instanceof CurrentUserError)) return false;
       if (error.status !== 503) return false;
       return failureCount < AUTH_TRANSIENT_MAX_RETRIES;
     },
+    // The backoff shape is only observable by timing the retries, which would
+    // make this spec sleep for the whole budget on every run.
+    // Stryker disable next-line ArithmeticOperator,ArrowFunction
     retryDelay: attemptIndex => Math.min(AUTH_TRANSIENT_MAX_BACKOFF_MS, 500 * 2 ** attemptIndex),
   });
 }

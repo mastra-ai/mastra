@@ -5,6 +5,7 @@ import {
   createRefInstructionBlock,
 } from '../../components/agent-edit-page/utils/form-validation';
 import {
+  EMPTY_RUNTIME_INSTRUCTIONS_MESSAGE,
   formatUnknownPromptBlocksMessage,
   formatUnpublishedPromptBlocksMessage,
   formatUnresolvedPromptBlocksMessage,
@@ -248,5 +249,14 @@ describe('the plural forms the prompt-block messages use', () => {
 
   it('pluralises the unknown message for more than one block', () => {
     expect(formatUnknownPromptBlocksMessage(['b-1', 'b-2'])).toContain('prompt blocks:');
+  });
+});
+
+describe('EMPTY_RUNTIME_INSTRUCTIONS_MESSAGE', () => {
+  it('explains that the agent would run with nothing, and what to do about it', () => {
+    expect(EMPTY_RUNTIME_INSTRUCTIONS_MESSAGE).toContain('only references unpublished prompt blocks');
+    expect(EMPTY_RUNTIME_INSTRUCTIONS_MESSAGE).toContain('would run with an empty prompt');
+    expect(EMPTY_RUNTIME_INSTRUCTIONS_MESSAGE).toContain('Publish the referenced prompt blocks');
+    expect(EMPTY_RUNTIME_INSTRUCTIONS_MESSAGE).toContain('add inline instructions');
   });
 });

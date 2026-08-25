@@ -121,6 +121,25 @@ describe('useCurrentUser', () => {
     });
   });
 
+  describe('when the request never reaches the server', () => {
+    it('fails fast, because only a status-carrying failure can be transient', async () => {
+      let calls = 0;
+      server.use(
+        http.get('*/api/auth/me', () => {
+          calls += 1;
+          return HttpResponse.error();
+        }),
+      );
+
+      const { result } = renderHook(() => useCurrentUser(), { wrapper: makeWrapper() });
+
+      await waitFor(() => expect(result.current.isError).toBe(true));
+      // A network error is not a CurrentUserError, so it must not consume the
+      // transient budget reserved for a flapping auth provider.
+      expect(calls).toBe(1);
+    });
+  });
+
   describe('the error it raises', () => {
     it('names the failing status so callers can branch on it', async () => {
       server.use(http.get('*/api/auth/me', () => new HttpResponse(null, { status: 401 })));

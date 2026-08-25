@@ -311,4 +311,28 @@ describe('auth actions — apiPrefix support (issue #13901)', () => {
       expect(json).not.toHaveBeenCalled();
     });
   });
+
+  describe('when the client carries no base url', () => {
+    // `MastraReactProvider` always supplies one, so the request builders' own
+    // fallback is only reachable by calling them directly.
+    it('sends the SSO login to a path relative to the current origin', async () => {
+      mockFetch.mockResolvedValue(createMockResponse({ url: 'https://sso.example.com/login' }));
+      const { makeSSOLoginRequest } = await import('../use-auth-actions');
+
+      await makeSSOLoginRequest({ options: {} } as never, {});
+
+      const [url] = mockFetch.mock.calls[0] as [string, RequestInit];
+      expect(url.startsWith('/api/auth/sso/login')).toBe(true);
+    });
+
+    it('sends the logout to a path relative to the current origin', async () => {
+      mockFetch.mockResolvedValue(createMockResponse({ success: true }));
+      const { makeLogoutRequest } = await import('../use-auth-actions');
+
+      await makeLogoutRequest({ options: {} } as never);
+
+      const [url] = mockFetch.mock.calls[0] as [string, RequestInit];
+      expect(url).toBe('/api/auth/logout');
+    });
+  });
 });

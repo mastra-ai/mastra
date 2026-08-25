@@ -20,6 +20,9 @@ export function instructionsResolveEmptyDueToDrafts(
   blocks: InstructionBlock[] | undefined,
   publicationStatuses: ReadonlyMap<string, PromptBlockPublicationStatus>,
 ): RuntimeEmptyResult {
+  // The length half is a shortcut: an empty list walks no blocks, so the
+  // `hasRef` check at the end reports `published` either way.
+  // Stryker disable next-line ConditionalExpression
   if (!blocks || blocks.length === 0) return { type: 'published' };
 
   let hasRef = false;
