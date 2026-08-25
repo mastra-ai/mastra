@@ -2268,6 +2268,56 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
           scheduleHeartbeat();
 
           try {
+            let activeRunId = subscription.activeRunId() ?? undefined;
+            let status: 'idle' | 'running' | 'suspended' = activeRunId ? 'running' : 'idle';
+            const suspendedRuns = activeRunId
+              ? []
+              : await agent
+                  .listSuspendedRuns({
+                    resourceId: effectiveResourceId,
+                    threadId: effectiveThreadId,
+                    perPage: 1,
+                    page: 0,
+                  })
+                  .then(result => result.runs)
+                  .catch(() => []);
+            const suspendedRun = suspendedRuns[0];
+            if (suspendedRun) {
+              activeRunId = suspendedRun.runId;
+              status = 'suspended';
+            } else if (!activeRunId) {
+              const durableAgent = agent as unknown as {
+                listActiveRuns?: (options: {
+                  resourceId?: string;
+                  threadId: string;
+                  perPage: number;
+                  page: number;
+                }) => Promise<{ runs: Array<{ runId: string }> }>;
+              };
+              const activeRuns = await durableAgent
+                .listActiveRuns?.({
+                  resourceId: effectiveResourceId,
+                  threadId: effectiveThreadId,
+                  perPage: 1,
+                  page: 0,
+                })
+                .then(result => result.runs)
+                .catch(() => []);
+              if (activeRuns?.[0]) {
+                activeRunId = activeRuns[0].runId;
+                status = 'running';
+              }
+            }
+
+            controller.enqueue({
+              type: 'data-thread-state',
+              data: {
+                ...(activeRunId ? { runId: activeRunId } : {}),
+                status,
+                updatedAt: new Date().toISOString(),
+              },
+              transient: true,
+            });
             for await (const part of subscription.stream) {
               controller.enqueue(part);
               scheduleHeartbeat();

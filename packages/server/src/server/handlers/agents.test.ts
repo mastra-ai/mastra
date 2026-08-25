@@ -2532,7 +2532,7 @@ describe('Agent Routes Authorization', () => {
       (mockAgent as any).subscribeToThread = vi.fn(async target => {
         capturedTarget = target;
         return {
-          activeRunId: () => null,
+          activeRunId: () => 'subscribed-run-id',
           abort,
           unsubscribe,
           stream: (async function* () {
@@ -2553,12 +2553,66 @@ describe('Agent Routes Authorization', () => {
 
       expect(capturedTarget).toEqual({ resourceId: 'user-a', threadId: 'subscribe-thread-from-context' });
       const reader = stream.getReader();
+      await expect(reader.read()).resolves.toEqual({
+        value: {
+          type: 'data-thread-state',
+          data: {
+            runId: 'subscribed-run-id',
+            status: 'running',
+            updatedAt: expect.any(String),
+          },
+          transient: true,
+        },
+        done: false,
+      });
       await expect(reader.read()).resolves.toEqual({ value: chunk, done: false });
       expect(abort).not.toHaveBeenCalled();
       expect(unsubscribe).not.toHaveBeenCalled();
       await reader.cancel();
       expect(abort).not.toHaveBeenCalled();
       expect(unsubscribe).toHaveBeenCalledTimes(1);
+    });
+
+    it('should prefer the live subscription run over stored suspended history', async () => {
+      await mockMemory.createThread({
+        threadId: 'subscribe-thread-live-run',
+        resourceId: 'user-a',
+        title: 'Live Run Thread',
+      });
+      const listSuspendedRuns = vi.fn(async () => ({
+        runs: [{ runId: 'stale-suspended-run' }],
+        total: 1,
+      }));
+      (mockAgent as any).listSuspendedRuns = listSuspendedRuns;
+      (mockAgent as any).subscribeToThread = vi.fn(async () => ({
+        activeRunId: () => 'live-run',
+        abort: vi.fn(() => true),
+        unsubscribe: vi.fn(),
+        stream: (async function* () {
+          await new Promise(() => {});
+        })(),
+      }));
+
+      const stream = (await SUBSCRIBE_AGENT_THREAD_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+        abortSignal: new AbortController().signal,
+        resourceId: 'user-a',
+        threadId: 'subscribe-thread-live-run',
+      } as any)) as ReadableStream;
+
+      const reader = stream.getReader();
+      await expect(reader.read()).resolves.toMatchObject({
+        value: {
+          type: 'data-thread-state',
+          data: { runId: 'live-run', status: 'running' },
+          transient: true,
+        },
+        done: false,
+      });
+      expect(listSuspendedRuns).not.toHaveBeenCalled();
+      await reader.cancel();
     });
 
     it('should emit heartbeat comments while a subscription stream is idle', async () => {
@@ -2591,6 +2645,14 @@ describe('Agent Routes Authorization', () => {
         } as any)) as ReadableStream;
 
         const reader = stream.getReader();
+        await expect(reader.read()).resolves.toMatchObject({
+          value: {
+            type: 'data-thread-state',
+            data: { status: 'idle' },
+            transient: true,
+          },
+          done: false,
+        });
         const read = reader.read();
         await vi.advanceTimersByTimeAsync(25_000);
 
@@ -2632,6 +2694,14 @@ describe('Agent Routes Authorization', () => {
         } as any)) as ReadableStream;
 
         const reader = stream.getReader();
+        await expect(reader.read()).resolves.toMatchObject({
+          value: {
+            type: 'data-thread-state',
+            data: { status: 'idle' },
+            transient: true,
+          },
+          done: false,
+        });
         abortController.abort();
         await Promise.resolve();
 
