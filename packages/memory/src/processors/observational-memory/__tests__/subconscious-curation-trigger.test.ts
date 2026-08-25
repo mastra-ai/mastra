@@ -175,7 +175,7 @@ describe('createCurationEvaluator', () => {
       cursorAfter: { lastKnowledgeId: 'k-2', updatedAt: new Date(NOW) },
     });
     const evaluator = createCurationEvaluator(CURATION, deps)!;
-    await evaluator.evaluate({ threadId: 'thread-1', resourceId: 'user-1', record, requestContext: requestContext() });
+    await evaluator.evaluate({ threadId: 'thread-1', resourceId: 'user-1', requestContext: requestContext() });
 
     expect(store.knowledgeBySource).toHaveBeenCalledWith(expect.objectContaining({ limit: 3 }));
     expect(runCuration).toHaveBeenCalledWith(expect.objectContaining({ threadId: 'thread-1', resourceId: 'user-1' }));
@@ -184,7 +184,7 @@ describe('createCurationEvaluator', () => {
   it('does not run the curator below the threshold', async () => {
     const { deps, runCuration } = fakeDeps({ records: 2 });
     const evaluator = createCurationEvaluator(CURATION, deps)!;
-    await evaluator.evaluate({ threadId: 'thread-1', resourceId: 'user-1', record, requestContext: requestContext() });
+    await evaluator.evaluate({ threadId: 'thread-1', resourceId: 'user-1', requestContext: requestContext() });
     expect(runCuration).not.toHaveBeenCalled();
   });
 
@@ -194,7 +194,6 @@ describe('createCurationEvaluator', () => {
     await evaluator.evaluate({
       threadId: 'thread-1',
       resourceId: 'user-1',
-      record,
       requestContext: new RequestContext(),
     });
     expect(store.knowledgeBySource).not.toHaveBeenCalled();
@@ -207,7 +206,7 @@ describe('createCurationEvaluator', () => {
       recordConfig: { subconscious: { curationAttempt: nextBackoff(undefined, NOW) } },
     });
     const evaluator = createCurationEvaluator(CURATION, deps)!;
-    await evaluator.evaluate({ threadId: 'thread-1', resourceId: 'user-1', record, requestContext: requestContext() });
+    await evaluator.evaluate({ threadId: 'thread-1', resourceId: 'user-1', requestContext: requestContext() });
     expect(store.knowledgeBySource).not.toHaveBeenCalled();
     expect(runCuration).not.toHaveBeenCalled();
   });
@@ -221,7 +220,7 @@ describe('createCurationEvaluator', () => {
     });
     const evaluator = createCurationEvaluator(CURATION, deps)!;
     await expect(
-      evaluator.evaluate({ threadId: 'thread-1', resourceId: 'user-1', record, requestContext: requestContext() }),
+      evaluator.evaluate({ threadId: 'thread-1', resourceId: 'user-1', requestContext: requestContext() }),
     ).rejects.toThrow('boom');
     expect(updateRecordConfig).toHaveBeenCalledWith(
       'record-1',
@@ -233,7 +232,7 @@ describe('createCurationEvaluator', () => {
     const stale = { lastKnowledgeId: 'k-0', updatedAt: new Date(NOW) };
     const { deps, updateRecordConfig } = fakeDeps({ records: 3, cursor: stale, cursorAfter: stale, outcome: 'ran' });
     const evaluator = createCurationEvaluator(CURATION, deps)!;
-    await evaluator.evaluate({ threadId: 'thread-1', resourceId: 'user-1', record, requestContext: requestContext() });
+    await evaluator.evaluate({ threadId: 'thread-1', resourceId: 'user-1', requestContext: requestContext() });
     expect(updateRecordConfig).toHaveBeenCalledWith(
       'record-1',
       expect.objectContaining({ subconscious: { curationAttempt: expect.objectContaining({ failures: 1 }) } }),
@@ -243,7 +242,7 @@ describe('createCurationEvaluator', () => {
   it('leaves backoff untouched on a skipped outcome', async () => {
     const { deps, updateRecordConfig } = fakeDeps({ records: 3, outcome: 'skipped' });
     const evaluator = createCurationEvaluator(CURATION, deps)!;
-    await evaluator.evaluate({ threadId: 'thread-1', resourceId: 'user-1', record, requestContext: requestContext() });
+    await evaluator.evaluate({ threadId: 'thread-1', resourceId: 'user-1', requestContext: requestContext() });
     expect(updateRecordConfig).not.toHaveBeenCalled();
   });
 
@@ -256,7 +255,7 @@ describe('createCurationEvaluator', () => {
       recordConfig: { subconscious: { curationAttempt: { failures: 2, nextAttemptAt: 0 } } },
     });
     const evaluator = createCurationEvaluator(CURATION, deps)!;
-    await evaluator.evaluate({ threadId: 'thread-1', resourceId: 'user-1', record, requestContext: requestContext() });
+    await evaluator.evaluate({ threadId: 'thread-1', resourceId: 'user-1', requestContext: requestContext() });
     expect(updateRecordConfig).toHaveBeenCalledWith(
       'record-1',
       expect.objectContaining({ subconscious: { curationAttempt: { failures: 0, nextAttemptAt: 0 } } }),
@@ -277,8 +276,8 @@ describe('createCurationEvaluator', () => {
     const evaluator = createCurationEvaluator(CURATION, deps)!;
     const context = requestContext();
     await Promise.all([
-      evaluator.evaluate({ threadId: 'thread-1', resourceId: 'user-1', record, requestContext: context }),
-      evaluator.evaluate({ threadId: 'thread-1', resourceId: 'user-1', record, requestContext: context }),
+      evaluator.evaluate({ threadId: 'thread-1', resourceId: 'user-1', requestContext: context }),
+      evaluator.evaluate({ threadId: 'thread-1', resourceId: 'user-1', requestContext: context }),
     ]);
     // Runs never interleave: every run-start is followed by its own run-end.
     expect(order).toEqual(['run-start', 'run-end', 'run-start', 'run-end']);

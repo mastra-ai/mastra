@@ -229,8 +229,8 @@ export class Subconscious {
    * observation array is evaluated after each successfully completed observation; in the
    * reflection array, at reflection commit; absent, `null` — zero curation work.
    *
-   * Precedence: an explicit `trigger` on the curate entry always wins and the deprecated
-   * top-level `curationThreshold`/`curationCadence`/`curationMaxAgeMs` are ignored. Without an
+   * Precedence: an explicit `trigger` on the curate entry always wins and the top-level
+   * `curationThreshold`/`curationMaxAgeMs` options and deprecated `curationCadence` are ignored. Without an
    * explicit trigger, the legacy fields (threshold — including explicit `false` = disabled —
    * beating cadence, as before) translate onto the curate entry's placement. With neither,
    * the placement default applies: reflection keeps today's commit-time behavior

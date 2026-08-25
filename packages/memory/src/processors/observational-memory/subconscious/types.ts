@@ -200,9 +200,9 @@ export interface ResolvedSubconsciousConfig {
   pins: false | { maxPins: number; maxCharacters: number; capturePinning: boolean };
   /**
    * Resolved curation placement + trigger, or `null` when no curate entry is configured
-   * (zero curation work). The deprecated top-level `curationCadence`/`curationThreshold`/
-   * `curationMaxAgeMs` fields below are inputs to this translation only — nothing
-   * downstream of resolution reads them.
+   * (zero curation work). The top-level `curationThreshold`/`curationMaxAgeMs` options and
+   * the deprecated `curationCadence` field below are inputs to this translation only —
+   * nothing downstream of resolution reads them.
    */
   curation: ResolvedSubconsciousCuration | null;
   curationCadence?: number;
