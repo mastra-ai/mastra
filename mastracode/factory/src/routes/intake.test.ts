@@ -310,6 +310,21 @@ describe('aggregated intake', () => {
     });
   });
 
+  it('gives up on a capability that never answers instead of hanging the listing', async () => {
+    vi.useFakeTimers();
+    vi.mocked(linear.listSources).mockReturnValueOnce(new Promise(() => {}));
+
+    const pending = buildApp(orgUser).request('/web/intake/sources');
+    await vi.advanceTimersByTimeAsync(15_000);
+    const response = await pending;
+    vi.useRealTimers();
+
+    expect(await response.json()).toEqual({
+      sources: [{ integrationId: 'github', id: 'repo-1', name: 'acme/app', type: 'repository' }],
+      failures: [{ integrationId: 'linear', message: 'linear did not answer within 15s' }],
+    });
+  });
+
   it('keeps listing items from the capabilities that answer and resumes an unavailable one at its cursor', async () => {
     await seed.intake.saveConfig({
       orgId: 'org1',

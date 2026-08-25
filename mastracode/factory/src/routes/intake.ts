@@ -40,8 +40,23 @@ export interface IntakeIntegrationFailure {
 
 type SettledIntegration<T> = { integrationId: string; value: T } | IntakeIntegrationFailure;
 
+const PROVIDER_READ_TIMEOUT_MS = 15_000;
+
+/** The Intake contract takes no abort signal, so a slow read is abandoned, not cancelled. */
+function withTimeout<T>(integrationId: string, read: () => Promise<T>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error(`${integrationId} did not answer within ${PROVIDER_READ_TIMEOUT_MS / 1000}s`)),
+      PROVIDER_READ_TIMEOUT_MS,
+    );
+    read()
+      .then(resolve, reject)
+      .finally(() => clearTimeout(timer));
+  });
+}
+
 /**
- * Read every integration concurrently and isolate the ones that throw, so a single
+ * Read every integration concurrently and isolate the ones that throw or hang, so a single
  * unreachable provider degrades to a per-source error instead of failing the listing.
  */
 async function settleByIntegration<T>(
@@ -50,7 +65,7 @@ async function settleByIntegration<T>(
   const settled = await Promise.all(
     requests.map(async ({ integrationId, read }): Promise<SettledIntegration<T>> => {
       try {
-        return { integrationId, value: await read() };
+        return { integrationId, value: await withTimeout(integrationId, read) };
       } catch (error) {
         console.error(`[factory] intake integration ${integrationId} is unavailable:`, error);
         return { integrationId, message: error instanceof Error ? error.message : String(error) };

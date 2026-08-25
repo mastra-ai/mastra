@@ -11,4 +11,6 @@ Intake listings no longer fail as a whole when one provider is down. `GET /web/i
 }
 ```
 
+A provider that hangs is given up on after 15 seconds and reported the same way, so an unresponsive one can't hold the request open either.
+
 A provider that fails mid-pagination keeps the cursor it came in with, so the next page resumes where it left off instead of replaying its first page.
