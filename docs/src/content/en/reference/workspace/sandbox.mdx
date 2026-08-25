@@ -101,15 +101,15 @@ The updater receives the hook currently installed, either the `onStart` construc
 
 ```typescript
 sandbox.setOnStart?.(previous => async args => {
-  await runSetup(args) // ours first, so later hooks see a ready workspace
-  await previous?.(args)
+  await previous?.(args) // whatever prepared the sandbox runs first
+  await mySetup(args)
 })
 ```
 
 Semantics:
 
 - Errors stay fatal, exactly as with the constructor option. Because each hook awaits the next, a throw stops the ones sequenced after it.
-- The caller chooses the order. Await `previous` last to run first, or first to run last.
+- The caller chooses the order. Await `previous` first when your hook needs the workspace it prepares, or last when yours is the one preparing it.
 - Ignoring `previous` replaces the installed hook. That's supported, and it's how a caller takes over setup a runtime installed.
 - Each call wraps the current hook, so attach once per sandbox instance. Attaching on a path that runs per request stacks duplicate work on every start.
 - Only starts that begin after the call see the new hook.

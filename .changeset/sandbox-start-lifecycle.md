@@ -46,7 +46,7 @@ For code handed a sandbox it didn't construct, this attaches a start hook after 
 
 ```typescript
 sandbox.setOnStart?.(previous => async args => {
-  await runSetup(args)
-  await previous?.(args)
+  await previous?.(args) // whatever set the sandbox up runs first
+  await mySetup(args)
 })
 ```
