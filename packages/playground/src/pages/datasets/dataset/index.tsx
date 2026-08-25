@@ -15,6 +15,7 @@ import { useState } from 'react';
 import { Link, useParams, useNavigate, useSearchParams } from 'react-router';
 import {
   DatasetPageTabs,
+  DatasetVersions,
   DuplicateDatasetDialog,
   ExperimentTriggerDialog,
   AddItemDialog,
@@ -38,7 +39,7 @@ function DatasetPage() {
   const { datasetId } = useParams()! as { datasetId: string };
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { activeVersion } = useDatasetItemsUrlState(searchParams, setSearchParams);
+  const { activeVersion, handleVersionChange } = useDatasetItemsUrlState(searchParams, setSearchParams);
 
   // Dialog states
   const [experimentDialogOpen, setExperimentDialogOpen] = useState(false);
@@ -126,9 +127,15 @@ function DatasetPage() {
             rightSlot={
               <ButtonsGroup>
                 <span className="text-ui-sm text-neutral3 mr-3 whitespace-nowrap">
-                  {dataset?.createdAt ? `Created ${format(new Date(dataset.createdAt), 'MMM d')} — ` : ''}v
-                  {dataset?.version ?? ''}
+                  {dataset?.createdAt ? `Created ${format(new Date(dataset.createdAt), 'MMM d')}` : ''}
                 </span>
+                <DatasetVersions
+                  datasetId={datasetId}
+                  value={activeVersion}
+                  onValueChange={handleVersionChange}
+                  currentVersion={dataset?.version}
+                  className="w-36"
+                />
                 {disableExperimentTrigger ? (
                   <Tooltip>
                     <TooltipTrigger asChild>

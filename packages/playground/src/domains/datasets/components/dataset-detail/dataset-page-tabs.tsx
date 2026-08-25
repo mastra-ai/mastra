@@ -124,11 +124,6 @@ export function DatasetPageTabs({ datasetId, onAddItemClick, onNavigateToDataset
     navigate(`/datasets/${datasetId}/items?items=${itemIds.join(',')}`);
   };
 
-  // Handler for Compare Versions action from versions panel
-  const handleCompareVersionsClick = (versionNumbers: string[]) => {
-    navigate(`/datasets/${datasetId}/versions?ids=${versionNumbers.join(',')}`);
-  };
-
   // Handler for bulk delete action from selection
   const handleBulkDeleteClick = (itemIds: string[]) => {
     setItemIdsToDelete(itemIds);
@@ -226,7 +221,6 @@ export function DatasetPageTabs({ datasetId, onAddItemClick, onNavigateToDataset
             activeSearchQuery={debouncedSearch}
             onSearchChange={setSearchQuery}
             currentDatasetVersion={dataset?.version}
-            onCompareVersionsClick={handleCompareVersionsClick}
           />
         </TabContent>
 

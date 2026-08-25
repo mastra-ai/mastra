@@ -43,6 +43,8 @@ export { DeleteDatasetDialog } from './components/delete-dataset-dialog';
 export { EmptyDatasetsTable } from './components/empty-datasets-table';
 export { DatasetCombobox } from './components/dataset-combobox';
 export type { DatasetComboboxProps } from './components/dataset-combobox';
+export { DatasetVersions } from './components/dataset-versions';
+export type { DatasetVersionsProps } from './components/dataset-versions';
 
 // Dataset detail components
 export { DatasetHeader } from './components/dataset-detail/dataset-header';

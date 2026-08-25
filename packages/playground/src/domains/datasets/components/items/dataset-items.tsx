@@ -7,7 +7,6 @@ import { ArrowRightToLineIcon } from 'lucide-react';
 import { useEffect } from 'react';
 import { useSearchParams } from 'react-router';
 import { useDatasetItemsUrlState } from '../../hooks/use-dataset-items-url-state';
-import type { DatasetVersion } from '../../hooks/use-dataset-versions';
 import { useItemSelection } from '../../hooks/use-item-selection';
 import { exportItemsToCSV } from '../../utils/csv-export';
 import { exportItemsToJSON } from '../../utils/json-export';
@@ -15,7 +14,6 @@ import { DatasetItemPanel } from './dataset-item-panel';
 import { DatasetItemsLayout } from './dataset-items-layout';
 import { DatasetItemsList } from './dataset-items-list';
 import { DatasetItemsToolbar } from './dataset-items-toolbar';
-import { DatasetVersionsPanel } from './dataset-versions-panel';
 
 export interface DatasetItemsProps {
   datasetId: string;
@@ -45,7 +43,6 @@ export interface DatasetItemsProps {
   onSearchChange?: (query: string) => void;
   // Version props
   currentDatasetVersion?: number;
-  onCompareVersionsClick?: (versionNumbers: string[]) => void;
 }
 
 /**
@@ -77,7 +74,6 @@ export function DatasetItems({
   activeSearchQuery,
   onSearchChange,
   currentDatasetVersion,
-  onCompareVersionsClick,
 }: DatasetItemsProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const {
@@ -109,10 +105,6 @@ export function DatasetItems({
     } else {
       onItemSelect(itemId);
     }
-  };
-
-  const handleVersionSelect = (version: DatasetVersion) => {
-    handleVersionChange(version.isCurrent ? null : version.version);
   };
 
   const handleCancelSelection = () => {
@@ -234,16 +226,5 @@ export function DatasetItems({
     />
   ) : null;
 
-  const versionsPanelSlot = (
-    <DatasetVersionsPanel
-      datasetId={datasetId}
-      onVersionSelect={handleVersionSelect}
-      onCompareVersionsClick={onCompareVersionsClick}
-      activeVersion={activeDatasetVersion}
-    />
-  );
-
-  return (
-    <DatasetItemsLayout listSlot={listSlot} detailPanelSlot={detailPanelSlot} versionsPanelSlot={versionsPanelSlot} />
-  );
+  return <DatasetItemsLayout listSlot={listSlot} detailPanelSlot={detailPanelSlot} />;
 }
