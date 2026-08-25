@@ -99,6 +99,28 @@ export function executeWithContextSync<T>(params: { span?: AnySpan; fn: () => T 
 }
 
 /**
+ * Resolve the spanId a suspending run should persist for resume linkage.
+ *
+ * On resume this becomes the resumed span's `parentSpanId`, so it has to name a
+ * span that actually reached exporters: an internal or excluded run span is
+ * never stored, and the resumed run's exported children would inherit the id
+ * and land as orphans. `undefined` is a valid answer — it makes those children
+ * trace roots instead of pointing them at a span that does not exist.
+ *
+ * `getExportedSpanId` is optional on the `Span` interface, so the typeof guard
+ * separates "this implementation predates the method" (keep the old behavior of
+ * linking to the span's own id) from "the method ran and found nothing
+ * exportable" (undefined). Without it the two collapse and custom span
+ * implementations silently lose resume linkage.
+ */
+export function resolveResumeLinkSpanId(
+  span: { id?: string; getExportedSpanId?: () => string | undefined } | undefined,
+): string | undefined {
+  if (!span) return undefined;
+  return typeof span.getExportedSpanId === 'function' ? span.getExportedSpanId() : span.id;
+}
+
+/**
  * Creates or gets a child span from existing tracing context or starts a new trace.
  * This helper consolidates the common pattern of creating spans that can either be:
  * 1. Children of an existing span (when tracingContext.currentSpan exists)
