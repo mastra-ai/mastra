@@ -43,6 +43,7 @@ function getCommands(modes: number): HelpEntry[] {
     { key: '/review', description: 'Review a GitHub pull request' },
     { key: '/report-issue', description: 'Open or browse mastracode issues' },
     { key: '/cost', description: 'Token usage and costs' },
+    { key: '/context', description: 'Audit what is using the context window' },
     { key: '/profile', description: 'Control process memory diagnostics (status/start/capture/stop)' },
     {
       key: '/prune',

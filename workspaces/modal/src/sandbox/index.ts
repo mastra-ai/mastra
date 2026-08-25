@@ -102,7 +102,7 @@ export class ModalSandbox extends MastraSandbox {
     super({
       ...options,
       name: 'ModalSandbox',
-      processes: new ModalProcessManager({ env: options.env ?? {} }),
+      processes: new ModalProcessManager(),
     });
 
     this.id = options.id ?? this._generateId();

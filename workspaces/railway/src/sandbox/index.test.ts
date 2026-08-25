@@ -590,6 +590,17 @@ describe('RailwaySandbox', () => {
       expect(sentOptions.timeoutSec).toBe(5);
     });
 
+    it('setEnv after construction reaches subsequent commands', async () => {
+      const sandbox = new RailwaySandbox({ token: 't' });
+      await sandbox._start();
+
+      sandbox.setEnv(env => ({ ...env, GH_TOKEN: 'tok_1' }));
+      await sandbox.executeCommand!('echo hello');
+
+      const sentOptions = mockSandbox.exec.mock.calls[0]![1] as { env?: Record<string, string> };
+      expect(sentOptions.env).toEqual(expect.objectContaining({ GH_TOKEN: 'tok_1' }));
+    });
+
     it('restarts a checkpoint-enabled sandbox when it is down before execution', async () => {
       const reconnectedSandbox = {
         ...mockSandbox,

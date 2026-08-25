@@ -108,6 +108,24 @@ import type { ToolCallForeachOptions } from './tool-call-concurrency';
  */
 const TERMINAL_FINISH_REASONS = ['stop', 'error', 'length', 'content-filter'];
 
+/**
+ * Chunk types that represent actual model output for a step. Used to detect a
+ * "zero-output" step: a stream that finishes with reason `other` without ever
+ * producing any of these must not re-enter the loop (issue #21897) — the
+ * request would be re-issued unchanged and spin until maxSteps.
+ */
+const STEP_CONTENT_CHUNK_TYPES = new Set([
+  'text-delta',
+  'reasoning-delta',
+  'tool-call',
+  'tool-call-delta',
+  'tool-result',
+  'object',
+  'object-result',
+  'file',
+  'source',
+]);
+
 function getRequestInputProcessors({
   inputProcessors,
   llmRequestInputProcessors,
@@ -520,6 +538,7 @@ async function processOutputStream<OUTPUT = undefined>({
 }: ProcessOutputStreamOptions<OUTPUT>): Promise<ProcessOutputStreamResult> {
   let transportSet = false;
   const collectedChunks: CollectedChunk[] = [];
+  let hasStepContent = false;
   let toolResultTripwire: TripWire | null = null;
   let toolResultProcessorRunner: ProcessorRunner | null = null;
   const getToolResultProcessorRunner = (): ProcessorRunner => {
@@ -722,6 +741,7 @@ async function processOutputStream<OUTPUT = undefined>({
     }
 
     if (chunk.type == 'object' || chunk.type == 'object-result') {
+      hasStepContent = true;
       controller.enqueue(chunk);
       continue;
     }
@@ -771,6 +791,10 @@ async function processOutputStream<OUTPUT = undefined>({
         args: chunk.payload.args,
         providerExecuted: chunk.payload.providerExecuted,
       });
+    }
+
+    if (STEP_CONTENT_CHUNK_TYPES.has(chunk.type)) {
+      hasStepContent = true;
     }
 
     // Collect every chunk for post-stream message building
@@ -882,6 +906,45 @@ async function processOutputStream<OUTPUT = undefined>({
               runId: chunk.runId,
               from: chunk.from,
               payload: { error: syntheticError },
+            },
+          });
+        }
+
+        // A provider can also close the stream cleanly with finishReason 'other' without
+        // producing any output (e.g. @ai-sdk/openai defaults to 'other' when the SSE
+        // stream ends before a response.completed event arrives). 'other' is not terminal,
+        // so the loop would re-issue the identical request and spin until maxSteps
+        // (issue #21897). When the step produced zero output, treat it as a stream error
+        // via the same deferred-error path so error processors can intercept and retry
+        // boundedly. A finish with reason 'other' that DID produce output continues as usual.
+        if (chunk.payload.stepResult.reason === 'other' && !hasStepContent && !runState.state.hasErrored) {
+          const rawReason = chunk.payload.stepResult.rawReason;
+          const syntheticError = new MastraError({
+            id: 'AGENT_STREAM_ERROR',
+            text: rawReason
+              ? `Agent stream finished with finishReason "other" (provider reported "${rawReason}") without producing any output`
+              : 'Agent stream finished with finishReason "other" without producing any output',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.SYSTEM,
+            details: {
+              runId: chunk.runId,
+              ...(rawReason && { rawFinishReason: rawReason }),
+            },
+          });
+
+          runState.setState({
+            hasErrored: true,
+            apiError: syntheticError,
+            deferredErrorChunk: {
+              type: 'error',
+              runId: chunk.runId,
+              from: chunk.from,
+              payload: { error: syntheticError },
+            },
+            stepResult: {
+              ...runState.state.stepResult,
+              reason: 'error',
+              isContinued: false,
             },
           });
         }
@@ -1663,11 +1726,13 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 activeTools: currentStep.activeTools as string[] | undefined,
                 options,
                 // Per-model modelSettings shallow-merge on top of call-time modelSettings.
-                // Per-model maxRetries always wins so p-retry uses the right retry count for this model.
+                // An explicit model or agent maxRetries wins; otherwise preserve modelSettings before using the default.
                 modelSettings: {
                   ...currentStep.modelSettings,
                   ...modelConfig.modelSettings,
-                  maxRetries: modelConfig.maxRetries,
+                  maxRetries: modelConfig.maxRetriesConfigured
+                    ? modelConfig.maxRetries
+                    : (currentStep.modelSettings?.maxRetries ?? modelConfig.maxRetries),
                 },
                 includeRawChunks,
                 structuredOutput: currentStep.structuredOutput,

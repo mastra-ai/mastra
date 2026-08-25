@@ -25,6 +25,9 @@ import type {
   MessageScrollerVisibility,
 } from './message-scroller-context';
 
+import { VISIBILITY_EPSILON, getCurrentAnchorId, getRelativeTop, getScrollTarget } from './message-scroller-geometry';
+import type { MessageScrollerItemRecord } from './message-scroller-geometry';
+
 import { cn } from '@/lib/utils';
 
 export type {
@@ -35,13 +38,6 @@ export type {
   MessageScrollerScrollable,
   MessageScrollerVisibility,
 } from './message-scroller-context';
-
-type MessageScrollerItemRecord = {
-  element: HTMLElement;
-  scrollAnchor: boolean;
-};
-
-const VISIBILITY_EPSILON = 0.5;
 
 const mergeRefs =
   <TElement,>(...refs: Array<React.Ref<TElement> | undefined>) =>
@@ -72,21 +68,6 @@ const orderItemsByDocumentPosition = (items: Array<readonly [string, MessageScro
     return 0;
   });
 
-const getContentPadding = (contentElement: HTMLElement | null) => {
-  if (!contentElement) return { start: 0, end: 0 };
-  const styles = window.getComputedStyle(contentElement);
-  return {
-    start: Number.parseFloat(styles.paddingBlockStart || styles.paddingTop || '0') || 0,
-    end: Number.parseFloat(styles.paddingBlockEnd || styles.paddingBottom || '0') || 0,
-  };
-};
-
-const getRelativeTop = (element: HTMLElement, viewportElement: HTMLElement) => {
-  const elementRect = element.getBoundingClientRect();
-  const viewportRect = viewportElement.getBoundingClientRect();
-  return elementRect.top - viewportRect.top + viewportElement.scrollTop;
-};
-
 const scrollViewportTo = (viewportElement: HTMLElement, top: number, behavior: ScrollBehavior) => {
   if (typeof viewportElement.scrollTo === 'function') {
     viewportElement.scrollTo({ top, behavior });
@@ -103,68 +84,6 @@ const scheduleScrollSync = (callback: () => void) => {
   }
 
   window.setTimeout(callback, 0);
-};
-
-const getScrollTarget = ({
-  align,
-  element,
-  scrollMargin,
-  viewportElement,
-}: {
-  align: MessageScrollerScrollAlign;
-  element: HTMLElement;
-  scrollMargin: number;
-  viewportElement: HTMLElement;
-}) => {
-  const contentPadding = getContentPadding(element.parentElement);
-  const elementTop = getRelativeTop(element, viewportElement);
-  const elementHeight = element.getBoundingClientRect().height;
-  const visibleHeight = Math.max(0, viewportElement.clientHeight - contentPadding.start - contentPadding.end);
-
-  if (align === 'center') return elementTop - contentPadding.start - (visibleHeight - elementHeight) / 2 - scrollMargin;
-  if (align === 'end')
-    return elementTop - viewportElement.clientHeight + elementHeight + contentPadding.end + scrollMargin;
-
-  if (align === 'nearest') {
-    const elementBottom = elementTop + elementHeight;
-    const viewportTop = viewportElement.scrollTop + contentPadding.start;
-    const viewportBottom = viewportElement.scrollTop + viewportElement.clientHeight - contentPadding.end;
-    if (elementTop >= viewportTop && elementBottom <= viewportBottom) return viewportElement.scrollTop;
-    return elementTop < viewportTop
-      ? elementTop - contentPadding.start - scrollMargin
-      : elementBottom - viewportElement.clientHeight + contentPadding.end + scrollMargin;
-  }
-
-  return elementTop - contentPadding.start - scrollMargin;
-};
-
-const getCurrentAnchorId = ({
-  fallbackAnchorId,
-  items,
-  scrollMargin,
-  scrollPreviousItemPeek,
-  visibleMessageIds,
-  viewportElement,
-}: {
-  fallbackAnchorId: string | undefined;
-  items: Array<readonly [string, MessageScrollerItemRecord]>;
-  scrollMargin: number;
-  scrollPreviousItemPeek: number;
-  visibleMessageIds: Set<string>;
-  viewportElement: HTMLElement;
-}) => {
-  const anchorLine = viewportElement.getBoundingClientRect().top + scrollMargin + scrollPreviousItemPeek;
-  const anchors = items.filter(([, item]) => item.scrollAnchor);
-  let anchoredAboveViewport: string | undefined;
-
-  for (const [messageId, item] of anchors) {
-    if (item.element.getBoundingClientRect().top <= anchorLine + VISIBILITY_EPSILON) {
-      anchoredAboveViewport = messageId;
-    }
-  }
-
-  if (anchoredAboveViewport) return anchoredAboveViewport;
-  return anchors.find(([messageId]) => visibleMessageIds.has(messageId))?.[0] ?? fallbackAnchorId;
 };
 
 export interface MessageScrollerProviderProps {

@@ -28,7 +28,7 @@ export const storageSettingsScenario: McE2eScenario = {
     await runtime.waitForScreenText(/Storage backend/i, terminal);
     runtime.printScreen('after /settings', terminal);
 
-    terminal.write('\x1b[B'.repeat(6));
+    terminal.write('\x1b[B'.repeat(7));
     terminal.write('\r');
     await runtime.waitForScreenText(/LibSQL/i, terminal);
     await runtime.waitForScreenText(/PostgreSQL/i, terminal);

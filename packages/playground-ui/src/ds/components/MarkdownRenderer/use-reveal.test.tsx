@@ -182,4 +182,25 @@ describe('useReveal', () => {
 
     expect(result.current).toBe('The whole reply, at once.');
   });
+
+  it('runs no frame loop for a reply that is already whole', () => {
+    const request = vi.spyOn(window, 'requestAnimationFrame');
+
+    stream('A reply loaded from history.', false);
+
+    expect(request).not.toHaveBeenCalled();
+    request.mockRestore();
+  });
+
+  it('stops its frame loop when the reply goes away', () => {
+    const cancel = vi.spyOn(window, 'cancelAnimationFrame');
+    const { unmount } = stream(sentence.repeat(4));
+
+    frame();
+    expect(cancel).not.toHaveBeenCalled();
+
+    unmount();
+    expect(cancel).toHaveBeenCalled();
+    cancel.mockRestore();
+  });
 });

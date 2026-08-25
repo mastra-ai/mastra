@@ -148,7 +148,7 @@ export class VercelSandbox extends MastraSandbox {
     super({
       ...options,
       name: 'VercelSandbox',
-      processes: new VercelSandboxProcessManager({ env: options.env ?? {} }),
+      processes: new VercelSandboxProcessManager(),
     });
 
     this.id = options.id ?? `vercel-sandbox-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -327,7 +327,8 @@ export class VercelSandbox extends MastraSandbox {
     const fullCommand = args?.length ? `${command} ${args.join(' ')}` : command;
     this.logger.debug(`${LOG_PREFIX} Executing: ${fullCommand}`, { cwd: options?.cwd });
 
-    const mergedEnv = { ...this._env, ...options?.env };
+    // Constructor env seeds the sandbox env, so getEnv() covers it plus any setEnv updates
+    const mergedEnv = { ...this.getEnv(), ...options?.env };
     const env = Object.fromEntries(
       Object.entries(mergedEnv).filter((entry): entry is [string, string] => entry[1] !== undefined),
     );

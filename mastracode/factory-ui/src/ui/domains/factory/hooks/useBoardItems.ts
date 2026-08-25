@@ -14,6 +14,14 @@ import { inferredParentWorkItemId } from '../services/relationships';
 import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 
+/**
+ * Column order, stated here rather than inherited from the list endpoint: a
+ * card must keep its place when a sync or a run touches it, and the board is
+ * the surface that decides what "first" means.
+ */
+const byNewest = (left: WorkItem, right: WorkItem) =>
+  right.createdAt.localeCompare(left.createdAt) || right.id.localeCompare(left.id);
+
 /** The board's persisted cards: the query behind them and the moves that rewrite them. */
 export function useBoardItems({ factoryProjectId, kind }: { factoryProjectId: string; kind: BoardKind }) {
   const items = useWorkItemsQuery(factoryProjectId);
@@ -24,7 +32,7 @@ export function useBoardItems({ factoryProjectId, kind }: { factoryProjectId: st
 
   const all = useMemo(() => items.data ?? [], [items.data]);
   const knownSourceKeys = useMemo(() => persistedSourceKeys(all), [all]);
-  const visible = all.filter(item => belongsToBoard(item, kind));
+  const visible = all.filter(item => belongsToBoard(item, kind)).sort(byNewest);
 
   const requestTransition = (item: WorkItem, toStage: string) => {
     setTransitionReasons(current => {

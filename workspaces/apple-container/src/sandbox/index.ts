@@ -370,7 +370,8 @@ export class AppleContainerSandbox extends MastraSandbox {
     const hasCommandTimeout = Number.isFinite(commandTimeout) && commandTimeout > 0;
     const fullCommand = buildShellCommand(command, args);
     const shellCommand = hasCommandTimeout ? buildTimeoutShellCommand(fullCommand, commandTimeout) : fullCommand;
-    const env = envFlags({ ...this._env, ...options.env });
+    // Constructor env seeds the sandbox env, so getEnv() covers it plus any setEnv updates
+    const env = envFlags({ ...this.getEnv(), ...options.env });
     const cliArgs = [
       'exec',
       ...env.args,
