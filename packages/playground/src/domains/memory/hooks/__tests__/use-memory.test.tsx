@@ -862,6 +862,25 @@ describe('the request context every memory call carries', () => {
     expect(requestContextOf(seen[0].search)).toContain('"tenant":"acme"');
   });
 
+  it('travels with a thread clone, alongside the title', async () => {
+    const seen: Array<{ search: string; body: string }> = [];
+    server.use(
+      http.post(`${BASE_URL}/api/memory/threads/:threadId/clone`, async ({ request }) => {
+        seen.push({ search: new URL(request.url).search, body: await request.text() });
+        return HttpResponse.json({ id: 'thread-2' });
+      }),
+    );
+    const { wrapper } = setup();
+    const { result } = renderHook(() => useCloneThread(), { wrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync({ threadId: THREAD_ID, agentId: AGENT_ID, title: 'Copy' });
+    });
+
+    expect(seen[0].body).toContain('"title":"Copy"');
+    expect(requestContextOf(seen[0].search)).toContain('"tenant":"acme"');
+  });
+
   it('travels with a thread delete', async () => {
     const seen = captureMemory();
     const { wrapper } = setup();
