@@ -18,7 +18,10 @@ interface UseSaveAgentArgs {
 
 export function useSaveAgent({
   agentId,
+  // Stryker disable next-line ArrayDeclaration: the catalogue is only looked up
+  // by id, so an entry that is not a tool can never match a selected one.
   availableAgentTools = [],
+  // Stryker disable next-line ArrayDeclaration: same — looked up by id only.
   availableSkills = [],
   onSuccess,
   silent = false,

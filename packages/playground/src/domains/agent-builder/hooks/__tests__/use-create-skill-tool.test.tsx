@@ -285,8 +285,14 @@ describe('useCreateSkillTool', () => {
     it('says nothing about workspaces when none are available', () => {
       const { result } = renderCreateSkillTool();
 
-      expect(result.current.tool.description).not.toContain('Available workspaces');
-      expect(result.current.tool.description).toContain('Create a new stored skill');
+      // Compared whole: appending anything at all would still "not contain"
+      // the workspaces heading.
+      expect(result.current.tool.description).toBe(
+        'Create a new stored skill and automatically attach it to the agent currently being edited. ' +
+          'Provide `name`, `description`, and `instructions` (markdown body for SKILL.md). ' +
+          'Optionally provide `workspaceId` (required when more than one workspace is available) and `visibility` (defaults to "private"). ' +
+          "On success the new skill is added to the agent's selected skills.",
+      );
     });
 
     it('declares the success envelope it reports back', () => {
@@ -339,7 +345,27 @@ describe('useCreateSkillTool', () => {
 
       await waitFor(() => expect(calls).toHaveLength(1));
       expect(writes.length).toBeGreaterThan(0);
-      expect(writes.every(id => id === 'ws-1')).toBe(true);
+      expect([...new Set(writes)]).toEqual(['ws-1']);
+    });
+
+    it('ignores a workspace id that is not a string, even a non-empty one', async () => {
+      seedWritableAuth();
+      const writes = seedWorkspaceWrite();
+      const calls = seedSkillCreate();
+      const { result } = renderCreateSkillTool({ availableWorkspaces: [{ id: 'ws-1', name: 'One' }] });
+
+      await waitFor(() => expect(result.current.visibility).toBe('private'));
+      // An array has a length, so only the type check keeps it out.
+      await runTool(result.current.tool, {
+        name: 'S',
+        description: 'D',
+        instructions: 'I',
+        workspaceId: ['ws-9'],
+      } as never);
+
+      await waitFor(() => expect(calls).toHaveLength(1));
+      expect(writes.length).toBeGreaterThan(0);
+      expect([...new Set(writes)]).toEqual(['ws-1']);
     });
   });
 
@@ -417,6 +443,7 @@ describe('useCreateSkillTool', () => {
       expect(description).toContain('SKILL.md');
       expect(description).toContain('required when more than one workspace is available');
       expect(description).toContain('defaults to "private"');
+      expect(description).toContain("the new skill is added to the agent's selected skills");
     });
   });
 

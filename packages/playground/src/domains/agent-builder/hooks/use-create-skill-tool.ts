@@ -66,6 +66,9 @@ export function useCreateSkillTool({ availableWorkspaces = [] }: UseCreateSkillT
         const { name, description, instructions, visibility } = inputData ?? {};
 
         let workspaceId: string | undefined =
+          // Stryker disable next-line OptionalChaining: the tool is always
+          // invoked with an input object; a call without one crashes a few
+          // lines below on the required `name`, before anything is observable.
           typeof inputData?.workspaceId === 'string' && inputData.workspaceId.length > 0
             ? inputData.workspaceId
             : undefined;

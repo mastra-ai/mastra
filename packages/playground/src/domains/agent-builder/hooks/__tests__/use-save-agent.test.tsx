@@ -396,6 +396,20 @@ describe('useSaveAgent', () => {
       expect(captured.body).toHaveProperty('browser');
     });
 
+    it('forwards the avatar as metadata when the form has one', async () => {
+      const { hook, captured } = renderSave({
+        agentId: 'existing-id',
+        availableAgentTools: [],
+        defaultValues: baseValues,
+      });
+
+      await act(async () => {
+        await hook.current.save({ ...baseValues, avatarUrl: 'https://example.com/a.png' });
+      });
+
+      expect(captured.body?.metadata).toEqual({ avatarUrl: 'https://example.com/a.png' });
+    });
+
     it('forwards a workspace when the form has one', async () => {
       const { hook, captured } = renderSave({
         agentId: 'existing-id',
