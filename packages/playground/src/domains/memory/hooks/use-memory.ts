@@ -49,6 +49,8 @@ export const useThread = ({ threadId, agentId }: { threadId?: string; agentId?: 
     queryFn: () => client.getMemoryThread({ threadId: threadId!, agentId }).get({ requestContext }),
     enabled: Boolean(threadId) && threadId !== 'new' && Boolean(agentId),
     staleTime: 5 * 60 * 1000,
+    // Stryker disable next-line ArithmeticOperator: how long an unobserved
+    // entry is kept is only observable by waiting it out.
     gcTime: 10 * 60 * 1000,
     retry: false,
     refetchOnWindowFocus: false,
@@ -198,6 +200,8 @@ export const useObservationalMemory = ({
     gcTime: 5 * 60 * 1000, // 5 minutes
     retry: false,
     refetchOnWindowFocus: false,
+    // Stryker disable next-line BooleanLiteral: react-query polls on a finite
+    // number and on nothing else, so any other value reads as "do not poll".
     refetchInterval: isActive ? 2000 : false, // Poll every 2 seconds when active
     placeholderData: previousData => previousData, // Keep previous data during refetch to prevent skeleton flash
   });
@@ -221,6 +225,8 @@ export const useMemoryWithOMStatus = ({
 }) => {
   const client = useMastraClient();
   const requestContext = useMergedRequestContext();
+  // Stryker disable next-line BooleanLiteral: the effect below settles this
+  // from the first response, well inside the two-second poll it would gate.
   const [isActive, setIsActive] = useState(false);
 
   const query = useQuery<GetMemoryStatusResponse | null>({
@@ -240,6 +246,8 @@ export const useMemoryWithOMStatus = ({
     gcTime: 5 * 60 * 1000, // 5 minutes
     retry: false,
     refetchOnWindowFocus: false,
+    // Stryker disable next-line BooleanLiteral: react-query polls on a finite
+    // number and on nothing else, so any other value reads as "do not poll".
     refetchInterval: isActive && pollWhenActive ? 2000 : false, // Poll every 2 seconds when active
     placeholderData: previousData => previousData, // Keep previous data during refetch to prevent skeleton flash
   });

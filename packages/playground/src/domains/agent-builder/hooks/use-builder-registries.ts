@@ -61,7 +61,7 @@ export function usePopularBuilderRegistrySkills(registryId: string | undefined) 
     queryFn: (): Promise<BuilderRegistryPopularResponse> => {
       // Unreachable: `enabled` below already keeps the query idle without a
       // registry. The throw only narrows `string | undefined` for TypeScript.
-      // Stryker disable next-line ConditionalExpression,StringLiteral
+      // Stryker disable next-line ConditionalExpression,StringLiteral,CallExpression
       if (!registryId) throw new Error('Registry ID is required');
       return client.getBuilderRegistryPopular(registryId, { limit: 10, offset: 0 });
     },

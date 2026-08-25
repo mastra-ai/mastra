@@ -1,6 +1,6 @@
 import { usePlaygroundStore } from '@mastra/playground-ui/store/playground-store';
 import { MastraReactProvider } from '@mastra/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { focusManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
@@ -76,7 +76,14 @@ beforeEach(() => usePlaygroundStore.setState({ requestContext: {} }));
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.useRealTimers();
 });
+
+/** Reads the request context a call carried, decoded out of its query string. */
+const requestContextOf = (search: string) => {
+  const encoded = new URLSearchParams(search).get('requestContext');
+  return encoded === null ? undefined : atob(encoded);
+};
 
 describe('useMemory', () => {
   it('reads the memory status of an agent', async () => {
@@ -839,5 +846,76 @@ describe('the observational views, when the caller switches what they are lookin
 
     expect(result.current.data).toMatchObject({ threadId: THREAD_ID });
     await waitFor(() => expect(result.current.data).toMatchObject({ threadId: 'thread-2' }));
+  });
+});
+
+describe('the request context every memory call carries', () => {
+  beforeEach(() => usePlaygroundStore.setState({ requestContext: { tenant: 'acme' } }));
+
+  it('travels with a thread read', async () => {
+    const seen = captureMemory();
+    const { wrapper } = setup();
+
+    renderHook(() => useThread({ threadId: THREAD_ID, agentId: AGENT_ID }), { wrapper });
+
+    await waitFor(() => expect(seen).toHaveLength(1));
+    expect(requestContextOf(seen[0].search)).toContain('"tenant":"acme"');
+  });
+
+  it('travels with a thread delete', async () => {
+    const seen = captureMemory();
+    const { wrapper } = setup();
+    const { result } = renderHook(() => useDeleteThread(), { wrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync({ threadId: THREAD_ID, agentId: AGENT_ID });
+    });
+
+    expect(requestContextOf(seen[0].search)).toContain('"tenant":"acme"');
+  });
+});
+
+describe('what a tab regaining focus costs', () => {
+  // Each of these reads opts out of react-query's focus refetch. The clock is
+  // wound past every one of their stale windows first, because a fresh entry
+  // would sit still on focus either way.
+  const PAST_EVERY_STALE_WINDOW_MS = 6 * 60 * 1000;
+
+  it.each([
+    ['useMemoryConfig', () => useMemoryConfig(AGENT_ID)],
+    ['useThread', () => useThread({ threadId: THREAD_ID, agentId: AGENT_ID })],
+    ['useThreads', () => useThreads({ resourceId: RESOURCE_ID, agentId: AGENT_ID, isMemoryEnabled: true })],
+    ['useObservationalMemory', () => useObservationalMemory({ agentId: AGENT_ID, resourceId: RESOURCE_ID })],
+    ['useMemoryWithOMStatus', () => useMemoryWithOMStatus({ agentId: AGENT_ID, resourceId: RESOURCE_ID })],
+  ])('%s reads nothing again when the window comes back', async (_label, useHook) => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const seen = captureMemory();
+    const { wrapper } = setup();
+
+    renderHook(useHook, { wrapper });
+    await waitFor(() => expect(seen).toHaveLength(1));
+
+    // Jump the clock rather than run it: staleness is read off `Date.now()`,
+    // and none of these reads has a timer pending to fire on the way.
+    vi.setSystemTime(Date.now() + PAST_EVERY_STALE_WINDOW_MS);
+    await act(async () => {
+      focusManager.setFocused(false);
+      focusManager.setFocused(true);
+      await vi.advanceTimersByTimeAsync(50);
+    });
+
+    expect(seen).toHaveLength(1);
+  });
+});
+
+describe('useObservationalMemory — what it needs before it reads', () => {
+  it('stays idle for an agent with neither a resource nor a thread', async () => {
+    const seen = captureMemory();
+    const { wrapper } = setup();
+
+    renderHook(() => useObservationalMemory({ agentId: AGENT_ID }), { wrapper });
+
+    await settle();
+    expect(seen).toEqual([]);
   });
 });

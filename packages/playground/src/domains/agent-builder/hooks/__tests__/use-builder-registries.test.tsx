@@ -404,6 +404,20 @@ describe('the cache entries the registry hooks write', () => {
     expect(queryClient.getQueryData(['builder-registry', 'skills-sh', 'popular'])).toBeDefined();
     expect(queryClient.getQueryData(['builder-registry', 'other', 'popular'])).toBeUndefined();
   });
+
+  it('files a rendered preview under the skill it renders', async () => {
+    server.use(http.get(`${REGISTRIES_URL}/skills-sh/preview`, () => HttpResponse.json({ content: '# Weather' })));
+    const { wrapper, queryClient } = makeHarness();
+
+    const { result } = renderHook(() => useBuilderRegistryPreview('skills-sh', 'acme', 'skills', 'weather/SKILL.md'), {
+      wrapper,
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(
+      queryClient.getQueryData(['builder-registry', 'skills-sh', 'preview', 'acme', 'skills', 'weather/SKILL.md']),
+    ).toBe('# Weather');
+  });
 });
 
 /**

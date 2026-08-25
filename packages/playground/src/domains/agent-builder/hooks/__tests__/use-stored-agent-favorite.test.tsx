@@ -130,6 +130,18 @@ describe('useToggleStoredAgentFavorite', () => {
       expect(listOf(queryClient)).toBeUndefined();
     });
 
+    it('leaves a list entry cached as nothing alone', async () => {
+      const { result, queryClient } = setup();
+      queryClient.setQueryData(['stored-agents', 'all'], null);
+      const release = pendingFavorite();
+
+      act(() => result.current.mutate({ favorited: true }));
+      await release();
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(queryClient.getQueryData(['stored-agents', 'all'])).toBeNull();
+    });
+
     it('leaves a list entry that carries no rows alone', async () => {
       const rowless = { total: 0, page: 1, perPage: 50, hasMore: false } as ListStoredAgentsResponse;
       const { result, queryClient } = setup({ lists: { all: rowless } });
@@ -293,6 +305,17 @@ describe('useToggleStoredAgentFavorite', () => {
       expect(listOf(queryClient)).toEqual(before);
       expect(queryClient.getQueryState(['stored-agents', 'all'])?.dataUpdatedAt).toBe(writtenAt);
     });
+
+    it('rolls back through an empty snapshot, inventing no cache entries', async () => {
+      const { result, queryClient } = setup({ omitAgentId: true, lists: { all: makeList([makeAgent()]) } });
+      const entryCount = queryClient.getQueryCache().getAll().length;
+
+      await act(async () => {
+        await result.current.mutateAsync({ favorited: true }).catch(() => {});
+      });
+
+      expect(queryClient.getQueryCache().getAll()).toHaveLength(entryCount);
+    });
   });
 
   describe('when the detail cache is empty', () => {
@@ -398,14 +421,20 @@ describe('useToggleStoredAgentFavorite', () => {
       const { result, queryClient } = setup({ detail: makeAgent() });
       const other = queryClient.fetchQuery({
         queryKey: ['stored-workflows'],
-        queryFn: async () => {
-          await otherInFlight;
-          return { ok: true };
-        },
+        // Honours the abort signal, so a cancel that swept up every query would
+        // reject here instead of passing unnoticed.
+        queryFn: ({ signal }) =>
+          new Promise<{ ok: boolean }>((resolve, reject) => {
+            signal.addEventListener('abort', () => reject(new Error('cancelled')));
+            void otherInFlight.then(() => resolve({ ok: true }));
+          }),
       });
       const release = pendingFavorite();
 
       act(() => result.current.mutate({ favorited: true }));
+      // The optimistic patch lands after both cancels, so waiting for it makes
+      // the release below strictly later than the cancelling.
+      await waitFor(() => expect(detailOf(queryClient)?.isFavorited).toBe(true));
       await act(async () => releaseOther());
       await release();
 
