@@ -25,6 +25,16 @@ import { E2BSandbox } from './index';
 /** Access to a public repo: a clone URL and no credential. */
 const repoAccess = (cloneUrl: string) => async () => ({ cloneUrl });
 
+/** Make the head lookup (`git ls-remote`) report a fixed sha. */
+function mockHead(sha: string): void {
+  execFileMock.mockImplementation((_cmd: string, _args: string[], _opts: unknown, cb: unknown) => {
+    (cb as (e: Error | null, o: { stdout: string; stderr: string }) => void)(null, {
+      stdout: `${sha}\tHEAD\n`,
+      stderr: '',
+    });
+  });
+}
+
 /**
  * Resolve a repo template to its named form. Repo templates are always
  * deferred, and the ladder under test is identical once a spec resolves.
@@ -180,6 +190,10 @@ const { mockSandbox, createMockSandboxApi, resetMockDefaults, createMockCommandH
 // Mock the E2B SDK
 vi.mock('e2b', () => createMockSandboxApi());
 
+// Repo templates resolve their head sha through `git ls-remote`.
+const { execFileMock } = vi.hoisted(() => ({ execFileMock: vi.fn() }));
+vi.mock('node:child_process', () => ({ execFile: (...args: unknown[]) => execFileMock(...args) }));
+
 describe('E2BSandbox', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -250,6 +264,7 @@ describe('E2BSandbox', () => {
       const { Sandbox, Template } = await import('e2b');
       const { repoTemplateAlias } = await import('../utils/repo-template');
       const head = 'd'.repeat(40);
+      mockHead(head);
       (Sandbox.list as any).mockReturnValue({ nextItems: vi.fn().mockResolvedValue([]) });
       (Template.exists as any).mockResolvedValue(true);
       (Sandbox.create as any).mockResolvedValue(mockSandbox);
@@ -258,7 +273,6 @@ describe('E2BSandbox', () => {
         id: 'deferred-1',
         template: createRepoTemplate({
           getRepositoryAccess: repoAccess('https://github.com/octocat/hello.git'),
-          resolveHead: async () => head,
         }),
       });
       const result = await sandbox.start();
@@ -271,19 +285,20 @@ describe('E2BSandbox', () => {
   });
 
   describe('Named template fallback ladder', () => {
-    const namedSpec = () =>
-      resolveRepoTemplate({
+    const namedSpec = () => {
+      mockHead('a'.repeat(40));
+      return resolveRepoTemplate({
         getRepositoryAccess: repoAccess('https://github.com/octocat/hello.git'),
         setupCommand: 'pnpm install',
-        sha: 'a'.repeat(40),
       });
+    };
 
     it('boots from the stale current build and rebuilds the missing sha ref in the background', async () => {
       const { Sandbox, Template } = await import('e2b');
+      mockHead('b'.repeat(40));
       const spec = await resolveRepoTemplate({
         getRepositoryAccess: repoAccess('https://github.com/octocat/stale-first.git'),
         setupCommand: 'pnpm install',
-        sha: 'b'.repeat(40),
       });
       // The exact sha tag doesn't exist yet, but a previous build does.
       (Template.exists as any).mockImplementation(async (ref: string) => ref === spec.staleRef);
@@ -304,10 +319,10 @@ describe('E2BSandbox', () => {
 
     it('dedupes background rebuild triggers for the same ref', async () => {
       const { Template } = await import('e2b');
+      mockHead('c'.repeat(40));
       const spec = await resolveRepoTemplate({
         getRepositoryAccess: repoAccess('https://github.com/octocat/stale-dedupe.git'),
         setupCommand: 'pnpm install',
-        sha: 'c'.repeat(40),
       });
       (Template.exists as any).mockImplementation(async (ref: string) => ref === spec.staleRef);
 

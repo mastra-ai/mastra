@@ -351,8 +351,6 @@ export const factory = new MastraFactory({
       console.info(`[sandbox] session ${ctx.sessionId} -> e2b sandbox`);
       return new E2BSandbox({
         id: ctx.sessionId,
-        // Undefined for a session with no repository, which is how the
-        // sandbox asks for the provider's default template.
         template: createE2BRepoTemplate(ctx),
       });
     }

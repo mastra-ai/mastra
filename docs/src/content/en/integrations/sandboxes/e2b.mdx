@@ -355,16 +355,14 @@ the call site.
 There is exactly one template per repository and setup command: the template
 name carries the repo slug plus a short hash of the inputs, and the commit
 sha rides as a tag on that name
-(`mastra-repo-<owner>-<repo>-<hash>:sha-<sha>`). Without an explicit
-`sha`, the spec pins itself to the repository's current default-branch head
-at resolution time: right before the template lookup it runs `git ls-remote`
-(no clone, \~100ms) and keys the tag on that sha. When the default branch
-moves, the next new sandbox rebuilds the same template in place under a new
-tag — old sha tags remain as prunable build history instead of piling up as
-stale templates. If the head can't be resolved, the ref degrades to the
-stable `current` tag and the build clones whatever the default branch is at
-build time. Pass `sha` to pin a specific commit instead, or `resolveHead` to
-supply the head sha yourself.
+(`mastra-repo-<owner>-<repo>-<hash>:sha-<sha>`). The spec pins itself to the
+repository's current default-branch head at resolution time: right before
+the template lookup it runs `git ls-remote` (no clone, \~100ms) and keys the
+tag on that sha. When the default branch moves, the next new sandbox
+rebuilds the same template in place under a new tag, and old sha tags remain
+as prunable build history instead of piling up as stale templates. If the
+head can't be resolved, the ref degrades to the stable `current` tag and the
+build clones whatever the default branch is at build time.
 
 Resolution is lazy and only ever blocks on a template's very first build.
 Every successful build also moves a stable `current` tag, so when the head
@@ -395,11 +393,11 @@ const result = await refreshRepoTemplate({
 
 The template layers on top of the default mountable base (E2B's `base`
 image, so git and common tooling are present, plus `s3fs`/FUSE for mount
-support). The clone lands in the build user's home directory
-(`$HOME/<repo>` by default) — build steps and runtime commands both run as
-the sandbox's non-root `user` in its home, so no directory prep is needed
-and runtime file ownership stays correct. Pass `workdir` to clone somewhere
-else.
+support). The clone lands in the build user's home directory at
+`$HOME/<repo>`, derived from the clone URL. Build steps and runtime commands
+both run as the sandbox's non-root `user` in its home, so no directory prep
+is needed, runtime file ownership stays correct, and a runtime `$HOME` probe
+finds the checkout exactly where the template left it.
 
 Failure handling is designed so a broken template never wedges a session:
 

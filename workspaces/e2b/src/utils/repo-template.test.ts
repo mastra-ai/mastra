@@ -1,22 +1,42 @@
 import { Template } from 'e2b';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createRepoTemplate, refreshRepoTemplate, repoTemplateAlias } from './repo-template';
 import type { RepoTemplateOptions } from './repo-template';
 import type { NamedTemplateSpec } from './template';
 
+// The head sha is always resolved live, through `git ls-remote`. Driving it
+// by mocking git exercises the real resolution path instead of stepping
+// around it.
+const { execFileMock } = vi.hoisted(() => ({ execFileMock: vi.fn() }));
+vi.mock('node:child_process', () => ({
+  execFile: (...args: unknown[]) => execFileMock(...args),
+}));
+
 const CLONE_URL = 'https://github.com/octocat/hello.git';
 const SHA = 'a'.repeat(40);
 const SETUP = 'pnpm install';
+
+/** Make `git ls-remote` report `sha`, or fail when it is undefined. */
+function mockHead(sha: string | undefined): void {
+  execFileMock.mockImplementation((_cmd: string, _args: string[], _opts: unknown, cb: unknown) => {
+    const done = cb as (err: Error | null, out?: { stdout: string; stderr: string }) => void;
+    if (sha === undefined) done(new Error('ls-remote failed'));
+    else done(null, { stdout: `${sha}\tHEAD\n`, stderr: '' });
+  });
+}
 
 /** Identity inputs, as `repoTemplateAlias` takes them. */
 const IDENTITY = { cloneUrl: CLONE_URL, sha: SHA, setupCommand: SETUP };
 /** Option inputs, as `createRepoTemplate` takes them. */
 const BASE: RepoTemplateOptions = {
   getRepositoryAccess: async () => ({ cloneUrl: CLONE_URL }),
-  sha: SHA,
   setupCommand: SETUP,
 };
+
+beforeEach(() => {
+  mockHead(SHA);
+});
 
 async function serializedSteps(spec: NamedTemplateSpec): Promise<string> {
   // JSON rendering covers the full serialized spec — every build step
@@ -112,36 +132,26 @@ describe('createRepoTemplate', () => {
     expect(steps).toContain('cd \\"$HOME/hello\\" && pnpm install');
   });
 
-  it('pins the resolved head when no sha is given', async () => {
+  it('pins whatever head the repository reports, so a moved branch retags', async () => {
     const head = 'c'.repeat(40);
-    const options = { ...BASE, sha: undefined, resolveHead: async () => head };
-    const resolved = await resolve(options);
+    mockHead(head);
+    const resolved = await resolve(BASE);
     expect(resolved.alias).toBe(repoTemplateAlias({ cloneUrl: CLONE_URL, setupCommand: SETUP, sha: head }));
     expect(await serializedSteps(resolved)).toContain(`checkout ${head}`);
   });
 
-  it('passes the clone URL to the head resolver', async () => {
-    let sawUrl: string | undefined;
-    await resolve({
-      ...BASE,
-      sha: undefined,
-      resolveHead: async url => {
-        sawUrl = url;
-        return 'c'.repeat(40);
-      },
-    });
-    expect(sawUrl).toBe(CLONE_URL);
+  it('looks the head up against the clone URL without cloning', async () => {
+    await resolve(BASE);
+    const [command, args] = execFileMock.mock.calls[0] as [string, string[]];
+    expect(command).toBe('git');
+    expect(args).toContain('ls-remote');
+    expect(args).toContain(CLONE_URL);
   });
 
   it('degrades to the sha-less alias when head resolution fails', async () => {
-    for (const resolveHead of [
-      async () => undefined,
-      async () => 'not a sha',
-      async (): Promise<string | undefined> => {
-        throw new Error('offline');
-      },
-    ]) {
-      const resolved = await resolve({ ...BASE, sha: undefined, resolveHead });
+    for (const head of [undefined, 'not a sha']) {
+      mockHead(head);
+      const resolved = await resolve(BASE);
       expect(resolved.alias).toBe(repoTemplateAlias({ cloneUrl: CLONE_URL, setupCommand: SETUP }));
       const steps = await serializedSteps(resolved);
       expect(steps).toContain('git clone https://github.com/octocat/hello');
@@ -176,7 +186,6 @@ describe('createRepoTemplate', () => {
         authorization: { scheme: 'bearer', token: TOKEN },
       }),
       setupCommand: SETUP,
-      resolveHead: async () => 'd'.repeat(40),
     };
 
     it('sets the credential only via envs and references it from commands', async () => {
@@ -251,19 +260,14 @@ describe('createRepoTemplate', () => {
     expect(spec.buildTags).toEqual(['current']);
   });
 
-  it('constrains custom workdirs to plain $HOME-relative or absolute paths', async () => {
-    expect(() => createRepoTemplate({ ...BASE, workdir: '/' })).toThrow();
-    expect(() => createRepoTemplate({ ...BASE, workdir: '$HOME' })).toThrow();
-    expect(() => createRepoTemplate({ ...BASE, workdir: '$HOME/../etc' })).toThrow();
-    expect(() => createRepoTemplate({ ...BASE, workdir: '$HOME/a;rm -rf /' })).toThrow();
-    expect((await resolve({ ...BASE, workdir: '$HOME/custom/dir' })).alias).toMatch(/^mastra-repo-/);
-    expect((await resolve({ ...BASE, workdir: '/srv/checkout' })).alias).toMatch(/^mastra-repo-/);
-  });
-
-  it('rejects malformed inputs', async () => {
-    expect(() => createRepoTemplate({ ...BASE, sha: 'not-hex!' })).toThrow(/sha/);
-    expect(() => createRepoTemplate({ ...BASE, workdir: 'relative/path' })).toThrow(/workdir/);
-    expect(() => createRepoTemplate({ ...BASE, workdir: '/tmp/../etc' })).toThrow(/workdir/);
+  it('derives the workdir from the repository, so a hostile name cannot escape it', async () => {
+    const steps = await serializedSteps(
+      await resolve({ ...BASE, getRepositoryAccess: async () => ({ cloneUrl: 'https://github.com/acme/..evil.git' }) }),
+    );
+    // The repository name keeps its real spelling in the clone URL; only
+    // the derived checkout path is sanitized.
+    expect(steps).toContain('\\"$HOME/evil\\"');
+    expect(steps).not.toContain('$HOME/..');
   });
 
   it('rejects clone URLs that could reach the build shell as anything but a URL', async () => {
@@ -285,8 +289,11 @@ describe('refreshRepoTemplate', () => {
   const options: RepoTemplateOptions = {
     getRepositoryAccess: async () => ({ cloneUrl: CLONE_URL }),
     setupCommand: SETUP,
-    resolveHead: async () => head,
   };
+
+  beforeEach(() => {
+    mockHead(head);
+  });
 
   afterEach(() => {
     vi.restoreAllMocks();
@@ -326,7 +333,8 @@ describe('refreshRepoTemplate', () => {
 
   it('degrades to the current-tag ref when the head cannot be resolved', async () => {
     vi.spyOn(Template, 'exists').mockResolvedValue(true);
-    const result = await refreshRepoTemplate({ ...options, resolveHead: async () => undefined });
+    mockHead(undefined);
+    const result = await refreshRepoTemplate(options);
     expect(result).toEqual({
       ref: repoTemplateAlias({ cloneUrl: CLONE_URL, setupCommand: SETUP }),
       action: 'reused',

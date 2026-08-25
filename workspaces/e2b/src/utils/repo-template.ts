@@ -58,10 +58,6 @@ const BUILD_TOKEN_ENV = 'MASTRA_BUILD_GH_TOKEN';
  */
 const CLONE_URL_PATTERN = /^https:\/\/[a-z0-9.-]+(?::\d+)?(?:\/[\w.-]+)+$/i;
 const SHA_PATTERN = /^[0-9a-f]{7,40}$/i;
-// Workdirs interpolate into build shell commands, so constrain them to
-// plain path characters: either `$HOME/...` (expanded by the build shell —
-// the default) or an absolute path. `..` traversal is rejected separately.
-const WORKDIR_PATTERN = /^(?:\$HOME|)(?:\/[\w.-]+)+$/;
 
 /**
  * Repository clone target plus an optional credential for it.
@@ -104,25 +100,11 @@ export interface RepoTemplateOptions {
    */
   getRepositoryAccess: (() => Promise<RepositoryAccess | undefined>) | undefined;
   /**
-   * Commit sha the template is pinned to (typically the default-branch
-   * head). Becomes the template's tag. Omit when unknown — the sha is then
-   * resolved live at template-resolution time (see {@link createRepoTemplate}).
-   */
-  sha?: string;
-  /**
    * Setup command run inside the checkout during the build (e.g.
    * `pnpm install`). Hashed into the template name so a changed setup
    * command produces a new template.
    */
   setupCommand?: string;
-  /**
-   * Path the repo is cloned to inside the image — `$HOME/...` (expanded by
-   * the build shell) or an absolute path. Defaults to `$HOME/<repo>`: build
-   * steps and runtime commands both run as the sandbox user in its home
-   * directory, so the checkout lands exactly where a runtime `$HOME` probe
-   * resolves it.
-   */
-  workdir?: string;
   /**
    * Extra environment for the build, available to every build step
    * including {@link RepoTemplateOptions.setupCommand}. Use it for the
@@ -139,14 +121,6 @@ export interface RepoTemplateOptions {
    * non-secret.
    */
   buildEnv?: Record<string, string> | (() => Promise<Record<string, string>>);
-  /**
-   * Override how the default-branch head sha is resolved for the deferred
-   * (sha-less) form. Receives the clone URL and the credential when one was
-   * produced. Return undefined when unknown; the template ref then degrades
-   * to the untagged form. Defaults to `git ls-remote <url> HEAD`
-   * (authenticated via `http.extraheader` when a token is available).
-   */
-  resolveHead?: (cloneUrl: string, token?: string) => Promise<string | undefined>;
 }
 
 /**
@@ -158,18 +132,18 @@ export interface RepoTemplateOptions {
 export interface RepoTemplateIdentity {
   /** https clone URL. Host is part of the identity. */
   cloneUrl: string;
+  /** Resolved head sha. Becomes the template's tag. */
   sha?: string;
   setupCommand?: string;
-  workdir?: string;
   buildEnv?: Record<string, string>;
 }
 
 /**
  * Compute the deterministic template ref for a set of repo template inputs
  * without constructing the builder: `mastra-repo-<hash>` named over
- * (clone URL, setup command, workdir, build env), tag-qualified with
- * `:sha-<sha>` when the sha is known. Exposed so callers (and proofs) can
- * predict which ref a sandbox will resolve.
+ * (clone URL, setup command, build env), tag-qualified with `:sha-<sha>`
+ * when the sha is known. Exposed so callers (and proofs) can predict which
+ * ref a sandbox will resolve.
  */
 export function repoTemplateAlias(identity: RepoTemplateIdentity): string {
   const name = repoTemplateName(identity);
@@ -183,7 +157,6 @@ export function repoTemplateAlias(identity: RepoTemplateIdentity): string {
 
 function repoTemplateName(identity: RepoTemplateIdentity): string {
   const cloneUrl = normalizeCloneUrl(identity.cloneUrl);
-  const workdir = identity.workdir ?? defaultWorkdir(cloneUrl);
   // Fixed key order, so a plain stringify is already canonical. Not a
   // replacer array: that filters keys at every level, which would drop the
   // build env's own keys from the hash.
@@ -191,14 +164,13 @@ function repoTemplateName(identity: RepoTemplateIdentity): string {
     ALIAS_VERSION,
     cloneUrl,
     identity.setupCommand ?? null,
-    workdir,
     // Sorted, since key order isn't identity. Values participate: env that
     // changes what setup installs changes the image.
     identity.buildEnv ? Object.entries(identity.buildEnv).sort(([a], [b]) => a.localeCompare(b)) : null,
   ];
   const hash = createHash('sha256').update(JSON.stringify(config)).digest('hex').slice(0, 8);
   // Readable name: the repo slug is right in the template name; the short
-  // hash suffix keeps host/setup-command/workdir variants and sanitization
+  // hash suffix keeps host/setup-command variants and sanitization
   // collisions distinct.
   const { owner, repo } = parseCloneUrl(cloneUrl);
   const slug = [owner, repo]
@@ -242,7 +214,6 @@ function shaTag(sha: string): string {
  */
 export function createRepoTemplate(options: RepoTemplateOptions): DeferredNamedTemplateSpec | undefined {
   if (!options.getRepositoryAccess) return undefined;
-  validateRepoTemplateOptions(options);
   return {
     resolveSpec: async () => (await resolveSpecAtHead(options)).spec,
   };
@@ -253,9 +224,8 @@ export function createRepoTemplate(options: RepoTemplateOptions): DeferredNamedT
  * head, and produce the concrete sha-tagged spec. Shared by the deferred
  * spec form and {@link refreshRepoTemplate}.
  *
- * An access failure degrades to tokenless behavior when a `cloneUrl` was
- * configured, and otherwise throws — which the sandbox turns into its
- * default-template fallback rather than a failed start.
+ * A failed access call leaves no clone URL and throws, which the sandbox
+ * turns into its default-template fallback rather than a failed start.
  */
 async function resolveSpecAtHead(options: RepoTemplateOptions): Promise<{ spec: NamedTemplateSpec; sha?: string }> {
   const access = options.getRepositoryAccess ? await options.getRepositoryAccess().catch(() => undefined) : undefined;
@@ -263,24 +233,19 @@ async function resolveSpecAtHead(options: RepoTemplateOptions): Promise<{ spec: 
   if (!cloneUrl) {
     throw new Error('Repo template has no clone URL: repository access returned none.');
   }
+  assertCloneUrl(cloneUrl);
   const token = access?.authorization?.token;
   const buildEnv = typeof options.buildEnv === 'function' ? await options.buildEnv() : options.buildEnv;
 
-  let sha = options.sha;
-  if (!sha) {
-    const resolve = options.resolveHead ?? resolveDefaultBranchHead;
-    const resolved = await resolve(cloneUrl, token).catch(() => undefined);
-    sha = resolved && SHA_PATTERN.test(resolved) ? resolved : undefined;
-  }
+  const resolved = await resolveDefaultBranchHead(cloneUrl, token).catch(() => undefined);
+  const sha = resolved && SHA_PATTERN.test(resolved) ? resolved : undefined;
 
   const identity: RepoTemplateIdentity = {
     cloneUrl,
     ...(sha ? { sha } : {}),
     ...(options.setupCommand ? { setupCommand: options.setupCommand } : {}),
-    ...(options.workdir ? { workdir: options.workdir } : {}),
     ...(buildEnv ? { buildEnv } : {}),
   };
-  validateRepoTemplateIdentity(identity);
   return { spec: buildRepoTemplateSpec(identity, token), ...(sha ? { sha } : {}) };
 }
 
@@ -310,7 +275,6 @@ export async function refreshRepoTemplate(
   options: RepoTemplateOptions,
   connection?: ConnectionOpts,
 ): Promise<RefreshRepoTemplateResult> {
-  validateRepoTemplateOptions(options);
   const { spec, sha } = await resolveSpecAtHead(options);
   const shaField = sha ? { sha } : {};
   if (await Template.exists(spec.alias, connection)) {
@@ -324,37 +288,16 @@ export async function refreshRepoTemplate(
 }
 
 /**
- * Validate what is knowable before resolution. The clone URL is checked in
- * {@link validateRepoTemplateIdentity} instead, since it only exists once
- * the access accessor has run.
+ * The clone URL is the only untrusted input that reaches a build command,
+ * so it is checked before it can be interpolated into one. The workdir is
+ * derived from it rather than supplied, so it needs no separate guard.
  */
-function validateRepoTemplateOptions(options: RepoTemplateOptions): void {
-  if (options.sha !== undefined && !SHA_PATTERN.test(options.sha)) {
-    throw new Error(`Invalid sha '${options.sha}': expected a 7-40 char hex commit sha`);
-  }
-  if (options.workdir !== undefined) assertWorkdir(options.workdir);
-}
-
-function validateRepoTemplateIdentity(identity: RepoTemplateIdentity): void {
-  assertCloneUrl(identity.cloneUrl);
-  if (identity.sha !== undefined && !SHA_PATTERN.test(identity.sha)) {
-    throw new Error(`Invalid sha '${identity.sha}': expected a 7-40 char hex commit sha`);
-  }
-  assertWorkdir(identity.workdir ?? defaultWorkdir(identity.cloneUrl));
-}
-
 function assertCloneUrl(cloneUrl: string): void {
   if (!CLONE_URL_PATTERN.test(cloneUrl)) {
     throw new Error(`Invalid cloneUrl '${cloneUrl}': expected an https URL with a plain host and path`);
   }
   if (parseCloneUrl(cloneUrl).repo === '') {
     throw new Error(`Invalid cloneUrl '${cloneUrl}': expected a repository path such as https://host/owner/repo.git`);
-  }
-}
-
-function assertWorkdir(workdir: string): void {
-  if (!WORKDIR_PATTERN.test(workdir) || workdir.includes('..')) {
-    throw new Error(`Invalid workdir '${workdir}': expected a $HOME-relative or absolute path with no traversal`);
   }
 }
 
@@ -371,7 +314,7 @@ function gitAuthFlag(): string {
 function buildRepoTemplateSpec(identity: RepoTemplateIdentity, token?: string): NamedTemplateSpec {
   const { sha, setupCommand, buildEnv } = identity;
   const cloneUrl = normalizeCloneUrl(identity.cloneUrl);
-  const workdir = identity.workdir ?? defaultWorkdir(cloneUrl);
+  const workdir = defaultWorkdir(cloneUrl);
 
   const auth = token ? `${gitAuthFlag()} ` : '';
 
