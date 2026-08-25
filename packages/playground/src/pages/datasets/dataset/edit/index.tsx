@@ -1,3 +1,4 @@
+import { Card } from '@mastra/playground-ui/components/Card';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { MainHeader } from '@mastra/playground-ui/components/MainHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
@@ -68,19 +69,21 @@ function EditDatasetPage() {
               <MainHeader.Description>{dataset.name}</MainHeader.Description>
             </MainHeader.Column>
           </MainHeader>
-          <EditDatasetForm
-            dataset={{
-              id: dataset.id,
-              name: dataset.name,
-              description: dataset.description || '',
-              targetType: dataset.targetType,
-              inputSchema: dataset.inputSchema,
-              groundTruthSchema: dataset.groundTruthSchema,
-              requestContextSchema: dataset.requestContextSchema,
-            }}
-            onSuccess={goToDataset}
-            onCancel={goToDataset}
-          />
+          <Card className="p-6">
+            <EditDatasetForm
+              dataset={{
+                id: dataset.id,
+                name: dataset.name,
+                description: dataset.description || '',
+                targetType: dataset.targetType,
+                inputSchema: dataset.inputSchema,
+                groundTruthSchema: dataset.groundTruthSchema,
+                requestContextSchema: dataset.requestContextSchema,
+              }}
+              onSuccess={goToDataset}
+              onCancel={goToDataset}
+            />
+          </Card>
         </div>
       </PageLayout.MainArea>
     </PageLayout>

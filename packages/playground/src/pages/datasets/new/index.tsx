@@ -1,3 +1,4 @@
+import { Card } from '@mastra/playground-ui/components/Card';
 import { MainHeader } from '@mastra/playground-ui/components/MainHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { DatabaseIcon } from 'lucide-react';
@@ -35,12 +36,14 @@ function CreateDatasetPage() {
               </MainHeader.Description>
             </MainHeader.Column>
           </MainHeader>
-          <CreateDatasetForm
-            targetType={targetType}
-            targetIds={targetIds}
-            onSuccess={datasetId => void navigate(`/datasets/${datasetId}`)}
-            onCancel={() => void navigate(-1)}
-          />
+          <Card className="p-6">
+            <CreateDatasetForm
+              targetType={targetType}
+              targetIds={targetIds}
+              onSuccess={datasetId => void navigate(`/datasets/${datasetId}`)}
+              onCancel={() => void navigate(-1)}
+            />
+          </Card>
         </div>
       </PageLayout.MainArea>
     </PageLayout>
