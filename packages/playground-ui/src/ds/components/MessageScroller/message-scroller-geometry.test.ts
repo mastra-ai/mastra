@@ -125,7 +125,14 @@ describe('getScrollTarget', () => {
     item: HTMLElement,
     viewport: HTMLElement,
     scrollMargin = 0,
-  ) => getScrollTarget({ align, element: item, scrollMargin, viewportElement: viewport });
+  ) =>
+    getScrollTarget({
+      align,
+      contentElement: item.parentElement,
+      element: item,
+      scrollMargin,
+      viewportElement: viewport,
+    });
 
   it('puts the message at the top of the readable area by default', () => {
     const viewport = makeViewport({ clientHeight: 500 });
@@ -139,6 +146,25 @@ describe('getScrollTarget', () => {
     const item = makeItem({ top: 300, paddingStart: 20 });
 
     expect(target('start', item, viewport, 16)).toBe(264);
+  });
+
+  it('reads the frame from the content element, however deep the message nests', () => {
+    const viewport = makeViewport({ clientHeight: 500 });
+    const item = makeItem({ top: 300, paddingStart: 20 });
+    const content = item.parentElement;
+    const group = document.createElement('div');
+    content?.appendChild(group);
+    group.appendChild(item);
+
+    expect(
+      getScrollTarget({
+        align: 'start',
+        contentElement: content,
+        element: item,
+        scrollMargin: 0,
+        viewportElement: viewport,
+      }),
+    ).toBe(280);
   });
 
   it('centres the message in the readable area', () => {

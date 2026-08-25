@@ -571,8 +571,10 @@ export function TranscriptEntries({
       {turnGroups.map((group, index) => {
         const isLiveTurn = index === turnGroups.length - 1;
         const runningTurn = isLiveTurn && running;
-        // Closing turns keep their room class so reserved space releases through its transition.
-        const holdsRoom = runningTurn && group.opensTurn;
+        // Closing turns keep their room class so reserved space releases through its
+        // transition. The first turn opens at the top of the transcript already, so
+        // room under it would buy no travel — only empty scroll below a fresh thread.
+        const holdsRoom = runningTurn && group.opensTurn && index > 0;
         const openRoomClass = group.key === restoredTurnKey ? 'turn-room-restored-open' : 'turn-room-open';
 
         // One reply, however many messages the server split it into: the meta row lands

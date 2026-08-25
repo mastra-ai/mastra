@@ -32,16 +32,19 @@ export const getRelativeTop = (element: HTMLElement, viewportElement: HTMLElemen
 
 export const getScrollTarget = ({
   align,
+  contentElement,
   element,
   scrollMargin,
   viewportElement,
 }: {
   align: MessageScrollerScrollAlign;
+  /** The padding framing the transcript lives here, however deep the rows nest. */
+  contentElement: HTMLElement | null;
   element: HTMLElement;
   scrollMargin: number;
   viewportElement: HTMLElement;
 }) => {
-  const contentPadding = getContentPadding(element.parentElement);
+  const contentPadding = getContentPadding(contentElement);
   const elementTop = getRelativeTop(element, viewportElement);
   const elementHeight = element.getBoundingClientRect().height;
   const visibleHeight = Math.max(0, viewportElement.clientHeight - contentPadding.start - contentPadding.end);
