@@ -19,6 +19,7 @@
 
 import type { MastraCodeConfig, MountedMastraCode } from '@mastra/code-sdk';
 import type { AgentControllerChannelsConfig, ChannelAdapterConfig } from '@mastra/core/channels';
+import type { NotificationsStorage } from '@mastra/core/notifications';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import type { FactoryStorage } from '@mastra/core/storage';
@@ -91,6 +92,8 @@ export interface IntegrationContext {
   baseUrl?: string;
   /** Mounted agent controller for webhook → session signal delivery. */
   controller?: MountedMastraCode['controller'];
+  /** Notification persistence used by integration recovery workers. */
+  notifications?: NotificationsStorage;
   /**
    * Shared OAuth state signer created by the factory. One signer per boot, so
    * every integration's OAuth flow signs and verifies with the same secret.

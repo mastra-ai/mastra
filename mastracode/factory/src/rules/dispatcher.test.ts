@@ -503,7 +503,7 @@ describe('FactoryDecisionDispatcher', () => {
       prepareBinding: true,
       idempotencyKey: 'stage-transition-1',
     });
-    const { controller, sendNotificationSignal, consumeStream } = createSession();
+    const { controller, session, sendNotificationSignal, consumeStream } = createSession();
     const prepareBinding = vi.fn(async () => {
       await storage.prepareRunStart({
         orgId: 'org-1',
@@ -526,6 +526,7 @@ describe('FactoryDecisionDispatcher', () => {
         kickoffMessage: null,
       });
     });
+    const hydrateSession = vi.fn(async () => {});
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
       isAutoRunEnabled: async () => true,
@@ -533,12 +534,20 @@ describe('FactoryDecisionDispatcher', () => {
       storage,
       ownerId: 'worker-1',
       prepareBinding,
+      hydrateSession,
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
     expect(prepareBinding).toHaveBeenCalledWith(
       expect.objectContaining({ item: expect.objectContaining({ id: item.id }), role: 'plan' }),
+    );
+    expect(hydrateSession).toHaveBeenCalledWith(session, {
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+    });
+    expect(hydrateSession.mock.invocationCallOrder[0]).toBeLessThan(
+      sendNotificationSignal.mock.invocationCallOrder[0]!,
     );
     expect(sendNotificationSignal).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -812,6 +821,7 @@ describe('FactoryDecisionDispatcher', () => {
       kickoffMessage: null,
     });
     const primeCredentials = vi.fn(async () => {});
+    const hydrateSession = vi.fn(async () => {});
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
       isAutoRunEnabled: async () => true,
@@ -819,11 +829,17 @@ describe('FactoryDecisionDispatcher', () => {
       storage,
       ownerId: 'worker-1',
       primeCredentials,
+      hydrateSession,
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
     expect(primeCredentials).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1' });
+    expect(hydrateSession).toHaveBeenCalledWith(session, {
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+    });
+    expect(hydrateSession.mock.invocationCallOrder[0]).toBeLessThan(session.sendSignal.mock.invocationCallOrder[0]!);
     expect(sendNotificationSignal).toHaveBeenCalledWith(
       {
         source: 'factory',

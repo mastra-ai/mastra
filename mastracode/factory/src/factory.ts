@@ -67,6 +67,7 @@ import { registerSandboxReattach } from './sandbox/reattach.js';
 import { SessionRetirementCoordinator } from './sandbox/session-retirement.js';
 import { handleServerError } from './server-error.js';
 import { observeSessionCheckpoint } from './session/checkpoint-capture.js';
+import { hydrateFactorySession, resolveFactoryDefaultModelId } from './session/factory-session.js';
 import { observeSessionFilesystem } from './session/filesystem-capture.js';
 import { observeSessionFirstExec } from './session/first-exec-capture.js';
 import { observeSessionFirstMessage } from './session/first-message-capture.js';
@@ -804,6 +805,17 @@ export class MastraFactory {
                 reconcileToolResults: () => factoryProcessor?.reconcileAllBoundThreads() ?? Promise.resolve(),
                 prepareBinding,
                 primeCredentials: tenant => primeTenantCredentials({ tenant, credentials: modelCredentialsStorage }),
+                hydrateSession: async (session, tenant) => {
+                  const defaultModelId = await resolveFactoryDefaultModelId(
+                    factoryProjectsStorage,
+                    tenant.factoryProjectId,
+                  );
+                  await hydrateFactorySession(session, {
+                    ...tenant,
+                    defaultModelId,
+                    memorySettings: memorySettingsStorage,
+                  });
+                },
               });
             },
           }),
@@ -952,6 +964,8 @@ export class MastraFactory {
       );
     }
 
+    const notifications = await prepared.base.storage?.getStore('notifications');
+
     // Integration lifecycle workers (e.g. polling an upstream without
     // webhooks): collected from READY integrations only, folded into the
     // constructor args so `new Mastra(...)` merges them with the default
@@ -965,6 +979,7 @@ export class MastraFactory {
           buildIntegrationContext(
             {
               controller: prepared.base.controller,
+              ...(notifications ? { notifications } : {}),
               publicOrigin,
               auth: routeAuth,
               stateSigner,

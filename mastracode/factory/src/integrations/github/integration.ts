@@ -1199,6 +1199,7 @@ export class GithubIntegration implements FactoryIntegration {
         requestedReviewers: pullRequest.requestedReviewers ?? [],
         labels: pullRequest.labels ?? [],
         headBranch: pullRequest.headBranch,
+        headSha: pullRequest.headSha,
         baseBranch: pullRequest.baseBranch,
         ...(pullRequest.author ? { author: pullRequest.author } : {}),
         ...(pullRequest.createdAt ? { createdAt: pullRequest.createdAt } : {}),

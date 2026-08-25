@@ -98,6 +98,10 @@ export interface FactoryDecisionDispatcherOptions {
   reconcileToolResults?: () => Promise<void>;
   prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
+  hydrateSession?: (
+    session: BoundDispatcherSession,
+    tenant: { orgId: string; factoryProjectId: string },
+  ) => Promise<void>;
   maxInFlight?: number;
   /** How often the stale-binding sweep runs. Defaults to 10 minutes. */
   staleBindingSweepIntervalMs?: number;
@@ -208,6 +212,10 @@ export class FactoryDecisionDispatcher {
   readonly #reconcileToolResults?: () => Promise<void>;
   readonly #prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   readonly #primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
+  readonly #hydrateSession?: (
+    session: BoundDispatcherSession,
+    tenant: { orgId: string; factoryProjectId: string },
+  ) => Promise<void>;
   readonly #maxInFlight: number;
   readonly #staleBindingSweepIntervalMs: number;
   readonly #staleBindingTtlMs: number;
@@ -228,6 +236,7 @@ export class FactoryDecisionDispatcher {
     this.#reconcileToolResults = options.reconcileToolResults;
     this.#prepareBinding = options.prepareBinding;
     this.#primeCredentials = options.primeCredentials;
+    this.#hydrateSession = options.hydrateSession;
     const maxInFlight = options.maxInFlight ?? MAX_IN_FLIGHT;
     this.#maxInFlight = Number.isFinite(maxInFlight) && maxInFlight > 0 ? Math.floor(maxInFlight) : MAX_IN_FLIGHT;
     this.#staleBindingSweepIntervalMs = positiveMs(
@@ -514,8 +523,12 @@ export class FactoryDecisionDispatcher {
                 name: decision.skillName,
                 arguments: decision.arguments,
               });
-        const session = resolved.session as DispatcherSession;
+        const session = resolved.session as DispatcherSession & BoundDispatcherSession;
         await this.#switchThread(session, binding);
+        await this.#hydrateSession?.(session, {
+          orgId: record.orgId,
+          factoryProjectId: record.factoryProjectId,
+        });
         const delivered = await session.thread.listActiveMessages();
         if (delivered.some(message => message.id === record.id)) return;
         if (decision.cancelInFlight) session.abort();
@@ -654,6 +667,10 @@ export class FactoryDecisionDispatcher {
         const requestContext = new RequestContext();
         requestContext.set('user', { workosId: startedBy, organizationId: record.orgId });
         const session = await this.#requireSession(binding);
+        await this.#hydrateSession?.(session, {
+          orgId: record.orgId,
+          factoryProjectId: record.factoryProjectId,
+        });
         await awaitNotification(
           () =>
             session.sendNotificationSignal(

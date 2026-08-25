@@ -1,3 +1,4 @@
+import { InMemoryNotificationsStorage } from '@mastra/core/notifications';
 import { describe, expect, it, vi } from 'vitest';
 import { builtInFactoryRules, defaultFactoryRules } from '../../rules/defaults.js';
 import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
@@ -6,6 +7,7 @@ import { FactoryTransitionService } from '../../rules/transition-service.js';
 import { FACTORY_PULL_REQUEST_RECONCILIATION_KEY } from '../../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import { GithubAppIdentity } from './app-identity.js';
+import { GithubIntegration } from './integration.js';
 import { createGithubPullRequestReconciler, GithubRules, reconciledClosedEvent } from './rules.js';
 import type { ReconcileIssueState, ReconcilePullRequestState } from './rules.js';
 import { changeRequestTargetKey } from './subscriptions.js';
@@ -14,11 +16,7 @@ async function setup(permission: string | undefined) {
   const seeded = await createFactoryStorageForTests();
   const workItems = seeded.workItems;
   const sourceControl = seeded.sourceControl.forIntegration('github');
-  const integrationStorage = seeded.integrations.forIntegration<
-    Record<string, unknown>,
-    Record<string, unknown>,
-    { kind: 'factory-pr-provenance'; workItemId: string }
-  >('github');
+  const integrationStorage = seeded.integrations.forIntegration('github');
   const project = await seeded.projects.create({
     orgId: 'org-1',
     userId: 'user-1',
@@ -1248,6 +1246,91 @@ describe('GithubRules', () => {
     );
   });
 
+  it('routes a changes-requested review by head branch when the PR card has no authoring link', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read');
+    const work = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'github:10:issue:42',
+          url: 'https://github.com/acme/repo/issues/42',
+        },
+        title: 'Issue 42',
+        stages: ['execute'],
+        sessions: { work: { sessionId: 'session-1', branch: 'feature', threadId: 'thread-1' } },
+        metadata: {},
+      },
+    });
+    await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: 'github:10:pull-request:17',
+          url: 'https://github.com/acme/repo/pull/17',
+        },
+        title: 'PR 17',
+        stages: ['review'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules: builtInFactoryRules(),
+    });
+
+    await service.ingest({
+      event: 'pull_request_review',
+      deliveryId: 'delivery-review-through-head-branch',
+      payload: {
+        action: 'submitted',
+        installation: { id: 7 },
+        repository: { id: 10, full_name: 'acme/repo' },
+        sender: { login: 'reviewer' },
+        review: {
+          id: 99,
+          state: 'changes_requested',
+          html_url: 'https://github.com/acme/repo/pull/17#pullrequestreview-99',
+        },
+        pull_request: {
+          number: 17,
+          title: 'PR 17',
+          html_url: 'https://github.com/acme/repo/pull/17',
+          state: 'open',
+          merged: false,
+          head: { ref: 'feature' },
+          base: { ref: 'main' },
+        },
+      },
+    });
+
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          workItemId: work.item.id,
+          decision: expect.objectContaining({
+            type: 'sendMessage',
+            role: 'work',
+            priority: 'high',
+            prepareBinding: true,
+          }),
+        }),
+      ]),
+    );
+  });
+
   it('ignores a changes-requested review on a pull request card with no authoring work item', async () => {
     // The link is what makes the hop safe. Without one there is no agent that
     // wrote this code, and waking the PR card's own review session would put
@@ -1724,6 +1807,7 @@ describe('createGithubPullRequestReconciler', () => {
       requestedReviewers: ['reviewer'],
       labels: ['bug'],
       headBranch: 'feature',
+      headSha: `sha-${number}`,
       baseBranch: 'main',
       author: 'pr-author',
       createdAt: '2030-01-01T00:00:00Z',
@@ -1733,7 +1817,13 @@ describe('createGithubPullRequestReconciler', () => {
 
   async function createCard(
     context: Awaited<ReturnType<typeof setup>>,
-    input: { number: number; url?: string | null; stages?: string[]; metadata?: Record<string, unknown> },
+    input: {
+      number: number;
+      url?: string | null;
+      stages?: string[];
+      sessions?: Record<string, { sessionId: string; threadId: string; branch?: string; startedBy: string }>;
+      metadata?: Record<string, unknown>;
+    },
   ) {
     return context.workItems.upsert({
       orgId: 'org-1',
@@ -1748,7 +1838,7 @@ describe('createGithubPullRequestReconciler', () => {
         },
         title: `PR ${input.number}`,
         stages: input.stages ?? ['review'],
-        sessions: {},
+        sessions: input.sessions ?? {},
         metadata: input.metadata ?? {},
       },
     });
@@ -1758,6 +1848,7 @@ describe('createGithubPullRequestReconciler', () => {
     context: Awaited<ReturnType<typeof setup>>,
     fetchPullRequest: ReturnType<typeof vi.fn>,
     fetchIssue?: ReturnType<typeof vi.fn>,
+    notifications?: InMemoryNotificationsStorage,
   ) {
     return createGithubPullRequestReconciler(
       {
@@ -1766,6 +1857,7 @@ describe('createGithubPullRequestReconciler', () => {
         integrationStorage: context.integrationStorage,
         projects: context.projects,
         storage: context.workItems,
+        ...(notifications ? { notifications } : {}),
         rules: builtInFactoryRules(),
       },
       fetchPullRequest as never,
@@ -1806,6 +1898,141 @@ describe('createGithubPullRequestReconciler', () => {
       author: 'maintainer',
     };
   }
+
+  it('requeues a failed GitHub notification for a bound work session once', async () => {
+    const context = await setup('read');
+    const notifications = new InMemoryNotificationsStorage();
+    await createCard(context, {
+      number: 17,
+      sessions: {
+        build: { sessionId: 'session-1', threadId: 'thread-1', startedBy: 'user-1' },
+      },
+    });
+    await notifications.createNotification({
+      id: 'notification-1',
+      threadId: 'thread-1',
+      source: 'github',
+      kind: 'review-comment-created',
+      priority: 'high',
+      summary: 'Address review feedback',
+    });
+    await notifications.updateNotification({
+      id: 'notification-1',
+      threadId: 'thread-1',
+      status: 'failed',
+      deliveryAttempts: 5,
+      lastDeliveryError: 'Factory session was resolved without a caller identity',
+    });
+    const reconciler = createReconciler(context, vi.fn().mockResolvedValue(undefined), undefined, notifications);
+
+    await reconciler([repositoryTarget]);
+
+    await expect(notifications.getNotification({ id: 'notification-1', threadId: 'thread-1' })).resolves.toMatchObject({
+      status: 'pending',
+      deliveryAttempts: 0,
+      metadata: { githubRecoveryAttempts: 1 },
+    });
+
+    await notifications.updateNotification({
+      id: 'notification-1',
+      threadId: 'thread-1',
+      status: 'failed',
+      deliveryAttempts: 5,
+    });
+    await reconciler([repositoryTarget]);
+
+    await expect(notifications.getNotification({ id: 'notification-1', threadId: 'thread-1' })).resolves.toMatchObject({
+      status: 'failed',
+      deliveryAttempts: 5,
+      metadata: { githubRecoveryAttempts: 1 },
+    });
+  });
+
+  it.each(['delivered', 'seen'] as const)(
+    'requeues stale %s GitHub feedback without a later completion signal',
+    async status => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-08-23T04:30:00.000Z'));
+      try {
+        const context = await setup('read');
+        const notifications = new InMemoryNotificationsStorage();
+        await createCard(context, {
+          number: 17,
+          sessions: {
+            build: { sessionId: 'session-1', threadId: 'thread-1', startedBy: 'user-1' },
+          },
+        });
+        await notifications.createNotification({
+          id: 'notification-1',
+          threadId: 'thread-1',
+          source: 'github',
+          kind: 'review-changes-requested',
+          priority: 'urgent',
+          summary: 'Address review feedback',
+          createdAt: new Date('2026-08-23T04:30:00.000Z'),
+        });
+        await notifications.updateNotification({ id: 'notification-1', threadId: 'thread-1', status });
+        vi.setSystemTime(new Date('2026-08-23T05:00:00.000Z'));
+        const reconciler = createReconciler(context, vi.fn().mockResolvedValue(undefined), undefined, notifications);
+
+        await reconciler([repositoryTarget]);
+
+        await expect(
+          notifications.getNotification({ id: 'notification-1', threadId: 'thread-1' }),
+        ).resolves.toMatchObject({
+          status: 'pending',
+          deliveryAttempts: 0,
+          metadata: { githubRecoveryAttempts: 1 },
+        });
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it('does not requeue stale GitHub feedback after a later PR synchronization', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-23T05:00:00.000Z'));
+    try {
+      const context = await setup('read');
+      const notifications = new InMemoryNotificationsStorage();
+      await createCard(context, {
+        number: 17,
+        sessions: {
+          build: { sessionId: 'session-1', threadId: 'thread-1', startedBy: 'user-1' },
+        },
+      });
+      await notifications.createNotification({
+        id: 'feedback-1',
+        threadId: 'thread-1',
+        source: 'github',
+        kind: 'review-changes-requested',
+        priority: 'urgent',
+        summary: 'Address review feedback',
+        createdAt: new Date('2026-08-23T04:20:00.000Z'),
+      });
+      await notifications.updateNotification({ id: 'feedback-1', threadId: 'thread-1', status: 'delivered' });
+      await notifications.createNotification({
+        id: 'synchronize-1',
+        threadId: 'thread-1',
+        source: 'github',
+        kind: 'pull-request-synchronize',
+        priority: 'medium',
+        summary: 'New commits pushed',
+        createdAt: new Date('2026-08-23T04:40:00.000Z'),
+      });
+      const reconciler = createReconciler(context, vi.fn().mockResolvedValue(undefined), undefined, notifications);
+
+      await reconciler([repositoryTarget]);
+
+      await expect(notifications.getNotification({ id: 'feedback-1', threadId: 'thread-1' })).resolves.toMatchObject({
+        status: 'delivered',
+        metadata: undefined,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
   it('replays a missed merge through the ingress exactly once', async () => {
     const context = await setup('read');
@@ -2171,6 +2398,36 @@ describe('createGithubPullRequestReconciler', () => {
       },
     });
     expect(await context.workItems.listDeferredDecisions('org-1', context.project.id)).toHaveLength(0);
+  });
+
+  it('replays a missed synchronize event once when the pull request head changes', async () => {
+    const context = await setup('read');
+    const card = await createCard(context, {
+      number: 20,
+      stages: ['done'],
+      metadata: { state: 'open', draft: false, merged: false, githubHeadSha: 'old-sha', repository: 'acme/repo' },
+    });
+    const fetchPullRequest = vi.fn(async () => ({
+      ...mergedState(20),
+      state: 'open' as const,
+      merged: false,
+      headSha: 'new-sha',
+    }));
+    const reconcile = createReconciler(context, fetchPullRequest);
+
+    await reconcile([repositoryTarget]);
+    await reconcile([repositoryTarget]);
+
+    const decisions = await context.workItems.listDeferredDecisions('org-1', context.project.id);
+    expect(decisions).toEqual([
+      expect.objectContaining({
+        workItemId: card.item.id,
+        decision: expect.objectContaining({ type: 'transition', board: 'review', stage: 'review' }),
+      }),
+    ]);
+    await expect(context.workItems.get({ orgId: 'org-1', id: card.item.id })).resolves.toMatchObject({
+      metadata: { githubHeadSha: 'new-sha' },
+    });
   });
 
   it.each([

@@ -351,6 +351,14 @@ async function resolveSubscriptionSession(
   if (!thread) return undefined;
   const ownerResourceId = thread.resourceId || resourceId;
   const scope = subscription.sessionScope || undefined;
+  const sessionRow = await github?.sourceControlStorage.sessions.getBySessionId(sessionId);
+  if (github && !sessionRow) {
+    throw new Error(`GitHub subscription ${subscription.id} has no Factory session ${sessionId} to run as.`);
+  }
+  const userId = sessionRow?.userId ?? subscription.data.subscribedByUserId ?? subscription.data.ownerId;
+  const organizationId = sessionRow?.orgId ?? subscription.orgId;
+  const requestContext = new RequestContext();
+  requestContext.set('user', { workosId: userId, organizationId });
   let session = await controller.getSessionByResource(ownerResourceId, scope);
   if (!session) {
     const tags = {
@@ -363,15 +371,9 @@ async function resolveSubscriptionSession(
     // The session is created under the resource that owns the thread, so the
     // thread switch below resolves; the persisted Factory session is keyed by
     // the subscription's session ID.
-    const sessionRow = await github?.sourceControlStorage.sessions.getBySessionId(sessionId);
-    if (!sessionRow) {
-      throw new Error(`GitHub subscription ${subscription.id} has no Factory session ${sessionId} to run as.`);
-    }
-    const requestContext = new RequestContext();
-    requestContext.set('user', { workosId: sessionRow.userId, organizationId: sessionRow.orgId });
     session = await controller.createSession({
       id: sessionId,
-      ownerId: sessionRow.userId,
+      ownerId: userId,
       resourceId: ownerResourceId,
       scope,
       tags,
@@ -384,7 +386,7 @@ async function resolveSubscriptionSession(
   if (session.thread.getId() !== threadId) {
     throw new Error(`Session ${sessionId} did not bind thread ${threadId}.`);
   }
-  return session;
+  return { session, requestContext };
 }
 
 /**
@@ -525,35 +527,38 @@ export async function dispatchGithubWebhook(
 
   for (const subscription of subscriptions) {
     try {
-      const session = await resolveSubscriptionSession(dependencies.controller, subscription, dependencies.github);
+      const resolved = await resolveSubscriptionSession(dependencies.controller, subscription, dependencies.github);
       // No session means this deployment does not hold the subscribed thread.
       // That is not a delivery failure, so it must not be retried or counted as
       // one; the subscription is left untouched because the thread may exist
       // wherever the subscription was created.
-      if (!session) {
+      if (!resolved) {
         skipped += 1;
         dependencies.onTargetSkipped?.(subscription);
         continue;
       }
-      const result = await session.sendNotificationSignal({
-        source: 'github',
-        kind: notification.kind,
-        summary: notification.summary,
-        priority: notification.priority,
-        payload: notification.payload,
-        sourceId: parsed.deliveryId,
-        dedupeKey: `${parsed.deliveryId}:${subscription.sessionId}:${subscription.threadId}`,
-        coalesceKey: `github:${subscription.data.repositoryExternalId}:pull-request:${subscription.data.changeRequestId}`,
-        metadata: {
-          event: notification.metadata.event,
-          action: notification.action,
-          repository: notification.metadata.repository,
-          issueNumber: notification.metadata.issueNumber,
-          pullRequestNumber: notification.metadata.pullRequestNumber,
-          targetUrl: notificationTargetUrl(parsed.event, parsed.payload),
-          deliveryId: parsed.deliveryId,
+      const result = await resolved.session.sendNotificationSignal(
+        {
+          source: 'github',
+          kind: notification.kind,
+          summary: notification.summary,
+          priority: notification.priority,
+          payload: notification.payload,
+          sourceId: parsed.deliveryId,
+          dedupeKey: `${parsed.deliveryId}:${subscription.sessionId}:${subscription.threadId}`,
+          coalesceKey: `github:${subscription.data.repositoryExternalId}:pull-request:${subscription.data.changeRequestId}`,
+          metadata: {
+            event: notification.metadata.event,
+            action: notification.action,
+            repository: notification.metadata.repository,
+            issueNumber: notification.metadata.issueNumber,
+            pullRequestNumber: notification.metadata.pullRequestNumber,
+            targetUrl: notificationTargetUrl(parsed.event, parsed.payload),
+            deliveryId: parsed.deliveryId,
+          },
         },
-      });
+        { requestContext: resolved.requestContext },
+      );
       await Promise.all([result.persisted, result.accepted].filter(Boolean));
       if (notification.terminal) {
         await retireSubscription(subscription.id, notification.kind === 'pull-request-merged' ? 'merged' : 'closed');

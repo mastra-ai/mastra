@@ -231,9 +231,12 @@ export function createTenantCredentialPrimer({
     const tenant = auth.tenant(c);
     if (tenant) {
       try {
-        await storeFor(tenant, credentials).ensureFresh();
+        await Promise.all([
+          storeFor(tenant, credentials).ensureFresh(),
+          storeFor({ ...tenant, orgFirst: true }, credentials).ensureFresh(),
+        ]);
       } catch {
-        // Fail open: model calls fall back to env credentials.
+        // Fail open: model calls serve the last tenant-scoped snapshot.
       }
     }
     await next();

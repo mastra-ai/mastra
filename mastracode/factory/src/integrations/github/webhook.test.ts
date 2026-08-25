@@ -264,8 +264,14 @@ describe('dispatchGithubWebhook', () => {
   });
 
   it('delivers with per-target dedupe, exact scope/thread resume, and no delivery overrides', async () => {
-    const sendA = vi.fn(async () => ({ record: { id: 'n-a' }, decision: { action: 'deliver' } }));
-    const sendB = vi.fn(async () => ({ record: { id: 'n-b' }, decision: { action: 'deliver' } }));
+    const sendA = vi.fn(async (_input: unknown, _options: { requestContext: RequestContext }) => ({
+      record: { id: 'n-a' },
+      decision: { action: 'deliver' },
+    }));
+    const sendB = vi.fn(async (_input: unknown, _options: { requestContext: RequestContext }) => ({
+      record: { id: 'n-b' },
+      decision: { action: 'deliver' },
+    }));
     const switchB = vi.fn(async () => undefined);
     const liveA = { thread: { getId: () => 'thread-a', switch: vi.fn() }, sendNotificationSignal: sendA };
     const resumedB = { thread: { getId: () => 'thread-b', switch: switchB }, sendNotificationSignal: sendB };
@@ -292,8 +298,9 @@ describe('dispatchGithubWebhook', () => {
 
     expect(result).toEqual({ delivered: 2, failed: 0, skipped: 0, ignored: false });
     expect(getSessionByResource).toHaveBeenCalledWith('resource-1', '/worktrees/a');
-    expect(getBySessionId).toHaveBeenCalledOnce();
-    expect(getBySessionId).toHaveBeenCalledWith('session-b');
+    expect(getBySessionId).toHaveBeenCalledTimes(2);
+    expect(getBySessionId).toHaveBeenNthCalledWith(1, 'session-a');
+    expect(getBySessionId).toHaveBeenNthCalledWith(2, 'session-b');
     // Owner and identity both come from the Factory session row, not from the
     // subscription's `ownerId` ('owner-1'), which matches no user.
     expect(createSession).toHaveBeenCalledWith({
@@ -322,8 +329,12 @@ describe('dispatchGithubWebhook', () => {
           targetUrl: 'https://github.com/octo/hello/pull/34#issuecomment-123',
         }),
       }),
+      expect.objectContaining({ requestContext: expect.any(RequestContext) }),
     );
-    expect(sendA.mock.calls[0]).toHaveLength(1);
+    expect(sendA.mock.calls[0]?.[1]?.requestContext.get('user')).toEqual({
+      workosId: 'user-1',
+      organizationId: 'org-1',
+    });
   });
 
   it('fails the delivery instead of reviving a session it cannot attribute to a user', async () => {

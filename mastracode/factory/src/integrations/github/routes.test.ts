@@ -1,4 +1,5 @@
 import { createHmac } from 'node:crypto';
+import { RequestContext } from '@mastra/core/request-context';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ListIntakeIssuesInput } from '../../capabilities/intake.js';
@@ -781,7 +782,7 @@ describe('webhook route', () => {
   });
 
   it('dispatches a verified PR webhook through the configured controller', async () => {
-    const sendNotificationSignal = vi.fn(async () => ({
+    const sendNotificationSignal = vi.fn(async (_input: unknown, _options: { requestContext: RequestContext }) => ({
       record: { id: 'notification-1' },
       decision: { action: 'deliver' },
     }));
@@ -796,6 +797,22 @@ describe('webhook route', () => {
       getSessionByResource: vi.fn(async () => session),
       createSession: vi.fn(),
     } as unknown as NonNullable<Parameters<typeof buildGithubRoutes>[0]>['controller'];
+    const now = new Date();
+    tables.sessions.push({
+      id: 'stored-session-1',
+      sessionId: 'session-1',
+      projectRepositoryId: 'project-1',
+      orgId: 'org1',
+      userId: 'owner-1',
+      branch: 'feat/review',
+      title: null,
+      baseBranch: 'main',
+      sandboxId: null,
+      sandboxWorkdir: '/worktrees/a',
+      materializedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    });
     tables.subscriptions.push({
       id: 'subscription-1',
       orgId: 'org1',
@@ -831,7 +848,10 @@ describe('webhook route', () => {
         priority: 'high',
         dedupeKey: 'delivery-1:session-1:thread-1',
       }),
+      expect.objectContaining({ requestContext: expect.any(RequestContext) }),
     );
+    const requestContext = sendNotificationSignal.mock.calls[0]?.[1]?.requestContext;
+    expect(requestContext?.get('user')).toEqual({ workosId: 'owner-1', organizationId: 'org1' });
   });
 
   it('rejects invalid signatures without logging', async () => {

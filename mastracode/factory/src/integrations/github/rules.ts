@@ -1,3 +1,5 @@
+import type { NotificationsStorage } from '@mastra/core/notifications';
+
 import { resolveFactoryGithubRule } from '../../rules/resolve.js';
 import type {
   FactoryGithubEventName,
@@ -195,6 +197,7 @@ export interface GithubRulesOptions {
   integrationStorage: IntegrationStorageHandle;
   projects: FactoryProjectsStorage;
   storage: WorkItemsStorage;
+  notifications?: NotificationsStorage;
   rules: FactoryRules;
 }
 
@@ -488,8 +491,19 @@ export class GithubRules {
     // the wake is silently dropped. The linked card records its author in
     // `parentWorkItemId`, so follow that link back rather than relaxing the
     // guard, which would let a Review card react to its own posted review.
-    if (preferAuthoringItem && resolved?.externalSource?.type === 'pull-request' && resolved.parentWorkItemId) {
-      return items.find(item => item.id === resolved.parentWorkItemId) ?? resolved;
+    if (preferAuthoringItem && resolved?.externalSource?.type === 'pull-request') {
+      if (resolved.parentWorkItemId) {
+        return items.find(item => item.id === resolved.parentWorkItemId) ?? resolved;
+      }
+      if (pullRequestHeadBranch) {
+        return (
+          items.find(
+            item =>
+              item.externalSource?.type !== 'pull-request' &&
+              Object.values(item.sessions).some(session => session.branch === pullRequestHeadBranch),
+          ) ?? resolved
+        );
+      }
     }
     return resolved;
   }
@@ -551,6 +565,7 @@ export interface ReconcilePullRequestState {
   requestedReviewers?: string[];
   labels?: string[];
   headBranch: string;
+  headSha?: string;
   baseBranch: string;
   author?: string;
   createdAt?: string;
@@ -696,6 +711,36 @@ export function reconciledIssueClosedEvent(
   };
 }
 
+export function reconciledUpdatedEvent(
+  repository: ReconcileRepository,
+  pullRequestNumber: number,
+  state: ReconcilePullRequestState,
+): ParsedGithubWebhook {
+  return {
+    event: 'pull_request',
+    deliveryId: `reconcile:${repository.id}:pull-request:${pullRequestNumber}:synchronize:${state.headSha}`,
+    payload: {
+      action: 'synchronize',
+      installation: { id: repository.installationId },
+      repository: { id: repository.id, full_name: repository.fullName },
+      sender: { login: state.author ?? 'github' },
+      pull_request: {
+        number: pullRequestNumber,
+        title: state.title,
+        html_url: state.url,
+        state: 'open',
+        draft: state.draft,
+        merged: false,
+        assignees: (state.assignees ?? []).map(login => ({ login })),
+        requested_reviewers: (state.requestedReviewers ?? []).map(login => ({ login })),
+        labels: (state.labels ?? []).map(name => ({ name })),
+        head: { ref: state.headBranch, sha: state.headSha },
+        base: { ref: state.baseBranch },
+      },
+    },
+  };
+}
+
 export function reconciledClosedEvent(
   repository: ReconcileRepository,
   pullRequestNumber: number,
@@ -722,7 +767,7 @@ export function reconciledClosedEvent(
         assignees: (state.assignees ?? []).map(login => ({ login })),
         requested_reviewers: (state.requestedReviewers ?? []).map(login => ({ login })),
         labels: (state.labels ?? []).map(name => ({ name })),
-        head: { ref: state.headBranch },
+        head: { ref: state.headBranch, ...(state.headSha ? { sha: state.headSha } : {}) },
         base: { ref: state.baseBranch },
       },
     },
@@ -741,6 +786,7 @@ function reconciledPullRequestMetadata(
     ...(state.assignees ? { assignees: state.assignees } : {}),
     ...(state.requestedReviewers ? { requestedReviewers: state.requestedReviewers } : {}),
     ...(state.labels ? { labels: state.labels } : {}),
+    ...(state.headSha ? { githubHeadSha: state.headSha } : {}),
     [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]:
       reconciliation === 'settled' ? (state.merged ? 'merged' : 'closed') : null,
   };
@@ -772,6 +818,66 @@ async function retireReconciledSubscriptions(
     rows
       .filter(row => row.status === 'open')
       .map(row => storage.subscriptions.updateStatus(row.id, merged ? 'merged' : 'closed')),
+  );
+}
+
+const GITHUB_RECOVERY_ATTEMPTS_KEY = 'githubRecoveryAttempts';
+const GITHUB_FEEDBACK_RECOVERY_DELAY_MS = 10 * 60 * 1000;
+const GITHUB_FEEDBACK_KINDS = new Set([
+  'issue-comment-created',
+  'review-comment-created',
+  'review-changes-requested',
+  'review-submitted',
+]);
+const GITHUB_FEEDBACK_COMPLETION_KINDS = new Set([
+  'pull-request-synchronize',
+  'pull-request-closed',
+  'pull-request-merged',
+  'review-approved',
+]);
+
+async function recoverGithubNotifications(
+  notifications: NotificationsStorage | undefined,
+  cards: Iterable<WorkItemRow>,
+  now = new Date(),
+): Promise<void> {
+  if (!notifications) return;
+  const threadIds = new Set<string>();
+  for (const card of cards) {
+    for (const session of Object.values(card.sessions)) threadIds.add(session.threadId);
+  }
+  await Promise.all(
+    [...threadIds].map(async threadId => {
+      const records = await notifications.listNotifications({ threadId, source: 'github' });
+      await Promise.all(
+        records.map(async notification => {
+          const recoveryAttempts = number(notification.metadata?.[GITHUB_RECOVERY_ATTEMPTS_KEY]) ?? 0;
+          if (recoveryAttempts >= 1) return;
+          const failed = notification.status === 'failed';
+          const staleFeedback =
+            (notification.status === 'delivered' || notification.status === 'seen') &&
+            GITHUB_FEEDBACK_KINDS.has(notification.kind) &&
+            now.getTime() - (notification.seenAt ?? notification.deliveredAt ?? notification.updatedAt).getTime() >=
+              GITHUB_FEEDBACK_RECOVERY_DELAY_MS &&
+            !records.some(
+              later =>
+                later.createdAt > notification.createdAt && GITHUB_FEEDBACK_COMPLETION_KINDS.has(later.kind),
+            );
+          if (!failed && !staleFeedback) return;
+          await notifications.updateNotification({
+            id: notification.id,
+            threadId,
+            status: 'pending',
+            deliverAt: now,
+            deliveryAttempts: 0,
+            metadata: {
+              ...notification.metadata,
+              [GITHUB_RECOVERY_ATTEMPTS_KEY]: recoveryAttempts + 1,
+            },
+          });
+        }),
+      );
+    }),
   );
 }
 
@@ -856,6 +962,11 @@ export function createGithubPullRequestReconciler(
         recordFailure(repository, error);
         continue;
       }
+      try {
+        await recoverGithubNotifications(options.notifications, [...cardsByNumber.values()].flat());
+      } catch (error) {
+        recordFailure(repository, error);
+      }
       for (const [pullRequestNumber, cards] of cardsByNumber) {
         try {
           const state = await fetchPullRequest({
@@ -865,6 +976,13 @@ export function createGithubPullRequestReconciler(
           });
           summary.checked += 1;
           if (!state) continue;
+          if (
+            state.state === 'open' &&
+            state.headSha &&
+            cards.some(card => typeof card.metadata?.githubHeadSha === 'string' && card.metadata.githubHeadSha !== state.headSha)
+          ) {
+            await rules.ingest(reconciledUpdatedEvent(repository, pullRequestNumber, state));
+          }
           for (const card of cards) {
             if (state.state === 'closed') continue;
             const metadata = card.metadata ?? {};
@@ -874,8 +992,9 @@ export function createGithubPullRequestReconciler(
             const assigneesChanged = !sameStrings(metadata.assignees, state.assignees);
             const reviewersChanged = !sameStrings(metadata.requestedReviewers, state.requestedReviewers);
             const labelsChanged = !sameStrings(metadata.labels, state.labels);
+            const headChanged = state.headSha !== undefined && metadata.githubHeadSha !== state.headSha;
             const metadataChanged =
-              statusChanged || authorChanged || assigneesChanged || reviewersChanged || labelsChanged;
+              statusChanged || authorChanged || assigneesChanged || reviewersChanged || labelsChanged || headChanged;
             const reconciliation = metadata[FACTORY_PULL_REQUEST_RECONCILIATION_KEY];
             if (!metadataChanged && reconciliation !== 'merged' && reconciliation !== 'closed') continue;
             try {
@@ -942,6 +1061,7 @@ export function githubRulesOptions(
     integrationStorage: context.storage.generic,
     projects: context.storage.projects,
     storage: context.rules.workItems,
+    ...(context.notifications ? { notifications: context.notifications } : {}),
     rules: context.rules.config,
   };
 }

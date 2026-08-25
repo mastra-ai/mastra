@@ -232,6 +232,11 @@ describe('createTenantCredentialPrimer', () => {
     ctx.set('user', { workosId: USER, organizationId: ORG });
     // Snapshot already hydrated by the primer — sync read works immediately.
     expect(resolveCredentialStore(ctx)!.getStoredApiKey('openai')).toBe('user-key');
+
+    ctx.set('controller', { state: { factoryProjectId: 'project-1' } });
+    // Factory sessions use a distinct org-first store, which must also be warm
+    // before synchronous model routing checks for OAuth credentials.
+    expect(resolveCredentialStore(ctx)!.getStoredApiKey('openai')).toBe('user-key');
   });
 
   it('passes unauthenticated requests through untouched', async () => {

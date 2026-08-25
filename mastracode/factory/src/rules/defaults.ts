@@ -344,6 +344,7 @@ function addressReviewFeedback(context: FactoryGithubRuleContext) {
     idempotencyKey: `${context.ingress.id}:address-review-feedback`,
     role: 'work',
     priority: 'high',
+    prepareBinding: true,
     message:
       `Changes were requested on pull request #${context.pullRequest.number} (${context.review.url}). ` +
       'Read the review comments on this PR, address the ones you agree with, and push the fixes to the PR branch. ' +
@@ -402,6 +403,7 @@ function addressPullRequestComment(context: FactoryGithubRuleContext) {
     idempotencyKey: `${context.ingress.id}:address-pull-request-comment`,
     role: 'work',
     priority: 'high',
+    prepareBinding: true,
     message:
       `${context.issueComment.author ?? 'Someone'} commented on pull request #${context.pullRequest.number} ` +
       `(${context.issueComment.url ?? context.pullRequest.url}). Read the comment, address it if you agree, and push ` +
