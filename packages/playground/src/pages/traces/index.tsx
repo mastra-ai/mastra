@@ -50,7 +50,6 @@ import { SpanScoresList } from '@/domains/traces/components/span-scores-list';
 import { SpanScoring } from '@/domains/traces/components/span-scoring';
 import { useTraceFeedback } from '@/domains/traces/hooks/use-trace-feedback';
 import { Link } from '@/lib/link';
-import { startViewTransition } from '@/lib/routing';
 
 type TracesPageProps = {
   scopedEntityId?: string;
@@ -500,7 +499,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
               anchorSpanId={anchorSpanId}
               isLoading={isLoadingLightSpans}
               onClose={url.handleTraceClose}
-              onSpanSelect={id => startViewTransition(() => url.handleSpanChange(id ?? null))}
+              onSpanSelect={id => url.handleSpanChange(id ?? null)}
               onEvaluateTrace={handleEvaluateTrace}
               onSaveAsDatasetItem={args => setDatasetDialogTarget(args)}
               onAddTraceMocksToItem={isAgentTrace ? args => setAddMocksTarget(args) : undefined}
@@ -551,7 +550,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
                     span={spanDetailData?.span}
                     isAnchor={anchorSpanId ? url.spanIdParam === anchorSpanId : undefined}
                     isLoading={isLoadingSpanDetail}
-                    onClose={() => startViewTransition(url.handleSpanClose)}
+                    onClose={url.handleSpanClose}
                     onPrevious={handlePreviousSpan}
                     onNext={handleNextSpan}
                     activeTab={url.spanTabParam ?? 'details'}

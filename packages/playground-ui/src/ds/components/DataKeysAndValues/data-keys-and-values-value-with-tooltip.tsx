@@ -4,19 +4,17 @@ import { cn } from '@/lib/utils';
 
 export interface DataKeysAndValuesValueWithTooltipProps {
   className?: string;
-  style?: React.CSSProperties;
   children: React.ReactNode;
   tooltip: string;
 }
 
 export function DataKeysAndValuesValueWithTooltip({
   className,
-  style,
   children,
   tooltip,
 }: DataKeysAndValuesValueWithTooltipProps) {
   return (
-    <dd className={cn(dataKeysAndValuesValueStyles, className)} style={style}>
+    <dd className={cn(dataKeysAndValuesValueStyles, className)}>
       <Tooltip>
         <TooltipTrigger asChild>
           <div tabIndex={0} className="hover:text-neutral4 inline cursor-help truncate">
