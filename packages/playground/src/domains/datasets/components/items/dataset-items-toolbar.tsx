@@ -1,21 +1,10 @@
 'use client';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
-import { Chip } from '@mastra/playground-ui/components/Chip';
 import { Column } from '@mastra/playground-ui/components/Columns';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { SearchFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
-import {
-  Plus,
-  Upload,
-  FileJson,
-  Download,
-  FolderPlus,
-  FolderOutput,
-  Trash2,
-  ChevronDownIcon,
-  EllipsisVerticalIcon,
-} from 'lucide-react';
+import { Plus, Upload, FileJson, Download, FolderPlus, FolderOutput, Trash2, ChevronDown } from 'lucide-react';
 
 export type DatasetItemsToolbarProps = {
   // Normal mode actions
@@ -35,7 +24,6 @@ export type DatasetItemsToolbarProps = {
   onCreateDatasetClick?: () => void;
   onAddToDatasetClick?: () => void;
   onDeleteClick?: () => void;
-  onCancelSelection: () => void;
 
   isItemPanelOpen?: boolean;
   isViewingOldVersion?: boolean;
@@ -54,7 +42,6 @@ export function DatasetItemsToolbar({
   onCreateDatasetClick,
   onAddToDatasetClick,
   onDeleteClick,
-  onCancelSelection,
   isItemPanelOpen,
   isViewingOldVersion,
 }: DatasetItemsToolbarProps) {
@@ -73,61 +60,49 @@ export function DatasetItemsToolbar({
   );
 
   if (selectedCount > 0) {
-    const hasMoreActions = Boolean(onCreateDatasetClick || onAddToDatasetClick);
-
     return (
       <Column.Toolbar className="">
         {searchField}
 
-        <div className="flex items-center gap-5">
-          <div className="text-neutral3 flex items-center gap-2 text-sm">
-            <Chip size="large" color="green">
-              {selectedCount}
-            </Chip>
-            <span>selected</span>
-          </div>
-          <ButtonsGroup>
-            {onDeleteClick && (
-              <Button onClick={onDeleteClick} className="text-red-500">
-                <Trash2 /> Delete
-              </Button>
-            )}
+        <DropdownMenu>
+          <DropdownMenu.Trigger asChild>
+            <Button>
+              {selectedCount} selected <ChevronDown />
+            </Button>
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Content align="end" className="w-72">
             {onExportClick && (
-              <Button onClick={onExportClick}>
+              <DropdownMenu.Item onSelect={onExportClick}>
                 <Download /> Export CSV
-              </Button>
+              </DropdownMenu.Item>
             )}
             {onExportJsonClick && (
-              <Button onClick={onExportJsonClick}>
+              <DropdownMenu.Item onSelect={onExportJsonClick}>
                 <Download /> Export JSON
-              </Button>
+              </DropdownMenu.Item>
             )}
-            {hasMoreActions && (
-              <DropdownMenu>
-                <DropdownMenu.Trigger asChild>
-                  <Button aria-label="More selection actions">
-                    <EllipsisVerticalIcon />
-                  </Button>
-                </DropdownMenu.Trigger>
-                <DropdownMenu.Content align="end" className="w-72">
-                  {onCreateDatasetClick && (
-                    <DropdownMenu.Item onSelect={onCreateDatasetClick}>
-                      <FolderPlus />
-                      <span>Create Dataset from Items</span>
-                    </DropdownMenu.Item>
-                  )}
-                  {onAddToDatasetClick && (
-                    <DropdownMenu.Item onSelect={onAddToDatasetClick}>
-                      <FolderOutput />
-                      <span>Copy Items to Dataset</span>
-                    </DropdownMenu.Item>
-                  )}
-                </DropdownMenu.Content>
-              </DropdownMenu>
+            {onCreateDatasetClick && (
+              <DropdownMenu.Item onSelect={onCreateDatasetClick}>
+                <FolderPlus />
+                <span>Create Dataset from Items</span>
+              </DropdownMenu.Item>
             )}
-            <Button onClick={onCancelSelection}>Cancel</Button>
-          </ButtonsGroup>
-        </div>
+            {onAddToDatasetClick && (
+              <DropdownMenu.Item onSelect={onAddToDatasetClick}>
+                <FolderOutput />
+                <span>Copy Items to Dataset</span>
+              </DropdownMenu.Item>
+            )}
+            {onDeleteClick && (
+              <>
+                <DropdownMenu.Separator />
+                <DropdownMenu.Item onSelect={onDeleteClick} className="text-red-500 focus:text-red-400">
+                  <Trash2 /> Delete Items
+                </DropdownMenu.Item>
+              </>
+            )}
+          </DropdownMenu.Content>
+        </DropdownMenu>
       </Column.Toolbar>
     );
   }
@@ -145,7 +120,7 @@ export function DatasetItemsToolbar({
             <DropdownMenu>
               <DropdownMenu.Trigger asChild>
                 <Button aria-label="Dataset actions menu">
-                  <ChevronDownIcon />
+                  <ChevronDown />
                 </Button>
               </DropdownMenu.Trigger>
               <DropdownMenu.Content align="end">

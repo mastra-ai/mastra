@@ -61,8 +61,6 @@ const paths = {
   datasetItemLink: (datasetId: string, itemId: string) => `/datasets/${datasetId}/items/${itemId}`,
   datasetItemCompareLink: (datasetId: string, itemId: string, secondItemId: string) =>
     `/datasets/${datasetId}/items/${itemId}/compare/${secondItemId}`,
-  datasetExperimentLink: (datasetId: string, experimentId: string) =>
-    `/datasets/${datasetId}/experiments/${experimentId}`,
   experimentLink: (experimentId: string) => `/experiments/${experimentId}`,
 } satisfies LinkComponentProviderProps['paths'];
 

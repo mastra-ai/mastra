@@ -107,7 +107,7 @@ function DatasetPage() {
   }
 
   const handleExperimentSuccess = (experimentId: string) => {
-    void navigate(`/datasets/${datasetId}/experiments/${experimentId}`);
+    void navigate(`/experiments/${experimentId}`);
   };
 
   const handleDeleteSuccess = () => {

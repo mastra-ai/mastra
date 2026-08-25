@@ -46,7 +46,6 @@ const noopPaths = {
   datasetLink: () => '',
   datasetItemLink: () => '',
   datasetItemCompareLink: () => '',
-  datasetExperimentLink: () => '',
   experimentLink: () => '',
 } as never;
 

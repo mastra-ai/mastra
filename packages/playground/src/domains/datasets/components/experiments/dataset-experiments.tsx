@@ -26,7 +26,7 @@ export function DatasetExperiments({
 }: DatasetExperimentsProps) {
   const [selectedExperimentIds, setSelectedExperimentIds] = useState<string[]>([]);
   const [isSelectionActive, setIsSelectionActive] = useState(false);
-  const { navigate } = useLinkComponent();
+  const { navigate, paths } = useLinkComponent();
 
   // Derive unique target IDs from all (unfiltered) experiments for the filter dropdown
   const targetIds = useMemo(() => {
@@ -62,7 +62,7 @@ export function DatasetExperiments({
   };
 
   const handleRowClick = (experimentId: string) => {
-    navigate(`/datasets/${datasetId}/experiments/${experimentId}`);
+    navigate(paths.experimentLink(experimentId));
   };
 
   if (isLoading) {

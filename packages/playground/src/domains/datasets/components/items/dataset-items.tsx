@@ -154,7 +154,6 @@ export function DatasetItems({
         onCreateDatasetClick={onCreateDatasetClick ? () => onCreateDatasetClick(getSelectedItems()) : undefined}
         onAddToDatasetClick={onAddToDatasetClick ? () => onAddToDatasetClick(getSelectedItems()) : undefined}
         onDeleteClick={onBulkDeleteClick ? () => onBulkDeleteClick(Array.from(selection.selectedIds)) : undefined}
-        onCancelSelection={selection.clearSelection}
         isItemPanelOpen={!!featuredItem}
         isViewingOldVersion={isViewingOldVersion}
       />

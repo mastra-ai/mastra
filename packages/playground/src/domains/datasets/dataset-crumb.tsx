@@ -1,4 +1,3 @@
-import { Button } from '@mastra/playground-ui/components/Button';
 import { ComboboxPrimitive, comboboxStyles } from '@mastra/playground-ui/components/Combobox';
 import { Check, ChevronsUpDown, Search } from 'lucide-react';
 import { useParams } from 'react-router';
@@ -23,10 +22,15 @@ export function DatasetCrumb() {
   const selected = options.find(o => o.value === datasetId) ?? null;
 
   return (
-    <span className="flex items-center">
-      <Button as={Link} href={paths.datasetLink(datasetId)} variant="ghost" size="sm">
+    <span className="flex min-w-0 items-center gap-1">
+      {/* Inherits crumb typography/color from the surrounding Crumb; only adds
+          the hover affordance and truncation of a linkable crumb. */}
+      <Link
+        href={paths.datasetLink(datasetId)}
+        className="hover:bg-neutral6/5 hover:text-neutral5 active:bg-neutral6/10 min-w-0 cursor-pointer truncate rounded-md px-1 py-0.5 transition-colors"
+      >
         {selected?.label ?? datasetId}
-      </Button>
+      </Link>
       <ComboboxPrimitive.Root
         autoHighlight
         items={options}

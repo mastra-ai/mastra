@@ -20,7 +20,7 @@ export const StubLink = forwardRef<HTMLAnchorElement, AnchorHTMLAttributes<HTMLA
 
 // Every path resolves to the id-bearing route so tests can assert real hrefs
 // where they matter and simply render everywhere else.
-const stubLinkPaths: LinkComponentProviderProps['paths'] = {
+export const stubLinkPaths: LinkComponentProviderProps['paths'] = {
   agentLink: id => `/agents/${id}`,
   agentsLink: () => '/agents',
   agentToolLink: (agentId, toolId) => `/agents/${agentId}/tools/${toolId}`,
@@ -57,7 +57,6 @@ const stubLinkPaths: LinkComponentProviderProps['paths'] = {
   datasetItemLink: (datasetId, itemId) => `/datasets/${datasetId}/items/${itemId}`,
   datasetItemCompareLink: (datasetId, itemId, secondItemId) =>
     `/datasets/${datasetId}/items/${itemId}/compare/${secondItemId}`,
-  datasetExperimentLink: (datasetId, experimentId) => `/datasets/${datasetId}/experiments/${experimentId}`,
   experimentLink: id => `/experiments/${id}`,
 };
 

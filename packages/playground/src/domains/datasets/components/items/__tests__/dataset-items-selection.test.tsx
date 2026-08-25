@@ -36,6 +36,8 @@ const renderItems = (props: Partial<React.ComponentProps<typeof DatasetItems>> =
     </TestLinkProvider>,
   );
 
+const selectionTrigger = () => screen.getByRole('button', { name: /1 selected/ });
+
 describe('DatasetItems selection', () => {
   it('always shows checkboxes on the current version, with no "Select &" menu', () => {
     renderItems();
@@ -52,7 +54,7 @@ describe('DatasetItems selection', () => {
     expect(screen.queryByLabelText('Select item item-a')).toBeNull();
   });
 
-  it('shows the contextual actions once an item is checked', () => {
+  it('collects all contextual actions in a single "{n} selected" menu', () => {
     renderItems({
       onBulkDeleteClick: () => {},
       onCreateDatasetClick: () => {},
@@ -60,44 +62,47 @@ describe('DatasetItems selection', () => {
     });
 
     fireEvent.click(screen.getByLabelText('Select item item-a'));
+    fireEvent.click(selectionTrigger());
 
-    expect(screen.getByText('selected')).toBeDefined();
-    expect(screen.getByText('Delete')).toBeDefined();
     expect(screen.getByText('Export CSV')).toBeDefined();
     expect(screen.getByText('Export JSON')).toBeDefined();
-    expect(screen.getByLabelText('More selection actions')).toBeDefined();
-    expect(screen.getByText('Cancel')).toBeDefined();
+    expect(screen.getByText('Create Dataset from Items')).toBeDefined();
+    expect(screen.getByText('Copy Items to Dataset')).toBeDefined();
+    expect(screen.getByText('Delete Items')).toBeDefined();
+    // Dropdown-only selection UX — no inline action buttons or Cancel.
+    expect(screen.queryByText('Cancel')).toBeNull();
   });
 
-  it('exposes Create/Copy dataset actions in the more-actions menu', () => {
+  it('invokes the Create Dataset action with the checked items', () => {
     const onCreateDatasetClick = vi.fn();
     renderItems({ onCreateDatasetClick, onAddToDatasetClick: () => {} });
 
     fireEvent.click(screen.getByLabelText('Select item item-a'));
-    fireEvent.click(screen.getByLabelText('More selection actions'));
+    fireEvent.click(selectionTrigger());
 
     fireEvent.click(screen.getByText('Create Dataset from Items'));
     expect(onCreateDatasetClick).toHaveBeenCalledWith([expect.objectContaining({ id: 'item-a' })]);
-    expect(screen.queryByText('Compare Items')).toBeNull();
   });
 
-  it('hides actions whose handlers are unavailable in the current context', () => {
+  it('hides menu actions whose handlers are unavailable in the current context', () => {
     renderItems(); // no delete / create / copy handlers
 
     fireEvent.click(screen.getByLabelText('Select item item-a'));
+    fireEvent.click(selectionTrigger());
 
-    expect(screen.queryByText('Delete')).toBeNull();
-    expect(screen.queryByLabelText('More selection actions')).toBeNull();
+    expect(screen.queryByText('Delete Items')).toBeNull();
+    expect(screen.queryByText('Create Dataset from Items')).toBeNull();
+    expect(screen.queryByText('Copy Items to Dataset')).toBeNull();
     expect(screen.getByText('Export CSV')).toBeDefined();
   });
 
-  it('clears the selection with Cancel', () => {
+  it('clears the selection when the item is unchecked', () => {
     renderItems();
 
     fireEvent.click(screen.getByLabelText('Select item item-a'));
-    fireEvent.click(screen.getByText('Cancel'));
+    fireEvent.click(screen.getByLabelText('Select item item-a'));
 
-    expect(screen.queryByText('selected')).toBeNull();
+    expect(screen.queryByRole('button', { name: /selected/ })).toBeNull();
   });
 
   it('forwards checked item ids to the bulk delete handler', () => {
@@ -106,7 +111,8 @@ describe('DatasetItems selection', () => {
 
     fireEvent.click(screen.getByLabelText('Select item item-a'));
     fireEvent.click(screen.getByLabelText('Select item item-b'));
-    fireEvent.click(screen.getByText('Delete'));
+    fireEvent.click(screen.getByRole('button', { name: /2 selected/ }));
+    fireEvent.click(screen.getByText('Delete Items'));
 
     expect(onBulkDeleteClick).toHaveBeenCalledWith(expect.arrayContaining(['item-a', 'item-b']));
   });
