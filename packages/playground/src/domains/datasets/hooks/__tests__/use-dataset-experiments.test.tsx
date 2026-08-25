@@ -1,10 +1,10 @@
 import type { DatasetExperiment } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
+import { act, cleanup, render, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
   useDatasetExperiment,
@@ -12,6 +12,7 @@ import {
   useDatasetExperiments,
   useScoresByExperimentId,
 } from '../use-dataset-experiments';
+import { installIntersectionObserver } from '@/test/intersection-observer';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -461,5 +462,150 @@ describe('useScoresByExperimentId', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(wrapper.queryClient.getQueryData(['dataset-experiment-scores', EXPERIMENT_ID, 'completed'])).toBeDefined();
+  });
+});
+
+describe('useDatasetExperimentResults, as the reader scrolls', () => {
+  let observer: ReturnType<typeof installIntersectionObserver>;
+
+  beforeEach(() => {
+    observer = installIntersectionObserver();
+  });
+
+  afterEach(() => observer.restore());
+
+  /** Renders the hook with its end-of-list sentinel actually mounted. */
+  const renderWithSentinel = () => {
+    const api: { current: ReturnType<typeof useDatasetExperimentResults> | null } = { current: null };
+
+    const Harness = () => {
+      const query = useDatasetExperimentResults({ datasetId: DATASET_ID, experimentId: EXPERIMENT_ID });
+      api.current = query;
+      return <div ref={query.setEndOfListElement} data-testid="sentinel" />;
+    };
+
+    render(<Harness />, { wrapper: createWrapper() });
+    return () => api.current!;
+  };
+
+  it('loads the next page once the end of the list comes into view', async () => {
+    const pages: string[] = [];
+    server.use(
+      http.get(RESULTS_URL, ({ request }) => {
+        pages.push(new URL(request.url).searchParams.get('page') ?? '');
+        return HttpResponse.json(resultsPage(['r-1'], 250));
+      }),
+    );
+
+    const query = renderWithSentinel();
+    await waitFor(() => expect(query().hasNextPage).toBe(true));
+    expect(pages).toEqual(['0']);
+
+    await act(async () => observer.setIntersecting(true));
+
+    await waitFor(() => expect(pages).toEqual(['0', '1']));
+  });
+
+  it('does not load anything more once the last page has arrived', async () => {
+    const pages: string[] = [];
+    server.use(
+      http.get(RESULTS_URL, ({ request }) => {
+        pages.push(new URL(request.url).searchParams.get('page') ?? '');
+        return HttpResponse.json(resultsPage(['r-1'], 1));
+      }),
+    );
+
+    const query = renderWithSentinel();
+    await waitFor(() => expect(query().isSuccess).toBe(true));
+
+    await act(async () => observer.setIntersecting(true));
+    await act(async () => new Promise(resolve => setTimeout(resolve, 60)));
+
+    expect(pages).toEqual(['0']);
+  });
+
+  it('stops asking once it has fetched exactly as many results as the server reports', async () => {
+    server.use(
+      http.get(RESULTS_URL, () =>
+        HttpResponse.json(
+          resultsPage(
+            Array.from({ length: 100 }, (_, i) => `r-${i}`),
+            100,
+          ),
+        ),
+      ),
+    );
+
+    const { result } = renderHook(
+      () => useDatasetExperimentResults({ datasetId: DATASET_ID, experimentId: EXPERIMENT_ID }),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    // 100 fetched of 100 reported: equal, not greater — the boundary case.
+    expect(result.current.hasNextPage).toBe(false);
+  });
+
+  it('survives a page that comes back with no body at all', async () => {
+    server.use(http.get(RESULTS_URL, () => HttpResponse.json(null)));
+
+    const { result } = renderHook(
+      () => useDatasetExperimentResults({ datasetId: DATASET_ID, experimentId: EXPERIMENT_ID }),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toEqual([]);
+    expect(result.current.hasNextPage).toBe(false);
+  });
+});
+
+describe('the polling the experiment views rely on', () => {
+  const pollingCases = [
+    ['running', true],
+    ['pending', true],
+    ['completed', false],
+    [undefined, false],
+  ] as const;
+
+  it.each(pollingCases)('polls the results of a %s experiment: %s', async (experimentStatus, shouldPoll) => {
+    let calls = 0;
+    server.use(
+      http.get(RESULTS_URL, () => {
+        calls += 1;
+        return HttpResponse.json(resultsPage(['r-1'], 1));
+      }),
+    );
+
+    const { result } = renderHook(
+      () => useDatasetExperimentResults({ datasetId: DATASET_ID, experimentId: EXPERIMENT_ID, experimentStatus }),
+      { wrapper: createWrapper() },
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    const afterFirst = calls;
+
+    await act(async () => new Promise(resolve => setTimeout(resolve, 2500)));
+
+    expect(calls > afterFirst).toBe(shouldPoll);
+  });
+
+  it.each(pollingCases)('polls the scores of a %s experiment: %s', async (experimentStatus, shouldPoll) => {
+    let calls = 0;
+    server.use(
+      http.get(SCORES_URL, () => {
+        calls += 1;
+        return HttpResponse.json({ scores: [], pagination: { total: 0, page: 0, perPage: 100, hasMore: false } });
+      }),
+    );
+
+    const { result } = renderHook(() => useScoresByExperimentId(EXPERIMENT_ID, experimentStatus), {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    const afterFirst = calls;
+
+    await act(async () => new Promise(resolve => setTimeout(resolve, 2500)));
+
+    expect(calls > afterFirst).toBe(shouldPoll);
   });
 });

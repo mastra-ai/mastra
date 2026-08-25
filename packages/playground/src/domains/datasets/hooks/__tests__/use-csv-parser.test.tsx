@@ -1,5 +1,6 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import Papa from 'papaparse';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { useCSVParser } from '../use-csv-parser';
 
@@ -103,5 +104,143 @@ describe('useCSVParser', () => {
       expect(parsed.data).toEqual([]);
       expect(parsed.headers).toEqual([]);
     });
+  });
+});
+
+/**
+ * The blocks above drive the real papaparse over real files. These pin the
+ * hook's side of the contract *with* papaparse — the config it asks for and
+ * how it handles the callbacks — which a real parse cannot show: a >1MB file
+ * would have to actually exist, and papaparse never invokes its `error`
+ * callback for a well-formed File in jsdom.
+ */
+describe('what the hook asks papaparse to do', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  /** Captures the parse config and hands back its callbacks to drive by hand. */
+  const captureParse = () => {
+    const captured: { config?: Papa.ParseLocalConfig<Record<string, string>, File> } = {};
+    vi.spyOn(Papa, 'parse').mockImplementation(((_file: unknown, config: unknown) => {
+      captured.config = config as Papa.ParseLocalConfig<Record<string, string>, File>;
+    }) as typeof Papa.parse);
+    return captured;
+  };
+
+  const fileOfSize = (size: number) => {
+    const file = csvFile('input\na\n');
+    Object.defineProperty(file, 'size', { value: size });
+    return file;
+  };
+
+  it('asks for a header row, greedy blank-line skipping and no type coercion', async () => {
+    const captured = captureParse();
+    const { result } = renderHook(() => useCSVParser());
+
+    await act(async () => {
+      void result.current.parseFile(fileOfSize(10));
+    });
+
+    expect(captured.config).toMatchObject({
+      header: true,
+      skipEmptyLines: 'greedy',
+      // Cells are handed to our own JSON parser, so papaparse must not guess
+      // types first — a numeric-looking id has to stay a string.
+      dynamicTyping: false,
+    });
+  });
+
+  it.each([
+    ['a small file', 10, false],
+    ['a file at the threshold', 1_000_000, false],
+    ['a file over the threshold', 1_000_001, true],
+  ])('parses %s off the main thread: %s', async (_label, size, worker) => {
+    const captured = captureParse();
+    const { result } = renderHook(() => useCSVParser());
+
+    await act(async () => {
+      void result.current.parseFile(fileOfSize(size));
+    });
+
+    expect(captured.config?.worker).toBe(worker);
+  });
+
+  it('reports itself parsing until the callback lands', async () => {
+    const captured = captureParse();
+    const { result } = renderHook(() => useCSVParser());
+
+    await act(async () => {
+      void result.current.parseFile(fileOfSize(10));
+    });
+    expect(result.current.isParsing).toBe(true);
+
+    await act(async () => {
+      captured.config?.complete?.(
+        { data: [], errors: [], meta: { fields: ['input'] } } as unknown as Papa.ParseResult<Record<string, string>>,
+        undefined as never,
+      );
+    });
+
+    await waitFor(() => expect(result.current.isParsing).toBe(false));
+  });
+
+  it('reports no headers when papaparse names none', async () => {
+    const captured = captureParse();
+    const { result } = renderHook(() => useCSVParser());
+
+    let parsed: Awaited<ReturnType<typeof result.current.parseFile>> | undefined;
+    await act(async () => {
+      void result.current.parseFile(fileOfSize(10)).then(value => {
+        parsed = value;
+      });
+    });
+
+    await act(async () => {
+      captured.config?.complete?.(
+        { data: [], errors: [], meta: {} } as unknown as Papa.ParseResult<Record<string, string>>,
+        undefined as never,
+      );
+    });
+
+    await waitFor(() => expect(parsed?.headers).toEqual([]));
+  });
+
+  it('surfaces a papaparse failure to the caller', async () => {
+    const captured = captureParse();
+    const { result } = renderHook(() => useCSVParser());
+
+    let rejection: unknown;
+    await act(async () => {
+      void result.current.parseFile(fileOfSize(10)).catch(error => {
+        rejection = error;
+      });
+    });
+
+    await act(async () => {
+      captured.config?.error?.(new Error('unterminated quote') as Papa.ParseError, fileOfSize(10));
+    });
+
+    await waitFor(() => expect((rejection as Error)?.message).toBe('unterminated quote'));
+    expect(result.current.error).toBeInstanceOf(Error);
+    expect(result.current.isParsing).toBe(false);
+  });
+
+  it('clears the previous error when a new parse starts', async () => {
+    vi.spyOn(Papa, 'parse').mockImplementation((() => {
+      throw new Error('boom');
+    }) as typeof Papa.parse);
+    const { result } = renderHook(() => useCSVParser());
+
+    await act(async () => {
+      await result.current.parseFile(csvFile('input\na\n')).catch(() => {});
+    });
+    expect(result.current.error).toBeInstanceOf(Error);
+
+    const captured = captureParse();
+    await act(async () => {
+      void result.current.parseFile(fileOfSize(10));
+    });
+
+    expect(result.current.error).toBeNull();
+    expect(captured.config).toBeDefined();
   });
 });

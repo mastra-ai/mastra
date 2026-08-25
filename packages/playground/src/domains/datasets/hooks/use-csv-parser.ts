@@ -72,6 +72,9 @@ export function useCSVParser() {
     } finally {
       setIsParsing(false);
     }
+    // `parseFile` closes over nothing but the two setters React keeps stable,
+    // so a different dependency list only changes the callback's identity.
+    // Stryker disable next-line ArrayDeclaration
   }, []);
 
   return {

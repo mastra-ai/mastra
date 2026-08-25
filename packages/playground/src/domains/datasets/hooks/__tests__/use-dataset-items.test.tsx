@@ -1,11 +1,12 @@
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, renderHook, waitFor } from '@testing-library/react';
+import { act, render, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useDatasetItem, useDatasetItems } from '../use-dataset-items';
+import { installIntersectionObserver } from '@/test/intersection-observer';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -13,11 +14,13 @@ const ITEMS_URL = `${BASE_URL}/api/datasets/dataset-1/items`;
 
 const createWrapper = () => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return ({ children }: { children: ReactNode }) => (
+  const wrapper = ({ children }: { children: ReactNode }) => (
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     </MastraReactProvider>
   );
+  wrapper.queryClient = queryClient;
+  return wrapper;
 };
 
 const settle = () => new Promise(resolve => setTimeout(resolve, 50));
@@ -307,5 +310,121 @@ describe('useDatasetItems', () => {
       await new Promise(resolve => setTimeout(resolve, 1500));
       expect(calls).toBe(afterFirstFailure);
     }, 15000);
+  });
+});
+
+describe('useDatasetItems, as the reader scrolls', () => {
+  let observer: ReturnType<typeof installIntersectionObserver>;
+
+  beforeEach(() => {
+    observer = installIntersectionObserver();
+  });
+
+  afterEach(() => observer.restore());
+
+  /** Renders the hook with its end-of-list sentinel actually mounted. */
+  const renderWithSentinel = () => {
+    const api: { current: ReturnType<typeof useDatasetItems> | null } = { current: null };
+
+    const Harness = () => {
+      const query = useDatasetItems('dataset-1');
+      api.current = query;
+      return <div ref={query.setEndOfListElement} data-testid="sentinel" />;
+    };
+
+    render(<Harness />, { wrapper: createWrapper() });
+    return () => api.current!;
+  };
+
+  it('loads the next page once the end of the list comes into view', async () => {
+    const pages: string[] = [];
+    server.use(
+      http.get(ITEMS_URL, ({ request }) => {
+        pages.push(new URL(request.url).searchParams.get('page') ?? '');
+        return HttpResponse.json(page(['a'], 50));
+      }),
+    );
+
+    const query = renderWithSentinel();
+    await waitFor(() => expect(query().hasNextPage).toBe(true));
+    expect(pages).toEqual(['0']);
+
+    await act(async () => observer.setIntersecting(true));
+
+    await waitFor(() => expect(pages).toEqual(['0', '1']));
+  });
+
+  it('does not load anything more once the last page has arrived', async () => {
+    const pages: string[] = [];
+    server.use(
+      http.get(ITEMS_URL, ({ request }) => {
+        pages.push(new URL(request.url).searchParams.get('page') ?? '');
+        return HttpResponse.json(page(['a'], 1));
+      }),
+    );
+
+    const query = renderWithSentinel();
+    await waitFor(() => expect(query().isSuccess).toBe(true));
+
+    await act(async () => observer.setIntersecting(true));
+    await act(async () => new Promise(resolve => setTimeout(resolve, 60)));
+
+    expect(pages).toEqual(['0']);
+  });
+});
+
+describe('useDatasetItems, on responses the server left empty', () => {
+  it('stops asking once it has fetched exactly as many items as the server reports', async () => {
+    server.use(
+      http.get(ITEMS_URL, () =>
+        HttpResponse.json(
+          page(
+            Array.from({ length: 10 }, (_, i) => `a${i}`),
+            10,
+          ),
+        ),
+      ),
+    );
+
+    const { result } = renderHook(() => useDatasetItems('dataset-1'), { wrapper: createWrapper() });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    // 10 fetched of 10 reported: equal, not greater — the boundary case.
+    expect(result.current.hasNextPage).toBe(false);
+  });
+
+  it('survives a page that comes back with no body at all', async () => {
+    server.use(http.get(ITEMS_URL, () => HttpResponse.json(null)));
+
+    const { result } = renderHook(() => useDatasetItems('dataset-1'), { wrapper: createWrapper() });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toEqual([]);
+    expect(result.current.total).toBeUndefined();
+    expect(result.current.hasNextPage).toBe(false);
+  });
+});
+
+describe('the cache entries the dataset item hooks write', () => {
+  it('files a single item under a key of its own', async () => {
+    server.use(http.get(`${ITEMS_URL}/item-1`, () => HttpResponse.json(item('item-1'))));
+    const wrapper = createWrapper();
+
+    const { result } = renderHook(() => useDatasetItem('dataset-1', 'item-1'), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(wrapper.queryClient.getQueryData(['dataset-item', 'dataset-1', 'item-1'])).toMatchObject({ id: 'item-1' });
+    expect(wrapper.queryClient.getQueryData(['dataset-items', 'dataset-1', 'item-1'])).toBeUndefined();
+  });
+
+  it('files the list under a key that carries the search and version', async () => {
+    server.use(http.get(ITEMS_URL, () => HttpResponse.json(page(['a'], 1))));
+    const wrapper = createWrapper();
+
+    const { result } = renderHook(() => useDatasetItems('dataset-1', 'needle', 7), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(wrapper.queryClient.getQueryData(['dataset-items', 'dataset-1', 'needle', 7])).toBeDefined();
+    expect(wrapper.queryClient.getQueryData(['dataset-items', 'dataset-1', undefined, undefined])).toBeUndefined();
   });
 });
