@@ -2,19 +2,29 @@
 '@mastra/playground-ui': patch
 ---
 
-The markdown entrance animation is now a shared `mastra-arriving` class in `theme.css`, exported as `ARRIVING_CLASS` from `@mastra/playground-ui/tokens`, so any surface can land a block on the same curve as a streamed word. Renamed from `mastra-markdown-arriving`.
+Improved how streaming transcripts move, and added the arrival primitives behind it.
 
-The shimmer on running labels is one sweep again. It tiled a fixed 120px gradient, so a long tool row showed three or four highlights travelling at once; it is now a single band scaled to the element, eased so it crosses the text quickly and turns around out of sight.
+**Fixed**
 
-`MessageScroller` now softens the catch-up it does while following a stream. Pinning to the end is still instant, but the content is put back where the reader last saw it and travels to zero on the compositor, so a reply that wraps a line no longer snaps.
+- Words already read no longer replay their entrance when markdown rebuilds around them, and a reply born streaming animates from its very first word instead of landing as a block that fades in.
+- The reveal clock no longer steps backwards for one frame, which unmounted a settled tool row and cut its shimmer off mid-sweep.
+- The shimmer on running labels is a single band scaled to the element instead of a tiled pattern, and it dissolves into the text colour when the label lands instead of snapping off.
+- `MessageScroller` follows the last message instead of the end of its box, so the reader is no longer parked on empty space below the conversation. Catch-up while following a stream is softened on the compositor, and opening a turn parks the sent message at the top and lets the answer grow beneath it.
 
-`MessageScroller` follows the last row rather than the end of its box. A chat reserves room under a live turn and docks its composer in the flow, and both sit below the last message — so scrolling to the end of the box parked the reader on empty space and carried the message they had just sent off the top. Every trip to "the end" — following a stream, landing on open, the jump-to-latest button — now stops with the last row resting against the end of the view.
+**Added**
 
-A turn opening is also one scripted scroll instead of a pin: the message that opened it is parked at the top, whether or not the reader was following. The answer then grows into the room under it and moves nothing at all; the scroller only takes over once the answer outgrows the screen.
+- `ArrivalScope`, `useWatched` and `Arriving`: one shared answer to "was the reader watching when this mounted", so every entrance derives from it.
+- `useRevealedText`: the word-by-word pacing, moved out of `MarkdownRenderer` so a caller can lay tool rows and cards down in the same rhythm as the prose. `streaming` on `MarkdownRenderer` now only means "this text is a prefix still being written".
 
-A streamed word now animates only while it is new. The entrance plays on whatever mounts carrying the class, and markdown rebuilds a growing tail constantly — a `-` turning a paragraph into a list item, a closing `**`, the stream ending — so a word already read faded in again every time the element around it changed. `MarkdownRenderer` ages its words out of the entrance instead, and a block whose words have all landed renders as plain text.
+```tsx
+const shown = useRevealedText(text, streaming);
 
-`Shimmer` takes `active` and is one element whatever it says:
+<MarkdownRenderer streaming={streaming || shown !== text}>{shown}</MarkdownRenderer>;
+```
+
+**Changed**
+
+- `Shimmer` takes `active` and stays one element across the switch, so nothing inside it remounts when a label lands:
 
 ```tsx
 // before: a different element per state, remounting everything inside on landing
@@ -24,21 +34,4 @@ const Header = status === 'running' ? Shimmer : 'span';
 <Shimmer active={status === 'running'}>{label}</Shimmer>;
 ```
 
-The sweep also lands rather than stopping: the band freezes where it stands and dissolves into the text colour, instead of snapping off mid-pass.
-
-Pacing a streamed reply moved out of `MarkdownRenderer` and into `useRevealedText`, exported alongside it. A reply is rarely only prose — tool rows and cards are written between its passages — and a component that paced its own text left the caller no way to lay the rest down in the same order. `streaming` on `MarkdownRenderer` now means only "this text is a prefix still being written: close the markers the stream has not reached".
-
-```tsx
-const shown = useRevealedText(text, streaming);
-
-<MarkdownRenderer streaming={streaming || shown !== text}>{shown}</MarkdownRenderer>;
-```
-
-The arrival boundary is now a primitive of its own: `ArrivalScope` marks a view the reader has been handed, `useWatched` answers whether they were watching when an element mounted, and `Arriving` fades a block in only when they were. Every entrance derives from that one answer instead of each component keeping its own idea of "new".
-
-A passage born streaming under the reader's eyes now animates from its first word. `MarkdownRenderer` treated whatever words it mounted with as already read — right for a restored transcript, wrong for a live reply, whose opening words landed plain and then replayed their entrance. The renderer now asks the arrival scope and its stream: text born streaming into a watched view plays in from word one, while a block that mounts complete — restored history, an expanded body, a card's output — lands as plain text and enters with its container.
-
-A reply joined mid-chunk now streams from its first word. The reveal used to hand the first render everything but the last twelve words, so a fat first chunk landed as a block, faded in whole, and only its tail streamed. Only a reply already hundreds of words ahead is joined near its tail instead of retyped.
-
-The reveal clock no longer runs backwards. A frame's timestamp can land behind the clock read when its loop was armed, and when it did the cursor stepped back across a word boundary — unmounting whatever sat on that boundary for one frame. A tool row that had just settled replayed its entrance, and its shimmer snapped off instead of dissolving. Time is clamped forward-only, so a word laid down stays down.
-
+- Renamed the entrance class `mastra-markdown-arriving` to `mastra-arriving`, exported as `ARRIVING_CLASS` from `@mastra/playground-ui/tokens`.
