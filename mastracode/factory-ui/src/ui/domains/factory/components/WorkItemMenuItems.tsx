@@ -11,6 +11,27 @@ import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 import { BoardStageIcon, actionIcon } from './BoardIcons';
 
+export interface WorkItemMenuProps {
+  item: WorkItem;
+  columnStage: BoardStageId;
+  runSpec?: ItemRunSpec;
+  runActions: RunAction[];
+  reReviewAction?: RunAction;
+  laneAction?: RunAction;
+  proposal?: FactoryDecisionSummary;
+  proposedRunLabel?: string;
+  pendingRunRoles: ReadonlyMap<string, FactoryRunPhase | undefined>;
+  runDisabled: boolean;
+  approvingDecisionId?: string;
+  onStartRun: (spec: ItemRunSpec, action: RunAction) => void;
+  /** Re-run an action whose session slot is already used (e.g. re-review an updated PR). */
+  onRestartRun: (spec: ItemRunSpec, action: RunAction) => void;
+  onApproveProposal: (decisionId: string) => void;
+  onDismissProposal: (decisionId: string) => void;
+  onMove: (toStage: string) => void;
+  onRemove: () => void;
+}
+
 /** Menu entries shared by the card's hover menu and the detail panel's footer menu. */
 export function WorkItemMenuItems({
   item,
@@ -30,26 +51,7 @@ export function WorkItemMenuItems({
   onDismissProposal,
   onMove,
   onRemove,
-}: {
-  item: WorkItem;
-  columnStage: BoardStageId;
-  runSpec?: ItemRunSpec;
-  runActions: RunAction[];
-  reReviewAction?: RunAction;
-  laneAction?: RunAction;
-  proposal?: FactoryDecisionSummary;
-  proposedRunLabel?: string;
-  pendingRunRoles: ReadonlyMap<string, FactoryRunPhase | undefined>;
-  runDisabled: boolean;
-  approvingDecisionId?: string;
-  onStartRun: (spec: ItemRunSpec, action: RunAction) => void;
-  /** Re-run an action whose session slot is already used (e.g. re-review an updated PR). */
-  onRestartRun: (spec: ItemRunSpec, action: RunAction) => void;
-  onApproveProposal: (decisionId: string) => void;
-  onDismissProposal: (decisionId: string) => void;
-  onMove: (toStage: string) => void;
-  onRemove: () => void;
-}): ReactElement {
+}: WorkItemMenuProps): ReactElement {
   return (
     <>
       {runSpec !== undefined &&

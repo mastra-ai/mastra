@@ -33,6 +33,7 @@ import { PullRequestStatusIcon } from './PullRequestStatusIcon';
 import { RelatedWorkItemLink } from './RelatedWorkItemLink';
 import { WorkItemActivity } from './WorkItemActivity';
 import { WorkItemDetailsPanel } from './WorkItemDetailsPanel';
+import type { WorkItemMenuProps } from './WorkItemMenuItems';
 import { WorkItemMenuItems } from './WorkItemMenuItems';
 
 export function WorkItemCard({
@@ -164,6 +165,53 @@ export function WorkItemCard({
   });
   const retryDecisionId = status.kind === 'error' ? status.retryDecisionId : undefined;
 
+  const menu: WorkItemMenuProps = {
+    item,
+    columnStage,
+    runSpec,
+    runActions,
+    reReviewAction,
+    laneAction,
+    proposal,
+    proposedRunLabel,
+    pendingRunRoles,
+    runDisabled,
+    approvingDecisionId,
+    onStartRun,
+    onRestartRun,
+    onApproveProposal,
+    onDismissProposal,
+    onMove,
+    onRemove,
+  };
+
+  // Acting from inside the panel collapses it first: the card the panel came
+  // from is what the result lands on. Dismissing a suggested run is the one
+  // entry that leaves it open — nothing else about the card changed.
+  const panelMenu: WorkItemMenuProps = {
+    ...menu,
+    onStartRun: (spec, action) => {
+      morph.closeDetails();
+      onStartRun(spec, action);
+    },
+    onRestartRun: (spec, action) => {
+      morph.closeDetails();
+      onRestartRun(spec, action);
+    },
+    onApproveProposal: decisionId => {
+      morph.closeDetails();
+      onApproveProposal(decisionId);
+    },
+    onMove: toStage => {
+      morph.closeDetails();
+      onMove(toStage);
+    },
+    onRemove: () => {
+      morph.closeDetails();
+      onRemove();
+    },
+  };
+
   const relatedLink = (related: WorkItem): ReactElement => {
     const relatedSession = sessionLivenessResolved
       ? itemThreadSession(liveSessions(related.sessions, liveWorktreePaths))
@@ -238,25 +286,7 @@ export function WorkItemCard({
                 }
               />
               <DropdownMenu.Content align="end" className="min-w-44">
-                <WorkItemMenuItems
-                  item={item}
-                  columnStage={columnStage}
-                  runSpec={runSpec}
-                  runActions={runActions}
-                  reReviewAction={reReviewAction}
-                  laneAction={laneAction}
-                  proposal={proposal}
-                  proposedRunLabel={proposedRunLabel}
-                  pendingRunRoles={pendingRunRoles}
-                  runDisabled={runDisabled}
-                  approvingDecisionId={approvingDecisionId}
-                  onStartRun={onStartRun}
-                  onRestartRun={onRestartRun}
-                  onApproveProposal={onApproveProposal}
-                  onDismissProposal={onDismissProposal}
-                  onMove={onMove}
-                  onRemove={onRemove}
-                />
+                <WorkItemMenuItems {...menu} />
               </DropdownMenu.Content>
             </DropdownMenu>
           </div>
@@ -323,42 +353,7 @@ export function WorkItemCard({
         primaryAction={primaryAction}
         runDisabled={runDisabled}
         runPending={runPending}
-        menu={
-          <WorkItemMenuItems
-            item={item}
-            columnStage={columnStage}
-            runSpec={runSpec}
-            runActions={runActions}
-            reReviewAction={reReviewAction}
-            laneAction={laneAction}
-            proposal={proposal}
-            proposedRunLabel={proposedRunLabel}
-            pendingRunRoles={pendingRunRoles}
-            runDisabled={runDisabled}
-            approvingDecisionId={approvingDecisionId}
-            onStartRun={(spec, action) => {
-              morph.closeDetails();
-              onStartRun(spec, action);
-            }}
-            onRestartRun={(spec, action) => {
-              morph.closeDetails();
-              onRestartRun(spec, action);
-            }}
-            onApproveProposal={decisionId => {
-              morph.closeDetails();
-              onApproveProposal(decisionId);
-            }}
-            onDismissProposal={onDismissProposal}
-            onMove={toStage => {
-              morph.closeDetails();
-              onMove(toStage);
-            }}
-            onRemove={() => {
-              morph.closeDetails();
-              onRemove();
-            }}
-          />
-        }
+        menu={<WorkItemMenuItems {...panelMenu} />}
       />
     </>
   );

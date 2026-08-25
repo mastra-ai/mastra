@@ -111,6 +111,10 @@ export function CandidateCard({
       <Plus aria-hidden />
       <span>Add to board</span>
     </DropdownMenu.Item>,
+    <DropdownMenu.Item key="source" render={<a href={candidate.url} target="_blank" rel="noreferrer" />}>
+      <ArrowUpRight aria-hidden />
+      <span>{externalLinkLabel(candidate.source)}</span>
+    </DropdownMenu.Item>,
   ];
 
   return (
@@ -162,10 +166,6 @@ export function CandidateCard({
               />
               <DropdownMenu.Content align="end" className="min-w-44">
                 {menuItems}
-                <DropdownMenu.Item render={<a href={candidate.url} target="_blank" rel="noreferrer" />}>
-                  <ArrowUpRight aria-hidden />
-                  <span>{externalLinkLabel(candidate.source)}</span>
-                </DropdownMenu.Item>
               </DropdownMenu.Content>
             </DropdownMenu>
           </div>
@@ -229,10 +229,6 @@ export function CandidateCard({
                 />
                 <DropdownMenu.Content align="end" className="min-w-44">
                   {menuItems}
-                  <DropdownMenu.Item render={<a href={candidate.url} target="_blank" rel="noreferrer" />}>
-                    <ArrowUpRight aria-hidden />
-                    <span>{externalLinkLabel(candidate.source)}</span>
-                  </DropdownMenu.Item>
                 </DropdownMenu.Content>
               </DropdownMenu>
             </div>
