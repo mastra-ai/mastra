@@ -14,6 +14,7 @@ import type { ProviderMetadata } from '@mastra/core/stream';
 import xxhash from 'xxhash-wasm';
 
 import type { Memory } from '../..';
+import { WORKING_MEMORY_STATE_ID } from '../working-memory-state/processor';
 import { resolveActivationTTL } from './activation-ttl';
 import { BufferingCoordinator } from './buffering-coordinator';
 import { composeObservationExtractors, composeReflectionExtractors } from './built-in-extractors';
@@ -38,9 +39,12 @@ export function getLatestStepParts(parts: MastraDBMessage['content']['parts']): 
 }
 
 /**
- * Returns true when a message contains at least one part with visible user/assistant
- * content (text, tool-invocation, reasoning, image, file).  Messages that only carry
- * internal `data-*` parts (buffering markers, observation markers, etc.) return false.
+ * Returns true for persisted Working Memory state signals (`role: 'signal'`,
+ * `signal.type: 'state'`, `state.id: 'working-memory'`). OM must not observe these:
+ * they mirror memory OM itself manages, and re-observing them creates a self-feedback
+ * loop that can overwrite stored working memory (#21961). Only the working-memory lane
+ * is filtered — other state lanes are outside OM's write path, so re-observing them
+ * cannot corrupt OM-managed state; excluding them broadly is a separate decision.
  */
 function isWorkingMemoryStateSignal(message: MastraDBMessage): boolean {
   if (message.role !== 'signal') return false;
@@ -49,7 +53,9 @@ function isWorkingMemoryStateSignal(message: MastraDBMessage): boolean {
   if (!signal || typeof signal !== 'object' || Array.isArray(signal)) return false;
 
   const signalRecord = signal as Record<string, unknown>;
-  if (signalRecord.type !== 'state') return false;
+  // Mirror core's mastraDBMessageToSignal: signal.type with fallback to top-level message.type
+  const signalType = signalRecord.type ?? (message as { type?: unknown }).type;
+  if (signalType !== 'state') return false;
 
   const metadata = signalRecord.metadata;
   if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return false;
@@ -59,7 +65,7 @@ function isWorkingMemoryStateSignal(message: MastraDBMessage): boolean {
     !!state &&
     typeof state === 'object' &&
     !Array.isArray(state) &&
-    (state as Record<string, unknown>).id === 'working-memory'
+    (state as Record<string, unknown>).id === WORKING_MEMORY_STATE_ID
   );
 }
 
@@ -1909,7 +1915,10 @@ export class ObservationalMemory {
       });
     }
 
-    return result.messages.filter(msg => msg.role !== 'system');
+    // Exclude working-memory state signals so storage-loaded paths (e.g. observe()
+    // without explicit messages, buffering token counts) never re-observe stored
+    // working memory (#21961).
+    return result.messages.filter(msg => msg.role !== 'system' && !isWorkingMemoryStateSignal(msg));
   }
 
   /**

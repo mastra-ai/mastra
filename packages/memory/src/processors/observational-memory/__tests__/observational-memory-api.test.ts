@@ -3056,6 +3056,21 @@ describe('getUnobservedMessages filtering', () => {
     expect(unobserved.map(message => message.id)).toEqual(['user-1', 'notification-signal']);
   });
 
+  it('should exclude working memory state signals when loading messages from storage', async () => {
+    const om = createOM(storage);
+    const base = Date.now() - 10_000;
+    await storage.saveMessages({
+      messages: [
+        { ...createTestMessage('User message', 'user', 'stored-user-1', new Date(base)), threadId },
+        { ...createWorkingMemoryStateSignal('stored-working-memory-signal', new Date(base + 1000)), threadId },
+      ],
+    });
+
+    const loaded = await (om as any).loadMessagesFromStorage(threadId, undefined);
+
+    expect(loaded.map((message: MastraDBMessage) => message.id)).toEqual(['stored-user-1']);
+  });
+
   it('should filter messages whose IDs are in observedMessageIds', async () => {
     const om = createOM(storage);
     const messages = createBulkMessages(5, threadId);
