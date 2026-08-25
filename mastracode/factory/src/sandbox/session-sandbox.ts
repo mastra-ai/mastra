@@ -1,4 +1,4 @@
-import type { SandboxStartHook, WorkspaceSandbox } from '@mastra/core/workspace';
+import type { MastraSandbox, SandboxStartHook, WorkspaceSandbox } from '@mastra/core/workspace';
 import { deriveLocalWorkdir, remoteWorkdirFromHome } from './workdir.js';
 
 /**
@@ -34,6 +34,10 @@ export interface FactorySandboxContext {
  * `workingDirectory` at a per-session directory (e.g.
  * `join(root, ctx.sessionId)`); the repo checks out as a subdirectory of it.
  *
+ * Returns a `MastraSandbox`, not the bare `WorkspaceSandbox` interface:
+ * factory relies on the base class for the start lifecycle and the runtime
+ * env, so providers extend it rather than reimplementing the contract.
+ *
  * Factory attaches its own session setup to the returned sandbox, so the
  * callback never has to wire it up. A callback may still pass its own
  * `onStart`; it runs after factory's setup, against a prepared workspace.
@@ -43,7 +47,7 @@ export interface FactorySandboxContext {
  * sandbox: ({ sessionId }) => new E2BSandbox({ id: sessionId })
  * ```
  */
-export type MastraFactorySandboxConfig = (ctx: FactorySandboxContext) => WorkspaceSandbox;
+export type MastraFactorySandboxConfig = (ctx: FactorySandboxContext) => MastraSandbox;
 
 /** The session's setup work, run against a started sandbox. Must be idempotent. */
 export type SessionSetupRun = (sandbox: WorkspaceSandbox, workdir: string) => Promise<void>;

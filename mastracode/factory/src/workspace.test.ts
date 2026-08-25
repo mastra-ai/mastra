@@ -1085,19 +1085,6 @@ describe('GitHub session workspace preparation', () => {
     expect(sandbox.setOnStart.mock.calls).toHaveLength(1);
   });
 
-  it('fails loudly when the callback returns a sandbox that cannot take a start hook', async () => {
-    const workspace = createRemoteFactory();
-    addProject({ sandboxProvider: 'railway' });
-    addSession({ id: 'session-a' });
-    mocks.createSandbox.mockImplementationOnce(() => ({ id: 'sbx-no-hook', provider: 'stub' }) as never);
-
-    // Silently skipping setup would produce a session whose repo never
-    // materializes — the failure mode the forwarding contract used to have.
-    await expect(workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') })).rejects.toThrow(
-      /does not support setOnStart/,
-    );
-  });
-
   it('never threads a persisted sha into the sandbox callback', async () => {
     const workspace = createRemoteFactory();
     addProject({ sandboxProvider: 'railway' });

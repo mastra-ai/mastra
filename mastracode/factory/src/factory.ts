@@ -408,7 +408,7 @@ export class MastraFactory {
     const sandboxConfig = this.#config.sandbox;
     if (sandboxConfig !== undefined && typeof sandboxConfig !== 'function') {
       throw new Error(
-        `MastraFactory: 'sandbox' must be a function constructing a WorkspaceSandbox from a FactorySandboxContext.`,
+        `MastraFactory: 'sandbox' must be a function constructing a MastraSandbox from a FactorySandboxContext.`,
       );
     }
 
