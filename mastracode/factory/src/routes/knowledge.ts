@@ -514,7 +514,8 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               id: node.id,
               name: node.name,
               kind: node.kind,
-              ...(node.description !== undefined ? { description: node.description } : {}),
+              // Empty string is a curator clear — omit it so the payload carries no dead keys.
+              ...(node.description ? { description: node.description } : {}),
               scope: node.scope,
               rung: deepestRung(node.scope),
               pinned: accented.has(node.id),

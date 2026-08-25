@@ -276,12 +276,17 @@ describe('KnowledgePage', () => {
     });
     renderRoute();
 
-    const nodes = await screen.findAllByTestId('knowledge-node');
-    fireEvent.mouseEnter(nodes[0]!, { clientX: 120, clientY: 80 });
+    // Select by label so the whitespace-only node (ent-1) is definitely exercised,
+    // regardless of render order.
+    const whitespaceNode = (await screen.findByText('Payments Service')).closest('[data-testid="knowledge-node"]');
+    const absentNode = (await screen.findByText('Deploy Runbook')).closest('[data-testid="knowledge-node"]');
+    expect(whitespaceNode).not.toBeNull();
+    expect(absentNode).not.toBeNull();
+    fireEvent.mouseEnter(whitespaceNode!, { clientX: 120, clientY: 80 });
     expect(screen.getByTestId('knowledge-hover-card')).toBeInTheDocument();
     expect(screen.queryByTestId('knowledge-hover-description')).not.toBeInTheDocument();
-    fireEvent.mouseLeave(nodes[0]!);
-    fireEvent.mouseEnter(nodes[1]!, { clientX: 140, clientY: 100 });
+    fireEvent.mouseLeave(whitespaceNode!);
+    fireEvent.mouseEnter(absentNode!, { clientX: 140, clientY: 100 });
     expect(screen.getByTestId('knowledge-hover-card')).toBeInTheDocument();
     expect(screen.queryByTestId('knowledge-hover-description')).not.toBeInTheDocument();
   });

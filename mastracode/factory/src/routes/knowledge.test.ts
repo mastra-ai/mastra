@@ -145,7 +145,8 @@ describe('KnowledgeRoutes', () => {
     expect(status).toBe(200);
     expect(body.nodes.find(node => node.id === described.id)?.description).toBe(synopsis);
     expect(body.nodes.find(node => node.id === absent.id)).not.toHaveProperty('description');
-    expect(body.nodes.find(node => node.id === empty.id)?.description).toBe('');
+    // '' is a curator clear — projected as omitted, same as absent.
+    expect(body.nodes.find(node => node.id === empty.id)).not.toHaveProperty('description');
     expect(body.nodes.find(node => node.id === contentful.id)).not.toHaveProperty('description');
     for (const graphNode of body.nodes) {
       expect(graphNode).not.toHaveProperty('content');
