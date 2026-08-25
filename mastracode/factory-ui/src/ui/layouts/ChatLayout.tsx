@@ -13,7 +13,7 @@ type ChatLayoutProps = {
 export function ChatLayout({ sidebar, header, main }: ChatLayoutProps) {
   return (
     <ViewportLayout sidebar={sidebar} header={header}>
-      <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">{main}</div>
+      <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">{main}</div>
     </ViewportLayout>
   );
 }
