@@ -28,6 +28,9 @@ const getFinishReason = (chunk: FinishChunkLike) => {
   if (chunk.type !== 'finish') return undefined;
 
   const reason = chunk.payload?.stepResult?.reason;
+  // The type check only narrows: the sole caller compares the result against a
+  // string literal, which a non-string reason fails either way.
+  // Stryker disable next-line ConditionalExpression
   return typeof reason === 'string' ? reason : undefined;
 };
 
@@ -44,8 +47,14 @@ export const buildStreamErrorMessage = (chunk: StreamErrorChunk): MastraDBMessag
   let text: string;
   if (typeof errorValue === 'string') {
     text = errorValue;
+    // The Error branch is a shortcut: an Error carries a string `message`, so
+    // the object branch below reads the same text out of it.
+    // Stryker disable next-line ConditionalExpression
   } else if (errorValue instanceof Error) {
     text = errorValue.message;
+    // The `typeof` half only narrows: a primitive cannot carry a string
+    // `message`, so the check beside it already rejects one.
+    // Stryker disable next-line ConditionalExpression
   } else if (
     errorValue &&
     typeof errorValue === 'object' &&
