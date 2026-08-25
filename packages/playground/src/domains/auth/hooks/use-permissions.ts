@@ -163,8 +163,8 @@ export function usePermissions(): UsePermissionsResult {
   // impersonated values are set together, so neither half can be true alone.
   // Stryker disable next-line LogicalOperator
   const roles = isImpersonating && impersonatedRole ? [impersonatedRole.id] : (access?.roles ?? []);
-  // Stryker disable next-line LogicalOperator
   const permissions =
+    // Stryker disable next-line LogicalOperator
     isImpersonating && impersonatedPermissions ? impersonatedPermissions : (access?.permissions ?? []);
 
   // Helper to check permission with RBAC bypass
