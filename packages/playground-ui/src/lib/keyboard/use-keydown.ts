@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useState } from 'react';
+import { useEffect, useEffectEvent, useState, type RefObject } from 'react';
 
 export type UseKeydownArgs = {
   [keySet: string]: () => void;
@@ -54,7 +54,12 @@ export const matchesCombo = (event: KeyboardEvent, combo: ParsedKeyCombo): boole
   event.altKey === combo.alt &&
   event.key.toLowerCase() === combo.key;
 
-export const useKeydown = (opts: UseKeydownArgs) => {
+export type UseKeydownOptions = {
+  /** Attach the listener to this element instead of `window`. */
+  target?: RefObject<HTMLElement | null>;
+};
+
+export const useKeydown = (opts: UseKeydownArgs, options: UseKeydownOptions = {}) => {
   const handlers = useEffectEvent((event: KeyboardEvent) => {
     for (const [combo, handler] of Object.entries(opts)) {
       if (matchesCombo(event, parseKeyCombo(combo))) {
@@ -65,36 +70,93 @@ export const useKeydown = (opts: UseKeydownArgs) => {
     }
   });
 
+  const hasTarget = Boolean(options.target);
+
   useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      handlers(event);
+    const element: HTMLElement | Window | null = hasTarget ? (options.target?.current ?? null) : window;
+    if (!element) return;
+
+    const handleKeyDown = (event: Event) => {
+      handlers(event as KeyboardEvent);
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+    element.addEventListener('keydown', handleKeyDown);
+    return () => element.removeEventListener('keydown', handleKeyDown);
+  });
 };
 
-export const useTableKeydown = (tableCount: number) => {
-  const [activeIndex, setActiveIndex] = useState(0);
+export type UseTableKeydownArgs = {
+  /** Number of rows in the table. */
+  count: number;
+  /** The scroll/list container; keyboard shortcuts only fire when focus is inside it. */
+  containerRef: RefObject<HTMLElement | null>;
+  /** Rows moved by PageUp/PageDown. Defaults to 10. */
+  pageSize?: number;
+  /** Initially active row index. Defaults to 0. */
+  initialIndex?: number;
+  /** Called when a row should be activated (for non-interactive rows). */
+  onActivate?: (index: number) => void;
+  /** Called with the next index before focus moves (e.g. virtualizer.scrollToIndex). */
+  onNavigate?: (index: number) => void;
+};
 
-  useKeydown({
-    ArrowUp: () => {
-      setActiveIndex(current => (current - 1 + tableCount) % tableCount);
+export const useTableKeydown = ({
+  count,
+  containerRef,
+  pageSize = 10,
+  initialIndex = 0,
+  onActivate,
+  onNavigate,
+}: UseTableKeydownArgs) => {
+  const [activeIndex, setActiveIndex] = useState(initialIndex);
+
+  const clamp = (index: number) => Math.min(Math.max(index, 0), Math.max(count - 1, 0));
+
+  const navigateTo = (index: number) => {
+    const next = clamp(index);
+    setActiveIndex(next);
+    onNavigate?.(next);
+
+    const rowElement = containerRef.current?.querySelector<HTMLElement>(`[data-row-index="${next}"]`);
+    if (rowElement) {
+      rowElement.focus();
+      rowElement.scrollIntoView?.({ block: 'nearest' });
+    }
+  };
+
+  useKeydown(
+    {
+      ArrowUp: () => navigateTo(activeIndex - 1),
+      ArrowDown: () => navigateTo(activeIndex + 1),
+      PageUp: () => navigateTo(activeIndex - pageSize),
+      PageDown: () => navigateTo(activeIndex + pageSize),
+      Home: () => navigateTo(0),
+      End: () => navigateTo(count - 1),
+      'mod+Home': () => navigateTo(0),
+      'mod+End': () => navigateTo(count - 1),
     },
-    ArrowDown: () => {
-      setActiveIndex(current => (current + 1) % tableCount);
-    },
-    Home: () => {
-      setActiveIndex(0);
-    },
-    End: () => {
-      setActiveIndex(tableCount - 1);
-    },
+    { target: containerRef },
+  );
+
+  useEffect(() => {
+    if (activeIndex >= count) {
+      setActiveIndex(Math.max(count - 1, 0));
+    }
+  }, [activeIndex, count]);
+
+  const getRowProps = (index: number) => ({
+    tabIndex: index === activeIndex ? 0 : -1,
+    'data-row-index': index,
+    onFocus: () => setActiveIndex(index),
   });
+
+  const getContainerProps = () => ({});
 
   return {
     activeIndex,
     setActiveIndex,
+    activate: (index: number) => onActivate?.(index),
+    getRowProps,
+    getContainerProps,
   };
 };
