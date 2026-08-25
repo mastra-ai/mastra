@@ -107,7 +107,16 @@ export class ExperimentsPG extends ExperimentsStorage {
     await this.#db.alterTable({
       tableName: TABLE_EXPERIMENT_RESULTS,
       schema: EXPERIMENT_RESULTS_SCHEMA,
-      ifNotExists: ['status', 'tags', 'comment', 'toolMockReport', 'organizationId', 'projectId', 'attempt'],
+      ifNotExists: [
+        'status',
+        'tags',
+        'comment',
+        'toolMockReport',
+        'metadata',
+        'organizationId',
+        'projectId',
+        'attempt',
+      ],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -298,6 +307,7 @@ export class ExperimentsPG extends ExperimentsStorage {
       input: safelyParseJSON(row.input),
       output: row.output ? safelyParseJSON(row.output) : null,
       groundTruth: row.groundTruth ? safelyParseJSON(row.groundTruth) : null,
+      metadata: row.metadata ? safelyParseJSON(row.metadata) : null,
       error: row.error ? safelyParseJSON(row.error) : null,
       startedAt: ensureDate(row.startedAtZ || row.startedAt)!,
       completedAt: ensureDate(row.completedAtZ || row.completedAt)!,
@@ -653,6 +663,7 @@ export class ExperimentsPG extends ExperimentsStorage {
           input: input.input,
           output: input.output ?? null,
           groundTruth: input.groundTruth ?? null,
+          metadata: input.metadata ?? null,
           error: input.error ?? null,
           startedAt: input.startedAt.toISOString(),
           completedAt: input.completedAt.toISOString(),
@@ -676,6 +687,7 @@ export class ExperimentsPG extends ExperimentsStorage {
         input: input.input,
         output: input.output ?? null,
         groundTruth: input.groundTruth ?? null,
+        metadata: input.metadata ?? null,
         error: input.error ?? null,
         startedAt: input.startedAt,
         completedAt: input.completedAt,
@@ -723,9 +735,9 @@ export class ExperimentsPG extends ExperimentsStorage {
           return t.one(
             `INSERT INTO ${tableName} (
               "id", "experimentId", "itemId", "itemDatasetVersion", "organizationId", "projectId",
-              "input", "output", "groundTruth", "error", "startedAt", "completedAt",
+              "input", "output", "groundTruth", "metadata", "error", "startedAt", "completedAt",
               "retryCount", "attempt", "traceId", "status", "tags", "toolMockReport", "createdAt"
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
             RETURNING *`,
             [
               id,
@@ -737,6 +749,7 @@ export class ExperimentsPG extends ExperimentsStorage {
               JSON.stringify(input.input),
               input.output != null ? JSON.stringify(input.output) : null,
               input.groundTruth != null ? JSON.stringify(input.groundTruth) : null,
+              input.metadata != null ? JSON.stringify(input.metadata) : null,
               input.error != null ? JSON.stringify(input.error) : null,
               input.startedAt.toISOString(),
               input.completedAt.toISOString(),
@@ -755,9 +768,9 @@ export class ExperimentsPG extends ExperimentsStorage {
         return t.one(
           `UPDATE ${tableName} SET
             "itemDatasetVersion" = $2, "organizationId" = $3, "projectId" = $4,
-            "input" = $5, "output" = $6, "groundTruth" = $7, "error" = $8,
-            "startedAt" = $9, "completedAt" = $10, "retryCount" = $11, "attempt" = $12,
-            "traceId" = $13, "status" = $14, "tags" = $15, "toolMockReport" = $16
+            "input" = $5, "output" = $6, "groundTruth" = $7, "metadata" = $8, "error" = $9,
+            "startedAt" = $10, "completedAt" = $11, "retryCount" = $12, "attempt" = $13,
+            "traceId" = $14, "status" = $15, "tags" = $16, "toolMockReport" = $17
           WHERE "id" = $1 RETURNING *`,
           [
             existing.id,
@@ -767,6 +780,7 @@ export class ExperimentsPG extends ExperimentsStorage {
             JSON.stringify(input.input),
             input.output != null ? JSON.stringify(input.output) : null,
             input.groundTruth != null ? JSON.stringify(input.groundTruth) : null,
+            input.metadata != null ? JSON.stringify(input.metadata) : null,
             input.error != null ? JSON.stringify(input.error) : null,
             input.startedAt.toISOString(),
             input.completedAt.toISOString(),

@@ -143,17 +143,21 @@ export class BackgroundTasksConvex extends BackgroundTasksStorage {
     await this.#db.insert({ tableName: TABLE_BACKGROUND_TASKS, record: toStored(task) });
   }
 
-  async updateTask(taskId: string, update: UpdateBackgroundTask): Promise<void> {
+  async updateTask(
+    taskId: string,
+    update: UpdateBackgroundTask,
+    options?: { expectedStatus?: BackgroundTask['status'] },
+  ): Promise<boolean> {
     const patch = toStoredPatch(update);
-    if (Object.keys(patch).length === 0) return;
+    if (Object.keys(patch).length === 0) return false;
 
-    await this.#db.patch({
+    return this.#db.patch({
       tableName: TABLE_BACKGROUND_TASKS,
       id: taskId,
       record: patch,
+      expected: options?.expectedStatus ? { status: options.expectedStatus } : undefined,
     });
   }
-
   async getTask(taskId: string): Promise<BackgroundTask | null> {
     const data = await this.#db.load<StoredTask>({ tableName: TABLE_BACKGROUND_TASKS, keys: { id: taskId } });
     return data ? fromStored(data) : null;

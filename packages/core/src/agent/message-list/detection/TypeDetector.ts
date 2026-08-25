@@ -218,9 +218,14 @@ export class TypeDetector {
   static hasAIV6CoreMessageCharacteristics(
     msg: CoreMessageV4 | AIV5Type.ModelMessage | AIV6Type.ModelMessage | AIV7Type.ModelMessage | AIV4Message,
   ): msg is AIV6Type.ModelMessage {
-    if ('parts' in msg || typeof msg.content === 'string') return false;
+    if ('parts' in msg || !Array.isArray(msg.content)) return false;
 
-    return msg.content.some(part => part.type === 'tool-approval-request' || part.type === 'tool-approval-response');
+    return msg.content.some(
+      part =>
+        part !== null &&
+        typeof part === 'object' &&
+        (part.type === 'tool-approval-request' || part.type === 'tool-approval-response'),
+    );
   }
 
   /**
@@ -240,10 +245,11 @@ export class TypeDetector {
       | AIV4Message,
   ): msg is AIV5Type.ModelMessage {
     if ('experimental_providerMetadata' in msg) return false;
-    // String content is identical in v4/v5/v6, so treat it as v5-compatible.
-    if (typeof msg.content === 'string') return true;
+    // String or missing content is compatible with the v5 model format.
+    if (!Array.isArray(msg.content)) return true;
 
     for (const part of msg.content) {
+      if (part === null || typeof part !== 'object') continue;
       if (part.type === 'tool-result' && 'output' in part) return true;
       if (part.type === 'tool-call' && 'input' in part) return true;
       if (part.type === 'tool-result' && 'result' in part) return false;

@@ -2008,6 +2008,7 @@ ${workingMemory}`;
             instruction: omConfig.observation.instruction,
             threadTitle: omConfig.observation.threadTitle,
             observeAttachments: omConfig.observation.observeAttachments,
+            continuationHints: omConfig.observation.continuationHints,
             extract: omConfig.observation.extract,
           }
         : undefined,
@@ -2020,6 +2021,7 @@ ${workingMemory}`;
             bufferActivation: omConfig.reflection.bufferActivation,
             blockAfter: omConfig.reflection.blockAfter,
             instruction: omConfig.reflection.instruction,
+            continuationHints: omConfig.reflection.continuationHints,
             extract: omConfig.reflection.extract,
           }
         : undefined,
