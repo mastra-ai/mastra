@@ -64,7 +64,15 @@ export function DatasetItemsList({
   onImportClick,
   onImportJsonClick,
 }: DatasetItemsListProps) {
-  const { containerRef, getRowProps } = useDataListKeyboard({ count: items.length });
+  const { containerRef, getRowProps } = useDataListKeyboard({
+    count: items.length,
+    // Arrow/page navigation opens the focused item, keeping the side panel in sync.
+    // Guard against the clamped boundary case (same id would toggle the panel closed).
+    onNavigate: index => {
+      const item = items[index];
+      if (item && item.id !== featuredItemId) onItemClick?.(item.id);
+    },
+  });
 
   // Only show empty state if there are no items AND no search is active AND not loading
 
@@ -155,6 +163,7 @@ export function DatasetItemsList({
                 <DataList.RowButton
                   key={item.id}
                   featured={isFeatured}
+                  data-selected={isFeatured || undefined}
                   onClick={() => onItemClick?.(item.id)}
                   {...getRowProps(index)}
                 >
@@ -174,6 +183,7 @@ export function DatasetItemsList({
                   flushLeft
                   colStart={2}
                   featured={isFeatured}
+                  data-selected={isFeatured || undefined}
                   onClick={() => onItemClick?.(item.id)}
                   {...getRowProps(index)}
                 >

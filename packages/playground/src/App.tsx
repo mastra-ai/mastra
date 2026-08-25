@@ -61,6 +61,7 @@ import CreateDatasetPage from './pages/datasets/new';
 import Evaluation from './pages/evaluation';
 import Experiments from './pages/experiments';
 import ExperimentPage from './pages/experiments/experiment';
+import ExperimentItemPage from './pages/experiments/experiment/item';
 import IntegrationsPage from './pages/integrations';
 import { Login } from './pages/login';
 import Logs from './pages/logs';
@@ -590,8 +591,30 @@ export const routes: RouteObject[] = [
               path: '/datasets/:datasetId',
               element: <DatasetPage />,
               handle: {
-                crumbs: () => [navCrumb('/datasets'), { id: 'dataset', Component: DatasetCrumb, heading: 'Dataset' }],
+                // The `to` link only renders when this isn't the current (last) crumb,
+                // i.e. on the nested items/:itemId route.
+                crumbs: ({ params }) => [
+                  navCrumb('/datasets'),
+                  {
+                    id: 'dataset',
+                    Component: DatasetCrumb,
+                    heading: 'Dataset',
+                    to: params.datasetId ? `/datasets/${encodeURIComponent(params.datasetId)}` : undefined,
+                  },
+                ],
               } satisfies RouteHeaderHandle,
+              children: [
+                {
+                  path: 'items/:itemId',
+                  element: <DatasetItemPage />,
+                  handle: {
+                    crumbs: ({ params }) => [
+                      { id: 'dataset-items', label: 'Items' },
+                      { id: 'dataset-item', label: decodeRouteParam(params.itemId) },
+                    ],
+                  } satisfies RouteHeaderHandle,
+                },
+              ],
             },
             {
               path: '/datasets/:datasetId/edit',
@@ -601,17 +624,6 @@ export const routes: RouteObject[] = [
                   navCrumb('/datasets'),
                   { id: 'dataset', Component: DatasetCrumb, heading: 'Dataset' },
                   { id: 'dataset-edit', label: 'Edit dataset' },
-                ],
-              } satisfies RouteHeaderHandle,
-            },
-            {
-              path: '/datasets/:datasetId/items/:itemId',
-              element: <DatasetItemPage />,
-              handle: {
-                crumbs: ({ params }) => [
-                  navCrumb('/datasets'),
-                  { id: 'dataset', Component: DatasetCrumb, heading: 'Dataset' },
-                  { id: 'dataset-item', label: decodeRouteParam(params.itemId) },
                 ],
               } satisfies RouteHeaderHandle,
             },
@@ -639,11 +651,29 @@ export const routes: RouteObject[] = [
               path: '/experiments/:experimentId',
               element: <ExperimentPage />,
               handle: {
+                // The `to` link only renders when this isn't the current (last) crumb,
+                // i.e. on the nested items/:itemId route.
                 crumbs: ({ params }) => [
                   navCrumb('/experiments'),
-                  { id: 'experiment', label: decodeRouteParam(params.experimentId) },
+                  {
+                    id: 'experiment',
+                    label: decodeRouteParam(params.experimentId),
+                    to: params.experimentId ? `/experiments/${encodeURIComponent(params.experimentId)}` : undefined,
+                  },
                 ],
               } satisfies RouteHeaderHandle,
+              children: [
+                {
+                  path: 'items/:itemId',
+                  element: <ExperimentItemPage />,
+                  handle: {
+                    crumbs: ({ params }) => [
+                      { id: 'experiment-items', label: 'Items' },
+                      { id: 'experiment-item', label: decodeRouteParam(params.itemId) },
+                    ],
+                  } satisfies RouteHeaderHandle,
+                },
+              ],
             },
             {
               path: '/datasets/:datasetId/experiments',

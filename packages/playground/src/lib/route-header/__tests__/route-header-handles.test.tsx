@@ -154,6 +154,52 @@ describe('route header handles', () => {
     expect(invalidHandles).toEqual([]);
   });
 
+  it('experiment item route yields Experiments / {expId} / Items / {itemId} with a non-clickable Items crumb', () => {
+    const handles = collectRouteHandles(getAppRoutes());
+    const parentHandle = handles.find(({ path }) => path === '/experiments/:experimentId')?.handle;
+    const childHandle = handles.find(({ path }) => path === '/experiments/:experimentId/items/:itemId')?.handle;
+
+    expect(parentHandle?.crumbs).toBeTypeOf('function');
+    expect(childHandle?.crumbs).toBeTypeOf('function');
+    if (typeof parentHandle?.crumbs !== 'function' || typeof childHandle?.crumbs !== 'function') return;
+
+    const ctx = {
+      params: { experimentId: 'exp-1', itemId: 'item-1' },
+      pathname: '/experiments/exp-1/items/item-1',
+    };
+    // Parent crumbs come first, child crumbs append (see useRouteHeader).
+    const crumbs = [...parentHandle.crumbs(ctx), ...childHandle.crumbs(ctx)];
+
+    expect(crumbs.map(c => c.id)).toEqual(['nav:/experiments', 'experiment', 'experiment-items', 'experiment-item']);
+    expect(crumbs[1]).toMatchObject({ label: 'exp-1', to: '/experiments/exp-1' });
+    expect(crumbs[2]).toMatchObject({ label: 'Items' });
+    expect(crumbs[2].to).toBeUndefined();
+    expect(crumbs[3]).toMatchObject({ label: 'item-1' });
+  });
+
+  it('dataset item route yields Datasets / {dataset} / Items / {itemId} with a non-clickable Items crumb', () => {
+    const handles = collectRouteHandles(getAppRoutes());
+    const parentHandle = handles.find(({ path }) => path === '/datasets/:datasetId')?.handle;
+    const childHandle = handles.find(({ path }) => path === '/datasets/:datasetId/items/:itemId')?.handle;
+
+    expect(parentHandle?.crumbs).toBeTypeOf('function');
+    expect(childHandle?.crumbs).toBeTypeOf('function');
+    if (typeof parentHandle?.crumbs !== 'function' || typeof childHandle?.crumbs !== 'function') return;
+
+    const ctx = {
+      params: { datasetId: 'ds-1', itemId: 'item-1' },
+      pathname: '/datasets/ds-1/items/item-1',
+    };
+    // Parent crumbs come first, child crumbs append (see useRouteHeader).
+    const crumbs = [...parentHandle.crumbs(ctx), ...childHandle.crumbs(ctx)];
+
+    expect(crumbs.map(c => c.id)).toEqual(['nav:/datasets', 'dataset', 'dataset-items', 'dataset-item']);
+    expect(crumbs[1].to).toBe('/datasets/ds-1');
+    expect(crumbs[2]).toMatchObject({ label: 'Items' });
+    expect(crumbs[2].to).toBeUndefined();
+    expect(crumbs[3]).toMatchObject({ label: 'item-1' });
+  });
+
   it('does not throw when route params contain malformed URI encoding', () => {
     const scheduleHandle = collectRouteHandles(getAppRoutes()).find(
       ({ path }) => path === '/workflows/schedules/:scheduleId',
