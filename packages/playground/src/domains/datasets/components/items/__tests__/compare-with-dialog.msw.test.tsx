@@ -88,6 +88,21 @@ describe('Compare with dialog', () => {
     });
   });
 
+  describe('when navigating the list with arrow keys', () => {
+    it('moves focus without opening the compare page', async () => {
+      const { navigate } = renderPanel();
+      const dialog = await openCompareDialog();
+      await within(dialog).findByText('item-b');
+
+      const rows = within(dialog).getAllByRole('button', { name: /item-/ });
+      rows[0].focus();
+      fireEvent.keyDown(rows[0], { key: 'ArrowDown' });
+
+      expect(navigate).not.toHaveBeenCalled();
+      await waitFor(() => expect(document.activeElement).toBe(rows[1]));
+    });
+  });
+
   describe('when an item is picked', () => {
     it('navigates to the compare page for the current item pair and closes the dialog', async () => {
       const { navigate } = renderPanel();

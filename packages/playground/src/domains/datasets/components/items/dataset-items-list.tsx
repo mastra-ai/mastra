@@ -11,6 +11,8 @@ export interface DatasetItemsListProps {
   isLoading: boolean;
   onItemClick?: (itemId: string) => void;
   featuredItemId?: string | null;
+  /** When false, arrow/page keyboard navigation only moves focus without opening the item. Defaults to true. */
+  selectOnNavigate?: boolean;
   setEndOfListElement?: (element: HTMLDivElement | null) => void;
   isFetchingNextPage?: boolean;
   hasNextPage?: boolean;
@@ -50,6 +52,7 @@ export function DatasetItemsList({
   isLoading,
   onItemClick,
   featuredItemId,
+  selectOnNavigate = true,
   setEndOfListElement,
   isFetchingNextPage,
   hasNextPage,
@@ -68,10 +71,12 @@ export function DatasetItemsList({
     count: items.length,
     // Arrow/page navigation opens the focused item, keeping the side panel in sync.
     // Guard against the clamped boundary case (same id would toggle the panel closed).
-    onNavigate: index => {
-      const item = items[index];
-      if (item && item.id !== featuredItemId) onItemClick?.(item.id);
-    },
+    onNavigate: selectOnNavigate
+      ? index => {
+          const item = items[index];
+          if (item && item.id !== featuredItemId) onItemClick?.(item.id);
+        }
+      : undefined,
   });
 
   // Only show empty state if there are no items AND no search is active AND not loading

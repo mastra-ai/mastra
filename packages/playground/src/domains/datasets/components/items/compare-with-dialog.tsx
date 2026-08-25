@@ -77,6 +77,7 @@ export function CompareWithDialog({ datasetId, currentItemId, open, onOpenChange
               items={otherItems}
               isLoading={isLoading}
               onItemClick={handleItemClick}
+              selectOnNavigate={false}
               columns={columns}
               // Always truthy so an empty result shows the "no match" row instead
               // of the add/import empty state, which makes no sense in this dialog.
