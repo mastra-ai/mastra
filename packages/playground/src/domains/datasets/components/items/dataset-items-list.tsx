@@ -1,7 +1,7 @@
 import type { DatasetItem } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
-import { DataList } from '@mastra/playground-ui/components/DataList';
+import { DataList, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { format, isThisYear, isToday } from 'date-fns';
 import { Plus, Upload, FileJson } from 'lucide-react';
@@ -66,6 +66,8 @@ export function DatasetItemsList({
   onImportClick,
   onImportJsonClick,
 }: DatasetItemsListProps) {
+  const { containerRef, getRowProps } = useDataListKeyboard({ count: items.length });
+
   // Only show empty state if there are no items AND no search is active AND not loading
 
   if (items.length === 0 && !searchQuery && !isLoading) {
@@ -106,7 +108,7 @@ export function DatasetItemsList({
   const gridColumns = [isSelectionActive ? 'auto' : '', ...columns.map(c => c.size)].filter(Boolean).join(' ');
 
   return (
-    <DataList columns={gridColumns}>
+    <DataList columns={gridColumns} scrollRef={containerRef}>
       <DataList.Top hasLeadingCell={isSelectionActive}>
         {isSelectionActive && !maxSelection && (
           <DataList.TopSelectCell
@@ -131,7 +133,7 @@ export function DatasetItemsList({
         <DataList.NoMatch message="No items match your search" />
       ) : (
         <>
-          {items.map(item => {
+          {items.map((item, index) => {
             const createdAtDate = new Date(item.createdAt);
             const isFeatured = featuredItemId === item.id;
 
@@ -159,7 +161,12 @@ export function DatasetItemsList({
 
             if (!isSelectionActive) {
               return (
-                <DataList.RowButton key={item.id} featured={isFeatured} onClick={() => onItemClick?.(item.id)}>
+                <DataList.RowButton
+                  key={item.id}
+                  featured={isFeatured}
+                  onClick={() => onItemClick?.(item.id)}
+                  {...getRowProps(index)}
+                >
                   {rowCells}
                 </DataList.RowButton>
               );
@@ -172,7 +179,13 @@ export function DatasetItemsList({
                   onToggle={shiftKey => handleToggleSelection(item.id, shiftKey, allIds)}
                   aria-label={`Select item ${item.id}`}
                 />
-                <DataList.RowButton flushLeft colStart={2} featured={isFeatured} onClick={() => onItemClick?.(item.id)}>
+                <DataList.RowButton
+                  flushLeft
+                  colStart={2}
+                  featured={isFeatured}
+                  onClick={() => onItemClick?.(item.id)}
+                  {...getRowProps(index)}
+                >
                   {rowCells}
                 </DataList.RowButton>
               </DataList.RowWrapper>
