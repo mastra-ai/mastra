@@ -1,5 +1,5 @@
 ---
-'@mastra/playground-ui': patch
+'@mastra/playground-ui': minor
 ---
 
 Improved how streaming transcripts move, and added the arrival primitives behind it.
@@ -14,12 +14,32 @@ Improved how streaming transcripts move, and added the arrival primitives behind
 **Added**
 
 - `ArrivalScope`, `useWatched` and `Arriving`: one shared answer to "was the reader watching when this mounted", so every entrance derives from it.
-- `useRevealedText`: the word-by-word pacing, moved out of `MarkdownRenderer` so a caller can lay tool rows and cards down in the same rhythm as the prose. `streaming` on `MarkdownRenderer` now only means "this text is a prefix still being written".
+- `useRevealedText`: the word-by-word pacing, moved out of `MarkdownRenderer` so a caller can lay tool rows and cards down in the same rhythm as the prose.
+
+**Migration**
+
+- `streaming` on `MarkdownRenderer` no longer paces the reveal — it only means "this text is a prefix still being written". A caller that relied on it for word-by-word pacing pairs the renderer with `useRevealedText`:
 
 ```tsx
+// before: streaming paced the text word by word
+<MarkdownRenderer streaming={streaming}>{text}</MarkdownRenderer>;
+
+// after: the caller owns the pace; streaming only mends the unterminated tail
 const shown = useRevealedText(text, streaming);
 
 <MarkdownRenderer streaming={streaming || shown !== text}>{shown}</MarkdownRenderer>;
+```
+
+- The entrance class `mastra-markdown-arriving` is renamed to `mastra-arriving`. Anything targeting the old name — a selector, a `className` — updates to the new one, best by importing it:
+
+```tsx
+// before
+<div className="mastra-markdown-arriving" />;
+
+// after
+import { ARRIVING_CLASS } from '@mastra/playground-ui/tokens';
+
+<div className={ARRIVING_CLASS} />;
 ```
 
 **Changed**
@@ -33,5 +53,3 @@ const Header = status === 'running' ? Shimmer : 'span';
 // after
 <Shimmer active={status === 'running'}>{label}</Shimmer>;
 ```
-
-- Renamed the entrance class `mastra-markdown-arriving` to `mastra-arriving`, exported as `ARRIVING_CLASS` from `@mastra/playground-ui/tokens`.
