@@ -355,10 +355,11 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
         if (scope)
           await this.#outbox(mention.sourceType, mention.sourceId, 'upsert', createKnowledgeUlid(), scope, session);
       }
-      // Merge matrix: target's description wins; a target without one adopts the source's
-      // (don't discard the only synopsis available); both absent stays absent.
+      // Merge matrix: a target that NEVER had a description (undefined — '' is an explicit curator
+      // clear and wins) adopts the source's; otherwise the target's state is preserved.
       let mergedTarget = target;
-      if (!target.description && source.description) {
+      // Deliberately no target-version CAS: last-write-wins is acceptable for a curator-rewritten derived field.
+      if (target.description === undefined && source.description) {
         const adoptedAt = new Date();
         await (
           await this.#nodes()

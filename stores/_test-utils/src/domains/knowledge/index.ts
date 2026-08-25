@@ -377,6 +377,33 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       const bareSource = await store.createNode({ name: 'Bare source', kind: 'person', scope: resource });
       await store.mergeNodes({ sourceId: bareSource.id, targetId: bareTarget.id, sourceVersion: bareSource.version });
       expect((await store.getNode(bareTarget.id))?.description).toBeUndefined();
+
+      // target explicitly cleared ('') => the clear wins; merge must not resurrect the source synopsis
+      const clearedSeed = await store.createNode({
+        name: 'Cleared target',
+        kind: 'person',
+        description: 'stale synopsis',
+        scope: resource,
+      });
+      const clearedTarget = await store.updateNode({
+        id: clearedSeed.id,
+        version: clearedSeed.version,
+        description: '',
+      });
+      const clearedSource = await store.createNode({
+        name: 'Cleared source',
+        kind: 'person',
+        description: 'resurrected synopsis',
+        scope: resource,
+      });
+      await store.mergeNodes({
+        sourceId: clearedSource.id,
+        targetId: clearedTarget.id,
+        sourceVersion: clearedSource.version,
+      });
+      const cleared = await store.getNode(clearedTarget.id);
+      expect(cleared?.description).toBe('');
+      expect(cleared?.version).toBe(clearedTarget.version);
     });
 
     it('matches descriptions in lexical search and keeps description-less text unchanged', async () => {

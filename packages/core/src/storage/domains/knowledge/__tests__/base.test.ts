@@ -506,6 +506,14 @@ describe('InMemoryKnowledgeStorage', () => {
       const m3 = await store.mergeNodes({ sourceId: s3.id, targetId: t3.id, sourceVersion: s3.version });
       expect(m3.description).toBeUndefined();
       expect(m3.version).toBe(t3.version);
+
+      // target explicitly cleared ('') => the clear wins; source synopsis is not resurrected
+      const t4Seed = await store.createNode({ name: 'T4', kind: 'topic', description: 'Stale.', scope: resource });
+      const t4 = await store.updateNode({ id: t4Seed.id, version: t4Seed.version, description: '' });
+      const s4 = await store.createNode({ name: 'S4', kind: 'topic', description: 'Resurrected.', scope: resource });
+      const m4 = await store.mergeNodes({ sourceId: s4.id, targetId: t4.id, sourceVersion: s4.version });
+      expect(m4.description).toBe('');
+      expect(m4.version).toBe(t4.version);
     });
 
     it('matches descriptions in lexical search and includes them in result text when present', async () => {

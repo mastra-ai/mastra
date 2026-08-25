@@ -182,7 +182,12 @@ export function createKnowledgeWriteTools(
         properties: {
           node: { type: 'string', minLength: 1 },
           expectedVersion: { type: 'integer', minimum: 1 },
-          description: { type: 'string', minLength: 0, maxLength: MAX_NODE_DESCRIPTION_LENGTH },
+          description: {
+            type: 'string',
+            minLength: 0,
+            maxLength: MAX_NODE_DESCRIPTION_LENGTH,
+            description: `Node synopsis, max ${MAX_NODE_DESCRIPTION_LENGTH} UTF-16 code units (the length check on execution is authoritative). An empty string clears the description.`,
+          },
         },
         required: ['node', 'expectedVersion', 'description'],
         additionalProperties: false,
@@ -192,7 +197,7 @@ export function createKnowledgeWriteTools(
         // Schema maxLength counts code points; this UTF-16 check is authoritative (same pattern as the capture-guidance bound above).
         if (value.description.length > MAX_NODE_DESCRIPTION_LENGTH) {
           throw new Error(
-            `Node descriptions are limited to ${MAX_NODE_DESCRIPTION_LENGTH} characters. Shorten the description and retry.`,
+            `Node descriptions are limited to ${MAX_NODE_DESCRIPTION_LENGTH} UTF-16 code units. Shorten the description and retry.`,
           );
         }
         const store = await getStore(memory);

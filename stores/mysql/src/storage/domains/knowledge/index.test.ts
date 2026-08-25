@@ -25,6 +25,8 @@ describe('MySQL knowledge legacy schema upgrade', () => {
     const store = createStore();
     await store.init();
     // Recreate the pre-description table shape, then let init() upgrade it.
+    // Mutates the shared table; safe because vitest runs files serially (fileParallelism: false)
+    // and the shared suite's beforeEach re-runs init(), which re-adds the column.
     await pool.query('ALTER TABLE `mastra_knowledge_nodes` DROP COLUMN description');
     const legacyId = `legacy-${Date.now()}`;
     await pool.query(
