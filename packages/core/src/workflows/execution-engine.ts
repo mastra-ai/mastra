@@ -37,6 +37,12 @@ export interface ExecutionEngineOptions {
   }) => boolean;
 
   /**
+   * Acknowledges that `resume()` calls cannot be de-duplicated via the persisted
+   * resume claim, suppressing the per-resume warning. See `WorkflowOptions.allowUnclaimedResumes`.
+   */
+  allowUnclaimedResumes?: boolean;
+
+  /**
    * Transforms the run snapshot immediately before it is persisted.
    * Must be pure and return JSON-safe data. Defaults to identity.
    */
