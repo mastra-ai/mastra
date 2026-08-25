@@ -14,6 +14,7 @@ import {
   EllipsisVerticalIcon,
   FileInputIcon,
   FileOutputIcon,
+  GitCompareIcon,
   History,
   ListChecksIcon,
   Pencil,
@@ -25,7 +26,7 @@ import {
 import { useEffect, useState } from 'react';
 import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
 import { EditModeContent } from '../dataset-detail/dataset-item-form';
-import { CompareWithList } from './compare-with-list';
+import { CompareWithDialog } from './compare-with-dialog';
 import { useLinkComponent } from '@/lib/framework';
 
 /** Schema validation error from API */
@@ -85,6 +86,9 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
 
   // Delete confirmation state
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  // "Compare with…" dialog state
+  const [showCompareDialog, setShowCompareDialog] = useState(false);
 
   // Reset form state when item changes (navigation or prop update)
   useEffect(() => {
@@ -297,6 +301,10 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
                       <Pencil />
                       Edit
                     </DropdownMenu.Item>
+                    <DropdownMenu.Item onSelect={() => setShowCompareDialog(true)}>
+                      <GitCompareIcon />
+                      Compare with…
+                    </DropdownMenu.Item>
                     <DropdownMenu.Item
                       onSelect={() => setShowDeleteConfirm(true)}
                       className="text-red-500 focus:text-red-400"
@@ -405,12 +413,17 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
                   codeStr={JSON.stringify(item.metadata ?? null, null, 2)}
                 />
               </div>
-
-              <CompareWithList datasetId={datasetId} currentItemId={item.id} />
             </>
           )}
         </DataPanel.Content>
       </DataPanel>
+
+      <CompareWithDialog
+        datasetId={datasetId}
+        currentItemId={item.id}
+        open={showCompareDialog}
+        onOpenChange={setShowCompareDialog}
+      />
 
       {/* Delete confirmation - uses portal, renders above panel */}
       <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>

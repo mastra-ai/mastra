@@ -200,6 +200,38 @@ describe('route header handles', () => {
     expect(crumbs[3]).toMatchObject({ label: 'item-1' });
   });
 
+  it('truncates long item ids to 8 chars with an ellipsis in item and compare crumbs', () => {
+    const handles = collectRouteHandles(getAppRoutes());
+    const itemHandle = handles.find(({ path }) => path === '/datasets/:datasetId/items/:itemId')?.handle;
+    const compareHandle = handles.find(
+      ({ path }) => path === '/datasets/:datasetId/items/:itemId/compare/:secondItemId',
+    )?.handle;
+
+    expect(itemHandle?.crumbs).toBeTypeOf('function');
+    expect(compareHandle?.crumbs).toBeTypeOf('function');
+    if (typeof itemHandle?.crumbs !== 'function' || typeof compareHandle?.crumbs !== 'function') return;
+
+    const longId = '03bb5c8f-970f-4d09-98cb-e3f0bd5813f0';
+    const secondId = '50203836-7083-448d-8624-97eae4dfb297';
+
+    const itemCrumbs = itemHandle.crumbs({
+      params: { datasetId: 'ds-1', itemId: longId },
+      pathname: `/datasets/ds-1/items/${longId}`,
+    });
+    expect(itemCrumbs.find(c => c.id === 'dataset-item')).toMatchObject({ label: '03bb5c8f...' });
+
+    const compareCrumbs = compareHandle.crumbs({
+      params: { datasetId: 'ds-1', itemId: longId, secondItemId: secondId },
+      pathname: `/datasets/ds-1/items/${longId}/compare/${secondId}`,
+    });
+    // Truncated label, but the link keeps the full id.
+    expect(compareCrumbs.find(c => c.id === 'dataset-item')).toMatchObject({
+      label: '03bb5c8f...',
+      to: `/datasets/ds-1/items/${longId}`,
+    });
+    expect(compareCrumbs.find(c => c.id === 'dataset-item-compare-second')).toMatchObject({ label: '50203836...' });
+  });
+
   it('does not throw when route params contain malformed URI encoding', () => {
     const scheduleHandle = collectRouteHandles(getAppRoutes()).find(
       ({ path }) => path === '/workflows/schedules/:scheduleId',

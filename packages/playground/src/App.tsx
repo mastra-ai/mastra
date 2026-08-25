@@ -250,6 +250,11 @@ const decodeRouteParam = (value: string | undefined) => {
   }
 };
 
+const truncateItemIdCrumb = (value: string | undefined) => {
+  const decoded = decodeRouteParam(value);
+  return decoded.length > 8 ? `${decoded.slice(0, 8)}...` : decoded;
+};
+
 // eslint-disable-next-line react-refresh/only-export-components -- route metadata is covered by regression tests.
 export const routes: RouteObject[] = [
   // Auth pages - no layout
@@ -610,7 +615,7 @@ export const routes: RouteObject[] = [
                   handle: {
                     crumbs: ({ params }) => [
                       { id: 'dataset-items', label: 'Items' },
-                      { id: 'dataset-item', label: decodeRouteParam(params.itemId) },
+                      { id: 'dataset-item', label: truncateItemIdCrumb(params.itemId) },
                     ],
                   } satisfies RouteHeaderHandle,
                 },
@@ -636,7 +641,7 @@ export const routes: RouteObject[] = [
                   { id: 'dataset', Component: DatasetCrumb, heading: 'Dataset' },
                   {
                     id: 'dataset-item',
-                    label: decodeRouteParam(params.itemId),
+                    label: truncateItemIdCrumb(params.itemId),
                     to:
                       params.datasetId && params.itemId
                         ? `/datasets/${encodeURIComponent(params.datasetId)}/items/${encodeURIComponent(params.itemId)}`
@@ -669,7 +674,7 @@ export const routes: RouteObject[] = [
                   handle: {
                     crumbs: ({ params }) => [
                       { id: 'experiment-items', label: 'Items' },
-                      { id: 'experiment-item', label: decodeRouteParam(params.itemId) },
+                      { id: 'experiment-item', label: truncateItemIdCrumb(params.itemId) },
                     ],
                   } satisfies RouteHeaderHandle,
                 },
@@ -696,11 +701,11 @@ export const routes: RouteObject[] = [
                   { id: 'dataset-items', label: 'Items' },
                   {
                     id: 'dataset-item',
-                    label: decodeRouteParam(params.itemId),
+                    label: truncateItemIdCrumb(params.itemId),
                     to: `/datasets/${params.datasetId}/items/${params.itemId}`,
                   },
                   { id: 'dataset-item-compare', label: 'Compare' },
-                  { id: 'dataset-item-compare-second', label: decodeRouteParam(params.secondItemId) },
+                  { id: 'dataset-item-compare-second', label: truncateItemIdCrumb(params.secondItemId) },
                 ],
               } satisfies RouteHeaderHandle,
             },
