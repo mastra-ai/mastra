@@ -1,13 +1,13 @@
 import { Button, buttonVariants } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { EllipsisVertical, Minimize2 } from 'lucide-react';
+import { ArrowUpRight, EllipsisVertical, Minimize2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useId } from 'react';
 import { Link, useParams } from 'react-router';
 
 import type { BoardCardStatus } from '../boardCardStatus';
-import { metadataLabels, pullRequestStatusForItem, workItemMeta } from '../boardItems';
+import { externalLinkLabel, metadataLabels, pullRequestStatusForItem, workItemMeta } from '../boardItems';
 import { itemStageLabel } from '../boardStages';
 import type { CardPrimaryAction } from '../cardPrimaryAction';
 import type { CardMorph } from '../hooks/useCardMorph';
@@ -22,12 +22,7 @@ import { CardDetailsBody, CardDetailsPanel } from './CardDetailsPanel';
 import { PullRequestStatusIcon } from './PullRequestStatusIcon';
 import { WorkItemActivity } from './WorkItemActivity';
 
-/**
- * What a work item card expands into. The header repeats the card's own rows in
- * the card's own order, spacing and padding — what the card already showed is
- * where it already was, so the box grows around it instead of re-staging it.
- * Only the description and the actions are staged in.
- */
+// The header repeats the card rows in the card order, so the box grows around them instead of re-staging them.
 export function WorkItemDetailsPanel({
   item,
   columnStage,
@@ -49,14 +44,11 @@ export function WorkItemDetailsPanel({
   projectRepositoryId: string;
   activityPage?: AuditEventPage;
   morph: CardMorph;
-  /** The card's related-item links, resolved once for the whole board. */
   relatedLinks: ReactNode;
-  /** The card's live session, when it has one. */
   threadSession?: WorkItemSessionRef;
   status: BoardCardStatus;
   retryingDecisionId?: string;
   onRetryDecision: (decisionId: string) => void;
-  /** The card's menu entries, wrapped by the card so acting collapses the panel. */
   menu: ReactNode;
   primaryAction?: CardPrimaryAction;
   runDisabled: boolean;
@@ -85,6 +77,17 @@ export function WorkItemDetailsPanel({
               {threadSession !== undefined && <span aria-hidden className="bg-accent1 size-2 shrink-0 rounded-full" />}
               {relatedLinks}
             </div>
+            {item.url !== null && (
+              <a
+                href={item.url}
+                target="_blank"
+                rel="noreferrer"
+                aria-label={externalLinkLabel(item.source)}
+                className={buttonVariants({ variant: 'ghost', size: 'icon-xs' })}
+              >
+                <ArrowUpRight size={13} aria-hidden />
+              </a>
+            )}
             <Button
               type="button"
               variant="ghost"

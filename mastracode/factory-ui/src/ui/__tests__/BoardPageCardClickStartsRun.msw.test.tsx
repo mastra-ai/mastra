@@ -15,10 +15,7 @@ import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
 import { createAppRoutes } from '../router';
 
-/**
- * jsdom lays nothing out, so the measured content reports the height we give it
- * here — the panel's box has to come back as exactly that.
- */
+// jsdom lays nothing out, so the measured content reports the height stubbed here.
 const PANEL_CONTENT_HEIGHT = 248;
 
 function stubContentHeight(height: number) {
@@ -170,7 +167,6 @@ function renderWorkBoard() {
   return renderWithProviders(<RouterProvider router={router} />);
 }
 
-/** Opens a card's detail dialog and starts its primary run from the footer. */
 async function startRunFromCardDetails(cardTitle: string) {
   const user = userEvent.setup();
   await user.click(await screen.findByRole('button', { name: `Details for ${cardTitle}` }));
@@ -205,9 +201,21 @@ describe('Board card details open the default run', () => {
     expect(await within(dialog).findByText('The sync runs the wrong way.')).toBeInTheDocument();
   });
 
-  // The popover renders its content one commit after it opens, so measuring from
-  // the open flag found nothing to observe and the panel stayed at its unmeasured
-  // height — a 0px line, since the content inside it is positioned.
+  it('links the card source from the panel header', async () => {
+    stubBoardEndpoints();
+    renderWorkBoard();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Details for Fix login bug' }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Fix login bug' });
+    expect(within(dialog).getByRole('link', { name: 'Open in GitHub' })).toHaveAttribute(
+      'href',
+      'https://github.com/acme/app/issues/7',
+    );
+  });
+
+  // The popover renders its content one commit after it opens: measuring from the open flag found nothing and left a 0px line.
   it('sizes the panel from its content on the first open', async () => {
     stubContentHeight(PANEL_CONTENT_HEIGHT);
     stubBoardEndpoints();
