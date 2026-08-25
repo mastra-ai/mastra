@@ -1,6 +1,7 @@
 ---
 name: docs-diagrams
-description: Convert existing docs diagram images to Mermaid, and author new Mermaid diagrams for Mastra docs. Use when replacing an Excalidraw or PNG/JPG/SVG diagram with Mermaid, when a docs page needs a new diagram, when a diagram renders wrong in light or dark mode, or when auditing which docs images should become Mermaid. Triggers on: convert diagram, Excalidraw, mermaid, flowchart, diagram image, diagram styling, diagram looks wrong.
+description: >-
+  Convert existing docs diagram images to Mermaid, and author new Mermaid diagrams for Mastra docs. Use when replacing an Excalidraw or PNG/JPG/SVG diagram with Mermaid, when a docs page needs a new diagram, when a diagram renders wrong in light or dark mode, or when auditing which docs images should become Mermaid. Triggers on: convert diagram, Excalidraw, mermaid, flowchart, diagram image, diagram styling, diagram looks wrong.
 ---
 
 # Docs Diagrams

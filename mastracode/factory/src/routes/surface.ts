@@ -191,6 +191,9 @@ export async function prepareFactoryRuleBinding(
       factoryProjectId: input.record.factoryProjectId,
       repositorySlug,
       branch,
+      // A human-approved proposal has an interactive user: attribute the run to
+      // the approver, not the repo connector.
+      attributeToUserId: input.record.approvedBy ?? undefined,
     });
 
     await coordinator.prepare({
