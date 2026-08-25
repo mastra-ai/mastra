@@ -1712,6 +1712,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             responseFormat: currentStep.structuredOutput ? 'json_schema' : undefined,
           });
           modelSpanTracker?.startInference?.();
+          // Same instant the MODEL_INFERENCE span opens, carried on
+          // `step-start` below so consumers can measure prefill without
+          // relying on when the chunk reaches them.
+          const inferenceStartedAt = Date.now();
 
           modelResult = executeWithContextSync({
             span: modelSpanTracker?.getTracingContext()?.currentSpan,
@@ -1770,6 +1774,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                       request: request || {},
                       warnings: warnings || [],
                       messageId: currentStep.messageId,
+                      startedAt: inferenceStartedAt,
                     },
                   };
                 },

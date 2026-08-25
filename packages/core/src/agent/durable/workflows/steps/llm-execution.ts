@@ -927,6 +927,11 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               responseFormat: structuredOutput ? 'json_schema' : undefined,
             });
             modelSpanTracker?.startInference?.();
+            // The instant inference starts, carried on `step-start` below.
+            // This step emits `step-start` from inside the chunk loop (it needs
+            // the provider's `warnings`), which is already past the prefill
+            // window, so the chunk's arrival time cannot stand in for it.
+            const inferenceStartedAt = Date.now();
 
             // Collect chunks for post-stream message building (via
             // buildMessagesFromChunks) and for the processLLMResponse hook
@@ -1069,6 +1074,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     stepId: DurableStepIds.LLM_EXECUTION,
                     messageId: currentMessageId,
                     warnings,
+                    startedAt: inferenceStartedAt,
                   });
                 }
 

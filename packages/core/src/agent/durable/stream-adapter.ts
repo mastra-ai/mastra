@@ -670,6 +670,7 @@ export async function emitStepStartEvent(
     messageId?: string;
     request?: StepStartPayload['request'];
     warnings?: StepStartPayload['warnings'];
+    startedAt?: StepStartPayload['startedAt'];
   },
 ): Promise<void> {
   const chunk: Extract<ChunkType, { type: 'step-start' }> = {
