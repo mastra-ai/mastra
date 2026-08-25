@@ -375,7 +375,7 @@ function BoardContent({
                 {loading && (
                   <SkeletonRows label={`Loading ${stage.label} column`} rows={3} rowClassName="h-24 w-full" />
                 )}
-                {!loading && !composerOpen && taskCount === 0 && (
+                {!loading && !composerOpen && taskCount === 0 && !(stage.id === 'intake' && intake.feed?.error) && (
                   <BoardColumnEmptyState
                     stage={stage.id}
                     kind={kind}
@@ -384,12 +384,7 @@ function BoardContent({
                   />
                 )}
                 {stage.id === 'intake' && (
-                  <IntakeColumnExtras
-                    source={intake.active}
-                    issues={intake.issues}
-                    pulls={intake.pulls}
-                    linearIssues={intake.linearIssues}
-                  />
+                  <IntakeColumnExtras source={intake.active} feed={intake.feed} />
                 )}
               </BoardColumn>
             );

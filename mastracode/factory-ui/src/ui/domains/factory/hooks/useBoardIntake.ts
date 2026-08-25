@@ -93,6 +93,9 @@ export function useBoardIntake({
     return all.filter(candidate => !knownSourceKeys.has(candidate.sourceKey));
   }, [knownSourceKeys, participantCandidates, intakeIssues, triageIssues.data, linearIssues.data, active, review]);
 
+  const feeds = { github: issues, 'github-prs': pulls, linear: linearIssues };
+  const feed = active ? feeds[active] : undefined;
+
   return {
     available,
     active,
@@ -100,14 +103,10 @@ export function useBoardIntake({
     select: setSelected,
     candidates,
     participantCandidates,
-    issues,
-    pulls,
-    linearIssues,
+    feed,
     isPending:
       (!review && (configQuery.isPending || ((config?.linear.enabled ?? false) && linearStatusQuery.isPending))) ||
-      (active === 'github' && issues.isPending) ||
-      (active === 'github-prs' && pulls.isPending) ||
-      (active === 'linear' && linearIssues.isPending),
+      Boolean(feed?.isPending),
     isTriagePending: !review && active === 'github' && triageIssues.isPending,
   };
 }
