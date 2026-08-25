@@ -15,6 +15,7 @@ import {
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { X } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { useState } from 'react';
 
 import { highlightCode, languageForPath } from '../../../../ui/highlight';
 import { stripSerializedAnsi } from '../../services/ansi';
@@ -205,10 +206,13 @@ function ToolBody({ tool, command }: { tool: ToolCall; command?: string }) {
 export function ToolCard({ tool }: { tool: ToolCall }) {
   const { icon: Icon, label, detail, command } = presentTool(tool.toolName, tool.args);
   const failed = tool.status === 'error';
+  // A card already on screen when the transcript loaded was not just called.
+  const [arrivedLive] = useState(() => tool.status === 'running');
 
   return (
     <ToolCallRoot
       status={tool.status === 'running' ? 'running' : failed ? 'error' : 'idle'}
+      className={cn(arrivedLive && 'motion-safe:animate-in fade-in-0 slide-in-from-bottom-1')}
       aria-label={`Tool: ${tool.toolName}`}
       aria-busy={tool.status === 'running'}
     >

@@ -270,7 +270,7 @@ describe('MarkdownRenderer', () => {
     const { container } = render(<MarkdownRenderer>{'Two words'}</MarkdownRenderer>);
 
     expect(container.textContent).toBe('Two words');
-    expect(container.querySelectorAll('.mastra-arriving')).toHaveLength(0);
+    expect(container.querySelectorAll('.mastra-markdown-arriving')).toHaveLength(0);
   });
 
   it('reveals a streamed reply a word at a time', () => {
@@ -312,11 +312,11 @@ describe('MarkdownRenderer', () => {
     const joined = container.textContent ?? '';
 
     expect(joined).toBe(Array.from({ length: 28 }, (_, index) => word(index)).join(' '));
-    expect(container.querySelectorAll('.mastra-arriving')).toHaveLength(0);
+    expect(container.querySelectorAll('.mastra-markdown-arriving')).toHaveLength(0);
 
     arrive(container, word(39));
 
-    const animated = [...container.querySelectorAll('.mastra-arriving')].map(node => node.textContent);
+    const animated = [...container.querySelectorAll('.mastra-markdown-arriving')].map(node => node.textContent);
 
     expect(animated).toEqual(Array.from({ length: 12 }, (_, index) => word(index + 28)));
   });
@@ -330,7 +330,7 @@ describe('MarkdownRenderer', () => {
     const code = container.querySelector('code');
 
     expect(code?.textContent).toBe('npm i');
-    expect(code?.classList.contains('mastra-arriving')).toBe(true);
+    expect(code?.classList.contains('mastra-markdown-arriving')).toBe(true);
     expect(code?.querySelector('span')).toBeNull();
   });
 
@@ -346,8 +346,8 @@ describe('MarkdownRenderer', () => {
 
     const block = container.querySelector('figure');
 
-    expect(block?.classList.contains('mastra-arriving')).toBe(true);
-    expect(block?.querySelector('.mastra-arriving')).toBeNull();
+    expect(block?.classList.contains('mastra-markdown-arriving')).toBe(true);
+    expect(block?.querySelector('.mastra-markdown-arriving')).toBeNull();
   });
 
   it('remounts no block as the reply grows past it', () => {

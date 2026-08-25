@@ -3,7 +3,7 @@ import type { ExtraProps } from 'react-markdown';
 type MarkdownElement = NonNullable<ExtraProps['node']>;
 type MarkdownChild = MarkdownElement['children'][number];
 
-const ARRIVING = 'mastra-arriving';
+const ARRIVING = 'mastra-markdown-arriving';
 
 /** Fades whole: a fence renders through `CodeBlock`, and inline code carries a background. */
 const UNBROKEN = new Set(['pre', 'code']);
