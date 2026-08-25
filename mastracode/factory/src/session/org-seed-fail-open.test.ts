@@ -58,23 +58,24 @@ describe('org-classification fail-open (projectless factory session, rejecting o
     const capturedInitialState = (prepareMock.mock.calls[0]![0] as { initialState: Record<string, unknown> })
       .initialState;
 
-    // 2. Session state as the controller builds it: schema defaults merged
-    //    with the cloned initialState (session.ts merge order).
-    const schemaDefaults: Record<string, unknown> = {};
-    const sessionState = { ...schemaDefaults, ...structuredClone(capturedInitialState) };
+    // 2. Session state as the controller builds it: the cloned initialState.
+    //    `factoryOrgUnresolved` is declared optional with NO schema default
+    //    (sdk/src/schema.ts), so the schema merge cannot clobber the value.
+    const sessionState = { ...structuredClone(capturedInitialState) };
 
-    // 3. Tyler's exact scenario: a projectless session whose org-state write
-    //    REJECTS. seedSessionOrg swallows the failure by contract, so the
-    //    write leaves no trace in session state.
+    // 3. A projectless session whose org-state write REJECTS. Without the
+    //    fail-closed default, seedSessionOrg attempts to write the unresolved
+    //    marker, the write rejects, is swallowed by contract, and the state
+    //    stays unmarked — the exact fail-open. With the default present, the
+    //    marker is already true and seedSessionOrg short-circuits without
+    //    writing, which the `stateSet` assertion below pins.
+    const stateSet = vi.fn(() => Promise.reject(new Error('session state write failed')));
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const sessionDouble = {
-      state: {
-        get: () => sessionState,
-        set: () => Promise.reject(new Error('session state write failed')),
-      },
-    };
-    await seedSessionOrg(sessionDouble, undefined);
-    warnSpy.mockRestore();
+    try {
+      await seedSessionOrg({ state: { get: () => sessionState, set: stateSet } }, undefined);
+    } finally {
+      warnSpy.mockRestore();
+    }
 
     // 4. The real SDK classification over that state.
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -107,6 +108,10 @@ describe('org-classification fail-open (projectless factory session, rejecting o
       // And the session was never classified — in particular never as 'local'.
       expect(requestContext.set).not.toHaveBeenCalledWith('organizationId', expect.anything());
       expect(requestContext.get('organizationId')).toBeUndefined();
+      // Fail-closed default present -> the seed short-circuits and never
+      // needs the (rejecting) write. Without the default, the write IS
+      // attempted (and rejects) — so this also reddens on the base.
+      expect(stateSet).not.toHaveBeenCalled();
     } finally {
       errorSpy.mockRestore();
     }
