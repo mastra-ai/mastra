@@ -48,8 +48,13 @@ const ALIAS_VERSION = 'v3';
  */
 const CURRENT_TAG = 'current';
 
-/** Env var the build's git auth header is computed from. Value set via `setEnvs`. */
-const BUILD_TOKEN_ENV = 'MASTRA_BUILD_GH_TOKEN';
+/**
+ * Env var carrying the repository credential during the build. The same
+ * name a session installs before running setup, so a setup command sees the
+ * same environment in both places. Set via `setEnvs`; the git auth header is
+ * computed from it too.
+ */
+const BUILD_TOKEN_ENV = 'GH_TOKEN';
 
 /**
  * Clone URLs interpolate into build shell commands, so constrain them to
@@ -334,14 +339,7 @@ function buildRepoTemplateSpec(identity: RepoTemplateIdentity, token?: string): 
   // file ownership right.
   let template = createDefaultMountableTemplate().template;
   const env: Record<string, string> = { ...buildEnv };
-  if (token) {
-    env[BUILD_TOKEN_ENV] = token;
-    // Setup commands shell out to `gh` and authenticated https the same way
-    // they do at runtime, where the session installs GH_TOKEN before setup.
-    // Without this a command that works in a session fails in the build,
-    // and the failure only shows up as a session that booted cold.
-    env.GH_TOKEN = token;
-  }
+  if (token) env[BUILD_TOKEN_ENV] = token;
   if (Object.keys(env).length > 0) {
     // Visible to build steps; probed to NOT persist into runtime sandbox
     // environments. Values must be short-lived — they stay in the template

@@ -415,7 +415,8 @@ The credential authenticates the head lookup and the build's clone through
 an in-shell `http.extraheader` — it enters the template definition's
 environment (visible to build steps but not persisted into runtime sandbox
 environments) and never touches the image filesystem, so no captured layer
-can contain it. It's also exposed to the setup command as `GH_TOKEN`, so a
+can contain it. It's set as `GH_TOKEN`, the same variable a session installs
+before running setup, so a
 command that shells out to `gh` or authenticated https behaves the same in
 the build as it does in a session.
 

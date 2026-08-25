@@ -194,26 +194,28 @@ describe('createRepoTemplate', () => {
       // references it through the env var. No expanded header, no tokened
       // URL, nothing a filesystem layer could capture.
       expect(serialized).toContain('"type": "ENV"');
-      expect(serialized).toContain('$MASTRA_BUILD_GH_TOKEN');
+      expect(serialized).toContain('$GH_TOKEN');
       expect(serialized).toContain('http.extraheader');
       expect(serialized).not.toContain('@github.com');
       expect(serialized).toContain('clone https://github.com/octocat/hello');
     });
 
-    it('exposes the credential to the setup command as GH_TOKEN, matching runtime setup', async () => {
+    it('names the credential GH_TOKEN, the same variable a session installs before setup', async () => {
       const serialized = await serializedSteps(await resolve(authed));
       // A setup command that shells out to `gh` or authenticated https works
       // in a session because the session installs GH_TOKEN before setup; the
       // build has to match or the same command fails only during the build.
-      expect(serialized).toContain('GH_TOKEN');
-      expect(JSON.parse(serialized)).toBeTruthy();
+      const definition = JSON.parse(serialized) as { steps: { type: string; args: string[] }[] };
+      const envStep = definition.steps.find(step => step.type === 'ENV');
+      expect(envStep?.args).toContain('GH_TOKEN');
+      expect(envStep?.args).toContain(TOKEN);
     });
 
     it('clones tokenlessly when access returns a URL but no credential', async () => {
       const serialized = await serializedSteps(
         await resolve({ ...authed, getRepositoryAccess: async () => ({ cloneUrl: CLONE_URL }) }),
       );
-      expect(serialized).not.toContain('MASTRA_BUILD_GH_TOKEN');
+      expect(serialized).not.toContain('GH_TOKEN');
       expect(serialized).not.toContain('extraheader');
     });
 

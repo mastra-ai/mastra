@@ -19,7 +19,7 @@ new E2BSandbox({
 });
 ```
 
-`getRepositoryAccess` supplies the clone URL and, for private repositories, a short-lived credential. It returns `undefined` from `createRepoTemplate()` when the accessor is absent, so a session with no repository needs no conditional at the call site. The credential authenticates the head lookup and the build's clone through an in-shell auth header, reaching the template definition's environment but never the image filesystem, and it's also exposed to the setup command as `GH_TOKEN` so a command that works in a session works during the build.
+`getRepositoryAccess` supplies the clone URL and, for private repositories, a short-lived credential. It returns `undefined` from `createRepoTemplate()` when the accessor is absent, so a session with no repository needs no conditional at the call site. The credential authenticates the head lookup and the build's clone through an in-shell auth header, reaching the template definition's environment but never the image filesystem. It's set as `GH_TOKEN`, the same variable a session installs before running setup, so a setup command behaves identically in both places.
 
 **Only the first build ever blocks a start**
 
