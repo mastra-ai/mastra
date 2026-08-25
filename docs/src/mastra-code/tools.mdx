@@ -155,8 +155,8 @@ Mastra Code supports two configured providers, Tavily and Parallel. Choose a def
 
 - **Tavily**: Used when `TAVILY_API_KEY` is set.
 - **Parallel**: Used when `PARALLEL_API_KEY` is set and no Tavily key is configured.
-- **Anthropic web search**: Built into Anthropic models and used when no provider key is configured.
-- **OpenAI web search**: Built into OpenAI models and used when no provider key is configured.
+
+When neither key is configured, agents running on Anthropic or OpenAI models fall back to that model's built-in web search. This model-native fallback applies only to agents on those models — other models, and Mastra Code workflows, have no `web_search` tool without a configured provider key.
 
 Provider-backed versions of `web_search` accept a single `query`. Optional parameters vary by provider.
 
