@@ -1,5 +1,19 @@
 # mastra
 
+## 1.26.1-alpha.11
+
+### Patch Changes
+
+- Fixed EU observability CLI requests to use the same Platform credentials as the US endpoint. ([#22251](https://github.com/mastra-ai/mastra/pull/22251))
+
+## 1.26.1-alpha.10
+
+### Patch Changes
+
+- Updated dependencies [[`b05f486`](https://github.com/mastra-ai/mastra/commit/b05f48612984d5fe2447ea2d6cdd5c604d285b97), [`7960688`](https://github.com/mastra-ai/mastra/commit/7960688828e04eaf3106e34f7758fa580257eef6)]:
+  - @mastra/core@1.62.0-alpha.10
+  - @mastra/deployer@1.62.0-alpha.10
+
 ## 1.26.1-alpha.9
 
 ### Patch Changes

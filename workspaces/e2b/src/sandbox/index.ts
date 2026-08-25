@@ -71,6 +71,17 @@ export interface E2BSandboxOptions extends Omit<MastraSandboxOptions, 'processes
   /** Unique identifier for this sandbox instance */
   id?: string;
   /**
+   * Persisted E2B provider sandbox ID to reattach to deterministically.
+   *
+   * When set, `start()` first queries this exact sandbox and connects to it
+   * (resuming it if paused) instead of discovering by logical `id` metadata.
+   * Only a typed "sandbox gone" error (not found / killed / not running)
+   * falls through to the usual logical-id lookup and create ladder;
+   * auth, quota, rate-limit, timeout, and network errors propagate without
+   * creating a new sandbox.
+   */
+  sandboxId?: string;
+  /**
    * Sandbox template specification.
    *
    * - `string` - Use an existing template by ID
@@ -212,6 +223,7 @@ export class E2BSandbox extends MastraSandbox {
   private readonly network?: SandboxNetworkOpts;
   private readonly lifecycle: SandboxLifecycle;
   private readonly connectionOpts: Record<string, string>;
+  private readonly _preferredSandboxId?: string;
   private readonly _instructionsOverride?: InstructionsOption;
   private readonly _constructorOptions: E2BSandboxOptions;
 
@@ -242,6 +254,7 @@ export class E2BSandbox extends MastraSandbox {
       ...(options.accessToken && { accessToken: options.accessToken }),
     };
 
+    this._preferredSandboxId = options.sandboxId;
     this._instructionsOverride = options.instructions;
     this._constructorOptions = { ...options };
 
@@ -264,13 +277,16 @@ export class E2BSandbox extends MastraSandbox {
    * independent sandboxes (e.g. one per project).
    *
    * `options.idleTimeoutMinutes` maps to the E2B sandbox `timeout` (ms);
-   * `options.sandboxId` is ignored because E2B reconnects by logical `id`.
+   * `options.sandboxId` reattaches the clone to that exact E2B sandbox on
+   * `start()`. The parent's own preferred provider sandbox ID is never
+   * inherited — physical identity is per-instance.
    */
   clone(options: SandboxCloneOptions = {}): E2BSandbox {
-    const { id: _id, ...base } = this._constructorOptions;
+    const { id: _id, sandboxId: _sandboxId, ...base } = this._constructorOptions;
     return new E2BSandbox({
       ...base,
       ...(options.id !== undefined && { id: options.id }),
+      ...(options.sandboxId !== undefined && { sandboxId: options.sandboxId }),
       ...(options.env !== undefined && { env: options.env }),
       ...(options.idleTimeoutMinutes !== undefined && { timeout: options.idleTimeoutMinutes * 60_000 }),
     });
@@ -305,6 +321,17 @@ export class E2BSandbox extends MastraSandbox {
     return this._sandbox;
   }
 
+  /**
+   * The E2B provider sandbox ID resolved after connect or create.
+   *
+   * Persist this to reattach deterministically later via the `sandboxId`
+   * option (or `clone({ sandboxId })`). Undefined until the sandbox has been
+   * started (attached) in this process.
+   */
+  get sandboxId(): string | undefined {
+    return this._sandbox?.sandboxId;
+  }
+
   // ---------------------------------------------------------------------------
   // Lifecycle
   // ---------------------------------------------------------------------------
@@ -323,7 +350,7 @@ export class E2BSandbox extends MastraSandbox {
 
     // Await template preparation (started in constructor) and existing sandbox search in parallel
     const [existingSandbox, templateId] = await Promise.all([
-      this.findExistingSandbox(),
+      this.acquireExistingSandbox(),
       this._templatePreparePromise || this.resolveTemplate(),
     ]);
 
@@ -487,6 +514,7 @@ export class E2BSandbox extends MastraSandbox {
       })),
       metadata: {
         ...this.metadata,
+        ...(this._sandbox && { sandboxId: this._sandbox.sandboxId }),
       },
     };
   }
@@ -862,6 +890,67 @@ export class E2BSandbox extends MastraSandbox {
     }
 
     return null;
+  }
+
+  /**
+   * Acquire an existing sandbox: try the preferred provider sandbox ID first
+   * (deterministic reattach), then fall back to logical-id metadata discovery.
+   */
+  private async acquireExistingSandbox(): Promise<Sandbox | null> {
+    if (this._preferredSandboxId) {
+      const preferred = await this.connectToPreferredSandbox(this._preferredSandboxId);
+      if (preferred) return preferred;
+    }
+    return this.findExistingSandbox();
+  }
+
+  /**
+   * Deterministically reattach to a sandbox by its E2B provider ID.
+   *
+   * Fail-closed: only a typed "sandbox gone" error (not found / killed /
+   * not running) returns null so the caller can fall through to logical-id
+   * discovery or creation. Any other error (auth, quota, rate limit,
+   * timeout, network) propagates so a duplicate sandbox is never created.
+   *
+   * Ownership is validated before connecting: a sandbox tagged with a
+   * different `mastra-sandbox-id` is refused (without resuming it).
+   * Sandboxes without the tag (created outside Mastra) are attachable.
+   */
+  private async connectToPreferredSandbox(preferredSandboxId: string): Promise<Sandbox | null> {
+    let info: E2BSandboxListInfo;
+    try {
+      info = await Sandbox.getInfo(preferredSandboxId, this.connectionOpts);
+    } catch (e) {
+      if (this.isSandboxDeadError(e)) {
+        this.logger.debug(
+          `${LOG_PREFIX} Preferred sandbox ${preferredSandboxId} is gone, falling back to logical-id discovery:`,
+          e,
+        );
+        return null;
+      }
+      throw e;
+    }
+
+    const owner = info.metadata?.['mastra-sandbox-id'];
+    if (owner !== undefined && owner !== this.id) {
+      throw new Error(
+        `${LOG_PREFIX} Provider sandbox ${preferredSandboxId} belongs to logical sandbox id "${owner}", refusing to attach it to "${this.id}"`,
+      );
+    }
+
+    try {
+      return await Sandbox.connect(preferredSandboxId, this.connectionOpts);
+    } catch (e) {
+      // The sandbox can terminate between getInfo and connect.
+      if (this.isSandboxDeadError(e)) {
+        this.logger.debug(
+          `${LOG_PREFIX} Preferred sandbox ${preferredSandboxId} vanished before connect, falling back:`,
+          e,
+        );
+        return null;
+      }
+      throw e;
+    }
   }
 
   /**

@@ -1,5 +1,23 @@
 # @mastra/code-sdk
 
+## 1.5.0-alpha.10
+
+### Minor Changes
+
+- Added Parallel as a configured web search provider in Mastra Code, alongside Tavily. Set PARALLEL_API_KEY to enable Parallel-backed web_search and web_extract tools, and pick your default provider in the TUI under /settings → Web search provider (providers are selectable only while their API key is configured; Auto uses the first configured key). ([#22216](https://github.com/mastra-ai/mastra/pull/22216))
+
+  ```bash
+  PARALLEL_API_KEY=your-api-key npx mastracode --prompt "Use web_search to find the latest Mastra release"
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`b05f486`](https://github.com/mastra-ai/mastra/commit/b05f48612984d5fe2447ea2d6cdd5c604d285b97), [`4bc0650`](https://github.com/mastra-ai/mastra/commit/4bc0650a49114480bf9b5bd318d679941f726823), [`7960688`](https://github.com/mastra-ai/mastra/commit/7960688828e04eaf3106e34f7758fa580257eef6), [`b05f486`](https://github.com/mastra-ai/mastra/commit/b05f48612984d5fe2447ea2d6cdd5c604d285b97)]:
+  - @mastra/core@1.62.0-alpha.10
+  - @mastra/fastembed@1.3.0-alpha.0
+  - @mastra/observability@1.17.2-alpha.2
+  - @mastra/mcp@1.17.2-alpha.2
+
 ## 1.5.0-alpha.9
 
 ### Patch Changes

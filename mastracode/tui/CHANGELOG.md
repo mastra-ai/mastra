@@ -1,5 +1,24 @@
 # mastracode
 
+## 0.36.0-alpha.10
+
+### Patch Changes
+
+- Added a Web search provider setting to /settings for choosing the default web_search/web_extract provider (Tavily or Parallel). Every provider stays visible in the selector; ones missing their API key are marked unavailable with the env var to set, and Auto uses the first configured key. ([#22216](https://github.com/mastra-ai/mastra/pull/22216))
+
+  ```bash
+  PARALLEL_API_KEY=your-api-key npx mastracode
+  # then: /settings → Web search provider → Parallel
+  # and in chat: "Use web_search to find the latest Mastra release"
+  ```
+
+- Updated dependencies [[`b05f486`](https://github.com/mastra-ai/mastra/commit/b05f48612984d5fe2447ea2d6cdd5c604d285b97), [`41c24e3`](https://github.com/mastra-ai/mastra/commit/41c24e376e1c61974af9aa0b48d4e0091e476dcc), [`4bc0650`](https://github.com/mastra-ai/mastra/commit/4bc0650a49114480bf9b5bd318d679941f726823), [`7960688`](https://github.com/mastra-ai/mastra/commit/7960688828e04eaf3106e34f7758fa580257eef6), [`b05f486`](https://github.com/mastra-ai/mastra/commit/b05f48612984d5fe2447ea2d6cdd5c604d285b97)]:
+  - @mastra/core@1.62.0-alpha.10
+  - @mastra/code-sdk@1.5.0-alpha.10
+  - @mastra/fastembed@1.3.0-alpha.0
+  - @mastra/observability@1.17.2-alpha.2
+  - @mastra/mcp@1.17.2-alpha.2
+
 ## 0.36.0-alpha.9
 
 ### Patch Changes

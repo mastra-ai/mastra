@@ -1102,9 +1102,9 @@ For runtime commands, the command resolves the target server in this order:
 1. `http://localhost:4111` for a local `mastra dev` server.
 1. `.mastra-project.json` for a Mastra platform project.
 
-Automatic platform auth is only used when the CLI resolves a Mastra platform target from `.mastra-project.json`. Localhost targets and explicit `--url` targets don't receive automatic credentials. Headers passed with `--header` are sent to any target, including localhost.
+Automatic Platform authentication is used when the CLI resolves a project from `.mastra-project.json` or recognizes an explicit Mastra-hosted Studio, Factory, or observability URL. Localhost and arbitrary explicit `--url` targets don't receive automatic credentials. Headers passed with `--header` are sent to any target, including localhost.
 
-For observability commands (`trace`, `log`, `score`, and `metric`), the CLI targets `https://observability.mastra.ai` by default instead of a project deployment URL. Trace Intelligence commands (`learning`) work the same way but target `https://output.signals.mastra.ai`. Both resolve credentials in this order:
+For observability commands (`trace`, `log`, `score`, and `metric`), the CLI targets the United States endpoint at `https://observability.mastra.ai` by default instead of a project deployment URL. Trace Intelligence commands (`learning`) work the same way but target `https://output.signals.mastra.ai`. When the CLI selects either hosted target automatically, it resolves credentials in this order:
 
 1. Explicit `Authorization` and `X-Mastra-Project-Id` headers passed with `--header`.
 1. `MASTRA_PLATFORM_ACCESS_TOKEN` and `MASTRA_PROJECT_ID` from your environment.
@@ -1113,7 +1113,13 @@ For observability commands (`trace`, `log`, `score`, and `metric`), the CLI targ
 
 Learning commands also send `X-Mastra-Organization-Id`, resolved from an explicit `--header`, `MASTRA_ORGANIZATION_ID` in your environment, or `.mastra-project.json`, in that order.
 
-Use `--url` and `--header` when you need to override the default hosted observability target or credentials.
+European Union observability data is stored at `https://observability.eu.mastra.ai`. Pass that trusted host with `--url`; it uses the same Platform credential resolution as the default United States endpoint:
+
+```bash
+mastra api --url https://observability.eu.mastra.ai trace list
+```
+
+Use `--url` and `--header` when you need to override another target or its credentials.
 
 ### Flags
 
@@ -1529,7 +1535,7 @@ mastra api metric label-values '{"metricName":"latency_ms","labelKey":"model","p
 
 #### Observability with `curl`
 
-You can call the hosted observability API directly with your platform access token and project ID:
+You can call the hosted observability API directly with your platform access token and project ID. The examples below use the United States host. Substitute `https://observability.eu.mastra.ai` for a European Union environment. The [hosted feedback query API](/docs/mastra-platform/api#observability-feedback-query-api) documents feedback endpoints that don't have CLI commands:
 
 ```bash
 curl -sS "https://observability.mastra.ai/api/observability/traces?page=0&perPage=20" \
