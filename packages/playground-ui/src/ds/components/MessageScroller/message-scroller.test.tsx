@@ -881,6 +881,24 @@ describe('MessageScroller autoScroll', () => {
     expect(scrollTo).not.toHaveBeenCalled();
   });
 
+  it('parks a turn one room above the end when the box stops short of the top', () => {
+    stubLayout({ 'message-2': 300 });
+    const { rerender } = render(<HistoryHarness autoScroll messageIds={['message-1']} />);
+
+    const viewport = screen.getByTestId('history-viewport');
+    installScrollTo(viewport);
+    setScrollMetrics(viewport, { scrollHeight: 1000, clientHeight: 400, scrollTop: 600 });
+    fireEvent.scroll(viewport);
+
+    Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 1100 });
+    rerender(<HistoryHarness autoScroll messageIds={['message-1', 'message-2']} />);
+
+    // Resting the message at the very top would take 900; the box ends at 700, and
+    // aiming past it would leave the trip chasing a write the browser clamps.
+    expect(startTripMock).toHaveBeenCalledTimes(1);
+    expect(lastTrip().getTarget()).toBe(700);
+  });
+
   it('brings a reader who left back to the turn they opened, and carries them again', async () => {
     vi.stubGlobal('ResizeObserver', MockResizeObserver);
     stubLayout({ 'message-2': 300 });

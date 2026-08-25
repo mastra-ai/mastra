@@ -24,6 +24,9 @@ export const getContentPadding = (contentElement: HTMLElement | null) => {
   };
 };
 
+export const getMaxScroll = (viewportElement: HTMLElement) =>
+  Math.max(0, viewportElement.scrollHeight - viewportElement.clientHeight);
+
 export const getRelativeTop = (element: HTMLElement, viewportElement: HTMLElement) => {
   const elementRect = element.getBoundingClientRect();
   const viewportRect = viewportElement.getBoundingClientRect();
@@ -84,7 +87,7 @@ export const getFollowTarget = ({
   items: Array<readonly [string, MessageScrollerItemRecord]>;
   viewportElement: HTMLElement;
 }) => {
-  const end = Math.max(0, viewportElement.scrollHeight - viewportElement.clientHeight);
+  const end = getMaxScroll(viewportElement);
   const lastRow = items.at(-1)?.[1].element;
   if (!lastRow || !contentElement) return end;
 

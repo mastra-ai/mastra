@@ -9,7 +9,7 @@ Improved how streaming transcripts move, and added the arrival primitives behind
 - Words already read no longer replay their entrance when markdown rebuilds around them, and a reply born streaming animates from its very first word instead of landing as a block that fades in.
 - The reveal clock no longer steps backwards for one frame, which unmounted a settled tool row and cut its shimmer off mid-sweep.
 - The shimmer on running labels is a single band scaled to the element instead of a tiled pattern, and it dissolves into the text colour when the label lands instead of snapping off.
-- `MessageScroller` follows the last message instead of the end of its box, so the reader is no longer parked on empty space below the conversation. Catch-up while following a stream is softened on the compositor, and opening a turn parks the sent message at the top and lets the answer grow beneath it.
+- `MessageScroller` follows the last message instead of the end of its box, so the reader is no longer parked on empty space below the conversation. Catch-up while following a stream is softened on the compositor, and opening a turn parks the sent message above the room reserved for its answer — the room decides how high it rests — and lets the answer grow beneath it.
 
 **Added**
 

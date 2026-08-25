@@ -25,7 +25,13 @@ import type {
   MessageScrollerVisibility,
 } from './message-scroller-context';
 
-import { VISIBILITY_EPSILON, getCurrentAnchorId, getFollowTarget, getScrollTarget } from './message-scroller-geometry';
+import {
+  VISIBILITY_EPSILON,
+  getCurrentAnchorId,
+  getFollowTarget,
+  getMaxScroll,
+  getScrollTarget,
+} from './message-scroller-geometry';
 import type { MessageScrollerItemRecord } from './message-scroller-geometry';
 import { glideContent } from './message-scroller-glide';
 import { startTrip } from './message-scroller-trip';
@@ -90,7 +96,7 @@ const scheduleScrollSync = (callback: () => void) => {
 };
 
 export interface MessageScrollerProviderProps {
-  /** Carry the reader with the stream, re-attaching on a new turn. Off parks a new turn at the top instead. */
+  /** Carry the reader with the stream, re-attaching on a new turn. Off still parks a new turn, without following the reply. */
   autoScroll?: boolean;
   children?: React.ReactNode;
   defaultScrollPosition?: MessageScrollerDefaultScrollPosition;
@@ -206,10 +212,17 @@ export function MessageScrollerProvider({
     (anchorId: string) => {
       const item = itemsRegistry.get(anchorId);
       if (!item || !viewportElement) return undefined;
-      return Math.max(
-        0,
-        getScrollTarget({ align: 'start', contentElement, element: item.element, scrollMargin, viewportElement }),
-      );
+      // Capped at the end of the box: the room reserved under the turn decides how
+      // high the message parks, and past the end the browser clamps writes anyway —
+      // an unreachable destination would leave the trip chasing that clamp.
+      const top = getScrollTarget({
+        align: 'start',
+        contentElement,
+        element: item.element,
+        scrollMargin,
+        viewportElement,
+      });
+      return Math.min(Math.max(0, top), getMaxScroll(viewportElement));
     },
     [contentElement, itemsRegistry, scrollMargin, viewportElement],
   );
@@ -565,9 +578,9 @@ export function MessageScrollerProvider({
   ]);
 
   // A turn opening is the one scripted scroll of a conversation: it carries the
-  // reader to the message they just sent and parks it at the top, with the room the
-  // turn reserves standing empty under it. The answer then grows into that room and
-  // moves nothing at all — following only takes over once it outgrows the screen.
+  // reader to the message they just sent and parks it as high as the room the turn
+  // reserves under it allows. The answer then grows into that room and moves
+  // nothing at all — following only takes over once it outgrows the room.
   React.useLayoutEffect(() => {
     const lastAnchorId = getLastAnchorId();
     const lastAnchor = lastAnchorId ? itemsRegistry.get(lastAnchorId) : undefined;
