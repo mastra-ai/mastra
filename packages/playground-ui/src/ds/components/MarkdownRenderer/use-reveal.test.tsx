@@ -2,14 +2,14 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { useReveal } from './use-reveal';
+import { useRevealedText } from './use-reveal';
 
 const frame = () => act(() => void vi.advanceTimersByTime(16));
 
 const words = (text: string) => text.match(/\S+/g)?.length ?? 0;
 
 const stream = (text: string, streaming = true) =>
-  renderHook(props => useReveal(props.text, props.streaming), { initialProps: { text, streaming } });
+  renderHook(props => useRevealedText(props.text, props.streaming), { initialProps: { text, streaming } });
 
 function drain(until: () => boolean, limit = 600): number {
   let frames = 0;
@@ -33,7 +33,7 @@ afterEach(() => {
   Reflect.deleteProperty(window, 'matchMedia');
 });
 
-describe('useReveal', () => {
+describe('useRevealedText', () => {
   it('leaves a reply loaded from history where it is', () => {
     const { result } = stream('A reply loaded from history.', false);
 

@@ -1412,3 +1412,36 @@ describe('live user-signal events render the same as their persisted copy', () =
     expect(messageParts(state.entries[0])).toEqual(sealed.content.parts);
   });
 });
+
+describe('transcript reducer entry identity', () => {
+  it('keeps the identity a tool-bearing entry was drawn with, and closes it to the next reply', () => {
+    const drawn = transcriptReducer(initialTranscript, {
+      type: 'event',
+      event: { type: 'tool_start', toolCallId: 'call-1', toolName: 'view', args: { path: 'a.ts' } },
+    });
+    const drawnId = drawn.entries[0]?.id;
+
+    expect(drawnId).toMatch(/^assistant-tools-/);
+
+    const claimed = transcriptReducer(drawn, {
+      type: 'event',
+      event: {
+        type: 'message_update',
+        message: dbMessage('assistant-first', 'assistant', [{ type: 'text', text: 'Read it.' }]),
+      },
+    });
+
+    expect(claimed.entries).toHaveLength(1);
+    expect(claimed.entries[0]?.id).toBe(drawnId);
+
+    const next = transcriptReducer(claimed, {
+      type: 'event',
+      event: {
+        type: 'message_update',
+        message: dbMessage('assistant-second', 'assistant', [{ type: 'text', text: 'Now the next one.' }]),
+      },
+    });
+
+    expect(next.entries).toHaveLength(2);
+  });
+});

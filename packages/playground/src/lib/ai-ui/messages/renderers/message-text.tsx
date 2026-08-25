@@ -1,5 +1,9 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
-import { MarkdownRenderer, type MarkdownExternalLinkTarget } from '@mastra/playground-ui/components/MarkdownRenderer';
+import {
+  MarkdownRenderer,
+  useRevealedText,
+  type MarkdownExternalLinkTarget,
+} from '@mastra/playground-ui/components/MarkdownRenderer';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -23,6 +27,7 @@ export interface MessageTextProps {
  */
 export const MessageText = ({ text, metadata, externalLinkTarget, streaming }: MessageTextProps) => {
   const [collapsedCompletionCheck, setCollapsedCompletionCheck] = useState(false);
+  const shown = useRevealedText(text, Boolean(streaming));
 
   if (metadata?.status === 'tripwire') {
     return <TripwireNotice reason={text} tripwire={metadata.tripwire} />;
@@ -80,8 +85,8 @@ export const MessageText = ({ text, metadata, externalLinkTarget, streaming }: M
   }
 
   return (
-    <MarkdownRenderer externalLinkTarget={externalLinkTarget} streaming={streaming}>
-      {text}
+    <MarkdownRenderer externalLinkTarget={externalLinkTarget} streaming={Boolean(streaming) || shown !== text}>
+      {shown}
     </MarkdownRenderer>
   );
 };

@@ -68,13 +68,17 @@ function wordStops(text: string): number[] {
  * hundred milliseconds, where a deeper buffer would spend the whole reply filling
  * and then sprint to catch up.
  *
+ * The reply it paces is whatever the caller hands it, so a caller with more than
+ * prose to lay down — a tool row between two paragraphs — paces the whole of it
+ * from one place and draws the rest against the same cursor.
+ *
  * Nothing here reads `streaming` past the first render: a reply that stops
  * arriving is one whose measured speed decays, which winds the buffer down on its
  * own. Words, not characters, are what a reader sees land, and they are not the
  * same length: an even flow of characters still drops "and if we do" in one frame
  * and spends four on "implementation".
  */
-export function useReveal(text: string, streaming: boolean): string {
+export function useRevealedText(text: string, streaming: boolean): string {
   const [calm] = useState(prefersReducedMotion);
   const stops = useMemo(() => wordStops(text), [text]);
   const words = stops.length - 1;

@@ -13,8 +13,14 @@ function messageEntry(
   id: string,
   role: 'user' | 'assistant',
   parts: MastraDBMessage['content']['parts'],
+  streaming?: boolean,
 ): TimelineEntry {
-  return { kind: 'message', id, message: { id, role, createdAt: CREATED_AT, content: { format: 2, parts } } };
+  return {
+    kind: 'message',
+    id,
+    streaming,
+    message: { id, role, createdAt: CREATED_AT, content: { format: 2, parts } },
+  };
 }
 
 function renderEntries(entries: TimelineEntry[]) {
@@ -52,6 +58,38 @@ describe('message meta', () => {
     await user.click(screen.getByRole('button', { name: 'Copy message' }));
 
     expect(await navigator.clipboard.readText()).toBe('reading the file\n\ndone');
+  });
+
+  it('stamps a reply once however many messages the server cut it into', () => {
+    const { container } = renderEntries([
+      messageEntry('user-1', 'user', [{ type: 'text', text: 'ship it' }]),
+      messageEntry('assistant-1', 'assistant', [{ type: 'text', text: 'reading the file' }]),
+      messageEntry('assistant-2', 'assistant', [{ type: 'text', text: 'shipped' }]),
+    ]);
+
+    expect(container.querySelectorAll('time')).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: 'Copy message' })).toHaveLength(2);
+  });
+
+  it('copies the whole reply from the message that closes it', async () => {
+    const user = userEvent.setup();
+    renderEntries([
+      messageEntry('assistant-1', 'assistant', [{ type: 'text', text: 'reading the file' }]),
+      messageEntry('assistant-2', 'assistant', [{ type: 'text', text: 'shipped' }]),
+    ]);
+
+    await user.click(screen.getByRole('button', { name: 'Copy message' }));
+
+    expect(await navigator.clipboard.readText()).toBe('reading the file\n\nshipped');
+  });
+
+  it('waits for the reply to finish before offering to copy it', () => {
+    const { container } = renderEntries([
+      messageEntry('assistant-1', 'assistant', [{ type: 'text', text: 'still writ' }], true),
+    ]);
+
+    expect(container.querySelector('time')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Copy message' })).toBeNull();
   });
 
   it('leaves a message with nothing to copy unstamped', () => {

@@ -102,21 +102,26 @@
   }
 }
 
-/* The scroller stays pinned to the end while this opens and closes, so these
- * curves — not a scroll animation — are what carry the transcript. Opening
- * answers a keypress; closing is the conversation settling, so it drifts. */
+/* The scroller parks the turn at the top as this opens, so these curves — not a
+ * scroll animation — are what carry the transcript. Opening answers a keypress;
+ * closing is the conversation settling, so it drifts.
+ *
+ * A whole screen of room, because room is what buys stillness: the turn is parked
+ * at the top when it opens, the reply grows into the space under it, and the
+ * scroller has nothing to follow until the answer outgrows the screen. Room to
+ * spare costs nothing — the scroller follows the last row, never the empty end. */
 .turn-room {
   min-height: 0;
   transition: min-height 1500ms cubic-bezier(0.3, 0, 0.2, 1);
 }
 
 .turn-room-open {
-  min-height: 70cqh;
+  min-height: 100cqh;
   transition: min-height 440ms cubic-bezier(0.2, 0, 0.2, 1);
 }
 
 .turn-room-restored-open {
-  min-height: 70cqh;
+  min-height: 100cqh;
   transition: none;
 }
 

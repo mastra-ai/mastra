@@ -88,12 +88,15 @@ export const ToolCallTrigger = ({ className, ...props }: ComponentProps<typeof C
 
 export const ToolCallHeader = ({ className, children, ...props }: ComponentProps<'span'>) => {
   const { status } = useToolCall();
-  const Header = status === 'running' ? Shimmer : 'span';
 
   return (
-    <Header className={cn('flex w-full min-w-0 items-center gap-2 px-1.5 py-1', className)} {...props}>
+    <Shimmer
+      active={status === 'running'}
+      className={cn('flex w-full min-w-0 items-center gap-2 px-1.5 py-1', className)}
+      {...props}
+    >
       {children}
-    </Header>
+    </Shimmer>
   );
 };
 

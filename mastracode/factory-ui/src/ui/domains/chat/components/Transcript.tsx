@@ -4,7 +4,7 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
+import { MarkdownRenderer, useRevealedText } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { MessageScrollerItem } from '@mastra/playground-ui/components/MessageScroller';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { startsUserTurn } from '@mastra/playground-ui/components/ThreadRail';
@@ -14,7 +14,7 @@ import { MessageFactory } from '@mastra/react/ui';
 import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvocationPart } from '@mastra/react/ui';
 import { Bell, CircleDot, ExternalLink, Info, Layers, Slack } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useState } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 
 import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
 import { useChatSessionContext } from '../context/useChatSessionContext';
@@ -24,7 +24,10 @@ import {
   useRespondAgentControllerSuspensionMutation,
 } from '../../../../hooks/useAgentControllerRunMutations';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
+import { messageProse, messageScript, revealedParts } from '../services/reveal';
 import { isTerminalInvocationState } from '../services/transcript';
+import { groupTurns, replySteps } from '../services/turns';
+import { ArrivalScope, Arriving, useArriving } from './arrival';
 import { MESSAGE_HOVER, MessageMeta } from './MessageMeta';
 import { ToolCard } from './tool/ToolCard';
 import { ToolGroup, TOOL_GROUP_MIN } from './tool/ToolGroup';
@@ -72,11 +75,8 @@ function stringify(v: unknown): string {
   }
 }
 
-function messageText(parts: MessageEntry['message']['content']['parts']): string {
-  return parts
-    .flatMap(part => (part.type === 'text' ? [part.text] : []))
-    .join('\n\n')
-    .trim();
+function messageText(parts: MessagePart[]): string {
+  return messageProse(parts).trim();
 }
 
 function lastSegment(id: string): string {
@@ -478,11 +478,6 @@ function SignalRow({ kind, label, message }: { kind: string; label: string; mess
 // Transcript
 // ---------------------------------------------------------------------------
 
-interface PreparedTranscriptEntry {
-  entry: TimelineEntry;
-  content: ReactNode;
-}
-
 export function Transcript({ tail }: { tail?: ReactNode }) {
   const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
   const { transcript, resolvePrompt, busy } = useChatTranscript();
@@ -493,28 +488,37 @@ export function Transcript({ tail }: { tail?: ReactNode }) {
     baseUrl,
     enabled: sessionEnabled,
   };
-  const approveMutation = useApproveAgentControllerToolMutation(hookArgs);
-  const respondMutation = useRespondAgentControllerSuspensionMutation(hookArgs);
+  const { mutateAsync: approve, isPending: approving } = useApproveAgentControllerToolMutation(hookArgs);
+  const { mutateAsync: respond, isPending: responding } = useRespondAgentControllerSuspensionMutation(hookArgs);
 
-  const onApprove = async (toolCallId: string, approved: boolean, promptId: string) => {
-    await approveMutation.mutateAsync({ toolCallId, approved });
-    resolvePrompt(promptId);
-  };
-  const onRespond = async (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => {
-    await respondMutation.mutateAsync({ toolCallId, resumeData });
-    resolvePrompt(promptId);
-  };
+  // Pinned: these reach every entry, and a fresh pair each token would redraw the lot.
+  const onApprove = useCallback(
+    async (toolCallId: string, approved: boolean, promptId: string) => {
+      await approve({ toolCallId, approved });
+      resolvePrompt(promptId);
+    },
+    [approve, resolvePrompt],
+  );
+  const onRespond = useCallback(
+    async (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => {
+      await respond({ toolCallId, resumeData });
+      resolvePrompt(promptId);
+    },
+    [respond, resolvePrompt],
+  );
 
   return (
-    <TranscriptEntries
-      entries={transcript.entries}
-      restoredHistory
-      isSubmitting={approveMutation.isPending || respondMutation.isPending}
-      onApprove={onApprove}
-      onRespond={onRespond}
-      running={busy}
-      tail={tail}
-    />
+    <ArrivalScope>
+      <TranscriptEntries
+        entries={transcript.entries}
+        restoredHistory
+        isSubmitting={approving || responding}
+        onApprove={onApprove}
+        onRespond={onRespond}
+        running={busy}
+        tail={tail}
+      />
+    </ArrivalScope>
   );
 }
 
@@ -537,9 +541,12 @@ export function TranscriptEntries({
   /** Rendered inside the live turn (the activity line), so the reserved room stays under it. */
   tail?: ReactNode;
 }) {
-  const suspensions = new Map(
-    entries.flatMap(entry => (entry.kind === 'suspension' ? [[entry.toolCallId, entry] as const] : [])),
-  );
+  const prompts = entries.flatMap(entry => (entry.kind === 'suspension' ? [entry] : []));
+  // Keyed by the prompts on screen, not by the array holding them: a delta hands this
+  // component a new `entries` every token, and a map rebuilt each time would be a new
+  // prop on every settled entry, undoing the memo below.
+  const promptKey = prompts.map(prompt => prompt.id).join('\n');
+  const suspensions = useMemo(() => new Map(prompts.map(prompt => [prompt.toolCallId, prompt] as const)), [promptKey]);
   const canonicalToolCallIds = new Set(
     entries.flatMap(entry =>
       entry.kind === 'message'
@@ -549,54 +556,14 @@ export function TranscriptEntries({
         : [],
     ),
   );
-  const renderEntry = (entry: TimelineEntry): ReactNode => {
-    switch (entry.kind) {
-      case 'message':
-        return renderMessageBubble({ entry, suspensions, isSubmitting, onRespond });
-      case 'notice':
-        return <NoticeCard entry={entry} />;
-      case 'approval':
-        return <ApprovalCard prompt={entry} isSubmitting={isSubmitting} onApprove={onApprove} />;
-      case 'notification':
-        return <NotificationCard entry={entry} />;
-      case 'notification_summary':
-        return <NotificationSummaryCard entry={entry} />;
-      case 'suspension':
-        return entry.toolName === 'request_access' || !canonicalToolCallIds.has(entry.toolCallId) ? (
-          <SuspensionCard prompt={entry} isSubmitting={isSubmitting} onRespond={onRespond} />
-        ) : null;
-      case 'subagent':
-        return <SubagentCard entry={entry} />;
-      default:
-        return null;
-    }
-  };
-
-  const preparedEntries = entries.map(entry => ({ entry, content: renderEntry(entry) }));
 
   // Ignore echoed user signals that render nothing when opening a turn.
   const drawsContent = (entry: MessageEntry): boolean =>
-    entry.message.content.parts.some(part => isRenderablePart(part, suspensions, entry.runtimeTools));
+    entry.message.content.parts.some(part => isRenderablePart(part, entry.runtimeTools));
   const opensTurn = (entry: TimelineEntry): boolean =>
     entry.kind === 'message' && startsUserTurn(entry.message) && drawsContent(entry);
 
-  const turnGroups: { key: string; entries: PreparedTranscriptEntry[]; opensTurn: boolean }[] = [];
-  for (const preparedEntry of preparedEntries) {
-    const opens = opensTurn(preparedEntry.entry);
-    if (!opens && turnGroups.length > 0) {
-      turnGroups.at(-1)?.entries.push(preparedEntry);
-      continue;
-    }
-    // A gap sorts above the turn it introduces but arrives after it: inside that turn the
-    // room absorbs its height, outside it shifts the transcript a beat later.
-    const previous = turnGroups.at(-1);
-    const introduction = previous && isTimeGap(previous.entries.at(-1)?.entry) ? previous.entries.splice(-1) : [];
-    turnGroups.push({
-      key: preparedEntry.entry.id,
-      entries: [...introduction, preparedEntry],
-      opensTurn: opens,
-    });
-  }
+  const turnGroups = groupTurns(entries, opensTurn, isTimeGap);
   const [restoredTurnKey] = useState(() => (restoredHistory ? turnGroups.at(-1)?.key : undefined));
 
   return (
@@ -607,21 +574,36 @@ export function TranscriptEntries({
         const holdsRoom = isLiveTurn && group.opensTurn && running;
         const openRoomClass = group.key === restoredTurnKey ? 'turn-room-restored-open' : 'turn-room-open';
 
+        // One reply, however many messages the server split it into: the meta row lands
+        // once, under the last of them, and copies the whole answer.
+        const steps = replySteps(group);
+        const replyEnd = steps.at(-1);
+        const reply = steps
+          .map(step => messageText(renderableParts(step)))
+          .filter(Boolean)
+          .join('\n\n');
+
         return (
           <div
             key={group.key}
             className={cn('flex flex-col', group.opensTurn && 'turn-room', holdsRoom && openRoomClass)}
           >
-            {group.entries.map(({ entry, content }) => (
-              <MessageScrollerItem
-                key={entry.id}
-                messageId={entry.id}
-                scrollAnchor={opensTurn(entry)}
-                // Prepend anchoring needs real item heights, not off-screen estimates.
-                className="[content-visibility:visible]"
-              >
-                {content}
-              </MessageScrollerItem>
+            {group.entries.map(entry => (
+              <TranscriptItem key={entry.id} entry={entry} scrollAnchor={opensTurn(entry)}>
+                <TranscriptEntryContent
+                  entry={entry}
+                  suspensions={suspensions}
+                  reply={entry === replyEnd ? reply : undefined}
+                  redundantSuspension={
+                    entry.kind === 'suspension' &&
+                    entry.toolName !== 'request_access' &&
+                    canonicalToolCallIds.has(entry.toolCallId)
+                  }
+                  isSubmitting={isSubmitting}
+                  onApprove={onApprove}
+                  onRespond={onRespond}
+                />
+              </TranscriptItem>
             ))}
             {isLiveTurn && tail}
           </div>
@@ -629,6 +611,85 @@ export function TranscriptEntries({
       })}
       {turnGroups.length === 0 && tail}
     </>
+  );
+}
+
+/**
+ * What one entry draws. Memoized on its own props, because a token landing on the live
+ * reply hands this list a new array while every settled entry in it is the same object:
+ * only the entry that changed is worth drawing again.
+ *
+ * `redundantSuspension` arrives decided rather than as the set it was decided from —
+ * the set grows with every tool call, and passing it would re-render the whole
+ * transcript each time one starts.
+ */
+const TranscriptEntryContent = memo(function TranscriptEntryContent({
+  entry,
+  suspensions,
+  reply,
+  redundantSuspension,
+  isSubmitting,
+  onApprove,
+  onRespond,
+}: {
+  entry: TimelineEntry;
+  suspensions: ReadonlyMap<string, SuspensionPrompt>;
+  reply?: string;
+  redundantSuspension: boolean;
+  isSubmitting: boolean;
+  onApprove: (toolCallId: string, approved: boolean, promptId: string) => void;
+  onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
+}) {
+  switch (entry.kind) {
+    case 'message':
+      return (
+        <MessageBubble
+          entry={entry}
+          suspensions={suspensions}
+          reply={reply}
+          isSubmitting={isSubmitting}
+          onRespond={onRespond}
+        />
+      );
+    case 'notice':
+      return <NoticeCard entry={entry} />;
+    case 'approval':
+      return <ApprovalCard prompt={entry} isSubmitting={isSubmitting} onApprove={onApprove} />;
+    case 'notification':
+      return <NotificationCard entry={entry} />;
+    case 'notification_summary':
+      return <NotificationSummaryCard entry={entry} />;
+    case 'suspension':
+      return redundantSuspension ? null : (
+        <SuspensionCard prompt={entry} isSubmitting={isSubmitting} onRespond={onRespond} />
+      );
+    case 'subagent':
+      return <SubagentCard entry={entry} />;
+    default:
+      return null;
+  }
+});
+
+function TranscriptItem({
+  entry,
+  scrollAnchor,
+  children,
+}: {
+  entry: TimelineEntry;
+  scrollAnchor: boolean;
+  children: ReactNode;
+}) {
+  const arriving = useArriving();
+
+  return (
+    <MessageScrollerItem
+      messageId={entry.id}
+      scrollAnchor={scrollAnchor}
+      // Prepend anchoring needs real item heights, not off-screen estimates.
+      className={cn('[content-visibility:visible]', arriving)}
+    >
+      <ArrivalScope>{children}</ArrivalScope>
+    </MessageScrollerItem>
   );
 }
 
@@ -678,29 +739,59 @@ function steeringLabel(entry: MessageEntry): string | undefined {
   if (entry.deliveryStatus === 'failed') return 'Not sent';
   return 'Steered message';
 }
-function renderMessageBubble({
+/**
+ * What the meta row stamps and offers to copy. A user's own words are their message;
+ * an assistant's are the whole turn's answer, which reaches the timeline split across
+ * one message per step — so only the message closing it carries the row, and a reply
+ * still being written carries none.
+ */
+function metaText(entry: MessageEntry, prose: string, reply?: string): string | undefined {
+  if (entry.message.role === 'user') return prose || undefined;
+
+  return entry.streaming ? undefined : reply;
+}
+
+/**
+ * One message, drawn at the pace it was written. The reveal is owned here rather than
+ * inside the markdown, because a reply is prose *and* the rows written between its
+ * passages: paced from one place, they land in the order the model wrote them.
+ */
+function MessageBubble({
   entry,
   suspensions,
+  reply,
   isSubmitting,
   onRespond,
 }: {
   entry: MessageEntry;
   suspensions: ReadonlyMap<string, SuspensionPrompt>;
+  /** The whole turn's answer, on the last message it was split across — the meta row's text. */
+  reply?: string;
   isSubmitting: boolean;
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
 }) {
+  const written = renderableParts(entry);
+  const shown = useRevealedText(messageScript(written), Boolean(entry.streaming));
+  const parts = revealedParts(written, shown);
+  // Decided the first time the entry is drawn and never revisited: only calls already
+  // there when the reader arrived may fold into a group. A call landing under them —
+  // a live run being watched, or one restored mid-run — stays the row it played as.
+  const [groupable] = useState<ReadonlySet<string>>(() =>
+    entry.streaming
+      ? new Set()
+      : new Set(written.flatMap(part => (part.type === 'tool-invocation' ? [part.toolInvocation.toolCallId] : []))),
+  );
   const messageParts = entry.message.content.parts ?? [];
-
-  const parts = messageParts.filter(part => isRenderablePart(part, suspensions, entry.runtimeTools));
   const message =
     parts.length === messageParts.length
       ? entry.message
       : { ...entry.message, content: { ...entry.message.content, parts } };
   const hasRenderablePart = parts.length > 0;
 
-  const toolGroups = collectToolGroups(parts, suspensions, entry.runtimeTools);
+  const toolGroups = collectToolGroups(parts, suspensions, entry.runtimeTools, groupable);
   const origin = channelOrigin(entry);
-  const prose = messageText(parts);
+  const prose = messageText(written);
+  const meta = metaText(entry, prose, reply);
   const steeringStatus = steeringLabel(entry);
   const steeringPending = entry.deliveryStatus === 'pending';
   const steeringFailed = entry.deliveryStatus === 'failed';
@@ -724,15 +815,15 @@ function renderMessageBubble({
           </span>
         )}
         {origin && <ChannelOriginBadge origin={origin} />}
-        {prose ? <MessageMeta text={prose} createdAt={entry.message.createdAt} align="end" /> : null}
+        {meta ? <MessageMeta text={meta} createdAt={entry.message.createdAt} align="end" /> : null}
       </div>
     ),
     Assistant: ({ children }) => (
       // The trailing margin of the last part spaced this message from the next
       // entry; the meta row inherits it as a gap unless it moves to the wrapper.
-      <div className={cn(MESSAGE_HOVER, 'max-w-full', prose && 'mb-3 [&>*:nth-last-child(2)]:mb-0')}>
+      <div className={cn(MESSAGE_HOVER, 'max-w-full', meta && 'mb-3 [&>*:nth-last-child(2)]:mb-0')}>
         {children}
-        {prose ? <MessageMeta text={prose} createdAt={entry.message.createdAt} align="start" /> : null}
+        {meta ? <MessageMeta text={meta} createdAt={entry.message.createdAt} align="start" /> : null}
       </div>
     ),
     System: ({ children }) => <div className="text-ui-sm text-icon3">{children}</div>,
@@ -752,31 +843,41 @@ function renderMessageBubble({
         </MarkdownRenderer>
       );
     },
+    // Reasoning is delivered whole, not token by token, so the block lands at once
+    // and the word pacing inside it has nothing to pace: the entrance is the
+    // container's, like a tool row's.
     Reasoning: (part: ReasoningPart) => (
-      <div className="border-border1 my-1.5 border-l-2 pl-2.5 italic [&_p]:my-0.5">
+      <Arriving className="border-border1 my-1.5 border-l-2 pl-2.5 italic [&_p]:my-0.5">
         <MarkdownRenderer className="text-ui-sm text-icon3">{part.reasoning}</MarkdownRenderer>
-      </div>
+      </Arriving>
     ),
     ToolInvocation: (part: ToolInvocationPart) => {
       const toolCallId = part.toolInvocation.toolCallId;
       const group = toolGroups.byFirstId.get(toolCallId);
-      if (group) return <ToolGroup tools={group} />;
+      if (group)
+        return (
+          <Arriving>
+            <ToolGroup tools={group} />
+          </Arriving>
+        );
       if (toolGroups.memberIds.has(toolCallId)) return null;
 
       const runtime = entry.runtimeTools?.[toolCallId];
       const tool = toolFromInvocationPart(part, runtime);
       const suspension = suspensions.get(tool.toolCallId);
       return (
-        <ToolFactory
-          toolName={tool.toolName}
-          toolCallId={tool.toolCallId}
-          input={suspension?.suspendPayload ?? tool.args}
-          output={tool.result}
-          status={suspension ? 'running' : tool.status}
-          isSubmitting={isSubmitting}
-          onRespond={suspension ? response => onRespond(tool.toolCallId, response, suspension.id) : undefined}
-          fallback={() => <ToolCard tool={tool} />}
-        />
+        <Arriving>
+          <ToolFactory
+            toolName={tool.toolName}
+            toolCallId={tool.toolCallId}
+            input={suspension?.suspendPayload ?? tool.args}
+            output={tool.result}
+            status={suspension ? 'running' : tool.status}
+            isSubmitting={isSubmitting}
+            onRespond={suspension ? response => onRespond(tool.toolCallId, response, suspension.id) : undefined}
+            fallback={() => <ToolCard tool={tool} />}
+          />
+        </Arriving>
       );
     },
     File: (part: FilePart) => <FileAttachment part={part} />,
@@ -849,19 +950,44 @@ function terminalInvocationStatus(invocation: ToolInvocationPart['toolInvocation
   return 'isError' in invocation && invocation.isError === true ? 'error' : 'done';
 }
 
-/** Parts that draw something: step markers and blank prose leave empty bubbles and split runs of calls. */
-function isRenderablePart(
-  part: MessageEntry['message']['content']['parts'][number],
-  suspensions: ReadonlyMap<string, SuspensionPrompt>,
-  runtimeTools: MessageEntry['runtimeTools'],
-): boolean {
+/** The parts a message actually draws: hidden tools and prompts drawn elsewhere fall out. */
+function renderableParts(entry: MessageEntry): MessagePart[] {
+  return mergeProse((entry.message.content.parts ?? []).filter(part => isRenderablePart(part, entry.runtimeTools)));
+}
+
+type MessagePart = MessageEntry['message']['content']['parts'][number];
+
+/**
+ * One answer is one document, however many parts it was streamed in. A model's
+ * text arrives as content blocks and a boundary can fall anywhere — mid-list,
+ * mid-emphasis — so a part is a slice of the stream, not a passage: rendering
+ * each on its own parses half a construct, and paces its own reveal, so a single
+ * reply streams in three places at once. Joined as the stream sent it, with
+ * nothing between.
+ */
+function mergeProse(parts: MessagePart[]): MessagePart[] {
+  const merged: MessagePart[] = [];
+
+  for (const part of parts) {
+    const previous = merged.at(-1);
+    if (part.type === 'text' && previous?.type === 'text') {
+      merged[merged.length - 1] = { ...previous, text: previous.text + part.text };
+      continue;
+    }
+    merged.push(part);
+  }
+
+  return merged;
+}
+
+function isRenderablePart(part: MessagePart, runtimeTools: MessageEntry['runtimeTools']): boolean {
   switch (part.type) {
     case 'text':
       return part.text.trim().length > 0;
     case 'reasoning':
       return part.reasoning.trim().length > 0;
     case 'tool-invocation':
-      return isRenderableTool(part, suspensions, runtimeTools);
+      return isRenderableTool(part, runtimeTools);
     case 'file':
       return true;
     default:
@@ -869,16 +995,24 @@ function isRenderablePart(
   }
 }
 
-function isRenderableTool(
+function isRenderableTool(part: ToolInvocationPart, runtimeTools: MessageEntry['runtimeTools']): boolean {
+  const tool = toolFromInvocationPart(part, runtimeTools?.[part.toolInvocation.toolCallId]);
+  return isTranscriptToolVisible(tool.toolName);
+}
+
+/**
+ * An `ask_user` still waiting for its suspension prompt draws nothing yet — but it
+ * keeps its place in the parts list. Dropping it and inserting it back when the
+ * prompt lands would shift every part after it, remounting text the reader is
+ * looking at; a slot that renders nothing until it can render the prompt shifts none.
+ */
+function awaitsPrompt(
   part: ToolInvocationPart,
   suspensions: ReadonlyMap<string, SuspensionPrompt>,
   runtimeTools: MessageEntry['runtimeTools'],
 ): boolean {
   const tool = toolFromInvocationPart(part, runtimeTools?.[part.toolInvocation.toolCallId]);
-  if (!isTranscriptToolVisible(tool.toolName)) return false;
-
-  const awaitingPrompt = tool.toolName === 'ask_user' && tool.status === 'running' && !suspensions.has(tool.toolCallId);
-  return !awaitingPrompt;
+  return tool.toolName === 'ask_user' && tool.status === 'running' && !suspensions.has(tool.toolCallId);
 }
 
 /** Tools whose own card carries the turn: a group row would swallow the prompt, the plan or the skill instructions. */
@@ -888,14 +1022,21 @@ const UNGROUPABLE_TOOLS = new Set(['ask_user', 'submit_plan', 'skill']);
  * Collapse runs of {@link TOOL_GROUP_MIN}+ consecutive plain tool calls into
  * groups keyed by their first toolCallId. Suspended calls break a run too —
  * their prompt must render inline.
+ *
+ * Only calls in `groupable` — the ones already there when the reader arrived —
+ * may fold. Compacting a call they watched land would take back rows they had
+ * just read — the third call swallowing the two above it — and shrink the
+ * transcript under them. History compacts; what played in front of them stays.
  */
 function collectToolGroups(
   parts: MessageEntry['message']['content']['parts'],
   suspensions: ReadonlyMap<string, SuspensionPrompt>,
   runtimeTools: MessageEntry['runtimeTools'],
+  groupable: ReadonlySet<string>,
 ): { byFirstId: Map<string, ToolCall[]>; memberIds: Set<string> } {
   const byFirstId = new Map<string, ToolCall[]>();
   const memberIds = new Set<string>();
+  if (groupable.size < TOOL_GROUP_MIN) return { byFirstId, memberIds };
   let run: ToolCall[] = [];
 
   const flush = () => {
@@ -907,11 +1048,15 @@ function collectToolGroups(
   };
 
   for (const part of parts) {
-    const groupable =
+    // Draws nothing, so it neither joins a run nor breaks one.
+    if (part.type === 'tool-invocation' && awaitsPrompt(part, suspensions, runtimeTools)) continue;
+
+    const joins =
       part.type === 'tool-invocation' &&
+      groupable.has(part.toolInvocation.toolCallId) &&
       !UNGROUPABLE_TOOLS.has(part.toolInvocation.toolName) &&
       !suspensions.has(part.toolInvocation.toolCallId);
-    if (groupable) {
+    if (joins) {
       run.push(toolFromInvocationPart(part, runtimeTools?.[part.toolInvocation.toolCallId]));
     } else {
       flush();

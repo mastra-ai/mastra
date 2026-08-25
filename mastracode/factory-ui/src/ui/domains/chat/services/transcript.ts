@@ -111,12 +111,7 @@ export interface SubagentEntry {
 
 export type PromptEntry = ApprovalPrompt | SuspensionPrompt;
 export type TimelineEntry =
-  | MessageEntry
-  | NoticeEntry
-  | PromptEntry
-  | NotificationEntry
-  | NotificationSummaryEntry
-  | SubagentEntry;
+  MessageEntry | NoticeEntry | PromptEntry | NotificationEntry | NotificationSummaryEntry | SubagentEntry;
 
 /** OM (observational memory) status. */
 export type OMPhase = 'idle' | 'observing' | 'reflecting' | 'buffering';
@@ -880,8 +875,7 @@ function reconcileToolResults(state: TranscriptState, messages: MastraDBMessage[
 function isChannelOriginSignal(message: MastraDBMessage): boolean {
   const signal = message.content.metadata?.signal as { providerOptions?: unknown } | undefined;
   const dataPart = (message.content.parts ?? []).find(part => part.type === 'data-user-message') as
-    | { data?: { providerOptions?: unknown } }
-    | undefined;
+    { data?: { providerOptions?: unknown } } | undefined;
 
   for (const candidate of [signal?.providerOptions, dataPart?.data?.providerOptions]) {
     if (!candidate || typeof candidate !== 'object') continue;
@@ -986,7 +980,9 @@ function indexOfSameTurn(entries: TimelineEntry[], message: MastraDBMessage): nu
   const index = latestAssistantIndex(entries);
   const entry = entries[index];
   if (entry?.kind !== 'message') return -1;
-  if (entry.id.startsWith('assistant-tools-')) return index;
+  // The entry keeps the id it was drawn with, so what marks it unclaimed is the
+  // message inside it still being the synthesized one.
+  if (entry.message.id.startsWith('assistant-tools-')) return index;
   return entry.streaming && windowCopyCovers(entry.message.content.parts, message.content.parts) ? index : -1;
 }
 
@@ -1007,10 +1003,10 @@ function upsertMessage(state: TranscriptState, message: MastraDBMessage, streami
       ? preserveRuntimeToolParts(message, prevEntry?.message)
       : preserveOptimisticUserContent(message, prevEntry?.message);
   const canonicalEntry = toMessageEntry(nextMessage, { streaming, runtimeTools: prevEntry?.runtimeTools });
-  const entry =
-    message.role === 'signal' && prevEntry?.message.role === 'user'
-      ? { ...canonicalEntry, id: prevEntry.id }
-      : canonicalEntry;
+  // An entry the reader is already watching keeps the identity it was drawn with:
+  // adopting the server's id here remounts the row and everything it holds — open
+  // cards, group state, its entrance. The canonical id still matches on lookup.
+  const entry = prevEntry ? { ...canonicalEntry, id: prevEntry.id } : canonicalEntry;
 
   if (message.role === 'assistant') {
     const ownedToolCallIds = new Set(
@@ -1129,7 +1125,9 @@ function withTool(
       createdAt: new Date(),
       content: { format: 2, parts: [] },
     };
-    entries.push(toMessageEntry(message, { streaming: false }));
+    // The live turn, drawn from its tool calls before any message carries them: streaming
+    // is what it is, and what tells the view these rows are landing under the reader.
+    entries.push(toMessageEntry(message, { streaming: true }));
     idx = entries.length - 1;
   }
 
