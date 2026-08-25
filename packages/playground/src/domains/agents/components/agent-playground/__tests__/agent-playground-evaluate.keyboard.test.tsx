@@ -64,7 +64,7 @@ const setupHandlers = () => {
 
 const renderDatasetsTab = async () => {
   setupHandlers();
-  const utils = renderWithProviders(<Harness />);
+  const utils = renderWithProviders(<Harness />, { router: true });
 
   fireEvent.click(screen.getByRole('tab', { name: 'Datasets' }));
   await waitFor(() => expect(screen.getByText('Dataset One')).toBeTruthy());
