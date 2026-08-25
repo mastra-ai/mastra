@@ -80,6 +80,11 @@ export interface TraceDataPanelViewProps {
   scoresTabBadge?: ReactNode;
   activeTab?: TraceDataPanelTab;
   onTabChange?: (tab: TraceDataPanelTab) => void;
+  /**
+   * When provided, the panel splits into two columns inside the same card: the
+   * trace content on the left, this slot (typically the span detail) on the right.
+   */
+  spanPanelSlot?: ReactNode;
   /** Extra classes applied to the panel root (e.g. `h-full` on the trace page). */
   className?: string;
 }
@@ -109,6 +114,7 @@ export function TraceDataPanelView({
   scoresTabBadge,
   activeTab,
   onTabChange,
+  spanPanelSlot,
   className,
 }: TraceDataPanelViewProps) {
   const isOnTracePage = placement === 'trace-page';
@@ -256,68 +262,86 @@ export function TraceDataPanelView({
         )}
       </DataPanel.Header>
 
-      {!collapsed &&
-        (isLoading ? (
-          <DataPanel.LoadingData>Loading trace...</DataPanel.LoadingData>
-        ) : hierarchicalSpans.length === 0 ? (
-          <DataPanel.NoData>No spans found for this trace.</DataPanel.NoData>
-        ) : (
-          <DataPanel.Content>
-            {(() => {
-              const detailsBody = (
-                <>
-                  {!isOnTracePage && rootSpan && (
-                    <TraceKeysAndValues rootSpan={rootSpan} usage={isSubtrace ? undefined : usage} className="mb-6" />
-                  )}
-
-                  {!isOnTracePage &&
-                    !onEvaluateTrace &&
-                    !onSaveAsDatasetItem &&
-                    !onAddTraceMocksToItem &&
-                    showUnavailableFeaturesMsg && (
-                      <Notice variant="info" className="mb-6">
-                        <Notice.Message>
-                          Evaluating traces and saving them as dataset items is available in Mastra Studio (local or
-                          deployed).
-                        </Notice.Message>
-                      </Notice>
+      {!collapsed && (
+        <SplitWithSpanPanel spanPanelSlot={spanPanelSlot}>
+          {isLoading ? (
+            <DataPanel.LoadingData>Loading trace...</DataPanel.LoadingData>
+          ) : hierarchicalSpans.length === 0 ? (
+            <DataPanel.NoData>No spans found for this trace.</DataPanel.NoData>
+          ) : (
+            <DataPanel.Content>
+              {(() => {
+                const detailsBody = (
+                  <>
+                    {!isOnTracePage && rootSpan && (
+                      <TraceKeysAndValues rootSpan={rootSpan} usage={isSubtrace ? undefined : usage} className="mb-6" />
                     )}
 
-                  <TraceTimeline
-                    hierarchicalSpans={hierarchicalSpans}
-                    onSpanClick={handleSpanClick}
-                    selectedSpanId={selectedSpanId}
-                    expandedSpanIds={expandedSpanIds}
-                    setExpandedSpanIds={setExpandedSpanIds}
-                    chartWidth={timelineChartWidth}
-                  />
-                </>
-              );
+                    {!isOnTracePage &&
+                      !onEvaluateTrace &&
+                      !onSaveAsDatasetItem &&
+                      !onAddTraceMocksToItem &&
+                      showUnavailableFeaturesMsg && (
+                        <Notice variant="info" className="mb-6">
+                          <Notice.Message>
+                            Evaluating traces and saving them as dataset items is available in Mastra Studio (local or
+                            deployed).
+                          </Notice.Message>
+                        </Notice>
+                      )}
 
-              // No scores slot → render details directly without the Tabs wrapper.
-              if (!scoresTabSlot) return detailsBody;
+                    <TraceTimeline
+                      hierarchicalSpans={hierarchicalSpans}
+                      onSpanClick={handleSpanClick}
+                      selectedSpanId={selectedSpanId}
+                      expandedSpanIds={expandedSpanIds}
+                      setExpandedSpanIds={setExpandedSpanIds}
+                      chartWidth={timelineChartWidth}
+                    />
+                  </>
+                );
 
-              return (
-                <Tabs<TraceDataPanelTab>
-                  defaultTab="details"
-                  value={activeTab}
-                  onValueChange={onTabChange}
-                  className={activeTab === 'scores' ? 'grid h-full min-h-0 grid-rows-[auto_1fr]' : undefined}
-                >
-                  <TabList variant="pill-ghost">
-                    <Tab value="details">Details</Tab>
-                    <Tab value="scores">Evaluations {scoresTabBadge != null && <>({scoresTabBadge})</>}</Tab>
-                  </TabList>
+                // No scores slot → render details directly without the Tabs wrapper.
+                if (!scoresTabSlot) return detailsBody;
 
-                  <TabContent value="details">{detailsBody}</TabContent>
-                  <TabContent value="scores" className="h-full min-h-0">
-                    {scoresTabSlot({ traceId, rootSpanId: rootSpan?.spanId })}
-                  </TabContent>
-                </Tabs>
-              );
-            })()}
-          </DataPanel.Content>
-        ))}
+                return (
+                  <Tabs<TraceDataPanelTab>
+                    defaultTab="details"
+                    value={activeTab}
+                    onValueChange={onTabChange}
+                    className={activeTab === 'scores' ? 'grid h-full min-h-0 grid-rows-[auto_1fr]' : undefined}
+                  >
+                    <TabList variant="pill-ghost">
+                      <Tab value="details">Details</Tab>
+                      <Tab value="scores">Evaluations {scoresTabBadge != null && <>({scoresTabBadge})</>}</Tab>
+                    </TabList>
+
+                    <TabContent value="details">{detailsBody}</TabContent>
+                    <TabContent value="scores" className="h-full min-h-0">
+                      {scoresTabSlot({ traceId, rootSpanId: rootSpan?.spanId })}
+                    </TabContent>
+                  </Tabs>
+                );
+              })()}
+            </DataPanel.Content>
+          )}
+        </SplitWithSpanPanel>
+      )}
     </DataPanel>
+  );
+}
+
+/**
+ * Renders the trace content as-is, or — when a span panel is provided — as a
+ * two-column split inside the same card, with the span detail on the right.
+ */
+function SplitWithSpanPanel({ spanPanelSlot, children }: { spanPanelSlot?: ReactNode; children: ReactNode }) {
+  if (!spanPanelSlot) return <>{children}</>;
+
+  return (
+    <div className="grid min-h-0 flex-1 grid-cols-[1fr_1fr]">
+      <div className="flex min-h-0 flex-col overflow-hidden">{children}</div>
+      <div className="border-border1 flex min-h-0 flex-col overflow-hidden border-l">{spanPanelSlot}</div>
+    </div>
   );
 }

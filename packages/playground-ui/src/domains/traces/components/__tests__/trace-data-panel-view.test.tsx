@@ -26,6 +26,25 @@ afterEach(() => {
   scrollIntoView.mockClear();
 });
 
+describe('TraceDataPanelView — span panel slot', () => {
+  it('renders the span panel content inside the same card, next to the trace content', () => {
+    const { container } = render(
+      <TraceDataPanelView {...baseProps} spanPanelSlot={<div data-testid="span-detail">span content</div>} />,
+    );
+
+    const spanDetail = screen.getByTestId('span-detail');
+    // Same card: the slot lives inside the panel's single <section> root.
+    expect(container.querySelector('section')?.contains(spanDetail)).toBe(true);
+    // Trace content still renders alongside it.
+    expect(screen.getByText(/agent run/i)).toBeTruthy();
+  });
+
+  it('renders no split when the slot is omitted', () => {
+    render(<TraceDataPanelView {...baseProps} />);
+    expect(screen.queryByTestId('span-detail')).toBeNull();
+  });
+});
+
 describe('TraceDataPanelView — className passthrough', () => {
   it('applies the provided className to the panel root', () => {
     const { container } = render(<TraceDataPanelView {...baseProps} className="h-full" />);

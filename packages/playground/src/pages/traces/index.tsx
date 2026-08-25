@@ -546,30 +546,31 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
                   </div>
                 ) : null
               }
-            />
-          ) : null
-        }
-        spanPanelSlot={
-          url.traceIdParam && url.spanIdParam ? (
-            <SpanDataPanelView
-              traceId={url.traceIdParam}
-              spanId={url.spanIdParam}
-              span={spanDetailData?.span}
-              isAnchor={anchorSpanId ? url.spanIdParam === anchorSpanId : undefined}
-              isLoading={isLoadingSpanDetail}
-              onClose={url.handleSpanClose}
-              onPrevious={handlePreviousSpan}
-              onNext={handleNextSpan}
-              activeTab={url.spanTabParam ?? 'details'}
-              onTabChange={tab => url.handleSpanTabChange(tab as SpanTab)}
-              feedbackTabBadge={feedbackData?.pagination?.total ?? undefined}
-              feedbackTabSlot={() => (
-                <SpanFeedbackList
-                  feedbackData={feedbackData}
-                  onPageChange={setFeedbackPage}
-                  isLoadingFeedbackData={isLoadingFeedback}
-                />
-              )}
+              spanPanelSlot={
+                url.spanIdParam ? (
+                  <SpanDataPanelView
+                    traceId={url.traceIdParam}
+                    spanId={url.spanIdParam}
+                    span={spanDetailData?.span}
+                    isAnchor={anchorSpanId ? url.spanIdParam === anchorSpanId : undefined}
+                    isLoading={isLoadingSpanDetail}
+                    onClose={url.handleSpanClose}
+                    onPrevious={handlePreviousSpan}
+                    onNext={handleNextSpan}
+                    activeTab={url.spanTabParam ?? 'details'}
+                    onTabChange={tab => url.handleSpanTabChange(tab as SpanTab)}
+                    feedbackTabBadge={feedbackData?.pagination?.total ?? undefined}
+                    feedbackTabSlot={() => (
+                      <SpanFeedbackList
+                        feedbackData={feedbackData}
+                        onPageChange={setFeedbackPage}
+                        isLoadingFeedbackData={isLoadingFeedback}
+                      />
+                    )}
+                    className="rounded-none border-0 bg-transparent"
+                  />
+                ) : null
+              }
             />
           ) : null
         }

@@ -56,6 +56,8 @@ export interface SpanDataPanelViewProps {
    * to `span.parentSpanId == null` (trace case) when omitted.
    */
   isAnchor?: boolean;
+  /** Extra classes for the panel root (e.g. flattening the card when nested in the trace panel). */
+  className?: string;
 }
 
 export function SpanDataPanelView({
@@ -71,9 +73,10 @@ export function SpanDataPanelView({
   feedbackTabSlot,
   feedbackTabBadge,
   isAnchor,
+  className,
 }: SpanDataPanelViewProps) {
   return (
-    <DataPanel>
+    <DataPanel className={className}>
       <DataPanel.Header>
         <DataPanel.Heading>
           Span <b># {spanId}</b>
