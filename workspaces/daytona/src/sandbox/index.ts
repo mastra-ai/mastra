@@ -251,7 +251,7 @@ export class DaytonaSandbox extends MastraSandbox {
   private readonly timeout: number;
   private readonly language: 'typescript' | 'javascript' | 'python';
   private readonly resources?: DaytonaResources;
-  private readonly env: Record<string, string>;
+
   private readonly labels: Record<string, string>;
   private readonly snapshotId?: string;
   private readonly image?: string;
@@ -275,7 +275,6 @@ export class DaytonaSandbox extends MastraSandbox {
       ...options,
       name: 'DaytonaSandbox',
       processes: new DaytonaProcessManager({
-        env: options.env,
         defaultTimeout: options.timeout ?? 300_000,
       }),
     });
@@ -284,7 +283,6 @@ export class DaytonaSandbox extends MastraSandbox {
     this.timeout = options.timeout ?? 300_000;
     this.language = options.language ?? 'typescript';
     this.resources = options.resources;
-    this.env = options.env ?? {};
     this.labels = options.labels ?? {};
     this.snapshotId = options.snapshot;
     this.image = options.image;

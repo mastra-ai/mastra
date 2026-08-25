@@ -7,7 +7,7 @@ import type {
 } from '@mastra/core/background-tasks';
 import { BackgroundTasksStorage, TABLE_BACKGROUND_TASKS, TABLE_SCHEMAS } from '@mastra/core/storage';
 import type { CreateIndexOptions } from '@mastra/core/storage';
-import type { Pool, RowDataPacket } from 'mysql2/promise';
+import type { Pool, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 
 import type { StoreOperationsMySQL } from '../operations';
 import { generateTableSQL, generateIndexSQL } from '../operations';
@@ -182,7 +182,11 @@ export class BackgroundTasksMySQL extends BackgroundTasksStorage {
     );
   }
 
-  async updateTask(taskId: string, update: UpdateBackgroundTask): Promise<void> {
+  async updateTask(
+    taskId: string,
+    update: UpdateBackgroundTask,
+    options?: { expectedStatus?: BackgroundTask['status'] },
+  ): Promise<boolean> {
     const setClauses: string[] = [];
     const params: (string | number | null)[] = [];
 
@@ -219,15 +223,17 @@ export class BackgroundTasksMySQL extends BackgroundTasksStorage {
       params.push(transformToSqlValue(update.completedAt));
     }
 
-    if (setClauses.length === 0) return;
+    if (setClauses.length === 0) return false;
 
     params.push(taskId);
-    await this.pool.execute(
-      `UPDATE ${formatTableName(TABLE_BACKGROUND_TASKS)} SET ${setClauses.join(', ')} WHERE ${quoteIdentifier('id', 'column name')} = ?`,
+    const statusPredicate = options?.expectedStatus ? ` AND ${quoteIdentifier('status', 'column name')} = ?` : '';
+    if (options?.expectedStatus) params.push(options.expectedStatus);
+    const [result] = await this.pool.execute<ResultSetHeader>(
+      `UPDATE ${formatTableName(TABLE_BACKGROUND_TASKS)} SET ${setClauses.join(', ')} WHERE ${quoteIdentifier('id', 'column name')} = ?${statusPredicate}`,
       params,
     );
+    return result.affectedRows > 0;
   }
-
   async getTask(taskId: string): Promise<BackgroundTask | null> {
     const [rows] = await this.pool.execute<RowDataPacket[]>(
       `SELECT * FROM ${formatTableName(TABLE_BACKGROUND_TASKS)} WHERE ${quoteIdentifier('id', 'column name')} = ?`,

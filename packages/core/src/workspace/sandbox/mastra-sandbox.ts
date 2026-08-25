@@ -54,6 +54,19 @@ export interface MastraSandboxOptions {
   onDestroy?: SandboxLifecycleHook;
 
   /**
+   * Initial values for the sandbox's runtime environment overlay.
+   *
+   * These values are made visible to every command and spawned process
+   * routed through the sandbox's process manager (which also backs the
+   * built-in `executeCommand`), merged per spawn. This is an overlay, not
+   * VM-level environment — providers may additionally consume their own
+   * env options for creation-time semantics, and providers with custom
+   * execution transports that bypass the process manager must consume the
+   * overlay themselves. Update at runtime with `setEnv`.
+   */
+  env?: Record<string, string | undefined>;
+
+  /**
    * Process manager for this sandbox.
    *
    * When provided, the base class automatically:
@@ -197,12 +210,21 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
   private readonly _onStop?: SandboxLifecycleHook;
   private readonly _onDestroy?: SandboxLifecycleHook;
 
+  /**
+   * Runtime environment overlay, merged into every process spawn.
+   *
+   * JS-private (`#`) rather than TS `private` so subclasses that declare
+   * their own `env` member (several providers do) can never collide with it.
+   */
+  #env: Record<string, string | undefined>;
+
   constructor(options: { name: string } & MastraSandboxOptions) {
     super({ name: options.name, component: RegisteredLogger.WORKSPACE });
 
     this._onStart = options.onStart;
     this._onStop = options.onStop;
     this._onDestroy = options.onDestroy;
+    this.#env = { ...options.env };
 
     // Automatically create MountManager if subclass implements mount()
     if (this.mount) {
@@ -245,6 +267,45 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
         };
       }
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Runtime environment overlay
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Update the sandbox's runtime environment overlay.
+   *
+   * The updater receives a copy of the current overlay and returns the new
+   * one, so a single call can set, unset, or batch-update variables:
+   *
+   * ```typescript
+   * sandbox.setEnv(env => ({ ...env, GH_TOKEN: token }));
+   * ```
+   *
+   * Changes apply immediately to subsequent commands and processes routed
+   * through the sandbox's process manager (including the built-in
+   * `executeCommand`), survive provider pause/resume and VM replacement,
+   * and are never written into the VM — the overlay is merged per spawn,
+   * not persisted. Removing a key removes it from the overlay only;
+   * env values a provider supplies on its own still apply.
+   */
+  setEnv(update: (env: Record<string, string | undefined>) => Record<string, string | undefined>): void {
+    // Clone both directions: the updater gets a copy, and its return value is
+    // cloned before storage so callers retaining either object can't mutate
+    // the stored overlay.
+    this.#env = { ...update({ ...this.#env }) };
+  }
+
+  /**
+   * Snapshot of the current runtime environment overlay.
+   *
+   * Returns a fresh copy — mutating it never affects the stored overlay; use
+   * {@link setEnv} to change it. The process manager reads this per spawn to
+   * merge the overlay into command environments.
+   */
+  getEnv(): Record<string, string | undefined> {
+    return { ...this.#env };
   }
 
   // ---------------------------------------------------------------------------

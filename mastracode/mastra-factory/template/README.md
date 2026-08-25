@@ -33,7 +33,7 @@ Day-to-day configuration (model providers, integrations) happens in the web UI. 
 | Feature                  | Requires                                                                                                                                            |
 | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Agents / model providers | add keys in the UI (Settings › Models), or `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`                                                                   |
-| Sign-in (WorkOS)         | `WORKOS_API_KEY`, `WORKOS_CLIENT_ID`                                                                                                                |
+| Sign-in (WorkOS)         | `WORKOS_API_KEY`, `WORKOS_CLIENT_ID`, `FACTORY_CREDENTIAL_ENCRYPTION_KEY`                                                                           |
 | GitHub projects & intake | WorkOS + `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, `GITHUB_APP_SLUG` + `APP_DATABASE_URL`      |
 | Linear intake            | WorkOS + `LINEAR_CLIENT_ID`, `LINEAR_CLIENT_SECRET` + `APP_DATABASE_URL` + a state secret (`GITHUB_APP_WEBHOOK_SECRET` or `WORKOS_COOKIE_PASSWORD`) |
 | Slack channels           | `SLACK_APP_SIGNING_SECRET`, `SLACK_APP_BOT_TOKEN`, `SLACK_APP_CLIENT_ID`, `SLACK_APP_CLIENT_SECRET` + WorkOS + a state secret (see above)           |
@@ -56,6 +56,9 @@ Integrations are per-organization, so they require sign-in, powered by [WorkOS](
 1. Create a WorkOS project → copy the **API key** and **Client ID** into `.env`.
 2. In WorkOS → Redirects, add `http://localhost:4111/auth/callback`.
 3. Set `WORKOS_COOKIE_PASSWORD` to a random 32+ character string.
+4. Generate a deployment-stable credential encryption key with `openssl rand -base64 32` and set it as `FACTORY_CREDENTIAL_ENCRYPTION_KEY`.
+
+Keep the encryption key outside the database and stable across replicas and deploys. Losing it makes stored model-provider keys, custom-provider API keys, GitHub PATs, and integration OAuth tokens unreadable. To rotate it, set a new `FACTORY_CREDENTIAL_ENCRYPTION_KEY` and `FACTORY_CREDENTIAL_ENCRYPTION_KEY_ID`, then provide the old key in `FACTORY_CREDENTIAL_ENCRYPTION_PREVIOUS_KEYS` as a JSON object such as `{"v1":"<old-base64-key>"}`. Factory rewrites legacy plaintext and old-key ciphertext with the primary key during startup and reads.
 
 ### GitHub
 

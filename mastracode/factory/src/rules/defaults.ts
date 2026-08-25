@@ -574,8 +574,8 @@ function mergeBoardRules(
       const baseLeaf = baseSources?.[source];
       const overrideLeaf = overrideSources?.[source];
       mergedSources[source] = {
-        ...(baseLeaf?.onEnter ? { onEnter: baseLeaf.onEnter } : {}),
-        ...(baseLeaf?.onExit ? { onExit: baseLeaf.onExit } : {}),
+        ...(baseLeaf && 'onEnter' in baseLeaf ? { onEnter: baseLeaf.onEnter } : {}),
+        ...(baseLeaf && 'onExit' in baseLeaf ? { onExit: baseLeaf.onExit } : {}),
         ...(overrideLeaf && 'onEnter' in overrideLeaf ? { onEnter: overrideLeaf.onEnter } : {}),
         ...(overrideLeaf && 'onExit' in overrideLeaf ? { onExit: overrideLeaf.onExit } : {}),
       };
@@ -594,7 +594,7 @@ function mergeToolRules(
     const baseLeaf = base?.[name];
     const overrideLeaf = overrides?.[name];
     result[name] = {
-      ...(baseLeaf?.onResult ? { onResult: baseLeaf.onResult } : {}),
+      ...(baseLeaf && 'onResult' in baseLeaf ? { onResult: baseLeaf.onResult } : {}),
       ...(overrideLeaf && 'onResult' in overrideLeaf ? { onResult: overrideLeaf.onResult } : {}),
     };
   }
@@ -611,7 +611,7 @@ function mergeGithubRules(
     const baseLeaf = base?.[event];
     const overrideLeaf = overrides?.[event];
     result[event] = {
-      ...(baseLeaf?.onEvent ? { onEvent: baseLeaf.onEvent } : {}),
+      ...(baseLeaf && 'onEvent' in baseLeaf ? { onEvent: baseLeaf.onEvent } : {}),
       ...(overrideLeaf && 'onEvent' in overrideLeaf ? { onEvent: overrideLeaf.onEvent } : {}),
     };
   }
@@ -628,7 +628,7 @@ function mergeLinearRules(
     const baseLeaf = base?.[event];
     const overrideLeaf = overrides?.[event];
     result[event] = {
-      ...(baseLeaf?.onEvent ? { onEvent: baseLeaf.onEvent } : {}),
+      ...(baseLeaf && 'onEvent' in baseLeaf ? { onEvent: baseLeaf.onEvent } : {}),
       ...(overrideLeaf && 'onEvent' in overrideLeaf ? { onEvent: overrideLeaf.onEvent } : {}),
     };
   }
