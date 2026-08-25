@@ -1097,4 +1097,32 @@ describe('MastraSandbox acquisition primitives', () => {
 
     expect(() => new UnadoptedHandleSandbox()).toThrow(/find\(\) requires connect\(\)/);
   });
+
+  it('rejects a provider whose class-field start replaced the lifecycle wrapper', async () => {
+    // A field initializer runs after the base constructor, so it silently
+    // overwrites the wrapper and hides the provider's own start.
+    let fieldStartCalls = 0;
+
+    class FieldStartSandbox extends MastraSandbox {
+      readonly id = 'field-start';
+      readonly name = 'FieldStartSandbox';
+      readonly provider = 'test';
+      status: ProviderStatus = 'pending';
+
+      start = async () => {
+        fieldStartCalls++;
+      };
+
+      constructor() {
+        super({ name: 'FieldStartSandbox' });
+      }
+    }
+
+    const sandbox = new FieldStartSandbox();
+
+    await expect(sandbox._start()).rejects.toThrow(/'start' must use method syntax/);
+    // The provider's start never ran, and the sandbox never claimed to be running.
+    expect(fieldStartCalls).toBe(0);
+    expect(sandbox.status).toBe('pending');
+  });
 });

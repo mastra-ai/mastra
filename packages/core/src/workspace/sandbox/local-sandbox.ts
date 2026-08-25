@@ -294,6 +294,10 @@ export class LocalSandbox extends MastraSandbox<string> {
    * Acquisition primitives (base-orchestrated start): an existing working
    * directory is the "found sandbox" — reattaching reports `outcome: 'connected'`,
    * a missing directory means a fresh sandbox (`outcome: 'created'`).
+   *
+   * This stat and the `mkdir` in `create()` are not atomic, so `'created'` is
+   * best-effort: two processes starting on the same working directory can both
+   * report it. Keep onStart setup idempotent.
    */
   protected override async find(): Promise<string | undefined> {
     try {

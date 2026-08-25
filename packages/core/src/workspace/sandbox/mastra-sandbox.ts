@@ -222,6 +222,10 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
 
   /** The subclass's `start()`, captured before the constructor shadows it. */
   private readonly _implStart: () => void | Promise<SandboxStartResult | void>;
+  /** The wrapper installed over `start()`, kept to detect a subclass that replaced it. */
+  private readonly _startWrapper: () => Promise<SandboxStartResult | void>;
+  /** Whether the subclass brought its own `start()`, captured before the wrapper shadowed it. */
+  private readonly _hasStartOverride: boolean;
 
   /** Whether acquisition runs through {@link find}/{@link connect}/{@link create}. */
   private readonly _useAcquisitionPrimitives: boolean;
@@ -260,8 +264,10 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
     // primitives below: class-FIELD initializers run after this constructor,
     // overwriting this wrapper and hiding the primitives from rung selection.
     const hasStartOverride = this.start !== MastraSandbox.prototype.start;
+    this._hasStartOverride = hasStartOverride;
     this._implStart = this.start.bind(this);
-    this.start = () => this._start();
+    this._startWrapper = () => this._start();
+    this.start = this._startWrapper;
     // Rung selection: a subclass `start()` override wins; otherwise the
     // primitives drive acquisition when `create()` is implemented.
     this._useAcquisitionPrimitives = !hasStartOverride && typeof this.create === 'function';
@@ -386,6 +392,18 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
    * Subclasses override `start()` to provide their startup logic.
    */
   async _start(): Promise<SandboxStartResult | void> {
+    // A class-FIELD `start` initializer runs after the constructor, replacing
+    // the wrapper. The constructor cannot see the field yet, so check on first
+    // use. Narrow to the combination that provisions nothing: no prototype
+    // `start` was captured and no primitives are driving acquisition, so the
+    // sandbox would report 'running' with no environment behind it. Replacing
+    // `start` is fine otherwise, which keeps spies on providers working.
+    if (this.start !== this._startWrapper && !this._hasStartOverride && !this._useAcquisitionPrimitives) {
+      throw new Error(
+        `${this.constructor.name}: 'start' must use method syntax, because a class-field initializer replaces the lifecycle wrapper.`,
+      );
+    }
+
     // Already running — definitionally not a fresh create. Reporting
     // 'connected' (rather than nothing) keeps every path through the wrapper
     // result-bearing for providers whose `start()` always reports one.
@@ -447,6 +465,9 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
 
     // Hook failures are FATAL: a caller must never observe a running sandbox
     // whose setup failed. Nothing latches, so the next start() retries it.
+    // The environment acquired above is NOT released first: providers that
+    // implement find() reconnect to it on retry, but a create-only provider
+    // provisions another one and leaves the first to its idle timeout.
     try {
       await this._onStart?.({ sandbox: this, outcome });
     } catch (error) {
