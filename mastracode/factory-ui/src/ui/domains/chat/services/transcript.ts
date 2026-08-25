@@ -111,7 +111,12 @@ export interface SubagentEntry {
 
 export type PromptEntry = ApprovalPrompt | SuspensionPrompt;
 export type TimelineEntry =
-  MessageEntry | NoticeEntry | PromptEntry | NotificationEntry | NotificationSummaryEntry | SubagentEntry;
+  | MessageEntry
+  | NoticeEntry
+  | PromptEntry
+  | NotificationEntry
+  | NotificationSummaryEntry
+  | SubagentEntry;
 
 /** OM (observational memory) status. */
 export type OMPhase = 'idle' | 'observing' | 'reflecting' | 'buffering';
@@ -875,7 +880,8 @@ function reconcileToolResults(state: TranscriptState, messages: MastraDBMessage[
 function isChannelOriginSignal(message: MastraDBMessage): boolean {
   const signal = message.content.metadata?.signal as { providerOptions?: unknown } | undefined;
   const dataPart = (message.content.parts ?? []).find(part => part.type === 'data-user-message') as
-    { data?: { providerOptions?: unknown } } | undefined;
+    | { data?: { providerOptions?: unknown } }
+    | undefined;
 
   for (const candidate of [signal?.providerOptions, dataPart?.data?.providerOptions]) {
     if (!candidate || typeof candidate !== 'object') continue;
