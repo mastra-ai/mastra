@@ -21,11 +21,15 @@
  * ```
  */
 
+import { pMap } from '../../utils/p-map';
 import type { WorkspaceFilesystem, FileEntry } from '../filesystem';
 import type { IgnoreFilter } from '../gitignore';
 import { loadGitignore } from '../gitignore';
 import { createGlobMatcher } from '../glob';
 import type { GlobMatcher } from '../glob';
+
+/** Maximum concurrent `readdir` calls while walking the tree. */
+const TREE_FILESYSTEM_CONCURRENCY = 8;
 
 // =============================================================================
 // Types
@@ -112,10 +116,118 @@ export async function formatAsTree(fs: WorkspaceFilesystem, path: string, option
   let fileCount = 0;
   let truncated = false;
 
+  // Parse exclude patterns once (like tree's -I flag, supports pipe-separated patterns)
+  const excludePatterns = exclude
+    ? Array.isArray(exclude)
+      ? exclude
+      : exclude
+          .split('|')
+          .map(p => p.trim())
+          .filter(Boolean)
+    : undefined;
+
+  /**
+   * Whether the walk should descend into a directory entry. Mirrors the
+   * filtering applied before recursion in `buildTree` — directories filtered
+   * out there are never listed, so their contents are never needed.
+   */
+  function shouldDescend(currentPath: string, entry: FileEntry): boolean {
+    if (entry.type !== 'directory' || entry.isSymlink) return false;
+    if (entry.name === '.git') return false;
+    if (!showHidden && entry.name.startsWith('.')) return false;
+    if (excludePatterns && excludePatterns.some(pattern => entry.name.includes(pattern))) return false;
+    if (ignoreFilter) {
+      const relativePath = getRelativePath('', currentPath, entry.name);
+      if (ignoreFilter(`${relativePath}/`)) return false;
+    }
+    return true;
+  }
+
+  // Prefetch all directory listings level-by-level with bounded concurrency,
+  // instead of one sequential readdir per directory during tree construction.
+  // On remote filesystems each readdir is a network round trip, so a serial
+  // walk costs D × RTT for D directories.
+  const entriesByPath = new Map<string, FileEntry[]>();
+  let rootError: unknown;
+
+  const normalizedRoot = path.replace(/\/$/, '');
+  const rootIsGit = normalizedRoot === '.git' || normalizedRoot.endsWith('/.git');
+  const shouldWalk = !rootIsGit && maxDepth > 0;
+
+  // If the filesystem implements the native bulk `walk` capability, fetch the
+  // whole subtree in one provider call and group entries by parent directory.
+  // On any failure, fall back to the readdir walk below (which reproduces
+  // root-level errors like DirectoryNotFoundError naturally).
+  let prefetched = false;
+  if (shouldWalk && typeof fs.walk === 'function') {
+    try {
+      const walkEntries = await fs.walk(path, {
+        maxDepth: Number.isFinite(maxDepth) ? maxDepth : undefined,
+        includeHidden: showHidden,
+      });
+      entriesByPath.set(path, []);
+      for (const entry of walkEntries) {
+        const separatorIndex = entry.path.lastIndexOf('/');
+        const parentPath = separatorIndex === -1 ? path : joinPath(path, entry.path.slice(0, separatorIndex));
+        let siblings = entriesByPath.get(parentPath);
+        if (!siblings) {
+          siblings = [];
+          entriesByPath.set(parentPath, siblings);
+        }
+        siblings.push(entry);
+        // Ensure empty directories have an entry list so recursion terminates cleanly
+        if (entry.type === 'directory' && !entry.isSymlink) {
+          const dirPath = joinPath(path, entry.path);
+          if (!entriesByPath.has(dirPath)) entriesByPath.set(dirPath, []);
+        }
+      }
+      prefetched = true;
+    } catch {
+      entriesByPath.clear();
+    }
+  }
+
+  let frontier: Array<{ path: string; depth: number }> = !shouldWalk || prefetched ? [] : [{ path, depth: 0 }];
+
+  while (frontier.length > 0) {
+    const results = await pMap(
+      frontier,
+      async dir => {
+        try {
+          return { entries: await fs.readdir(dir.path) };
+        } catch (error) {
+          return { error };
+        }
+      },
+      { concurrency: TREE_FILESYSTEM_CONCURRENCY },
+    );
+
+    const nextFrontier: Array<{ path: string; depth: number }> = [];
+    for (let i = 0; i < frontier.length; i++) {
+      const { path: dirPath, depth } = frontier[i]!;
+      const result = results[i]!;
+      if ('error' in result) {
+        // At root level (depth 0), propagate errors so users see auth/access issues.
+        // For subdirectories, silently skip (permission issues on nested dirs are common).
+        if (depth === 0) rootError = result.error;
+        continue;
+      }
+      entriesByPath.set(dirPath, result.entries);
+      // Children at depth + 1 >= maxDepth are never listed (only marked truncated)
+      if (depth + 1 >= maxDepth) continue;
+      for (const entry of result.entries) {
+        if (shouldDescend(dirPath, entry)) {
+          nextFrontier.push({ path: joinPath(dirPath, entry.name), depth: depth + 1 });
+        }
+      }
+    }
+    frontier = nextFrontier;
+  }
+
   /**
    * Build tree recursively using tab indentation
    */
-  async function buildTree(currentPath: string, depth: number): Promise<void> {
+  function buildTree(currentPath: string, depth: number): void {
     // Never descend into .git even when explicitly targeted as root
     const normalizedCurrentPath = currentPath.replace(/\/$/, '');
     if (normalizedCurrentPath === '.git' || normalizedCurrentPath.endsWith('/.git')) {
@@ -127,14 +239,10 @@ export async function formatAsTree(fs: WorkspaceFilesystem, path: string, option
       return;
     }
 
-    let entries: FileEntry[];
-    try {
-      entries = await fs.readdir(currentPath);
-    } catch (error) {
-      // At root level (depth 0), propagate errors so users see auth/access issues
-      // For subdirectories, silently skip (permission issues on nested dirs are common)
-      if (depth === 0) {
-        throw error;
+    const entries = entriesByPath.get(currentPath);
+    if (!entries) {
+      if (depth === 0 && rootError !== undefined) {
+        throw rootError;
       }
       return;
     }
@@ -152,15 +260,9 @@ export async function formatAsTree(fs: WorkspaceFilesystem, path: string, option
     }
 
     // Filter by exclude pattern (like tree's -I flag, supports pipe-separated patterns)
-    if (exclude) {
-      const patterns = Array.isArray(exclude)
-        ? exclude
-        : exclude
-            .split('|')
-            .map(p => p.trim())
-            .filter(Boolean);
+    if (excludePatterns) {
       filtered = filtered.filter(e => {
-        return !patterns.some(pattern => e.name.includes(pattern));
+        return !excludePatterns.some(pattern => e.name.includes(pattern));
       });
     }
 
@@ -226,7 +328,7 @@ export async function formatAsTree(fs: WorkspaceFilesystem, path: string, option
         // This also prevents infinite loops from circular symlinks
         if (!entry.isSymlink) {
           const childPath = joinPath(currentPath, entry.name);
-          await buildTree(childPath, depth + 1);
+          buildTree(childPath, depth + 1);
         }
       } else {
         fileCount++;
@@ -234,7 +336,7 @@ export async function formatAsTree(fs: WorkspaceFilesystem, path: string, option
     }
   }
 
-  await buildTree(path, 0);
+  buildTree(path, 0);
 
   // Build summary
   const dirPart = dirCount === 1 ? '1 directory' : `${dirCount} directories`;
