@@ -445,12 +445,15 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     );
   }
 
+  // Collapsing the trace panel only makes sense when a span detail panel is open next to it.
+  const effectiveTraceCollapsed = Boolean(url.spanIdParam) && traceCollapsed;
+
   return (
     <PageLayout width="wide" height="full">
       {pageTopArea}
 
       <TracesLayout
-        traceCollapsed={traceCollapsed}
+        traceCollapsed={effectiveTraceCollapsed}
         listSlot={
           <TracesListView
             // Remount on mode switch: the virtualizer caches measurements / scroll state from
@@ -508,8 +511,8 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
               initialSpanId={url.spanIdParam}
               onPrevious={handlePreviousTrace}
               onNext={handleNextTrace}
-              collapsed={traceCollapsed}
-              onCollapsedChange={setTraceCollapsed}
+              collapsed={effectiveTraceCollapsed}
+              onCollapsedChange={url.spanIdParam ? setTraceCollapsed : undefined}
               placement="traces-list"
               LinkComponent={Link}
               activeTab={traceTab}

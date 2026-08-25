@@ -245,6 +245,22 @@ describe('Traces side panel header actions', () => {
 
     expect(screen.getByRole('button', { name: 'Evaluate trace' })).not.toBeNull();
     expect(screen.getByRole('button', { name: 'Save as Dataset Item' })).not.toBeNull();
+    // No span detail open → nothing to collapse next to.
+    expect(screen.queryByRole('button', { name: /collapse panel/i })).toBeNull();
+  });
+
+  it('offers the collapse toggle only when a span detail panel is open', async () => {
+    // jsdom lacks scrollIntoView, which the timeline uses to reveal the URL-selected span.
+    Element.prototype.scrollIntoView = () => {};
+    setTracePageHandlers(metricsCapableSystemPackages);
+    server.use(
+      http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a/light`, () => HttpResponse.json(traceLightSpans)),
+      http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(emptyFeedback)),
+    );
+
+    const { queryClient } = renderPage('/traces?traceId=trace-a&spanId=span-a');
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
     expect(screen.getByRole('button', { name: /collapse panel/i })).not.toBeNull();
   });
 });
