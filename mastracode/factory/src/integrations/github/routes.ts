@@ -212,14 +212,16 @@ async function resolveOrgTenant(
  */
 function parseListPage(raw: string | undefined): number | null {
   if (raw === undefined) return 1;
+  if (!/^\d{1,5}$/.test(raw)) return null;
   const page = Number(raw);
-  return Number.isInteger(page) && page > 0 ? page : null;
+  return page >= 1 ? page : null;
 }
 
+/** Parse an issue or pull request number from the path. */
 function parseResourceNumber(raw: string | undefined): number | null {
-  if (raw === undefined || !/^\d+$/.test(raw)) return null;
+  if (raw === undefined || !/^\d{1,10}$/.test(raw)) return null;
   const parsed = Number(raw);
-  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+  return parsed > 0 ? parsed : null;
 }
 
 const VALID_ISSUE_LABEL_FILTERS = new Set(['status: auto-triaged', 'status: needs approval']);

@@ -3,7 +3,7 @@ import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Maximize2, Sparkles, TriangleAlert } from 'lucide-react';
-import type { ReactElement } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 
 import type { BoardCardStatus } from '../boardCardStatus';
 import { HIDDEN_CARD_LABELS, SOURCE_LABELS } from '../boardItems';
@@ -18,18 +18,23 @@ export function SourceTitle({ source, title }: { source: WorkItemSource; title: 
   );
 }
 
+/**
+ * The app-wide provider uses a 0ms delay, which suits icon buttons but makes
+ * card-sized targets fire while the pointer merely crosses the board. One
+ * provider covers every card on the board; a board holds hundreds of them.
+ */
+export function BoardTooltipDelay({ children }: { children: ReactNode }) {
+  return <TooltipProvider delay={400}>{children}</TooltipProvider>;
+}
+
 export function CardTitleTooltip({ title, children }: { title: string; children: ReactElement }) {
   return (
-    // The app-wide provider uses a 0ms delay, which is fine for icon buttons but
-    // makes a card-sized target fire while the pointer merely crosses the board.
-    <TooltipProvider delay={400}>
-      <Tooltip>
-        <TooltipTrigger render={children} />
-        <TooltipContent side="top" className="max-w-90">
-          <span className="wrap-anywhere whitespace-pre-wrap">{title}</span>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <Tooltip>
+      <TooltipTrigger render={children} />
+      <TooltipContent side="top" className="max-w-90">
+        <span className="wrap-anywhere whitespace-pre-wrap">{title}</span>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -46,7 +51,11 @@ export function CardDetailsHint({ className }: { className?: string }) {
   return (
     <span
       aria-hidden
-      className={cn('text-ui-xs text-icon4 ml-auto flex shrink-0 items-center gap-1.5', REVEAL_ON_CARD_HOVER, className)}
+      className={cn(
+        'text-ui-xs text-icon4 ml-auto flex shrink-0 items-center gap-1.5',
+        REVEAL_ON_CARD_HOVER,
+        className,
+      )}
     >
       <Maximize2 size={11} aria-hidden />
       Details

@@ -43,15 +43,14 @@ describe('boardCardStatus', () => {
   });
 
   it('keeps the click that is still resolving ahead of a rule effect queued behind it', () => {
-    expect(
-      boardCardStatus({ preparing: 'Preparing run…', decision: decision({ status: 'pending' }) }),
-    ).toEqual({ kind: 'busy', label: 'Preparing run…' });
+    expect(boardCardStatus({ preparing: 'Preparing run…', decision: decision({ status: 'pending' }) })).toEqual({
+      kind: 'busy',
+      label: 'Preparing run…',
+    });
   });
 
   it('offers the retry and hides the raw failure behind the detail', () => {
-    expect(
-      boardCardStatus({ decision: decision({ status: 'failed', lastError: 'ENOENT: no such file' }) }),
-    ).toEqual({
+    expect(boardCardStatus({ decision: decision({ status: 'failed', lastError: 'ENOENT: no such file' }) })).toEqual({
       kind: 'error',
       label: 'Automated run could not start',
       detail: 'ENOENT: no such file',

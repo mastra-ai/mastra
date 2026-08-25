@@ -19,8 +19,8 @@ export function CardSourceDescription({
   projectRepositoryId: string | undefined;
   number: number | undefined;
 }) {
-  const isIssue = source === 'github-issue';
-  const isPull = source === 'github-pr';
+  const isIssue = source === 'github-issue' && number !== undefined;
+  const isPull = source === 'github-pr' && number !== undefined;
   const issue = useGitHubIssueDetail(isIssue ? projectRepositoryId : undefined, isIssue ? number : undefined);
   const pull = useGitHubPullRequestDetail(isPull ? projectRepositoryId : undefined, isPull ? number : undefined);
 

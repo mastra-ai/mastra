@@ -28,7 +28,16 @@ export function useAuditEvents(
   });
 }
 
-export function useCompleteAuditEvents(
+/**
+ * How far back the board reads. The route pages at 200 and cannot filter by
+ * actor — `actorIds` only resolves profiles — so walking to the end means
+ * replaying the project's whole audit history on every mount and every time the
+ * board's actor set shifts. A card older than the window keeps the creator its
+ * own metadata carries; it loses only the "last worker" attribution.
+ */
+const MAX_ACTIVITY_PAGES = 3;
+
+export function useRecentAuditEvents(
   factoryProjectId: string | undefined,
   group: string,
   limit: number,
@@ -41,28 +50,24 @@ export function useCompleteAuditEvents(
         const events: AuditEventPage['events'] = [];
         const actors: AuditEventPage['actors'] = {};
         let before: string | undefined;
-        const seenCursors = new Set<string>();
 
-        do {
+        for (let fetched = 0; fetched < MAX_ACTIVITY_PAGES; fetched += 1) {
           signal.throwIfAborted();
           const page = await fetchAuditEvents(baseUrl, factoryProjectId, { actorIds, before, limit, signal });
           events.push(...page.events);
           for (const [actorId, actor] of Object.entries(page.actors)) actors[actorId] ??= actor;
 
-          const nextCursor = page.nextCursor;
-          if (nextCursor && (nextCursor === before || seenCursors.has(nextCursor))) {
-            throw new Error('Audit pagination cursor did not advance');
-          }
-          if (nextCursor) seenCursors.add(nextCursor);
-          before = nextCursor;
-        } while (before);
+          if (page.nextCursor === undefined) break;
+          if (page.nextCursor === before) throw new Error('Audit pagination cursor did not advance');
+          before = page.nextCursor;
+        }
 
         return { events, actors };
       }
     : skipToken;
 
   return useQuery({
-    queryKey: queryKeys.factoryAudit(factoryProjectId, `${group}:complete`, actorKey),
+    queryKey: queryKeys.factoryAudit(factoryProjectId, `${group}:recent`, actorKey),
     queryFn,
     staleTime: 15_000,
   });

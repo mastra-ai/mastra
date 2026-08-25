@@ -176,10 +176,7 @@ describe('Board card details open the default run', () => {
     const { startRequests } = stubBoardEndpoints({ workItems: [linearWorkItem] });
     renderWorkBoard();
 
-    const user = userEvent.setup();
-    await user.click(await screen.findByRole('button', { name: 'Details for ENG-42: Fix intake sync' }));
-    const dialog = await screen.findByRole('dialog', { name: 'ENG-42: Fix intake sync' });
-    await user.click(within(dialog).getByRole('button', { name: 'Investigate' }));
+    await startRunFromCardDetails('ENG-42: Fix intake sync');
 
     await waitFor(() => expect(startRequests).toHaveLength(1));
     expect(startRequests[0]).toMatchObject({

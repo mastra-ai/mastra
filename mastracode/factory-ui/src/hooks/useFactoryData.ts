@@ -60,6 +60,13 @@ export function useProjectPullRequestsQuery(projectRepositoryId: string | undefi
   });
 }
 
+/**
+ * A description barely moves, and each read spends the installation's mint
+ * budget. Re-opening a card within the window paints from cache instead of
+ * putting the panel back through its skeleton.
+ */
+const DETAIL_STALE_MS = 5 * 60_000;
+
 /** One issue's card detail (meta + markdown description), fetched when its card opens. */
 export function useGitHubIssueDetail(projectRepositoryId: string | undefined, number: number | undefined) {
   const { baseUrl } = useApiConfig();
@@ -69,6 +76,7 @@ export function useGitHubIssueDetail(projectRepositoryId: string | undefined, nu
       projectRepositoryId !== undefined && number !== undefined
         ? () => getRepositoryIssue(baseUrl, projectRepositoryId, number)
         : skipToken,
+    staleTime: DETAIL_STALE_MS,
   });
 }
 
@@ -81,5 +89,6 @@ export function useGitHubPullRequestDetail(projectRepositoryId: string | undefin
       projectRepositoryId !== undefined && number !== undefined
         ? () => getRepositoryPullRequest(baseUrl, projectRepositoryId, number)
         : skipToken,
+    staleTime: DETAIL_STALE_MS,
   });
 }
