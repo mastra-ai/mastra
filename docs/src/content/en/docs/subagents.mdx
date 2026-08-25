@@ -176,7 +176,7 @@ The `context` object includes:
 | Property | Description |
 | - | - |
 | `primitiveId` | The ID of the subagent that ran |
-| `result` | The subagent's response |
+| `result` | The subagent's response, including `text`, `usage`, `finishReason`, and `subAgentToolResults` |
 | `error` | Error if the delegation failed |
 | `bail()` | Function to stop the parent agent's loop |
 
