@@ -400,12 +400,29 @@ function localhostHostOf(value: string): string {
   return new URL(value).host;
 }
 
+function isUsableEnvVarValue(name: string, value: string): boolean {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return false;
+  if (!dbAutofixFor(name)) return true;
+
+  try {
+    new URL(trimmed);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function checkEnvVarNames(
   referenced: Iterable<string>,
   envVars: Record<string, string>,
   managedEnvVarNames?: string[] | null,
 ): PreflightIssue[] {
-  const provided = new Set(Object.keys(envVars));
+  const provided = new Set(
+    Object.entries(envVars)
+      .filter(([name, value]) => isUsableEnvVarValue(name, value))
+      .map(([name]) => name),
+  );
   const managed = new Set(managedEnvVarNames ?? []);
   const missing: string[] = [];
   const issues: PreflightIssue[] = [];
@@ -512,9 +529,9 @@ async function checkWorkersNeedRedis(
     return [];
   }
 
-  const provided = new Set(Object.keys(envVars));
+  const redisUrl = envVars.REDIS_URL;
   const managed = new Set(managedEnvVarNames ?? []);
-  if (provided.has('REDIS_URL') || managed.has('REDIS_URL')) return [];
+  if ((redisUrl !== undefined && isUsableEnvVarValue('REDIS_URL', redisUrl)) || managed.has('REDIS_URL')) return [];
 
   const autofix = dbAutofixFor('REDIS_URL');
   return [

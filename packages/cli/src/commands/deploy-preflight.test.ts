@@ -92,6 +92,19 @@ describe('preflightBuildOutput', () => {
       expect(issues.find(i => i.code === 'MISSING_ENV_VAR')).toBeUndefined();
     });
 
+    it('treats empty and invalid provider env vars as missing so deploy can offer managed databases', async () => {
+      writeBundle(`const db = process.env.DATABASE_URL; const redis = process.env.REDIS_URL;`);
+
+      const issues = await preflightBuildOutput(tmpDir, { DATABASE_URL: 'non-url', REDIS_URL: '   ' });
+
+      expect(
+        issues.find(i => i.code === 'MISSING_ENV_VAR' && i.message.includes('DATABASE_URL'))?.autofix,
+      ).toMatchObject({ provider: 'neon' });
+      expect(issues.find(i => i.code === 'MISSING_ENV_VAR' && i.message.includes('REDIS_URL'))?.autofix).toMatchObject({
+        provider: 'redis',
+      });
+    });
+
     describe('LOCALHOST_ENV_VAR', () => {
       it('flags a provider-known env var whose value points at localhost, with an autofix', async () => {
         writeBundle(`const url = process.env.REDIS_URL;`);
@@ -594,9 +607,7 @@ describe('preflightBuildOutput', () => {
       writeWorkersManifest({ enabled: true });
 
       const issues = await preflightBuildOutput(tmpDir, {});
-      const issue = issues.find(
-        i => i.code === 'MISSING_ENV_VAR' && i.message.includes('Background tasks'),
-      );
+      const issue = issues.find(i => i.code === 'MISSING_ENV_VAR' && i.message.includes('Background tasks'));
       expect(issue).toBeDefined();
       expect(issue?.severity).toBe('warning');
       expect(issue?.autofix).toEqual({
@@ -604,6 +615,15 @@ describe('preflightBuildOutput', () => {
         provider: 'redis',
         envVarName: 'REDIS_URL',
       });
+    });
+
+    it('flags an invalid REDIS_URL so deploy can offer managed Redis', async () => {
+      writeBundle(`export default {};`);
+      writeWorkersManifest({ enabled: true });
+
+      const issues = await preflightBuildOutput(tmpDir, { REDIS_URL: 'non-url' });
+      const workerIssue = issues.find(i => i.message.includes('Background tasks'));
+      expect(workerIssue?.autofix).toMatchObject({ provider: 'redis' });
     });
 
     it('does not flag when REDIS_URL is present in the env file', async () => {
