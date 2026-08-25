@@ -79,6 +79,36 @@ export function addCachedSession(queryClient: QueryClient, projectRepositoryId: 
   });
 }
 
+export function updateCachedSessionTitle(
+  queryClient: QueryClient,
+  projectRepositoryId: string | undefined,
+  sessionId: string,
+  title: string,
+) {
+  const trimmedTitle = title.trim();
+  if (!trimmedTitle) return;
+
+  const queryKey = queryKeys.sessions(projectRepositoryId);
+  if (!queryClient.getQueryData<WorkspacesData>(queryKey)) return;
+
+  // an in-flight list fetch can still carry the branch-only row and overwrite this title
+  void queryClient.cancelQueries({ queryKey });
+  queryClient.setQueryData<WorkspacesData>(queryKey, current => {
+    if (!current) return current;
+
+    let changed = false;
+    const updateTitle = (session: FactoryUserSession) => {
+      if (session.sessionId !== sessionId || session.title === trimmedTitle) return session;
+      changed = true;
+      return { ...session, title: trimmedTitle };
+    };
+    const workspaces = current.workspaces.map(updateTitle);
+    const userSessions = current.userSessions.map(updateTitle);
+
+    return changed ? { ...current, workspaces, userSessions } : current;
+  });
+}
+
 function invalidateSessionQueries(
   queryClient: QueryClient,
   projectRepositoryId: string | undefined,

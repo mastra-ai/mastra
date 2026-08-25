@@ -6,7 +6,7 @@
  * Everything else — loading, no linked work item, no title yet — leaves the
  * default `Mastra Factory` in place.
  */
-import { waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -171,7 +171,7 @@ describe('ThreadPage document title', () => {
     await waitFor(() => expect(document.title).toBe('Investigate Pricing Bug | Mastra Factory'));
   });
 
-  it('shows the issue number for GitHub issue-backed work sessions', async () => {
+  it('uses the thread title in the work-session sidebar while the document title shows the issue number', async () => {
     stubBase({
       workItems: [
         {
@@ -208,6 +208,7 @@ describe('ThreadPage document title', () => {
     await renderRoute(`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`);
 
     await waitFor(() => expect(document.title).toBe('#42 | Mastra Factory'));
+    expect(await screen.findByRole('button', { name: 'Fix flaky login' })).toBeInTheDocument();
   });
 
   it('shows the team key for Linear issue-backed work sessions', async () => {

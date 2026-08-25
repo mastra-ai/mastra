@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
+import { queryKeys } from '../api/keys';
+import { createQueryClient } from '../query-client';
 import type { FactoryUserSession } from '../ui/domains/workspaces/services/user-sessions';
-import { sessionsRefetchInterval } from './useWorkspaces';
+import { sessionsRefetchInterval, updateCachedSessionTitle } from './useWorkspaces';
 import type { WorkspacesData } from './useWorkspaces';
 
 function session(overrides: Partial<FactoryUserSession>): FactoryUserSession {
@@ -56,5 +58,53 @@ describe('sessionsRefetchInterval', () => {
   it('stops polling once an un-materialized session has had no activity for the window', () => {
     const afterWindow = Date.parse('2026-07-20T00:10:00.000Z');
     expect(sessionsRefetchInterval(data({ workspaces: [session({ materializedAt: null })] }), afterWindow)).toBe(false);
+  });
+});
+
+describe('updateCachedSessionTitle', () => {
+  it('updates the matching workspace without replacing unrelated rows', () => {
+    const client = createQueryClient();
+    const workspace = session({ title: undefined });
+    const unrelated = session({ id: 'row-2', sessionId: 'sess-2', title: 'Keep me' });
+    const current = data({ workspaces: [workspace, unrelated] });
+    const queryKey = queryKeys.sessions(workspace.projectRepositoryId);
+    client.setQueryData(queryKey, current);
+
+    updateCachedSessionTitle(client, workspace.projectRepositoryId, workspace.sessionId, 'Generated workspace title');
+
+    const updated = client.getQueryData<WorkspacesData>(queryKey);
+    expect(updated).toEqual(
+      data({
+        workspaces: [{ ...workspace, title: 'Generated workspace title' }, unrelated],
+      }),
+    );
+    expect(updated?.workspaces[1]).toBe(unrelated);
+  });
+
+  it('updates the matching user session', () => {
+    const client = createQueryClient();
+    const userSession = session({ sessionId: 'user-1', title: undefined, branch: 'user/session-user-1' });
+    const queryKey = queryKeys.sessions(userSession.projectRepositoryId);
+    client.setQueryData(queryKey, data({ userSessions: [userSession] }));
+
+    updateCachedSessionTitle(client, userSession.projectRepositoryId, userSession.sessionId, 'Generated user title');
+
+    expect(client.getQueryData<WorkspacesData>(queryKey)?.userSessions).toEqual([
+      { ...userSession, title: 'Generated user title' },
+    ]);
+  });
+
+  it('preserves the cached data when the session is absent or the title is unchanged', () => {
+    const client = createQueryClient();
+    const workspace = session({ title: 'Generated workspace title' });
+    const current = data({ workspaces: [workspace] });
+    const queryKey = queryKeys.sessions(workspace.projectRepositoryId);
+    client.setQueryData(queryKey, current);
+
+    updateCachedSessionTitle(client, workspace.projectRepositoryId, 'missing-session', 'Other title');
+    expect(client.getQueryData(queryKey)).toBe(current);
+
+    updateCachedSessionTitle(client, workspace.projectRepositoryId, workspace.sessionId, 'Generated workspace title');
+    expect(client.getQueryData(queryKey)).toBe(current);
   });
 });
