@@ -98,6 +98,19 @@ export interface RepoSummary {
   installationId: number;
 }
 
+export interface GithubTriageCommentUpsertInput {
+  installationId: number;
+  repository: string;
+  issueNumber: number;
+  body: string;
+}
+
+export interface GithubTriageCommentUpsertResult {
+  action: 'created' | 'updated';
+  commentId: string;
+  url: string;
+}
+
 export type GithubRepositoryPermission = 'admin' | 'maintain' | 'write' | 'triage' | 'read' | 'none';
 
 export interface IssueSummary {
@@ -114,6 +127,9 @@ export interface IssueSummary {
 
 /** Page size for issue/PR listings; one GitHub API call per page. */
 export const LIST_PAGE_SIZE = 30;
+
+/** Allow GitHub OAuth token exchanges enough time to complete during installation callbacks. */
+const GITHUB_OAUTH_TOKEN_TIMEOUT_MS = 30_000;
 
 export interface IssuePage {
   issues: IssueSummary[];
@@ -350,6 +366,11 @@ export class GithubIntegration implements FactoryIntegration {
   /** App slug — the URL name used to build the install URL. */
   get slug(): string {
     return this.#slug;
+  }
+
+  /** Whether a GitHub login belongs to this integration's App. */
+  isFactoryCommentAuthor(login: string | null | undefined): boolean {
+    return typeof login === 'string' && login.toLowerCase() === `${this.#slug}[bot]`.toLowerCase();
   }
 
   /** Extra bot logins authorized to trigger author-gated PR notifications. */
@@ -1090,7 +1111,7 @@ export class GithubIntegration implements FactoryIntegration {
   async exchangeOAuthCode(code: string, redirectUri: string): Promise<string> {
     const res = await fetch('https://github.com/login/oauth/access_token', {
       method: 'POST',
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.timeout(GITHUB_OAUTH_TOKEN_TIMEOUT_MS),
       headers: { 'content-type': 'application/json', accept: 'application/json' },
       body: JSON.stringify({
         client_id: this.#clientId,
@@ -1253,6 +1274,32 @@ export class GithubIntegration implements FactoryIntegration {
    * Session-scoped agent tools for token refresh and PR subscriptions in
    * sessions bound to a GitHub-backed project. Empty elsewhere.
    */
+  async upsertFactoryTriageComment(input: GithubTriageCommentUpsertInput): Promise<GithubTriageCommentUpsertResult> {
+    const parts = splitRepoFullName(input.repository);
+    if (!parts) throw new Error('GitHub triage comments require an owner/repository source.');
+    const octokit = this.getInstallationOctokit(input.installationId);
+    const comments = [] as Array<{ id: number; body?: string | null; user?: { login?: string } | null; html_url: string }>;
+    for (let page = 1; ; page += 1) {
+      const response = await octokit.issues.listComments({
+        ...parts,
+        issue_number: input.issueNumber,
+        per_page: 100,
+        page,
+      });
+      comments.push(...response.data);
+      if (response.data.length < 100) break;
+    }
+    const existing = comments
+      .filter(comment => comment.body?.includes('<!-- mastra-factory-triage -->') && this.isFactoryCommentAuthor(comment.user?.login))
+      .sort((left, right) => left.id - right.id)[0];
+    if (existing) {
+      const { data } = await octokit.issues.updateComment({ ...parts, comment_id: existing.id, body: input.body });
+      return { action: 'updated', commentId: String(data.id), url: data.html_url };
+    }
+    const { data } = await octokit.issues.createComment({ ...parts, issue_number: input.issueNumber, body: input.body });
+    return { action: 'created', commentId: String(data.id), url: data.html_url };
+  }
+
   sessionTools({ requestContext }: { requestContext: RequestContext }): IntegrationTools {
     return createGithubSubscriptionTools(requestContext, this);
   }

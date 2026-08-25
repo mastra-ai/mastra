@@ -76,6 +76,48 @@ function createIntegration(fetchImpl?: typeof fetch): PlatformGithubIntegration 
 }
 
 describe('PlatformGithubIntegration', () => {
+  it('updates the oldest Platform-owned triage marker across comment pages and learns the actual writer', async () => {
+    const older = { id: 10, body: '<!-- mastra-factory-triage --> oldest', htmlUrl: 'https://github.com/acme/app/issues/7#issuecomment-10', user: { login: 'mastra-platform[bot]', avatarUrl: null, htmlUrl: 'https://github.com/apps/mastra-platform' }, createdAt: '2026-07-01T00:00:00Z', updatedAt: '2026-07-01T00:00:00Z' };
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(json({ comments: [
+        { ...older, id: 20, user: { ...older.user, login: 'person' } },
+        { ...older, id: 30 },
+        ...Array.from({ length: 28 }, (_, index) => ({ ...older, id: 100 + index, body: 'unmarked', user: { ...older.user, login: 'person' } })),
+      ] }))
+      .mockResolvedValueOnce(json({ comments: [older] }))
+      .mockResolvedValueOnce(json({ ...older, user: { ...older.user, login: 'actual-factory-writer[bot]' } }));
+    const integration = createIntegration(fetchImpl);
+
+    await expect(
+      integration.upsertFactoryTriageComment({ installationId: 7, repository: 'acme/app', issueNumber: 7, body: '<!-- mastra-factory-triage -->\nFinal' }),
+    ).resolves.toEqual({ action: 'updated', commentId: '10', url: older.htmlUrl });
+
+    expect(fetchImpl.mock.calls.map(([url, init]) => `${init?.method ?? 'GET'} ${new URL(String(url)).pathname}${new URL(String(url)).search}`)).toEqual([
+      'GET /v1/server/github/repos/acme/app/issues/7/comments?page=1&per_page=30',
+      'GET /v1/server/github/repos/acme/app/issues/7/comments?page=2&per_page=30',
+      'PATCH /v1/server/github/repos/acme/app/issues/comments/10',
+    ]);
+    expect(JSON.parse(String(fetchImpl.mock.calls[2]![1]?.body))).toEqual({ body: '<!-- mastra-factory-triage -->\nFinal' });
+    expect(integration.isFactoryCommentAuthor('actual-factory-writer[bot]')).toBe(true);
+  });
+
+  it('creates a triage marker through the Platform proxy when no Factory marker exists', async () => {
+    const created = { id: 42, body: '<!-- mastra-factory-triage --> Pending', htmlUrl: 'https://github.com/acme/app/issues/7#issuecomment-42', user: { login: 'mastra-platform[bot]', avatarUrl: null, htmlUrl: 'https://github.com/apps/mastra-platform' }, createdAt: '2026-07-01T00:00:00Z', updatedAt: '2026-07-01T00:00:00Z' };
+    const fetchImpl = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(json({ comments: [{ ...created, id: 9, user: { ...created.user, login: 'person' } }] }))
+      .mockResolvedValueOnce(json(created));
+    const integration = createIntegration(fetchImpl);
+
+    await expect(
+      integration.upsertFactoryTriageComment({ installationId: 7, repository: 'acme/app', issueNumber: 7, body: '<!-- mastra-factory-triage -->\nPending' }),
+    ).resolves.toEqual({ action: 'created', commentId: '42', url: created.htmlUrl });
+    expect(fetchImpl.mock.calls.map(([url, init]) => `${init?.method ?? 'GET'} ${new URL(String(url)).pathname}${new URL(String(url)).search}`)).toEqual([
+      'GET /v1/server/github/repos/acme/app/issues/7/comments?page=1&per_page=30',
+      'POST /v1/server/github/repos/acme/app/issues/7/comments',
+    ]);
+  });
+
   it('lists platform-owned installations and repositories as Intake sources', async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()
@@ -742,6 +784,7 @@ describe('PlatformGithubIntegration', () => {
     });
     expect(Object.keys(integration.sessionTools({ requestContext }))).toEqual([
       'github_refresh_token',
+      'github_upsert_factory_triage_comment',
       'github_subscribe_pr',
       'github_unsubscribe_pr',
     ]);
