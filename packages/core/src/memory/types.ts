@@ -1071,7 +1071,7 @@ type BaseMemoryConfig = {
          * first turn of a thread.
          *
          * Durable and evented agents don't emit this chunk yet; the title is still
-         * generated and persisted, and a warning is logged.
+         * generated and persisted.
          *
          * @default false
          */

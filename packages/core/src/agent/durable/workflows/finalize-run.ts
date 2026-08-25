@@ -213,7 +213,6 @@ export async function runDurableFinishSideEffects({
       messageListState: messageList.serialize(),
       requestContext: effectiveRequestContext,
       tracingContext,
-      logger: effectiveLogger,
     };
 
     try {
@@ -251,23 +250,13 @@ export async function generateDurableThreadTitle({
   messageListState,
   requestContext,
   tracingContext,
-  logger,
 }: GenerateThreadTitleArgs & { agent: AnyAgent; memory: MastraMemory }): Promise<void> {
   const thread = await memory.getThreadById({ threadId });
   const mergedConfig = memory.getMergedThreadConfig(memoryConfig);
-  const { shouldGenerate, model, instructions, minMessages, emitEvent } = agent.resolveTitleGenerationConfig(
+  const { shouldGenerate, model, instructions, minMessages } = agent.resolveTitleGenerationConfig(
     mergedConfig.generateTitle,
   );
   if (!shouldGenerate || thread?.title) return;
-
-  // Durable finalization has no stream writer, so the `data-thread-title` chunk
-  // cannot be emitted here. The title is still generated and persisted.
-  if (emitEvent) {
-    logger?.warn(
-      '[DurableAgent] generateTitle.emitEvent is not supported for durable agents yet; the title is persisted but no data-thread-title chunk is emitted',
-      { threadId },
-    );
-  }
 
   const titleMessageList = new MessageList().deserialize(messageListState);
   const uiMessages = agent.filterUiMessagesByThread(titleMessageList, threadId, titleMessageList.get.all.ui());
