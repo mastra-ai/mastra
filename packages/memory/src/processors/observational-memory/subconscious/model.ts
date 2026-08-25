@@ -56,7 +56,9 @@ export async function resolveReminderLaneModel(options: {
     // return it unreduced. Past the largest threshold `resolve` throws — clamp to the largest
     // tier instead: an oversized reminder turn should degrade, not fail the observation cycle.
     const thresholds = omModel.getThresholds();
-    const clamped = Math.min(estimatedInputTokens, thresholds[thresholds.length - 1] ?? estimatedInputTokens);
+    // `thresholds` is non-empty by construction (the ModelByInputTokens constructor rejects an
+    // empty config), so the last entry is always the largest tier.
+    const clamped = Math.min(estimatedInputTokens, thresholds[thresholds.length - 1]!);
     return omModel.resolve(clamped) as SubconsciousModel;
   }
   if (mainAgent) return (await mainAgent.getModel({ requestContext })) as SubconsciousModel;

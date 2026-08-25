@@ -235,23 +235,20 @@ function runReminderLaneTurn(args: ReminderLaneTurnArgs): Promise<string> {
     }, deadlineMs);
     // The waiter must never outlive the host process just to keep a deadline armed.
     (timer as { unref?: () => void }).unref?.();
-    const onAbort = () => {
+    const onAbort = () =>
+      finish(() => reject(new Error('The caller aborted while waiting for the reminder lane turn.')));
+    const finish = (fn: () => void) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      reject(new Error('The caller aborted while waiting for the reminder lane turn.'));
+      args.abortSignal?.removeEventListener('abort', onAbort);
+      fn();
     };
     if (args.abortSignal?.aborted) {
       onAbort();
       return;
     }
     args.abortSignal?.addEventListener('abort', onAbort, { once: true });
-    const finish = (fn: () => void) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      fn();
-    };
     try {
       const result = args.agent.queueMessage(args.prompt, {
         threadId,
@@ -261,13 +258,18 @@ function runReminderLaneTurn(args: ReminderLaneTurnArgs): Promise<string> {
             requestContext: args.requestContext,
             maxSteps: args.maxSteps,
             onFinish: event => finish(() => resolve((event.text ?? '').trim())),
+            // A run that fails after it started reports here; without it the waiter would burn
+            // the full deadline on an ordinary model or tool failure.
+            onError: ({ error }: { error: Error | string }) =>
+              finish(() => reject(error instanceof Error ? error : new Error(String(error)))),
           },
         },
       });
       // `accepted` settles at routing-decision time. A rejection means the signal could not be
       // routed at all; a `blocked` disposition means the turn will never run, so both reject the
-      // waiter immediately instead of burning the full deadline. A run failing AFTER it started
-      // does not resolve `onFinish`, so the deadline above is the terminal backstop for that.
+      // waiter immediately instead of burning the full deadline. A synchronous throw from stream
+      // setup on the drain side never reaches these callbacks, so the deadline stays as the
+      // terminal backstop for that residue.
       result.accepted
         .then((disposition: { action?: string; reason?: string } | undefined) => {
           if (disposition?.action === 'blocked') {

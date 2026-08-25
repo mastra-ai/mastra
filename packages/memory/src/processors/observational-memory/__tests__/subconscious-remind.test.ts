@@ -891,6 +891,24 @@ describe('Subconscious remind ask lane', () => {
     }
   });
 
+  it('rejects a blocking ask immediately when the lane run fails after starting', async () => {
+    const { tools, generateSpy } = createAskTool({});
+    // A post-start failure reports through onError; the waiter must not burn the deadline.
+    generateSpy.mockImplementation(((_prompt: any, opts: any) => {
+      void Promise.resolve().then(() =>
+        opts?.ifIdle?.streamOptions?.onError?.({ error: new Error('model exploded mid-stream') }),
+      );
+      return { accepted: Promise.resolve({ action: 'wake' }) };
+    }) as any);
+    try {
+      const result: any = await tools.ask_memory.execute!({ question: 'when?' } as any, askContext());
+      expect(result.ok).toBe(false);
+      expect(result.error).toMatch(/model exploded mid-stream/);
+    } finally {
+      generateSpy.mockRestore();
+    }
+  });
+
   it('stops a blocking ask waiting when the calling turn aborts, without failing the lane', async () => {
     const { tools, generateSpy } = createAskTool({});
     // The lane turn never finishes on its own; only the abort should release the caller.
@@ -901,6 +919,9 @@ describe('Subconscious remind ask lane', () => {
         { question: 'when?' } as any,
         askContext({ abortSignal: controller.signal }),
       );
+      // Abort AFTER the turn is queued so the listener path is exercised, not the
+      // already-aborted upfront check.
+      await new Promise(resolve => setTimeout(resolve, 0));
       controller.abort();
       const result: any = await pending;
       expect(result.ok).toBe(false);
