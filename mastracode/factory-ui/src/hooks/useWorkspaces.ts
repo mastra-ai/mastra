@@ -79,7 +79,7 @@ export function addCachedSession(queryClient: QueryClient, projectRepositoryId: 
   });
 }
 
-export function updateCachedSessionTitle(
+export async function updateCachedSessionTitle(
   queryClient: QueryClient,
   projectRepositoryId: string | undefined,
   sessionId: string,
@@ -92,7 +92,7 @@ export function updateCachedSessionTitle(
   if (!queryClient.getQueryData<WorkspacesData>(queryKey)) return;
 
   // an in-flight list fetch can still carry the branch-only row and overwrite this title
-  void queryClient.cancelQueries({ queryKey });
+  await queryClient.cancelQueries({ queryKey });
   queryClient.setQueryData<WorkspacesData>(queryKey, current => {
     if (!current) return current;
 

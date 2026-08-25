@@ -46,7 +46,7 @@ export function PageTitle() {
 
   useEffect(() => {
     if (!routeSessionId || !threadTitle) return;
-    updateCachedSessionTitle(queryClient, projectRepositoryId, routeSessionId, threadTitle);
+    void updateCachedSessionTitle(queryClient, projectRepositoryId, routeSessionId, threadTitle);
   }, [projectRepositoryId, queryClient, routeSessionId, threadTitle]);
 
   useDocumentTitle(identifier ?? threadTitle);

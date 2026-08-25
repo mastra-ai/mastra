@@ -62,7 +62,7 @@ describe('sessionsRefetchInterval', () => {
 });
 
 describe('updateCachedSessionTitle', () => {
-  it('updates the matching workspace without replacing unrelated rows', () => {
+  it('updates the matching workspace without replacing unrelated rows', async () => {
     const client = createQueryClient();
     const workspace = session({ title: undefined });
     const unrelated = session({ id: 'row-2', sessionId: 'sess-2', title: 'Keep me' });
@@ -70,7 +70,7 @@ describe('updateCachedSessionTitle', () => {
     const queryKey = queryKeys.sessions(workspace.projectRepositoryId);
     client.setQueryData(queryKey, current);
 
-    updateCachedSessionTitle(client, workspace.projectRepositoryId, workspace.sessionId, 'Generated workspace title');
+    await updateCachedSessionTitle(client, workspace.projectRepositoryId, workspace.sessionId, 'Generated workspace title');
 
     const updated = client.getQueryData<WorkspacesData>(queryKey);
     expect(updated).toEqual(
@@ -81,30 +81,59 @@ describe('updateCachedSessionTitle', () => {
     expect(updated?.workspaces[1]).toBe(unrelated);
   });
 
-  it('updates the matching user session', () => {
+  it('updates the matching user session', async () => {
     const client = createQueryClient();
     const userSession = session({ sessionId: 'user-1', title: undefined, branch: 'user/session-user-1' });
     const queryKey = queryKeys.sessions(userSession.projectRepositoryId);
     client.setQueryData(queryKey, data({ userSessions: [userSession] }));
 
-    updateCachedSessionTitle(client, userSession.projectRepositoryId, userSession.sessionId, 'Generated user title');
+    await updateCachedSessionTitle(client, userSession.projectRepositoryId, userSession.sessionId, 'Generated user title');
 
     expect(client.getQueryData<WorkspacesData>(queryKey)?.userSessions).toEqual([
       { ...userSession, title: 'Generated user title' },
     ]);
   });
 
-  it('preserves the cached data when the session is absent or the title is unchanged', () => {
+  it('keeps the title when a canceled sessions fetch resolves with stale data', async () => {
+    const client = createQueryClient();
+    const workspace = session({ title: undefined });
+    const current = data({ workspaces: [workspace] });
+    const queryKey = queryKeys.sessions(workspace.projectRepositoryId);
+    client.setQueryData(queryKey, current);
+
+    let resolveFetch!: (value: WorkspacesData) => void;
+    const fetch = client.fetchQuery({
+      queryKey,
+      queryFn: () =>
+        new Promise<WorkspacesData>(resolve => {
+          resolveFetch = resolve;
+        }),
+      staleTime: 0,
+    });
+    const fetchResult = fetch.catch(() => undefined);
+    await Promise.resolve();
+    expect(client.getQueryState(queryKey)?.fetchStatus).toBe('fetching');
+
+    await updateCachedSessionTitle(client, workspace.projectRepositoryId, workspace.sessionId, 'Generated workspace title');
+    resolveFetch(current);
+    await fetchResult;
+
+    expect(client.getQueryData<WorkspacesData>(queryKey)?.workspaces).toEqual([
+      { ...workspace, title: 'Generated workspace title' },
+    ]);
+  });
+
+  it('preserves the cached data when the session is absent or the title is unchanged', async () => {
     const client = createQueryClient();
     const workspace = session({ title: 'Generated workspace title' });
     const current = data({ workspaces: [workspace] });
     const queryKey = queryKeys.sessions(workspace.projectRepositoryId);
     client.setQueryData(queryKey, current);
 
-    updateCachedSessionTitle(client, workspace.projectRepositoryId, 'missing-session', 'Other title');
+    await updateCachedSessionTitle(client, workspace.projectRepositoryId, 'missing-session', 'Other title');
     expect(client.getQueryData(queryKey)).toBe(current);
 
-    updateCachedSessionTitle(client, workspace.projectRepositoryId, workspace.sessionId, 'Generated workspace title');
+    await updateCachedSessionTitle(client, workspace.projectRepositoryId, workspace.sessionId, 'Generated workspace title');
     expect(client.getQueryData(queryKey)).toBe(current);
   });
 });
