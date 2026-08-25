@@ -130,6 +130,20 @@ describe('useToggleStoredSkillFavorite', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(listOf(queryClient)).toBeUndefined();
     });
+
+    it('leaves a list entry that carries no rows alone', async () => {
+      const rowless = { total: 0, page: 1, perPage: 50, hasMore: false } as ListStoredSkillsResponse;
+      const { result, queryClient } = setup({ lists: { all: rowless } });
+      const writtenAt = queryClient.getQueryState(['stored-skills', 'all'])?.dataUpdatedAt;
+      const release = pendingFavorite();
+
+      act(() => result.current.mutate({ favorited: true }));
+      await release();
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(listOf(queryClient)).toEqual(rowless);
+      expect(queryClient.getQueryState(['stored-skills', 'all'])?.dataUpdatedAt).toBe(writtenAt);
+    });
   });
 
   describe('the favourite count it predicts', () => {
@@ -268,14 +282,17 @@ describe('useToggleStoredSkillFavorite', () => {
     it('leaves the caches untouched', async () => {
       const before = makeList([makeSkill()]);
       const { result, queryClient } = setup({ omitSkillId: true, lists: { all: before } });
+      // React Query keeps the same object for an equal value, so identity
+      // cannot tell "never written" from "rewritten identically" — the write
+      // timestamp can.
+      const writtenAt = queryClient.getQueryState(['stored-skills', 'all'])?.dataUpdatedAt;
 
       await act(async () => {
         await result.current.mutateAsync({ favorited: true }).catch(() => {});
       });
 
-      // Identity, not deep equality: rewriting the entry with an identical
-      // value would still be a write, and would still bump the cache.
-      expect(listOf(queryClient)).toBe(before);
+      expect(listOf(queryClient)).toEqual(before);
+      expect(queryClient.getQueryState(['stored-skills', 'all'])?.dataUpdatedAt).toBe(writtenAt);
     });
   });
 
@@ -324,6 +341,53 @@ describe('useToggleStoredSkillFavorite', () => {
       // Without the cancel, the stale in-flight response would land on top of
       // the optimistic patch and flip the star back off.
       expect(listOf(queryClient)?.skills[0].isFavorited).toBe(true);
+    });
+
+    it('cancels an in-flight read of the skill itself, not just the lists', async () => {
+      let releaseDetail: () => void = () => {};
+      const detailInFlight = new Promise<void>(resolve => {
+        releaseDetail = resolve;
+      });
+      server.use(
+        http.get(`${BASE_URL}/api/stored/skills/${SKILL_ID}`, async () => {
+          await detailInFlight;
+          return HttpResponse.json(makeSkill({ isFavorited: false, favoriteCount: 0 }));
+        }),
+      );
+
+      const { result, queryClient } = setup({ detail: makeSkill() });
+      void queryClient.fetchQuery({
+        queryKey: ['stored-skill', SKILL_ID],
+        queryFn: async () => {
+          const response = await fetch(`${BASE_URL}/api/stored/skills/${SKILL_ID}`);
+          return (await response.json()) as StoredSkillResponse;
+        },
+      });
+      const release = pendingFavorite();
+
+      act(() => result.current.mutate({ favorited: true }));
+      await waitFor(() => expect(detailOf(queryClient)?.isFavorited).toBe(true));
+
+      await act(async () => releaseDetail());
+      await release();
+
+      // Without the cancel, the stale in-flight detail would land on top of the
+      // optimistic patch and flip the star back off.
+      expect(detailOf(queryClient)?.isFavorited).toBe(true);
+    });
+
+    it('does not snapshot caches it has no business restoring', async () => {
+      server.use(http.put(FAVORITE_URL, () => new HttpResponse(null, { status: 500 })));
+      const { result, queryClient } = setup({ lists: { all: makeList([makeSkill()]) } });
+      queryClient.setQueryData(['stored-workflows'], { seeded: true });
+      const unrelatedWrittenAt = queryClient.getQueryState(['stored-workflows'])?.dataUpdatedAt;
+
+      await act(async () => {
+        await result.current.mutateAsync({ favorited: true }).catch(() => {});
+      });
+
+      // A rollback that restored every cache would rewrite this one too.
+      expect(queryClient.getQueryState(['stored-workflows'])?.dataUpdatedAt).toBe(unrelatedWrittenAt);
     });
 
     it('does not cancel unrelated work', async () => {

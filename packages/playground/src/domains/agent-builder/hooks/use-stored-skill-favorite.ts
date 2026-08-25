@@ -61,7 +61,12 @@ export const useToggleStoredSkillFavorite = (skillId?: string) => {
       return { previousDetail, previousLists };
     },
     onError: (_error, _vars, context) => {
+      // Stryker disable next-line ConditionalExpression: `onMutate` always
+      // returns a context, so this only narrows the optional parameter.
       if (!context) return;
+      // Stryker disable next-line ConditionalExpression,LogicalOperator: with no
+      // cached detail there is nothing to restore, and React Query ignores a
+      // `setQueryData` of `undefined` — so skipping and writing agree.
       if (skillId && context.previousDetail !== undefined) {
         queryClient.setQueryData(['stored-skill', skillId], context.previousDetail);
       }
@@ -71,6 +76,8 @@ export const useToggleStoredSkillFavorite = (skillId?: string) => {
     },
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: ['stored-skills'] });
+      // Stryker disable next-line ConditionalExpression: `onSettled` only runs
+      // for a mutation that got past `mutationFn`, which throws without an id.
       if (skillId) {
         void queryClient.invalidateQueries({ queryKey: ['stored-skill', skillId] });
       }

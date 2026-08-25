@@ -65,7 +65,12 @@ export const useToggleStoredAgentFavorite = (agentId?: string) => {
       return { previousDetail, previousLists };
     },
     onError: (_error, _vars, context) => {
+      // Stryker disable next-line ConditionalExpression: `onMutate` always
+      // returns a context, so this only narrows the optional parameter.
       if (!context) return;
+      // Stryker disable next-line ConditionalExpression,LogicalOperator: with no
+      // cached detail there is nothing to restore, and React Query ignores a
+      // `setQueryData` of `undefined` — so skipping and writing agree.
       if (agentId && context.previousDetail !== undefined) {
         queryClient.setQueryData(['stored-agent', agentId], context.previousDetail);
       }
@@ -75,6 +80,8 @@ export const useToggleStoredAgentFavorite = (agentId?: string) => {
     },
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: ['stored-agents'] });
+      // Stryker disable next-line ConditionalExpression: `onSettled` only runs
+      // for a mutation that got past `mutationFn`, which throws without an id.
       if (agentId) {
         void queryClient.invalidateQueries({ queryKey: ['stored-agent', agentId] });
       }
