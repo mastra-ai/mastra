@@ -44,6 +44,7 @@ import {
   resolveFactoryPullRequestParentWorkItemId,
 } from './integrations/github/provenance.js';
 import type { FactoryPullRequestProvenanceData } from './integrations/github/provenance.js';
+import { createGithubReviewPublisher } from './integrations/github/review-publisher.js';
 import { PlatformGithubIntegration } from './integrations/platform/github/integration.js';
 import { PlatformLinearIntegration } from './integrations/platform/linear/integration.js';
 import { createCustomProvidersPrimer, registerCustomProvidersSource } from './routes/custom-provider-source.js';
@@ -58,6 +59,7 @@ import {
 import { builtInFactoryRules } from './rules/defaults.js';
 import { FactoryDecisionDispatcher } from './rules/dispatcher.js';
 import { FactoryPhaseStateProcessor } from './rules/processor.js';
+import { createFactoryReviewTools } from './rules/review-tool.js';
 import { createTerminalStageCleanup } from './rules/terminal-cleanup.js';
 import { createFactoryTransitionTools } from './rules/tools.js';
 import { FactoryTransitionService } from './rules/transition-service.js';
@@ -727,6 +729,20 @@ export class MastraFactory {
                     tools[name] = tool;
                   }
                 };
+                if (workItemsStorage && githubIntegration?.versionControl && storage.isDomainReady('source-control')) {
+                  mergeTools(
+                    'factory-review',
+                    await createFactoryReviewTools({
+                      requestContext,
+                      storage: workItemsStorage,
+                      publisher: createGithubReviewPublisher({
+                        storage: sourceControlStorage.forIntegration('github'),
+                        versionControl: githubIntegration.versionControl,
+                      }),
+                      sessions: sourceControlStorage.forIntegration('github').sessions,
+                    }),
+                  );
+                }
                 if (workItemsStorage && transitionService) {
                   mergeTools(
                     'factory',
