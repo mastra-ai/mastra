@@ -935,7 +935,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               // Terminate the stream
               controller.terminate();
               return;
-            case 'finish':
+            case 'finish': {
               // 'suspended' is not terminal: a resume leg rehydrates the persisted 'suspended'
               // status and must be able to finish as 'success'. Only 'failed' and 'canceled'
               // block the success transition.
@@ -1246,6 +1246,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
               self.#closeTransportIfNeeded();
               break;
+            }
 
             case 'goal':
               // A continuing goal evaluation marks a safe truncation point for

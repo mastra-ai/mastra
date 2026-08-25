@@ -1008,16 +1008,15 @@ https://mastra.ai/en/docs/memory/overview`,
     if (generateTitle !== undefined && config.options) {
       if (typeof generateTitle === 'boolean') {
         config.options.generateTitle = generateTitle;
-      } else if (typeof generateTitle === 'object' && generateTitle.model) {
+      } else if (typeof generateTitle === 'object' && generateTitle !== null) {
         const model = generateTitle.model;
-        // Extract ModelRouterModelId from various model configurations
+        // Extract ModelRouterModelId from various model configurations.
+        // `model` is optional (the agent's own model is the default) and
+        // dynamic functions cannot be serialized - both leave modelId unset.
         let modelId: string | undefined;
 
         if (typeof model === 'string') {
           modelId = model;
-        } else if (typeof model === 'function') {
-          // Cannot serialize dynamic functions - skip
-          modelId = undefined;
         } else if (model && typeof model === 'object') {
           // Handle config objects with id field
           if ('id' in model && typeof model.id === 'string') {
@@ -1025,12 +1024,12 @@ https://mastra.ai/en/docs/memory/overview`,
           }
         }
 
-        if (modelId && config.options) {
-          config.options.generateTitle = {
-            model: modelId as ModelRouterModelId,
-            instructions: typeof generateTitle.instructions === 'string' ? generateTitle.instructions : undefined,
-          };
-        }
+        config.options.generateTitle = {
+          ...(modelId && { model: modelId as ModelRouterModelId }),
+          instructions: typeof generateTitle.instructions === 'string' ? generateTitle.instructions : undefined,
+          ...(typeof generateTitle.minMessages === 'number' && { minMessages: generateTitle.minMessages }),
+          ...(typeof generateTitle.emitEvent === 'boolean' && { emitEvent: generateTitle.emitEvent }),
+        };
       }
     }
 

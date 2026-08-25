@@ -1028,7 +1028,8 @@ type BaseMemoryConfig = {
   /**
    * Automatically generate descriptive thread titles based on the first user message.
    * Can be a boolean to enable with defaults, or an object to customize the model and instructions.
-   * Title generation runs asynchronously and doesn't affect response time.
+   * Title generation runs asynchronously and doesn't affect response time, unless
+   * `emitEvent` is enabled - then the stream waits for the title before `finish`.
    *
    * @default false
    * @example
@@ -1302,8 +1303,8 @@ export type SerializedMemoryConfig = {
     generateTitle?:
       | boolean
       | {
-          /** Model ID in format provider/model-name */
-          model: ModelRouterModelId;
+          /** Model ID in format provider/model-name. Defaults to the agent's own model. */
+          model?: ModelRouterModelId;
           /** Custom instructions for title generation */
           instructions?: string;
           /** Minimum number of thread messages required before a title is generated */

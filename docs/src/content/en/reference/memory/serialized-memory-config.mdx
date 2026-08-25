@@ -85,9 +85,9 @@ new MastraEditor({
           },
           {
             name: 'generateTitle',
-            type: 'boolean | { model: ModelRouterModelId; instructions?: string; minMessages?: number; emitEvent?: boolean }',
+            type: 'boolean | { model?: ModelRouterModelId; instructions?: string; minMessages?: number; emitEvent?: boolean }',
             description:
-              'Title generation configuration. Pass an object with `model` (in `"provider/model"` form), optional `instructions`, an optional minimum message count, and optional `emitEvent` to stream the title as a `data-thread-title` chunk.',
+              'Title generation configuration. Pass an object with an optional `model` (in `"provider/model"` form, defaults to the agent\'s own model), optional `instructions`, an optional minimum message count, and optional `emitEvent` to stream the title as a `data-thread-title` chunk.',
             isOptional: true,
           },
         ],

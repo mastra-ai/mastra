@@ -113,9 +113,9 @@ To enable `workingMemory` on an agent, you’ll need a storage provider configur
           },
           {
             name: 'generateTitle',
-            type: 'boolean | { model?: DynamicArgument<MastraLanguageModel>; instructions?: DynamicArgument<string>; minMessages?: number; emitEvent?: boolean }',
+            type: 'boolean | { model?: DynamicArgument<MastraModelConfig>; instructions?: DynamicArgument<string>; minMessages?: number; emitEvent?: boolean }',
             description:
-              "Controls automatic thread title generation from the conversation transcript. Can be a boolean or an object with a custom model, custom instructions, a minimum message count, and `emitEvent`. With `emitEvent: true` the run's stream waits for the title and emits it as a transient `data-thread-title` chunk before `finish`.",
+              'Controls automatic thread title generation from the conversation transcript. Accepts a boolean or an object with a custom model (any `MastraModelConfig`: a model instance, a `"provider/model"` ID, or an OpenAI-compatible config; defaults to the agent\'s own model), custom instructions, a minimum message count, and `emitEvent`. With `emitEvent: true` the run\'s stream waits for the title and emits it as a transient `data-thread-title` chunk before `finish`.',
             isOptional: true,
             defaultValue: 'false',
           },

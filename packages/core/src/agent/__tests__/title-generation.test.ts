@@ -3360,47 +3360,47 @@ describe('sub-agent title generation propagation (#18738)', () => {
   });
 });
 
+function createMockModels() {
+  const agentModel = new MockLanguageModelV2({
+    doGenerate: async () => ({
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      finishReason: 'stop' as const,
+      usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+      content: [{ type: 'text' as const, text: 'Agent response' }],
+      warnings: [],
+    }),
+    doStream: async () => ({
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      warnings: [],
+      stream: convertArrayToReadableStream([
+        { type: 'stream-start' as const, warnings: [] },
+        { type: 'response-metadata' as const, id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+        { type: 'text-start' as const, id: 'text-1' },
+        { type: 'text-delta' as const, id: 'text-1', delta: 'Agent response' },
+        { type: 'text-end' as const, id: 'text-1' },
+        {
+          type: 'finish' as const,
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        },
+      ]),
+    }),
+  });
+
+  const titleModel = new MockLanguageModelV2({
+    doGenerate: async () => ({
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      finishReason: 'stop' as const,
+      usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+      content: [{ type: 'text' as const, text: 'Generated Title' }],
+      warnings: [],
+    }),
+  });
+
+  return { agentModel, titleModel };
+}
+
 describe('onTitleGenerated callback', () => {
-  function createMockModels() {
-    const agentModel = new MockLanguageModelV2({
-      doGenerate: async () => ({
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        finishReason: 'stop' as const,
-        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-        content: [{ type: 'text' as const, text: 'Agent response' }],
-        warnings: [],
-      }),
-      doStream: async () => ({
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        warnings: [],
-        stream: convertArrayToReadableStream([
-          { type: 'stream-start' as const, warnings: [] },
-          { type: 'response-metadata' as const, id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-          { type: 'text-start' as const, id: 'text-1' },
-          { type: 'text-delta' as const, id: 'text-1', delta: 'Agent response' },
-          { type: 'text-end' as const, id: 'text-1' },
-          {
-            type: 'finish' as const,
-            finishReason: 'stop' as const,
-            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-          },
-        ]),
-      }),
-    });
-
-    const titleModel = new MockLanguageModelV2({
-      doGenerate: async () => ({
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        finishReason: 'stop' as const,
-        usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
-        content: [{ type: 'text' as const, text: 'Generated Title' }],
-        warnings: [],
-      }),
-    });
-
-    return { agentModel, titleModel };
-  }
-
   function createAgentWithTitleGen(agentModel: MockLanguageModelV2, titleModel: MockLanguageModelV2) {
     const mockMemory = new MockMemory();
     mockMemory.getMergedThreadConfig = () => ({
@@ -3508,46 +3508,6 @@ describe('onTitleGenerated callback', () => {
 });
 
 describe('generateTitle emitEvent', () => {
-  function createMockModels() {
-    const agentModel = new MockLanguageModelV2({
-      doGenerate: async () => ({
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        finishReason: 'stop' as const,
-        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-        content: [{ type: 'text' as const, text: 'Agent response' }],
-        warnings: [],
-      }),
-      doStream: async () => ({
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        warnings: [],
-        stream: convertArrayToReadableStream([
-          { type: 'stream-start' as const, warnings: [] },
-          { type: 'response-metadata' as const, id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-          { type: 'text-start' as const, id: 'text-1' },
-          { type: 'text-delta' as const, id: 'text-1', delta: 'Agent response' },
-          { type: 'text-end' as const, id: 'text-1' },
-          {
-            type: 'finish' as const,
-            finishReason: 'stop' as const,
-            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-          },
-        ]),
-      }),
-    });
-
-    const titleModel = new MockLanguageModelV2({
-      doGenerate: async () => ({
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        finishReason: 'stop' as const,
-        usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
-        content: [{ type: 'text' as const, text: 'Generated Title' }],
-        warnings: [],
-      }),
-    });
-
-    return { agentModel, titleModel };
-  }
-
   function createAgentWithTitleGen(
     agentModel: MockLanguageModelV2,
     titleModel: MockLanguageModelV2,

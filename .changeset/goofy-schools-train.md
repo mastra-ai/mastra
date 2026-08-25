@@ -1,6 +1,5 @@
 ---
 '@mastra/core': minor
-'@mastra/server': patch
 ---
 
 Added `generateTitle.emitEvent` so HTTP and stream clients receive the generated thread title without polling.
