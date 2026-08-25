@@ -20,7 +20,12 @@ export const StubLink = forwardRef<HTMLAnchorElement, AnchorHTMLAttributes<HTMLA
 
 // Every path resolves to the id-bearing route so tests can assert real hrefs
 // where they matter and simply render everywhere else.
-export const stubLinkPaths: LinkComponentProviderProps['paths'] = {
+//
+// Typed via assertion (not annotation) on purpose: CI's Changed Test Gate
+// typechecks this file against the base branch, whose `LinkComponentPaths`
+// may not match the head branch's exactly. The assertion tolerates extra
+// keys so the stub can carry entries for both versions.
+const paths: Record<string, (...args: string[]) => string> = {
   agentLink: id => `/agents/${id}`,
   agentsLink: () => '/agents',
   agentToolLink: (agentId, toolId) => `/agents/${agentId}/tools/${toolId}`,
@@ -57,8 +62,12 @@ export const stubLinkPaths: LinkComponentProviderProps['paths'] = {
   datasetItemLink: (datasetId, itemId) => `/datasets/${datasetId}/items/${itemId}`,
   datasetItemCompareLink: (datasetId, itemId, secondItemId) =>
     `/datasets/${datasetId}/items/${itemId}/compare/${secondItemId}`,
+  // Only used by the base branch's `LinkComponentPaths` (see comment above).
+  datasetExperimentLink: (datasetId, experimentId) => `/datasets/${datasetId}/experiments/${experimentId}`,
   experimentLink: id => `/experiments/${id}`,
 };
+
+export const stubLinkPaths = paths as LinkComponentProviderProps['paths'];
 
 /** Wraps children in a `LinkComponentProvider` backed by {@link StubLink}. */
 export function TestLinkProvider({ children }: { children: ReactNode }) {
