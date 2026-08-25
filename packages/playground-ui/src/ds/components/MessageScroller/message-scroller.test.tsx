@@ -899,6 +899,27 @@ describe('MessageScroller autoScroll', () => {
     expect(lastTrip().getTarget()).toBe(700);
   });
 
+  it('trips on a short thread whose room has not opened yet, and rides it open', () => {
+    stubLayout({ 'message-2': 300 });
+    const { rerender } = render(<HistoryHarness autoScroll messageIds={['message-1']} />);
+
+    const viewport = screen.getByTestId('history-viewport');
+    installScrollTo(viewport);
+    setScrollMetrics(viewport, { scrollHeight: 400, clientHeight: 400, scrollTop: 0 });
+    fireEvent.scroll(viewport);
+
+    rerender(<HistoryHarness autoScroll messageIds={['message-1', 'message-2']} />);
+
+    // A short thread has no scroll extent the instant its turn mounts — the new
+    // message only ate the column's slack. The trip must still start, going nowhere…
+    expect(startTripMock).toHaveBeenCalledTimes(1);
+    expect(lastTrip().getTarget()).toBe(0);
+
+    // …because its destination is re-read as the room opens under it.
+    Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 1000 });
+    expect(lastTrip().getTarget()).toBe(300);
+  });
+
   it('brings a reader who left back to the turn they opened, and carries them again', async () => {
     vi.stubGlobal('ResizeObserver', MockResizeObserver);
     stubLayout({ 'message-2': 300 });

@@ -16,6 +16,7 @@ Improved how streamed replies move: one document, one pace, and a transcript tha
 **Changed**
 
 - Sending a message parks it near the top of the view with most of the screen reserved beneath, so the answer grows into empty space and nothing moves while it fits that room.
+- Opening a thread that is still answering follows the stream from the live end, instead of holding the reading position it restored.
 - A run of tool calls the reader watched arrive stays expanded. Compacting into a "N steps" row is what reloaded history does; a live turn stays as it played, including in a session opened mid-run.
 - The timestamp and copy button land once, under the finished reply, and copy the whole answer — instead of once per persisted step, mid-run.
 - Long transcripts redraw only the entry a token changed, so streaming stays responsive.

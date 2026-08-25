@@ -212,19 +212,25 @@ export function MessageScrollerProvider({
     (anchorId: string) => {
       const item = itemsRegistry.get(anchorId);
       if (!item || !viewportElement) return undefined;
-      // Capped at the end of the box: the room reserved under the turn decides how
-      // high the message parks, and past the end the browser clamps writes anyway —
-      // an unreachable destination would leave the trip chasing that clamp.
-      const top = getScrollTarget({
-        align: 'start',
-        contentElement,
-        element: item.element,
-        scrollMargin,
-        viewportElement,
-      });
-      return Math.min(Math.max(0, top), getMaxScroll(viewportElement));
+      return Math.max(
+        0,
+        getScrollTarget({ align: 'start', contentElement, element: item.element, scrollMargin, viewportElement }),
+      );
     },
     [contentElement, itemsRegistry, scrollMargin, viewportElement],
+  );
+
+  // The motion's destination, never the decision's: the room under a fresh turn is
+  // still opening when the trip starts — on a short thread the box has not even
+  // grown yet — so the cap is re-read per frame and the trip rides the end of the
+  // box until the opened room decides where the message rests.
+  const parkTripTarget = React.useCallback(
+    (anchorId: string) => {
+      const target = anchorTripTarget(anchorId);
+      if (target === undefined || !viewportElement) return target;
+      return Math.min(target, getMaxScroll(viewportElement));
+    },
+    [anchorTripTarget, viewportElement],
   );
 
   const cancelTripAnimation = React.useCallback(() => {
@@ -614,7 +620,7 @@ export function MessageScrollerProvider({
         tripRef.current = { anchorId: lastAnchorId };
         tripAnimationRef.current = startTrip(
           viewportElement,
-          () => anchorTripTarget(lastAnchorId),
+          () => parkTripTarget(lastAnchorId),
           reason => {
             tripAnimationRef.current = null;
             tripRef.current = null;
@@ -645,6 +651,7 @@ export function MessageScrollerProvider({
     getOrderedItems,
     itemsRegistry,
     itemsVersion,
+    parkTripTarget,
     scrollToEnd,
     seenAnchorElements,
     seenAnchorIds,
