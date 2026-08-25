@@ -1,10 +1,8 @@
-import { Button } from '@mastra/playground-ui/components/Button';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
-import { Play } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { ExperimentTriggerDialog } from '@/domains/datasets/components/experiment-trigger/experiment-trigger-dialog';
@@ -98,23 +96,18 @@ export default function Experiments() {
   return (
     <PageLayout>
       <PageLayout.TopArea>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <ExperimentsToolbar
-            search={search}
-            onSearchChange={setSearch}
-            statusFilter={statusFilter}
-            onStatusFilterChange={setStatusFilter}
-            datasetFilter={datasetFilter}
-            onDatasetFilterChange={setDatasetFilter}
-            datasetOptions={experimentDatasetOptions}
-            onReset={resetFilters}
-            hasActiveFilters={hasFilters}
-          />
-          <Button variant="primary" onClick={() => setRunDialogOpen(true)}>
-            <Play />
-            Run Experiment
-          </Button>
-        </div>
+        <ExperimentsToolbar
+          search={search}
+          onSearchChange={setSearch}
+          statusFilter={statusFilter}
+          onStatusFilterChange={setStatusFilter}
+          datasetFilter={datasetFilter}
+          onDatasetFilterChange={setDatasetFilter}
+          datasetOptions={experimentDatasetOptions}
+          onReset={resetFilters}
+          hasActiveFilters={hasFilters}
+          onRunClick={() => setRunDialogOpen(true)}
+        />
       </PageLayout.TopArea>
 
       <ExperimentsList
