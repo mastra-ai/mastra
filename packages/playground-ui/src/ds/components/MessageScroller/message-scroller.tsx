@@ -548,10 +548,18 @@ export function MessageScrollerProvider({
         didScroll = scrollToEnd({ behavior: 'auto' });
       }
 
-      // Arming is left to the anchoring effect's next pass, so the rows the
-      // transcript opened with are recorded as read before any turn can park.
       if (!didScroll) return;
       defaultScrollAppliedRef.current = true;
+      // Settling is what arms turn anchoring: the rows the transcript opened with
+      // are recorded as read here, and on a settled thread the next anchor to
+      // register is the send itself — an arming left to a later anchoring pass
+      // would be eaten by that send instead of parking it.
+      for (const [messageId, item] of getOrderedItems()) {
+        if (!item.scrollAnchor) continue;
+        seenAnchorIds.add(messageId);
+        seenAnchorElements.add(item.element);
+      }
+      turnAnchoringArmedRef.current = true;
     };
 
     if (!deferDefaultScrollRef.current) {
@@ -575,11 +583,14 @@ export function MessageScrollerProvider({
   }, [
     defaultScrollPosition,
     getLastAnchorId,
+    getOrderedItems,
     itemsRegistry,
     itemsVersion,
     scrollToEnd,
     scrollToMessage,
     scrollToStart,
+    seenAnchorElements,
+    seenAnchorIds,
     viewportElement,
   ]);
 

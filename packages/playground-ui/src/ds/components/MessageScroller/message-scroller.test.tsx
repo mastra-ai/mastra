@@ -697,6 +697,36 @@ describe('MessageScroller turn anchoring', () => {
     expect(scrollTo).toHaveBeenLastCalledWith({ top: 950, behavior: 'auto' });
   });
 
+  it('parks the first send of a thread whose default scroll settled with no anchor after it', () => {
+    let layoutReady = false;
+    const scheduledScrolls: FrameRequestCallback[] = [];
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => {
+      scheduledScrolls.push(callback);
+      return scheduledScrolls.length;
+    });
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      if (layoutReady && this.dataset.messageId === 'message-2') return createRect({ top: 700 });
+      if (layoutReady && this.dataset.messageId === 'message-3') return createRect({ top: 1100 });
+      return createRect({ top: 0 });
+    });
+    const { rerender } = render(<TurnHarness messageIds={[]} />);
+
+    const viewport = screen.getByTestId('turn-viewport');
+    const scrollTo = installScrollTo(viewport);
+    setScrollMetrics(viewport, { scrollHeight: 1200, clientHeight: 400, scrollTop: 250 });
+
+    rerender(<TurnHarness messageIds={['message-1', 'message-2']} />);
+    act(() => scheduledScrolls.shift()?.(0));
+    layoutReady = true;
+    act(() => scheduledScrolls.shift()?.(16));
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 950, behavior: 'auto' });
+
+    rerender(<TurnHarness messageIds={['message-1', 'message-2', 'message-3']} />);
+
+    expect(startTripMock).toHaveBeenCalledTimes(1);
+    expect(lastTrip().getTarget()).toBe(800);
+  });
+
   it('parks a turn that opens below the ones already read at the top of the viewport', () => {
     stubLayout({ 'message-2': 300 });
     const { rerender } = render(<TurnHarness messageIds={['message-1']} />);
