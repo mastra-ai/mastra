@@ -152,6 +152,18 @@ describe('BuildBundler', () => {
   });
 
   describe('getEntry', () => {
+    it('emits a dedicated worker entry alongside the API entry', async () => {
+      const { BuildBundler } = await import('./BuildBundler');
+      const bundler = new BuildBundler();
+
+      const entries = (bundler as any).getAdditionalEntries();
+
+      expect(entries).toHaveProperty('worker');
+      expect(entries.worker).toContain("import { mastra } from '#mastra'");
+      expect(entries.worker).toContain("request.url !== '/health'");
+      expect(entries.worker).toContain('await mastra.startWorkers()');
+    });
+
     it('should include studio: true when studio is enabled', async () => {
       const { BuildBundler } = await import('./BuildBundler');
       const bundler = new BuildBundler({ studio: true });

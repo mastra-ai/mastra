@@ -5,6 +5,7 @@ import { FileService } from '@mastra/deployer/build';
 import { Bundler } from '@mastra/deployer/bundler';
 import { copy } from 'fs-extra';
 import { shouldSkipDotenvLoading } from '../utils.js';
+import { getWorkerEntry } from '../worker/WorkerBundler.js';
 
 export class BuildBundler extends Bundler {
   private studio: boolean;
@@ -65,6 +66,10 @@ export class BuildBundler extends Bundler {
     { toolsPaths, projectRoot }: { toolsPaths: (string | string[])[]; projectRoot: string },
   ): Promise<void> {
     return this._bundle(this.getEntry(), entryFile, { outputDirectory, projectRoot }, toolsPaths);
+  }
+
+  protected getAdditionalEntries(): Record<string, string> {
+    return { worker: getWorkerEntry() };
   }
 
   protected getEntry(): string {

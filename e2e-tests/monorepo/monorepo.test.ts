@@ -410,9 +410,13 @@ export const environmentRoute = registerApiRoute('/environment', {
           await writeFile(sourcePath, enabledSource);
           await runBuild(fixturePath);
 
-          const workersPath = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'workers.json');
-          const workersConfig = JSON.parse(await readFile(workersPath, 'utf-8'));
+          const outputPath = join(fixturePath, 'apps', 'custom', '.mastra', 'output');
+          const workersConfig = JSON.parse(await readFile(join(outputPath, 'workers.json'), 'utf-8'));
           expect(workersConfig).toEqual({ enabled: true, globalConcurrency: 20, mode: 'worker' });
+
+          const workerEntry = await readFile(join(outputPath, 'worker.mjs'), 'utf-8');
+          expect(workerEntry).toContain('/health');
+          expect(workerEntry).toContain('startWorkers');
         } finally {
           await writeFile(sourcePath, originalSource);
           await runBuild(fixturePath);
