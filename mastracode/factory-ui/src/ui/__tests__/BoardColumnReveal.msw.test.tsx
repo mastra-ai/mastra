@@ -2,8 +2,7 @@
  * A column renders one page of cards at a time: a board that has run for a
  * while holds hundreds of items per lane, and every card mounts a run spec, an
  * activity read and a status pass on each list poll. A card linked to by
- * `?item=` renders however deep it sits, because the board scrolls to it by
- * finding it in the DOM.
+ * `?item=` renders however deep it sits, so the board can scroll to it.
  */
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';

@@ -11,7 +11,7 @@ const REVEAL_STEP = 30;
 /**
  * Renders a column's cards a step at a time, extending as its own scroller
  * nears the end. `pinned` keeps a deeplinked card rendered however deep it
- * sits: the board scrolls to it by finding it in the DOM.
+ * sits, so the board can scroll to it.
  */
 export function ColumnReveal<T>({
   items,

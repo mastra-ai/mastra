@@ -38,6 +38,7 @@ import { WorkItemMenuItems } from './WorkItemMenuItems';
 
 export function WorkItemCard({
   item,
+  cardRef,
   highlighted,
   columnStage,
   relatedItems,
@@ -64,6 +65,8 @@ export function WorkItemCard({
   onRemove,
 }: {
   item: WorkItem;
+  /** Hands the card's node to the board, which scrolls to it when it is deeplinked. */
+  cardRef: (element: HTMLElement | null) => void;
   highlighted: boolean;
   columnStage: BoardStageId;
   /** Cards linked to this one, resolved once for the whole board. */
@@ -241,13 +244,15 @@ export function WorkItemCard({
     <>
       <CardTitleTooltip title={item.title}>
         <article
-          ref={morph.cardRef}
+          ref={element => {
+            morph.cardRef.current = element;
+            cardRef(element);
+          }}
           draggable={!evaluating}
           aria-label={item.title}
           aria-busy={evaluating || runPending || undefined}
           data-testid="work-item-card"
           data-related={relatedItems.length > 0 ? 'true' : undefined}
-          data-work-item-id={item.id}
           data-highlighted={highlighted || undefined}
           onDragStart={event => {
             if (!evaluating) setDragPayload(event, { kind: 'work-item', id: item.id, fromStage: columnStage });

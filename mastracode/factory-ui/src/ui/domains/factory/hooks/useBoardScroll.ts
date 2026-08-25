@@ -5,9 +5,10 @@ import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 
 /**
- * Scrolls the board to its first populated lane once, on first paint. A
- * pointer or wheel gesture claims the scroll position for the user and the
- * board never repositions itself again for that board.
+ * Scrolls the board to its first populated lane once, on first paint, or to
+ * the deeplinked card when there is one. A pointer or wheel gesture claims the
+ * scroll position for the user and the board never repositions itself again
+ * for that board.
  */
 export function useBoardScroll({
   boardKey,
@@ -32,22 +33,6 @@ export function useBoardScroll({
   const userPositionedRef = useRef<string | undefined>(undefined);
   const targetPositionedRef = useRef<string | undefined>(undefined);
   useEffect(() => {
-    if (!targetReady || !targetItemId) return;
-    const targetKey = `${boardKey}:${targetItemId}`;
-    if (targetPositionedRef.current === targetKey) return;
-    const cards = containerRef.current?.querySelectorAll<HTMLElement>('[data-work-item-id]');
-    if (!cards) return;
-    for (const card of cards) {
-      if (card.dataset.workItemId !== targetItemId) continue;
-      targetPositionedRef.current = targetKey;
-      userPositionedRef.current = boardKey;
-      card.scrollIntoView?.({ behavior: 'auto', block: 'center', inline: 'center' });
-      card.querySelector<HTMLElement>('a[href], button:not(:disabled)')?.focus({ preventScroll: true });
-      return;
-    }
-  }, [boardKey, targetItemId, targetReady]);
-
-  useEffect(() => {
     if (!settled || autoPositionedRef.current === boardKey || userPositionedRef.current === boardKey) return;
 
     const firstPopulatedStage = stages.find(
@@ -64,6 +49,19 @@ export function useBoardScroll({
 
   return {
     containerRef,
+    /**
+     * The deeplinked card positions the board as it mounts, whenever that is —
+     * it hands its own node over instead of the board searching for it.
+     */
+    registerCard: (itemId: string) => (element: HTMLElement | null) => {
+      if (element === null || !targetReady || itemId !== targetItemId) return;
+      const targetKey = `${boardKey}:${itemId}`;
+      if (targetPositionedRef.current === targetKey) return;
+      targetPositionedRef.current = targetKey;
+      userPositionedRef.current = boardKey;
+      element.scrollIntoView?.({ behavior: 'auto', block: 'center', inline: 'center' });
+      element.querySelector<HTMLElement>('a[href], button:not(:disabled)')?.focus({ preventScroll: true });
+    },
     registerLane: (stage: BoardStageId) => (element: HTMLElement | null) => {
       if (element) laneRefs.current.set(stage, element);
       else laneRefs.current.delete(stage);

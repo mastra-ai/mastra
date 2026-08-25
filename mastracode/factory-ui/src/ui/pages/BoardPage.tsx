@@ -356,6 +356,7 @@ function BoardContent({
                       <WorkItemCard
                         key={`${item.id}:${stage.id}`}
                         item={item}
+                        cardRef={scroll.registerCard(item.id)}
                         highlighted={targetItemId === item.id}
                         columnStage={stage.id}
                         relatedItems={relatedItemsFor(item)}
