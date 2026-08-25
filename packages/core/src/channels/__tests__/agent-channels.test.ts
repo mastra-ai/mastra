@@ -303,6 +303,77 @@ describe('AgentChannels', () => {
       expect(agentChannels.sdk).toBeNull();
     });
 
+    it('registers SDK handlers once per instance when initialized repeatedly', async () => {
+      const chatMod = await getChatModule();
+      const registrationMethods = [
+        'onDirectMessage',
+        'onNewMention',
+        'onSubscribedMessage',
+        'onSlashCommand',
+        'onAction',
+      ] as const;
+      const registeredHandlers = new Map<string, Array<(...args: any[]) => unknown>>(
+        registrationMethods.map(method => [method, []]),
+      );
+      const registrationSpies = registrationMethods.map(method =>
+        vi.spyOn(chatMod.Chat.prototype as any, method).mockImplementation((handler: (...args: any[]) => unknown) => {
+          registeredHandlers.get(method)!.push(handler);
+        }),
+      );
+      const db = new InMemoryDB();
+      const memoryStore = new InMemoryMemory({ db });
+      const mockMastra = {
+        getStorage: () => ({ getStore: () => memoryStore }),
+        getServer: () => null,
+      } as any;
+
+      try {
+        await agentChannels.initialize(mockMastra);
+        await agentChannels.initialize(mockMastra);
+
+        for (const method of registrationMethods) {
+          expect(registeredHandlers.get(method), method).toHaveLength(1);
+        }
+
+        const chatThread = {
+          id: 'channel-1:thread-1',
+          channelId: 'channel-1',
+          isDM: true,
+          adapter: agentChannels.adapters.discord,
+          isSubscribed: vi.fn().mockResolvedValue(true),
+          subscribe: vi.fn().mockResolvedValue(undefined),
+          mentionUser: vi.fn((userId: string) => `<@${userId}>`),
+          messages: (async function* () {})(),
+        } as any;
+        const message = {
+          id: 'message-1',
+          text: 'hello',
+          author: { userId: 'user-1', userName: 'tyler', fullName: 'Tyler Barnes' },
+          attachments: [],
+        } as any;
+
+        await registeredHandlers.get('onDirectMessage')![0]!(chatThread, message);
+        expect(mockAgent.sendMessage).toHaveBeenCalledTimes(1);
+
+        const secondAgent = createMockAgent('second-agent');
+        const secondChannels = new AgentChannels({ adapters: { discord: createMockAdapter('discord') } });
+        secondChannels.__setAgent(secondAgent);
+        await secondChannels.initialize(mockMastra);
+
+        for (const method of registrationMethods) {
+          expect(registeredHandlers.get(method), method).toHaveLength(2);
+        }
+        await registeredHandlers.get('onDirectMessage')![1]!(
+          { ...chatThread, adapter: secondChannels.adapters.discord },
+          message,
+        );
+        expect(secondAgent.sendMessage).toHaveBeenCalledTimes(1);
+        expect(mockAgent.sendMessage).toHaveBeenCalledTimes(1);
+      } finally {
+        for (const spy of registrationSpies) spy.mockRestore();
+      }
+    });
+
     it('returns Chat instance after initialization', async () => {
       const db = new InMemoryDB();
       const memoryStore = new InMemoryMemory({ db });
