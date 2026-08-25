@@ -67,6 +67,22 @@ if (!globalThis.ResizeObserver) {
   };
 }
 
+// jsdom has no IntersectionObserver; nothing intersects, so columns stay on their first page.
+if (!globalThis.IntersectionObserver) {
+  globalThis.IntersectionObserver = class IntersectionObserver {
+    readonly root = null;
+    readonly rootMargin = '';
+    readonly thresholds: readonly number[] = [];
+    constructor(_callback: IntersectionObserverCallback) {}
+    disconnect() {}
+    observe(_target: Element) {}
+    unobserve(_target: Element) {}
+    takeRecords(): IntersectionObserverEntry[] {
+      return [];
+    }
+  };
+}
+
 if (!Element.prototype.scrollTo) {
   Element.prototype.scrollTo = () => {};
 }

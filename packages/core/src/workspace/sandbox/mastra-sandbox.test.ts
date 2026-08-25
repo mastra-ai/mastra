@@ -478,6 +478,119 @@ describe('MastraSandbox Base Class', () => {
     });
   });
 
+  describe('setOnStart', () => {
+    it('attaches a hook after construction, so hosts need not thread one through the constructor', async () => {
+      const calls: string[] = [];
+      const sandbox = new MountableSandbox();
+
+      sandbox.setOnStart(() => () => {
+        calls.push('attached');
+      });
+      await sandbox._start();
+
+      expect(calls).toEqual(['attached']);
+    });
+
+    it('hands the updater the constructor hook so an attach composes instead of clobbering', async () => {
+      const calls: string[] = [];
+      const sandbox = new MountableSandbox({
+        onStart: () => {
+          calls.push('constructor');
+        },
+      });
+
+      // Caller controls the order: ours first, so the hook that was already
+      // there observes whatever setup we performed.
+      sandbox.setOnStart(previous => async args => {
+        calls.push('attached');
+        await previous?.(args);
+      });
+      await sandbox._start();
+
+      expect(calls).toEqual(['attached', 'constructor']);
+    });
+
+    it('chains across repeated calls without a hook registry', async () => {
+      const calls: string[] = [];
+      const sandbox = new MountableSandbox({
+        onStart: () => {
+          calls.push('constructor');
+        },
+      });
+
+      sandbox.setOnStart(previous => async args => {
+        await previous?.(args);
+        calls.push('first');
+      });
+      sandbox.setOnStart(previous => async args => {
+        await previous?.(args);
+        calls.push('second');
+      });
+      await sandbox._start();
+
+      expect(calls).toEqual(['constructor', 'first', 'second']);
+    });
+
+    it('replaces the existing hook when the updater ignores it', async () => {
+      const calls: string[] = [];
+      const sandbox = new MountableSandbox({
+        onStart: () => {
+          calls.push('constructor');
+        },
+      });
+
+      sandbox.setOnStart(() => () => {
+        calls.push('replacement');
+      });
+      await sandbox._start();
+
+      expect(calls).toEqual(['replacement']);
+    });
+
+    it('passes the hook args through the composed chain', async () => {
+      let receivedArg: unknown;
+      const sandbox = new MountableSandbox({
+        onStart: arg => {
+          receivedArg = arg;
+        },
+      });
+
+      sandbox.setOnStart(previous => async args => {
+        await previous?.(args);
+      });
+      await sandbox._start();
+
+      expect(receivedArg).toEqual({ sandbox });
+    });
+
+    it('keeps hook failures fatal when the hook arrived through setOnStart', async () => {
+      const sandbox = new MountableSandbox();
+
+      sandbox.setOnStart(() => () => {
+        throw new Error('attached boom');
+      });
+
+      await expect(sandbox._start()).rejects.toThrow(/onStart hook failed: attached boom/);
+      expect(sandbox.status).toBe('error');
+    });
+
+    it('applies to the next start, not the one already running', async () => {
+      const calls: string[] = [];
+      const sandbox = new MountableSandbox();
+
+      await sandbox._start();
+      sandbox.setOnStart(() => () => {
+        calls.push('attached');
+      });
+      expect(calls).toEqual([]);
+
+      await sandbox._stop();
+      await sandbox._start();
+
+      expect(calls).toEqual(['attached']);
+    });
+  });
+
   describe('Built-in executeCommand', () => {
     it('retains full command output by default', async () => {
       const output = 'x'.repeat(1024 * 1024 + 5);
@@ -960,5 +1073,28 @@ describe('MastraSandbox acquisition primitives', () => {
     await expect(sandbox.start()).resolves.toEqual({ outcome: 'connected' });
     expect(onStart).toHaveBeenLastCalledWith(expect.objectContaining({ outcome: 'connected' }));
     expect(sandbox.status).toBe('running');
+  });
+
+  it('rejects a provider that finds handles it never adopts', () => {
+    // Without connect(), a found handle would report outcome 'connected' while
+    // the sandbox runs against nothing. Fail at construction instead.
+    class UnadoptedHandleSandbox extends MastraSandbox<string> {
+      readonly id = 'unadopted';
+      readonly name = 'UnadoptedHandleSandbox';
+      readonly provider = 'test';
+      status: ProviderStatus = 'pending';
+
+      constructor() {
+        super({ name: 'UnadoptedHandleSandbox' });
+      }
+
+      protected override async find(): Promise<string | undefined> {
+        return 'vm-handle';
+      }
+
+      protected override async create(): Promise<void> {}
+    }
+
+    expect(() => new UnadoptedHandleSandbox()).toThrow(/find\(\) requires connect\(\)/);
   });
 });

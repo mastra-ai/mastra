@@ -31,6 +31,7 @@ import type { SandboxLifecycle } from '../lifecycle';
 
 export type { SandboxStartOutcome, SandboxStartResult } from '../lifecycle';
 
+import type { SandboxStartHook } from './mastra-sandbox';
 import type { MountManager } from './mount-manager';
 import type { SandboxProcessManager } from './process-manager';
 import type { CommandResult, ExecuteCommandOptions, SandboxInfo } from './types';
@@ -235,6 +236,25 @@ export interface WorkspaceSandbox extends SandboxLifecycle<SandboxInfo> {
    * ```
    */
   setEnv?(update: (env: Record<string, string | undefined>) => Record<string, string | undefined>): void;
+
+  /**
+   * Attach or replace the sandbox's start hook after construction.
+   *
+   * The updater receives the currently installed hook and returns the one to
+   * install, so callers compose rather than clobber. The hook runs inside every
+   * start, and a thrown error fails that start. Only starts beginning after the
+   * call see the new hook.
+   * Optional - available on sandboxes that support runtime hook updates.
+   *
+   * @example
+   * ```typescript
+   * sandbox.setOnStart(prev => async args => {
+   *   await runSetup(args);
+   *   await prev?.(args);
+   * });
+   * ```
+   */
+  setOnStart?(update: (previous: SandboxStartHook | undefined) => SandboxStartHook): void;
 
   // ---------------------------------------------------------------------------
   // Networking (Optional)

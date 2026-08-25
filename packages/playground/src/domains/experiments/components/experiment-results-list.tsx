@@ -1,5 +1,5 @@
 import type { ClientScoreRowData, DatasetExperimentResult } from '@mastra/client-js';
-import { DataList, DataListSkeleton } from '@mastra/playground-ui/components/DataList';
+import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { cn } from '@mastra/playground-ui/utils/cn';
 
@@ -39,12 +39,14 @@ export function ExperimentResultsList({
   const gridColumns = [hasSelection ? 'auto' : '', ...columns.map(c => c.size)].filter(Boolean).join(' ');
   const hasInputColumn = columns.some(col => col.name === 'input');
 
+  const { containerRef, getRowProps } = useDataListKeyboard({ count: results.length });
+
   if (isLoading) {
     return <DataListSkeleton columns={gridColumns} />;
   }
 
   return (
-    <DataList columns={gridColumns} className="min-w-0">
+    <DataList columns={gridColumns} className="min-w-0" scrollRef={containerRef}>
       <DataList.Top hasLeadingCell={hasSelection}>
         {hasSelection && <DataList.TopCell>&nbsp;</DataList.TopCell>}
         {hasSelection ? (
@@ -62,7 +64,7 @@ export function ExperimentResultsList({
         <DataList.NoMatch message="No results yet" />
       ) : (
         <>
-          {results.map(result => {
+          {results.map((result, index) => {
             const hasError = Boolean(result.error);
             const isFeatured = result.id === featuredResultId;
 
@@ -100,7 +102,13 @@ export function ExperimentResultsList({
 
             if (!hasSelection) {
               return (
-                <DataList.RowButton key={result.id} featured={isFeatured} onClick={() => onResultClick(result.id)}>
+                <DataList.RowButton
+                  key={result.id}
+                  featured={isFeatured}
+                  data-selected={isFeatured || undefined}
+                  onClick={() => onResultClick(result.id)}
+                  {...getRowProps(index)}
+                >
                   {rowCells}
                 </DataList.RowButton>
               );
@@ -117,7 +125,9 @@ export function ExperimentResultsList({
                   flushLeft
                   colStart={2}
                   featured={isFeatured}
+                  data-selected={isFeatured || undefined}
                   onClick={() => onResultClick(result.id)}
+                  {...getRowProps(index)}
                 >
                   {rowCells}
                 </DataList.RowButton>

@@ -674,6 +674,10 @@ export class RailwaySandbox extends MastraSandbox {
         throw new SandboxNotReadyError(this.id);
       }
 
+      // TODO: this reconstructs "am I inside the current start?" from base
+      // internals because status flips to 'running' before the onStart hook.
+      // If the base ever gates commands on start re-entrancy directly, delete
+      // this branch and let it decide.
       if (this._startPromise) {
         if (this.status === 'running') {
           // status flips to 'running' before the base class runs the

@@ -365,16 +365,9 @@ export class DaytonaSandbox extends MastraSandbox {
   // ---------------------------------------------------------------------------
 
   /**
-   * Start the Daytona sandbox.
-   * Reconnects to an existing sandbox with the same logical ID if one exists,
-   * otherwise creates a new sandbox instance.
-   *
-   * Reports `outcome: 'created'` only when a brand-new sandbox was created;
-   * reconnecting to an existing sandbox reports `outcome: 'connected'`.
-   */
-  /**
    * Acquisition primitives (base-orchestrated start): the base derives
-   * `created` structurally from whether an existing sandbox was found.
+   * `created` structurally from whether an existing sandbox was found, so
+   * reconnecting to one with the same logical ID reports `connected`.
    * Lookup errors other than not-found propagate deliberately — creating a
    * duplicate sandbox on a transient/auth error would be worse than failing.
    */
@@ -416,8 +409,8 @@ export class DaytonaSandbox extends MastraSandbox {
   }
 
   protected override async create(): Promise<void> {
-    // Create Daytona client if not exists (find() normally runs first, but
-    // keep this branch self-sufficient).
+    // find() always runs first through the base ladder and constructs the
+    // client, so reaching here without one means create() was called directly.
     if (!this._daytona) {
       this._daytona = new Daytona(this.connectionOpts);
     }
@@ -608,10 +601,9 @@ export class DaytonaSandbox extends MastraSandbox {
   // Command Execution
   // ---------------------------------------------------------------------------
 
-  // executeCommand is auto-created by the MastraSandbox base class from the
-  // process manager: pm.spawn already lazy-starts via ensureRunning(), and the
-  // base default releases the process handle when the command settles (the
-  // previous override here leaked handles by never calling pm.release).
+  // No executeCommand override: the base default (built from the process
+  // manager) releases the handle when the command settles. The override that
+  // used to live here never called pm.release, so it leaked handles.
 
   /**
    * Bulk-write files into the sandbox filesystem via the SDK's native upload.

@@ -211,6 +211,88 @@ describe('concurrent resume', () => {
     expect(harness.getDownstreamExecutions()).toBe(1);
   });
 
+  function fakeLogger() {
+    return {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      trackException: vi.fn(),
+    } as any;
+  }
+
+  function createUnclaimableWorkflow(options: { allowUnclaimedResumes?: boolean }) {
+    const approvalStep = createStep({
+      id: 'approval',
+      inputSchema: z.object({ item: z.string() }),
+      outputSchema: z.object({ approved: z.boolean() }),
+      suspendSchema: z.object({ reason: z.string() }),
+      resumeSchema: z.object({ approved: z.boolean() }),
+      execute: async ({ inputData, resumeData, suspend }) => {
+        if (!resumeData) {
+          await suspend({ reason: `Needs approval: ${inputData.item}` });
+          return { approved: false };
+        }
+        return { approved: resumeData.approved };
+      },
+    });
+
+    const workflow = createWorkflow({
+      id: 'unclaimable-resume-wf',
+      inputSchema: z.object({ item: z.string() }),
+      outputSchema: z.object({ approved: z.boolean() }),
+      options: {
+        validateInputs: false,
+        // Same persistence shape as the internal agent loop: never persist
+        // `running`, so the resume claim cannot be written.
+        shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus !== 'running',
+        ...options,
+      },
+    })
+      .then(approvalStep)
+      .commit();
+    return { workflow };
+  }
+
+  it('warns when shouldPersistSnapshot excludes "running" and the resume cannot be claimed', async () => {
+    const harness = createUnclaimableWorkflow({});
+    const logger = fakeLogger();
+    new Mastra({
+      storage: new MockStore(),
+      workflows: { 'unclaimable-resume-wf': harness.workflow },
+      logger,
+    });
+
+    const run = await harness.workflow.createRun();
+    const started = await run.start({ inputData: { item: 'widget' } });
+    expect(started.status).toBe('suspended');
+
+    const result = await run.resume({ step: 'approval', resumeData: { approved: true } });
+    expect(result.status).toBe('success');
+
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('cannot be de-duplicated'));
+  });
+
+  it('does not warn when allowUnclaimedResumes acknowledges the unclaimable resume', async () => {
+    const harness = createUnclaimableWorkflow({ allowUnclaimedResumes: true });
+    const logger = fakeLogger();
+    new Mastra({
+      storage: new MockStore(),
+      workflows: { 'unclaimable-resume-wf': harness.workflow },
+      logger,
+    });
+
+    const run = await harness.workflow.createRun();
+    const started = await run.start({ inputData: { item: 'widget' } });
+    expect(started.status).toBe('suspended');
+
+    const result = await run.resume({ step: 'approval', resumeData: { approved: true } });
+    expect(result.status).toBe('success');
+
+    const warnings = logger.warn.mock.calls.map((c: any[]) => String(c[0]));
+    expect(warnings.filter((m: string) => m.includes('cannot be de-duplicated'))).toHaveLength(0);
+  });
+
   it('still resumes normally when there is no contention', async () => {
     const harness = createApprovalWorkflow();
     const { run } = await suspendRun(harness.workflow);

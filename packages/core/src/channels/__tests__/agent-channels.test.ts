@@ -355,6 +355,70 @@ describe('AgentChannels', () => {
     });
   });
 
+  describe('repeated initialization', () => {
+    it('does not accumulate duplicate handler registrations when initialize is called again', async () => {
+      const chatMod = await getChatModule();
+      const registrationMethods = [
+        'onDirectMessage',
+        'onNewMention',
+        'onSubscribedMessage',
+        'onSlashCommand',
+        'onAction',
+      ] as const;
+      let slashHandlers: ((event: any) => Promise<void>)[] = [];
+      const spies = registrationMethods.map(method => {
+        const spy = vi.spyOn(chatMod.Chat.prototype as any, method);
+        if (method === 'onSlashCommand') {
+          spy.mockImplementation((handler: any) => {
+            slashHandlers.push(handler);
+          });
+        }
+        return spy;
+      });
+      const db = new InMemoryDB();
+      const memoryStore = new InMemoryMemory({ db });
+      const mockMastra = {
+        getStorage: () => ({ getStore: () => memoryStore }),
+        getServer: () => null,
+      } as any;
+
+      try {
+        await agentChannels.initialize(mockMastra);
+        const firstSdk = agentChannels.sdk;
+        expect(firstSdk).not.toBeNull();
+
+        // Second, sequential initialization after the first has fully resolved
+        await agentChannels.initialize(mockMastra);
+
+        // Same Chat SDK instance — a second instance would carry its own handlers
+        expect(agentChannels.sdk).toBe(firstSdk);
+
+        // Each inbound handler is registered exactly once
+        for (const spy of spies) {
+          expect(spy).toHaveBeenCalledTimes(1);
+        }
+
+        // One emitted event reaches exactly one callback and produces one agent send
+        expect(slashHandlers).toHaveLength(1);
+        await slashHandlers[0]!({
+          adapter: agentChannels.adapters.discord,
+          channel: { id: 'channel-1', isDM: false, channelVisibility: 'public' },
+          command: '/weather',
+          text: 'London',
+          triggerId: 'interaction-1',
+          user: { userId: 'user-1', userName: 'tyler', fullName: 'Tyler Barnes', isBot: false, isMe: false },
+          raw: { id: 'interaction-1' },
+          openModal: vi.fn(),
+        });
+        expect(mockAgent.sendMessage).toHaveBeenCalledTimes(1);
+      } finally {
+        for (const spy of spies) {
+          spy.mockRestore();
+        }
+      }
+    });
+  });
+
   describe('slash command handling', () => {
     it('registers a catch-all slash command handler and routes commands to the agent', async () => {
       const chatMod = await getChatModule();

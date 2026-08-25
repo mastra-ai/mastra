@@ -3,6 +3,7 @@ import { Chip } from '@mastra/playground-ui/components/Chip';
 import {
   DataList as EntityList,
   DataListSkeleton as EntityListSkeleton,
+  useDataListKeyboard,
 } from '@mastra/playground-ui/components/DataList';
 import { StatusBadge } from '@mastra/playground-ui/components/StatusBadge';
 import { getShortId } from '@mastra/playground-ui/components/Text';
@@ -77,12 +78,14 @@ export function ExperimentsList({
     });
   }, [sortedExperiments, search, datasetMap, statusFilter, datasetFilter]);
 
+  const { containerRef, getRowProps } = useDataListKeyboard({ count: filteredData.length });
+
   if (isLoading) {
     return <EntityListSkeleton columns={COLUMNS} />;
   }
 
   return (
-    <EntityList columns={COLUMNS} variant="striped">
+    <EntityList columns={COLUMNS} variant="striped" scrollRef={containerRef}>
       <EntityList.Top>
         <EntityList.TopCell>Experiment</EntityList.TopCell>
         <EntityList.TopCell>Dataset</EntityList.TopCell>
@@ -95,7 +98,7 @@ export function ExperimentsList({
         <EntityList.TopCell>Date</EntityList.TopCell>
       </EntityList.Top>
 
-      {filteredData.map(exp => {
+      {filteredData.map((exp, index) => {
         const dsName = exp.datasetId
           ? (datasetMap.get(exp.datasetId) ?? getShortId(exp.datasetId) ?? exp.datasetId)
           : '—';
@@ -106,7 +109,12 @@ export function ExperimentsList({
         const successPct = total > 0 ? Math.round((succeeded / total) * 100) : 0;
 
         return (
-          <EntityList.RowLink key={exp.id} to={paths.experimentLink(exp.id)} LinkComponent={Link}>
+          <EntityList.RowLink
+            key={exp.id}
+            to={paths.experimentLink(exp.id)}
+            LinkComponent={Link}
+            {...getRowProps(index)}
+          >
             <EntityList.Cell>
               <ExperimentNameLabel experiment={exp} />
             </EntityList.Cell>

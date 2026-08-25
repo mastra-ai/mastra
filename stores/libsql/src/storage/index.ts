@@ -155,6 +155,16 @@ export type LibSQLConfig =
   | (LibSQLBaseConfig & {
       url: string;
       authToken?: string;
+      /**
+       * URL of the remote primary database to sync from, enabling an embedded
+       * replica (e.g. 'libsql://your-db.turso.io'). Requires a local `file:` url.
+       */
+      syncUrl?: string;
+      /**
+       * Interval in seconds for automatic sync with the remote primary.
+       * Only applies when `syncUrl` is set.
+       */
+      syncInterval?: number;
     })
   | (LibSQLBaseConfig & {
       client: Client;
@@ -209,11 +219,15 @@ export class LibSQLStore extends MastraCompositeStore {
         this.shouldCacheInit = false;
       }
 
-      this.isLocalDb = config.url.startsWith('file:') || config.url.includes(':memory:');
+      // Embedded replicas (`file:` url + `syncUrl`) are managed by the libsql
+      // sync engine, so local pragma tuning and busy_timeout don't apply.
+      this.isLocalDb = (config.url.startsWith('file:') || config.url.includes(':memory:')) && !config.syncUrl;
 
       this.client = createClient({
         url: config.url,
         ...(config.authToken ? { authToken: config.authToken } : {}),
+        ...(config.syncUrl ? { syncUrl: config.syncUrl } : {}),
+        ...(config.syncInterval !== undefined ? { syncInterval: config.syncInterval } : {}),
         // `busy_timeout` only applies to local sqlite3 connections; remote
         // contention is handled server-side. See libsql-client-ts#288/#345.
         ...(this.isLocalDb ? { timeout: this.connectionTimeoutMs } : {}),
