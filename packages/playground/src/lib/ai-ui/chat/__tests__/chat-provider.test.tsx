@@ -1,3 +1,4 @@
+import type { RouteResponse } from '@mastra/client-js';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { useMemoryThreadMessages } from '@mastra/playground-ui/domains/memory/hooks/use-memory-thread-messages';
 import { useObservationalMemory } from '@mastra/playground-ui/domains/memory/hooks/use-observational-memory';
@@ -110,8 +111,18 @@ const omObservationWithExtractionResponse = () =>
     headers: { 'content-type': 'text/event-stream' },
   });
 
-const workingMemoryResponse = () =>
-  HttpResponse.json({ workingMemory: null, source: 'thread', workingMemoryTemplate: null, threadExists: false });
+type WorkingMemoryResponse = RouteResponse<'GET /memory/threads/:threadId/working-memory'>;
+
+const workingMemoryResponse = (
+  workingMemory: unknown = null,
+  options: Partial<WorkingMemoryResponse> = {},
+): WorkingMemoryResponse => ({
+  workingMemory,
+  source: 'thread',
+  workingMemoryTemplate: null,
+  threadExists: false,
+  ...options,
+});
 
 // Background queries fired by the real provider stack (memory config, working
 // memory, thread-signal subscribe). They're not under test here but must be
@@ -119,7 +130,7 @@ const workingMemoryResponse = () =>
 const baseHandlers = (_captured: Captured[]) => [
   http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })),
   http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json({ config: {} })),
-  http.get(`${BASE_URL}/api/memory/threads/:threadId/working-memory`, () => workingMemoryResponse()),
+  http.get(`${BASE_URL}/api/memory/threads/:threadId/working-memory`, () => HttpResponse.json(workingMemoryResponse())),
   http.post(
     `${BASE_URL}/api/agents/:agentId/threads/subscribe`,
     () =>
@@ -748,6 +759,80 @@ describe('ChatProvider', () => {
     expect(messageRequests.every(url => url.includes('/threads/thread-1/messages'))).toBe(true);
   });
 
+  it('refetches working memory on an OM observation-end event so the provider shows the persisted value without a remount', async () => {
+    // OM can persist working memory server-side with no tool call in the
+    // stream. The endpoint flips once the observation-end event has been
+    // emitted, before buffer-status resolves.
+    let observationEndEmitted = false;
+    let bufferingComplete = false;
+    const wmRequestPhases: string[] = [];
+
+    const WorkingMemoryProbe = () => {
+      const { workingMemoryData } = useWorkingMemory();
+      return <div data-testid="wm-data">{workingMemoryData ?? 'no-working-memory'}</div>;
+    };
+
+    server.use(...baseHandlers([]));
+    server.use(
+      http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json({ config: { observationalMemory: true } })),
+      http.post(`${BASE_URL}/api/memory/observational-memory/buffer-status`, () => {
+        bufferingComplete = true;
+        return HttpResponse.json({ record: null });
+      }),
+      http.get(`${BASE_URL}/api/memory/threads/thread-1/working-memory`, () => {
+        wmRequestPhases.push(bufferingComplete ? 'buffered' : observationEndEmitted ? 'observed' : 'mount');
+        return HttpResponse.json(
+          workingMemoryResponse(observationEndEmitted ? 'responseFormat: bullet list' : null, {
+            source: 'resource',
+            threadExists: true,
+          }),
+        );
+      }),
+      http.post(
+        `${BASE_URL}/api/agents/agent-1/stream`,
+        () =>
+          new HttpResponse(
+            new ReadableStream<Uint8Array>({
+              async start(controller) {
+                const encoder = new TextEncoder();
+                await new Promise(resolve => setTimeout(resolve, 120));
+                observationEndEmitted = true;
+                controller.enqueue(
+                  encoder.encode(
+                    `data: ${JSON.stringify({ type: 'data-om-observation-end', data: { operationType: 'observation' } })}\n\n`,
+                  ),
+                );
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'finish', payload: {} })}\n\n`));
+                controller.close();
+              },
+            }),
+            { status: 200, headers: { 'content-type': 'text/event-stream' } },
+          ),
+      ),
+    );
+
+    await act(async () => {
+      render(
+        <Wrapper>
+          <ChatProvider agentId="agent-1" threadId="thread-1" initialMessages={[]}>
+            <WorkingMemoryProbe />
+            <SendOnMount text="trigger WM extraction" />
+          </ChatProvider>
+        </Wrapper>,
+      );
+    });
+
+    await screen.findByTestId('wm-data');
+    expect(screen.getByTestId('wm-data').textContent).not.toBe('responseFormat: bullet list');
+
+    await waitFor(() => expect(screen.getByTestId('wm-data').textContent).toBe('responseFormat: bullet list'), {
+      timeout: 2000,
+    });
+    // A fetch in the observed phase can only come from the observation-end
+    // refresh, so it must have fired before buffering completed.
+    expect(wmRequestPhases).toContain('observed');
+  });
+
   it('refetches working memory after awaited OM buffering completes so the provider shows the persisted value without a remount', async () => {
     // OM persists working memory asynchronously, after the chat stream ends.
     // The endpoint serves the stale value until buffer-status resolves, then
@@ -768,14 +853,10 @@ describe('ChatProvider', () => {
       }),
       http.get(`${BASE_URL}/api/memory/threads/thread-1/working-memory`, () =>
         HttpResponse.json(
-          bufferingComplete
-            ? {
-                workingMemory: 'responseFormat: bullet list',
-                source: 'resource',
-                workingMemoryTemplate: null,
-                threadExists: true,
-              }
-            : { workingMemory: null, source: 'resource', workingMemoryTemplate: null, threadExists: true },
+          workingMemoryResponse(bufferingComplete ? 'responseFormat: bullet list' : null, {
+            source: 'resource',
+            threadExists: true,
+          }),
         ),
       ),
       http.post(`${BASE_URL}/api/agents/agent-1/stream`, () => omObservationEndResponse()),
