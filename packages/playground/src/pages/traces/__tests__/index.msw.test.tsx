@@ -20,6 +20,8 @@ import {
   traceLightSpans,
   traceList,
   traceListWithTwoTraces,
+  traceSpanScores,
+  emptyTraceSpanScores,
   traceUsageBreakdown,
 } from './fixtures/traces';
 import { TestLinkProvider } from '@/test/link-provider';
@@ -55,6 +57,9 @@ const setTracePageHandlers = (systemPackages: GetSystemPackagesResponse) => {
     http.get(`${TEST_BASE_URL}/api/observability/discovery/entity-names`, () => HttpResponse.json(emptyEntityNames)),
     http.get(`${TEST_BASE_URL}/api/observability/discovery/service-names`, () => HttpResponse.json(emptyServiceNames)),
     http.get(`${TEST_BASE_URL}/api/observability/discovery/environments`, () => HttpResponse.json(emptyEnvironments)),
+    http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId/:spanId/scores`, () =>
+      HttpResponse.json(emptyTraceSpanScores),
+    ),
     http.post(`${TEST_BASE_URL}/api/observability/metrics/breakdown`, () => {
       onBreakdownRequest();
       return HttpResponse.json(traceUsageBreakdown);
@@ -238,8 +243,53 @@ describe('Traces side panel header actions', () => {
     const { queryClient } = renderPage('/traces?traceId=trace-a');
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-    expect(screen.getByRole('button', { name: 'Score trace' })).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Evaluate trace' })).not.toBeNull();
     expect(screen.getByRole('button', { name: 'Save as Dataset Item' })).not.toBeNull();
     expect(screen.getByRole('button', { name: /collapse panel/i })).not.toBeNull();
+  });
+});
+
+describe('Traces side panel Scores tab', () => {
+  const openScoresTab = async (scoresResponse = emptyTraceSpanScores) => {
+    setTracePageHandlers(metricsCapableSystemPackages);
+    server.use(
+      http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a/light`, () => HttpResponse.json(traceLightSpans)),
+      http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(emptyFeedback)),
+      http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId/:spanId/scores`, () =>
+        HttpResponse.json(scoresResponse),
+      ),
+    );
+
+    const { queryClient } = renderPage('/traces?traceId=trace-a');
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+    fireEvent.click(screen.getByRole('tab', { name: /evaluations/i }));
+    return queryClient;
+  };
+
+  describe('when the trace has scores', () => {
+    it('renders the score chart legend above the scores table', async () => {
+      await openScoresTab(traceSpanScores);
+
+      // Chart legend: one entry per scorer with its average (scorer names also
+      // appear in the table rows, hence the *AllByText queries).
+      expect((await screen.findAllByText('Relevance')).length).toBeGreaterThan(0);
+      expect(screen.getAllByText('Toxicity').length).toBeGreaterThan(0);
+      expect(screen.getByText('0.60')).not.toBeNull();
+      expect(screen.getByText('1.00')).not.toBeNull();
+
+      // Table rows still render from the same data.
+      expect(screen.getByText('score-1')).not.toBeNull();
+      expect(screen.getByText('score-3')).not.toBeNull();
+    });
+  });
+
+  describe('when the trace has no scores', () => {
+    it('shows the table empty state without a chart', async () => {
+      await openScoresTab();
+
+      expect(await screen.findByText(/no scores/i)).not.toBeNull();
+      expect(screen.queryByText('0.60')).toBeNull();
+    });
   });
 });

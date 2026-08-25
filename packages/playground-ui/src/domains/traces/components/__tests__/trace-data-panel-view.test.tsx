@@ -67,7 +67,7 @@ describe('TraceDataPanelView — header actions', () => {
 
     // The body is hidden while collapsed, so these can only come from the header.
     expect(screen.queryByText('agent run')).toBeNull();
-    expect(screen.getByRole('button', { name: /score trace/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /evaluate trace/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: /save as dataset item/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: /add tool mocks to item/i })).toBeTruthy();
   });
@@ -337,13 +337,13 @@ describe('TraceDataPanelView — the actions row', () => {
     render(<TraceDataPanelView {...baseProps} onEvaluateTrace={vi.fn()} />);
 
     expect(screen.queryByText(/available in Mastra Studio/)).toBeNull();
-    expect(screen.getByRole('button', { name: /score trace/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /evaluate trace/i })).toBeTruthy();
   });
 
   it('never shows the actions row on the trace page', () => {
     render(<TraceDataPanelView {...baseProps} placement="trace-page" onEvaluateTrace={vi.fn()} />);
 
-    expect(screen.queryByRole('button', { name: /score trace/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /evaluate trace/i })).toBeNull();
     expect(screen.queryByText(/available in Mastra Studio/)).toBeNull();
   });
 
@@ -360,7 +360,7 @@ describe('TraceDataPanelView — the actions row', () => {
     const onEvaluateTrace = vi.fn();
     render(<TraceDataPanelView {...baseProps} onEvaluateTrace={onEvaluateTrace} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /score trace/i }));
+    fireEvent.click(screen.getByRole('button', { name: /evaluate trace/i }));
 
     expect(onEvaluateTrace).toHaveBeenCalledTimes(1);
   });
@@ -662,14 +662,14 @@ describe('TraceDataPanelView — trace-level tabs', () => {
     render(<TraceDataPanelView {...baseProps} />);
 
     expect(screen.queryByRole('tab', { name: /details/i })).toBeNull();
-    expect(screen.queryByRole('tab', { name: /scores/i })).toBeNull();
+    expect(screen.queryByRole('tab', { name: /evaluations/i })).toBeNull();
   });
 
   it('renders Details and Scores tabs when a scores slot is provided', () => {
     render(<TraceDataPanelView {...baseProps} scoresTabSlot={() => <div>trace scores here</div>} />);
 
     expect(screen.getByRole('tab', { name: /details/i })).toBeTruthy();
-    expect(screen.getByRole('tab', { name: /scores/i })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: /evaluations/i })).toBeTruthy();
     // Details is the default tab.
     expect(screen.getByText('agent run')).toBeTruthy();
     expect(screen.queryByText('trace scores here')).toBeNull();
@@ -700,7 +700,7 @@ describe('TraceDataPanelView — trace-level tabs', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('tab', { name: /scores/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /evaluations/i }));
 
     expect(onTabChange).toHaveBeenCalledWith('scores');
   });
@@ -708,7 +708,7 @@ describe('TraceDataPanelView — trace-level tabs', () => {
   it('shows the badge count in the Scores tab label', () => {
     render(<TraceDataPanelView {...baseProps} scoresTabSlot={() => null} scoresTabBadge={3} />);
 
-    expect(screen.getByRole('tab', { name: /scores \(3\)/i })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: /evaluations \(3\)/i })).toBeTruthy();
   });
 });
 

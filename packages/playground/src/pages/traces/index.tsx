@@ -1,4 +1,5 @@
 import type { EntityType } from '@mastra/core/observability';
+import { Card, CardContent } from '@mastra/playground-ui/components/Card';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import { DateTimeRangePicker } from '@mastra/playground-ui/components/DateTimeRangePicker';
 import { Label } from '@mastra/playground-ui/components/Label';
@@ -40,6 +41,7 @@ import { useSearchParams } from 'react-router';
 import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
 import { AddTraceMocksToItemDialog } from '@/domains/observability/components/add-trace-mocks-to-item-dialog';
 import { TraceAsItemDialog } from '@/domains/observability/components/trace-as-item-dialog';
+import { TraceScoreLineChart } from '@/domains/observability/components/trace-score-line-chart';
 import { useScorers } from '@/domains/scores';
 import { useTraceSpanScores } from '@/domains/scores/hooks/use-trace-span-scores';
 import { ScoreDataPanel } from '@/domains/traces/components/score-data-panel';
@@ -515,7 +517,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
               scoresTabBadge={spanScoresData?.pagination?.total ?? undefined}
               scoresTabSlot={({ traceId: tid, rootSpanId }) =>
                 rootSpanId ? (
-                  <div className="grid gap-6">
+                  <div className="grid h-full min-h-0 grid-rows-[auto_auto_1fr] gap-6">
                     <SpanScoring
                       traceId={tid}
                       isTopLevelSpan={!anchorSpan?.parentSpanId}
@@ -530,12 +532,17 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
                       scorers={scorers}
                       isLoadingScorers={isLoadingScorers}
                     />
-                    <SpanScoresList
-                      scoresData={spanScoresData}
-                      onPageChange={setSpanScoresPage}
-                      isLoadingScoresData={isLoadingSpanScoresData}
-                      onScoreSelect={score => url.handleScoreChange(score.id)}
-                    />
+                    <TraceScoreLineChart scoresData={spanScoresData} className="min-h-0 w-full" />
+                    <Card appearance="surface" className="min-h-0 w-full overflow-hidden">
+                      <CardContent className="h-full overflow-y-auto">
+                        <SpanScoresList
+                          scoresData={spanScoresData}
+                          onPageChange={setSpanScoresPage}
+                          isLoadingScoresData={isLoadingSpanScoresData}
+                          onScoreSelect={score => url.handleScoreChange(score.id)}
+                        />
+                      </CardContent>
+                    </Card>
                   </div>
                 ) : null
               }

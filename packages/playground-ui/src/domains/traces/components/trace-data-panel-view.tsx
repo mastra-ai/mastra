@@ -206,7 +206,7 @@ export function TraceDataPanelView({
                 </Button>
               )}
               {onEvaluateTrace && (
-                <Button size="md" tooltip="Score trace" aria-label="Score trace" onClick={onEvaluateTrace}>
+                <Button size="md" tooltip="Evaluate trace" aria-label="Evaluate trace" onClick={onEvaluateTrace}>
                   <CircleGaugeIcon />
                 </Button>
               )}
@@ -298,14 +298,21 @@ export function TraceDataPanelView({
               if (!scoresTabSlot) return detailsBody;
 
               return (
-                <Tabs<TraceDataPanelTab> defaultTab="details" value={activeTab} onValueChange={onTabChange}>
+                <Tabs<TraceDataPanelTab>
+                  defaultTab="details"
+                  value={activeTab}
+                  onValueChange={onTabChange}
+                  className={activeTab === 'scores' ? 'grid h-full min-h-0 grid-rows-[auto_1fr]' : undefined}
+                >
                   <TabList variant="pill-ghost">
                     <Tab value="details">Details</Tab>
-                    <Tab value="scores">Scores {scoresTabBadge != null && <>({scoresTabBadge})</>}</Tab>
+                    <Tab value="scores">Evaluations {scoresTabBadge != null && <>({scoresTabBadge})</>}</Tab>
                   </TabList>
 
                   <TabContent value="details">{detailsBody}</TabContent>
-                  <TabContent value="scores">{scoresTabSlot({ traceId, rootSpanId: rootSpan?.spanId })}</TabContent>
+                  <TabContent value="scores" className="h-full min-h-0">
+                    {scoresTabSlot({ traceId, rootSpanId: rootSpan?.spanId })}
+                  </TabContent>
                 </Tabs>
               );
             })()}
