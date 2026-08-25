@@ -40,7 +40,7 @@ export function TraceScoreLineChart({
         <MetricsLineChart
           data={data}
           series={series}
-          height={160}
+          height={90}
           yDomain={[0, 1]}
           xAxisInterval="preserveStartEnd"
           xAxisMinTickGap={40}
