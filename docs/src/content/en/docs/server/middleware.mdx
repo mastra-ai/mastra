@@ -103,7 +103,7 @@ export const mastra = new Mastra({
 
 Each wildcard pattern blocks both the route group itself and its nested routes. For example, `/api/logs/*` blocks `/api/logs` and `/api/logs/transports`. Other route groups remain available.
 
-These paths use the default [`server.apiPrefix`](/reference/configuration#serverapiprefix) of `/api`. If you configure a different prefix, update the middleware paths to match it. Custom API routes must live outside the configured API prefix and aren't blocked by these patterns.
+Generated servers pass `server.apiPrefix` to the Hono adapter's [`prefix` constructor option](/reference/server/hono-adapter#constructor-parameters), which prefixes built-in routes. Middleware paths are registered unchanged, so they must explicitly include the configured prefix. For example, with `apiPrefix: '/api/v2'`, use `/api/v2/memory/*`. Custom API routes must live outside the configured API prefix and aren't blocked by these patterns.
 
 This approach can't block routes declared public with `requiresAuth: false`, because Mastra skips user middleware for those routes. With a non-Hono server adapter, register equivalent middleware through the server framework instead.
 
