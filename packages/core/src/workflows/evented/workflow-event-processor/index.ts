@@ -116,30 +116,6 @@ function readForeachResult(
   return result;
 }
 
-/**
- * True when the workflow opts out of persisting snapshots for *every* status,
- * including the resumable 'suspended' one — i.e. it wants no durable trace at
- * all (the notification dispatcher, internal fire-and-forget runs).
- *
- * Such a run still gets a 'running' row written unconditionally at start, so
- * without an explicit terminal cleanup it would accumulate one dead row per
- * run forever (issue #20254). Workflows that persist *some* statuses keep
- * their existing behavior: the last persisted snapshot is left in place.
- */
-function neverPersistsSnapshots({
-  workflow,
-  stepResults,
-}: {
-  workflow?: { options?: { shouldPersistSnapshot?: (params: any) => boolean } };
-  stepResults: Record<string, StepResult<any, any, any, any>>;
-}): boolean {
-  const shouldPersistSnapshot = workflow?.options?.shouldPersistSnapshot;
-  if (!shouldPersistSnapshot) return false;
-  return (['running', 'suspended', 'pending', 'waiting'] as const).every(
-    workflowStatus => !shouldPersistSnapshot({ stepResults, workflowStatus }),
-  );
-}
-
 export class WorkflowEventProcessor extends EventProcessor {
   private stepExecutor: StepExecutor;
   private stepExecutionStrategy?: StepExecutionStrategy;
@@ -695,16 +671,15 @@ export class WorkflowEventProcessor extends EventProcessor {
           activeStepsPath: activeStepsPath,
         },
       });
-    } else if (
-      finalStatus !== 'paused' &&
-      (parentWorkflow || neverPersistsSnapshots({ workflow, stepResults: stepResults ?? {} }))
-    ) {
+    } else if (finalStatus !== 'paused') {
       // The run reached a terminal state its workflow opted not to persist
-      // (e.g. the internal `executionWorkflow` inside `agentic-loop`, or the
-      // notification dispatcher). A row may still exist from an earlier phase —
-      // 'pending' at nested-run start, 'suspended' before a resume, or the
-      // 'running' record every run writes at start — and without the terminal
-      // update it would leak as a stale, resumable-looking record. Terminal
+      // (e.g. the durable agentic loop, the internal `executionWorkflow`
+      // inside `agentic-loop`, or the notification dispatcher). A row may
+      // still exist from an earlier phase — 'pending' at nested-run start,
+      // 'suspended' before a resume, or the 'running' record every run writes
+      // at start — and without the terminal update it would leak forever as a
+      // stale record byte-identical to a genuinely orphaned run, polluting
+      // `listActiveRuns()` / `recoverActiveRuns()` (issue #22209). Terminal
       // runs can't be resumed, so drop the row entirely. Best-effort: a storage
       // failure here must not abort run completion.
       try {
@@ -983,10 +958,10 @@ export class WorkflowEventProcessor extends EventProcessor {
           activeStepsPath: activeStepsPath,
         },
       });
-    } else if (parentWorkflow || neverPersistsSnapshots({ workflow, stepResults: stepResults ?? {} })) {
+    } else {
       // Mirrors endWorkflow: a run whose workflow opted out of persisting the
       // terminal 'failed' status would otherwise leak its earlier-phase
-      // ('running'/'pending'/'suspended') snapshot row forever.
+      // ('running'/'pending'/'suspended') snapshot row forever (issue #22209).
       // Best-effort: a storage failure here must not abort run completion.
       try {
         await workflowsStore?.deleteWorkflowRunById({ runId, workflowName: workflowId });
