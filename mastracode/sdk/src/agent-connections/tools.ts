@@ -17,6 +17,7 @@ import type {
   AgentConnectResult,
   AgentConnectionDeltaOp,
   AgentConnectionListResult,
+  AgentPeerView,
   AgentSignalPriority,
   AgentSignalSendResult,
   ConnectedAgentPeer,
@@ -26,32 +27,52 @@ const prioritySchema = z.enum(['low', 'medium', 'high', 'urgent']);
 
 const peerSchema = z.object({
   id: z.string(),
+  agentId: z.string(),
+  resourceId: z.string(),
+  threadId: z.string(),
+  label: z.string().optional(),
+  title: z.string().optional(),
+  mode: z.string().optional(),
+  relationship: z.enum(['none', 'saved']),
+  presence: z.enum(['advertised', 'absent']),
+  displayStatus: z.enum(['discovered', 'connected', 'saved']),
+  canAttemptSend: z.boolean(),
+  pid: z.number().optional(),
+  connectedAt: z.number().optional(),
+  lastSeenAt: z.number().optional(),
+});
+
+const savedPeerSchema = z.object({
+  id: z.string(),
   agentId: z.string().optional(),
   resourceId: z.string(),
   threadId: z.string(),
   label: z.string().optional(),
   title: z.string().optional(),
   mode: z.string().optional(),
-  status: z.enum(['available', 'offline']),
   pid: z.number().optional(),
-  connectedAt: z.number().optional(),
+  connectedAt: z.number(),
   lastSeenAt: z.number(),
-  offlineAt: z.number().optional(),
-  connected: z.boolean().optional(),
 });
 
 const listResultSchema = z.object({
   content: z.string(),
-  available: z.array(peerSchema),
-  connected: z.array(peerSchema),
+  peers: z.array(peerSchema),
+  savedCount: z.number(),
   isError: z.boolean().optional(),
 });
 
 const connectResultSchema = z.object({
   content: z.string(),
-  connected: z.array(peerSchema),
+  connected: z.array(savedPeerSchema),
   changed: z.array(
-    z.object({ op: z.string(), id: z.string(), peer: peerSchema.optional(), status: z.string().optional() }),
+    z.object({
+      op: z.string(),
+      id: z.string(),
+      peer: peerSchema.optional(),
+      presence: z.string().optional(),
+      displayStatus: z.string().optional(),
+    }),
   ),
   isError: z.boolean().optional(),
 });
@@ -86,9 +107,9 @@ export function createAgentConnectionTools(options: AgentConnectionToolsOptions 
 
   const agentConnectionsListTool = createTool({
     id: 'agent_connections_list',
-    description: `List peer MastraCode agents that this thread can connect to.
+    description: `List cross-agent peers discovered now or saved by this thread.
 
-Returns currently available peers plus already-connected peers that may now be offline. Use agent_connect with a returned peer id to connect or disconnect.`,
+Each peer has an explicit durable relationship, current advertisement presence, display status, and send eligibility. Use agent_connect for [discovered] peers and agent_disconnect for saved peers.`,
     inputSchema: z.object({}),
     outputSchema: listResultSchema,
     execute: async (_input, context): Promise<AgentConnectionListResult> => {
@@ -99,19 +120,19 @@ Returns currently available peers plus already-connected peers that may now be o
         }
         const runtimeAgent = options.getAgent?.();
         const registryContext = { ...agentContext, runtimeAgent };
-        const available = await registry.listPeers(registryContext);
-        const connected = await registry.connectedPeers(registryContext);
+        const peers = await registry.listPeers(registryContext);
+        const savedCount = peers.filter(peer => peer.relationship === 'saved').length;
         return {
-          content: formatPeerList(available, connected),
-          available,
-          connected,
+          content: formatPeerList(peers, savedCount),
+          peers,
+          savedCount,
           isError: false,
         };
       } catch (error) {
         return {
           content: `Failed to list agent connections: ${errorMessage(error)}`,
-          available: [],
-          connected: [],
+          peers: [],
+          savedCount: 0,
           isError: true,
         };
       }
@@ -149,9 +170,9 @@ Use agent_connections_list first, then pass peer ids from that result. Connected
           }
         } else {
           for (const id of ids) {
-            const peer = await registry.findPeer(registryContext, id);
-            if (!peer) return errorConnectResult(`Unknown agent peer id: ${id}`, current, changed);
-            if (peer.status === 'offline') return errorConnectResult(`Agent peer is offline: ${id}`, current, changed);
+            const peer = await registry.findDiscoveredPeer(registryContext, id);
+            if (!peer) return errorConnectResult(`Unknown or unadvertised agent peer id: ${id}`, current, changed);
+            const connectedAt = byId.get(peer.id)?.connectedAt ?? now;
             const connectedPeer: ConnectedAgentPeer = {
               id: peer.id,
               agentId: peer.agentId,
@@ -160,14 +181,22 @@ Use agent_connections_list first, then pass peer ids from that result. Connected
               label: peer.label,
               title: peer.title,
               mode: peer.mode,
-              status: peer.status,
               pid: peer.pid,
-              connectedAt: byId.get(peer.id)?.connectedAt ?? now,
-              lastSeenAt: peer.lastSeenAt,
-              offlineAt: peer.offlineAt,
+              connectedAt,
+              lastSeenAt: peer.lastSeenAt ?? now,
             };
             byId.set(peer.id, connectedPeer);
-            changed.push({ op: 'connect', id: peer.id, peer: connectedPeer });
+            changed.push({
+              op: 'connect',
+              id: peer.id,
+              peer: {
+                ...peer,
+                relationship: 'saved',
+                displayStatus: 'connected',
+                canAttemptSend: true,
+                connectedAt,
+              },
+            });
           }
         }
 
@@ -218,12 +247,20 @@ The target must already be connected and currently available. Use expectsReply t
         if (!isMemoryBacked(agentContext.agent)) {
           return { content: 'Agent signals require a memory-backed thread.', isError: true };
         }
+        const saved = await readAgentConnections(agentContext);
+        if (!saved.some(peer => peer.id === targetId)) {
+          return { content: `Cannot send: peer is not saved: ${targetId}`, isError: true };
+        }
         const runtimeAgent = options.getAgent?.();
-        const connected = await registry.connectedPeers({ ...agentContext, runtimeAgent });
+        const connected = await registry.connectedPeers({ ...agentContext, runtimeAgent }, saved);
         const target = connected.find(peer => peer.id === targetId);
-        if (!target) return { content: `Agent peer is not connected: ${targetId}`, isError: true };
-        if (target.status === 'offline')
-          return { content: `Agent peer is offline: ${targetId}`, target, isError: true };
+        if (!target?.canAttemptSend) {
+          return {
+            content: `Cannot send: saved peer is not currently advertised. Peer: ${targetId}`,
+            ...(target ? { target } : {}),
+            isError: true,
+          };
+        }
         const agent = options.getAgent?.();
         if (!agent?.sendNotificationSignal) {
           return {
@@ -355,7 +392,7 @@ The target must already be connected and currently available. Use expectsReply t
 }
 
 function noMemoryListResult(): AgentConnectionListResult {
-  return { content: 'Agent connections require a memory-backed thread.', available: [], connected: [], isError: true };
+  return { content: 'Agent connections require a memory-backed thread.', peers: [], savedCount: 0, isError: true };
 }
 
 function noMemoryConnectResult(): AgentConnectResult {
@@ -370,17 +407,13 @@ function errorConnectResult(
   return { content, connected, changed, isError: true };
 }
 
-function formatPeerList(
-  available: Awaited<ReturnType<AgentConnectionRegistry['listPeers']>>,
-  connected: ConnectedAgentPeer[],
-): string {
-  if (available.length === 0) return 'No peer agents are available or connected.';
-  const lines = available.map(peer => {
-    const marker = peer.connected ? 'connected' : 'available';
+function formatPeerList(peers: Awaited<ReturnType<AgentConnectionRegistry['listPeers']>>, savedCount: number): string {
+  if (peers.length === 0) return 'No peer agents are discovered or saved.';
+  const lines = peers.map(peer => {
     const label = peer.label ?? peer.title ?? peer.id;
-    return `- ${peer.id} [${marker}, ${peer.status}] ${label} (${peer.resourceId}/${peer.threadId})`;
+    return `- ${peer.id} [${peer.displayStatus}] ${label} (${peer.resourceId}/${peer.threadId})`;
   });
-  return `Agent peers:\n${lines.join('\n')}\nConnected: ${connected.length}`;
+  return `Agent peers:\n${lines.join('\n')}\nSaved: ${savedCount}`;
 }
 
 function formatConnectResult(
@@ -400,7 +433,7 @@ function formatSignalResult({
   accepted,
   notification,
 }: {
-  target: ConnectedAgentPeer;
+  target: AgentPeerView;
   summary: string;
   priority: AgentSignalPriority;
   accepted?: SendAgentSignalAccepted;

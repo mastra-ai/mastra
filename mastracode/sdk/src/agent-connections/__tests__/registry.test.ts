@@ -1,6 +1,6 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it } from 'vitest';
-import { AgentConnectionRegistry, AGENT_CONNECTIONS_DISCOVERY_CONTEXT_KEY } from '../registry.js';
+import { AgentConnectionRegistry, AGENT_CONNECTIONS_DISCOVERY_CONTEXT_KEY, stablePeerId } from '../registry.js';
 import { AGENT_CONNECTIONS_STATE_TYPE } from '../types.js';
 
 function createContext(storedPeers: unknown[] = []) {
@@ -23,8 +23,25 @@ function createContext(storedPeers: unknown[] = []) {
   } as any;
 }
 
+function savedPeer(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'code-agent:resource-2:thread-2',
+    agentId: 'code-agent',
+    resourceId: 'resource-2',
+    threadId: 'thread-2',
+    label: 'Saved Peer',
+    connectedAt: 5,
+    lastSeenAt: 1_000,
+    ...overrides,
+  };
+}
+
 describe('AgentConnectionRegistry', () => {
-  it('lists discovered peers with deterministic ids and order', async () => {
+  it('normalizes missing agent ids and percent-encodes canonical peer ids', () => {
+    expect(stablePeerId({ resourceId: 'resource:a', threadId: 'thread/b' })).toBe('code-agent:resource%3Aa:thread%2Fb');
+  });
+
+  it('lists freshly advertised unsaved peers as discovered in deterministic order', async () => {
     const registry = new AgentConnectionRegistry({
       now: () => 1_000,
       listPeers: () => [
@@ -37,43 +54,100 @@ describe('AgentConnectionRegistry', () => {
 
     expect(peers.map(peer => peer.id)).toEqual(['code-agent:resource-a:thread-a', 'code-agent:resource-b:thread-b']);
     expect(peers).toMatchObject([
-      { label: 'A', status: 'available', connected: false, lastSeenAt: 1_000 },
-      { label: 'B', status: 'available', connected: false, lastSeenAt: 1_000 },
+      {
+        agentId: 'code-agent',
+        label: 'A',
+        relationship: 'none',
+        presence: 'advertised',
+        displayStatus: 'discovered',
+        canAttemptSend: false,
+        lastSeenAt: 1_000,
+      },
+      {
+        agentId: 'code-agent',
+        label: 'B',
+        relationship: 'none',
+        presence: 'advertised',
+        displayStatus: 'discovered',
+        canAttemptSend: false,
+        lastSeenAt: 1_000,
+      },
     ]);
   });
 
-  it('merges connected peers and keeps missing ones as offline', async () => {
+  it('ignores discovery entries whose supplied id does not match the canonical endpoint tuple', async () => {
+    const registry = new AgentConnectionRegistry({
+      listPeers: () => [{ id: 'alias', resourceId: 'resource-2', threadId: 'thread-2' }],
+    });
+
+    await expect(registry.listPeers(createContext())).resolves.toEqual([]);
+  });
+
+  it('renders saved advertised peers as connected and saved absent peers as saved', async () => {
     const registry = new AgentConnectionRegistry({
       now: () => 10_000,
-      offlineTtlMs: 1_000,
-      listPeers: () => [{ id: 'live', resourceId: 'resource-2', threadId: 'thread-2', label: 'Live' }],
+      listPeers: () => [{ resourceId: 'resource-2', threadId: 'thread-2', label: 'Fresh label' }],
     });
     const context = createContext([
-      {
-        id: 'live',
-        resourceId: 'resource-2',
-        threadId: 'thread-2',
-        label: 'Live old',
-        status: 'available',
-        connectedAt: 5,
-        lastSeenAt: 9_500,
-      },
-      {
-        id: 'stale',
+      savedPeer(),
+      savedPeer({
+        id: 'code-agent:resource-3:thread-3',
         resourceId: 'resource-3',
         threadId: 'thread-3',
-        label: 'Stale',
-        status: 'available',
-        connectedAt: 6,
-        lastSeenAt: 1_000,
-      },
+        label: 'Absent',
+        pid: (globalThis as any).process.pid,
+        lastSeenAt: 9_999,
+      }),
     ]);
 
     const peers = await registry.listPeers(context);
 
     expect(peers).toMatchObject([
-      { id: 'live', label: 'Live', status: 'available', connected: true },
-      { id: 'stale', label: 'Stale', status: 'offline', connected: true, offlineAt: 10_000 },
+      {
+        id: 'code-agent:resource-2:thread-2',
+        label: 'Fresh label',
+        relationship: 'saved',
+        presence: 'advertised',
+        displayStatus: 'connected',
+        canAttemptSend: true,
+        connectedAt: 5,
+      },
+      {
+        id: 'code-agent:resource-3:thread-3',
+        relationship: 'saved',
+        presence: 'absent',
+        displayStatus: 'saved',
+        canAttemptSend: false,
+        pid: (globalThis as any).process.pid,
+        lastSeenAt: 9_999,
+      },
+    ]);
+  });
+
+  it('keeps historical noncanonical saved ids separate from canonical discovery', async () => {
+    const registry = new AgentConnectionRegistry({
+      now: () => 20_000,
+      listPeers: () => [{ resourceId: 'resource-2', threadId: 'thread-2', label: 'Canonical discovery' }],
+    });
+    const context = createContext([savedPeer({ id: 'historical-peer-id', label: 'Historical saved record' })]);
+
+    const peers = await registry.listPeers(context);
+
+    expect(peers).toMatchObject([
+      {
+        id: 'code-agent:resource-2:thread-2',
+        relationship: 'none',
+        presence: 'advertised',
+        displayStatus: 'discovered',
+        canAttemptSend: false,
+      },
+      {
+        id: 'historical-peer-id',
+        relationship: 'saved',
+        presence: 'absent',
+        displayStatus: 'saved',
+        canAttemptSend: false,
+      },
     ]);
   });
 
@@ -81,33 +155,13 @@ describe('AgentConnectionRegistry', () => {
     const registry = new AgentConnectionRegistry({ now: () => 20 });
     const context = createContext();
     context.requestContext.set(AGENT_CONNECTIONS_DISCOVERY_CONTEXT_KEY, [
-      { id: 'self', resourceId: 'resource-1', threadId: 'thread-1' },
-      { id: 'peer', resourceId: 'resource-2', threadId: 'thread-2' },
+      { resourceId: 'resource-1', threadId: 'thread-1' },
+      { resourceId: 'resource-2', threadId: 'thread-2' },
     ]);
 
     const peers = await registry.listPeers(context);
 
-    expect(peers.map(peer => peer.id)).toEqual(['peer']);
-  });
-
-  it('uses process liveness when discovered peers include a pid', async () => {
-    const registry = new AgentConnectionRegistry({
-      now: () => 10_000,
-      offlineTtlMs: 1,
-      listPeers: () => [
-        {
-          id: 'current-process',
-          resourceId: 'resource-2',
-          threadId: 'thread-2',
-          pid: (globalThis as any).process.pid,
-          lastSeenAt: 1,
-        },
-      ],
-    });
-
-    const peers = await registry.listPeers(createContext());
-
-    expect(peers).toMatchObject([{ id: 'current-process', status: 'available', pid: (globalThis as any).process.pid }]);
+    expect(peers.map(peer => peer.id)).toEqual(['code-agent:resource-2:thread-2']);
   });
 
   it('discovers peers through the core agent pubsub discovery API', async () => {
@@ -137,7 +191,7 @@ describe('AgentConnectionRegistry', () => {
         label: 'PubSub Peer',
         title: 'Peer Thread',
         mode: 'build',
-        status: 'available',
+        presence: 'advertised',
       },
     ]);
   });

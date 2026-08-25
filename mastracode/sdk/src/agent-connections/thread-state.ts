@@ -66,11 +66,9 @@ export function normalizeConnectedPeers(peers: unknown[]): ConnectedAgentPeer[] 
       label: candidate.label,
       title: candidate.title,
       mode: candidate.mode,
-      status: candidate.status === 'offline' ? 'offline' : 'available',
       pid: candidate.pid,
       connectedAt: typeof candidate.connectedAt === 'number' ? candidate.connectedAt : Date.now(),
       lastSeenAt: typeof candidate.lastSeenAt === 'number' ? candidate.lastSeenAt : 0,
-      offlineAt: typeof candidate.offlineAt === 'number' ? candidate.offlineAt : undefined,
     });
   }
   return sortConnectedPeers(normalized);

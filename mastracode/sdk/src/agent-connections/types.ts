@@ -1,13 +1,14 @@
 export const AGENT_CONNECTIONS_STATE_ID = 'agent-connections';
 export const AGENT_CONNECTIONS_STATE_TYPE = 'agent_connection';
 
-export type AgentConnectionStatus = 'available' | 'offline';
-export type AgentConnectionOperation = 'connect' | 'disconnect';
+export type AgentPeerRelationship = 'none' | 'saved';
+export type AgentPeerPresence = 'advertised' | 'absent';
+export type AgentPeerDisplayStatus = 'discovered' | 'connected' | 'saved';
 export type AgentSignalPriority = 'low' | 'medium' | 'high' | 'urgent';
 export type AgentSignalRoutingAction = 'wake' | 'deliver' | 'persist' | 'discard' | 'blocked';
 
 export interface AgentPeerIdentity {
-  /** Stable model-facing id used by tools. Derived from routing fields when omitted by discovery. */
+  /** Stable model-facing id used by tools. Discovery ids must match the canonical routing tuple id. */
   id?: string;
   /** Target agent id. Defaults to the current code agent when omitted by discovery. */
   agentId?: string;
@@ -16,28 +17,31 @@ export interface AgentPeerIdentity {
   label?: string;
   title?: string;
   mode?: string;
-  status?: AgentConnectionStatus;
   pid?: number;
   lastSeenAt?: number;
-  offlineAt?: number;
 }
 
-export interface AvailableAgentPeer extends AgentPeerIdentity {
+export interface AgentPeerView {
   id: string;
-  status: AgentConnectionStatus;
+  agentId: string;
+  resourceId: string;
+  threadId: string;
+  label?: string;
+  title?: string;
+  mode?: string;
+  relationship: AgentPeerRelationship;
+  presence: AgentPeerPresence;
+  displayStatus: AgentPeerDisplayStatus;
+  canAttemptSend: boolean;
   pid?: number;
-  lastSeenAt: number;
-  offlineAt?: number;
-  connected: boolean;
+  connectedAt?: number;
+  lastSeenAt?: number;
 }
 
 export interface ConnectedAgentPeer extends AgentPeerIdentity {
   id: string;
-  status: AgentConnectionStatus;
-  pid?: number;
   connectedAt: number;
   lastSeenAt: number;
-  offlineAt?: number;
 }
 
 export interface SentAgentSignal {
@@ -59,16 +63,17 @@ export interface AgentConnectionsState {
 }
 
 export interface AgentConnectionDeltaOp {
-  op: 'connect' | 'disconnect' | 'status-change' | 'update';
+  op: 'connect' | 'disconnect' | 'presence-change' | 'update';
   id: string;
-  peer?: ConnectedAgentPeer;
-  status?: AgentConnectionStatus;
+  peer?: AgentPeerView;
+  presence?: AgentPeerPresence;
+  displayStatus?: AgentPeerDisplayStatus;
 }
 
 export interface AgentConnectionListResult {
   content: string;
-  available: AvailableAgentPeer[];
-  connected: ConnectedAgentPeer[];
+  peers: AgentPeerView[];
+  savedCount: number;
   isError?: boolean;
 }
 
@@ -81,7 +86,7 @@ export interface AgentConnectResult {
 
 export interface AgentSignalSendResult {
   content: string;
-  target?: ConnectedAgentPeer;
+  target?: AgentPeerView;
   priority?: AgentSignalPriority;
   expectsReply?: boolean;
   messageId?: string;

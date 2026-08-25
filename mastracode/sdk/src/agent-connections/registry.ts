@@ -1,9 +1,9 @@
 import type { RequestContext } from '@mastra/core/request-context';
 import type { AgentConnectionContext } from './thread-state.js';
 import { readAgentConnections } from './thread-state.js';
-import type { AgentConnectionStatus, AgentPeerIdentity, AvailableAgentPeer, ConnectedAgentPeer } from './types.js';
+import type { AgentPeerIdentity, AgentPeerView, ConnectedAgentPeer } from './types.js';
 
-type NormalizedAgentPeerIdentity = AgentPeerIdentity & { id: string };
+type NormalizedAgentPeerIdentity = Omit<AgentPeerIdentity, 'id' | 'agentId'> & { id: string; agentId: string };
 
 export const AGENT_CONNECTIONS_DISCOVERY_CONTEXT_KEY = 'mastracode.agentConnectionPeers';
 export const DEFAULT_AGENT_CONNECTION_OFFLINE_TTL_MS = 30_000;
@@ -11,75 +11,63 @@ export const DEFAULT_AGENT_CONNECTION_OFFLINE_TTL_MS = 30_000;
 type PeerDiscoverySource = (context: AgentConnectionContext) => Promise<AgentPeerIdentity[]> | AgentPeerIdentity[];
 
 export interface AgentConnectionRegistryOptions {
+  /** Retained for configuration compatibility. Presence now requires a fresh discovery advertisement. */
   offlineTtlMs?: number;
   now?: () => number;
   listPeers?: PeerDiscoverySource;
 }
 
 export class AgentConnectionRegistry {
-  readonly #offlineTtlMs: number;
   readonly #now: () => number;
   readonly #listPeers?: PeerDiscoverySource;
 
   constructor(options: AgentConnectionRegistryOptions = {}) {
-    this.#offlineTtlMs = options.offlineTtlMs ?? DEFAULT_AGENT_CONNECTION_OFFLINE_TTL_MS;
     this.#now = options.now ?? Date.now;
     this.#listPeers = options.listPeers;
   }
 
-  async listPeers(context: AgentConnectionContext): Promise<AvailableAgentPeer[]> {
-    const now = this.#now();
-    const connected = await readAgentConnections(context);
+  async discoverPeers(context: AgentConnectionContext): Promise<AgentPeerView[]> {
     const discovered = await this.#discover(context);
-    const byId = new Map<string, AvailableAgentPeer>();
-
-    for (const peer of discovered) {
-      const normalized = normalizeDiscoveredPeer(peer, now, this.#offlineTtlMs);
-      if (isSelf(normalized, context)) continue;
-      byId.set(normalized.id, normalized);
-    }
-
-    for (const peer of connected) {
-      const discoveredPeer = byId.get(peer.id);
-      const statusPeer = discoveredPeer
-        ? { ...discoveredPeer, connected: true }
-        : connectedPeerToAvailable(peer, now, this.#offlineTtlMs);
-      byId.set(peer.id, statusPeer);
-    }
-
-    const result = [...byId.values()].sort(comparePeers);
-    return result;
-  }
-
-  async connectedPeers(context: AgentConnectionContext): Promise<ConnectedAgentPeer[]> {
-    const available = await this.listPeers(context);
-    const connected = await readAgentConnections(context);
-    const connectedIds = new Set(connected.map(peer => peer.id));
-    return available
-      .filter(peer => connectedIds.has(peer.id))
-      .map(peer => {
-        const existing = connected.find(item => item.id === peer.id);
-        return {
-          id: peer.id,
-          agentId: peer.agentId,
-          resourceId: peer.resourceId,
-          threadId: peer.threadId,
-          label: peer.label,
-          title: peer.title,
-          mode: peer.mode,
-          status: peer.status,
-          pid: peer.pid,
-          connectedAt: existing?.connectedAt ?? this.#now(),
-          lastSeenAt: peer.lastSeenAt,
-          offlineAt: peer.offlineAt,
-        };
-      })
+    return discovered
+      .filter(peer => !isSelf(peer, context))
+      .map(peer => discoveredPeerToView(peer))
       .sort(comparePeers);
   }
 
-  async findPeer(context: AgentConnectionContext, id: string): Promise<AvailableAgentPeer | undefined> {
-    const peers = await this.listPeers(context);
-    return peers.find(peer => peer.id === id);
+  async listPeers(context: AgentConnectionContext, savedPeers?: ConnectedAgentPeer[]): Promise<AgentPeerView[]> {
+    const saved = savedPeers ?? (await readAgentConnections(context));
+    const discovered = await this.discoverPeers(context);
+    const byId = new Map<string, AgentPeerView>(discovered.map(peer => [peer.id, peer]));
+
+    for (const peer of saved) {
+      const canonicalId = stablePeerId(peer);
+      const discoveredPeer = peer.id === canonicalId ? byId.get(peer.id) : undefined;
+      if (discoveredPeer && sameEndpoint(peer, discoveredPeer)) {
+        byId.set(peer.id, {
+          ...discoveredPeer,
+          relationship: 'saved',
+          displayStatus: 'connected',
+          canAttemptSend: true,
+          connectedAt: peer.connectedAt,
+        });
+      } else {
+        byId.set(peer.id, savedPeerToAbsentView(peer));
+      }
+    }
+
+    return [...byId.values()].sort(comparePeers);
+  }
+
+  async connectedPeers(context: AgentConnectionContext, savedPeers?: ConnectedAgentPeer[]): Promise<AgentPeerView[]> {
+    return (await this.listPeers(context, savedPeers)).filter(peer => peer.relationship === 'saved');
+  }
+
+  async findPeer(context: AgentConnectionContext, id: string): Promise<AgentPeerView | undefined> {
+    return (await this.listPeers(context)).find(peer => peer.id === id);
+  }
+
+  async findDiscoveredPeer(context: AgentConnectionContext, id: string): Promise<AgentPeerView | undefined> {
+    return (await this.discoverPeers(context)).find(peer => peer.id === id);
   }
 
   async #discover(context: AgentConnectionContext): Promise<NormalizedAgentPeerIdentity[]> {
@@ -91,7 +79,7 @@ export class AgentConnectionRegistry {
     const byId = new Map<string, NormalizedAgentPeerIdentity>();
     for (const peers of sources) {
       for (const peer of peers) {
-        const normalized = normalizePeerIdentity(peer);
+        const normalized = normalizePeerIdentity(peer, this.#now());
         if (normalized) byId.set(normalized.id, normalized);
       }
     }
@@ -100,82 +88,73 @@ export class AgentConnectionRegistry {
 
   async #discoverFromInjectedSource(context: AgentConnectionContext): Promise<AgentPeerIdentity[]> {
     if (!this.#listPeers) return [];
-    const peers = await this.#listPeers(context);
-    return peers;
+    return this.#listPeers(context);
   }
 }
 
 export function stablePeerId(peer: Omit<AgentPeerIdentity, 'id'> & { id?: string }): string {
-  if (peer.id) return peer.id;
   return [peer.agentId ?? 'code-agent', peer.resourceId, peer.threadId].map(part => encodeURIComponent(part)).join(':');
 }
 
-function normalizePeerIdentity(peer: unknown): NormalizedAgentPeerIdentity | undefined {
+function normalizePeerIdentity(peer: unknown, now: number): NormalizedAgentPeerIdentity | undefined {
   if (!peer || typeof peer !== 'object') return;
   const candidate = peer as Partial<AgentPeerIdentity>;
   if (!candidate.resourceId || !candidate.threadId) return;
+  const agentId = candidate.agentId ?? 'code-agent';
+  const id = stablePeerId({ agentId, resourceId: candidate.resourceId, threadId: candidate.threadId });
+  if (candidate.id && candidate.id !== id) return;
   return {
-    id: stablePeerId(candidate as Omit<AgentPeerIdentity, 'id'> & { id?: string }),
-    agentId: candidate.agentId,
+    id,
+    agentId,
     resourceId: candidate.resourceId,
     threadId: candidate.threadId,
     label: candidate.label,
     title: candidate.title,
     mode: candidate.mode,
-    status: candidate.status,
     pid: candidate.pid,
-    lastSeenAt: candidate.lastSeenAt,
-    offlineAt: candidate.offlineAt,
+    lastSeenAt: typeof candidate.lastSeenAt === 'number' ? candidate.lastSeenAt : now,
   };
 }
 
-function normalizeDiscoveredPeer(peer: AgentPeerIdentity, now: number, ttlMs: number): AvailableAgentPeer {
-  const candidate = peer as AgentPeerIdentity & { lastSeenAt?: number; status?: AgentConnectionStatus };
-  const lastSeenAt = typeof candidate.lastSeenAt === 'number' ? candidate.lastSeenAt : now;
-  const status = candidate.status ?? availabilityFromPeer(candidate, lastSeenAt, now, ttlMs);
+function discoveredPeerToView(peer: NormalizedAgentPeerIdentity): AgentPeerView {
   return {
     ...peer,
-    id: stablePeerId(peer),
-    status,
-    lastSeenAt,
-    offlineAt: status === 'offline' ? now : undefined,
-    connected: false,
+    relationship: 'none',
+    presence: 'advertised',
+    displayStatus: 'discovered',
+    canAttemptSend: false,
   };
 }
 
-function connectedPeerToAvailable(peer: ConnectedAgentPeer, now: number, ttlMs: number): AvailableAgentPeer {
-  const status = availabilityFromPeer(peer, peer.lastSeenAt, now, ttlMs);
+function savedPeerToAbsentView(peer: ConnectedAgentPeer): AgentPeerView {
   return {
-    ...peer,
-    status,
-    offlineAt: status === 'offline' ? (peer.offlineAt ?? now) : undefined,
-    connected: true,
+    id: peer.id,
+    agentId: peer.agentId ?? 'code-agent',
+    resourceId: peer.resourceId,
+    threadId: peer.threadId,
+    label: peer.label,
+    title: peer.title,
+    mode: peer.mode,
+    relationship: 'saved',
+    presence: 'absent',
+    displayStatus: 'saved',
+    canAttemptSend: false,
+    pid: peer.pid,
+    connectedAt: peer.connectedAt,
+    lastSeenAt: peer.lastSeenAt,
   };
 }
 
-function availabilityFromPeer(
-  peer: AgentPeerIdentity,
-  lastSeenAt: number,
-  now: number,
-  ttlMs: number,
-): AgentConnectionStatus {
-  if (typeof peer.pid === 'number') return isProcessAlive(peer.pid) ? 'available' : 'offline';
-  return lastSeenAt > 0 && now - lastSeenAt <= ttlMs ? 'available' : 'offline';
-}
-
-function isProcessAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
+function sameEndpoint(a: AgentPeerIdentity, b: AgentPeerIdentity): boolean {
+  return (
+    (a.agentId ?? 'code-agent') === (b.agentId ?? 'code-agent') &&
+    a.resourceId === b.resourceId &&
+    a.threadId === b.threadId
+  );
 }
 
 async function discoverFromCoreAgent(context: AgentConnectionContext): Promise<AgentPeerIdentity[]> {
-  if (!context.runtimeAgent?.discoverThreadPeers) {
-    return [];
-  }
+  if (!context.runtimeAgent?.discoverThreadPeers) return [];
   const peers = await context.runtimeAgent.discoverThreadPeers({ timeoutMs: 100 });
   if (!Array.isArray(peers)) return [];
   return peers.filter(isPeerLike).map(peer => {
@@ -185,7 +164,7 @@ async function discoverFromCoreAgent(context: AgentConnectionContext): Promise<A
       metadata && typeof metadata === 'object' && typeof (metadata as { mode?: unknown }).mode === 'string'
         ? (metadata as { mode: string }).mode
         : candidate.mode;
-    return { ...candidate, mode, status: candidate.status ?? 'available' };
+    return { ...candidate, mode };
   });
 }
 
