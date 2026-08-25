@@ -26,7 +26,7 @@ export function useAgentBuilderSidebarVisibility(): UseAgentBuilderSidebarVisibi
   // Defensive early-out only: while either query is in flight `capabilities` is
   // still undefined and `canAccessAgentBuilder` is still false, so dropping this
   // guard would produce the same `isVisible: false` from the checks below.
-  // Stryker disable next-line ConditionalExpression,LogicalOperator
+  // Stryker disable next-line ConditionalExpression,LogicalOperator,BlockStatement
   if (capabilitiesLoading || builderAccessLoading) {
     return { isVisible: false };
   }
