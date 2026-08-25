@@ -3,6 +3,7 @@ import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
+import { toast } from 'sonner';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { datasetVersionsResponse } from '../../__tests__/fixtures/dataset-versions';
@@ -142,6 +143,7 @@ describe('ExperimentTriggerDialog', () => {
 
     it('runs against the selected dataset and reports the experiment id', async () => {
       const { triggerCalls } = setupHandlers();
+      const toastSuccess = vi.spyOn(toast, 'success');
       const { onSuccess } = renderDialog();
 
       await screen.findByRole('combobox', { name: 'Select a dataset...' });
@@ -152,6 +154,7 @@ describe('ExperimentTriggerDialog', () => {
       fireEvent.click(runButton());
 
       await waitFor(() => expect(onSuccess).toHaveBeenCalledWith('exp-1'));
+      expect(toastSuccess).toHaveBeenCalledWith('Experiment triggered successfully');
       expect(triggerCalls).toHaveLength(1);
       expect(triggerCalls[0].datasetId).toBe('dataset-1');
       expect(triggerCalls[0].body.targetType).toBe('agent');
