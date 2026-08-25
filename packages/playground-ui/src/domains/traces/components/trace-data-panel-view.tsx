@@ -10,9 +10,11 @@ import {
   WrenchIcon,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
 import { getAllSpanIds } from '../hooks/get-all-span-ids';
 import { useDownloadTraceJson } from '../hooks/use-download-trace-json';
 import type { TraceUsageSummary } from '../trace-list-columns';
+import type { TraceViewMode } from '../types';
 import { formatHierarchicalSpans } from './format-hierarchical-spans';
 import { TraceKeysAndValues } from './trace-keys-and-values';
 import { TraceTimeline } from './trace-timeline';
@@ -20,6 +22,7 @@ import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { DataPanel } from '@/ds/components/DataPanel';
 import { Notice } from '@/ds/components/Notice';
+import { Tab, TabList, Tabs } from '@/ds/components/Tabs';
 import { Icon } from '@/ds/icons/Icon';
 import type { LinkComponent } from '@/ds/types/link-component';
 import { truncateString } from '@/lib/truncate-string';
@@ -68,6 +71,9 @@ export interface TraceDataPanelViewProps {
    * handlers (e.g. inline below an experiment result).
    */
   showUnavailableFeaturesMsg?: boolean;
+  viewMode?: TraceViewMode;
+  onViewModeChange?: (mode: TraceViewMode) => void;
+  reviewSlot?: ReactNode;
 }
 
 export function TraceDataPanelView({
@@ -91,6 +97,9 @@ export function TraceDataPanelView({
   traceHref,
   anchorSpanId,
   showUnavailableFeaturesMsg = true,
+  viewMode,
+  onViewModeChange,
+  reviewSlot,
 }: TraceDataPanelViewProps) {
   const isOnTracePage = placement === 'trace-page';
   const [internalCollapsed, setInternalCollapsed] = useState(false);
@@ -148,6 +157,16 @@ export function TraceDataPanelView({
   };
 
   const showOpenTracePageLink = !isOnTracePage && LinkComponent && traceHref;
+  const showViewModeTabs = reviewSlot !== undefined && viewMode !== undefined && onViewModeChange !== undefined;
+  const isReviewMode = showViewModeTabs && viewMode === 'review';
+  const viewModeTabs = showViewModeTabs ? (
+    <Tabs defaultTab="review" value={viewMode} onValueChange={onViewModeChange}>
+      <TabList variant="pill" className="min-w-0">
+        <Tab value="review">Review</Tab>
+        <Tab value="advanced">Advanced</Tab>
+      </TabList>
+    </Tabs>
+  ) : null;
 
   // Shared across both header layouts (list side panel and full trace page) so a trace can be
   // downloaded from wherever it's being inspected.
@@ -168,7 +187,8 @@ export function TraceDataPanelView({
       <DataPanel.Header>
         {isOnTracePage ? (
           <>
-            <DataPanel.Heading>Trace Timeline</DataPanel.Heading>
+            <DataPanel.Heading>{isReviewMode ? 'Trace Review' : 'Trace Timeline'}</DataPanel.Heading>
+            {viewModeTabs}
             <ButtonsGroup className="ml-auto shrink-0">{downloadTraceButton}</ButtonsGroup>
           </>
         ) : (
@@ -176,6 +196,7 @@ export function TraceDataPanelView({
             <DataPanel.Heading>
               Trace <b># {truncateString(traceId, 12)}</b>
             </DataPanel.Heading>
+            {viewModeTabs}
             <ButtonsGroup className="ml-auto shrink-0">
               {onCollapsedChange && (
                 <Button
@@ -219,60 +240,66 @@ export function TraceDataPanelView({
           <DataPanel.NoData>No spans found for this trace.</DataPanel.NoData>
         ) : (
           <DataPanel.Content>
-            {!isOnTracePage && rootSpan && (
-              <TraceKeysAndValues rootSpan={rootSpan} usage={isSubtrace ? undefined : usage} className="mb-6" />
+            {isReviewMode ? (
+              reviewSlot
+            ) : (
+              <>
+                {!isOnTracePage && rootSpan && (
+                  <TraceKeysAndValues rootSpan={rootSpan} usage={isSubtrace ? undefined : usage} className="mb-6" />
+                )}
+
+                {!isOnTracePage && (onEvaluateTrace || onSaveAsDatasetItem || onAddTraceMocksToItem) && (
+                  <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+                    {onEvaluateTrace && (
+                      <Button size="sm" onClick={onEvaluateTrace}>
+                        <Icon>
+                          <CircleGaugeIcon />
+                        </Icon>
+                        Evaluate Trace
+                      </Button>
+                    )}
+                    {onSaveAsDatasetItem && (
+                      <Button size="sm" onClick={() => onSaveAsDatasetItem({ traceId, rootSpanId: rootSpan?.spanId })}>
+                        <Icon>
+                          <SaveIcon />
+                        </Icon>
+                        Save as Dataset Item
+                      </Button>
+                    )}
+                    {onAddTraceMocksToItem && (
+                      <Button size="sm" onClick={() => onAddTraceMocksToItem({ traceId })}>
+                        <Icon>
+                          <WrenchIcon />
+                        </Icon>
+                        Add tool mocks to item
+                      </Button>
+                    )}
+                  </div>
+                )}
+
+                {!isOnTracePage &&
+                  !onEvaluateTrace &&
+                  !onSaveAsDatasetItem &&
+                  !onAddTraceMocksToItem &&
+                  showUnavailableFeaturesMsg && (
+                    <Notice variant="info" className="mb-6">
+                      <Notice.Message>
+                        Evaluating traces and saving them as dataset items is available in Mastra Studio (local or
+                        deployed).
+                      </Notice.Message>
+                    </Notice>
+                  )}
+
+                <TraceTimeline
+                  hierarchicalSpans={hierarchicalSpans}
+                  onSpanClick={handleSpanClick}
+                  selectedSpanId={selectedSpanId}
+                  expandedSpanIds={expandedSpanIds}
+                  setExpandedSpanIds={setExpandedSpanIds}
+                  chartWidth={timelineChartWidth}
+                />
+              </>
             )}
-
-            {!isOnTracePage && (onEvaluateTrace || onSaveAsDatasetItem || onAddTraceMocksToItem) && (
-              <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-                {onEvaluateTrace && (
-                  <Button size="sm" onClick={onEvaluateTrace}>
-                    <Icon>
-                      <CircleGaugeIcon />
-                    </Icon>
-                    Evaluate Trace
-                  </Button>
-                )}
-                {onSaveAsDatasetItem && (
-                  <Button size="sm" onClick={() => onSaveAsDatasetItem({ traceId, rootSpanId: rootSpan?.spanId })}>
-                    <Icon>
-                      <SaveIcon />
-                    </Icon>
-                    Save as Dataset Item
-                  </Button>
-                )}
-                {onAddTraceMocksToItem && (
-                  <Button size="sm" onClick={() => onAddTraceMocksToItem({ traceId })}>
-                    <Icon>
-                      <WrenchIcon />
-                    </Icon>
-                    Add tool mocks to item
-                  </Button>
-                )}
-              </div>
-            )}
-
-            {!isOnTracePage &&
-              !onEvaluateTrace &&
-              !onSaveAsDatasetItem &&
-              !onAddTraceMocksToItem &&
-              showUnavailableFeaturesMsg && (
-                <Notice variant="info" className="mb-6">
-                  <Notice.Message>
-                    Evaluating traces and saving them as dataset items is available in Mastra Studio (local or
-                    deployed).
-                  </Notice.Message>
-                </Notice>
-              )}
-
-            <TraceTimeline
-              hierarchicalSpans={hierarchicalSpans}
-              onSpanClick={handleSpanClick}
-              selectedSpanId={selectedSpanId}
-              expandedSpanIds={expandedSpanIds}
-              setExpandedSpanIds={setExpandedSpanIds}
-              chartWidth={timelineChartWidth}
-            />
           </DataPanel.Content>
         ))}
     </DataPanel>
