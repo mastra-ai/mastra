@@ -33,7 +33,9 @@ export function TracesLayout({
   return (
     <div
       className={cn(
-        'grid max-h-full min-h-0 items-start gap-4 transition-[grid-template-columns] duration-300 ease-in-out',
+        // Width changes are animated by the View Transitions API (callers wrap
+        // span open/close in startViewTransition), so no CSS transition here.
+        'grid max-h-full min-h-0 items-start gap-4',
         hasSidePanel ? (sidePanelWide ? 'grid-cols-[1fr_4fr]' : 'grid-cols-[1fr_1fr]') : 'grid-cols-[1fr]',
       )}
     >
@@ -42,7 +44,7 @@ export function TracesLayout({
       {hasSidePanel && (
         <div
           className={cn(
-            'grid max-h-full gap-4 overflow-auto',
+            'grid max-h-full gap-4 overflow-auto [view-transition-name:traces-side-panel]',
             // Fill the page height so the trace panel reaches the bottom; when collapsed
             // the column shrinks to content (items-start on the outer grid).
             !traceCollapsed && 'h-full',

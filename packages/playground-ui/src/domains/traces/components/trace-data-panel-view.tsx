@@ -274,7 +274,12 @@ export function TraceDataPanelView({
                 const detailsBody = (
                   <>
                     {!isOnTracePage && rootSpan && (
-                      <TraceKeysAndValues rootSpan={rootSpan} usage={isSubtrace ? undefined : usage} className="mb-6" />
+                      <TraceKeysAndValues
+                        rootSpan={rootSpan}
+                        usage={isSubtrace ? undefined : usage}
+                        className="mb-6"
+                        viewTransitionPrefix="trace-kv"
+                      />
                     )}
 
                     {!isOnTracePage &&

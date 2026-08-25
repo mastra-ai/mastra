@@ -51,9 +51,25 @@ export interface TraceKeysAndValuesProps {
   usage?: TraceUsageSummary;
   numOfCol?: 1 | 2 | 3;
   className?: string;
+  /**
+   * When set, each key/value cell gets a `view-transition-name` prefixed with this
+   * value, so rows morph smoothly (via the View Transitions API) when the layout
+   * reflows — e.g. from two columns to one when the span panel opens. Must be
+   * unique page-wide.
+   */
+  viewTransitionPrefix?: string;
 }
 
-export function TraceKeysAndValues({ rootSpan, usage, numOfCol = 2, className }: TraceKeysAndValuesProps) {
+export function TraceKeysAndValues({
+  rootSpan,
+  usage,
+  numOfCol = 2,
+  className,
+  viewTransitionPrefix,
+}: TraceKeysAndValuesProps) {
+  // Arbitrary-value Tailwind classes can't be built dynamically, so use inline styles.
+  const vt = (name: string): React.CSSProperties | undefined =>
+    viewTransitionPrefix ? { viewTransitionName: `${viewTransitionPrefix}-${name}` } : undefined;
   const startedAt = rootSpan.startedAt ? new Date(rootSpan.startedAt) : null;
   const endedAt = rootSpan.endedAt ? new Date(rootSpan.endedAt) : null;
   const status = computeTraceStatus(rootSpan);
@@ -69,54 +85,60 @@ export function TraceKeysAndValues({ rootSpan, usage, numOfCol = 2, className }:
       <DataKeysAndValues numOfCol={numOfCol} className={cn(className, RESPONSIVE_GRID_COLUMNS[numOfCol])}>
         {rootSpan.entityId && (
           <>
-            <DataKeysAndValues.Key>Entity</DataKeysAndValues.Key>
-            <DataKeysAndValues.Value>{rootSpan.entityName || rootSpan.entityId}</DataKeysAndValues.Value>
+            <DataKeysAndValues.Key style={vt('entity-key')}>Entity</DataKeysAndValues.Key>
+            <DataKeysAndValues.Value style={vt('entity-val')}>
+              {rootSpan.entityName || rootSpan.entityId}
+            </DataKeysAndValues.Value>
           </>
         )}
         {rootSpan.entityType && (
           <>
-            <DataKeysAndValues.Key>Entity Type</DataKeysAndValues.Key>
-            <DataKeysAndValues.Value>{formatEntityType(rootSpan.entityType)}</DataKeysAndValues.Value>
+            <DataKeysAndValues.Key style={vt('entity-type-key')}>Entity Type</DataKeysAndValues.Key>
+            <DataKeysAndValues.Value style={vt('entity-type-val')}>
+              {formatEntityType(rootSpan.entityType)}
+            </DataKeysAndValues.Value>
           </>
         )}
-        <DataKeysAndValues.Key>Status</DataKeysAndValues.Key>
-        <DataKeysAndValues.Value>
+        <DataKeysAndValues.Key style={vt('status-key')}>Status</DataKeysAndValues.Key>
+        <DataKeysAndValues.Value style={vt('status-val')}>
           <TraceStatusValue status={status} />
         </DataKeysAndValues.Value>
         {duration && exactDuration && (
           <>
-            <DataKeysAndValues.Key>Duration</DataKeysAndValues.Key>
-            <DataKeysAndValues.ValueWithTooltip tooltip={exactDuration}>{duration}</DataKeysAndValues.ValueWithTooltip>
+            <DataKeysAndValues.Key style={vt('duration-key')}>Duration</DataKeysAndValues.Key>
+            <DataKeysAndValues.ValueWithTooltip tooltip={exactDuration} style={vt('duration-val')}>
+              {duration}
+            </DataKeysAndValues.ValueWithTooltip>
           </>
         )}
         {startedAtTimestamp && exactStartedAtTimestamp && (
           <>
-            <DataKeysAndValues.Key>Started at</DataKeysAndValues.Key>
-            <DataKeysAndValues.ValueWithTooltip tooltip={exactStartedAtTimestamp}>
+            <DataKeysAndValues.Key style={vt('started-key')}>Started at</DataKeysAndValues.Key>
+            <DataKeysAndValues.ValueWithTooltip tooltip={exactStartedAtTimestamp} style={vt('started-val')}>
               {startedAtTimestamp}
             </DataKeysAndValues.ValueWithTooltip>
           </>
         )}
         {endedAtTimestamp && exactEndedAtTimestamp && (
           <>
-            <DataKeysAndValues.Key>Ended at</DataKeysAndValues.Key>
-            <DataKeysAndValues.ValueWithTooltip tooltip={exactEndedAtTimestamp}>
+            <DataKeysAndValues.Key style={vt('ended-key')}>Ended at</DataKeysAndValues.Key>
+            <DataKeysAndValues.ValueWithTooltip tooltip={exactEndedAtTimestamp} style={vt('ended-val')}>
               {endedAtTimestamp}
             </DataKeysAndValues.ValueWithTooltip>
           </>
         )}
         {usage && (
           <>
-            <DataKeysAndValues.Key>Trace input tokens</DataKeysAndValues.Key>
-            <DataKeysAndValues.Value>
+            <DataKeysAndValues.Key style={vt('input-tokens-key')}>Trace input tokens</DataKeysAndValues.Key>
+            <DataKeysAndValues.Value style={vt('input-tokens-val')}>
               {usage.inputTokens === undefined ? '—' : formatCompact(usage.inputTokens)}
             </DataKeysAndValues.Value>
-            <DataKeysAndValues.Key>Trace output tokens</DataKeysAndValues.Key>
-            <DataKeysAndValues.Value>
+            <DataKeysAndValues.Key style={vt('output-tokens-key')}>Trace output tokens</DataKeysAndValues.Key>
+            <DataKeysAndValues.Value style={vt('output-tokens-val')}>
               {usage.outputTokens === undefined ? '—' : formatCompact(usage.outputTokens)}
             </DataKeysAndValues.Value>
-            <DataKeysAndValues.Key>Trace est. cost</DataKeysAndValues.Key>
-            <DataKeysAndValues.Value>
+            <DataKeysAndValues.Key style={vt('cost-key')}>Trace est. cost</DataKeysAndValues.Key>
+            <DataKeysAndValues.Value style={vt('cost-val')}>
               {usage.estimatedCost === undefined ? '—' : formatCost(usage.estimatedCost, usage.costUnit)}
             </DataKeysAndValues.Value>
           </>
