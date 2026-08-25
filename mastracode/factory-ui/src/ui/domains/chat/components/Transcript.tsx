@@ -562,6 +562,9 @@ export function TranscriptEntries({
     entry.message.content.parts.some(part => draws(part, suspensions, entry.runtimeTools));
   const opensTurn = (entry: TimelineEntry): boolean =>
     entry.kind === 'message' && startsUserTurn(entry.message) && drawsContent(entry);
+  // A steer interjects into a reply still being written: it keeps its turn for the
+  // rail and history, but claims no room and no trip — the reader stays with the stream.
+  const steers = (entry: TimelineEntry | undefined): boolean => entry?.kind === 'message' && Boolean(entry.steer);
 
   const turnGroups = groupTurns(entries, opensTurn, isTimeGap);
   const [restoredTurnKey] = useState(() => (restoredHistory ? turnGroups.at(-1)?.key : undefined));
@@ -574,7 +577,8 @@ export function TranscriptEntries({
         // Closing turns keep their room class so reserved space releases through its
         // transition. The first turn opens at the top of the transcript already, so
         // room under it would buy no travel — only empty scroll below a fresh thread.
-        const holdsRoom = runningTurn && group.opensTurn && index > 0;
+        const holdsRoom =
+          runningTurn && group.opensTurn && index > 0 && !steers(group.entries.find(entry => entry.id === group.key));
         const openRoomClass = group.key === restoredTurnKey ? 'turn-room-restored-open' : 'turn-room-open';
 
         // One reply, however many messages the server split it into: the meta row lands
@@ -596,7 +600,7 @@ export function TranscriptEntries({
             className={cn('flex flex-col', group.opensTurn && 'turn-room', holdsRoom && openRoomClass)}
           >
             {group.entries.map(entry => (
-              <TranscriptItem key={entry.id} entry={entry} scrollAnchor={opensTurn(entry)}>
+              <TranscriptItem key={entry.id} entry={entry} scrollAnchor={opensTurn(entry) && !steers(entry)}>
                 <TranscriptEntryContent
                   entry={entry}
                   suspensions={suspensions}

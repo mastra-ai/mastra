@@ -219,6 +219,25 @@ describe('TranscriptEntries turn groups', () => {
     expect(state.entries[0]).toMatchObject({ message: { id: 'signal-steer' } });
   });
 
+  it('lets a steer slide in under the stream without opening room', () => {
+    let state = createInitialTranscript({ messages: [], threadId: 'thread-1' });
+    state = transcriptReducer(state, { type: 'localUser', text: 'first question' });
+    state = transcriptReducer(state, { type: 'localUser', text: 'change direction', steer: true });
+
+    renderWithProviders(
+      <TranscriptEntries
+        entries={state.entries}
+        onApprove={() => {}}
+        onRespond={() => {}}
+        running
+        tail={<div data-testid="tail" />}
+      />,
+    );
+
+    expect(screen.getByText('change direction')).toBeInTheDocument();
+    expect(screen.getByTestId('tail').parentElement).not.toHaveClass(ROOM_CLASS);
+  });
+
   it('takes the gap that introduces a turn into that turn, where the room absorbs it', () => {
     renderWithProviders(
       <TranscriptEntries
