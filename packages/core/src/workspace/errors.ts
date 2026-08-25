@@ -128,6 +128,19 @@ export class NotDirectoryError extends FilesystemError {
   }
 }
 
+/**
+ * Thrown by a filesystem's optional native `grep()` capability when the
+ * requested pattern can't be executed natively (e.g., JS regex syntax the
+ * provider's search engine doesn't support). Callers catch this and fall
+ * back to the host-side walk-and-read implementation.
+ */
+export class UnsupportedGrepPatternError extends FilesystemError {
+  constructor(pattern: string, reason?: string) {
+    super(`Unsupported grep pattern: ${pattern}${reason ? ` (${reason})` : ''}`, 'EUNSUPPORTED_PATTERN', pattern);
+    this.name = 'UnsupportedGrepPatternError';
+  }
+}
+
 export class DirectoryNotEmptyError extends FilesystemError {
   constructor(path: string) {
     super(`Directory not empty: ${path}`, 'ENOTEMPTY', path);

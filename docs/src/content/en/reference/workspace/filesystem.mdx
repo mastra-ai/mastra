@@ -484,6 +484,123 @@ const instructions = filesystem.getInstructions?.()
 
 **Returns:** `string`
 
+### `walk(path, options?)`
+
+Native recursive tree walk executed by the provider in as few calls as possible. When implemented, the workspace `list_files` tool uses it instead of issuing one `readdir` round trip per directory, which matters for remote providers (sandboxes, object stores). If `walk` throws, tools fall back to the `readdir`-based walk automatically.
+
+```typescript
+const entries = await filesystem.walk?.('.', { maxDepth: 3 })
+// [{ name: 'index.ts', type: 'file', path: 'src/index.ts' }, ...]
+```
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+  {
+    name: 'path',
+    type: 'string',
+    description: 'Directory to walk.',
+  },
+  {
+    name: 'options.maxDepth',
+    type: 'number',
+    description: 'Maximum directory depth to descend (root entries are depth 1).',
+    isOptional: true,
+  },
+  {
+    name: 'options.includeHidden',
+    type: 'boolean',
+    description: 'Include entries whose names start with ".". Defaults to false.',
+    isOptional: true,
+  },
+]}
+/>
+
+**Returns:** `Promise<WalkEntry[]>`
+
+```typescript
+interface WalkEntry extends FileEntry {
+  path: string // Relative to the walk root, POSIX separators, no leading "./"
+}
+```
+
+### `grep(options)`
+
+Native content search executed by the provider (for example with `rg` or `grep` inside a sandbox). When implemented, the workspace `grep` tool delegates to it instead of downloading every file to search host-side. Throw `UnsupportedGrepPatternError` when a pattern can't run natively — callers catch it and fall back to the host-side implementation.
+
+```typescript
+const results = await filesystem.grep?.({
+  pattern: 'TODO',
+  path: '.',
+  caseSensitive: true,
+  includeHidden: false,
+})
+// [{ path: 'src/index.ts', matches: [{ line: 3, column: 6, text: '// TODO: fix' }] }]
+```
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+  {
+    name: 'options.pattern',
+    type: 'string',
+    description: 'JavaScript regex source to search for.',
+  },
+  {
+    name: 'options.path',
+    type: 'string',
+    description: 'File or directory root to search within.',
+  },
+  {
+    name: 'options.caseSensitive',
+    type: 'boolean',
+    description: 'Whether matching is case-sensitive.',
+  },
+  {
+    name: 'options.includeHidden',
+    type: 'boolean',
+    description: 'Include hidden files and directories in the search.',
+  },
+  {
+    name: 'options.maxCountPerFile',
+    type: 'number',
+    description: 'Maximum matches per file (like `grep -m`).',
+    isOptional: true,
+  },
+  {
+    name: 'options.maxTotalMatches',
+    type: 'number',
+    description: 'Global cap on total matches across all files.',
+    isOptional: true,
+  },
+  {
+    name: 'options.contextLines',
+    type: 'number',
+    description: 'Lines of context to include before and after each match.',
+    isOptional: true,
+  },
+]}
+/>
+
+**Returns:** `Promise<FilesystemGrepResult[]>`
+
+```typescript
+interface FilesystemGrepResult {
+  path: string // Relative to the search root, POSIX separators
+  matches: FilesystemGrepMatch[]
+}
+
+interface FilesystemGrepMatch {
+  line: number // 1-based line number
+  column: number // 0-based UTF-16 (JS string) index, not a byte offset
+  text: string // Full matched line, without trailing newline
+  before?: string[] // Context lines before the match
+  after?: string[] // Context lines after the match
+}
+```
+
 ## Related
 
 - [Workspace Class](/reference/workspace/workspace-class)
