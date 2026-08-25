@@ -330,6 +330,35 @@ Use `createNotificationInboxTool()` to give agents one tool for inbox actions in
 
 `sendNotificationSignal()` requires a storage domain with `notifications` support. Use `sendSignal({ type: 'notification' })` only for lower-level notification-shaped context that should bypass inbox storage.
 
+## Cross-agent connections in Mastra Code
+
+Mastra Code can use notification signals to communicate between agent threads. A peer is an exact `{ agentId, resourceId, threadId }` endpoint. Discovery is a point-in-time advertisement that the exact endpoint is available now; it isn't a durable connection or a guarantee that delivery will succeed.
+
+`agent_connections_list` returns one `peers` collection. Each peer includes:
+
+- `relationship`: `none` or `saved`. This is the authoritative durable state for the current sender thread.
+- `presence`: `advertised` or `absent`. This reflects the current discovery pass.
+- `displayStatus`: A derived, presentational value: `discovered`, `connected`, or `saved`.
+- `canAttemptSend`: `true` only when the peer is both saved and currently advertised.
+
+The displayed statuses mean:
+
+| Status | Meaning | Can attempt a send? |
+| - | - | - |
+| `[discovered]` | Advertised now, but not saved by the current sender thread. | No |
+| `[connected]` | Saved by the current sender thread and advertised now. | Yes |
+| `[saved]` | Saved by the current sender thread, but not advertised now. | No |
+
+Use the connection tools for distinct operations:
+
+- `agent_connect` saves a freshly discovered exact peer in the current sender thread.
+- `agent_disconnect` removes a saved peer from the current sender thread. The peer doesn't need to be currently advertised, and repeated disconnects are safe.
+- `agent_signal_send` requires the exact peer to remain saved and freshly advertised at send time. A previously discovered or recently seen peer that is absent from the current discovery pass isn't sendable.
+
+Saved connections remain in the sender thread until explicitly disconnected. Every send independently refreshes discovery and verifies the exact endpoint before routing begins. A saved connection therefore records collaboration intent; it doesn't indicate current presence.
+
+After a send attempt reaches Core routing, the routing result is authoritative. The result can be `wake`, `deliver`, `persist`, `blocked`, or `discard`, depending on the target thread and notification policy.
+
 ## Distributed and serverless deployments
 
 Signals coordinate runs through a pub/sub backend. When a signal arrives on a backend that implements `LeaseProvider`, Mastra acquires a lease on the target thread so a single process owns the conversation at a time, then either wakes the agent or routes the input into the running loop. Backends without leasing fall back to a no-op that always grants ownership, which is fine in a single process but not across instances.
