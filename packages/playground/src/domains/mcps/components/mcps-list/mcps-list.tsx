@@ -2,6 +2,7 @@ import type { McpServerListResponse } from '@mastra/client-js';
 import {
   DataList as EntityList,
   DataListSkeleton as EntityListSkeleton,
+  useDataListKeyboard,
 } from '@mastra/playground-ui/components/DataList';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
@@ -20,7 +21,7 @@ export interface McpServersListProps {
   search?: string;
 }
 
-function McpServerRow({ server }: { server: McpServer }) {
+function McpServerRow({ server, rowProps }: { server: McpServer; rowProps?: Record<string, unknown> }) {
   const { paths, Link } = useLinkComponent();
   const client = useMastraClient();
   const baseUrl = client.options.baseUrl;
@@ -35,7 +36,7 @@ function McpServerRow({ server }: { server: McpServer }) {
   const name = truncateString(server.name, 50);
 
   return (
-    <EntityList.RowLink to={paths.mcpServerLink(server.id)} LinkComponent={Link}>
+    <EntityList.RowLink to={paths.mcpServerLink(server.id)} LinkComponent={Link} {...rowProps}>
       <EntityList.NameCell>{name}</EntityList.NameCell>
       <EntityList.DescriptionCell>{sseUrl}</EntityList.DescriptionCell>
       <EntityList.TextCell className="text-center">{agentToolsCount || ''}</EntityList.TextCell>
@@ -53,12 +54,14 @@ export function McpServersList({ mcpServers, isLoading, search = '' }: McpServer
     );
   }, [mcpServers, search]);
 
+  const { containerRef, getRowProps } = useDataListKeyboard({ count: filteredData.length });
+
   if (isLoading) {
     return <EntityListSkeleton columns="auto 1fr auto auto auto" />;
   }
 
   return (
-    <EntityList columns="auto 1fr auto auto auto" variant="striped">
+    <EntityList columns="auto 1fr auto auto auto" variant="striped" scrollRef={containerRef}>
       <EntityList.Top>
         <EntityList.TopCell>Name</EntityList.TopCell>
         <EntityList.TopCell>URL</EntityList.TopCell>
@@ -74,8 +77,8 @@ export function McpServersList({ mcpServers, isLoading, search = '' }: McpServer
 
       {filteredData.length === 0 && search ? <EntityList.NoMatch message="No MCP Servers match your search" /> : null}
 
-      {filteredData.map(server => (
-        <McpServerRow key={server.id} server={server} />
+      {filteredData.map((server, index) => (
+        <McpServerRow key={server.id} server={server} rowProps={getRowProps(index)} />
       ))}
     </EntityList>
   );

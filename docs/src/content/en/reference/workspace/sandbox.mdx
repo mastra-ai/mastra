@@ -32,10 +32,87 @@ The `WorkspaceSandbox` interface defines how workspaces execute commands and man
 Starts the sandbox and is called automatically by `workspace.init()` or the first `executeCommand()` call.
 
 ```typescript
-await sandbox.start()
+const result = await sandbox.start()
+// { outcome: 'created' } — a fresh VM was created
+// { outcome: 'connected' } — reconnected to an existing VM
+// undefined — the provider does not report
 ```
 
-This method prepares the sandbox for command execution.
+**Returns:** `void | Promise<SandboxStartResult | void>`
+
+A sandbox constructed with a known `id` resolves that id on `start()`: reconnect or resume the sandbox if it exists, create it if not (get-or-create). Providers that support this report a `SandboxStartResult`:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'outcome',
+    type: "'created' | 'connected'",
+    description:
+      "`'created'` when a brand-new sandbox VM (or working directory) was provisioned; `'connected'` when the call reconnected to or resumed an existing one.",
+  },
+]}
+/>
+
+Providers that predate the contract return `void`, which the base class treats as unknown.
+
+Provider implementations plug into the start lifecycle at one of three rungs; the best available wins, and the base class always owns coalescing, status management, the `onStart` hook, and mount processing:
+
+1. **Acquisition primitives**: implement protected `find()` (side-effect-free lookup by logical id, returning a provider-native handle or `undefined`), `connect(handle)` (wake/resume/adopt), and `create()` (provision fresh) without overriding `start()`. The base orchestrates find → connect → `{ outcome: 'connected' }`, else create → `{ outcome: 'created' }`. The outcome is derived structurally from which branch ran. Used by `E2BSandbox`, `DaytonaSandbox`, and `LocalSandbox`.
+1. **`start()` override returning `SandboxStartResult`**: for providers whose API is a fused get-or-create where decomposition would add round-trips (`PlatformSandbox`, `RailwaySandbox`).
+1. **`start()` override returning `void`**: legacy providers, where the outcome is unknown.
+
+Concurrent `start()` calls on one instance coalesce onto a single in-flight attempt, and joined callers share that attempt's result (all observe `outcome: 'created'` when the shared attempt created the VM). The in-flight slot is cleared when the attempt settles, so a failed start can be retried. While the sandbox is already `running`, `start()` resolves `{ outcome: 'connected' }` without re-invoking the provider.
+
+The result is also forwarded to the `onStart` lifecycle hook as `{ sandbox, outcome }`.
+
+### `onStart` (constructor option)
+
+`onStart` runs inside the start lifecycle, after the sandbox reaches `running` status and before pending mounts are processed. It fires on every start regardless of trigger, whether an explicit call, a lazy `ensureRunning()` from a command, or a revival after the provider replaced the VM. That makes it the seam for once-per-VM setup: branch on `outcome` and probe or run whatever the environment needs.
+
+```typescript
+new E2BSandbox({
+  id: sessionId,
+  onStart: async ({ sandbox, outcome }) => {
+    if (outcome === 'created') {
+      // Fresh VM: run the full setup.
+      await runSetup(sandbox)
+      return
+    }
+    // Reconnected: probe, and self-heal if setup never completed.
+    const probe = await sandbox.executeCommand('test -d ~/repo/.git')
+    if (probe.exitCode !== 0) await runSetup(sandbox)
+  },
+})
+```
+
+Semantics:
+
+- A thrown error is fatal: `start()` rejects with the hook's error and the sandbox is marked `error`, so a caller never observes a running sandbox whose setup hook failed. Nothing is latched, and the next `start()` (including the one triggered by the next lazy command) retries the hook. `onStop` and `onDestroy` remain non-fatal observers, because teardown proceeds best-effort.
+- `outcome` distinguishes the branches: `'created'` means this start provisioned a fresh VM (run setup), `'connected'` means it reconnected or resumed (setup normally already ran, so probe when the hook must self-heal a crash between create and setup-complete). `undefined` means the provider doesn't report.
+- Keep setup work idempotent. A hook re-runs whenever a probe decides it should, and a checkpoint-recovered fresh VM reports `outcome: 'created'`.
+- The sandbox status flips to `running` before the hook executes (the hook runs commands through the sandbox's own command path), so commands issued concurrently through `ensureRunning()` can interleave with it. Callers awaiting the original `start()` always observe a sandbox whose hook finished.
+- The hook runs before pending filesystem mounts are processed, so it can't rely on mounted paths.
+
+### `setOnStart(update)`
+
+Attaches a start hook after construction, for runtimes that receive a sandbox they didn't build. Without it, every host that constructs a sandbox has to accept a hook and pass it to the provider constructor, and a host that forgets leaves setup unrun with no error.
+
+The updater receives the hook currently installed, either the `onStart` constructor option or one a previous call left behind, and returns the hook to install. Composing this way means a caller never discards a hook it didn't know about:
+
+```typescript
+sandbox.setOnStart?.(previous => async args => {
+  await previous?.(args) // whatever prepared the sandbox runs first
+  await mySetup(args)
+})
+```
+
+Semantics:
+
+- Errors stay fatal, exactly as with the constructor option. Because each hook awaits the next, a throw stops the ones sequenced after it.
+- The caller chooses the order. Await `previous` first when your hook needs the workspace it prepares, or last when yours is the one preparing it.
+- Ignoring `previous` replaces the installed hook. That's supported, and it's how a caller takes over setup a runtime installed.
+- Each call wraps the current hook, so attach once per sandbox instance. Attaching on a path that runs per request stacks duplicate work on every start.
+- Only starts that begin after the call see the new hook.
 
 ### `stop()`
 
@@ -111,7 +188,8 @@ const result = await sandbox.executeCommand('npm', ['install', 'lodash'])
           {
             name: 'env',
             type: 'Record<string, string>',
-            description: 'Additional environment variables',
+            description:
+              'Additional environment variables for this command. These take precedence over the sandbox environment for this command execution only.',
             isOptional: true,
           },
           {
@@ -132,6 +210,42 @@ const result = await sandbox.executeCommand('npm', ['install', 'lodash'])
   },
 ]}
 />
+
+### `setEnv(update)`
+
+Update the sandbox's runtime environment. These values are merged into every command the sandbox runs, including `executeCommand()` and `processes.spawn()`, so credentials installed or rotated after the sandbox was created reach every subsequent command. Optional, so check for support or use optional chaining.
+
+```typescript
+sandbox.setEnv?.(env => ({ ...env, GH_TOKEN: token }))
+```
+
+The updater receives a copy of the current environment and returns the replacement, so a single call can set, unset, or batch-update variables. Removing a key removes it from the sandbox's runtime environment only, so values the provider supplies on its own still apply. Seed the initial values with the `env` constructor option.
+
+The runtime environment applies to commands executed through the sandbox rather than to the VM's own environment, so it's never written into the VM and survives provider pause and resume. When a command runs, provider defaults are applied first, the sandbox's runtime environment overrides them, and the per-call `env` option on `executeCommand()` wins over both.
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+  {
+    name: 'update',
+    type: '(env: Record<string, string | undefined>) => Record<string, string | undefined>',
+    description: "Receives a copy of the sandbox's current runtime environment and returns the replacement.",
+  },
+]}
+/>
+
+**Returns:** `void`
+
+### `getEnv()`
+
+Returns a copy of the sandbox's current runtime environment. Mutating the returned object doesn't change the sandbox, so use `setEnv()` for updates.
+
+```typescript
+const token = sandbox.getEnv().GH_TOKEN
+```
+
+**Returns:** `Record<string, string | undefined>`
 
 ### `getInfo()`
 

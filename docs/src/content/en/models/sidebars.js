@@ -126,6 +126,16 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/agentrouter',
+          label: 'AgentRouter',
+        },
+        {
+          type: 'doc',
+          id: 'providers/agnes',
+          label: 'Agnes AI',
+        },
+        {
+          type: 'doc',
           id: 'providers/ai-router',
           label: 'AI-ROUTER',
         },
@@ -471,6 +481,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/iteracompute',
+          label: 'IteraCompute',
+        },
+        {
+          type: 'doc',
           id: 'providers/jalapeno',
           label: 'Jalapeno Cloud',
         },
@@ -636,6 +651,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/neosmith',
+          label: 'NeoSmith',
+        },
+        {
+          type: 'doc',
           id: 'providers/neuralwatt',
           label: 'Neuralwatt',
         },
@@ -681,6 +701,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/opper',
+          label: 'Opper',
+        },
+        {
+          type: 'doc',
           id: 'providers/orcarouter',
           label: 'OrcaRouter',
         },
@@ -688,6 +713,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/ovhcloud',
           label: 'OVHcloud AI Endpoints',
+        },
+        {
+          type: 'doc',
+          id: 'providers/pendra',
+          label: 'Pendra',
         },
         {
           type: 'doc',
@@ -798,6 +828,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/stackit',
           label: 'STACKIT',
+        },
+        {
+          type: 'doc',
+          id: 'providers/standardcompute',
+          label: 'Standard Compute',
         },
         {
           type: 'doc',

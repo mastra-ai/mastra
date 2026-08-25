@@ -539,6 +539,7 @@ export function createWorkflowTestSuite(config: WorkflowTestConfig) {
       stream: config.streamWorkflow,
       streamResume: config.streamResumeWorkflow,
       getStorage: config.getStorage,
+      deletesDeclinedTerminalSnapshots: config.deletesDeclinedTerminalSnapshots,
       skipTests,
       concurrent: config.concurrent,
     };

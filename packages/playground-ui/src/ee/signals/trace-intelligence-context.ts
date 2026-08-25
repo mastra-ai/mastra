@@ -23,7 +23,7 @@ export const defaultTraceIntelligenceContextValue: TraceIntelligenceContextValue
   cacheScope: 'oss-studio',
   request: defaultRequest,
   LinkComponent: 'a',
-  getTraceHref: traceId => `/traces/${encodeURIComponent(traceId)}`,
+  getTraceHref: traceId => `/traces?traceId=${encodeURIComponent(traceId)}`,
 };
 
 export const TraceIntelligenceContext = createContext(defaultTraceIntelligenceContextValue);

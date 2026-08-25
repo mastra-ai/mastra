@@ -62,7 +62,7 @@ const TooltipContent = React.forwardRef<HTMLDivElement, TooltipContentProps>(
       alignOffset = 0,
       arrowPadding = 10,
       anchor,
-      positionMethod,
+      positionMethod = 'fixed',
       collisionBoundary,
       collisionPadding,
       sticky,

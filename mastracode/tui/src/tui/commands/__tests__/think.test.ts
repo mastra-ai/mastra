@@ -115,4 +115,13 @@ describe('handleThinkCommand', () => {
     expect(showInfo).toHaveBeenCalledWith(expect.stringContaining('Invalid thinking level'));
     expect(showInfo).toHaveBeenCalledWith(expect.stringContaining('max'));
   });
+
+  it('rejects trailing arguments consistently with other interfaces', async () => {
+    const { ctx, stateSet, showInfo } = makeCtx();
+
+    await handleThinkCommand(ctx, ['high', 'extra']);
+
+    expect(stateSet).not.toHaveBeenCalled();
+    expect(showInfo).toHaveBeenCalledWith(expect.stringContaining('Invalid thinking level'));
+  });
 });

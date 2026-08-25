@@ -14,6 +14,7 @@ import {
   sanitizeCommentText,
 } from './index.js';
 import type {
+  GithubPRSubscription,
   GithubPullRequestSnapshot,
   GithubRepositoryResolver,
   GithubSignalsOptions,
@@ -40,6 +41,40 @@ function createThreadStore(thread: StorageThreadType): GithubSignalsThreadStore 
       return nextThread;
     }),
   };
+}
+
+function createSubscribedThread(
+  id: string,
+  subscription: Partial<GithubPRSubscription> & Pick<GithubPRSubscription, 'number'>,
+): StorageThreadType {
+  return {
+    id,
+    resourceId: `resource-${id}`,
+    createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+    metadata: {
+      mastra: {
+        [GITHUB_SIGNALS_METADATA_KEY]: {
+          subscriptions: [
+            {
+              owner: 'mastra-ai',
+              repo: 'mastra',
+              mode: 'working',
+              subscribedAt: '2026-01-01T00:00:00.000Z',
+              updatedAt: '2026-01-01T00:00:00.000Z',
+              lastSubscribeSignalId: `signal-${subscription.number}`,
+              ...subscription,
+            },
+          ],
+        },
+      },
+    },
+  };
+}
+
+function getSavedGithubSubscriptions(threadStore: GithubSignalsThreadStore): GithubPRSubscription[] {
+  const savedThread = vi.mocked(threadStore.saveThread).mock.calls.at(-1)![0].thread;
+  return (savedThread.metadata?.mastra as any)[GITHUB_SIGNALS_METADATA_KEY].subscriptions;
 }
 
 function createRequestContext(thread: StorageThreadType) {
@@ -175,7 +210,10 @@ describe('GithubSignals', () => {
       expect.objectContaining({
         type: 'reactive',
         tagName: 'github-subscribe-pr',
-        attributes: { owner: 'mastra-ai', repo: 'mastra', number: 123 },
+        attributes: { owner: 'mastra-ai', repo: 'mastra', number: 123, mode: 'working' },
+        metadata: {
+          github: { action: 'subscribeToPR', owner: 'mastra-ai', repo: 'mastra', number: 123, mode: 'working' },
+        },
       }),
     );
     expect(GithubSignals.signals.unsubscribeFromPR({ owner: 'mastra-ai', repo: 'mastra', number: 123 })).toEqual(
@@ -216,8 +254,22 @@ describe('GithubSignals', () => {
       expect.objectContaining({
         type: 'reactive',
         tagName: 'system-reminder',
-        contents: expect.stringContaining('/github subscribe 17439'),
-        attributes: { type: 'github-subscription-hint' },
+        contents: expect.stringMatching(
+          /--mode review.*new commits.*authorized latest PR comments.*review-thread-state changes including all threads resolved.*PR close or merge updates.*--mode working.*all actionable PR activity.*Do not subscribe for a one-off inspection\./,
+        ),
+        attributes: {
+          type: 'github-subscription-hint',
+          availableModes: 'review,working',
+          defaultMode: null,
+        },
+        metadata: {
+          github: {
+            action: 'subscriptionHint',
+            owner: 'mastra-ai',
+            repo: 'mastra',
+            number: 17439,
+          },
+        },
       }),
     );
     const savedThread = vi.mocked(threadStore.saveThread).mock.calls[0]![0].thread;
@@ -315,6 +367,15 @@ describe('GithubSignals', () => {
     expect(Object.keys(result.tools ?? {})).toEqual(
       expect.arrayContaining(['github_subscribe_pr', 'github_unsubscribe_pr']),
     );
+    const subscribeTool = (result.tools as any).github_subscribe_pr;
+    expect(subscribeTool.description).toContain('Use review mode for new commits');
+    expect(subscribeTool.description).toContain('review-thread-state changes including all threads resolved');
+    expect(subscribeTool.description).toContain('PR close or merge updates');
+    expect(subscribeTool.description).toContain('Use working mode for all actionable PR activity');
+    expect(subscribeTool.description).toContain('Do not subscribe for a one-off inspection');
+    expect(subscribeTool.inputSchema.safeParse({ number: 42, mode: 'review' }).success).toBe(true);
+    expect(subscribeTool.inputSchema.safeParse({ number: 42, mode: 'working' }).success).toBe(true);
+    expect(subscribeTool.inputSchema.safeParse({ number: 42, mode: 'other' }).success).toBe(false);
   });
 
   it('subscribe and unsubscribe tools mutate the current thread subscription directly', async () => {
@@ -350,7 +411,14 @@ describe('GithubSignals', () => {
           messages: [],
         },
       ),
-    ).resolves.toMatchObject({ subscribed: true, owner: 'mastra-ai', repo: 'mastra', number: 17439 });
+    ).resolves.toMatchObject({
+      subscribed: true,
+      mode: 'working',
+      owner: 'mastra-ai',
+      repo: 'mastra',
+      number: 17439,
+      message: 'Subscribed to mastra-ai/mastra#17439 in working mode.',
+    });
     let savedThread = vi.mocked(threadStore.saveThread).mock.calls.at(-1)![0].thread;
     expect((savedThread.metadata?.mastra as any)[GITHUB_SIGNALS_METADATA_KEY].subscriptions).toEqual([
       expect.objectContaining({ owner: 'mastra-ai', repo: 'mastra', number: 17439 }),
@@ -616,11 +684,13 @@ describe('GithubSignals', () => {
         data: expect.objectContaining({
           type: 'reactive',
           tagName: GITHUB_SYNC_STATUS_TAG,
+          contents: 'Subscribed to mastra-ai/mastra#123 in working mode.',
           attributes: expect.objectContaining({
             status: 'subscribed',
             owner: 'mastra-ai',
             repo: 'mastra',
             number: 123,
+            mode: 'working',
           }),
         }),
       }),
@@ -2519,15 +2589,18 @@ describe('GithubSignals', () => {
       },
     );
     expect(dirtySuppressesCiPending).not.toHaveBeenCalled();
-    const reviewActivity = await runPoll(createThreadWithCursor({ lastObservedReviewStateHash: 'reviews-1' }), {
-      title: 'PR',
-      state: 'open',
-      contentHash: 'reviews-2',
-      ciState: 'unknown',
-      unresolvedReviewThreads: 2,
-      reviewStateHash: 'reviews-2',
-      latestCommentAuthor: 'reviewer',
-    });
+    const reviewActivity = await runPoll(
+      createThreadWithCursor({ lastObservedReviewStateHash: 'reviews-1' }),
+      {
+        title: 'PR',
+        state: 'open',
+        contentHash: 'reviews-2',
+        ciState: 'unknown',
+        unresolvedReviewThreads: 2,
+        reviewStateHash: 'reviews-2',
+      },
+      { permissionResolver: { getPermission: vi.fn(async () => 'none' as const) } },
+    );
     expect(reviewActivity).toHaveBeenCalledWith(
       [expect.objectContaining({ kind: 'pull-request-review-activity', priority: 'medium' })],
       expect.anything(),
@@ -3720,5 +3793,635 @@ describe('GithubSignals', () => {
     resolveFirstSync();
     await vi.advanceTimersByTimeAsync(0);
     expect(threadStore.saveThread).not.toHaveBeenCalled();
+  });
+
+  it('defaults omitted and legacy subscription modes to working and preserves cursors when changing mode', async () => {
+    const legacyThread = createSubscribedThread('thread-legacy-mode', {
+      number: 201,
+      mode: 'invalid' as any,
+      lastObservedGithubUpdatedAt: '2026-01-01T00:00:00.000Z',
+      lastObservedContentHash: 'legacy-hash',
+      lastObservedHeadSha: 'legacy-head',
+    });
+    const legacyStore = createThreadStore(legacyThread);
+    const legacyProcessor = new GithubSignals({
+      threadStore: legacyStore,
+      syncClient: {
+        syncPullRequest: vi.fn(async () => ({ ok: true })),
+        getPullRequestSnapshot: vi.fn(async () => ({
+          state: 'open',
+          githubUpdatedAt: '2026-01-01T00:00:00.000Z',
+          contentHash: 'legacy-hash',
+          headSha: 'legacy-head',
+        })),
+      },
+    });
+
+    await legacyProcessor.pollThreadNow({ threadId: legacyThread.id, resourceId: legacyThread.resourceId });
+    expect(getSavedGithubSubscriptions(legacyStore)[0]).toMatchObject({ mode: 'working' });
+
+    const omittedThread: StorageThreadType = {
+      id: 'thread-omitted-mode',
+      resourceId: 'resource-omitted-mode',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {},
+    };
+    const omittedStore = createThreadStore(omittedThread);
+    const omittedProcessor = new GithubSignals({ threadStore: omittedStore, syncOnSubscribe: false });
+    const omittedResult = await omittedProcessor.subscribeThreadToPR({
+      threadId: omittedThread.id,
+      resourceId: omittedThread.resourceId,
+      pr: { owner: 'mastra-ai', repo: 'mastra', number: 202 },
+    });
+    expect(omittedResult).toMatchObject({ mode: 'working', subscription: { mode: 'working' } });
+    expect(getSavedGithubSubscriptions(omittedStore)[0]).toMatchObject({ mode: 'working' });
+
+    const changedResult = await legacyProcessor.subscribeThreadToPR({
+      threadId: legacyThread.id,
+      resourceId: legacyThread.resourceId,
+      pr: { owner: 'mastra-ai', repo: 'mastra', number: 201 },
+      mode: 'review',
+    });
+    expect(changedResult).toMatchObject({
+      mode: 'review',
+      subscription: {
+        mode: 'review',
+        lastObservedContentHash: 'legacy-hash',
+        lastObservedHeadSha: 'legacy-head',
+      },
+    });
+    legacyProcessor.stopAllPolling();
+    omittedProcessor.stopAllPolling();
+  });
+
+  it('round-trips review mode through reactive signals, direct subscriptions, tools, and storage', async () => {
+    expect(
+      GithubSignals.signals.subscribeToPR({ owner: 'mastra-ai', repo: 'mastra', number: 203, mode: 'review' }),
+    ).toEqual(
+      expect.objectContaining({
+        attributes: { owner: 'mastra-ai', repo: 'mastra', number: 203, mode: 'review' },
+        metadata: {
+          github: { action: 'subscribeToPR', owner: 'mastra-ai', repo: 'mastra', number: 203, mode: 'review' },
+        },
+      }),
+    );
+
+    const thread: StorageThreadType = {
+      id: 'thread-review-roundtrip',
+      resourceId: 'resource-review-roundtrip',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {},
+    };
+    const threadStore = createThreadStore(thread);
+    const processor = new GithubSignals({ threadStore, syncOnSubscribe: false });
+    const directResult = await processor.subscribeThreadToPR({
+      threadId: thread.id,
+      resourceId: thread.resourceId,
+      pr: { owner: 'mastra-ai', repo: 'mastra', number: 203 },
+      mode: 'review',
+    });
+    expect(directResult).toMatchObject({ mode: 'review', subscription: { mode: 'review' } });
+
+    const toolResult = await runGithubSignalsProcessor({
+      processor,
+      messageList: new MessageList({ threadId: thread.id, resourceId: thread.resourceId }),
+      requestContext: createRequestContext(thread),
+    });
+    const tools = toolResult.tools as Record<string, { execute: (input: unknown) => Promise<unknown> }>;
+    await expect(
+      tools.github_subscribe_pr!.execute({ owner: 'mastra-ai', repo: 'mastra', number: 203, mode: 'review' }),
+    ).resolves.toMatchObject({
+      subscribed: true,
+      mode: 'review',
+      message: 'Subscribed to mastra-ai/mastra#203 in review mode.',
+    });
+    expect(getSavedGithubSubscriptions(threadStore)[0]).toMatchObject({ mode: 'review' });
+    processor.stopAllPolling();
+  });
+
+  it('silently checkpoints review baselines during subscribe and the first later poll', async () => {
+    const snapshot: GithubPullRequestSnapshot = {
+      title: 'Review baseline',
+      state: 'open',
+      githubUpdatedAt: '2026-01-01T00:05:00.000Z',
+      contentHash: 'baseline-content',
+      threadContentHash: 'baseline-thread',
+      headSha: 'baseline-head',
+      ciState: 'failure',
+      mergeableState: 'dirty',
+      reviewStateHash: 'review-1',
+      unresolvedReviewThreads: 1,
+    };
+    const subscribeThread: StorageThreadType = {
+      id: 'thread-review-baseline-subscribe',
+      resourceId: 'resource-review-baseline-subscribe',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {},
+    };
+    const subscribeStore = createThreadStore(subscribeThread);
+    const subscribeNotification = vi.fn(async () => ({ accepted: true }));
+    const subscribeProcessor = new GithubSignals({
+      threadStore: subscribeStore,
+      syncClient: {
+        syncPullRequest: vi.fn(async () => ({ ok: true })),
+        getPullRequestSnapshot: vi.fn(async () => snapshot),
+      },
+      agentId: 'code-agent',
+    });
+    subscribeProcessor.__registerMastra({
+      getAgentById: vi.fn(() => ({ sendSignal: vi.fn(), sendNotificationSignal: subscribeNotification })),
+    } as any);
+
+    await subscribeProcessor.subscribeThreadToPR({
+      threadId: subscribeThread.id,
+      resourceId: subscribeThread.resourceId,
+      pr: { owner: 'mastra-ai', repo: 'mastra', number: 204 },
+      mode: 'review',
+    });
+    expect(subscribeNotification).not.toHaveBeenCalled();
+    expect(getSavedGithubSubscriptions(subscribeStore)[0]).toMatchObject({
+      mode: 'review',
+      lastObservedContentHash: 'baseline-content',
+      lastObservedHeadSha: 'baseline-head',
+      lastObservedCiState: 'failure',
+    });
+
+    const laterThread: StorageThreadType = {
+      id: 'thread-review-baseline-poll',
+      resourceId: 'resource-review-baseline-poll',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {},
+    };
+    const laterStore = createThreadStore(laterThread);
+    const laterNotification = vi.fn(async () => ({ accepted: true }));
+    const laterProcessor = new GithubSignals({
+      threadStore: laterStore,
+      syncOnSubscribe: false,
+      syncClient: {
+        syncPullRequest: vi.fn(async () => ({ ok: true })),
+        getPullRequestSnapshot: vi.fn(async () => snapshot),
+      },
+      agentId: 'code-agent',
+    });
+    laterProcessor.__registerMastra({
+      getAgentById: vi.fn(() => ({ sendSignal: vi.fn(), sendNotificationSignal: laterNotification })),
+    } as any);
+    await laterProcessor.subscribeThreadToPR({
+      threadId: laterThread.id,
+      resourceId: laterThread.resourceId,
+      pr: { owner: 'mastra-ai', repo: 'mastra', number: 205 },
+      mode: 'review',
+    });
+    vi.mocked(laterStore.saveThread).mockClear();
+    await laterProcessor.pollThreadNow({ threadId: laterThread.id, resourceId: laterThread.resourceId });
+    expect(laterNotification).not.toHaveBeenCalled();
+    expect(getSavedGithubSubscriptions(laterStore)[0]).toMatchObject({
+      mode: 'review',
+      lastObservedContentHash: 'baseline-content',
+      lastObservedHeadSha: 'baseline-head',
+    });
+    subscribeProcessor.stopAllPolling();
+    laterProcessor.stopAllPolling();
+  });
+
+  it('silently checkpoints the first review snapshot after an initial snapshot error', async () => {
+    const thread: StorageThreadType = {
+      id: 'thread-review-recovery',
+      resourceId: 'resource-review-recovery',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {},
+    };
+    const threadStore = createThreadStore(thread);
+    let snapshotAttempt = 0;
+    const syncClient: GithubSignalsSyncClient = {
+      syncPullRequest: vi.fn(async () => ({ ok: true })),
+      getPullRequestSnapshot: vi.fn(async () => {
+        snapshotAttempt++;
+        if (snapshotAttempt === 1) throw new Error('snapshot unavailable');
+        return {
+          state: 'open',
+          githubUpdatedAt: '2026-01-01T00:05:00.000Z',
+          contentHash: 'recovered-content',
+          headSha: 'recovered-head',
+          ciState: 'failure' as const,
+        };
+      }),
+    };
+    const sendNotificationSignal = vi.fn(async () => ({ accepted: true }));
+    const processor = new GithubSignals({ threadStore, syncClient, agentId: 'code-agent' });
+    processor.__registerMastra({
+      getAgentById: vi.fn(() => ({ sendSignal: vi.fn(), sendNotificationSignal })),
+    } as any);
+
+    await processor.subscribeThreadToPR({
+      threadId: thread.id,
+      resourceId: thread.resourceId,
+      pr: { owner: 'mastra-ai', repo: 'mastra', number: 206 },
+      mode: 'review',
+    });
+    await processor.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
+
+    expect(sendNotificationSignal).not.toHaveBeenCalled();
+    expect(getSavedGithubSubscriptions(threadStore)[0]).toMatchObject({
+      mode: 'review',
+      lastObservedContentHash: 'recovered-content',
+      lastObservedHeadSha: 'recovered-head',
+    });
+    expect(getSavedGithubSubscriptions(threadStore)[0]!.lastSnapshotError).toBeUndefined();
+    processor.stopAllPolling();
+  });
+
+  it('emits independently ranked review comment, head, and unresolved-review notifications', async () => {
+    const thread = createSubscribedThread('thread-review-dedicated', {
+      number: 207,
+      mode: 'review',
+      lastObservedGithubUpdatedAt: '2026-01-01T00:00:00.000Z',
+      lastObservedContentHash: 'old-content',
+      lastObservedThreadContentHash: 'old-thread',
+      lastObservedHeadSha: 'old-head',
+      lastObservedState: 'open',
+      lastObservedMergeableState: 'clean',
+      lastObservedCiState: 'success',
+      lastObservedReviewStateHash: 'review-1',
+    });
+    const threadStore = createThreadStore(thread);
+    const sendNotificationSignal = vi.fn(async () => ({ accepted: true }));
+    const processor = new GithubSignals({
+      threadStore,
+      syncClient: {
+        syncPullRequest: vi.fn(async () => ({ ok: true })),
+        getPullRequestSnapshot: vi.fn(async () => ({
+          title: 'Review dedicated changes',
+          state: 'open',
+          githubUpdatedAt: '2026-01-01T00:10:00.000Z',
+          contentHash: 'new-content',
+          threadContentHash: 'new-thread',
+          headSha: 'new-head',
+          mergeableState: 'dirty',
+          ciState: 'failure' as const,
+          reviewStateHash: 'review-2',
+          unresolvedReviewThreads: 2,
+          latestCommentAuthor: 'reviewer',
+          latestCommentBody: 'I addressed the review.',
+          latestCommentUrl: 'https://github.com/mastra-ai/mastra/pull/207#issuecomment-2',
+          latestCommentUpdatedAt: '2026-01-01T00:09:00.000Z',
+        })),
+      },
+      permissionResolver: { getPermission: vi.fn(async () => 'write' as const) },
+      agentId: 'code-agent',
+    });
+    processor.__registerMastra({
+      getAgentById: vi.fn(() => ({ sendSignal: vi.fn(), sendNotificationSignal })),
+    } as any);
+
+    await processor.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
+
+    expect(sendNotificationSignal).toHaveBeenCalledTimes(1);
+    const notifications = (sendNotificationSignal.mock.calls as unknown[][])[0]![0] as Array<{ kind: string }>;
+    expect(notifications.map(notification => notification.kind)).toEqual([
+      'pull-request-activity',
+      'pull-request-code-activity',
+      'pull-request-review-activity',
+    ]);
+    expect(notifications).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'pull-request-code-activity',
+          summary: 'New head revision for mastra-ai/mastra#207: Review dedicated changes.',
+          attributes: expect.objectContaining({ mode: 'review' }),
+          metadata: expect.objectContaining({ github: expect.objectContaining({ mode: 'review' }) }),
+        }),
+      ]),
+    );
+    expect(getSavedGithubSubscriptions(threadStore)[0]).toMatchObject({
+      lastNotificationKind: 'pull-request-activity',
+      lastNotificationPriority: 'high',
+      lastNotificationSummary: 'reviewer commented on mastra-ai/mastra#207: I addressed the review.',
+    });
+  });
+
+  it('suppresses aggregate review noise while advancing every cursor and retaining notification history', async () => {
+    const thread = createSubscribedThread('thread-review-suppressed', {
+      number: 208,
+      mode: 'review',
+      lastObservedGithubUpdatedAt: '2026-01-01T00:00:00.000Z',
+      lastObservedContentHash: 'old-content',
+      lastObservedThreadContentHash: 'old-thread',
+      lastObservedHeadSha: 'same-head',
+      lastObservedState: 'open',
+      lastObservedMergeableState: 'clean',
+      lastObservedCiState: 'success',
+      lastObservedReviewStateHash: 'review-1',
+      lastNotificationAt: '2026-01-01T00:01:00.000Z',
+      lastNotificationKind: 'pull-request-code-activity',
+      lastNotificationPriority: 'medium',
+      lastNotificationSummary: 'Earlier code activity',
+    });
+    const threadStore = createThreadStore(thread);
+    const sendNotificationSignal = vi.fn(async () => ({ accepted: true }));
+    const processor = new GithubSignals({
+      threadStore,
+      syncClient: {
+        syncPullRequest: vi.fn(async () => ({ ok: true })),
+        getPullRequestSnapshot: vi.fn(async () => ({
+          state: 'open',
+          githubUpdatedAt: '2026-01-01T00:10:00.000Z',
+          contentHash: 'new-content',
+          threadContentHash: 'new-thread',
+          headSha: 'same-head',
+          mergeableState: 'dirty',
+          ciState: 'failure' as const,
+          reviewStateHash: 'review-1',
+          unresolvedReviewThreads: 1,
+        })),
+      },
+      agentId: 'code-agent',
+    });
+    processor.__registerMastra({
+      getAgentById: vi.fn(() => ({ sendSignal: vi.fn(), sendNotificationSignal })),
+    } as any);
+
+    await processor.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
+
+    expect(sendNotificationSignal).not.toHaveBeenCalled();
+    expect(getSavedGithubSubscriptions(threadStore)[0]).toMatchObject({
+      lastObservedGithubUpdatedAt: '2026-01-01T00:10:00.000Z',
+      lastObservedContentHash: 'new-content',
+      lastObservedThreadContentHash: 'new-thread',
+      lastObservedMergeableState: 'dirty',
+      lastObservedCiState: 'failure',
+      lastNotificationAt: '2026-01-01T00:01:00.000Z',
+      lastNotificationKind: 'pull-request-code-activity',
+      lastNotificationSummary: 'Earlier code activity',
+    });
+  });
+
+  it('does not author-gate head or review-state changes while suppressing unauthorized comments', async () => {
+    const thread = createSubscribedThread('thread-review-author-gates', {
+      number: 209,
+      mode: 'review',
+      lastObservedGithubUpdatedAt: '2026-01-01T00:00:00.000Z',
+      lastObservedContentHash: 'old-content',
+      lastObservedHeadSha: 'old-head',
+      lastObservedReviewStateHash: 'review-1',
+    });
+    const threadStore = createThreadStore(thread);
+    const sendNotificationSignal = vi.fn(async () => ({ accepted: true }));
+    const processor = new GithubSignals({
+      threadStore,
+      syncClient: {
+        syncPullRequest: vi.fn(async () => ({ ok: true })),
+        getPullRequestSnapshot: vi.fn(async () => ({
+          title: 'No review actor',
+          state: 'open',
+          githubUpdatedAt: '2026-01-01T00:10:00.000Z',
+          contentHash: 'new-content',
+          headSha: 'new-head',
+          reviewStateHash: 'review-2',
+          unresolvedReviewThreads: 2,
+          latestCommentAuthor: 'read-only-user',
+          latestCommentBody: 'Unauthorized review comment',
+          latestCommentUrl: 'https://github.com/mastra-ai/mastra/pull/209#issuecomment-2',
+          latestCommentUpdatedAt: '2026-01-01T00:09:00.000Z',
+        })),
+      },
+      permissionResolver: { getPermission: vi.fn(async () => 'read' as const) },
+      agentId: 'code-agent',
+    });
+    processor.__registerMastra({
+      getAgentById: vi.fn(() => ({ sendSignal: vi.fn(), sendNotificationSignal })),
+    } as any);
+
+    await processor.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
+
+    const notifications = (sendNotificationSignal.mock.calls as unknown[][])[0]![0] as Array<{ kind: string }>;
+    expect(notifications.map(notification => notification.kind)).toEqual([
+      'pull-request-code-activity',
+      'pull-request-review-activity',
+    ]);
+  });
+
+  it('notifies when the final observable review thread is resolved without requiring a comment author', async () => {
+    const thread = createSubscribedThread('thread-review-all-resolved', {
+      number: 210,
+      mode: 'review',
+      lastObservedGithubUpdatedAt: '2026-01-01T00:00:00.000Z',
+      lastObservedContentHash: 'old-content',
+      lastObservedState: 'open',
+      lastObservedReviewStateHash: 'review-1',
+    });
+    const threadStore = createThreadStore(thread);
+    const sendNotificationSignal = vi.fn(async () => ({ accepted: true }));
+    const permissionResolver = { getPermission: vi.fn(async () => 'none' as const) };
+    const processor = new GithubSignals({
+      threadStore,
+      syncClient: {
+        syncPullRequest: vi.fn(async () => ({ ok: true })),
+        getPullRequestSnapshot: vi.fn(async () => ({
+          title: 'Resolve final review thread',
+          state: 'open',
+          githubUpdatedAt: '2026-01-01T00:10:00.000Z',
+          contentHash: 'resolved-content',
+          reviewStateHash: 'review-0',
+          unresolvedReviewThreads: 0,
+        })),
+      },
+      permissionResolver,
+      agentId: 'code-agent',
+    });
+    processor.__registerMastra({
+      getAgentById: vi.fn(() => ({ sendSignal: vi.fn(), sendNotificationSignal })),
+    } as any);
+
+    await processor.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
+
+    expect(permissionResolver.getPermission).not.toHaveBeenCalled();
+    expect(sendNotificationSignal).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({
+          kind: 'pull-request-review-activity',
+          summary: 'All review threads are resolved for mastra-ai/mastra#210: Resolve final review thread.',
+        }),
+      ],
+      expect.objectContaining({ threadId: thread.id, resourceId: thread.resourceId }),
+    );
+  });
+
+  it('refuses terminal review subscriptions across direct, tool, and reactive contracts', async () => {
+    vi.useFakeTimers();
+    const directThread = createSubscribedThread('thread-review-terminal-direct', {
+      number: 210,
+      mode: 'review',
+      lastObservedGithubUpdatedAt: '2026-01-01T00:00:00.000Z',
+      lastObservedContentHash: 'old-content',
+    });
+    const directStore = createThreadStore(directThread);
+    const terminalSyncClient: GithubSignalsSyncClient = {
+      syncPullRequest: vi.fn(async () => ({ ok: true })),
+      getPullRequestSnapshot: vi.fn(async input => ({
+        state: input.number === 211 ? 'merged' : 'closed',
+        githubUpdatedAt: '2026-01-01T00:10:00.000Z',
+        contentHash: input.number === 211 ? 'merged-content' : 'closed-content',
+      })),
+    };
+    const directProcessor = new GithubSignals({ threadStore: directStore, syncClient: terminalSyncClient });
+    await directProcessor.startPollingForThread({ threadId: directThread.id, resourceId: directThread.resourceId });
+    const directResult = await directProcessor.subscribeThreadToPR({
+      threadId: directThread.id,
+      resourceId: directThread.resourceId,
+      pr: { owner: 'mastra-ai', repo: 'mastra', number: 210 },
+      mode: 'review',
+    });
+    expect(directResult).toMatchObject({ mode: 'review', terminalState: 'closed' });
+    expect(directResult.subscription).toBeUndefined();
+    expect(getSavedGithubSubscriptions(directStore)).toEqual([]);
+    expect(directProcessor.isPollingThread({ threadId: directThread.id, resourceId: directThread.resourceId })).toBe(
+      false,
+    );
+
+    const toolThread: StorageThreadType = {
+      id: 'thread-review-terminal-tool',
+      resourceId: 'resource-review-terminal-tool',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {},
+    };
+    const toolProcessor = new GithubSignals({
+      threadStore: createThreadStore(toolThread),
+      syncClient: terminalSyncClient,
+    });
+    const toolStep = await runGithubSignalsProcessor({
+      processor: toolProcessor,
+      messageList: new MessageList({ threadId: toolThread.id, resourceId: toolThread.resourceId }),
+      requestContext: createRequestContext(toolThread),
+    });
+    const tools = toolStep.tools as Record<string, { execute: (input: unknown) => Promise<unknown> }>;
+    await expect(
+      tools.github_subscribe_pr!.execute({ owner: 'mastra-ai', repo: 'mastra', number: 211, mode: 'review' }),
+    ).resolves.toMatchObject({ subscribed: false, mode: 'review', terminalState: 'merged', reason: 'terminal' });
+
+    const reactiveThread: StorageThreadType = {
+      id: 'thread-review-terminal-reactive',
+      resourceId: 'resource-review-terminal-reactive',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {},
+    };
+    const signal = createSignal(
+      GithubSignals.signals.subscribeToPR({ owner: 'mastra-ai', repo: 'mastra', number: 212, mode: 'review' }),
+    );
+    const messageList = new MessageList({ threadId: reactiveThread.id, resourceId: reactiveThread.resourceId });
+    messageList.add(
+      [signal.toDBMessage({ threadId: reactiveThread.id, resourceId: reactiveThread.resourceId })],
+      'input',
+    );
+    const chunks: unknown[] = [];
+    await runGithubSignalsProcessor({
+      processor: new GithubSignals({ threadStore: createThreadStore(reactiveThread), syncClient: terminalSyncClient }),
+      messageList,
+      requestContext: createRequestContext(reactiveThread),
+      chunks,
+    });
+    expect(chunks).toContainEqual(
+      expect.objectContaining({
+        type: 'data-signal',
+        data: expect.objectContaining({
+          contents: 'Not subscribed to mastra-ai/mastra#212 in review mode because it is already closed.',
+          attributes: expect.objectContaining({
+            status: 'not_subscribed_terminal',
+            mode: 'review',
+            terminalState: 'closed',
+          }),
+        }),
+      }),
+    );
+    toolProcessor.stopAllPolling();
+  });
+
+  it('notifies before retiring a review subscription whose first available snapshot is closed', async () => {
+    const thread = createSubscribedThread('thread-review-terminal-poll', {
+      number: 213,
+      mode: 'review',
+    });
+    const threadStore = createThreadStore(thread);
+    let state: 'closed' | 'open' = 'closed';
+    const syncClient: GithubSignalsSyncClient = {
+      syncPullRequest: vi.fn(async () => ({ ok: true })),
+      getPullRequestSnapshot: vi.fn(async () => ({
+        state,
+        githubUpdatedAt: state === 'closed' ? '2026-01-01T00:10:00.000Z' : '2026-01-01T00:20:00.000Z',
+        contentHash: state === 'closed' ? 'closed-content' : 'reopened-content',
+      })),
+    };
+    const sendNotificationSignal = vi.fn(async () => ({ accepted: true }));
+    const processor = new GithubSignals({ threadStore, syncClient, agentId: 'code-agent' });
+    processor.__registerMastra({
+      getAgentById: vi.fn(() => ({ sendSignal: vi.fn(), sendNotificationSignal })),
+    } as any);
+
+    await expect(processor.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId })).resolves.toBe(0);
+    expect(getSavedGithubSubscriptions(threadStore)).toEqual([]);
+    expect(sendNotificationSignal).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({
+          kind: 'pull-request-closed',
+          summary:
+            'mastra-ai/mastra#213 was closed. This thread has been automatically unsubscribed from this PR. Resubscribe if you still need updates.',
+        }),
+      ],
+      expect.objectContaining({ threadId: thread.id, resourceId: thread.resourceId }),
+    );
+
+    state = 'open';
+    await expect(processor.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId })).resolves.toBe(0);
+    expect(syncClient.syncPullRequest).toHaveBeenCalledTimes(1);
+    expect(sendNotificationSignal).toHaveBeenCalledTimes(1);
+  });
+
+  it('notifies before retiring a review subscription even when the terminal state was already observed', async () => {
+    const thread = createSubscribedThread('thread-review-terminal-merged', {
+      number: 214,
+      mode: 'review',
+      lastObservedGithubUpdatedAt: '2026-01-01T00:10:00.000Z',
+      lastObservedContentHash: 'merged-content',
+      lastObservedState: 'merged',
+    });
+    const threadStore = createThreadStore(thread);
+    const sendNotificationSignal = vi.fn(async () => ({ accepted: true }));
+    const processor = new GithubSignals({
+      threadStore,
+      syncClient: {
+        syncPullRequest: vi.fn(async () => ({ ok: true })),
+        getPullRequestSnapshot: vi.fn(async () => ({
+          state: 'merged',
+          mergedAt: '2026-01-01T00:10:00.000Z',
+          githubUpdatedAt: '2026-01-01T00:10:00.000Z',
+          contentHash: 'merged-content',
+        })),
+      },
+      agentId: 'code-agent',
+    });
+    processor.__registerMastra({
+      getAgentById: vi.fn(() => ({ sendSignal: vi.fn(), sendNotificationSignal })),
+    } as any);
+
+    await expect(processor.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId })).resolves.toBe(0);
+
+    expect(getSavedGithubSubscriptions(threadStore)).toEqual([]);
+    expect(sendNotificationSignal).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({
+          kind: 'pull-request-merged',
+          summary:
+            'mastra-ai/mastra#214 was merged. This thread has been automatically unsubscribed from this PR. Resubscribe if you still need updates.',
+        }),
+      ],
+      expect.objectContaining({ threadId: thread.id, resourceId: thread.resourceId }),
+    );
   });
 });

@@ -111,7 +111,12 @@ export function Combobox(props: ComboboxProps) {
       </BaseCombobox.Trigger>
 
       <BaseCombobox.Portal container={resolvedContainer}>
-        <BaseCombobox.Positioner align="start" sideOffset={4} className={comboboxStyles.positioner}>
+        <BaseCombobox.Positioner
+          align="start"
+          sideOffset={4}
+          positionMethod="fixed"
+          className={comboboxStyles.positioner}
+        >
           <BaseCombobox.Popup className={comboboxStyles.popup}>
             <div className={comboboxStyles.searchContainer}>
               <Search className={comboboxStyles.searchIcon} />

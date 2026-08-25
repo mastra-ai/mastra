@@ -4,14 +4,12 @@ import type { FactoryDecisionSummary } from './services/decisions';
 
 /** A card has one status row, so every announcement it could make resolves to one of these. */
 export type BoardCardStatus =
-  | { kind: 'idle'; label: string; affordance: 'open' | 'run' }
+  | { kind: 'idle' }
   | { kind: 'waiting'; label: string; decisionId: string }
   | { kind: 'busy'; label: string }
   | { kind: 'error'; label: string; detail?: string; retryDecisionId?: string };
 
 export interface BoardCardStatusInput {
-  /** What clicking the card does when nothing is happening. */
-  idle: { label: string; affordance: 'open' | 'run' };
   /** Run a rule parked on this card, held until someone releases it. */
   proposal?: { label: string; decisionId: string };
   /** Destination of an in-flight stage move. */
@@ -46,7 +44,7 @@ function automationCopy(type: string): { busy: string; failed: string } {
 /**
  * Resolves the card's single status, freshest intent first: the user's own
  * in-flight action outranks what the server is doing on its own, and both
- * outrank the idle affordance.
+ * outrank a parked run.
  */
 export function boardCardStatus(input: BoardCardStatusInput): BoardCardStatus {
   const { moving, decision } = input;
@@ -63,7 +61,7 @@ export function boardCardStatus(input: BoardCardStatusInput): BoardCardStatus {
     return {
       kind: 'error',
       label: automationCopy(decision.type).failed,
-      retryDecisionId: decision.id,
+      ...(decision.canRetry ? { retryDecisionId: decision.id } : {}),
       detail: decision.lastError ?? undefined,
     };
   }
@@ -85,5 +83,5 @@ export function boardCardStatus(input: BoardCardStatusInput): BoardCardStatus {
   if (input.proposal) {
     return { kind: 'waiting', label: input.proposal.label, decisionId: input.proposal.decisionId };
   }
-  return { kind: 'idle', ...input.idle };
+  return { kind: 'idle' };
 }

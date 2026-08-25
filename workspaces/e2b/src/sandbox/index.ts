@@ -19,6 +19,7 @@ import type {
   SandboxFileInput,
   SandboxNetworking,
   SandboxCloneOptions,
+  SandboxStartResult,
 } from '@mastra/core/workspace';
 
 /**
@@ -27,7 +28,13 @@ import type {
 type InstructionsOption = string | ((opts: { defaultInstructions: string; requestContext?: RequestContext }) => string);
 import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
 import { Sandbox, Template } from 'e2b';
-import type { SandboxInfo as E2BSandboxListInfo, SandboxNetworkOpts, TemplateBuilder, TemplateClass } from 'e2b';
+import type {
+  SandboxInfo as E2BSandboxListInfo,
+  SandboxLifecycle,
+  SandboxNetworkOpts,
+  TemplateBuilder,
+  TemplateClass,
+} from 'e2b';
 import { createDefaultMountableTemplate } from '../utils/template';
 import type { TemplateSpec } from '../utils/template';
 import { mountS3, mountGCS, mountAzure, LOG_PREFIX } from './mounts';
@@ -65,6 +72,17 @@ export interface E2BSandboxOptions extends Omit<MastraSandboxOptions, 'processes
   /** Unique identifier for this sandbox instance */
   id?: string;
   /**
+   * Persisted E2B provider sandbox ID to reattach to deterministically.
+   *
+   * When set, `start()` first queries this exact sandbox and connects to it
+   * (resuming it if paused) instead of discovering by logical `id` metadata.
+   * Only a typed "sandbox gone" error (not found / killed / not running)
+   * falls through to the usual logical-id lookup and create ladder;
+   * auth, quota, rate-limit, timeout, and network errors propagate without
+   * creating a new sandbox.
+   */
+  sandboxId?: string;
+  /**
    * Sandbox template specification.
    *
    * - `string` - Use an existing template by ID
@@ -88,6 +106,18 @@ export interface E2BSandboxOptions extends Omit<MastraSandboxOptions, 'processes
   metadata?: Record<string, unknown>;
   /** Network configuration to use when creating the E2B sandbox */
   network?: SandboxNetworkOpts;
+  /**
+   * Sandbox lifecycle behavior when the `timeout` is reached.
+   *
+   * Defaults to `{ onTimeout: 'pause' }`, which snapshots the sandbox so the
+   * next `start()` reconnects and resumes it. Pass `{ onTimeout: 'kill' }` for
+   * stateless workspaces whose data lives outside the sandbox (e.g. mounted
+   * from S3) — idle sandboxes are then destroyed and recreated on next use
+   * instead of retained as paused snapshots.
+   *
+   * Note: an explicit `stop()` always pauses, regardless of this setting.
+   */
+  lifecycle?: SandboxLifecycle;
 
   /** Domain for self-hosted E2B. Falls back to E2B_DOMAIN env var. */
   domain?: string;
@@ -152,7 +182,7 @@ export interface E2BSandboxOptions extends Omit<MastraSandboxOptions, 'processes
  *
  * ```
  */
-export class E2BSandbox extends MastraSandbox {
+export class E2BSandbox extends MastraSandbox<Sandbox> {
   readonly id: string;
   readonly name = 'E2BSandbox';
   readonly provider = 'e2b';
@@ -190,10 +220,11 @@ export class E2BSandbox extends MastraSandbox {
   private _isRetrying = false;
   private readonly timeout: number;
   private readonly templateSpec?: TemplateSpec;
-  private readonly env: Record<string, string>;
   private readonly metadata: Record<string, unknown>;
   private readonly network?: SandboxNetworkOpts;
+  private readonly lifecycle: SandboxLifecycle;
   private readonly connectionOpts: Record<string, string>;
+  private readonly _preferredSandboxId?: string;
   private readonly _instructionsOverride?: InstructionsOption;
   private readonly _constructorOptions: E2BSandboxOptions;
 
@@ -207,15 +238,16 @@ export class E2BSandbox extends MastraSandbox {
     super({
       ...options,
       name: 'E2BSandbox',
-      processes: new E2BProcessManager({ env: options.env ?? {} }),
+      processes: new E2BProcessManager(),
     });
 
     this.id = options.id ?? this.generateId();
     this.timeout = options.timeout ?? 300_000; // 5 minutes;
     this.templateSpec = options.template;
-    this.env = options.env ?? {};
     this.metadata = options.metadata ?? {};
     this.network = options.network;
+    // Always sent explicitly: the E2B API defaults to 'kill' when lifecycle is omitted.
+    this.lifecycle = options.lifecycle ?? { onTimeout: 'pause' };
     this.connectionOpts = {
       ...(options.domain && { domain: options.domain }),
       ...(options.apiUrl && { apiUrl: options.apiUrl }),
@@ -223,6 +255,7 @@ export class E2BSandbox extends MastraSandbox {
       ...(options.accessToken && { accessToken: options.accessToken }),
     };
 
+    this._preferredSandboxId = options.sandboxId;
     this._instructionsOverride = options.instructions;
     this._constructorOptions = { ...options };
 
@@ -245,13 +278,16 @@ export class E2BSandbox extends MastraSandbox {
    * independent sandboxes (e.g. one per project).
    *
    * `options.idleTimeoutMinutes` maps to the E2B sandbox `timeout` (ms);
-   * `options.sandboxId` is ignored because E2B reconnects by logical `id`.
+   * `options.sandboxId` reattaches the clone to that exact E2B sandbox on
+   * `start()`. The parent's own preferred provider sandbox ID is never
+   * inherited — physical identity is per-instance.
    */
   clone(options: SandboxCloneOptions = {}): E2BSandbox {
-    const { id: _id, ...base } = this._constructorOptions;
+    const { id: _id, sandboxId: _sandboxId, ...base } = this._constructorOptions;
     return new E2BSandbox({
       ...base,
       ...(options.id !== undefined && { id: options.id }),
+      ...(options.sandboxId !== undefined && { sandboxId: options.sandboxId }),
       ...(options.env !== undefined && { env: options.env }),
       ...(options.idleTimeoutMinutes !== undefined && { timeout: options.idleTimeoutMinutes * 60_000 }),
     });
@@ -286,57 +322,74 @@ export class E2BSandbox extends MastraSandbox {
     return this._sandbox;
   }
 
+  /**
+   * The E2B provider sandbox ID resolved after connect or create.
+   *
+   * Persist this to reattach deterministically later via the `sandboxId`
+   * option (or `clone({ sandboxId })`). Undefined until the sandbox has been
+   * started (attached) in this process.
+   */
+  get sandboxId(): string | undefined {
+    return this._sandbox?.sandboxId;
+  }
+
   // ---------------------------------------------------------------------------
   // Lifecycle
   // ---------------------------------------------------------------------------
 
   /**
-   * Start the E2B sandbox.
-   * Handles template preparation, existing sandbox reconnection, and new sandbox creation.
+   * Acquisition primitives (base-orchestrated start): the base derives
+   * `outcome: 'created'` only when a brand-new sandbox VM was created;
+   * reconnecting (including resuming a paused sandbox) is `outcome: 'connected'`.
    *
-   * Status management and mount processing are handled by the base class.
+   * `find` returns an already-connected E2B handle: `Sandbox.connect`
+   * resumes paused sandboxes, and its failures are deliberately swallowed
+   * (unusable handle → create fresh) — that forgiveness is this provider's
+   * policy, so it lives here rather than in `connect`. The exception is the
+   * `sandboxId` reattach inside {@link acquireExistingSandbox}, which is
+   * fail-closed: only a "sandbox gone" error falls through to discovery.
    */
-  async start(): Promise<void> {
+  protected override async find(): Promise<Sandbox | undefined> {
     // Already have a sandbox instance
     if (this._sandbox) {
+      return this._sandbox;
+    }
+    return (await this.acquireExistingSandbox()) ?? undefined;
+  }
+
+  protected override async connect(existingSandbox: Sandbox): Promise<void> {
+    if (existingSandbox === this._sandbox) {
       return;
     }
+    this._sandbox = existingSandbox;
+    this._createdAt = new Date();
+    this.logger.debug(`${LOG_PREFIX} Reconnected to existing sandbox for: ${this.id}`);
 
-    // Await template preparation (started in constructor) and existing sandbox search in parallel
-    const [existingSandbox, templateId] = await Promise.all([
-      this.findExistingSandbox(),
-      this._templatePreparePromise || this.resolveTemplate(),
-    ]);
+    // Clean up stale mounts from previous config
+    // (processPending is called by base class after start completes)
+    const expectedPaths = Array.from(this.mounts.entries.keys());
+    this.logger.debug(`${LOG_PREFIX} Running mount reconciliation...`);
+    await this.reconcileMounts(expectedPaths);
+    this.logger.debug(`${LOG_PREFIX} Mount reconciliation complete`);
+  }
 
-    if (existingSandbox) {
-      this._sandbox = existingSandbox;
-      this._createdAt = new Date();
-      this.logger.debug(`${LOG_PREFIX} Reconnected to existing sandbox for: ${this.id}`);
-
-      // Clean up stale mounts from previous config
-      // (processPending is called by base class after start completes)
-      const expectedPaths = Array.from(this.mounts.entries.keys());
-      this.logger.debug(`${LOG_PREFIX} Running mount reconciliation...`);
-      await this.reconcileMounts(expectedPaths);
-      this.logger.debug(`${LOG_PREFIX} Mount reconciliation complete`);
-      return;
-    }
-
-    // If template preparation failed earlier, retry now
-    let resolvedTemplateId = templateId;
+  protected override async create(): Promise<void> {
+    // Template preparation started in the constructor; retry here if it failed.
+    let resolvedTemplateId = await (this._templatePreparePromise || this.resolveTemplate());
     if (!resolvedTemplateId) {
       this.logger.debug(`${LOG_PREFIX} Template preparation failed earlier, retrying...`);
       resolvedTemplateId = await this.resolveTemplate();
     }
 
     // Create a new sandbox with our logical ID in metadata.
-    // lifecycle.onTimeout: 'pause' makes the sandbox pause on timeout instead of being destroyed.
+    // lifecycle defaults to onTimeout: 'pause', which pauses the sandbox on timeout instead of
+    // destroying it so the next start() can resume it. Callers can override it (e.g. 'kill').
     this.logger.debug(`${LOG_PREFIX} Creating new sandbox for: ${this.id} with template: ${resolvedTemplateId}`);
 
     try {
       this._sandbox = await Sandbox.create(resolvedTemplateId, {
         ...this.connectionOpts,
-        lifecycle: { onTimeout: 'pause' },
+        lifecycle: this.lifecycle,
         metadata: {
           ...this.metadata,
           'mastra-sandbox-id': this.id,
@@ -348,14 +401,14 @@ export class E2BSandbox extends MastraSandbox {
       // If template not found (404), rebuild it and retry
       const errorStr = String(createError);
       if (errorStr.includes('404') && errorStr.includes('not found') && !this.templateSpec) {
-        this.logger.debug(`${LOG_PREFIX} Template not found, rebuilding: ${templateId}`);
+        this.logger.debug(`${LOG_PREFIX} Template not found, rebuilding: ${resolvedTemplateId}`);
         this._resolvedTemplateId = undefined; // Clear cached ID to force rebuild
         const rebuiltTemplateId = await this.buildDefaultTemplate();
 
         this.logger.debug(`${LOG_PREFIX} Retrying sandbox creation with rebuilt template: ${rebuiltTemplateId}`);
         this._sandbox = await Sandbox.create(rebuiltTemplateId, {
           ...this.connectionOpts,
-          lifecycle: { onTimeout: 'pause' },
+          lifecycle: this.lifecycle,
           metadata: {
             ...this.metadata,
             'mastra-sandbox-id': this.id,
@@ -370,7 +423,6 @@ export class E2BSandbox extends MastraSandbox {
 
     this.logger.debug(`${LOG_PREFIX} Created sandbox ${this._sandbox.sandboxId} for logical ID: ${this.id}`);
     this._createdAt = new Date();
-
     // Note: processPending is called by base class after start completes
   }
 
@@ -467,6 +519,7 @@ export class E2BSandbox extends MastraSandbox {
       })),
       metadata: {
         ...this.metadata,
+        ...(this._sandbox && { sandboxId: this._sandbox.sandboxId }),
       },
     };
   }
@@ -845,6 +898,67 @@ export class E2BSandbox extends MastraSandbox {
   }
 
   /**
+   * Acquire an existing sandbox: try the preferred provider sandbox ID first
+   * (deterministic reattach), then fall back to logical-id metadata discovery.
+   */
+  private async acquireExistingSandbox(): Promise<Sandbox | null> {
+    if (this._preferredSandboxId) {
+      const preferred = await this.connectToPreferredSandbox(this._preferredSandboxId);
+      if (preferred) return preferred;
+    }
+    return this.findExistingSandbox();
+  }
+
+  /**
+   * Deterministically reattach to a sandbox by its E2B provider ID.
+   *
+   * Fail-closed: only a typed "sandbox gone" error (not found / killed /
+   * not running) returns null so the caller can fall through to logical-id
+   * discovery or creation. Any other error (auth, quota, rate limit,
+   * timeout, network) propagates so a duplicate sandbox is never created.
+   *
+   * Ownership is validated before connecting: a sandbox tagged with a
+   * different `mastra-sandbox-id` is refused (without resuming it).
+   * Sandboxes without the tag (created outside Mastra) are attachable.
+   */
+  private async connectToPreferredSandbox(preferredSandboxId: string): Promise<Sandbox | null> {
+    let info: E2BSandboxListInfo;
+    try {
+      info = await Sandbox.getInfo(preferredSandboxId, this.connectionOpts);
+    } catch (e) {
+      if (this.isSandboxDeadError(e)) {
+        this.logger.debug(
+          `${LOG_PREFIX} Preferred sandbox ${preferredSandboxId} is gone, falling back to logical-id discovery:`,
+          e,
+        );
+        return null;
+      }
+      throw e;
+    }
+
+    const owner = info.metadata?.['mastra-sandbox-id'];
+    if (owner !== undefined && owner !== this.id) {
+      throw new Error(
+        `${LOG_PREFIX} Provider sandbox ${preferredSandboxId} belongs to logical sandbox id "${owner}", refusing to attach it to "${this.id}"`,
+      );
+    }
+
+    try {
+      return await Sandbox.connect(preferredSandboxId, this.connectionOpts);
+    } catch (e) {
+      // The sandbox can terminate between getInfo and connect.
+      if (this.isSandboxDeadError(e)) {
+        this.logger.debug(
+          `${LOG_PREFIX} Preferred sandbox ${preferredSandboxId} vanished before connect, falling back:`,
+          e,
+        );
+        return null;
+      }
+      throw e;
+    }
+  }
+
+  /**
    * Find an existing sandbox with matching mastra-sandbox-id metadata.
    * Returns the connected sandbox if found, null otherwise.
    * Connecting to a paused sandbox resumes it.
@@ -1013,9 +1127,8 @@ export class E2BSandbox extends MastraSandbox {
     if (!error) return false;
     const errorStr = String(error);
     return (
-      errorStr.includes('sandbox was not found') ||
+      /\b(?:paused\s+)?sandbox(?:\s+\S+)?\s+(?:was\s+)?not found\b/i.test(errorStr) ||
       errorStr.includes('Sandbox is probably not running') ||
-      errorStr.includes('Sandbox not found') ||
       errorStr.includes('sandbox has been killed')
     );
   }
@@ -1030,10 +1143,12 @@ export class E2BSandbox extends MastraSandbox {
   private handleSandboxTimeout(): void {
     this._sandbox = null;
 
-    // Reset mounted entries to pending so they get re-mounted on restart
+    // Reset retryable entries to pending so they get re-mounted on restart.
+    // A mount error belongs to the dead physical sandbox and must not prevent
+    // the configured filesystem from being attempted in its replacement.
     for (const [path, entry] of this.mounts.entries) {
-      if (entry.state === 'mounted' || entry.state === 'mounting') {
-        this.mounts.set(path, { state: 'pending' });
+      if (entry.state === 'mounted' || entry.state === 'mounting' || entry.state === 'error') {
+        this.mounts.set(path, { state: 'pending', error: undefined });
       }
     }
 

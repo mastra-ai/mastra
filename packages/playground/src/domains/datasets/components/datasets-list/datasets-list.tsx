@@ -4,6 +4,7 @@ import { Chip } from '@mastra/playground-ui/components/Chip';
 import {
   DataList as EntityList,
   DataListSkeleton as EntityListSkeleton,
+  useDataListKeyboard,
 } from '@mastra/playground-ui/components/DataList';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { ProcessorIcon } from '@mastra/playground-ui/icons/ProcessorIcon';
@@ -103,12 +104,14 @@ export function DatasetsList({
     });
   }, [enrichedDatasets, search, targetFilter, experimentFilter, tagFilter]);
 
+  const { containerRef, getRowProps } = useDataListKeyboard({ count: filteredData.length });
+
   if (isLoading) {
     return <EntityListSkeleton columns={COLUMNS} />;
   }
 
   return (
-    <EntityList columns={COLUMNS} variant="striped">
+    <EntityList columns={COLUMNS} variant="striped" scrollRef={containerRef}>
       <EntityList.Top>
         <EntityList.TopCell>Name</EntityList.TopCell>
         <EntityList.TopCell>Description</EntityList.TopCell>
@@ -120,7 +123,7 @@ export function DatasetsList({
         <EntityList.TopCell className="justify-center">Review</EntityList.TopCell>
       </EntityList.Top>
 
-      {filteredData.map(ds => {
+      {filteredData.map((ds, index) => {
         const experimentsChipColor: 'green' | 'yellow' | 'red' =
           ds.successPct !== null && ds.successPct >= 70
             ? 'green'
@@ -140,6 +143,7 @@ export function DatasetsList({
               colEnd={rowLayout.rowLinkColEnd}
               to={paths.datasetLink(ds.id)}
               LinkComponent={Link}
+              {...getRowProps(index)}
             >
               <EntityList.NameCell>{ds.name}</EntityList.NameCell>
               <EntityList.DescriptionCell>{ds.description}</EntityList.DescriptionCell>

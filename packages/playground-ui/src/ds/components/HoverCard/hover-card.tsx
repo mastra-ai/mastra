@@ -58,7 +58,7 @@ const HoverCardContent = React.forwardRef<HTMLDivElement, HoverCardContentProps>
       container,
       showArrow = true,
       anchor,
-      positionMethod,
+      positionMethod = 'fixed',
       alignOffset,
       collisionBoundary,
       collisionPadding,
