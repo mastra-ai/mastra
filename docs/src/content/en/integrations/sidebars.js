@@ -326,7 +326,10 @@ const sidebars = {
           type: 'doc',
           id: 'observability/sentry',
           label: 'Sentry',
-          customProps: { icon: 'https://cdn.simpleicons.org/sentry/362d59/white?viewbox=auto&size=28' },
+          customProps: {
+            icon: '/img/integrations/sentry.svg',
+            iconDark: '/img/integrations/sentry-dark.svg',
+          },
         },
       ],
     },

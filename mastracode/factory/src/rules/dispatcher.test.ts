@@ -40,26 +40,54 @@ function createSession(
     /** Once the session is free, a redelivered signal wakes it and lands. */
     acceptRedeliveredSignal?: boolean;
     initialDeliveredSignalIds?: string[];
+    /**
+     * Per-call notification outcomes. `deliver` models a kickoff queued onto a
+     * run already in flight; `endRun: true` ends that run afterwards, freeing
+     * the session for a redelivery. Exhausted entries fall back to the default
+     * wake response.
+     */
+    notificationResponses?: Array<{ action: 'deliver'; endRun?: boolean } | { action: 'wake' }>;
   },
 ) {
   let threadId = 'thread-1';
-  const consumeStream = vi.fn(async () => {});
-  const notificationAccepted = accepted ?? Promise.resolve({ action: 'wake', output: { consumeStream } });
   const agentEndListeners = new Set<(event: { type: string; reason?: string }) => void>();
   const emitAgentEnd = (reason = options?.agentEndReason) => {
     for (const listener of agentEndListeners) {
       listener({ type: 'agent_end', reason });
     }
   };
+  // A consumed wake stream means the woken run ran to its end, so the real
+  // session emits agent_end by then; the dispatcher now waits to observe it.
+  const consumeStream = vi.fn(async () => {
+    emitAgentEnd(options?.agentEndReason ?? 'complete');
+  });
+  const notificationAccepted = accepted ?? Promise.resolve({ action: 'wake', output: { consumeStream } });
   let signalSends = 0;
   const deliveredKeys = new Set<string>();
   const deliveredSignals = new Set(options?.initialDeliveredSignalIds ?? []);
   const delivered: string[] = [];
+  let notificationSends = 0;
   const sendNotificationSignal = vi.fn(
     async (input: { dedupeKey?: string }, _options?: { requestContext?: { get(key: string): unknown } }) => {
       if (input.dedupeKey && !deliveredKeys.has(input.dedupeKey)) {
         deliveredKeys.add(input.dedupeKey);
         delivered.push(input.dedupeKey);
+      }
+      const scripted = options?.notificationResponses?.[notificationSends];
+      notificationSends += 1;
+      if (scripted?.action === 'deliver') {
+        if (scripted.endRun) {
+          // The busy run finishes without acting on the queued kickoff, which
+          // is the moment the session becomes free to take it again.
+          queueMicrotask(() => emitAgentEnd('complete'));
+        }
+        return { persisted: Promise.resolve(), accepted: Promise.resolve({ action: 'deliver' }) };
+      }
+      if (scripted?.action === 'wake') {
+        return {
+          persisted: Promise.resolve(),
+          accepted: Promise.resolve({ action: 'wake', output: { consumeStream } }),
+        };
       }
       return { persisted: Promise.resolve(), accepted: notificationAccepted };
     },
@@ -1114,10 +1142,9 @@ describe('FactoryDecisionDispatcher', () => {
     ).toMatchObject({ status: 'succeeded' });
   });
 
-  it('releases a wake dispatch when the terminal event is not observed before the deadline', async () => {
+  it('fails a wake dispatch for retry when the terminal event is not observed before the deadline', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
       const storage = (await createFactoryStorageForTests()).workItems;
       const { item, transitionService } = await queueDecision(storage, {
@@ -1164,14 +1191,15 @@ describe('FactoryDecisionDispatcher', () => {
       await vi.advanceTimersByTimeAsync(FACTORY_DISPATCH_CONSTANTS.skillCompletionObservationTimeoutMs);
       await dispatch;
 
-      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
-      expect(getAgentEndListenerCount()).toBe(0);
-      expect(warn).toHaveBeenCalledWith('Factory skill run terminal event was not observed before timeout', {
-        decisionId: expect.any(String),
-        runId: undefined,
+      // An unobserved run end is the silent-stall failure mode: the decision
+      // must fail for redelivery instead of completing on nothing.
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+        status: 'retry',
+        attempts: 1,
+        lastError: expect.stringContaining('terminal event was not observed'),
       });
+      expect(getAgentEndListenerCount()).toBe(0);
     } finally {
-      warn.mockRestore();
       vi.useRealTimers();
     }
   });
@@ -2631,9 +2659,8 @@ describe('FactoryDecisionDispatcher', () => {
     expect(decision!.lastError!.length).toBeLessThanOrEqual(512);
   });
 
-  it('recovers and dispatches a prepared kickoff after the coordinator returns', async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
-    const { controller, delivered, sendNotificationSignal } = createSession();
+  /** Prepare a prompt-kickoff pending start bound to the stubbed session. */
+  async function preparePromptKickoff(storage: WorkItemsStorage, controller: unknown) {
     const rules = defaultFactoryRules({ version: 'rules-v1' });
     const transitionService = new FactoryTransitionService({ storage, rules });
     const sourceControl = {
@@ -2677,6 +2704,13 @@ describe('FactoryDecisionDispatcher', () => {
         },
       },
     });
+    return { transitionService };
+  }
+
+  it('recovers and dispatches a prepared kickoff after the coordinator returns', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { controller, delivered, sendNotificationSignal } = createSession();
+    const { transitionService } = await preparePromptKickoff(storage, controller);
     const primeCredentials = vi.fn(async () => {});
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
@@ -2705,6 +2739,75 @@ describe('FactoryDecisionDispatcher', () => {
     const kickoffOptions = sendNotificationSignal.mock.calls[0]![1];
     expect(kickoffOptions?.requestContext?.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
     expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('sent');
+  });
+
+  it('redelivers a kickoff notification dropped onto an ending run once that run finishes', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    // First send lands `deliver` on a run that then ends without acting on the
+    // kickoff; the dispatcher must wait for that run's end and redeliver into
+    // the idle session instead of completing on the delivery ack.
+    const { controller, delivered, getAgentEndListenerCount } = createSession(undefined, {
+      notificationResponses: [{ action: 'deliver', endRun: true }, { action: 'wake' }],
+    });
+    const { transitionService } = await preparePromptKickoff(storage, controller);
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect(delivered).toEqual(['factory-kickoff:kickoff-1', 'factory-kickoff:kickoff-1:retry:1']);
+    expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('sent');
+    expect(getAgentEndListenerCount()).toBe(0);
+  });
+
+  it('fails a kickoff for retry when the delivered run never ends', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { controller } = createSession(undefined, {
+      notificationResponses: [{ action: 'deliver' }],
+    });
+    const { transitionService } = await preparePromptKickoff(storage, controller);
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      skillCompletionObservationTimeoutMs: 25,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    // A delivery ack alone must never complete the pending start: the kickoff
+    // was consumed by a run that never ended, so the row stays retryable.
+    expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]).toMatchObject({
+      status: 'retry',
+      lastError: expect.stringContaining('has not ended'),
+    });
+  });
+
+  it('fails a kickoff for retry when the woken run ends in error', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { controller } = createSession(undefined, { agentEndReason: 'error' });
+    const { transitionService } = await preparePromptKickoff(storage, controller);
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]).toMatchObject({
+      status: 'retry',
+      lastError: expect.stringContaining('ended in error'),
+    });
   });
 
   it('dispatches a pending start on the first tick even when the deferred-decision queue exceeds the batch size', async () => {
