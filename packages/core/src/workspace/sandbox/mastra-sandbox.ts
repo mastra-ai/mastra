@@ -226,6 +226,8 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
   private readonly _startWrapper: () => Promise<SandboxStartResult | void>;
   /** Whether the subclass brought its own `start()`, captured before the wrapper shadowed it. */
   private readonly _hasStartOverride: boolean;
+  /** Which acquisition primitives existed at construction, to catch ones added by field initializers. */
+  private readonly _primitivesAtConstruction: { find: boolean; connect: boolean; create: boolean };
 
   /** Whether acquisition runs through {@link find}/{@link connect}/{@link create}. */
   private readonly _useAcquisitionPrimitives: boolean;
@@ -271,6 +273,13 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
     // Rung selection: a subclass `start()` override wins; otherwise the
     // primitives drive acquisition when `create()` is implemented.
     this._useAcquisitionPrimitives = !hasStartOverride && typeof this.create === 'function';
+    // Recorded so first start can tell a primitive that arrived late (a class
+    // field) from one that was never implemented.
+    this._primitivesAtConstruction = {
+      find: typeof this.find === 'function',
+      connect: typeof this.connect === 'function',
+      create: typeof this.create === 'function',
+    };
     // A handle nobody adopts would still report `outcome: 'connected'`, so the
     // sandbox would look reconnected while running against nothing. Fail here
     // instead, where the cause is visible.
@@ -402,6 +411,16 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
       throw new Error(
         `${this.constructor.name}: 'start' must use method syntax, because a class-field initializer replaces the lifecycle wrapper.`,
       );
+    }
+
+    // Same hazard through the primitives: a field-declared `create()` is
+    // invisible to rung selection, so the base no-op would run in its place.
+    for (const primitive of ['find', 'connect', 'create'] as const) {
+      if (typeof this[primitive] === 'function' && !this._primitivesAtConstruction[primitive]) {
+        throw new Error(
+          `${this.constructor.name}: '${primitive}()' must use method syntax, because a class-field initializer runs too late for the start lifecycle to see it.`,
+        );
+      }
     }
 
     // Already running — definitionally not a fresh create. Reporting

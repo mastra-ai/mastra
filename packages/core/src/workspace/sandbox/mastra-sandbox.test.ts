@@ -1125,4 +1125,31 @@ describe('MastraSandbox acquisition primitives', () => {
     expect(fieldStartCalls).toBe(0);
     expect(sandbox.status).toBe('pending');
   });
+
+  it('rejects a provider whose class-field create is invisible to rung selection', async () => {
+    // The field initializes after the constructor, so rung selection misses it
+    // and the base no-op would run in its place.
+    let fieldCreateCalls = 0;
+
+    class FieldCreateSandbox extends MastraSandbox {
+      readonly id = 'field-create';
+      readonly name = 'FieldCreateSandbox';
+      readonly provider = 'test';
+      status: ProviderStatus = 'pending';
+
+      create = async () => {
+        fieldCreateCalls++;
+      };
+
+      constructor() {
+        super({ name: 'FieldCreateSandbox' });
+      }
+    }
+
+    const sandbox = new FieldCreateSandbox();
+
+    await expect(sandbox._start()).rejects.toThrow(/'create\(\)' must use method syntax/);
+    expect(fieldCreateCalls).toBe(0);
+    expect(sandbox.status).toBe('pending');
+  });
 });
