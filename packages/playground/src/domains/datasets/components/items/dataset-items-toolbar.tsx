@@ -3,17 +3,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { SearchFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
-import {
-  Plus,
-  Upload,
-  FileJson,
-  Download,
-  FolderPlus,
-  FolderOutput,
-  Trash2,
-  ChevronDown,
-  ArrowRightToLineIcon,
-} from 'lucide-react';
+import { Plus, Upload, FileJson, Download, FolderPlus, FolderOutput, Trash2, ChevronDown } from 'lucide-react';
 
 export type DatasetItemsToolbarProps = {
   // Normal mode actions
@@ -62,9 +52,13 @@ export function DatasetItemsToolbar({
     <div className="text-accent6 text-ui-sm flex min-w-0 items-center gap-3">
       <span className="truncate">You are seeing v{activeDatasetVersion}, which is an older version of the dataset</span>
       {onReturnToLatestVersion && (
-        <Button onClick={onReturnToLatestVersion}>
-          <ArrowRightToLineIcon /> Return to latest
-        </Button>
+        <button
+          type="button"
+          onClick={onReturnToLatestVersion}
+          className="text-ui-sm text-icon3 hover:text-icon6 shrink-0 underline underline-offset-2 transition-colors"
+        >
+          Return to latest
+        </button>
       )}
     </div>
   );
