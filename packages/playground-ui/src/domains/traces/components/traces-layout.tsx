@@ -40,6 +40,9 @@ export function TracesLayout({
         <div
           className={cn(
             'grid max-h-full gap-4 overflow-auto',
+            // Fill the page height so the trace panel reaches the bottom; when collapsed
+            // the column shrinks to content (items-start on the outer grid).
+            !traceCollapsed && 'h-full',
             scorePanelSlot
               ? traceCollapsed
                 ? 'grid-rows-[auto_3fr_3fr]'

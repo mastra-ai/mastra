@@ -5,6 +5,7 @@ import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { SpanDataPanelView } from '@mastra/playground-ui/domains/traces/components/span-data-panel-view';
 import { TraceDataPanelView } from '@mastra/playground-ui/domains/traces/components/trace-data-panel-view';
+import type { TraceDataPanelTab } from '@mastra/playground-ui/domains/traces/components/trace-data-panel-view';
 import { TraceKeysAndValues } from '@mastra/playground-ui/domains/traces/components/trace-keys-and-values';
 import { TracesErrorContent } from '@mastra/playground-ui/domains/traces/components/traces-error-content';
 import { useSpanDetail } from '@mastra/playground-ui/domains/traces/hooks/use-span-detail';
@@ -34,12 +35,13 @@ export default function TracePage() {
 
   const spanIdParam = searchParams.get('spanId') || undefined;
   const tabParam = searchParams.get('tab');
-  const initialSpanTab: SpanTab = tabParam === 'scoring' ? 'scoring' : tabParam === 'feedback' ? 'feedback' : 'details';
+  const initialSpanTab: SpanTab = tabParam === 'feedback' ? 'feedback' : 'details';
   const scoreIdParam = searchParams.get('scoreId') || undefined;
 
   const [featuredSpanId, setFeaturedSpanId] = useState<string | null>(spanIdParam ?? null);
   const [featuredScore, setFeaturedScore] = useState<ScoreRowData | undefined>();
   const [spanTab, setSpanTab] = useState<SpanTab>(initialSpanTab);
+  const [traceTab, setTraceTab] = useState<TraceDataPanelTab>('details');
   const [spanScoresPage, setSpanScoresPage] = useState(0);
   const [datasetDialogOpen, setDatasetDialogOpen] = useState(false);
 
@@ -56,14 +58,13 @@ export default function TracePage() {
 
   const { data: spanDetailData, isLoading: isLoadingSpanDetail } = useSpanDetail(traceId, featuredSpanId ?? '');
 
-  // Reset pagination whenever the active span changes — otherwise a page index from a previous
-  // span could be reused against a span that has fewer (or no) scores.
-  useEffect(() => setSpanScoresPage(0), [traceId, featuredSpanId]);
+  useEffect(() => setSpanScoresPage(0), [traceId]);
 
   const { data: scorers, isLoading: isLoadingScorers } = useScorers();
+  // Trace-level scores shown in the trace panel's "Scores" tab, anchored at the root span.
   const { data: spanScoresData, isLoading: isLoadingSpanScoresData } = useTraceSpanScores({
     traceId,
-    spanId: featuredSpanId ?? undefined,
+    spanId: rootSpan?.spanId,
     page: spanScoresPage,
   });
 
@@ -154,20 +155,13 @@ export default function TracePage() {
   }, [navigate]);
 
   const handleEvaluateTrace = useCallback(() => {
-    setSpanTab('scoring');
-    if (rootSpan && featuredSpanId !== rootSpan.spanId) {
-      setFeaturedSpanId(rootSpan.spanId);
-      setFeaturedScore(undefined);
-      updateSearchParams({ spanId: rootSpan.spanId, tab: 'scoring', scoreId: null });
-    } else {
-      updateSearchParams({ tab: 'scoring' });
-    }
-  }, [rootSpan, featuredSpanId, updateSearchParams]);
+    setTraceTab('scores');
+  }, []);
 
   const traceHeaderActions = rootSpan ? (
     <RouteHeaderActions owner="trace-detail">
       <ButtonsGroup>
-        <Button tooltip="Evaluate Trace" aria-label="Evaluate Trace" onClick={handleEvaluateTrace}>
+        <Button tooltip="Score trace" aria-label="Score trace" onClick={handleEvaluateTrace}>
           <CircleGaugeIcon />
           Evaluate
         </Button>
@@ -230,7 +224,37 @@ export default function TracePage() {
           onEvaluateTrace={handleEvaluateTrace}
           initialSpanId={featuredSpanId}
           placement="trace-page"
+          className="h-full"
           timelineChartWidth={featuredSpanId ? 'default' : 'wide'}
+          activeTab={traceTab}
+          onTabChange={setTraceTab}
+          scoresTabBadge={spanScoresData?.pagination?.total ?? undefined}
+          scoresTabSlot={({ traceId: tid, rootSpanId }) =>
+            rootSpanId ? (
+              <div className="grid gap-6">
+                <SpanScoring
+                  traceId={tid}
+                  isTopLevelSpan
+                  spanId={rootSpanId}
+                  entityType={
+                    rootSpan?.entityType === EntityType.AGENT
+                      ? 'Agent'
+                      : rootSpan?.entityType === EntityType.WORKFLOW_RUN
+                        ? 'Workflow'
+                        : undefined
+                  }
+                  scorers={scorers}
+                  isLoadingScorers={isLoadingScorers}
+                />
+                <SpanScoresList
+                  scoresData={spanScoresData}
+                  onPageChange={setSpanScoresPage}
+                  isLoadingScoresData={isLoadingSpanScoresData}
+                  onScoreSelect={handleScoreSelect}
+                />
+              </div>
+            ) : null
+          }
         />
         {featuredSpanId && !isTraceLoading && (
           <div
@@ -256,31 +280,6 @@ export default function TracePage() {
                   onPageChange={setFeedbackPage}
                   isLoadingFeedbackData={isLoadingFeedback}
                 />
-              )}
-              scoringTabBadge={spanScoresData?.pagination?.total ?? undefined}
-              scoringTabSlot={({ span, traceId: tid, spanId: sid }) => (
-                <div className="grid gap-6">
-                  <SpanScoring
-                    traceId={tid}
-                    isTopLevelSpan={!Boolean(span.parentSpanId)}
-                    spanId={sid}
-                    entityType={
-                      span.attributes?.agentId || span.entityType === EntityType.AGENT
-                        ? 'Agent'
-                        : span.attributes?.workflowId || span.entityType === EntityType.WORKFLOW_RUN
-                          ? 'Workflow'
-                          : undefined
-                    }
-                    scorers={scorers}
-                    isLoadingScorers={isLoadingScorers}
-                  />
-                  <SpanScoresList
-                    scoresData={spanScoresData}
-                    onPageChange={setSpanScoresPage}
-                    isLoadingScoresData={isLoadingSpanScoresData}
-                    onScoreSelect={handleScoreSelect}
-                  />
-                </div>
               )}
             />
             {featuredScore && <ScoreDataPanel score={featuredScore} onClose={handleScoreClose} />}
