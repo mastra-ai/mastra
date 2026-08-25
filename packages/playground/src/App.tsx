@@ -663,7 +663,7 @@ export const routes: RouteObject[] = [
                   navCrumb('/experiments'),
                   {
                     id: 'experiment',
-                    label: decodeRouteParam(params.experimentId),
+                    label: truncateItemIdCrumb(params.experimentId),
                     to: params.experimentId ? `/experiments/${encodeURIComponent(params.experimentId)}` : undefined,
                   },
                 ],
