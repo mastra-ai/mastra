@@ -729,8 +729,19 @@ function redrawsEntry(
   toolCallIds: string[],
 ): boolean {
   if (texts.length === 0 || candidate.entry.message.role !== displayed.role) return false;
-  if (!texts.every(text => candidate.texts.has(text))) return false;
+  if (!texts.every(text => drawsText(candidate, text))) return false;
   return toolCallIds.length === 0 || windowCopyCovers(candidate.entry.message.content.parts, displayed.content.parts);
+}
+
+/**
+ * A streaming entry's prose is a moving prefix: mid-run, the persisted snapshot
+ * and the stream hold the same text at different lengths, in either direction.
+ * Sealed entries keep exact matching, so repeated words still draw two bubbles.
+ */
+function drawsText(candidate: OnScreenMessage, text: string): boolean {
+  if (candidate.texts.has(text)) return true;
+  if (!candidate.entry.streaming) return false;
+  return [...candidate.texts].some(drawn => drawn.startsWith(text) || text.startsWith(drawn));
 }
 
 interface OnScreenMessage {

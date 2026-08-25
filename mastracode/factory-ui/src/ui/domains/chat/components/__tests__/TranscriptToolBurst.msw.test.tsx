@@ -39,6 +39,10 @@ describe('parallel tool calls landing at once', () => {
       </MemoryRouter>,
     );
 
+    expect(screen.queryAllByRole('group', { name: 'Tool: view' })).toHaveLength(0);
+
+    act(() => void vi.advanceTimersByTime(600));
+
     expect(screen.getAllByRole('group', { name: 'Tool: view' })).toHaveLength(1);
 
     act(() => void vi.advanceTimersByTime(4000));

@@ -47,7 +47,11 @@ describe('assistant prose', () => {
     const thought = Array.from({ length: 30 }, (_, index) => `thought${index + 1}`).join(' ');
     const { container } = renderEntries([assistant([{ type: 'reasoning', reasoning: thought, details: [] }], true)]);
 
-    expect(container.textContent).toContain('thought10');
+    expect(container.textContent).not.toContain('thought5');
+
+    act(() => void vi.advanceTimersByTime(700));
+
+    expect(container.textContent).toContain('thought5');
     expect(container.textContent).not.toContain('thought30');
 
     act(() => void vi.advanceTimersByTime(4000));

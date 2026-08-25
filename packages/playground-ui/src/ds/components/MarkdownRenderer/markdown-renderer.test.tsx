@@ -311,21 +311,21 @@ describe('MarkdownRenderer', () => {
     expect(held('word1')).toBe(early);
   });
 
-  it('animates only what lands after it joined a reply already under way', () => {
+  it('animates only what lands after it joined a reply already far ahead', () => {
     vi.useFakeTimers();
     const word = (index: number) => `word${index}`;
-    const { container } = render(<Streamed text={Array.from({ length: 40 }, (_, index) => word(index)).join(' ')} />);
+    const { container } = render(<Streamed text={Array.from({ length: 310 }, (_, index) => word(index)).join(' ')} />);
 
     const joined = container.textContent ?? '';
 
-    expect(joined).toBe(Array.from({ length: 28 }, (_, index) => word(index)).join(' '));
+    expect(joined).toBe(Array.from({ length: 10 }, (_, index) => word(index)).join(' '));
     expect(container.querySelectorAll('.mastra-arriving')).toHaveLength(0);
 
-    arrive(container, word(29));
+    arrive(container, word(11));
 
     const animated = [...container.querySelectorAll('.mastra-arriving')].map(node => node.textContent);
 
-    expect(animated).toEqual([word(28), word(29)]);
+    expect(animated).toEqual([word(10), word(11)]);
   });
 
   it('animates the first words of a passage born under the reader\u2019s eyes, then settles them', () => {

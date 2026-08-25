@@ -1020,7 +1020,59 @@ describe('transcript reducer mergeWindow', () => {
     expect(next.entries).toHaveLength(1);
   });
 
-  it('still inserts a window copy that extends what the gap left on screen', () => {
+  it('does not redraw a step the stream has already written further', () => {
+    // A focus revalidation lands mid-run: the persisted step holds a prefix of
+    // the text still streaming on screen — same step, older snapshot.
+    let state = createInitialTranscript({ messages: [] });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: {
+        type: 'message_update',
+        message: dbMessage('streamed-turn', 'assistant', [
+          {
+            type: 'tool-invocation',
+            toolInvocation: { state: 'result', toolCallId: 'tool-1', toolName: 'view', args: {}, result: 'ok' },
+          },
+          { type: 'text', text: 'Almost, but not approvable yet.' },
+        ]),
+      },
+    });
+
+    const next = transcriptReducer(state, {
+      type: 'mergeWindow',
+      messages: [
+        dbMessage('step-1', 'assistant', [
+          {
+            type: 'tool-invocation',
+            toolInvocation: { state: 'result', toolCallId: 'tool-1', toolName: 'view', args: {}, result: 'ok' },
+          },
+        ]),
+        dbMessage('step-2', 'assistant', [{ type: 'text', text: 'Almost, but not' }]),
+      ],
+    });
+
+    expect(next.entries).toHaveLength(1);
+  });
+
+  it('still inserts a sealed turn whose text merely extends an older one', () => {
+    const onScreen = createInitialTranscript({
+      messages: [dbMessage('history-turn', 'assistant', [{ type: 'text', text: 'Almost, but' }])],
+    });
+
+    const next = transcriptReducer(onScreen, {
+      type: 'mergeWindow',
+      messages: [
+        dbMessage('history-turn', 'assistant', [{ type: 'text', text: 'Almost, but' }]),
+        dbMessage('new-turn', 'assistant', [{ type: 'text', text: 'Almost, but not approvable yet.' }]),
+      ],
+    });
+
+    expect(next.entries).toHaveLength(2);
+  });
+
+  it('adopts a window copy that has written the streaming step further', () => {
+    // SSE is behind the server: the persisted step extends the text still
+    // streaming on screen. One turn, healed in place — never a second bubble.
     let state = createInitialTranscript({ messages: [] });
     state = transcriptReducer(state, {
       type: 'event',
@@ -1035,7 +1087,8 @@ describe('transcript reducer mergeWindow', () => {
       messages: [dbMessage('step-2', 'assistant', [{ type: 'text', text: 'Almost, but not approvable yet.' }])],
     });
 
-    expect(next.entries).toHaveLength(2);
+    expect(next.entries).toHaveLength(1);
+    expect(messageParts(next.entries[0])).toEqual([{ type: 'text', text: 'Almost, but not approvable yet.' }]);
   });
 
   it('inserts a window copy whose parts prove it is a different turn', () => {

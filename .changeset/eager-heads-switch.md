@@ -39,3 +39,6 @@ A tool row stays in the bubble it landed in. The run rotates its assistant messa
 The timestamp and copy button under a reply now wait for the whole answer. A reply is one message per step, and the stamp landed after every step — appearing with a copy button mid-run, then vanishing when the next step opened. The stamp lands once, when the run stops answering.
 
 The thinking passage streams word by word on the same clock as the reply. It was treated as a block delivered whole — held back for one beat, then landed at once and grown raw as more thinking streamed in. Its words are now part of the reveal's script, so it is laid down at the pace it is written, and the prose after it waits its turn.
+
+Focusing the window mid-run no longer duplicates the reply. A focus revalidation refetches the thread while its text is still streaming, and the persisted step — the same prose cut at an older or newer length — failed the exact-text match and landed as a second bubble, jumping the scroll under the reader. A still-streaming entry now claims the step whose prose is a prefix of its own, in either direction; sealed turns keep exact matching, so the same words sent twice still draw two bubbles.
+

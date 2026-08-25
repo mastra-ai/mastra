@@ -37,3 +37,8 @@ const shown = useRevealedText(text, streaming);
 The arrival boundary is now a primitive of its own: `ArrivalScope` marks a view the reader has been handed, `useWatched` answers whether they were watching when an element mounted, and `Arriving` fades a block in only when they were. Every entrance derives from that one answer instead of each component keeping its own idea of "new".
 
 A passage born streaming under the reader's eyes now animates from its first word. `MarkdownRenderer` treated whatever words it mounted with as already read — right for a restored transcript, wrong for a live reply, whose opening words landed plain and then replayed their entrance. The renderer now asks the arrival scope and its stream: text born streaming into a watched view plays in from word one, while a block that mounts complete — restored history, an expanded body, a card's output — lands as plain text and enters with its container.
+
+A reply joined mid-chunk now streams from its first word. The reveal used to hand the first render everything but the last twelve words, so a fat first chunk landed as a block, faded in whole, and only its tail streamed. Only a reply already hundreds of words ahead is joined near its tail instead of retyped.
+
+The reveal clock no longer runs backwards. A frame's timestamp can land behind the clock read when its loop was armed, and when it did the cursor stepped back across a word boundary — unmounting whatever sat on that boundary for one frame. A tool row that had just settled replayed its entrance, and its shimmer snapped off instead of dissolving. Time is clamped forward-only, so a word laid down stays down.
+
