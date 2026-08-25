@@ -224,12 +224,16 @@ export function execute<OUTPUT = undefined>({
 
   // For OpenAI strict mode, ensure all properties are required and additionalProperties: false
   if (isOpenAIStrictMode && responseFormat?.schema) {
+    // Spread `model` directly would drop prototype getters like `modelId`/`provider`,
+    // so pass the fields the compat layers read explicitly.
+    const compatModel = {
+      modelId: model.modelId,
+      provider: model.provider,
+      supportsStructuredOutputs: true,
+    };
     responseFormat.schema = applyCompatLayer({
       schema: responseFormat.schema,
-      compatLayers: [
-        new OpenAIReasoningSchemaCompatLayer({ ...model, supportsStructuredOutputs: true }),
-        new OpenAISchemaCompatLayer({ ...model, supportsStructuredOutputs: true }),
-      ],
+      compatLayers: [new OpenAIReasoningSchemaCompatLayer(compatModel), new OpenAISchemaCompatLayer(compatModel)],
       mode: 'jsonSchema',
     });
   }
