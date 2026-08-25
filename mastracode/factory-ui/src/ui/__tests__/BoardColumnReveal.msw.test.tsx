@@ -8,7 +8,7 @@
 import { screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
@@ -19,27 +19,50 @@ const REPO_ID = 'repo-1';
 const REVEAL_STEP = 30;
 const ITEM_COUNT = 45;
 
-const workItems = Array.from({ length: ITEM_COUNT }, (_, index) => ({
-  id: `item-${index}`,
-  orgId: 'org-1',
-  createdBy: 'user-1',
-  factoryProjectId: FACTORY_ID,
-  externalSource: null,
-  parentWorkItemId: null,
-  title: `Task ${index}`,
-  stages: ['triage'],
-  stageHistory: [],
-  sessions: {},
-  metadata: {},
-  revision: 1,
-  createdAt: `2026-07-18T00:${String(index).padStart(2, '0')}:00.000Z`,
-  updatedAt: `2026-07-18T00:${String(index).padStart(2, '0')}:00.000Z`,
-}));
+const buildWorkItems = (count: number) =>
+  Array.from({ length: count }, (_, index) => ({
+    id: `item-${index}`,
+    orgId: 'org-1',
+    createdBy: 'user-1',
+    factoryProjectId: FACTORY_ID,
+    externalSource: null,
+    parentWorkItemId: null,
+    title: `Task ${index}`,
+    stages: ['triage'],
+    stageHistory: [],
+    sessions: {},
+    metadata: {},
+    revision: 1,
+    createdAt: `2026-07-18T00:${String(index).padStart(2, '0')}:00.000Z`,
+    updatedAt: `2026-07-18T00:${String(index).padStart(2, '0')}:00.000Z`,
+  }));
+
+const workItems = buildWorkItems(ITEM_COUNT);
 
 /** The board lists newest first, so the oldest card is the one past the page. */
 const OLDEST_TITLE = 'Task 0';
 
-function stubBoardEndpoints() {
+/** Reports the sentinel as in view the moment it is observed. */
+function stubSentinelAlwaysInView() {
+  const original = globalThis.IntersectionObserver;
+  vi.stubGlobal(
+    'IntersectionObserver',
+    class AlwaysInView {
+      constructor(private readonly callback: IntersectionObserverCallback) {}
+      observe() {
+        this.callback([{ isIntersecting: true } as IntersectionObserverEntry], this as never);
+      }
+      disconnect() {}
+      unobserve() {}
+      takeRecords(): IntersectionObserverEntry[] {
+        return [];
+      }
+    },
+  );
+  return () => vi.stubGlobal('IntersectionObserver', original);
+}
+
+function stubBoardEndpoints(items: object[] = workItems) {
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
@@ -65,7 +88,9 @@ function stubBoardEndpoints() {
         ],
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () => HttpResponse.json({ workItems })),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+      HttpResponse.json({ workItems: items }),
+    ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions`, () =>
       HttpResponse.json({ decisions: [] }),
     ),
@@ -90,6 +115,8 @@ function renderBoard(search = '') {
 }
 
 describe('Board column reveal', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
   it('renders one page of a long column, keeping the rest out of the tree', async () => {
     stubBoardEndpoints();
     renderBoard();
@@ -97,6 +124,18 @@ describe('Board column reveal', () => {
     await screen.findByLabelText(`Task ${ITEM_COUNT - 1}`);
     await waitFor(() => expect(screen.getAllByTestId('work-item-card')).toHaveLength(REVEAL_STEP));
     expect(screen.queryByLabelText(OLDEST_TITLE)).not.toBeInTheDocument();
+  });
+
+  // An observer only reports crossings. A sentinel that never leaves view — a
+  // lane short enough to sit inside the root margin — reported once and the
+  // column stalled two pages in, with the rest of its cards never rendered.
+  it('keeps revealing while the sentinel stays in view', async () => {
+    stubSentinelAlwaysInView();
+    stubBoardEndpoints(buildWorkItems(REVEAL_STEP * 2 + 10));
+
+    renderBoard();
+
+    await waitFor(() => expect(screen.getAllByTestId('work-item-card')).toHaveLength(REVEAL_STEP * 2 + 10));
   });
 
   it('renders a linked card even when it sits past the first page', async () => {
