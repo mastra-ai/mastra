@@ -10,10 +10,7 @@ import { BoardStageIcon } from './BoardIcons';
 
 /** Header cells and card lanes share this so the two rows stay column-aligned. */
 function columnWidthClass(collapsed: boolean): string {
-  return cn(
-    'w-[80cqw] min-w-0 shrink-0 transition-[width] motion-reduce:transition-none',
-    collapsed ? 'lg:w-14' : 'lg:w-80',
-  );
+  return cn('w-80 min-w-0 shrink-0 transition-[width] motion-reduce:transition-none', collapsed && 'lg:w-14');
 }
 
 function ColumnTaskBadge({ count, total, label }: { count: number; total: number; label: string }) {

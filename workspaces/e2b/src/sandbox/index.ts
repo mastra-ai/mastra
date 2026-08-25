@@ -19,6 +19,7 @@ import type {
   SandboxFileInput,
   SandboxNetworking,
   SandboxCloneOptions,
+  SandboxStartResult,
 } from '@mastra/core/workspace';
 
 /**
@@ -181,7 +182,7 @@ export interface E2BSandboxOptions extends Omit<MastraSandboxOptions, 'processes
  *
  * ```
  */
-export class E2BSandbox extends MastraSandbox {
+export class E2BSandbox extends MastraSandbox<Sandbox> {
   readonly id: string;
   readonly name = 'E2BSandbox';
   readonly provider = 'e2b';
@@ -337,39 +338,44 @@ export class E2BSandbox extends MastraSandbox {
   // ---------------------------------------------------------------------------
 
   /**
-   * Start the E2B sandbox.
-   * Handles template preparation, existing sandbox reconnection, and new sandbox creation.
+   * Acquisition primitives (base-orchestrated start): the base derives
+   * `outcome: 'created'` only when a brand-new sandbox VM was created;
+   * reconnecting (including resuming a paused sandbox) is `outcome: 'connected'`.
    *
-   * Status management and mount processing are handled by the base class.
+   * `find` returns an already-connected E2B handle: `Sandbox.connect`
+   * resumes paused sandboxes, and its failures are deliberately swallowed
+   * (unusable handle → create fresh) — that forgiveness is this provider's
+   * policy, so it lives here rather than in `connect`. The exception is the
+   * `sandboxId` reattach inside {@link acquireExistingSandbox}, which is
+   * fail-closed: only a "sandbox gone" error falls through to discovery.
    */
-  async start(): Promise<void> {
+  protected override async find(): Promise<Sandbox | undefined> {
     // Already have a sandbox instance
     if (this._sandbox) {
+      return this._sandbox;
+    }
+    return (await this.acquireExistingSandbox()) ?? undefined;
+  }
+
+  protected override async connect(existingSandbox: Sandbox): Promise<void> {
+    if (existingSandbox === this._sandbox) {
       return;
     }
+    this._sandbox = existingSandbox;
+    this._createdAt = new Date();
+    this.logger.debug(`${LOG_PREFIX} Reconnected to existing sandbox for: ${this.id}`);
 
-    // Await template preparation (started in constructor) and existing sandbox search in parallel
-    const [existingSandbox, templateId] = await Promise.all([
-      this.acquireExistingSandbox(),
-      this._templatePreparePromise || this.resolveTemplate(),
-    ]);
+    // Clean up stale mounts from previous config
+    // (processPending is called by base class after start completes)
+    const expectedPaths = Array.from(this.mounts.entries.keys());
+    this.logger.debug(`${LOG_PREFIX} Running mount reconciliation...`);
+    await this.reconcileMounts(expectedPaths);
+    this.logger.debug(`${LOG_PREFIX} Mount reconciliation complete`);
+  }
 
-    if (existingSandbox) {
-      this._sandbox = existingSandbox;
-      this._createdAt = new Date();
-      this.logger.debug(`${LOG_PREFIX} Reconnected to existing sandbox for: ${this.id}`);
-
-      // Clean up stale mounts from previous config
-      // (processPending is called by base class after start completes)
-      const expectedPaths = Array.from(this.mounts.entries.keys());
-      this.logger.debug(`${LOG_PREFIX} Running mount reconciliation...`);
-      await this.reconcileMounts(expectedPaths);
-      this.logger.debug(`${LOG_PREFIX} Mount reconciliation complete`);
-      return;
-    }
-
-    // If template preparation failed earlier, retry now
-    let resolvedTemplateId = templateId;
+  protected override async create(): Promise<void> {
+    // Template preparation started in the constructor; retry here if it failed.
+    let resolvedTemplateId = await (this._templatePreparePromise || this.resolveTemplate());
     if (!resolvedTemplateId) {
       this.logger.debug(`${LOG_PREFIX} Template preparation failed earlier, retrying...`);
       resolvedTemplateId = await this.resolveTemplate();
@@ -395,7 +401,7 @@ export class E2BSandbox extends MastraSandbox {
       // If template not found (404), rebuild it and retry
       const errorStr = String(createError);
       if (errorStr.includes('404') && errorStr.includes('not found') && !this.templateSpec) {
-        this.logger.debug(`${LOG_PREFIX} Template not found, rebuilding: ${templateId}`);
+        this.logger.debug(`${LOG_PREFIX} Template not found, rebuilding: ${resolvedTemplateId}`);
         this._resolvedTemplateId = undefined; // Clear cached ID to force rebuild
         const rebuiltTemplateId = await this.buildDefaultTemplate();
 
@@ -417,7 +423,6 @@ export class E2BSandbox extends MastraSandbox {
 
     this.logger.debug(`${LOG_PREFIX} Created sandbox ${this._sandbox.sandboxId} for logical ID: ${this.id}`);
     this._createdAt = new Date();
-
     // Note: processPending is called by base class after start completes
   }
 

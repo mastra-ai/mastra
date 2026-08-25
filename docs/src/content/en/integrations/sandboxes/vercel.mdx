@@ -211,7 +211,7 @@ Both callbacks are optional and can be used independently.
   },
   {
     name: 'onStart',
-    type: 'SandboxLifecycleHook',
+    type: 'SandboxStartHook',
     description: 'Lifecycle hook called after the sandbox reaches `running` status.',
     isOptional: true,
   },
@@ -432,7 +432,7 @@ const workspace = new Workspace({
   },
   {
     name: 'onStart',
-    type: 'SandboxLifecycleHook',
+    type: 'SandboxStartHook',
     description: 'Lifecycle hook called after the sandbox reaches `running` status.',
     isOptional: true,
   },

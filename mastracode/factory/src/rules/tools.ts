@@ -8,7 +8,7 @@ import type { FactorySessionSourceLookup } from './binding-context.js';
 import { resolveFactorySessionAddress } from './binding-context.js';
 import type { FactoryTransitionService } from './transition-service.js';
 import { currentStage } from './transition-service.js';
-import { FACTORY_RULE_STAGES } from './types.js';
+import { FACTORY_RULE_STAGES, FACTORY_TRIAGE_TYPES, isFactoryTriageType } from './types.js';
 import type { FactoryRuleBoard } from './types.js';
 
 const MAX_RATIONALE_LENGTH = 1_000;
@@ -29,6 +29,10 @@ const transitionInputSchema = z
   })
   .strict();
 
+const triageTransitionInputSchema = transitionInputSchema.extend({
+  triageType: z.enum(FACTORY_TRIAGE_TYPES),
+});
+
 function boardForSource(type: string | undefined): FactoryRuleBoard {
   return type === 'pull-request' ? 'review' : 'work';
 }
@@ -47,15 +51,17 @@ export async function createFactoryTransitionTools(options: {
   if (!resolution) return {};
   const availableBinding = resolution.binding ?? (await options.storage.findActiveRunBinding(resolution.address));
   if (!availableBinding) return {};
+  const isTriage = availableBinding.role === 'triage';
 
   return {
     factory_transition_work_item: createTool({
       id: 'factory_transition_work_item',
-      description:
-        'Request a governed stage transition for the Factory work item exactly bound to this thread. Use the current revision from the factory-phase signal and explain why the transition is appropriate.',
-      inputSchema: transitionInputSchema,
+      description: isTriage
+        ? 'Report the triage classification and request a governed stage transition for the Factory work item exactly bound to this thread. Only bugs may request Planning autonomously; closure outcomes may request a terminal stage. Feature requests and other non-bug classifications that remain open must stay in their current Intake or Triage stage for maintainer approval.'
+        : 'Request a governed stage transition for the Factory work item exactly bound to this thread. Use the current revision from the factory-phase signal and explain why the transition is appropriate.',
+      inputSchema: isTriage ? triageTransitionInputSchema : transitionInputSchema,
       requireApproval: true,
-      execute: async ({ stage, expectedRevision, rationale }, execution) => {
+      execute: async ({ stage, expectedRevision, rationale, ...input }, execution) => {
         const currentResolution = await resolveFactorySessionAddress({
           requestContext: execution.requestContext,
           storage: options.storage,
@@ -78,6 +84,8 @@ export async function createFactoryTransitionTools(options: {
         }
         const item = await options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
         if (!item) throw new Error('Bound Factory work item not found.');
+        const triageType =
+          'triageType' in input && isFactoryTriageType(input.triageType) ? input.triageType : undefined;
 
         const result = await options.transitionService.transition({
           orgId: binding.orgId,
@@ -89,6 +97,7 @@ export async function createFactoryTransitionTools(options: {
           actor: { type: 'agent', bindingId: binding.id, role: binding.role },
           ingress: { type: 'agent', identity: `${binding.id}:${toolCallId}` },
           cause: rationale,
+          ...(triageType ? { triageType } : {}),
         });
 
         // A phase EXIT is the natural moment to ask what was worth keeping:

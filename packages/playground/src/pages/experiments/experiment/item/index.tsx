@@ -169,7 +169,7 @@ function ExperimentItemPageContent({ itemId }: { itemId: string }) {
                 collapsed={traceCollapsed}
                 onCollapsedChange={setTraceCollapsed}
                 LinkComponent={Link}
-                traceHref={`/traces/${featuredTraceId}`}
+                traceHref={`/traces?traceId=${encodeURIComponent(featuredTraceId)}`}
               />
 
               {featuredSpanId && (
