@@ -883,6 +883,14 @@ export interface Span<TType extends SpanType> extends BaseSpan<TType> {
   /** Get the closest parent spanId that isn't an internal span */
   getParentSpanId(includeInternalSpans?: boolean): string | undefined;
 
+  /**
+   * Optional hook returning the spanId observability signals (logs, metrics,
+   * scores) should reference: the span's own id when it reaches exporters,
+   * otherwise the nearest exportable ancestor's id, or undefined when none
+   * exists. Prevents signals from referencing spanIds that are never exported.
+   */
+  getExportedSpanId?(): string | undefined;
+
   /** Find the closest parent span of a specific type by walking up the parent chain */
   findParent<T extends SpanType>(spanType: T): Span<T> | undefined;
 

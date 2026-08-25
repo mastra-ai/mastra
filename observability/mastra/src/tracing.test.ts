@@ -1597,6 +1597,99 @@ describe('Tracing', () => {
       rootSpan.end();
     });
 
+    it('logs emitted inside a non-exportable span should reference the nearest exportable ancestor spanId', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+        logging: { level: 'info' },
+        // default: includeInternalSpans is falsy, so internal spans never export
+      });
+
+      const agentSpan = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: "agent run: 'lila'",
+        attributes: { agentId: 'lila' },
+      });
+
+      // Internal workflow_step wrapper — filtered out of export
+      const internalStep = agentSpan.createChildSpan({
+        type: SpanType.WORKFLOW_STEP,
+        name: 'internal-step',
+        tracingPolicy: { internal: InternalSpans.WORKFLOW },
+      });
+      expect(internalStep.isInternal).toBe(true);
+
+      observability.getLoggerContext(internalStep).error('Upstream LLM API error');
+
+      expect(testExporter.logEvents).toHaveLength(1);
+      const log = testExporter.logEvents[0]!.log;
+      // Never the internal span's own id — that id never reaches exporters
+      expect(log.spanId).not.toBe(internalStep.id);
+      expect(log.spanId).toBe(agentSpan.id);
+      expect(log.correlationContext?.spanId).toBe(agentSpan.id);
+      expect(log.traceId).toBe(internalStep.traceId);
+
+      internalStep.end();
+      agentSpan.end();
+    });
+
+    it('logs emitted inside a non-exportable span with no exportable ancestor should omit spanId', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+        logging: { level: 'info' },
+      });
+
+      // Root span is itself internal — nothing exportable in the chain
+      const internalRoot = observability.startSpan({
+        type: SpanType.WORKFLOW_RUN,
+        name: 'internal-root',
+        tracingPolicy: { internal: InternalSpans.WORKFLOW },
+      });
+      expect(internalRoot.isInternal).toBe(true);
+
+      observability.getLoggerContext(internalRoot).error('boom');
+
+      expect(testExporter.logEvents).toHaveLength(1);
+      const log = testExporter.logEvents[0]!.log;
+      expect(log.spanId).toBeUndefined();
+      expect(log.correlationContext?.spanId).toBeUndefined();
+
+      internalRoot.end();
+    });
+
+    it('getMetricsContext inside a non-exportable span should reference the nearest exportable ancestor spanId', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const agentSpan = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'agent',
+        attributes: { agentId: 'a1' },
+      });
+      const internalStep = agentSpan.createChildSpan({
+        type: SpanType.WORKFLOW_STEP,
+        name: 'internal-step',
+        tracingPolicy: { internal: InternalSpans.WORKFLOW },
+      });
+      expect(internalStep.isInternal).toBe(true);
+
+      observability.getMetricsContext(internalStep).emit('my_counter', 1);
+
+      expect(testExporter.metricEvents).toHaveLength(1);
+      const metric = testExporter.metricEvents[0]!.metric;
+      expect(metric.spanId).not.toBe(internalStep.id);
+      expect(metric.spanId).toBe(agentSpan.id);
+
+      internalStep.end();
+      agentSpan.end();
+    });
+
     it('getLoggerContext should respect logging.level config', () => {
       const observability = new DefaultObservabilityInstance({
         serviceName: 'test-service',
