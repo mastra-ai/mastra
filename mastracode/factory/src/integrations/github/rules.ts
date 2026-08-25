@@ -19,11 +19,13 @@ import { FACTORY_PULL_REQUEST_RECONCILIATION_KEY } from '../../storage/domains/w
 import type { IntegrationContext } from '../base.js';
 import type { GithubAppIdentity } from './app-identity.js';
 import type { GithubRepositoryPermission } from './integration.js';
+import type { PullRequestLinkFacts } from './links.js';
 import {
   canonicalSourceKey,
   cardBelongsToRepository,
   closingIssueNumbers,
   legacySourceKey,
+  provenanceParentWorkItemId,
   pullRequestParentWorkItemId,
 } from './links.js';
 import { changeRequestTargetKey } from './subscriptions.js';
@@ -114,6 +116,11 @@ function eventName(parsed: ParsedGithubWebhook): FactoryGithubEventName | undefi
 
 function provenanceTarget(repositoryId: number, pullRequestNumber: number): string {
   return `factory-pr-provenance:${repositoryId}:${pullRequestNumber}`;
+}
+
+/** A Review card with nothing recorded about what it implements. */
+function isUnlinkedReviewCard(item: WorkItemRow | undefined): item is WorkItemRow {
+  return item?.externalSource?.type === 'pull-request' && item.parentWorkItemId === null;
 }
 
 function workItemSource(item: WorkItemRow) {
@@ -283,16 +290,13 @@ export class GithubRules {
       reReviewEvent ? null : provenance,
       senderIsResponder && !reviewRequested,
     );
-    if (relatedItem?.externalSource?.type === 'pull-request' && relatedItem.parentWorkItemId === null) {
+    if (isUnlinkedReviewCard(relatedItem)) {
       relatedItem =
         (await this.#linkPullRequestCard({
           project,
           card: relatedItem,
           provenance,
-          repositoryId,
-          repositoryFullName: repositoryName,
-          closesIssues,
-          headBranch,
+          facts: { repositoryId, repositoryFullName: repositoryName, closesIssues, headBranch },
         })) ?? relatedItem;
     }
     const actor = await githubActor(this.options.github, {
@@ -503,18 +507,12 @@ export class GithubRules {
     project: ExternalRepositoryProjectTarget;
     card: WorkItemRow;
     provenance: FactoryPullRequestProvenanceData | null;
-    repositoryId: number;
-    repositoryFullName: string;
-    closesIssues: number[];
-    headBranch: string | undefined;
+    facts: PullRequestLinkFacts;
   }): Promise<WorkItemRow | undefined> {
     const { orgId, factoryProjectId } = input.project;
     const items = await this.options.storage.list({ orgId, factoryProjectId });
-    const authored =
-      input.provenance && items.some(item => item.id === input.provenance?.workItemId)
-        ? input.provenance.workItemId
-        : null;
-    const parentWorkItemId = authored ?? pullRequestParentWorkItemId(items, input);
+    const parentWorkItemId =
+      provenanceParentWorkItemId(items, input.provenance) ?? pullRequestParentWorkItemId(items, input.facts);
     if (!parentWorkItemId || parentWorkItemId === input.card.id) return undefined;
     const linked = await this.options.storage.setParentWorkItemIfMissing({
       orgId,

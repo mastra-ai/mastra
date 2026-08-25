@@ -826,7 +826,8 @@ export class MastraFactory {
                 prepareBinding,
                 primeCredentials: tenant => primeTenantCredentials({ tenant, credentials: modelCredentialsStorage }),
                 resolveLinkedWorkItemParentId: async ({ orgId, factoryProjectId, decision }) => {
-                  const facts = decision.source === 'github-pr' ? pullRequestLinkFacts(decision.metadata) : null;
+                  if (decision.source !== 'github-pr') return null;
+                  const facts = pullRequestLinkFacts(decision.metadata);
                   if (!facts) return null;
                   return resolvePullRequestParentWorkItemId(
                     {
