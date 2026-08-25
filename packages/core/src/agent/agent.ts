@@ -150,7 +150,6 @@ import { AgentLegacyHandler } from './agent-legacy';
 import type {
   AgentExecutionOptions,
   AgentExecutionOptionsBase,
-  AgentMemoryOption,
   InnerAgentExecutionOptions,
   MultiPrimitiveExecutionOptions,
   NetworkOptions,
@@ -201,6 +200,7 @@ import type {
   AgentExecuteOnFinishOptions,
   AgentEditorConfig,
   AgentInstructions,
+  AgentMemoryOption,
   AgentMessageInput,
   AgentMethodType,
   AgentSignal,
