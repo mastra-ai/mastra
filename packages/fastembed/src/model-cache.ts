@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { FlagEmbedding, EmbeddingModel } from './fastembed.js';
 
-export type FastEmbedModelType = 'BGESmallENV15' | 'BGEBaseENV15';
+export type FastEmbedModelType = 'BGESmallENV15' | 'BGEBaseENV15' | 'MLE5Large';
 
 let modelCachePathPromise: Promise<string> | undefined;
 
