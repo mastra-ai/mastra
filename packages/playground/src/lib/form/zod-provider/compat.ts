@@ -157,14 +157,17 @@ export function getUnionOptions(schema: AnySchema): AnySchema[] | undefined {
  */
 export function getIntersection(schema: AnySchema): { left: AnySchema; right: AnySchema } | undefined {
   const def = getDef(schema);
-  if (def?.left && def?.right) {
-    return { left: def.left, right: def.right };
+  if (def) {
+    const { left, right } = def;
+    if (left && right) return { left, right };
   }
   // v4 also exposes schema.def directly. The walk that feeds these helpers can
   // hand them any node, so this has to survive a value that is not a schema —
   // every other getter here already does.
-  if (schema?.def?.left && schema?.def?.right) {
-    return { left: schema.def.left, right: schema.def.right };
+  const v4Def = schema?.def;
+  if (v4Def) {
+    const { left, right } = v4Def;
+    if (left && right) return { left, right };
   }
   return undefined;
 }
@@ -189,11 +192,33 @@ export function hasDateTimeCheck(checks: any[]): boolean {
     // v4 format
     if (isV4(check)) {
       const checkDef = getDef(check);
-      return checkDef?.check === 'string_format' && checkDef?.format === 'datetime';
+      if (!checkDef) return false;
+      return checkDef.check === 'string_format' && checkDef.format === 'datetime';
     }
     // v3 format
     return check.kind === 'datetime';
   });
+}
+
+/**
+ * Last-resort type sniff for a schema whose internals name nothing. Zod v4
+ * names its classes with a leading underscore (`_ZodString`), which is what the
+ * slice strips.
+ */
+export function getConstructorTypeName(schema: AnySchema): string | undefined {
+  return schema?.constructor?.name?.slice(1);
+}
+
+/**
+ * The Zod type name of a schema, however it happens to record it.
+ * v3 stores `ZodString` in `_def.typeName`; v4 stores `string` in
+ * `_zod.def.type`; a schema that records neither is sniffed by constructor.
+ */
+export function getTypeName(schema: AnySchema): string | undefined {
+  const def = getDef(schema);
+  const v4Type =
+    typeof def?.type === 'string' ? `Zod${def.type.charAt(0).toUpperCase()}${def.type.slice(1)}` : undefined;
+  return def?.typeName ?? v4Type ?? getConstructorTypeName(schema);
 }
 
 /**
@@ -222,10 +247,7 @@ export function isLiteralSchema(schema: AnySchema): boolean {
   const def = getDef(schema);
   // Alternatives over the same fact; the constructor sniff is the last resort
   // for a schema whose internals name nothing.
-  // Stryker disable next-line OptionalChaining,ConditionalExpression,MethodExpression,StringLiteral
-  return (
-    def?.typeName === 'ZodLiteral' || def?.type === 'literal' || schema?.constructor?.name?.slice(1) === 'ZodLiteral'
-  );
+  return def?.typeName === 'ZodLiteral' || def?.type === 'literal' || getConstructorTypeName(schema) === 'ZodLiteral';
 }
 
 /**
@@ -237,10 +259,9 @@ export function isIntersectionSchema(schema: AnySchema): boolean {
   const def = getDef(schema);
   // Alternatives over the same fact; the constructor sniff is the last resort
   // for a schema whose internals name nothing.
-  // Stryker disable next-line OptionalChaining,ConditionalExpression,MethodExpression,StringLiteral
   return (
     def?.typeName === 'ZodIntersection' ||
     def?.type === 'intersection' ||
-    schema?.constructor?.name?.slice(1) === 'ZodIntersection'
+    getConstructorTypeName(schema) === 'ZodIntersection'
   );
 }

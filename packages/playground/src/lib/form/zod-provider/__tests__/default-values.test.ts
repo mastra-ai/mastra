@@ -125,3 +125,63 @@ describe.each([
     });
   });
 });
+
+/**
+ * Zod v4 names its classes with a leading underscore, which is what the
+ * constructor sniff strips. A real v3 schema never reaches that last resort,
+ * because v3 always records a `typeName`.
+ */
+class _ZodLiteral {
+  _def = { value: 'fixed' };
+}
+
+const withDefault = (value: unknown) => ({ _def: { defaultValue: () => value } });
+const literal = (value: unknown) => ({ _def: { typeName: 'ZodLiteral', value } });
+
+describe('getDefaultValueInZodStack — recognising a literal', () => {
+  it('recognises one by constructor name when the internals name nothing', () => {
+    expect(getDefaultValueInZodStack(new _ZodLiteral())).toBe('fixed');
+  });
+
+  it('does not hand back the first value of an enum as its default', () => {
+    // A v3 enum keeps its members in `values`, the same key a v4 literal uses.
+    expect(getDefaultValueInZodStack({ _def: { typeName: 'ZodEnum', values: ['a', 'b'] } })).toBeUndefined();
+  });
+
+  it('keeps unwrapping when a literal names no value', () => {
+    const schema = { _def: { typeName: 'ZodLiteral', innerType: withDefault(7) } };
+
+    expect(getDefaultValueInZodStack(schema)).toBe(7);
+  });
+
+  it.each([
+    ['a node whose constructor carries no name', { _def: { value: 'x' }, constructor: {} }],
+    ['a node with no prototype', Object.assign(Object.create(null), { _def: { value: 'x' } })],
+  ])('reports no default rather than throwing on %s', (_label, schema) => {
+    expect(getDefaultValueInZodStack(schema)).toBeUndefined();
+  });
+});
+
+describe('getDefaultValueInZodStack — walking the wrappers', () => {
+  it('unwraps an effects wrapper to reach the default underneath', () => {
+    expect(getDefaultValueInZodStack({ _def: { schema: withDefault('inner') } })).toBe('inner');
+  });
+
+  it('merges the halves of an intersection that also exposes a shape', () => {
+    // Both roads are open here; the intersection is the one that must win, or
+    // the halves never contribute their defaults.
+    const schema = {
+      _def: {
+        shape: { fromShape: literal('shape') },
+        left: { _def: { shape: { a: literal('L') } } },
+        right: { _def: { shape: { b: literal('R') } } },
+      },
+    };
+
+    expect(getDefaultValueInZodStack(schema)).toEqual({ a: 'L', b: 'R' });
+  });
+
+  it('ignores a node that names only one half of an intersection', () => {
+    expect(getDefaultValueInZodStack({ _def: { left: { _def: { shape: {} } } } })).toBeUndefined();
+  });
+});

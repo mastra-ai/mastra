@@ -359,3 +359,117 @@ describe('validateSchema, against a schema that reports issues the other way rou
     expect(result.success === false && result.errors).toEqual([]);
   });
 });
+
+/**
+ * A v3 `fieldConfig()` wrapper hides its config behind a Symbol on the
+ * refinement function of a `ZodEffects`. These stand-ins reproduce that shape so
+ * the walk that hunts for it can be steered off course on purpose.
+ */
+const refinementCarrying = (config: Record<string, unknown>) => {
+  const refinement = () => {};
+  (refinement as unknown as Record<symbol, unknown>)[Symbol('fieldConfig')] = config;
+  return refinement;
+};
+
+const effects = (effect: unknown, extra: Record<string, unknown> = {}) => ({
+  _def: { typeName: 'ZodEffects', effect, ...extra },
+});
+
+const configured = (config: Record<string, unknown>) =>
+  effects({ type: 'refinement', refinement: refinementCarrying(config) });
+
+const objectOf = (shape: Record<string, unknown>) => ({ shape });
+
+describe('the field config it digs out of a schema', () => {
+  it('carries the custom data an author attached', () => {
+    const fields = fieldsOf(objectOf({ tuned: configured({ customData: { hint: 'pick one' } }) }));
+
+    expect(fields[0].fieldConfig?.customData).toEqual({ hint: 'pick one' });
+  });
+
+  it('finds a config wrapped one level down', () => {
+    const fields = fieldsOf(objectOf({ tuned: { _def: { schema: configured({ label: 'Tuned' }) } } }));
+
+    expect(fields[0].fieldConfig).toMatchObject({ label: 'Tuned' });
+  });
+
+  it.each([
+    [
+      'the refinement sits on something other than a ZodEffects',
+      {
+        _def: { typeName: 'ZodString', effect: { type: 'refinement', refinement: refinementCarrying({ label: 'x' }) } },
+      },
+    ],
+    ['the effect is not a refinement', effects({ type: 'transform', refinement: refinementCarrying({ label: 'x' }) })],
+    ['the effects wrapper carries no effect', { _def: { typeName: 'ZodEffects' } }],
+    ['the refinement itself is missing', effects({ type: 'refinement' })],
+    ['the field is not a schema at all', 'not a schema'],
+  ])('leaves the field unconfigured when %s', (_label, field) => {
+    expect(fieldsOf(objectOf({ tuned: field }))[0].fieldConfig).toBeUndefined();
+  });
+});
+
+describe('a field whose value is not a schema', () => {
+  it('still parses, as a plain required string with no sub-fields', () => {
+    expect(fieldsOf(objectOf({ stray: 'not a schema' }))[0]).toMatchObject({
+      key: 'stray',
+      type: 'string',
+      required: true,
+      schema: [],
+    });
+  });
+});
+
+describe('the options it lists for an enum', () => {
+  it('reads the entries of an enum recorded as an object', () => {
+    const level = { _def: { typeName: 'ZodNativeEnum', values: { Low: 'low', High: 'high' } } };
+
+    expect(fieldsOf(objectOf({ level }))[0].options).toEqual([
+      ['Low', 'low'],
+      ['High', 'high'],
+    ]);
+  });
+});
+
+describe('the sub-fields it builds', () => {
+  it('adds none for a union that lists no options', () => {
+    expect(fieldsOf(objectOf({ choice: { _def: { typeName: 'ZodUnion' } } }))[0].schema).toEqual([]);
+  });
+
+  it('does not read options off a schema that is not a union', () => {
+    const text = { _def: { typeName: 'ZodString', options: [z.number()] } };
+
+    expect(fieldsOf(objectOf({ text }))[0].schema).toEqual([]);
+  });
+
+  it('adds none for an array that names no element', () => {
+    expect(fieldsOf(objectOf({ list: { _def: { typeName: 'ZodArray' } } }))[0].schema).toEqual([]);
+  });
+});
+
+describe('the halves of an intersection', () => {
+  // A node that only *looks* like an intersection: it names no type of its own,
+  // so the field's type is whatever its halves make of it.
+  const intersectionOf = (left: unknown, right: unknown) => objectOf({ combo: { _def: { left, right } } });
+
+  it('merges the keys of two object halves and leaves the field type alone', () => {
+    const field = fieldsOf(intersectionOf(z.object({ a: z.string() }), z.object({ b: z.number() })))[0];
+
+    expect(field.schema?.map(sub => sub.key)).toEqual(['a', 'b']);
+    expect(field.type).toBe('string');
+  });
+
+  it('takes the field type from a left half that is not an object', () => {
+    const field = fieldsOf(intersectionOf(z.number(), z.object({ b: z.string() })))[0];
+
+    expect(field.type).toBe('number');
+    expect(field.schema?.map(sub => sub.key)).toEqual(['b']);
+  });
+
+  it('lets a right half that is not an object win the field type', () => {
+    const field = fieldsOf(intersectionOf(z.boolean(), z.number()))[0];
+
+    expect(field.type).toBe('number');
+    expect(field.schema).toEqual([]);
+  });
+});

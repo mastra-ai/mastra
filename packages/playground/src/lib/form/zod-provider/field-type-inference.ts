@@ -1,17 +1,21 @@
 import type { FieldConfig } from '@autoform/core';
-import { getDef, getStringChecks, hasDateTimeCheck, getUnionOptions, getShape, getLiteralValue } from './compat';
+import {
+  getConstructorTypeName,
+  getDef,
+  getStringChecks,
+  hasDateTimeCheck,
+  getUnionOptions,
+  getShape,
+  getLiteralValue,
+  getTypeName,
+} from './compat';
 
 export function inferFieldType(schema: any, fieldConfig?: FieldConfig): string {
   if (fieldConfig?.fieldType) {
     return fieldConfig.fieldType;
   }
 
-  //starts with an underscore, so we want to pick from second character
-  const constructorName = schema?.constructor?.name?.slice(1);
-  const def = getDef(schema);
-  const v4Type =
-    typeof def?.type === 'string' ? `Zod${def.type.charAt(0).toUpperCase()}${def.type.slice(1)}` : undefined;
-  const typeName = def?.typeName ?? v4Type ?? constructorName;
+  const typeName = getTypeName(schema);
 
   if (typeName === 'ZodObject') return 'object';
   if (typeName === 'ZodIntersection') return 'object';
@@ -37,7 +41,7 @@ export function inferFieldType(schema: any, fieldConfig?: FieldConfig): string {
         const optShape = getShape(option);
         if (optShape) {
           return Object.values(optShape).some((value: any) => {
-            const vName = value?.constructor?.name?.slice(1);
+            const vName = getConstructorTypeName(value);
             const vDef = getDef(value);
             return vName === 'ZodLiteral' || vDef?.typeName === 'ZodLiteral' || vDef?.type === 'literal';
           });

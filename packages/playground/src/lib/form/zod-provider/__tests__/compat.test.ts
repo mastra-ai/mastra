@@ -3,6 +3,8 @@ import { z } from 'zod';
 
 import {
   getArrayElement,
+  getConstructorTypeName,
+  getTypeName,
   getBaseSchema,
   getDef,
   getDefaultValue,
@@ -467,5 +469,106 @@ describe('the compat getters, on internals that carry only one half of a pair', 
 
   it('treats a schema with no isOptional and no safeParse as required', () => {
     expect(isOptional({ _def: {} })).toBe(false);
+  });
+});
+
+/**
+ * Zod v4 names its classes with a leading underscore, which is what the
+ * constructor sniff strips. A real v3 schema never reaches that last resort,
+ * because v3 always records a `typeName`.
+ */
+class _ZodIntersection {
+  _def = { left: { _def: {} }, right: { _def: {} } };
+}
+
+describe('getConstructorTypeName', () => {
+  it('strips the underscore Zod v4 puts in front of its class names', () => {
+    expect(getConstructorTypeName(new _ZodIntersection())).toBe('ZodIntersection');
+  });
+
+  it.each([
+    ['nothing at all', undefined],
+    ['a value with no prototype', Object.create(null)],
+    ['a value whose constructor carries no name', { constructor: {} }],
+  ])('answers with nothing rather than throwing for %s', (_label, value) => {
+    expect(getConstructorTypeName(value)).toBeUndefined();
+  });
+});
+
+describe('getTypeName', () => {
+  it('reads the v3 type name', () => {
+    expect(getTypeName(z.string())).toBe('ZodString');
+  });
+
+  it('title-cases the lowercase type v4 records', () => {
+    expect(getTypeName(v4({ type: 'string' }))).toBe('ZodString');
+  });
+
+  it('falls back to the constructor when the internals name nothing', () => {
+    expect(getTypeName(new _ZodIntersection())).toBe('ZodIntersection');
+  });
+});
+
+describe('getDef — what counts as a schema', () => {
+  it('reads nothing off a function, even one carrying a def', () => {
+    const fn = Object.assign(() => {}, { _def: { typeName: 'ZodString' } });
+
+    expect(getDef(fn)).toBeUndefined();
+  });
+});
+
+describe('isOptional — which probe it prefers', () => {
+  it('trusts isOptional over safeParse when the two disagree', () => {
+    const schema = { isOptional: () => true, safeParse: () => ({ success: false }) };
+
+    expect(isOptional(schema)).toBe(true);
+  });
+});
+
+describe('hasDateTimeCheck — a v4 check with nothing inside', () => {
+  it('reports no datetime check rather than throwing', () => {
+    expect(hasDateTimeCheck([{ _zod: {} }])).toBe(false);
+  });
+});
+
+describe('isDefaultSchema — a wrapper with no value yet', () => {
+  it('recognises a v3 default wrapper by name alone', () => {
+    expect(isDefaultSchema({ _def: { typeName: 'ZodDefault' } })).toBe(true);
+  });
+});
+
+describe('isLiteralSchema — a node whose constructor carries no name', () => {
+  it('reports it as not a literal rather than throwing', () => {
+    expect(isLiteralSchema({ _def: {}, constructor: {} })).toBe(false);
+  });
+});
+
+describe('isIntersectionSchema — what it takes to qualify', () => {
+  const halves = { left: { _def: {} }, right: { _def: {} } };
+
+  it('needs both halves, not just the name', () => {
+    expect(isIntersectionSchema({ _def: { typeName: 'ZodIntersection' } })).toBe(false);
+  });
+
+  it('recognises one by constructor name when the internals name nothing', () => {
+    expect(isIntersectionSchema(new _ZodIntersection())).toBe(true);
+  });
+
+  it.each([
+    ['halves on `def` but no internals of its own', { def: halves }],
+    ['a constructor that carries no name', { _def: halves, constructor: {} }],
+    ['no prototype', Object.assign(Object.create(null), { _def: halves })],
+  ])('reports a node with %s as not an intersection', (_label, schema) => {
+    expect(isIntersectionSchema(schema)).toBe(false);
+  });
+});
+
+describe('getIntersection — a node that names only one half', () => {
+  it.each([
+    ['only a left half', { _def: { left: { _def: {} } } }],
+    ['only a right half', { _def: { right: { _def: {} } } }],
+    ['only a left half on `def`', { def: { left: { _def: {} } } }],
+  ])('reads no intersection out of %s', (_label, schema) => {
+    expect(getIntersection(schema)).toBeUndefined();
   });
 });

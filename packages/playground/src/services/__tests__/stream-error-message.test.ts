@@ -119,6 +119,10 @@ describe('stream error messages', () => {
       expect(textOf(buildStreamErrorMessage({ payload: { error: { code: 500 } } }))).toBe('{"code":500}');
     });
 
+    it('dumps a payload that is neither a string nor an object', () => {
+      expect(textOf(buildStreamErrorMessage({ payload: { error: 42 } }))).toBe('42');
+    });
+
     it('reports an explicit null error as unknown', () => {
       expect(textOf(buildStreamErrorMessage({ payload: { error: null } }))).toBe('Unknown error');
     });

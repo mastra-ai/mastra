@@ -42,38 +42,30 @@ export const isMaxStepsFinishChunk = (chunk: FinishChunkLike) => getFinishReason
  * the error payload when present, falling back to a JSON dump so we never
  * silently swallow an error.
  */
-export const buildStreamErrorMessage = (chunk: StreamErrorChunk): MastraDBMessage => {
-  const errorValue = chunk.payload?.error;
-  let text: string;
-  if (typeof errorValue === 'string') {
-    text = errorValue;
-    // The Error branch is a shortcut: an Error carries a string `message`, so
-    // the object branch below reads the same text out of it.
-    // Stryker disable next-line ConditionalExpression
-  } else if (errorValue instanceof Error) {
-    text = errorValue.message;
-    // The `typeof` half only narrows: a primitive cannot carry a string
-    // `message`, so the check beside it already rejects one.
-    // Stryker disable next-line ConditionalExpression
-  } else if (
-    errorValue &&
-    typeof errorValue === 'object' &&
-    typeof (errorValue as { message?: unknown }).message === 'string'
-  ) {
-    text = (errorValue as { message: string }).message;
-  } else if (errorValue == null) {
-    text = 'Unknown error';
-  } else {
+const getErrorText = (errorValue: unknown): string => {
+  if (typeof errorValue === 'string') return errorValue;
+
+  // One read covers both an `Error` and any object carrying a readable
+  // `message`: a primitive answers `undefined` here, so it needs no guard of
+  // its own, and an `Error` reaches this the same way a plain object does.
+  const message = (errorValue as { message?: unknown } | null | undefined)?.message;
+  if (typeof message === 'string') return message;
+
+  if (errorValue == null) return 'Unknown error';
+
+  try {
+    return JSON.stringify(errorValue) ?? String(errorValue);
+  } catch {
     try {
-      text = JSON.stringify(errorValue) ?? String(errorValue);
+      return String(errorValue);
     } catch {
-      try {
-        text = String(errorValue);
-      } catch {
-        text = 'Unknown error';
-      }
+      return 'Unknown error';
     }
   }
+};
+
+export const buildStreamErrorMessage = (chunk: StreamErrorChunk): MastraDBMessage => {
+  const text = getErrorText(chunk.payload?.error);
   return {
     id: `error-${chunk.runId ?? 'unknown'}-${Date.now()}`,
     role: 'assistant',

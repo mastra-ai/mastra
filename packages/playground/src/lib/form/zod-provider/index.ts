@@ -7,6 +7,7 @@ import {
   getShape,
   getArrayElement,
   getLiteralValues,
+  getTypeName,
   getUnionOptions,
   getIntersection,
   isOptional,
@@ -27,7 +28,7 @@ function getFieldConfigInZodStack(schema: AnySchema): FieldConfig | undefined {
 
   // v3: field config stored via Symbol on refinement function
   if (def.typeName === 'ZodEffects' && def.effect?.type === 'refinement') {
-    const fn = def.effect?.refinement;
+    const fn = def.effect.refinement;
     if (fn) {
       const symbols = Object.getOwnPropertySymbols(fn);
       for (const sym of symbols) {
@@ -39,9 +40,30 @@ function getFieldConfigInZodStack(schema: AnySchema): FieldConfig | undefined {
 
   // Recurse into wrappers
   if ('innerType' in def) return getFieldConfigInZodStack(def.innerType);
+  // Forcing this branch changes nothing: with no `schema` key the recursion
+  // walks into `undefined` and lands on the same `undefined` returned below.
+  // Stryker disable next-line ConditionalExpression
   if ('schema' in def) return getFieldConfigInZodStack(def.schema);
 
   return undefined;
+}
+
+/**
+ * Sub-fields for one half of an intersection. An object half contributes its own
+ * keys and leaves the field's type alone; any other half is parsed as a single
+ * field whose type becomes the type of the intersection.
+ */
+function parseIntersectionHalf(key: string, halfSchema: AnySchema): { fields: ParsedField[]; type?: string } {
+  const halfShape = getShape(halfSchema);
+  if (halfShape) {
+    return { fields: Object.entries(halfShape).map(([k, field]) => parseField(k, field as AnySchema)) };
+  }
+
+  const child = parseField(key, halfSchema);
+  // `parseField` always fills `schema` with an array, so the fallback is only
+  // here to satisfy the optional type.
+  // Stryker disable next-line ArrayDeclaration
+  return { fields: child.schema ?? [child], type: child.type };
 }
 
 function parseField(key: string, schema: AnySchema): ParsedField {
@@ -71,13 +93,7 @@ function parseField(key: string, schema: AnySchema): ParsedField {
   }
 
   const unionOptions = getUnionOptions(baseSchema);
-  const constructorName = baseSchema?.constructor?.name?.slice(1);
-  const baseDef = getDef(baseSchema);
-  const v4Type =
-    typeof baseDef?.type === 'string'
-      ? `Zod${baseDef.type.charAt(0).toUpperCase()}${baseDef.type.slice(1)}`
-      : undefined;
-  const baseTypeName = baseDef?.typeName ?? v4Type ?? constructorName;
+  const baseTypeName = getTypeName(baseSchema);
 
   if ((baseTypeName === 'ZodUnion' || baseTypeName === 'ZodDiscriminatedUnion') && unionOptions) {
     subSchema = Object.entries(unionOptions).map(([k, field]: [string, AnySchema]) => {
@@ -87,29 +103,15 @@ function parseField(key: string, schema: AnySchema): ParsedField {
 
   const intersection = getIntersection(baseSchema);
   if (intersection) {
-    const { left: leftSchema, right: rightSchema } = intersection;
-    let subSchemaLeft: ParsedField[] = [];
-    let subSchemaRight: ParsedField[] = [];
+    const left = parseIntersectionHalf(key, intersection.left);
+    const right = parseIntersectionHalf(key, intersection.right);
 
-    const leftShape = getShape(leftSchema);
-    if (leftShape) {
-      subSchemaLeft = Object.entries(leftShape).map(([k, field]) => parseField(k, field as AnySchema));
-    } else {
-      const leftChild = parseField(key, leftSchema);
-      subSchemaLeft = leftChild.schema ?? [leftChild];
-      type = leftChild.type;
-    }
+    // A half that is not an object contributes its own type to the field; when
+    // both do, the right half wins, as it does when merging their values.
+    if (left.type) type = left.type;
+    if (right.type) type = right.type;
 
-    const rightShape = getShape(rightSchema);
-    if (rightShape) {
-      subSchemaRight = Object.entries(rightShape).map(([k, field]) => parseField(k, field as AnySchema));
-    } else {
-      const rightChild = parseField(key, rightSchema);
-      subSchemaRight = rightChild.schema ?? [rightChild];
-      type = rightChild.type;
-    }
-
-    subSchema = [...subSchemaLeft, ...subSchemaRight];
+    subSchema = [...left.fields, ...right.fields];
   }
 
   if (baseTypeName === 'ZodArray') {
@@ -129,7 +131,7 @@ function parseField(key: string, schema: AnySchema): ParsedField {
     default: defaultValue,
     description: baseSchema.description,
     fieldConfig:
-      isLiteral || Object.keys(fieldConfig ?? {})?.length > 0
+      isLiteral || Object.keys(fieldConfig ?? {}).length > 0
         ? {
             ...fieldConfig,
             customData: {

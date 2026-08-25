@@ -157,3 +157,48 @@ describe('inferFieldType, on internals shaped like the other zod version', () =>
     expect(inferFieldType(v4({ type: 'union', options: [branch] }))).toBe('discriminated-union');
   });
 });
+
+/**
+ * Zod v4 names its classes with a leading underscore, which is what the
+ * constructor sniff strips. These stand-ins exercise that last resort, which no
+ * real v3 schema reaches because v3 always records a `typeName`.
+ */
+class _ZodNumber {
+  _def = {};
+}
+
+const union = (...options: unknown[]) => ({ _def: { typeName: 'ZodUnion', options } });
+
+describe('inferFieldType — when the internals name no type', () => {
+  it('falls back to the constructor name, minus the leading underscore', () => {
+    expect(inferFieldType(new _ZodNumber())).toBe('number');
+  });
+
+  it('settles on string for a node whose constructor carries no name', () => {
+    expect(inferFieldType({ _def: {}, constructor: {} })).toBe('string');
+  });
+
+  it('does not mistake a stray literal value on another type for a literal', () => {
+    expect(inferFieldType({ _def: { typeName: 'ZodTombstone', value: 42 } })).toBe('string');
+  });
+});
+
+describe('inferFieldType — reading the options of a union', () => {
+  it('reports a plain union when the schema lists no options at all', () => {
+    expect(inferFieldType({ _def: { typeName: 'ZodUnion' } })).toBe('union');
+  });
+
+  it('reads a v4 literal discriminant off an option shape', () => {
+    expect(inferFieldType(union({ shape: { kind: { _zod: { def: { type: 'literal' } } } } }))).toBe(
+      'discriminated-union',
+    );
+  });
+
+  it.each([
+    ['a hole in the shape', undefined],
+    ['a value with no prototype', Object.create(null)],
+    ['a value whose constructor carries no name', { constructor: {} }],
+  ])('reports a plain union rather than throwing on %s', (_label, kind) => {
+    expect(inferFieldType(union({ shape: { kind } }))).toBe('union');
+  });
+});
