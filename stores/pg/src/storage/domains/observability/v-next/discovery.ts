@@ -214,9 +214,9 @@ async function readWithRefresh(
   // one refresh instead of N.
   const previousRefreshedAt = row.refreshedAt;
   void claimRefresh(client, schema, cacheKey, ttlSeconds)
-    .then(claimed => {
+    .then(claimedAt => {
       // Lost the claim: another process is already refreshing this key.
-      if (!claimed) return;
+      if (!claimedAt) return;
       return startRefresh().then(
         // Success rewrites `refreshedAt` via upsertCache.
         () => {},
@@ -224,7 +224,7 @@ async function readWithRefresh(
         // back by restoring the timestamp we found, so the next reader
         // retries instead of waiting out a TTL on a stamp that never
         // corresponded to a completed refresh.
-        () => releaseClaim(client, schema, cacheKey, previousRefreshedAt),
+        () => releaseClaim(client, schema, cacheKey, previousRefreshedAt, claimedAt),
       );
     })
     .catch(() => {});
@@ -247,36 +247,49 @@ async function readWithRefresh(
  *
  * The stamp is provisional in both directions: a completed refresh overwrites
  * it via `upsertCache`, and a failed one restores it via `releaseClaim`.
+ *
+ * Returns the exact provisional stamp written by the claim (or `null` when
+ * the claim was lost) so `releaseClaim` can restore the row only while it
+ * still holds this claim's stamp.
  */
-async function claimRefresh(client: DbClient, schema: string, cacheKey: string, ttlSeconds: number): Promise<boolean> {
+async function claimRefresh(
+  client: DbClient,
+  schema: string,
+  cacheKey: string,
+  ttlSeconds: number,
+): Promise<string | null> {
   const table = qualifiedTable(schema, TABLE_DISCOVERY);
-  const claimed = await client.oneOrNone<{ claimed: number }>(
+  // The stamp is returned as text so the microsecond precision Postgres
+  // stores survives the round trip — a JS Date only holds milliseconds,
+  // which would break the exact-match guard in `releaseClaim`.
+  const claimed = await client.oneOrNone<{ refreshedAt: string }>(
     `UPDATE ${table} SET "refreshedAt" = NOW()
       WHERE "cacheKey" = $1 AND "refreshedAt" <= NOW() - ($2 || ' seconds')::interval
-     RETURNING 1 AS claimed`,
+     RETURNING "refreshedAt"::text AS "refreshedAt"`,
     [cacheKey, Math.floor(ttlSeconds)],
   );
-  return claimed !== null;
+  return claimed?.refreshedAt ?? null;
 }
 
 /**
  * Hand back a claim whose refresh failed by restoring the timestamp the
- * claiming reader observed. Guarded on the current value so a refresh that
- * completed in the meantime (another process, or a later claim) isn't dragged
- * backwards into staleness.
+ * claiming reader observed. Guarded on the row still holding this claim's
+ * exact provisional stamp so a refresh that completed in the meantime
+ * (another process, or a later claim) isn't dragged backwards into staleness.
  */
 async function releaseClaim(
   client: DbClient,
   schema: string,
   cacheKey: string,
   previousRefreshedAt: Date,
+  claimedAt: string,
 ): Promise<void> {
   const table = qualifiedTable(schema, TABLE_DISCOVERY);
   try {
     await client.query(
       `UPDATE ${table} SET "refreshedAt" = $2
-        WHERE "cacheKey" = $1 AND "refreshedAt" > $2`,
-      [cacheKey, previousRefreshedAt],
+        WHERE "cacheKey" = $1 AND "refreshedAt" = $3::timestamptz`,
+      [cacheKey, previousRefreshedAt, claimedAt],
     );
   } catch {
     // Best-effort: the claim expires on its own once the TTL elapses.

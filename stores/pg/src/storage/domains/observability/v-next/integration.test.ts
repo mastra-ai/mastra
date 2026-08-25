@@ -1156,6 +1156,62 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
         await harness.close();
       }
     });
+
+    it('does not roll back a newer successful refresh when an earlier claimant fails late', async () => {
+      let failRefresh: (() => void) | undefined;
+      const refreshStarted = Promise.withResolvers<void>();
+      const refreshGate = new Promise<void>((_, reject) => {
+        failRefresh = () => reject(new Error('boom'));
+      });
+
+      const harness = await createHarness({
+        schemaPrefix: 'obs_vnext_discovery_claim_late_fail',
+        discovery: { ttlSeconds: 1 },
+        wrapClient: client =>
+          wrapClient(client, {
+            manyOrNone: async (query: string, values?: QueryValues) => {
+              if (query.includes('SELECT v FROM (') && query.includes('"serviceName" AS v')) {
+                refreshStarted.resolve();
+                await refreshGate;
+              }
+              return client.manyOrNone(query, values);
+            },
+          }),
+      });
+
+      try {
+        const staleRefreshedAt = new Date(Date.now() - 60_000);
+        await seedDiscoveryCache(
+          harness.baseClient,
+          harness.schema,
+          'service_names',
+          ['stale-service'],
+          staleRefreshedAt,
+        );
+
+        // Claimant A wins the claim and blocks inside its refresh.
+        const first = await harness.domain.getServiceNames({});
+        expect(first.serviceNames).toEqual(['stale-service']);
+        await refreshStarted.promise;
+
+        // While A is stuck, its claim outlives the TTL and claimant B (another
+        // process) claims and completes a refresh, stamping a fresh row.
+        const bRefreshedAt = new Date(Date.now() + 5_000);
+        await seedDiscoveryCache(harness.baseClient, harness.schema, 'service_names', ['b-service'], bRefreshedAt);
+
+        // A's refresh now fails. Its release must not rewind B's fresh row.
+        failRefresh?.();
+        await new Promise(resolve => setTimeout(resolve, 200));
+
+        const row = await harness.baseClient.one<{ values: string[]; refreshedAt: Date }>(
+          `SELECT "values", "refreshedAt" FROM ${qualifiedTable(harness.schema, TABLE_DISCOVERY)} WHERE "cacheKey" = 'service_names'`,
+        );
+        expect(row.values).toEqual(['b-service']);
+        expect(new Date(row.refreshedAt).getTime()).toBe(bRefreshedAt.getTime());
+      } finally {
+        await harness.close();
+      }
+    });
   });
 
   describe('discovery — refresh failure surfaces', () => {
