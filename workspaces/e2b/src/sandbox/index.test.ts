@@ -330,6 +330,39 @@ describe('E2BSandbox', () => {
 
       expect(Sandbox.connect).toHaveBeenCalledWith('existing-sandbox', expect.any(Object));
     });
+
+    it("reports outcome 'created' when a new sandbox is created", async () => {
+      const sandbox = new E2BSandbox();
+
+      await expect(sandbox._start()).resolves.toEqual({ outcome: 'created' });
+    });
+
+    it("reports outcome 'connected' when reconnecting to an existing sandbox", async () => {
+      const { Sandbox } = await import('e2b');
+      (Sandbox.list as any).mockReturnValue({
+        nextItems: vi.fn().mockResolvedValue([{ sandboxId: 'existing-sandbox', state: 'running' }]),
+      });
+
+      const sandbox = new E2BSandbox({ id: 'existing-id' });
+
+      await expect(sandbox._start()).resolves.toEqual({ outcome: 'connected' });
+    });
+
+    it("reports outcome 'connected' when re-acquiring with an attached instance (find returns it, no API calls)", async () => {
+      const { Sandbox } = await import('e2b');
+      const sandbox = new E2BSandbox();
+      await sandbox._start();
+      const createCalls = (Sandbox.create as any).mock.calls.length;
+      const listCalls = (Sandbox.list as any).mock.calls.length;
+
+      // Force a re-acquisition (the base wrapper's already-running shortcut
+      // would otherwise skip it): the attached instance short-circuits find(),
+      // so no list/create round-trips happen and the outcome is 'connected'.
+      (sandbox as any).status = 'stopped';
+      await expect(sandbox.start()).resolves.toEqual({ outcome: 'connected' });
+      expect((Sandbox.create as any).mock.calls.length).toBe(createCalls);
+      expect((Sandbox.list as any).mock.calls.length).toBe(listCalls);
+    });
   });
 
   describe('Start - Preferred Provider Sandbox ID', () => {
