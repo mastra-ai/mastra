@@ -220,9 +220,9 @@ Platforms redeliver on non-`2xx` responses, each with its own policy. Slack retr
 
 ### After acknowledgment: Mastra owns the error
 
-Once the adapter returns `200`, the platform considers the event delivered and never retries it, no matter what happens to the agent run. Errors at this stage are handled in Mastra:
+Once the adapter returns `200`, the platform treats the event as delivered and never retries it, even if the agent run later fails. Errors at this stage are handled in Mastra:
 
-- The default handler catches errors from the agent run and posts an error message back to the thread. Set `formatError` on an adapter to customize the text; the default is `❌ Error: {message}`.
+- The default handler catches errors from the agent run and posts an error message back to the thread. Set `formatError` on an adapter to customize the text. The default is `❌ Error: {message}`.
 - A custom handler that throws bypasses that catch. Chat SDK logs the rejection and drops it. Nothing is posted to the thread and nothing is retried.
 
 If a custom handler does its own work before calling the default handler, catch failures and decide what to do, because no other layer will:
@@ -251,7 +251,7 @@ Retrying inside a handler is an application decision. If you retry, make the wor
 
 ### Duplicate delivery
 
-Retries mean the same event can arrive more than once. This happens when the acknowledgment is slow or lost, for example a Slack retry after the three-second deadline, or a Telegram redelivery after a network failure.
+Retries mean the same event can arrive more than once, typically because an acknowledgment was slow or lost. A Slack retry after the three-second deadline and a Telegram redelivery after a network failure both produce a duplicate.
 
 Adapters deduplicate redelivered events: Slack checks the `x-slack-retry-num` header and a delivered-event record, and Telegram claims each `update_id` once. Both rely on channel state, so configure [storage](/docs/storage) to keep deduplication reliable across restarts. Deduplication is best effort. Keep side effects in custom handlers idempotent so a duplicate that slips through doesn't repeat work like creating a ticket or charging a customer.
 
