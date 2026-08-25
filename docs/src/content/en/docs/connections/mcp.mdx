@@ -108,6 +108,36 @@ export async function handleRequest(prompt: string, apiKey: string) {
 
 Visit [`listTools()`](/reference/tools/mcp-client#listtools) and [`listToolsets()`](/reference/tools/mcp-client#listtoolsets) for their full APIs.
 
+### Generate TypeScript types
+
+MCP tools are discovered at runtime, so their input and output schemas aren't visible to TypeScript by default. Run the typegen command to generate type declarations from every tool your configured `MCPClient` instances discover:
+
+```bash
+mastra mcp typegen
+```
+
+The command loads your Mastra module, connects to each configured MCP server, and writes a generated file (default: `src/mastra/mcp-tools.generated.ts`) containing:
+
+- An `Input` and `Output` interface for every discovered tool
+- An `MCPToolTypes` interface keyed by server and tool name
+- An `MCPToolName` union of namespaced tool names as returned by `getTools()`
+
+```typescript
+import type { MCPToolTypes } from './mcp-tools.generated'
+
+type WeatherInput = MCPToolTypes['weather']['getForecast']['input']
+```
+
+| Flag | Description |
+| :- | :- |
+| `--output <path>` | Output file path, relative to the project root |
+| `--client <name>` | Only use the exported `MCPClient` with this variable name |
+| `--dir <path>` | Path to the Mastra folder (default: `src/mastra`) |
+| `--root <path>` | Project root directory |
+| `--env <files...>` | Custom env files to load |
+
+Regenerate the file whenever server tool definitions change, and check it into version control like any other generated contract. You can also generate declarations programmatically with `mcpClient.generateTypeDeclarations()`.
+
 ### Tool approval
 
 Set `requireToolApproval` on a server to require approval for all its tools:

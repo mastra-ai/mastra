@@ -13,6 +13,7 @@ import { createProject } from './commands/actions/create-project';
 import { initProject } from './commands/actions/init-project';
 import { lintProject } from './commands/actions/lint-project';
 import { listScorers } from './commands/actions/list-scorers';
+import { mcpTypegen } from './commands/actions/mcp-typegen';
 import { migrate } from './commands/actions/migrate';
 import { startDevServer } from './commands/actions/start-dev-server';
 import { startProject } from './commands/actions/start-project';
@@ -329,6 +330,19 @@ program
   .option('--debug', 'Enable debug logs', false)
   .option('-y, --yes', 'Skip confirmation prompt (for CI/automation)')
   .action(migrate);
+
+const mcpCommand = program.command('mcp').description('Work with MCP servers configured in your project');
+
+mcpCommand
+  .command('typegen')
+  .description('Generate TypeScript types for tools discovered from your MCP servers')
+  .option('-d, --dir <path>', 'Path to your Mastra folder')
+  .option('-r, --root <path>', 'Path to your root folder')
+  .option('-e, --env <env>', 'Custom env file to include')
+  .option('-o, --output <path>', 'Output file path (default: <mastra dir>/mcp-tools.generated.ts)')
+  .option('-c, --client <exportName>', 'Only use the MCPClient exported under this name from your Mastra entry file')
+  .option('--debug', 'Enable debug logs', false)
+  .action(mcpTypegen);
 
 const scorersCommand = program.command('scorers').description('Manage scorers for evaluating AI outputs');
 
