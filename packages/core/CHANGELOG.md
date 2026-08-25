@@ -1,5 +1,114 @@
 # @mastra/core
 
+## 1.62.0-alpha.8
+
+### Minor Changes
+
+- Added `AgentController#generateThreadTitle()` — name a thread on demand from where its conversation went, with the model and instructions `generateTitle` gives the first-turn namer. ([#22156](https://github.com/mastra-ai/mastra/pull/22156))
+
+  It reads a bounded window of the thread's recent messages and writes the thread row without constructing a `Session`, so a "rename this conversation" action never spins up a workspace or sandbox for a session that is no longer live. A live session lends its agent, request context and event stream, and hears the resulting `thread_title_updated`.
+
+  ```ts
+  const title = await controller.generateThreadTitle({
+    threadId,
+    resourceId,
+    // The caller's identity, so model resolution bills their credentials.
+    requestContext,
+    // Optional: hosts that store the title model themselves pass it here.
+    model: ({ requestContext }) => resolveModel(storedModelId, { requestContext }),
+  });
+  ```
+
+- Sandboxes now own their runtime environment. `MastraSandbox` accepts an `env` constructor option, and you can read or update the environment at runtime with `getEnv()` and `setEnv(updater)`: ([#22250](https://github.com/mastra-ai/mastra/pull/22250))
+
+  ```typescript
+  sandbox.setEnv(env => ({ ...env, GH_TOKEN: token }));
+  ```
+
+  The sandbox environment is merged into every process spawn by the base `SandboxProcessManager`, so it reaches `executeCommand()` and `processes.spawn()` on any provider whose execution routes through its process manager, including values installed or rotated after the sandbox was created (for example, refreshed credentials). Per-call `env` options take precedence for that command only.
+
+  These values apply to commands executed through the sandbox; they are not VM-level environment and are never written into the VM. `WorkspaceSandbox` declares `setEnv` as an optional capability.
+
+### Patch Changes
+
+- Fixed channel typing statuses staying pinned to the thread after a run ends without posting a message. When a run terminates on a tool call (for example via a stopWhen predicate), errors, or is aborted before any assistant text is posted, the typing status is now cleared instead of showing the last status indefinitely. Fixes #21880 ([#22264](https://github.com/mastra-ai/mastra/pull/22264))
+
+- Fixed durable agent runs writing the entire conversation into storage on every step. A long run persisted the accumulated message history and step output once per completed step, so the amount written grew with the square of the run length — a 57-step run produced hundreds of megabytes in Postgres and Redis, made saves slow enough to time out, and could fail an approval with a 500. ([#22127](https://github.com/mastra-ai/mastra/pull/22127))
+
+  Historical completed steps in a still-running snapshot now keep only the fields the engine needs for routing, while the active step retains the conversation state needed for crash recovery. On a benchmark run this cut total bytes written by around 70% and peak snapshot size from 561 KB to 118 KB. Suspended and finished runs are stored exactly as before.
+
+  Also fixed approvals that arrived while a large suspend was still being written. Resume read the run once and gave up if it did not yet look suspended; it now briefly re-reads snapshots that are still running or pending, while missing runs and statuses that cannot become suspended still fail immediately.
+
+  Reported in https://github.com/mastra-ai/mastra/issues/20747
+
+- Fixed suspended agent runs writing snapshots that grew quadratically with step count, which could exhaust memory on human-in-the-loop workflows using tool approval with large payloads. ([#21732](https://github.com/mastra-ai/mastra/pull/21732))
+
+  Each buffered step of a run persisted its own full copy of the conversation so far — three times over, as model messages, database messages, and UI messages. A fifteen-step run was observed writing 22 MB of buffered steps over 2 MB of distinct messages, and production runs reached 170 MB per suspended run.
+
+  Snapshots now record the IDs of the response messages referenced by each step and lazily rebuild those messages from the conversation that is already stored alongside them. This preserves the correct messages even when processors move or remove messages before suspension. Steps still expose the same messages after a run resumes, so no application code needs to change, while persisted snapshot size now grows linearly with step count.
+
+  Fixes [#17738](https://github.com/mastra-ai/mastra/issues/17738).
+
+- Fixed streaming channels posting blank messages when a response starts with whitespace-only text. ([#22168](https://github.com/mastra-ai/mastra/pull/22168))
+
+- Fixed `session.thread.firstUserMessage()` and `firstUserMessages()` returning nothing for agent-controller sessions. A live session persists a chat message as a `user` signal rather than a `user` row, and the lookup only matched the latter, so it came back empty for every real session. ([#22156](https://github.com/mastra-ai/mastra/pull/22156))
+
+  Added `isUserAuthoredMessage()` for the same check anywhere else, and sessions now emit a `thread_title_updated` event when a generated title lands on the thread.
+
+- Improved workspace grep performance on remote filesystems by searching directories and files concurrently. ([#22225](https://github.com/mastra-ai/mastra/pull/22225))
+
+- Fixed workflow imports crashing in environments where the global `fetch` value is not callable. ([#22246](https://github.com/mastra-ai/mastra/pull/22246))
+
+- Fixed workspace search indexing so it can be rebuilt without starting the sandbox. ([#22245](https://github.com/mastra-ai/mastra/pull/22245))
+
+  ```typescript
+  import { LocalFilesystem, Workspace } from '@mastra/core/workspace';
+
+  const workspace = new Workspace({
+    filesystem: new LocalFilesystem({ basePath: './workspace' }),
+    bm25: true,
+    autoIndexPaths: ['docs'],
+  });
+
+  await workspace.rebuildSearchIndex();
+  ```
+
+- Fixed malformed message parts crashing OpenAI-compatible providers when observational memory is enabled. ([#22069](https://github.com/mastra-ai/mastra/pull/22069))
+
+- Experiment results now include isolated metadata snapshots from the dataset items that ran. ([#22005](https://github.com/mastra-ai/mastra/pull/22005))
+
+- Stopped internal agent-loop workflows from logging a `shouldPersistSnapshot excludes the "running" status` warning on every resume. Workflows can now set `options.allowUnclaimedResumes: true` to acknowledge that resume claims cannot be persisted (because `running` snapshots are intentionally not written) and suppress the per-resume warning; the built-in agentic-loop, agentic-execution, and agent-network workflows opt in. User workflows that exclude `running` without acknowledging still get the warning. ([#22262](https://github.com/mastra-ai/mastra/pull/22262))
+
+- Fixed recursive tool preparation for cyclic sub-agent graphs when background tasks are disabled. ([#22244](https://github.com/mastra-ai/mastra/pull/22244))
+
+- Fixed built-in memory processors so canceled agent runs retain transcript history through normal output processing. Removed the accidental partial-abort persistence option because cancellation persistence is no longer opt-in. ([#22243](https://github.com/mastra-ai/mastra/pull/22243))
+
+  ```ts
+  // Before
+  await agent.stream('Hello', { abortSignal, persistPartialOnAbort: true });
+
+  // Now
+  await agent.stream('Hello', { abortSignal });
+  ```
+
+- Cancelling a durable agent run that is already executing now works through the agent APIs. `agent.abortThreadStream({ resourceId, threadId })` and `agent.abortRunStream(runId)` only ever reached the abort controller a regular run prepares, which a durable run does not have, so they recorded a cancellation nothing acted on while the run streamed on. The server route `POST /agents/:agentId/threads/abort` goes through the same call. Both now publish the durable abort request as well, the same one the `abort()` on a stream result publishes, so the run stops in whichever process is executing it. ([#22255](https://github.com/mastra-ai/mastra/pull/22255))
+
+  ```ts
+  const { runId } = await durableAgent.stream('...', { memory: { thread, resource } });
+
+  // before: the cancellation was recorded and the run streamed on to completion
+  // after: the run stops and onAbort fires
+  durableAgent.abortRunStream(runId);
+  ```
+
+- Fixed agent skill search to rank relevant instructions and references instead of relying on literal substring matches. ([#22174](https://github.com/mastra-ai/mastra/pull/22174))
+
+- Prevent background task dispatch from overwriting concurrent cancellation ([#22228](https://github.com/mastra-ai/mastra/pull/22228))
+
+- Enforce atomic conditional background task state updates so cancellation cannot be overwritten during dispatch. Background task storage is no longer exposed by Cloudflare KV or ClickHouse, which cannot provide the required compare-and-set semantics. ([#22228](https://github.com/mastra-ai/mastra/pull/22228))
+
+- Fixed grouped channel streams closing between agent steps. ([#22173](https://github.com/mastra-ai/mastra/pull/22173))
+
 ## 1.62.0-alpha.7
 
 ### Patch Changes
