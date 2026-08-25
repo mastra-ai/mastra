@@ -59,7 +59,12 @@ function decodeCredentialEncryptionKey(name: string, encodedKey: string): Buffer
 function credentialEncryption() {
   const encodedKey = process.env.FACTORY_CREDENTIAL_ENCRYPTION_KEY?.trim();
   if (!encodedKey) {
-    throw new Error('FACTORY_CREDENTIAL_ENCRYPTION_KEY is required when Factory auth is enabled.');
+    console.warn(
+      '[factory] FACTORY_CREDENTIAL_ENCRYPTION_KEY is not set. Stored model-provider keys, custom-provider ' +
+        'API keys, and integration secrets will be persisted as plaintext. Generate a key with ' +
+        '`openssl rand -base64 32` and set FACTORY_CREDENTIAL_ENCRYPTION_KEY to encrypt them at rest.',
+    );
+    return undefined;
   }
 
   const previousKeys: Record<string, unknown> = process.env.FACTORY_CREDENTIAL_ENCRYPTION_PREVIOUS_KEYS
