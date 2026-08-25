@@ -10,7 +10,7 @@
       "response": {
         "toolCalls": [
           {
-            "id": "call_agent_connections_list",
+            "id": "call_initial_list",
             "name": "agent_connections_list",
             "arguments": {}
           }
@@ -21,17 +21,16 @@
       "match": {
         "model": "gpt-5.4-mini",
         "endpoint": "chat",
-        "toolCallId": "call_agent_connections_list",
+        "toolCallId": "call_initial_list",
         "hasToolResult": true
       },
       "response": {
         "toolCalls": [
           {
-            "id": "call_agent_connect",
+            "id": "call_initial_connect",
             "name": "agent_connect",
             "arguments": {
-              "ids": ["code-agent:mc-e2e-peer-resource:mc-e2e-peer-thread"],
-              "action": "connect"
+              "ids": ["code-agent:mc-e2e-peer-resource:mc-e2e-peer-thread"]
             }
           }
         ]
@@ -41,10 +40,178 @@
       "match": {
         "model": "gpt-5.4-mini",
         "endpoint": "chat",
+        "userMessage": "connected-agents",
+        "sequenceIndex": 0
+      },
+      "response": {
+        "content": "Initial agent connection completed."
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "connected-agents",
+        "sequenceIndex": 1
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_saved_list",
+            "name": "agent_connections_list",
+            "arguments": {}
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "toolCallId": "call_saved_list",
         "hasToolResult": true
       },
       "response": {
-        "content": "Agent connection tool flow completed. Connected to code-agent:mc-e2e-peer-resource:mc-e2e-peer-thread."
+        "content": "Confirmed the absent peer is saved."
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Disconnect the absent saved peer.",
+        "sequenceIndex": 0
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_disconnect",
+            "name": "agent_disconnect",
+            "arguments": {
+              "ids": ["code-agent:mc-e2e-peer-resource:mc-e2e-peer-thread"]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "connected-agents",
+        "sequenceIndex": 2
+      },
+      "response": {
+        "content": "Absent saved peer disconnected."
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "List peers after disconnecting the absent peer.",
+        "sequenceIndex": 0
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_disconnected_list",
+            "name": "agent_connections_list",
+            "arguments": {}
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "toolCallId": "call_disconnected_list",
+        "hasToolResult": true
+      },
+      "response": {
+        "content": "Disconnected absent peer is omitted from the peer list."
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Reconnect to the peer reviewer agent.",
+        "sequenceIndex": 0
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_reconnect_list",
+            "name": "agent_connections_list",
+            "arguments": {}
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "toolCallId": "call_reconnect_list",
+        "hasToolResult": true
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_reconnect",
+            "name": "agent_connect",
+            "arguments": {
+              "ids": ["code-agent:mc-e2e-peer-resource:mc-e2e-peer-thread"]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "connected-agents",
+        "sequenceIndex": 3
+      },
+      "response": {
+        "content": "Peer reviewer reconnected."
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Send a low-priority confirmation signal to the reconnected peer.",
+        "sequenceIndex": 0
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_reconnect_send",
+            "name": "agent_signal_send",
+            "arguments": {
+              "targetId": "code-agent:mc-e2e-peer-resource:mc-e2e-peer-thread",
+              "summary": "Reconnected peer confirmation.",
+              "priority": "low",
+              "expectsReply": false,
+              "messageId": "agent-connections-tool-flow-reconnect"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "toolCallId": "call_reconnect_send",
+        "hasToolResult": true
+      },
+      "response": {
+        "content": "Agent connection tool flow completed after disconnect, reconnect, and send."
       }
     }
   ]
