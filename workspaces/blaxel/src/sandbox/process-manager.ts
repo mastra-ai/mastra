@@ -132,25 +132,17 @@ class BlaxelProcessHandle extends ProcessHandle {
 // Blaxel Process Manager
 // =============================================================================
 
-export interface BlaxelProcessManagerOptions {
-  env?: Record<string, string | undefined>;
-}
-
 /**
  * Blaxel implementation of SandboxProcessManager.
  * Uses the Blaxel SDK's process API for background process management.
  */
 export class BlaxelProcessManager extends SandboxProcessManager<BlaxelSandbox> {
-  constructor(opts: BlaxelProcessManagerOptions = {}) {
-    super({ env: opts.env });
-  }
-
   async spawn(command: string, options: SpawnProcessOptions = {}): Promise<ProcessHandle> {
     return this.sandbox.retryOnDead(async () => {
       const blaxel = this.sandbox.blaxel;
 
-      // Merge default env with per-spawn env
-      const mergedEnv = { ...this.env, ...options.env };
+      // The base spawn wrapper already merged the sandbox env into options.env
+      const mergedEnv = { ...options.env };
       const envs = Object.fromEntries(
         Object.entries(mergedEnv).filter((entry): entry is [string, string] => entry[1] !== undefined),
       );

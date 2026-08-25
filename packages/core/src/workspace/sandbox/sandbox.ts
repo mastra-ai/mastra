@@ -219,6 +219,21 @@ export interface WorkspaceSandbox extends SandboxLifecycle<SandboxInfo> {
    */
   executeCommand?(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<CommandResult>;
 
+  /**
+   * Update the sandbox's runtime environment overlay.
+   *
+   * The updater receives a copy of the current overlay and returns the new
+   * one. Values are made visible to subsequent commands and processes routed
+   * through the sandbox's process manager; this is not VM-level environment.
+   * Optional - available on sandboxes that support runtime env updates.
+   *
+   * @example
+   * ```typescript
+   * sandbox.setEnv(env => ({ ...env, GH_TOKEN: token }));
+   * ```
+   */
+  setEnv?(update: (env: Record<string, string | undefined>) => Record<string, string | undefined>): void;
+
   // ---------------------------------------------------------------------------
   // Networking (Optional)
   // ---------------------------------------------------------------------------

@@ -1,5 +1,6 @@
 import type { WorkItem } from '../../../../factory/services/workItems';
-import type { FactoryProjectPayload, FactoryUserSession, MaterializeResult } from '../../../services/github';
+import type { FactoryProjectPayload, MaterializeResult } from '../../../services/github';
+import type { FactoryUserSession } from '../../../services/user-sessions';
 
 export const factoryId = 'fp-1';
 export const projectRepositoryId = 'ghp-1';

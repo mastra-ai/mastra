@@ -1,5 +1,7 @@
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
+import { createPlaintextFactorySecretEncryption } from '../../../secret-encryption.js';
+import type { FactorySecretEncryption } from '../../../secret-encryption.js';
 
 /**
  * A user-defined OpenAI-compatible provider. The DB-backed counterpart of the
@@ -59,28 +61,15 @@ interface CustomProviderDbRow extends Record<string, unknown> {
   updated_at: Date;
 }
 
-function toRecord(row: CustomProviderDbRow): CustomProviderRecord {
-  return {
-    id: row.id,
-    orgId: row.org_id,
-    createdBy: row.created_by,
-    providerId: row.provider_id,
-    name: row.name,
-    url: row.url,
-    apiKey: row.api_key,
-    models: Array.isArray(row.models) ? row.models : [],
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  };
-}
-
 export class CustomProvidersStorage extends FactoryStorageDomain {
-  constructor() {
+  constructor(private readonly encryption: FactorySecretEncryption = createPlaintextFactorySecretEncryption()) {
     super('custom-providers');
   }
 
   async init(): Promise<void> {
     await this.ensureCollections([CUSTOM_PROVIDERS_SCHEMA]);
+    const rows = await this.ops.findMany<CustomProviderDbRow>('custom_providers', {});
+    await Promise.all(rows.filter(row => row.api_key !== null).map(row => this.#migrateApiKey(row.id)));
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -89,6 +78,34 @@ export class CustomProvidersStorage extends FactoryStorageDomain {
 
   get #db(): FactoryStorageOps {
     return this.ops;
+  }
+
+  async #toRecord(row: CustomProviderDbRow): Promise<CustomProviderRecord> {
+    const apiKey = row.api_key === null ? null : (await this.encryption.decrypt<string>(row.api_key)).value;
+    return {
+      id: row.id,
+      orgId: row.org_id,
+      createdBy: row.created_by,
+      providerId: row.provider_id,
+      name: row.name,
+      url: row.url,
+      apiKey,
+      models: Array.isArray(row.models) ? row.models : [],
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+  }
+
+  async #encryptApiKey(apiKey: string | undefined): Promise<string | null> {
+    return apiKey === undefined ? null : this.encryption.encrypt(apiKey);
+  }
+
+  async #migrateApiKey(id: string): Promise<void> {
+    await this.#db.updateAtomic<CustomProviderDbRow>('custom_providers', { id }, async row => {
+      if (row.api_key === null) return null;
+      const decrypted = await this.encryption.decrypt<string>(row.api_key);
+      return decrypted.needsReencryption ? { api_key: await this.encryption.encrypt(decrypted.value) } : null;
+    });
   }
 
   /**
@@ -111,6 +128,7 @@ export class CustomProvidersStorage extends FactoryStorageDomain {
     previousProviderId?: string;
   }): Promise<CustomProviderRecord> {
     const now = new Date();
+    const encryptedApiKey = await this.#encryptApiKey(input.apiKey);
     const renameFrom = previousProviderId && previousProviderId !== input.providerId ? previousProviderId : undefined;
 
     if (renameFrom) {
@@ -132,12 +150,12 @@ export class CustomProvidersStorage extends FactoryStorageDomain {
             provider_id: input.providerId,
             name: input.name,
             url: input.url,
-            api_key: input.apiKey ?? null,
+            api_key: encryptedApiKey,
             models: input.models,
             updated_at: now,
           }),
         );
-        if (renamed) return toRecord(renamed);
+        if (renamed) return this.#toRecord(renamed);
         // Old row already gone — fall through to a plain create of the new id.
       }
       // Rename onto an existing id: overwrite the target below, then delete
@@ -145,7 +163,7 @@ export class CustomProvidersStorage extends FactoryStorageDomain {
       // (recoverable by re-submitting or deleting) instead of losing data.
     }
 
-    const record = await this.#write({ orgId, userId, input, now });
+    const record = await this.#write({ orgId, userId, input, encryptedApiKey, now });
     if (renameFrom) {
       await this.#db.deleteMany('custom_providers', { org_id: orgId, provider_id: renameFrom });
     }
@@ -162,11 +180,13 @@ export class CustomProvidersStorage extends FactoryStorageDomain {
     orgId,
     userId,
     input,
+    encryptedApiKey,
     now,
   }: {
     orgId: string;
     userId: string;
     input: UpsertCustomProviderInput;
+    encryptedApiKey: string | null;
     now: Date;
   }): Promise<CustomProviderRecord> {
     const updateExisting = () =>
@@ -176,14 +196,14 @@ export class CustomProvidersStorage extends FactoryStorageDomain {
         () => ({
           name: input.name,
           url: input.url,
-          api_key: input.apiKey ?? null,
+          api_key: encryptedApiKey,
           models: input.models,
           updated_at: now,
         }),
       );
 
     const updated = await updateExisting();
-    if (updated) return toRecord(updated);
+    if (updated) return this.#toRecord(updated);
 
     try {
       const row = await this.#db.insertOne<CustomProviderDbRow>('custom_providers', {
@@ -192,18 +212,18 @@ export class CustomProvidersStorage extends FactoryStorageDomain {
         provider_id: input.providerId,
         name: input.name,
         url: input.url,
-        api_key: input.apiKey ?? null,
+        api_key: encryptedApiKey,
         models: input.models,
         created_at: now,
         updated_at: now,
       });
-      return toRecord(row);
+      return this.#toRecord(row);
     } catch (error) {
       if (!(error instanceof UniqueViolationError)) throw error;
       // Lost the insert race — apply this write to the winning row.
       const row = await updateExisting();
       if (!row) throw error;
-      return toRecord(row);
+      return this.#toRecord(row);
     }
   }
 
@@ -213,7 +233,7 @@ export class CustomProvidersStorage extends FactoryStorageDomain {
       { org_id: orgId },
       { orderBy: [['name', 'asc']] },
     );
-    return rows.map(toRecord);
+    return Promise.all(rows.map(row => this.#toRecord(row)));
   }
 
   async delete({ orgId, providerId }: { orgId: string; providerId: string }): Promise<boolean> {

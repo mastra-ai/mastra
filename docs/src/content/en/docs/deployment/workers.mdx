@@ -4,6 +4,7 @@ description: "Separate background processing from the API layer by running workf
 packages:
   - "@mastra/core"
   - "@mastra/redis-streams"
+  - "@mastra/valkey-streams"
   - "@mastra/google-cloud-pubsub"
   - "@mastra/pg"
   - "@mastra/libsql"
@@ -45,7 +46,7 @@ Subscribes to workflow events on the [PubSub](/docs/server/pubsub) bus and execu
 
 In a split deployment, the orchestration worker pulls events from a distributed PubSub backend and delegates step execution back to the API over HTTP. In-process, it runs steps directly.
 
-The orchestration worker requires a PubSub backend that supports pull mode (e.g., [`RedisStreamsPubSub`](/reference/pubsub/redis-streams) or [`GoogleCloudPubSub`](/reference/pubsub/google-cloud-pubsub)).
+The orchestration worker requires a PubSub backend that supports pull mode (e.g., [`RedisStreamsPubSub`](/reference/pubsub/redis-streams), [`ValkeyStreamsPubSub`](/reference/pubsub/valkey-streams), or [`GoogleCloudPubSub`](/reference/pubsub/google-cloud-pubsub)).
 
 ### Scheduler worker
 
@@ -122,7 +123,7 @@ Any [supported storage backend](/reference/workers/overview#supported-storage-ba
 
 Run the same build artifact in multiple containers, each with a different [`MASTRA_WORKERS`](/reference/workers/overview#mastra_workers) value to control which worker starts in each process.
 
-Split deployments require a distributed PubSub backend ([`RedisStreamsPubSub`](/reference/pubsub/redis-streams) or [`GoogleCloudPubSub`](/reference/pubsub/google-cloud-pubsub)), a shared [storage backend](/reference/workers/overview#supported-storage-backends), and network connectivity between the orchestration worker and the API.
+Split deployments require a distributed PubSub backend ([`RedisStreamsPubSub`](/reference/pubsub/redis-streams), [`ValkeyStreamsPubSub`](/reference/pubsub/valkey-streams), or [`GoogleCloudPubSub`](/reference/pubsub/google-cloud-pubsub)), a shared [storage backend](/reference/workers/overview#supported-storage-backends), and network connectivity between the orchestration worker and the API.
 
 ### Select workers
 

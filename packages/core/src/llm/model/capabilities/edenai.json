@@ -138,8 +138,6 @@
   ],
   "temperature": [
     "amazon/moonshot.kimi-k2-thinking",
-    "amazon/nvidia.nemotron-nano-9b-v2",
-    "amazon/nvidia.nemotron-nano-9b-v2@us",
     "amazon/zai.glm-4.7-flash",
     "amazon/zai.glm-4.7-flash@us",
     "anthropic/claude-opus-4-5",

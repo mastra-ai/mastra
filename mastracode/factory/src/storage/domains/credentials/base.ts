@@ -26,6 +26,8 @@
 import type { AuthCredential, OAuthCredential } from '@mastra/code-sdk/auth/types';
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
+import { createPlaintextFactorySecretEncryption } from '../../../secret-encryption.js';
+import type { FactorySecretEncryption } from '../../../secret-encryption.js';
 
 /** Owning tenant of a credential row. `userId` absent = org-scoped row. */
 export interface CredentialTenant {
@@ -136,7 +138,7 @@ interface CredentialDbRow extends Record<string, unknown> {
   id: string;
   provider: string;
   user_id: string | null;
-  data: AuthCredential;
+  data: unknown;
   updated_at: Date;
 }
 
@@ -181,12 +183,14 @@ function tenantWhere(tenant: CredentialTenant, provider: string): CollectionWher
  * invalidating each other's rotating tokens / double-claiming a flow.
  */
 export class ModelCredentialsStorage extends FactoryStorageDomain {
-  constructor() {
+  constructor(private readonly encryption: FactorySecretEncryption = createPlaintextFactorySecretEncryption()) {
     super('model-credentials');
   }
 
   async init(): Promise<void> {
     await this.ensureCollections([MODEL_CREDENTIALS_SCHEMA, OAUTH_LOGIN_SESSIONS_SCHEMA]);
+    const rows = await this.ops.findMany<CredentialDbRow>('model_provider_credentials', {});
+    await Promise.all(rows.map(row => this.#migrateCredential(row.id)));
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -198,19 +202,32 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
     return this.ops;
   }
 
+  async #decryptCredential(value: unknown): Promise<AuthCredential> {
+    return (await this.encryption.decrypt<AuthCredential>(value)).value;
+  }
+
+  async #migrateCredential(id: string): Promise<void> {
+    await this.#db.updateAtomic<CredentialDbRow>('model_provider_credentials', { id }, async row => {
+      const decrypted = await this.encryption.decrypt<AuthCredential>(row.data);
+      if (!decrypted.needsReencryption) return null;
+      return { data: await this.encryption.encrypt(decrypted.value) };
+    });
+  }
+
   /** Read the tenant's credential for a provider at exactly that scope. */
   async getCredential(tenant: CredentialTenant, provider: string): Promise<AuthCredential | undefined> {
     const row = await this.#db.findOne<CredentialDbRow>('model_provider_credentials', tenantWhere(tenant, provider));
-    return row?.data;
+    return row ? this.#decryptCredential(row.data) : undefined;
   }
 
   /** Upsert the tenant's credential (`created_at` is preserved on update). */
   async setCredential(tenant: CredentialTenant, provider: string, credential: AuthCredential): Promise<void> {
     const where = tenantWhere(tenant, provider);
+    const encrypted = await this.encryption.encrypt(credential);
     const update = async () =>
       this.#db.updateMany('model_provider_credentials', where, {
         type: credential.type,
-        data: credential,
+        data: encrypted,
         updated_at: new Date(),
       });
 
@@ -225,7 +242,7 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
           user_id: tenant.userId ?? null,
           provider,
           type: credential.type,
-          data: credential,
+          data: encrypted,
           created_at: now,
           updated_at: now,
         });
@@ -251,20 +268,20 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
       this.#db.findMany<CredentialDbRow>('model_provider_credentials', { org_id: orgId, user_id: userId }),
       this.#db.findMany<CredentialDbRow>('model_provider_credentials', { org_id: orgId, user_id: null }),
     ]);
-    return [
-      ...userRows.map(row => ({
+    return Promise.all([
+      ...userRows.map(async row => ({
         provider: row.provider,
         scope: 'user' as const,
-        credential: row.data,
+        credential: await this.#decryptCredential(row.data),
         updatedAt: row.updated_at,
       })),
-      ...orgRows.map(row => ({
+      ...orgRows.map(async row => ({
         provider: row.provider,
         scope: 'org' as const,
-        credential: row.data,
+        credential: await this.#decryptCredential(row.data),
         updatedAt: row.updated_at,
       })),
-    ];
+    ]);
   }
 
   /**
@@ -284,7 +301,9 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
         provider,
         user_id: userId,
       });
-      return row ? { provider: row.provider, scope: 'user', credential: row.data } : undefined;
+      return row
+        ? { provider: row.provider, scope: 'user', credential: await this.#decryptCredential(row.data) }
+        : undefined;
     };
     const readOrg = async (): Promise<ResolvedCredential | undefined> => {
       const row = await this.#db.findOne<CredentialDbRow>('model_provider_credentials', {
@@ -292,7 +311,9 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
         provider,
         user_id: null,
       });
-      return row ? { provider: row.provider, scope: 'org', credential: row.data } : undefined;
+      return row
+        ? { provider: row.provider, scope: 'org', credential: await this.#decryptCredential(row.data) }
+        : undefined;
     };
     return precedence === 'org' ? ((await readOrg()) ?? (await readUser())) : ((await readUser()) ?? (await readOrg()));
   }
@@ -315,16 +336,17 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
       'model_provider_credentials',
       tenantWhere(tenant, provider),
       async row => {
-        if (row.data.type !== 'oauth') return null;
-        const current = row.data;
+        const decrypted = await this.encryption.decrypt<AuthCredential>(row.data);
+        if (decrypted.value.type !== 'oauth') return null;
+        const current = decrypted.value;
         // Re-check under the lock: another replica may have refreshed while we waited.
         if (!isOAuthCredentialExpired(current)) {
           result = current;
-          return null;
+          return decrypted.needsReencryption ? { data: await this.encryption.encrypt(current) } : null;
         }
         const next = await refreshFn(current);
         result = next;
-        return { data: next, updated_at: new Date() };
+        return { data: await this.encryption.encrypt(next), updated_at: new Date() };
       },
     );
     return result;

@@ -282,10 +282,7 @@ export function useCustomEnvironmentVariablesEditor<TRow extends EnvironmentVari
 
 function parsePastedEnvText(text: string) {
   const trimmedText = text.trim();
-  if (!trimmedText.includes('=')) return [];
-
   const entries = parseEnvFileText(trimmedText);
-  if (entries.length === 0) return [];
 
   const firstAssignmentLooksLikeEnvVar = /^(?:export\s+)?[A-Z_][A-Z0-9_]*\s*=/.test(trimmedText);
   const hasBulkShape = entries.length > 1 || trimmedText.includes('\n') || firstAssignmentLooksLikeEnvVar;

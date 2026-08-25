@@ -130,10 +130,6 @@ class RailwayProcessHandle extends ProcessHandle {
 // Railway Process Manager
 // =============================================================================
 
-export interface RailwayProcessManagerOptions {
-  env?: Record<string, string | undefined>;
-}
-
 /**
  * Railway implementation of SandboxProcessManager.
  * Uses the Railway SDK's `Sandbox.exec()` with one exec per spawned process.
@@ -141,15 +137,11 @@ export interface RailwayProcessManagerOptions {
 export class RailwayProcessManager extends SandboxProcessManager<RailwaySandbox> {
   private _spawnCounter = 0;
 
-  constructor(opts: RailwayProcessManagerOptions = {}) {
-    super({ env: opts.env });
-  }
-
   async spawn(command: string, options: SpawnProcessOptions = {}): Promise<ProcessHandle> {
     const railway = this.sandbox.railway;
 
-    // Merge default env with per-spawn env.
-    const mergedEnv = { ...this.env, ...options.env };
+    // The base spawn wrapper already merged the sandbox env into options.env
+    const mergedEnv = { ...options.env };
     const env = Object.fromEntries(
       Object.entries(mergedEnv).filter((entry): entry is [string, string] => entry[1] !== undefined),
     );

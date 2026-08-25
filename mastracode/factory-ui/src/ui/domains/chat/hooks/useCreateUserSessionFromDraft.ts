@@ -4,7 +4,7 @@ import { useNavigate, useParams } from 'react-router';
 
 import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../../../../api/keys';
 import { addCachedSession } from '../../../../hooks/useWorkspaces';
-import { createUserSession } from '../../workspaces/services/github';
+import { createUserSession } from '../../workspaces/services/user-sessions';
 import { useChatModels } from '../context/useChatModels';
 import { useChatModes } from '../context/useChatModes';
 import { useChatSessionContext } from '../context/useChatSessionContext';

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { FactoryUserSession } from '../ui/domains/workspaces/services/github';
+import type { FactoryUserSession } from '../ui/domains/workspaces/services/user-sessions';
 import { sessionsRefetchInterval } from './useWorkspaces';
 import type { WorkspacesData } from './useWorkspaces';
 

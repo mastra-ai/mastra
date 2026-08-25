@@ -7,7 +7,8 @@ import {
   stripMastraCodeCustomProviderPrefix,
 } from '../onboarding/settings.js';
 import { AMAZON_BEDROCK_GATEWAY_ID, createAmazonBedrockGateway } from '../providers/amazon-bedrock-gateway.js';
-import type { ThinkingLevel } from '../providers/openai-codex.js';
+import { isThinkingLevelSetting } from '../thinking.js';
+import type { ThinkingLevelSetting } from '../thinking.js';
 import { resolveCredentialStore } from './credential-resolver.js';
 import { resolveCustomProviders } from './custom-provider-source.js';
 import {
@@ -84,7 +85,7 @@ export function resolveModelId(modelId: string): string {
  */
 export function resolveModel(
   modelId: string,
-  options?: { thinkingLevel?: ThinkingLevel; remapForCodexOAuth?: boolean; requestContext?: RequestContext },
+  options?: { thinkingLevel?: ThinkingLevelSetting; remapForCodexOAuth?: boolean; requestContext?: RequestContext },
 ): GatewayLanguageModel {
   reloadAuthStorage();
   const headers = getAgentControllerHeaders(options?.requestContext);
@@ -166,6 +167,10 @@ export function resolveModel(
   });
 }
 
+export interface ThinkingRequestContext {
+  state?: { thinkingLevel?: unknown };
+  session?: { modeId?: string };
+}
 /**
  * Resolve the effective thinking level for the current request.
  *
@@ -179,12 +184,13 @@ export function resolveModel(
  * apply to the next request of every session — including automated
  * (rule-driven) Factory runs that nobody ever opens interactively.
  */
+
 export function resolveRequestThinkingLevel(
-  agentControllerContext: AgentControllerRequestContext<any> | undefined,
+  agentControllerContext: ThinkingRequestContext | undefined,
   settingsPath?: string,
-): ThinkingLevel {
-  const override = agentControllerContext?.state?.thinkingLevel as ThinkingLevel | undefined;
-  if (override !== undefined) return override;
+): ThinkingLevelSetting {
+  const override = agentControllerContext?.state?.thinkingLevel;
+  if (isThinkingLevelSetting(override)) return override;
   const modeId = agentControllerContext?.session?.modeId;
   return resolveDefaultThinkingLevel(loadSettings(settingsPath), modeId).level;
 }

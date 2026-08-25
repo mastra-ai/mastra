@@ -196,6 +196,7 @@ export interface FactoryDeferredDecisionRecord {
   decision: Record<string, unknown>;
   status: FactoryDispatchStatus;
   attempts: number;
+  deliveryGeneration: number;
   failureOccurrence: number;
   availableAt: Date;
   leaseOwner: string | null;
@@ -343,6 +344,7 @@ export interface FactoryDispatchFailureInput extends FactoryLeaseIdentity {
   lastError: string;
   failureCode: FactoryDispatchFailureCode;
   terminal: boolean;
+  advanceDeliveryGeneration?: boolean;
 }
 
 export interface CommitFactoryTransitionInput {
@@ -477,8 +479,8 @@ export const WORK_ITEMS_SCHEMA: CollectionSchema = {
   ],
   indexes: [
     {
-      name: 'work_items_org_project_updated_at_idx',
-      columns: ['org_id', 'factory_project_id', 'updated_at'],
+      name: 'work_items_org_project_created_at_id_idx',
+      columns: ['org_id', 'factory_project_id', 'created_at', 'id'],
     },
     {
       name: 'work_items_project_parent_idx',
@@ -732,6 +734,7 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
       decision: { type: 'json' },
       status: { type: 'text' },
       attempts: { type: 'integer' },
+      delivery_generation: { type: 'integer', default: 0 },
       failure_occurrence: { type: 'integer', default: 0 },
       available_at: { type: 'timestamp' },
       lease_owner: { type: 'text', nullable: true },
@@ -900,6 +903,7 @@ function toDeferredDecision(row: GovernanceDbRow): FactoryDeferredDecisionRecord
     decision: row.decision as Record<string, unknown>,
     status: row.status as FactoryDispatchStatus,
     attempts: Number(row.attempts),
+    deliveryGeneration: Number(row.delivery_generation ?? 0),
     failureOccurrence: Number(row.failure_occurrence ?? 0),
     availableAt: row.available_at as Date,
     leaseOwner: (row.lease_owner as string | null) ?? null,
@@ -1112,6 +1116,9 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         failed = true;
         return {
           status: input.terminal ? 'failed' : 'retry',
+          ...(table === 'factory_deferred_decisions' && !input.terminal && input.advanceDeliveryGeneration !== false
+            ? { delivery_generation: Number(current.delivery_generation ?? 0) + 1 }
+            : {}),
           available_at: input.availableAt,
           lease_owner: null,
           lease_expires_at: null,
@@ -1132,12 +1139,21 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     const rows = await ops.findMany<WorkItemDbRow>(
       'work_items',
       { org_id: orgId, factory_project_id: factoryProjectId },
-      { orderBy: [['updated_at', 'desc']] },
+      {
+        orderBy: [
+          ['created_at', 'desc'],
+          ['id', 'desc'],
+        ],
+      },
     );
     return rows.map(toWorkItem);
   }
 
-  /** List the org's work items for a project, newest first. */
+  /**
+   * List the org's work items for a project, newest first. Ordered on `created_at` with an id
+   * tiebreak so the order is stable: `updated_at` moves under every write, which makes it useless
+   * as a cursor and non-deterministic for the callers that iterate this list.
+   */
   async list({ orgId, factoryProjectId }: { orgId: string; factoryProjectId: string }): Promise<WorkItemRow[]> {
     return this.#listWithOps(this.#db, orgId, factoryProjectId);
   }
@@ -1303,6 +1319,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
                 decision,
                 status: 'pending',
                 attempts: 0,
+                delivery_generation: 0,
                 available_at: now,
                 lease_owner: null,
                 lease_expires_at: null,
@@ -1438,6 +1455,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             decision,
             status: 'pending',
             attempts: 0,
+            delivery_generation: 0,
             available_at: input.now,
             lease_owner: null,
             lease_expires_at: null,
@@ -2039,6 +2057,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           return {
             status: 'retry',
             attempts: 0,
+            delivery_generation: Number(current.delivery_generation ?? 0) + 1,
             available_at: now,
             lease_owner: null,
             lease_expires_at: null,
@@ -2523,6 +2542,34 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       updated_at: now,
     });
     return { item: toWorkItem(row), created: true, previous: emptyPrior() };
+  }
+
+  async setParentWorkItemIfMissing({
+    orgId,
+    id,
+    userId,
+    parentWorkItemId,
+  }: {
+    orgId: string;
+    id: string;
+    userId: string;
+    parentWorkItemId: string;
+  }): Promise<WorkItemRow | null> {
+    const candidate = await this.#db.findOne<WorkItemDbRow>('work_items', { org_id: orgId, id });
+    if (!candidate) return null;
+
+    return this.#withProjectRelationTransaction(orgId, candidate.factory_project_id, async ops => {
+      const row = await ops.updateAtomic<WorkItemDbRow>('work_items', { org_id: orgId, id }, async current => {
+        if (current.parent_work_item_id !== null) return current;
+        validateParentRelation(
+          await this.#listWithOps(ops, orgId, current.factory_project_id),
+          current.id,
+          parentWorkItemId,
+        );
+        return applyUpdate({ current, userId, input: { parentWorkItemId } });
+      });
+      return row ? toWorkItem(row) : null;
+    });
   }
 
   async update({
