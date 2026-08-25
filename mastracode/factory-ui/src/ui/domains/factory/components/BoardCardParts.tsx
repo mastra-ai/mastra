@@ -2,8 +2,8 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { MessageSquare, Play, Sparkles, TriangleAlert } from 'lucide-react';
-import type { ReactElement } from 'react';
+import { Maximize2, Sparkles, TriangleAlert } from 'lucide-react';
+import type { ReactElement, ReactNode } from 'react';
 
 import type { BoardCardStatus } from '../boardCardStatus';
 import { HIDDEN_CARD_LABELS, SOURCE_LABELS } from '../boardItems';
@@ -18,18 +18,19 @@ export function SourceTitle({ source, title }: { source: WorkItemSource; title: 
   );
 }
 
+// The app-wide provider fires at 0ms, which makes card-sized targets open as the pointer merely crosses them.
+export function BoardTooltipDelay({ children }: { children: ReactNode }) {
+  return <TooltipProvider delay={400}>{children}</TooltipProvider>;
+}
+
 export function CardTitleTooltip({ title, children }: { title: string; children: ReactElement }) {
   return (
-    // The app-wide provider uses a 0ms delay, which is fine for icon buttons but
-    // makes a card-sized target fire while the pointer merely crosses the board.
-    <TooltipProvider delay={400}>
-      <Tooltip>
-        <TooltipTrigger render={children} />
-        <TooltipContent side="top" className="max-w-90">
-          <span className="wrap-anywhere whitespace-pre-wrap">{title}</span>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <Tooltip>
+      <TooltipTrigger render={children} />
+      <TooltipContent side="top" className="max-w-90">
+        <span className="wrap-anywhere whitespace-pre-wrap">{title}</span>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -41,34 +42,22 @@ export function CardTitleTooltip({ title, children }: { title: string; children:
 export const REVEAL_ON_CARD_HOVER =
   'transition-opacity duration-200 ease-out motion-reduce:transition-none pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:group-focus-within:opacity-100 pointer-fine:aria-expanded:opacity-100';
 
-type IdleBoardCardStatus = Extract<BoardCardStatus, { kind: 'idle' }>;
-
-function IdleCardStatus({ status, className }: { status: IdleBoardCardStatus; className?: string }) {
+export function CardDetailsHint({ className }: { className?: string }) {
   return (
     <span
       aria-hidden
       className={cn(
         'text-ui-xs text-icon4 ml-auto flex shrink-0 items-center gap-1.5',
-        className,
         REVEAL_ON_CARD_HOVER,
+        className,
       )}
     >
-      {status.affordance === 'open' ? <MessageSquare size={11} aria-hidden /> : <Play size={11} aria-hidden />}
-      {status.label}
+      <Maximize2 size={11} aria-hidden />
+      Details
     </span>
   );
 }
 
-export function CardIdleOverlay({ status }: { status: IdleBoardCardStatus }) {
-  return (
-    <IdleCardStatus
-      status={status}
-      className="pointer-events-none pointer-fine:absolute pointer-fine:right-3 pointer-fine:bottom-3 pointer-fine:z-20 pointer-fine:ml-0"
-    />
-  );
-}
-
-/** The card's one status row: a hover hint when idle, a live region once something is happening. */
 export function CardStatus({
   status,
   onApprove,
@@ -84,7 +73,7 @@ export function CardStatus({
   onRetry?: () => void;
   retrying?: boolean;
 }) {
-  if (status.kind === 'idle') return <IdleCardStatus status={status} />;
+  if (status.kind === 'idle') return null;
 
   // A parked run is the one idle state the card cannot whisper: it needs the
   // user, so it stays lit without a hover and carries its own button. The

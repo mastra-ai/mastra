@@ -9,7 +9,7 @@ import {
 import type { TraceColumnPreferences, TraceUsageSummary } from '../trace-list-columns';
 import { formatSpanDuration, getInputPreview } from '../utils/span-utils';
 import { formatCompact, formatCost } from '@/domains/metrics/components/metrics-utils';
-import { DataList, DataListSkeleton, TracesDataList } from '@/ds/components/DataList';
+import { DataList, DataListSkeleton, TracesDataList, useDataListKeyboard } from '@/ds/components/DataList';
 import { cn } from '@/lib/utils';
 
 export type TracesListViewTrace = {
@@ -93,6 +93,12 @@ export function TracesListView({
     overscan: OVERSCAN,
   });
 
+  const { getRowProps } = useDataListKeyboard({
+    count: traces.length,
+    containerRef: scrollRef,
+    onNavigate: index => virtualizer.scrollToIndex(index),
+  });
+
   // Reset scroll to top whenever a fresh query resolves (filter / date range change).
   // `isLoading` only flips on initial fetches — `fetchNextPage` keeps it `false`, so this
   // effect doesn't fire during pagination.
@@ -173,6 +179,7 @@ export function TracesListView({
                 key={rowKey}
                 ref={virtualizer.measureElement}
                 data-index={vi.index}
+                {...getRowProps(vi.index)}
                 onClick={() => onTraceClick(trace)}
                 featured={isFeatured}
                 className={cn(isRecentlyAdded && 'animate-row-highlight')}

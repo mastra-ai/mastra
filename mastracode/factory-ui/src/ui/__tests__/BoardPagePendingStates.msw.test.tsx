@@ -358,22 +358,19 @@ describe('Board card pending states', () => {
     await waitForMutationsIdle(client);
   });
 
-  it('links the whole card to its attached thread', async () => {
+  it('links the card details to its attached thread', async () => {
     stubBoardEndpoints();
+    const user = userEvent.setup();
     renderWorkBoard();
 
-    const titleText = await screen.findByText('Fix login bug');
-    const card = titleText.closest<HTMLElement>('[data-testid="work-item-card"]');
-    if (!card) throw new Error('Expected the title inside its work item card');
-    expect(titleText.closest('a, button')).toBeNull();
+    await user.click(await screen.findByRole('button', { name: 'Details for Fix login bug' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Fix login bug' });
 
-    const threadLink = within(card).getByRole('link', { name: 'Open session for Fix login bug' });
+    const threadLink = within(dialog).getByRole('link', { name: 'Open session' });
     expect(threadLink).toHaveAttribute(
       'href',
       `/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`,
     );
-    expect(within(card).getByText('Open session')).toBeInTheDocument();
-    expect(card.querySelector('[data-live-session-indicator]')).toBeInTheDocument();
     const matches = matchRoutes(createAppRoutes(), threadLink.getAttribute('href') ?? '');
     expect(matches?.at(-1)?.route.path).toBe('threads/:threadId');
   });
@@ -494,7 +491,7 @@ describe('Board card pending states', () => {
     ).toBeVisible();
   });
 
-  it('names the click outcome differently for cards that have a session and cards that do not', async () => {
+  it('marks only the cards whose bound session still exists as live', async () => {
     stubBoardEndpoints();
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
@@ -511,23 +508,18 @@ describe('Board card pending states', () => {
     );
     if (!started || !unstarted) throw new Error('Expected both work item cards');
 
-    expect(within(started).getByRole('link', { name: 'Open session for Fix login bug' })).toBeInTheDocument();
-    expect(within(started).getByText('Open session')).toBeInTheDocument();
     expect(started.querySelector('[data-live-session-indicator]')).toBeInTheDocument();
-    expect(within(started).queryByText('Start session')).not.toBeInTheDocument();
-    expect(within(unstarted).getByText('Start session')).toBeInTheDocument();
-    expect(within(unstarted).queryByRole('link', { name: /Open session for/ })).not.toBeInTheDocument();
     expect(unstarted.querySelector('[data-live-session-indicator]')).not.toBeInTheDocument();
   });
 
-  it('acknowledges a session-starting card click while it is still resolving the session', async () => {
+  it('acknowledges a session start from the card details while it is still resolving the session', async () => {
     stubBoardEndpoints();
     const refreshGate = deferred();
     let workItemRequests = 0;
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, async () => {
         workItemRequests += 1;
-        // The click refetches before it can decide to open or create; hold that
+        // The start refetches before it can decide to open or create; hold that
         // refetch open so the pre-mutation window is observable.
         if (workItemRequests > 1) await refreshGate.promise;
         return HttpResponse.json({ workItems: [{ ...workItem, sessions: {} }] });
@@ -544,9 +536,9 @@ describe('Board card pending states', () => {
     const user = userEvent.setup();
     renderWorkBoard();
 
-    const card = await screen.findByTestId('work-item-card');
-    await waitFor(() => expect(within(card).getByRole('button', { name: /Start session/ })).toBeEnabled());
-    await user.click(within(card).getByRole('button', { name: 'Start session for Fix login bug' }));
+    await user.click(await screen.findByRole('button', { name: 'Details for Fix login bug' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Fix login bug' });
+    await user.click(within(dialog).getByRole('button', { name: 'Start session' }));
 
     // No run mutation exists yet, so this row is the only feedback the click can produce.
     const status = await screen.findByText('Preparing session…');
@@ -557,7 +549,7 @@ describe('Board card pending states', () => {
     await waitFor(() => expect(screen.queryByText('Preparing session…')).not.toBeInTheDocument());
   });
 
-  it('starts one run when a session-starting card is clicked twice before it resolves', async () => {
+  it('starts one session when the details run control is re-triggered before it resolves', async () => {
     stubBoardEndpoints();
     const refreshGate = deferred();
     let workItemRequests = 0;
@@ -579,27 +571,26 @@ describe('Board card pending states', () => {
         });
       }),
     );
-    // pointerEventsCheck is off so the second click still reaches the handler
-    // once the button goes disabled: the handler itself has to refuse it, since
-    // the disabled attribute alone wouldn't stop a programmatic re-dispatch.
+    // pointerEventsCheck off so clicks reach disabled controls: the attribute alone wouldn't stop a re-dispatch.
     const user = userEvent.setup({ pointerEventsCheck: 0 });
     const { client } = renderWorkBoard();
 
-    const card = await screen.findByTestId('work-item-card');
-    await waitFor(() => expect(within(card).getByRole('button', { name: /Start session/ })).toBeEnabled());
-    const trigger = within(card).getByRole('button', { name: 'Start session for Fix login bug' });
+    await user.click(await screen.findByRole('button', { name: 'Details for Fix login bug' }));
+    let dialog = await screen.findByRole('dialog', { name: 'Fix login bug' });
+    await user.click(within(dialog).getByRole('button', { name: 'Start session' }));
 
-    await user.click(trigger);
     await screen.findByText('Preparing session…');
-    await user.click(trigger);
+
+    // Reopening mid-flight must present the run as already happening, not offer a second one.
+    await user.click(await screen.findByRole('button', { name: 'Details for Fix login bug' }));
+    dialog = await screen.findByRole('dialog', { name: 'Fix login bug' });
+    expect(within(dialog).getByRole('button', { name: 'Starting…' })).toBeDisabled();
 
     refreshGate.resolve();
     await waitFor(() => expect(screen.queryByText('Preparing session…')).not.toBeInTheDocument());
     await waitFor(() => expect(runStarts).toHaveLength(1));
 
-    // Both clicks unblock on the same gate release, so a duplicate start would
-    // already be in flight here. Draining to a settled cache is deterministic,
-    // unlike a fixed sleep that a slower duplicate can outrun.
+    // Both activations unblock on the same gate release, so a duplicate start would already be in flight here.
     await waitForMutationsIdle(client);
     expect(runStarts).toHaveLength(1);
   });

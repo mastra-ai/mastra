@@ -2,6 +2,7 @@ import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { ListFilter, RotateCcw, Tag, UsersRound } from 'lucide-react';
 import { useState } from 'react';
 
@@ -14,6 +15,8 @@ const ALL_TEAMMATES = 'all';
 export function BoardRelevanceFilters({
   kind,
   participants,
+  search,
+  onSearchChange,
   selectedParticipantId,
   selectedTypes,
   availableLabels,
@@ -26,6 +29,9 @@ export function BoardRelevanceFilters({
 }: {
   kind: BoardKind;
   participants: readonly BoardParticipant[];
+  /** Free-text narrowing, applied before a column pages its cards. */
+  search: string;
+  onSearchChange: (search: string) => void;
   selectedParticipantId?: string;
   selectedTypes: ReadonlySet<BoardRelevanceType>;
   availableLabels: readonly string[];
@@ -47,7 +53,10 @@ export function BoardRelevanceFilters({
         ? [...selectedLabels][0]!
         : `${selectedLabels.size} labels`;
   const hasActiveFilters =
-    selectedParticipantId !== undefined || selectedRelevanceLabels.length !== options.length || selectedLabels.size > 0;
+    selectedParticipantId !== undefined ||
+    selectedRelevanceLabels.length !== options.length ||
+    selectedLabels.size > 0 ||
+    search !== '';
   const [labelSearch, setLabelSearch] = useState('');
   const normalizedSearch = labelSearch.trim().toLowerCase();
   const visibleLabels = normalizedSearch
@@ -69,6 +78,16 @@ export function BoardRelevanceFilters({
 
   const renderControls = (mobile: boolean) => (
     <>
+      <div className={mobile ? 'w-full' : 'w-52'}>
+        <ListSearch
+          label="Search cards"
+          placeholder="Search cards…"
+          value={search}
+          onSearch={onSearchChange}
+          size="sm"
+        />
+      </div>
+
       <Combobox
         options={teammateOptions}
         value={selectedParticipantId ?? ALL_TEAMMATES}

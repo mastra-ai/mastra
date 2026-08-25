@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Columns3Icon, Pencil, Trash2 } from 'lucide-react';
-import { forwardRef, useCallback, useMemo, useState } from 'react';
+import { forwardRef, useCallback, useMemo, useRef, useState } from 'react';
 import { DataList } from './data-list';
 import type { DataListStickyHeaderBackground, DataListVariant } from './data-list-root';
 import { DataListSkeleton } from './data-list-skeleton';
@@ -9,6 +9,7 @@ import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import type { LinkComponent } from '@/ds/types/link-component';
+import { useTableKeydown } from '@/lib/keyboard';
 
 type DataListStoryArgs = {
   variant: DataListVariant;
@@ -689,5 +690,52 @@ export const ScoresTable: Story = {
         </ScoresDataList>
       </div>
     );
+  },
+};
+
+/**
+ * Accessible keyboard navigation via `useTableKeydown` (roving tabindex).
+ * Tab into the list to land on the active row, then use ArrowUp/ArrowDown,
+ * Home/End, and PageUp/PageDown to move focus. Tab leaves the list in one stop.
+ */
+export const KeyboardNavigation: Story = {
+  render: ({ variant }) => {
+    const KeyboardNavExample = () => {
+      const containerRef = useRef<HTMLDivElement | null>(null);
+      const { activeIndex, getRowProps } = useTableKeydown({
+        count: SAMPLE_RUNS.length,
+        containerRef,
+      });
+
+      return (
+        <div ref={containerRef}>
+          <DataList columns={COMPACT_COLUMNS} variant={variant}>
+            <DataList.Top>
+              <DataList.TopCell>ID</DataList.TopCell>
+              <DataList.TopCell>Input</DataList.TopCell>
+              <DataList.TopCell>Status</DataList.TopCell>
+              <DataList.TopCell>Date</DataList.TopCell>
+              <DataList.TopCell>Time</DataList.TopCell>
+            </DataList.Top>
+            {SAMPLE_RUNS.map((run, index) => (
+              <DataList.RowButton
+                key={run.id}
+                featured={index === activeIndex}
+                onClick={() => {}}
+                {...getRowProps(index)}
+              >
+                <DataList.IdCell id={run.id} />
+                <DataList.MonoCell>{run.input}</DataList.MonoCell>
+                <DataList.Cell height="compact">{run.status}</DataList.Cell>
+                <DataList.DateCell timestamp={run.createdAt} />
+                <DataList.TimeCell timestamp={run.createdAt} />
+              </DataList.RowButton>
+            ))}
+          </DataList>
+        </div>
+      );
+    };
+
+    return <KeyboardNavExample />;
   },
 };

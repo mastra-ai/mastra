@@ -1,5 +1,23 @@
 # @mastra/core
 
+## 1.62.0-alpha.10
+
+### Patch Changes
+
+- Fixed `run.cancel()` leaving a workflow's spans open when a step ignores `abortSignal`. ([#22278](https://github.com/mastra-ai/mastra/pull/22278))
+
+  A step that never observes the abort signal keeps running, so the execution engine never unwinds and never ends the run's spans. Exporters that only act on span-end events (Langfuse, Mastra Cloud, and any OpenTelemetry-based exporter) therefore never received the run span or any of its ancestors, leaving traces without input/output, tags, or cost, and turning every step that did finish into an orphan. `cancel()` now closes the run's span tree itself, on both the default and evented engines.
+
+  ```ts
+  const run = await workflow.createRun();
+  run.start({ inputData: {} });
+
+  // The trace is now closed and exported even if the running step never returns
+  await run.cancel();
+  ```
+
+- Fixed delegated (supervisor) resume dropping a sub-agent leaf tool's writer.custom() data frames from the parent stream. Resumed delegations now continue on the delegation thread persisted by the suspended run instead of generating a new one, so approval-gated tools that emit custom data frames keep streaming them after approval. Also, a failure to save a custom data frame to memory no longer removes it from the stream. Fixes https://github.com/mastra-ai/mastra/issues/22217 ([#22277](https://github.com/mastra-ai/mastra/pull/22277))
+
 ## 1.62.0-alpha.9
 
 ### Patch Changes
