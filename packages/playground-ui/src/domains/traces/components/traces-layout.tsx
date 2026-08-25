@@ -34,7 +34,7 @@ export function TracesLayout({
     <div
       className={cn(
         'grid max-h-full min-h-0 items-start gap-4 transition-[grid-template-columns] duration-300 ease-in-out',
-        hasSidePanel ? (sidePanelWide ? 'grid-cols-[1fr_2fr]' : 'grid-cols-[1fr_1fr]') : 'grid-cols-[1fr]',
+        hasSidePanel ? (sidePanelWide ? 'grid-cols-[1fr_4fr]' : 'grid-cols-[1fr_1fr]') : 'grid-cols-[1fr]',
       )}
     >
       {listSlot}
