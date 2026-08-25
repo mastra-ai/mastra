@@ -257,6 +257,7 @@ describe('aggregated intake', () => {
         { integrationId: 'github', id: 'repo-1', name: 'acme/app', type: 'repository' },
         { integrationId: 'linear', id: 'team-1', name: 'Platform', type: 'project' },
       ],
+      failures: [],
     });
   });
 
@@ -297,6 +298,42 @@ describe('aggregated intake', () => {
     expect(typeof body.nextCursor).toBe('string');
   });
 
+  it('keeps listing sources from the capabilities that answer when one is unavailable', async () => {
+    vi.mocked(linear.listSources).mockRejectedValueOnce(new Error('Linear token expired'));
+
+    const response = await buildApp(orgUser).request('/web/intake/sources');
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      sources: [{ integrationId: 'github', id: 'repo-1', name: 'acme/app', type: 'repository' }],
+      failures: [{ integrationId: 'linear', message: 'Linear token expired' }],
+    });
+  });
+
+  it('keeps listing items from the capabilities that answer and resumes an unavailable one at its cursor', async () => {
+    await seed.intake.saveConfig({
+      orgId: 'org1',
+      userId: 'u1',
+      config: {
+        github: { enabled: true, sourceIds: ['repo-1'] },
+        linear: { enabled: true, sourceIds: ['team-1'] },
+      },
+    });
+    vi.mocked(linear.listItems).mockRejectedValueOnce(new Error('Bad gateway'));
+    const cursor = Buffer.from(JSON.stringify({ linear: 'linear-page-2' })).toString('base64url');
+
+    const response = await buildApp(orgUser).request(`/web/intake/items?cursor=${cursor}`);
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.items).toEqual([expect.objectContaining({ integrationId: 'github', title: 'Fix login' })]);
+    expect(body.failures).toEqual([{ integrationId: 'linear', message: 'Bad gateway' }]);
+    expect(JSON.parse(Buffer.from(body.nextCursor, 'base64url').toString('utf8'))).toEqual({
+      github: 'github-next',
+      linear: 'linear-page-2',
+    });
+  });
+
   it('does not call disabled or unselected capabilities', async () => {
     await seed.intake.saveConfig({
       orgId: 'org1',
@@ -307,7 +344,7 @@ describe('aggregated intake', () => {
       },
     });
     const response = await buildApp(orgUser).request('/web/intake/items');
-    expect(await response.json()).toEqual({ items: [], nextCursor: null });
+    expect(await response.json()).toEqual({ items: [], nextCursor: null, failures: [] });
     expect(github.listItems).not.toHaveBeenCalled();
     expect(linear.listItems).not.toHaveBeenCalled();
   });
