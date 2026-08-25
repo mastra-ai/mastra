@@ -8,20 +8,18 @@ import StepItem from "@site/src/components/StepItem";
 
 # Kubernetes (Helm)
 
-Deploy the Mastra platform — **Mastra Server** (your agent runtime) and **Mastra Studio** (the management UI) — on any Kubernetes cluster using the official `mastra-projects` Helm chart. The chart works on GKE, EKS, AKS, and generic or local clusters, and handles service exposure, TLS, and secret wiring for you.
-
 :::info Enterprise only
 The Helm chart is available exclusively to Mastra Enterprise customers. It is distributed from a private registry: your Enterprise license is exchanged for short-lived pull credentials. [Contact us](https://mastra.ai/contact) to get an Enterprise license.
 :::
+
+Deploy the Mastra platform — Mastra Server (your agent runtime) and Mastra Studio (the management UI) — on any Kubernetes cluster using the official `mastra-projects` Helm chart. The chart works on GKE, EKS, AKS, and generic or local clusters, and handles service exposure, TLS, and secret wiring for you.
 
 The chart follows two design principles:
 
 - **Bring your own images.** You build your Mastra project image with `mastra build` and push it to a registry. The chart never builds images.
 - **Bring your own data stores.** You point the chart at your PostgreSQL database and, optionally, an S3-compatible object store. Nothing stateful is bundled.
 
-:::note
 This guide covers the Helm chart, which manages Deployments, Services, Ingress or Gateway resources, and secrets for you. To write the Kubernetes manifests yourself, or to run multiple server pods with shared pub/sub, see [Kubernetes](/integrations/deploy/kubernetes).
-:::
 
 ## Before you begin
 
