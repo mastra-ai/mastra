@@ -35,6 +35,7 @@ This demo runs in Mastra Studio, but you can connect this agent to your React, N
    - Run `circle wallet login`, then `circle wallet status` to confirm the session and accept the Terms of Use if you have not already.
 3. **Add your API keys**
    - Copy `.env.example` to `.env` and fill in your keys.
+   - If your corporate network inspects TLS traffic, uncomment `NODE_OPTIONS=--use-system-ca`. This setting requires Node.js 22.15 or later.
 4. **Start the dev server**
    - Run `pnpm dev` and open [localhost:4111](http://localhost:4111) to try it out.
 

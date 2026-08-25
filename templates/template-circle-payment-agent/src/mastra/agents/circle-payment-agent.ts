@@ -48,6 +48,8 @@ async function hasSkills(): Promise<boolean> {
 const SESSION_ENV_VARS = [
   'PATH',
   'HOME',
+  // Lets child Node processes use host TLS settings such as `--use-system-ca` behind Zscaler.
+  'NODE_OPTIONS',
   'DBUS_SESSION_BUS_ADDRESS',
   'XDG_RUNTIME_DIR',
   'USERPROFILE',
