@@ -532,20 +532,16 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
    *
    * The base constructor wraps `start()` so direct calls are routed through
    * `_start()`. Use METHOD syntax when overriding — a class-field `start`
-   * initializer would overwrite the wrapper.
+   * initializer would overwrite the wrapper. Implementing neither rung throws:
+   * a sandbox with nothing to start says so with an empty `async start() {}`.
    *
    * Id-keyed getOrCreate contract: a sandbox constructed with a known `id`
    * resolves that id on start — reconnect/resume when the provider finds an
    * existing VM for it, create otherwise.
    */
   async start(): Promise<SandboxStartResult | void> {
-    // Reaching the base implementation means nothing will provision this
-    // sandbox, so it would report 'running' with no environment behind it.
-    // Besides a provider that implements neither, this catches a misspelled
-    // override and a `start`/`create` declared as a class FIELD, since field
-    // initializers run after this constructor and are invisible to the
-    // wrapper and to rung selection. A sandbox with genuinely nothing to
-    // start declares that with an empty `async start() {}`.
+    // Also where a misspelled override and a class-FIELD `start`/`create` land,
+    // since field initializers run too late for the constructor to see them.
     throw new Error(
       `${this.constructor.name} implements neither start() nor the create() acquisition primitive, so starting it would do nothing. Implement one using method syntax.`,
     );
