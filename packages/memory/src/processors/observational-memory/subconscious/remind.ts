@@ -116,6 +116,17 @@ export function remindThreadKey(parentThreadId: string): string {
   return `subconscious:${parentThreadId}:remind`;
 }
 
+/**
+ * The resource id the lane runs under. The runtime keys its serialization lane on
+ * `[resourceId, threadId]`, so EVERY entry point must derive the resource identically — asks and
+ * passive evaluations resolving different resource ids for the same session would split into two
+ * lanes on the same memory thread and interleave. Both paths read the session's resource and fall
+ * back to the parent thread id when the session has none.
+ */
+function laneResourceId(parentThreadId: string, resourceId?: string): string {
+  return resourceId ?? parentThreadId;
+}
+
 export interface SubconsciousRemindOptions {
   /**
    * Returns the Memory that backs the reminder agent's own conversation. Called on demand so a
@@ -190,6 +201,11 @@ interface ReminderLaneTurnArgs {
   requestContext?: RequestContext;
   maxSteps?: number;
   deadlineMs?: number;
+  /**
+   * Rejects the waiter when aborted. The lane turn itself is NOT cancelled — it completes and its
+   * transcript persists in order; only the caller stops waiting.
+   */
+  abortSignal?: AbortSignal;
 }
 
 /**
@@ -204,7 +220,8 @@ interface ReminderLaneTurnArgs {
  * continuing conversation" contract.
  *
  * The completion callback rides in the queued entry's stream options, so each turn resolves its
- * own waiter; no cross-turn correlation bookkeeping is needed in-process.
+ * own waiter. The correlation is in-process: if another process wins the wake race and executes
+ * the turn, the transcript still persists in order, but this waiter falls to the deadline.
  */
 function runReminderLaneTurn(args: ReminderLaneTurnArgs): Promise<string> {
   const threadId = remindThreadKey(args.parentThreadId);
@@ -216,6 +233,19 @@ function runReminderLaneTurn(args: ReminderLaneTurnArgs): Promise<string> {
       settled = true;
       reject(new Error(`The reminder lane did not complete this turn within ${deadlineMs}ms.`));
     }, deadlineMs);
+    // The waiter must never outlive the host process just to keep a deadline armed.
+    (timer as { unref?: () => void }).unref?.();
+    const onAbort = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      reject(new Error('The caller aborted while waiting for the reminder lane turn.'));
+    };
+    if (args.abortSignal?.aborted) {
+      onAbort();
+      return;
+    }
+    args.abortSignal?.addEventListener('abort', onAbort, { once: true });
     const finish = (fn: () => void) => {
       if (settled) return;
       settled = true;
@@ -234,10 +264,19 @@ function runReminderLaneTurn(args: ReminderLaneTurnArgs): Promise<string> {
           },
         },
       });
-      // `accepted` settles at routing-decision time; it rejects only when the signal cannot be
-      // routed at all (for example a model that throws during stream setup). A run failing after
-      // it started does not resolve `onFinish`, so the deadline above is the terminal backstop.
-      result.accepted.catch((error: unknown) => finish(() => reject(error)));
+      // `accepted` settles at routing-decision time. A rejection means the signal could not be
+      // routed at all; a `blocked` disposition means the turn will never run, so both reject the
+      // waiter immediately instead of burning the full deadline. A run failing AFTER it started
+      // does not resolve `onFinish`, so the deadline above is the terminal backstop for that.
+      result.accepted
+        .then((disposition: { action?: string; reason?: string } | undefined) => {
+          if (disposition?.action === 'blocked') {
+            finish(() =>
+              reject(new Error(`The reminder lane refused this turn: ${disposition.reason ?? 'thread-blocked'}.`)),
+            );
+          }
+        })
+        .catch((error: unknown) => finish(() => reject(error)));
     } catch (error) {
       finish(() => reject(error));
     }
@@ -253,7 +292,7 @@ function runReminderLaneTurn(args: ReminderLaneTurnArgs): Promise<string> {
 export function createRemindAskTool(options: RemindAskToolOptions) {
   const { memory, config, omModel } = options;
 
-  const answer = async (question: string, context: AskToolContext, threadId: string) => {
+  const answer = async (question: string, context: AskToolContext, threadId: string, abortSignal?: AbortSignal) => {
     const scope = resolveScope({
       requestContext: context.requestContext,
       resourceId: context.agent?.resourceId,
@@ -284,10 +323,11 @@ export function createRemindAskTool(options: RemindAskToolOptions) {
     return await runReminderLaneTurn({
       agent,
       parentThreadId: threadId,
-      resourceId: context.agent?.resourceId ?? threadId,
+      resourceId: laneResourceId(threadId, context.agent?.resourceId),
       prompt,
       requestContext: context.requestContext,
       maxSteps: config.maxSteps,
+      abortSignal,
     });
   };
 
@@ -348,7 +388,9 @@ export function createRemindAskTool(options: RemindAskToolOptions) {
 
       if (wait) {
         try {
-          return { ok: true, answer: await answer(question, context, threadId) };
+          // The abort signal is wired ONLY here: a detached answer must outlive the asking turn,
+          // so wiring it there would cancel the answer the moment the run finishes.
+          return { ok: true, answer: await answer(question, context, threadId, context.abortSignal) };
         } catch (error) {
           // Never throw out of the main agent's turn; hand it a result it can reason about.
           return { ok: false, ...describeAskFailure(error) };
@@ -488,9 +530,7 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
           const reminder = await runReminderLaneTurn({
             agent,
             parentThreadId: context.threadId,
-            // A reminder always has a thread; a resource is optional on the observation path, so
-            // fall back to the thread to keep the conversation addressable.
-            resourceId: context.resourceId ?? context.threadId,
+            resourceId: laneResourceId(context.threadId, context.resourceId),
             prompt,
             requestContext: context.requestContext,
             maxSteps: config.maxSteps,

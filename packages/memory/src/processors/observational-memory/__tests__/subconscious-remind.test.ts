@@ -10,7 +10,7 @@ import { applyExtractorHooks } from '../extracted-values';
 import { buildExtractorOutputSections, Extractor } from '../extractor';
 import { ModelByInputTokens } from '../model-by-input-tokens';
 import { SubconsciousRemindExtractor } from '../subconscious';
-import { resolveSubconsciousAgentModel } from '../subconscious/model';
+import { resolveReminderLaneModel, resolveSubconsciousAgentModel } from '../subconscious/model';
 import { createRemindAskTool } from '../subconscious/remind';
 
 function createModel(response: string) {
@@ -844,6 +844,70 @@ describe('Subconscious remind ask lane', () => {
     await expect(resolveSubconsciousAgentModel({ config, omModel: 'default', mainAgent })).resolves.toBe(
       'main-agent-model',
     );
+  });
+
+  it('routes the reminder lane model by tier, clamping past the largest threshold', async () => {
+    const config = { name: 'remind', maxSteps: 3, builtIn: true } as any;
+    const tiered = new ModelByInputTokens({ upTo: { 1000: 'openai/gpt-5-nano', 100000: 'openai/gpt-5' } });
+    // A small estimate takes the small tier; a bigger one crosses to the larger tier.
+    await expect(resolveReminderLaneModel({ config, omModel: tiered, estimatedInputTokens: 100 })).resolves.toBe(
+      'openai/gpt-5-nano',
+    );
+    await expect(resolveReminderLaneModel({ config, omModel: tiered, estimatedInputTokens: 5000 })).resolves.toBe(
+      'openai/gpt-5',
+    );
+    // Past every threshold the lane clamps to the largest tier instead of throwing: an oversized
+    // reminder turn should degrade, not fail the observation cycle.
+    await expect(resolveReminderLaneModel({ config, omModel: tiered, estimatedInputTokens: 999999 })).resolves.toBe(
+      'openai/gpt-5',
+    );
+  });
+
+  it('passes failover arrays and dynamic model configs to the reminder agent unreduced', async () => {
+    const config = { name: 'remind', maxSteps: 3, builtIn: true } as any;
+    const failover = [{ model: 'openai/gpt-5' }, { model: 'openai/gpt-5-nano' }] as any;
+    await expect(
+      resolveReminderLaneModel({ config: { ...config, model: failover }, estimatedInputTokens: 10 }),
+    ).resolves.toBe(failover);
+    const dynamic = (() => 'openai/gpt-5') as any;
+    await expect(
+      resolveReminderLaneModel({ config: { ...config, model: dynamic }, estimatedInputTokens: 10 }),
+    ).resolves.toBe(dynamic);
+  });
+
+  it('rejects immediately when the lane refuses the turn as blocked', async () => {
+    const { tools, generateSpy } = createAskTool({});
+    // A blocked disposition means the turn will never run: the waiter must fail now, not after
+    // the full lane deadline.
+    generateSpy.mockImplementation((() => ({
+      accepted: Promise.resolve({ action: 'blocked', reason: 'thread-blocked' }),
+    })) as any);
+    try {
+      const result: any = await tools.ask_memory.execute!({ question: 'when?' } as any, askContext());
+      expect(result.ok).toBe(false);
+      expect(result.error).toMatch(/refused this turn.*thread-blocked/);
+    } finally {
+      generateSpy.mockRestore();
+    }
+  });
+
+  it('stops a blocking ask waiting when the calling turn aborts, without failing the lane', async () => {
+    const { tools, generateSpy } = createAskTool({});
+    // The lane turn never finishes on its own; only the abort should release the caller.
+    generateSpy.mockImplementation((() => ({ accepted: Promise.resolve({ action: 'deliver' }) })) as any);
+    const controller = new AbortController();
+    try {
+      const pending = tools.ask_memory.execute!(
+        { question: 'when?' } as any,
+        askContext({ abortSignal: controller.signal }),
+      );
+      controller.abort();
+      const result: any = await pending;
+      expect(result.ok).toBe(false);
+      expect(result.error).toMatch(/aborted while waiting/);
+    } finally {
+      generateSpy.mockRestore();
+    }
   });
 
   it('returns the answer as the tool result when wait is true', async () => {
