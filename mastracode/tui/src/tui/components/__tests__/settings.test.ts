@@ -217,16 +217,18 @@ describe('SettingsComponent web search provider submenu', () => {
     return { config, callbacks, done, select };
   }
 
-  it('only offers providers whose API key is configured', () => {
+  it('always lists all providers, marking those missing their API key', () => {
     const { select } = openWebSearchSubmenu(createConfig({ tavilyKeyAvailable: true }));
-    expect(select.items.map((i: { value: string }) => i.value)).toEqual(['auto', 'tavily']);
+    expect(select.items.map((i: { value: string }) => i.value)).toEqual(['auto', 'tavily', 'parallel']);
+    expect(select.items[1].label).toBe('  Tavily');
+    expect(select.items[2].label).toBe('  Parallel (unavailable)');
+    expect(select.items[2].description).toContain('PARALLEL_API_KEY');
   });
 
-  it('offers both providers when both keys are configured and persists the choice', () => {
+  it('persists the choice when the provider key is configured', () => {
     const { config, callbacks, done, select } = openWebSearchSubmenu(
       createConfig({ tavilyKeyAvailable: true, parallelKeyAvailable: true }),
     );
-    expect(select.items.map((i: { value: string }) => i.value)).toEqual(['auto', 'tavily', 'parallel']);
 
     select.onSelect?.({ value: 'parallel' });
 
@@ -235,8 +237,13 @@ describe('SettingsComponent web search provider submenu', () => {
     expect(done).toHaveBeenCalledWith('Parallel');
   });
 
-  it('offers only Auto when no provider keys are configured', () => {
-    const { select } = openWebSearchSubmenu();
-    expect(select.items.map((i: { value: string }) => i.value)).toEqual(['auto']);
+  it('ignores selecting a provider whose API key is missing', () => {
+    const { config, callbacks, done, select } = openWebSearchSubmenu();
+
+    select.onSelect?.({ value: 'tavily' });
+
+    expect(callbacks.onWebSearchProviderChange).not.toHaveBeenCalled();
+    expect(config.webSearchProvider).toBe('auto');
+    expect(done).not.toHaveBeenCalled();
   });
 });

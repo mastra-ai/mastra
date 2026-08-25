@@ -417,27 +417,26 @@ export class SettingsComponent extends Box implements Focusable {
                 label: '  Auto',
                 description: 'First configured provider key (Tavily, then Parallel)',
               },
-              ...(config.tavilyKeyAvailable
-                ? [
-                    {
-                      value: 'tavily',
-                      label: '  Tavily',
-                      description: 'Always use Tavily (TAVILY_API_KEY configured)',
-                    },
-                  ]
-                : []),
-              ...(config.parallelKeyAvailable
-                ? [
-                    {
-                      value: 'parallel',
-                      label: '  Parallel',
-                      description: 'Always use Parallel (PARALLEL_API_KEY configured)',
-                    },
-                  ]
-                : []),
+              {
+                value: 'tavily',
+                label: config.tavilyKeyAvailable ? '  Tavily' : '  Tavily (unavailable)',
+                description: config.tavilyKeyAvailable
+                  ? 'Always use Tavily'
+                  : 'Missing TAVILY_API_KEY — set it to use Tavily',
+              },
+              {
+                value: 'parallel',
+                label: config.parallelKeyAvailable ? '  Parallel' : '  Parallel (unavailable)',
+                description: config.parallelKeyAvailable
+                  ? 'Always use Parallel'
+                  : 'Missing PARALLEL_API_KEY — set it to use Parallel',
+              },
             ],
             config.webSearchProvider,
             value => {
+              // Providers without their API key are shown but not selectable.
+              if (value === 'tavily' && !config.tavilyKeyAvailable) return;
+              if (value === 'parallel' && !config.parallelKeyAvailable) return;
               config.webSearchProvider = value as WebSearchProviderSetting;
               callbacks.onWebSearchProviderChange(config.webSearchProvider);
               done(webSearchProviderLabel(config.webSearchProvider));
