@@ -932,9 +932,13 @@ describe('useObservationalMemory — what it needs before it reads', () => {
     const seen = captureMemory();
     const { wrapper } = setup();
 
-    renderHook(() => useObservationalMemory({ agentId: AGENT_ID }), { wrapper });
+    const { result } = renderHook(() => useObservationalMemory({ agentId: AGENT_ID }), { wrapper });
 
     await settle();
     expect(seen).toEqual([]);
+    // Sending nothing is not enough on its own: the query function would answer
+    // `null` without a request either way. The query must never run at all.
+    expect(result.current.fetchStatus).toBe('idle');
+    expect(result.current.isPending).toBe(true);
   });
 });
