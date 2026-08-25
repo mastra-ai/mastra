@@ -283,6 +283,127 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       expect(second[0]?.documentId).toBe(first[0]?.documentId);
     });
 
+    it('persists description independently of content', async () => {
+      const node = await store.createNode({
+        name: 'Described',
+        kind: 'task',
+        content: 'long-form body',
+        description: 'Short synopsis.',
+        scope: resource,
+      });
+      expect((await store.getNode(node.id))?.description).toBe('Short synopsis.');
+
+      const afterDescription = await store.updateNode({
+        id: node.id,
+        version: node.version,
+        description: 'Updated synopsis.',
+      });
+      expect(afterDescription.description).toBe('Updated synopsis.');
+      expect(afterDescription.content).toBe('long-form body');
+
+      const afterContent = await store.updateNode({
+        id: node.id,
+        version: afterDescription.version,
+        content: 'revised body',
+      });
+      expect(afterContent.description).toBe('Updated synopsis.');
+      expect(afterContent.content).toBe('revised body');
+
+      await expect(
+        store.updateNode({ id: node.id, version: afterDescription.version, description: 'stale write' }),
+      ).rejects.toThrow('version conflict');
+
+      const cleared = await store.updateNode({ id: node.id, version: afterContent.version, description: '' });
+      expect(cleared.description).toBe('');
+    });
+
+    it('round-trips an over-curator-limit description unmodified', async () => {
+      // Storage is bounds-agnostic; the length bound is a curator-write policy.
+      const oversized = 'x'.repeat(5000);
+      const node = await store.createNode({ name: 'Oversized', kind: 'task', description: oversized, scope: resource });
+      expect((await store.getNode(node.id))?.description).toBe(oversized);
+    });
+
+    it('round-trips a node without description as undefined', async () => {
+      const node = await store.createNode({ name: 'Bare', kind: 'task', content: 'body', scope: resource });
+      expect((await store.getNode(node.id))?.description).toBeUndefined();
+    });
+
+    it('applies the merge description matrix with target mutation', async () => {
+      // target has description => target's wins
+      const keepTarget = await store.createNode({
+        name: 'Keep target',
+        kind: 'person',
+        description: 'target synopsis',
+        scope: resource,
+      });
+      const keepSource = await store.createNode({
+        name: 'Keep source',
+        kind: 'person',
+        description: 'source synopsis',
+        scope: resource,
+      });
+      const keepVersion = keepTarget.version;
+      await store.mergeNodes({ sourceId: keepSource.id, targetId: keepTarget.id, sourceVersion: keepSource.version });
+      const keptTarget = await store.getNode(keepTarget.id);
+      expect(keptTarget?.description).toBe('target synopsis');
+      expect(keptTarget?.version).toBe(keepVersion);
+
+      // target absent + source present => adopt source's, bump target version, enqueue upsert
+      const adoptTarget = await store.createNode({ name: 'Adopt target', kind: 'person', scope: resource });
+      const adoptSource = await store.createNode({
+        name: 'Adopt source',
+        kind: 'person',
+        description: 'adopted synopsis',
+        scope: resource,
+      });
+      const beforeAdopt = (await store.listSemanticOutbox()).length;
+      await store.mergeNodes({
+        sourceId: adoptSource.id,
+        targetId: adoptTarget.id,
+        sourceVersion: adoptSource.version,
+      });
+      const adopted = await store.getNode(adoptTarget.id);
+      expect(adopted?.description).toBe('adopted synopsis');
+      expect(adopted?.version).toBe(adoptTarget.version + 1);
+      expect((await store.listSemanticOutbox()).slice(beforeAdopt)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ documentId: `knowledge:node:${adoptTarget.id}`, operation: 'upsert' }),
+        ]),
+      );
+
+      // both absent => stays absent
+      const bareTarget = await store.createNode({ name: 'Bare target', kind: 'person', scope: resource });
+      const bareSource = await store.createNode({ name: 'Bare source', kind: 'person', scope: resource });
+      await store.mergeNodes({ sourceId: bareSource.id, targetId: bareTarget.id, sourceVersion: bareSource.version });
+      expect((await store.getNode(bareTarget.id))?.description).toBeUndefined();
+    });
+
+    it('matches descriptions in lexical search and keeps description-less text unchanged', async () => {
+      const described = await store.createNode({
+        name: 'Search described',
+        kind: 'task',
+        content: 'plain body',
+        description: 'findable zebra synopsis',
+        scope: resource,
+      });
+      const plain = await store.createNode({
+        name: 'Search plain',
+        kind: 'task',
+        content: 'ordinary body',
+        scope: resource,
+      });
+
+      const byDescription = await store.search({ query: 'zebra', scope: resource });
+      expect(byDescription).toEqual([expect.objectContaining({ id: described.id })]);
+      expect(byDescription[0]?.text).toBe('Search described\nfindable zebra synopsis\nplain body');
+
+      const byContent = await store.search({ query: 'ordinary', scope: resource });
+      expect(byContent).toEqual([expect.objectContaining({ id: plain.id })]);
+      // description-less result text is byte-identical to the pre-description shape
+      expect(byContent[0]?.text).toBe('Search plain\nordinary body');
+    });
+
     it('dangerously clears every knowledge table', async () => {
       const node = await store.createNode({ name: 'Temporary', kind: 'task', scope: resource });
       const record = await store.appendKnowledge({
