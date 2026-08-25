@@ -17,7 +17,7 @@ export interface IntakeFeed {
 
 /**
  * Intake column tail for the ACTIVE candidate feed: failure notice, Linear
- * reauth notice, and pagination. Only one feed is browsed at a time, so only
+ * reauth notice, or pagination. Only one feed is browsed at a time, so only
  * its states render.
  */
 export function IntakeColumnExtras({ source, feed }: { source?: IntakeSource; feed?: IntakeFeed }) {
@@ -25,22 +25,10 @@ export function IntakeColumnExtras({ source, feed }: { source?: IntakeSource; fe
   if (source === undefined || !feed) return null;
 
   if (feed.error) {
-    const expired = source === 'linear' && isLinearReauthError(feed.error);
-    return (
-      <div className="flex flex-col items-start gap-2 p-1">
-        <Txt as="p" role="alert" variant="ui-xs" className="text-notice-destructive-fg m-0">
-          {expired ? 'Linear authorization expired. Reconnect to keep syncing issues.' : feed.error.message}
-        </Txt>
-        {expired ? (
-          <Button size="xs" onClick={() => connectLinear(baseUrl)}>
-            Connect Linear
-          </Button>
-        ) : (
-          <Button size="xs" onClick={() => void feed.refetch()}>
-            Retry
-          </Button>
-        )}
-      </div>
+    return source === 'linear' && isLinearReauthError(feed.error) ? (
+      <LinearReauthNotice onConnect={() => connectLinear(baseUrl)} />
+    ) : (
+      <FeedFailureNotice message={feed.error.message} onRetry={() => void feed.refetch()} />
     );
   }
 
@@ -51,5 +39,31 @@ export function IntakeColumnExtras({ source, feed }: { source?: IntakeSource; fe
       onLoadMore={() => void feed.fetchNextPage()}
       label="Load more candidates"
     />
+  );
+}
+
+function LinearReauthNotice({ onConnect }: { onConnect: () => void }) {
+  return (
+    <div className="flex flex-col items-start gap-2 p-1">
+      <Txt as="span" variant="ui-xs" className="text-icon3">
+        Linear authorization expired. Reconnect to keep syncing issues.
+      </Txt>
+      <Button size="xs" onClick={onConnect}>
+        Connect Linear
+      </Button>
+    </div>
+  );
+}
+
+function FeedFailureNotice({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div className="flex flex-col items-start gap-2 p-1">
+      <Txt as="p" role="alert" variant="ui-xs" className="text-notice-destructive-fg m-0">
+        {message}
+      </Txt>
+      <Button size="xs" onClick={onRetry}>
+        Retry
+      </Button>
+    </div>
   );
 }

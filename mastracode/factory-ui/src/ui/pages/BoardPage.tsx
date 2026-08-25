@@ -300,6 +300,8 @@ function BoardContent({
               const stageWorkItems = workItemsForStage(stage.id);
               const taskCount = stageContentCount(stage.id, stages, stageWorkItems, filteredCandidates);
               const composerOpen = composer.stage === stage.id;
+              const intakeFeedFailed = stage.id === 'intake' && Boolean(intake.feed?.error);
+              const showEmptyState = !loading && !composerOpen && taskCount === 0 && !intakeFeedFailed;
               return (
                 <BoardColumn
                   key={stage.id}
@@ -403,7 +405,7 @@ function BoardContent({
                   {loading && (
                     <SkeletonRows label={`Loading ${stage.label} column`} rows={3} rowClassName="h-24 w-full" />
                   )}
-                  {!loading && !composerOpen && taskCount === 0 && !(stage.id === 'intake' && intake.feed?.error) && (
+                  {showEmptyState && (
                     <BoardColumnEmptyState
                       stage={stage.id}
                       kind={kind}
