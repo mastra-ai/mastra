@@ -50,10 +50,14 @@ export function TracesLayout({
           {/* Span and score panels stack over the trace panel like sheets, each offset to
               the left so the panel underneath stays visible at its edge. */}
           {spanPanelSlot && (
-            <div className="absolute inset-y-0 right-0 bottom-0 left-8 z-10 grid shadow-2xl">{spanPanelSlot}</div>
+            <div className="animate-in fade-in-0 slide-in-from-right-8 absolute inset-y-0 right-0 bottom-0 left-8 z-10 grid shadow-2xl duration-200">
+              {spanPanelSlot}
+            </div>
           )}
           {scorePanelSlot && (
-            <div className="absolute inset-y-0 right-0 bottom-0 left-16 z-20 grid shadow-2xl">{scorePanelSlot}</div>
+            <div className="animate-in fade-in-0 slide-in-from-right-8 absolute inset-y-0 right-0 bottom-0 left-16 z-20 grid shadow-2xl duration-200">
+              {scorePanelSlot}
+            </div>
           )}
         </div>
       )}
