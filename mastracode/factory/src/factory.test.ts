@@ -407,11 +407,27 @@ describe('MastraFactory.prepare', () => {
     expect(create).not.toHaveBeenCalled();
   });
 
-  it('rejects a non-function sandbox config', async () => {
+  it('tells an old options-object sandbox config what to write instead', async () => {
     const factory = new MastraFactory({
       secretEncryption,
       storage: fakeStorage(),
-      sandbox: { create: () => ({}) } as unknown as () => never,
+      // The pre-callback shape: a fleet the factory managed itself.
+      sandbox: { enabled: true, provider: 'e2b', maxSandboxes: 4 } as unknown as () => never,
+    });
+    const error = await factory.prepare().catch((e: unknown) => e as Error);
+    expect(error).toBeInstanceOf(Error);
+    // Names the new shape and shows the replacement, so an existing host can
+    // fix its config from the message alone.
+    expect(error.message).toMatch(/'sandbox' is now a callback/);
+    expect(error.message).toMatch(/FactorySandboxContext/);
+    expect(error.message).toMatch(/sandbox: ctx => new E2BSandbox\(\{ id: ctx\.sessionId \}\)/);
+  });
+
+  it('rejects a sandbox config that is neither a callback nor an object', async () => {
+    const factory = new MastraFactory({
+      secretEncryption,
+      storage: fakeStorage(),
+      sandbox: 'e2b' as unknown as () => never,
     });
     await expect(factory.prepare()).rejects.toThrow(/'sandbox' must be a function/);
   });

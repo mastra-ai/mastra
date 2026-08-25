@@ -465,44 +465,24 @@ const stateSigner = {
   },
 };
 
-const ensureProjectSandbox = vi.fn(
-  async (opts: {
-    row: any;
-    repoFullName?: string;
-    storage: SourceControlStorageInMemory['sandboxes'];
-    token: string;
-    onProgress?: (e: any) => void;
-    seedCheckpointName?: string;
-  }) => {
-    const freshProvision = !opts.row.sandboxId;
-    await opts.storage.setSandboxId({ id: opts.row.id, sandboxId: 'sb' });
-    opts.onProgress?.({ phase: 'provisioning', message: 'Provisioning a new sandbox…' });
-    return {
-      sandbox: {
-        id: 'sb',
-        ...(freshProvision && opts.seedCheckpointName ? { seedCheckpointNameUsed: opts.seedCheckpointName } : {}),
-      },
-      workdir: `/workspace/${opts.repoFullName ?? 'octo/hello'}`,
-    };
-  },
-);
 const materializeRepo = vi.fn(
   async (opts: { onProgress?: (e: any) => void }) => {
     opts.onProgress?.({ phase: 'cloning', message: 'Cloning octo/hello…' });
   },
 );
-const reattachSandbox = vi.fn(async (_id: string, _options?: { actingUserId?: string }) => ({ id: 'sb' }));
 const runSetupCommand = vi.fn(async (_sb: any, _worktreePath: string, _command: string) => {});
 const runTeardownCommand = vi.fn(async (_sb: any, _worktreePath: string, _command: string) => {});
 const commitAll = vi.fn(async () => ({ committed: true }));
 const pushBranch = vi.fn(async () => {});
-const teardownProjectSandbox = vi.fn(async (_opts: { row: { id: string } }) => {});
 const createPullRequest = vi.fn(async (_input: CreatePullRequestInput) => ({
   url: 'https://github.com/octo/hello/pull/1',
 }));
 let sandboxEnabled = true;
-/** DI-injected sandbox callback stub — presence signals "configured". */
-const sandboxCallback = ((ctx: { sessionId: string }) => ({ id: `sbx-${ctx.sessionId}` })) as any;
+/**
+ * DI-injected sandbox callback stub — presence signals "configured".
+ * A `vi.fn` so tests can assert the factory never constructed a sandbox.
+ */
+const sandboxCallback = vi.fn((ctx: { sessionId: string }) => ({ id: `sbx-${ctx.sessionId}` })) as any;
 vi.mock('./sandbox', () => {
   class MaterializeError extends Error {
     code: string;
@@ -520,15 +500,12 @@ vi.mock('./sandbox', () => {
   }
   return {
     DEFAULT_COMMAND_TIMEOUT_MS: 15 * 60_000,
-    ensureProjectSandbox: (opts: any) => ensureProjectSandbox(opts),
     materializeRepo: (opts: any) => materializeRepo(opts),
     runSetupCommand: (sb: any, worktreePath: string, command: string) => runSetupCommand(sb, worktreePath, command),
     runTeardownCommand: (sb: any, worktreePath: string, command: string, options?: { timeoutMs?: number }) =>
       runTeardownCommand(sb, worktreePath, command, options),
     commitAll: (...args: any[]) => commitAll(...(args as [])),
     pushBranch: (...args: any[]) => pushBranch(...(args as [])),
-    teardownProjectSandbox: (opts: any) => teardownProjectSandbox(opts),
-    projectSandboxKey: (row: { id: string }) => `project-${row.id}`,
     createPullRequest: (input: any) => createPullRequest(input),
     // Match the real ref validator closely enough for route tests.
     isValidGitRef: (v: unknown): v is string =>
@@ -741,14 +718,12 @@ beforeEach(() => {
   process.env.GITHUB_APP_WEBHOOK_SECRET = 'test-webhook-secret';
   // The webhook route verifies deliveries against the injected instance's secret.
   githubStub.webhookSecret = 'test-webhook-secret';
-  ensureProjectSandbox.mockClear();
   materializeRepo.mockClear();
-  reattachSandbox.mockClear();
+  sandboxCallback.mockClear();
   runSetupCommand.mockClear();
   runTeardownCommand.mockClear();
   commitAll.mockClear();
   pushBranch.mockClear();
-  teardownProjectSandbox.mockClear();
   createPullRequest.mockClear();
   addIssueLabels.mockClear();
   removeIssueLabel.mockClear();
@@ -1736,7 +1711,11 @@ describe('Factory session routes', () => {
     });
     expect(session.sessionId).toEqual(expect.any(String));
     expect(tables.sessions).toHaveLength(1);
-    expect(ensureProjectSandbox).not.toHaveBeenCalled();
+    // Creating a session provisions nothing: no repo is materialized and the
+    // configured sandbox callback is never even constructed. A sandbox boots
+    // lazily, at the session's first command.
+    expect(materializeRepo).not.toHaveBeenCalled();
+    expect(sandboxCallback).not.toHaveBeenCalled();
   });
 
   it('uses a supplied UUID for branch identity and persists a normalized title', async () => {

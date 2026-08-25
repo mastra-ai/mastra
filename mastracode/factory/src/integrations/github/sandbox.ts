@@ -213,7 +213,7 @@ export interface RepoMaterializeInfo {
 
 /** Options for {@link materializeRepo}. */
 export interface MaterializeRepoOptions {
-  /** The per-(project,user) sandbox binding (provisioned via `ensureProjectSandbox`). */
+  /** The per-(project,user) sandbox binding whose workdir this materializes into. */
   row: RepoMaterializationBinding;
   /** Repo metadata from the org-owned project row. */
   repoInfo: RepoMaterializeInfo;

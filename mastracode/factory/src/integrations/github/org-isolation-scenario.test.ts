@@ -212,17 +212,7 @@ const stateSigner = {
   },
 };
 
-// Mirror production: provisioning persists a sandboxId onto the binding row so
-// the later git routes can reattach. We update the fake DB row in place.
-const ensureProjectSandbox = vi.fn(
-  async (opts: { row: any; repoFullName?: string; storage: SourceControlStorageInMemory['sandboxes'] }) => {
-    const sandboxId = opts.row.sandboxId ?? `sb-${opts.row.userId}`;
-    await opts.storage.setSandboxId({ id: opts.row.id, sandboxId });
-    return { sandbox: { id: sandboxId }, workdir: `/workspace/${opts.repoFullName ?? 'octo/hello'}` };
-  },
-);
 const materializeRepo = vi.fn(async (_opts: any) => {});
-const reattachSandbox = vi.fn(async (_id: string) => ({ id: 'sb' }));
 const commitAll = vi.fn(async () => ({ committed: true }));
 const pushBranch = vi.fn(async () => {});
 const createPullRequest = vi.fn(async () => ({ url: 'https://github.com/octo/hello/pull/1' }));
@@ -244,7 +234,6 @@ vi.mock('./sandbox', () => {
     }
   }
   return {
-    ensureProjectSandbox: (opts: any) => ensureProjectSandbox(opts),
     materializeRepo: (opts: any) => materializeRepo(opts),
     commitAll: (...args: any[]) => commitAll(...(args as [])),
     pushBranch: (...args: any[]) => pushBranch(...(args as [])),
@@ -387,9 +376,7 @@ beforeEach(() => {
   cookieUser = null;
   bootstrapSucceeds = true;
   mintCount = 0;
-  ensureProjectSandbox.mockClear();
   materializeRepo.mockClear();
-  reattachSandbox.mockClear();
   commitAll.mockClear();
   pushBranch.mockClear();
   createPullRequest.mockClear();

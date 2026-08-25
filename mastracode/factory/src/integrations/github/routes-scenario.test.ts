@@ -207,30 +207,17 @@ vi.mock('./subscriptions', () => ({
   subscribeToPullRequest: (input: unknown) => subscribeToPullRequest(input),
 }));
 
-const ensureProjectSandbox = vi.fn(
-  async (opts: { row: any; repoFullName?: string; storage: SourceControlStorageInMemory['sandboxes'] }) => {
-    await opts.storage.setSandboxId({ id: opts.row.id, sandboxId: 'sb' });
-    return { sandbox: { id: 'sb' }, workdir: `/workspace/${opts.repoFullName ?? 'octo/hello'}` };
-  },
-);
 const materializeRepo = vi.fn(async (_opts: any) => {});
-const reattachSandbox = vi.fn(async (_id: string) => ({ id: 'sb' }));
 const commitAll = vi.fn(async () => ({ committed: true }));
 // pushBranch is overridable per-test so S2 can make it block on a deferred.
 let pushImpl: (...args: any[]) => Promise<void> = async () => {};
 const pushBranch = vi.fn((...args: any[]) => pushImpl(...args));
 const createPullRequest = vi.fn(async (..._args: any[]) => ({ url: 'https://github.com/octo/hello/pull/1' }));
-let sandboxEnabled = true;
-/** DI-injected sandbox surface stub — routes read `enabled`/`provider`. */
-const sandboxRuntime = {
-  get enabled() {
-    return sandboxEnabled;
-  },
-  get provider() {
-    return sandboxEnabled ? 'railway' : 'none';
-  },
-  create: (ctx: { sessionId: string }) => ({ id: `sbx-${ctx.sessionId}` }),
-} as any;
+/**
+ * DI-injected sandbox callback stub — presence signals "configured".
+ * A `vi.fn` so tests can assert the routes never constructed a sandbox.
+ */
+const sandboxRuntime = vi.fn((ctx: { sessionId: string }) => ({ id: `sbx-${ctx.sessionId}` })) as any;
 vi.mock('./sandbox', () => {
   class MaterializeError extends Error {
     code: string;
@@ -247,7 +234,6 @@ vi.mock('./sandbox', () => {
     }
   }
   return {
-    ensureProjectSandbox: (opts: any) => ensureProjectSandbox(opts),
     materializeRepo: (opts: any) => materializeRepo(opts),
     commitAll: (...args: any[]) => commitAll(...(args as [])),
     pushBranch: (...args: any[]) => pushBranch(...(args as [])),
@@ -398,13 +384,11 @@ beforeEach(() => {
   sourceControlStorage.worktreesRows = tables.worktrees as any;
   sourceControlStorage.sessionsRows = tables.sessions as any;
   featureEnabled = true;
-  sandboxEnabled = true;
   mintCount = 0;
   repositoryAccessCount = 0;
   pushImpl = async () => {};
-  ensureProjectSandbox.mockClear();
+  sandboxRuntime.mockClear();
   materializeRepo.mockClear();
-  reattachSandbox.mockClear();
   commitAll.mockClear();
   pushBranch.mockClear();
   createPullRequest.mockClear();
@@ -447,9 +431,10 @@ describe('S1: full write-back journey through the real route handlers', () => {
     });
 
     // 2. Opening the project provisions nothing: session sandboxes boot
-    // lazily at the first real command.
-    expect(ensureProjectSandbox).not.toHaveBeenCalled();
+    // lazily at the first real command, so neither the repo materialization
+    // nor the sandbox callback has run.
     expect(materializeRepo).not.toHaveBeenCalled();
+    expect(sandboxRuntime).not.toHaveBeenCalled();
 
     // 3. Session creation persists identity only; AgentController's workspace
     // factory materializes the isolated checkout when that session starts.

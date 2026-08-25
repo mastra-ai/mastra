@@ -407,6 +407,17 @@ export class MastraFactory {
     // checked.
     const sandboxConfig = this.#config.sandbox;
     if (sandboxConfig !== undefined && typeof sandboxConfig !== 'function') {
+      // An object here is almost certainly the pre-callback config, which
+      // described a fleet the factory managed itself. That fleet is gone:
+      // sandboxes are per session and the host constructs them, so say what to
+      // write instead rather than only naming the expected type.
+      if (typeof sandboxConfig === 'object' && sandboxConfig !== null) {
+        throw new Error(
+          `MastraFactory: 'sandbox' is now a callback, not an options object. It receives a FactorySandboxContext and returns a MastraSandbox, so the host chooses the provider per session:\n` +
+            `  sandbox: ctx => new E2BSandbox({ id: ctx.sessionId })\n` +
+            `The previous options (enabled, provider, machine, create, localRoot, idleTimeoutMinutes, maxSandboxes) now belong to the sandbox you construct: omit 'sandbox' entirely to disable sandboxes, and set per-provider options on the instance you return.`,
+        );
+      }
       throw new Error(
         `MastraFactory: 'sandbox' must be a function constructing a MastraSandbox from a FactorySandboxContext.`,
       );
