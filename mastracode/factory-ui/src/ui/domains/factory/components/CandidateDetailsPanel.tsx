@@ -14,12 +14,7 @@ import { CardLabels } from './BoardCardParts';
 import { SourceIcon } from './BoardIcons';
 import { CardDetailsBody, CardDetailsPanel } from './CardDetailsPanel';
 
-/**
- * What a candidate card expands into. The header repeats the card's own rows in
- * the card's own order, spacing and padding — what the card already showed is
- * where it already was, so the box grows around it instead of re-staging it.
- * Only the description and the actions are staged in.
- */
+// The header repeats the card rows in the card order, so the box grows around them instead of re-staging them.
 export function CandidateDetailsPanel({
   candidate,
   labelledBy,
@@ -39,7 +34,6 @@ export function CandidateDetailsPanel({
   labels: string[];
   projectRepositoryId: string;
   factoryProjectId: string;
-  /** The card's menu entries, shared with the card's own hover menu. */
   menu: ReactNode;
   defaultAction: RunAction;
   disabled: boolean;

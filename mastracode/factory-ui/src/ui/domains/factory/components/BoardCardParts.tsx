@@ -18,11 +18,7 @@ export function SourceTitle({ source, title }: { source: WorkItemSource; title: 
   );
 }
 
-/**
- * The app-wide provider uses a 0ms delay, which suits icon buttons but makes
- * card-sized targets fire while the pointer merely crosses the board. One
- * provider covers every card on the board; a board holds hundreds of them.
- */
+// The app-wide provider fires at 0ms, which makes card-sized targets open as the pointer merely crosses them.
 export function BoardTooltipDelay({ children }: { children: ReactNode }) {
   return <TooltipProvider delay={400}>{children}</TooltipProvider>;
 }
@@ -46,7 +42,6 @@ export function CardTitleTooltip({ title, children }: { title: string; children:
 export const REVEAL_ON_CARD_HOVER =
   'transition-opacity duration-200 ease-out motion-reduce:transition-none pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:group-focus-within:opacity-100 pointer-fine:aria-expanded:opacity-100';
 
-/** Hover hint that a card opens its details instead of acting on it. */
 export function CardDetailsHint({ className }: { className?: string }) {
   return (
     <span
@@ -63,7 +58,6 @@ export function CardDetailsHint({ className }: { className?: string }) {
   );
 }
 
-/** The card's one status row: a live region once something is happening. */
 export function CardStatus({
   status,
   onApprove,

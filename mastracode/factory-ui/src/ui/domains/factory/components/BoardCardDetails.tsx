@@ -6,7 +6,6 @@ import { useLinearIssueDetail } from '../../../../hooks/useLinearData';
 import { githubNumberForItem, linearIdentifierForItem } from '../boardItems';
 import type { WorkItem } from '../services/workItems';
 
-/** Which of the card's sources carries a description we can fetch, if any. */
 function descriptionSource(item: Pick<WorkItem, 'source' | 'metadata'>): 'issue' | 'pull' | 'linear' | undefined {
   if (githubNumberForItem(item) !== undefined) {
     if (item.source === 'github-issue') return 'issue';
@@ -16,11 +15,7 @@ function descriptionSource(item: Pick<WorkItem, 'source' | 'metadata'>): 'issue'
   return undefined;
 }
 
-/**
- * The source's own description for a card's detail view — fetched on demand,
- * rendered as the markdown it was authored in. Sources without a fetchable
- * body (manual, Slack) render nothing rather than a placeholder.
- */
+// Sources with no fetchable body (manual, Slack) render nothing rather than a placeholder.
 export function CardSourceDescription({
   item,
   projectRepositoryId,

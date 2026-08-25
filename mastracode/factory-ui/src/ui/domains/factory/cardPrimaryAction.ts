@@ -39,8 +39,7 @@ export function cardPrimaryAction({
       start: () => onStartRun(runSpec, runAction),
     };
   }
-  // Every run this card offers is already taken by a live session, so the card
-  // has nowhere new to start: opening the session it has is the action.
+  // Every run this card offers is already taken by a live session, so opening that session is the action.
   if (hasSession) return undefined;
   return {
     label: 'Start session',

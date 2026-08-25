@@ -67,9 +67,7 @@ if (!globalThis.ResizeObserver) {
   };
 }
 
-// jsdom has no IntersectionObserver; the board's column reveal observes a
-// sentinel with one. Nothing ever intersects here, so a column stays on its
-// first page — which is the state the reveal tests assert.
+// jsdom has no IntersectionObserver; nothing intersects, so columns stay on their first page.
 if (!globalThis.IntersectionObserver) {
   globalThis.IntersectionObserver = class IntersectionObserver {
     readonly root = null;

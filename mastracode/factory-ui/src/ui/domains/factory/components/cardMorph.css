@@ -1,14 +1,9 @@
-/* The card's detail panel opens over the card itself, so it grows out of that
- * top-left corner rather than fading in as a separate surface. Keyframes cannot
- * be written as utilities, so the motion lives here; unlayered, so it beats the
- * popover's stock zoom utilities. */
+/* Unlayered so it beats the popover's stock zoom utilities. */
 
 .board-card-details[data-slot='popover-content'] {
   --board-panel-w: min(28rem, calc(100vw - 1.5rem));
 
-  /* Replaced inline with the measured content height. The fallback is the card's
-   * own box — where the morph starts — because the content is positioned and so
-   * gives the box no intrinsic height to fall back on: `auto` is a 0px line. */
+  /* Replaced inline with the measured content height. The content is positioned, so `auto` here would be a 0px line. */
   --board-panel-h: var(--board-card-h, 7rem);
 
   width: var(--board-panel-w);
@@ -19,9 +14,7 @@
   transition: height 200ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-/* Both ends of the morph are lengths. An intrinsic `to` (fit-content) has no
- * interpolation, so the box snapped to full size on the first frame instead of
- * growing. */
+/* Both ends must be lengths: an intrinsic `to` has no interpolation and snaps to full size on the first frame. */
 @keyframes board-card-morph {
   from {
     width: var(--board-card-w, 20rem);
@@ -34,9 +27,7 @@
   }
 }
 
-/* Collapsing needs its own name, not the same keyframes reversed: an animation
- * only restarts when `animation-name` changes, so reusing the entry's name left
- * the finished animation in place and the panel vanished with no exit at all. */
+/* Its own name, not the entry's reversed: an animation only restarts when `animation-name` changes. */
 @keyframes board-card-unmorph {
   from {
     width: var(--board-panel-w);

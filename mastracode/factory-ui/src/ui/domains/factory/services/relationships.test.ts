@@ -174,8 +174,7 @@ describe('related work item index', () => {
     expect(relatedItemsFor(byChild)).toEqual([childPr]);
     expect(relatedItemsFor(parentPr)).toEqual([byParent]);
     expect(relatedItemsFor(unrelated)).toEqual([]);
-    // Linked through two buckets at once, one on each side: board order decides,
-    // not the order the buckets happen to be read in.
+    // Board order decides, not the order the buckets are read in.
     expect(relatedItemsFor(multiLinked)).toEqual([branchPr, childOfMultiLinked]);
   });
 });

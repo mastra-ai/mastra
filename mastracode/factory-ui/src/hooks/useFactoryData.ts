@@ -60,14 +60,9 @@ export function useProjectPullRequestsQuery(projectRepositoryId: string | undefi
   });
 }
 
-/**
- * A description barely moves, and each read spends the installation's mint
- * budget. Re-opening a card within the window paints from cache instead of
- * putting the panel back through its skeleton.
- */
+// A description barely moves and each read spends the installation mint budget.
 export const DETAIL_STALE_MS = 5 * 60_000;
 
-/** One issue's card detail (meta + markdown description), fetched when its card opens. */
 export function useGitHubIssueDetail(projectRepositoryId: string | undefined, number: number | undefined) {
   const { baseUrl } = useApiConfig();
   return useQuery({
@@ -80,7 +75,6 @@ export function useGitHubIssueDetail(projectRepositoryId: string | undefined, nu
   });
 }
 
-/** One pull request's card detail (meta + markdown description), fetched when its card opens. */
 export function useGitHubPullRequestDetail(projectRepositoryId: string | undefined, number: number | undefined) {
   const { baseUrl } = useApiConfig();
   return useQuery({

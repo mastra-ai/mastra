@@ -47,7 +47,6 @@ export function useLinearIssuesQuery(githubProjectId: string | undefined) {
   });
 }
 
-/** One issue's card detail (markdown description), fetched when its card opens. */
 export function useLinearIssueDetail(factoryProjectId: string | undefined, identifier: string | undefined) {
   const { baseUrl } = useApiConfig();
   return useQuery({

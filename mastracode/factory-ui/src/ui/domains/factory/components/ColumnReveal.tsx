@@ -1,18 +1,10 @@
 import type { ReactNode } from 'react';
 import { useCallback, useState } from 'react';
 
-/**
- * Cards revealed per step. Every card mounts a run spec, an activity read and a
- * status pass, all replayed on each list poll, and a column can hold hundreds —
- * a step is already more than a column shows at once.
- */
+// Every card mounts a run spec, an activity read and a status pass on each poll.
 const REVEAL_STEP = 30;
 
-/**
- * Renders a column's cards a step at a time, extending as its own scroller
- * nears the end. `pinned` keeps a deeplinked card rendered however deep it
- * sits, so the board can scroll to it.
- */
+// `pinned` keeps a deeplinked card rendered however deep it sits, so the board can scroll to it.
 export function ColumnReveal<T>({
   items,
   pinned,
@@ -26,12 +18,7 @@ export function ColumnReveal<T>({
   const pinnedIndex = pinned === undefined ? -1 : items.findIndex(pinned);
   const count = Math.max(revealed, pinnedIndex + 1);
 
-  // Keyed by the reveal count rather than by what is rendered, so every step
-  // remounts the sentinel and observes it again — a pinned card holds the
-  // rendered count still while the reveal advances underneath it. An observer
-  // only reports crossings: a sentinel that never leaves view — a lane whose
-  // cards all fit — would otherwise report once and stall with the rest of the
-  // column unrendered.
+  // Keyed by the reveal, not by what is rendered: observers report crossings, and a pinned card holds the render count still.
   const sentinelRef = useCallback((node: HTMLDivElement | null) => {
     if (node === null) return;
     const observer = new IntersectionObserver(

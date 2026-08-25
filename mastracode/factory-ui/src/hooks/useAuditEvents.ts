@@ -28,13 +28,8 @@ export function useAuditEvents(
   });
 }
 
-/**
- * How far back the board reads. The route pages at 200 and cannot filter by
- * actor — `actorIds` only resolves profiles — so walking to the end means
- * replaying the project's whole audit history on every mount and every time the
- * board's actor set shifts. A card older than the window keeps the creator its
- * own metadata carries; it loses only the "last worker" attribution.
- */
+// The route cannot filter by actor, so an unbounded read replays the project's whole history on every mount.
+// A card older than the window keeps the creator its own metadata carries.
 const MAX_ACTIVITY_PAGES = 3;
 
 export function useRecentAuditEvents(

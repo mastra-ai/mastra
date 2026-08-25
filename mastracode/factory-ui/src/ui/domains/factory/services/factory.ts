@@ -32,12 +32,10 @@ export interface GithubPullRequest {
   updatedAt: string;
 }
 
-/** One issue's full card-detail payload, fetched on demand (body included). */
 export interface GithubIssueDetail extends GithubIssue {
   description: string | null;
 }
 
-/** One pull request's full card-detail payload, fetched on demand (body included). */
 export interface GithubPullRequestDetail extends GithubPullRequest {
   description: string | null;
 }
@@ -103,7 +101,6 @@ export async function listRepositoryPullRequests(
   return getRepositoryResource<GithubPullRequestPage>(baseUrl, githubProjectId, 'prs', { page: String(page) });
 }
 
-/** One issue's detail (title, meta, markdown body) — fetched when a card opens. */
 export async function getRepositoryIssue(
   baseUrl: string,
   githubProjectId: string,
@@ -112,7 +109,6 @@ export async function getRepositoryIssue(
   return getRepositoryResource<GithubIssueDetail>(baseUrl, githubProjectId, `issues/${number}`);
 }
 
-/** One pull request's detail (title, meta, markdown body) — fetched when a card opens. */
 export async function getRepositoryPullRequest(
   baseUrl: string,
   githubProjectId: string,

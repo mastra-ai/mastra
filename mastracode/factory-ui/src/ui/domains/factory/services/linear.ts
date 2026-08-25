@@ -40,7 +40,6 @@ export interface LinearIssue {
   updatedAt: string;
 }
 
-/** One issue's card-detail payload, fetched when its card opens. */
 export interface LinearIssueDetail {
   identifier: string;
   title: string;
@@ -139,7 +138,6 @@ export async function listLinearIssues(
   return getLinearResource<LinearIssuePage>(baseUrl, `/web/linear/issues?${params.toString()}`);
 }
 
-/** One issue's detail (markdown description) — fetched when a card opens. */
 export async function getLinearIssue(
   baseUrl: string,
   factoryProjectId: string,

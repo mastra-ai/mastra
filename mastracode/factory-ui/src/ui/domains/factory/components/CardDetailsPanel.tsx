@@ -6,11 +6,7 @@ import type { ReactNode } from 'react';
 import type { CardMorph } from '../hooks/useCardMorph';
 import './cardMorph.css';
 
-/**
- * The surface a board card expands into: one popover pinned over the card's own
- * box, growing from it and folding back into it. Both card kinds open the same
- * panel, so the geometry and the motion are decided once, here.
- */
+// Both card kinds open this one panel, so the geometry and the motion are decided once.
 export function CardDetailsPanel({
   morph,
   labelledBy,
@@ -20,11 +16,7 @@ export function CardDetailsPanel({
   labelledBy: string;
   children: ReactNode;
 }) {
-  // The panel is as tall as what it holds: a card whose source has no
-  // description would otherwise open onto an empty half-screen box. The content
-  // lays out unconstrained and the box follows it, so a description arriving
-  // after the fetch grows the panel instead of being scrolled into a height
-  // decided before it existed.
+  // The content lays out unconstrained and the box follows, so a description arriving late grows the panel.
   const content = useMeasuredAutoHeight<HTMLDivElement>();
 
   if (!morph.mounted) return null;
@@ -36,17 +28,14 @@ export function CardDetailsPanel({
         anchor={morph.cardRef}
         side="bottom"
         align="start"
-        // Zero distance from the card's own top edge: the panel opens over the
-        // card it came from instead of beside it.
+        // Opens over the card it came from, not beside it.
         sideOffset={({ anchor }) => -anchor.height}
         collisionPadding={12}
         collisionAvoidance={{ side: 'shift', align: 'shift', fallbackAxisSide: 'none' }}
-        // The card sits in a column that clips at ~20rem; bounding the panel by
-        // its column would squeeze it. It answers to the page instead.
+        // Bounded by the page, not by the column that clips at ~20rem.
         collisionBoundary={document.body}
         style={content.height === null ? morph.style : { ...morph.style, '--board-panel-h': `${content.height}px` }}
-        // Focus the panel itself: a clipped box scrolls to reveal whatever is
-        // focused, and the first tabbable sits at the far corner.
+        // A clipped box scrolls to whatever is focused, and the first tabbable sits at the far corner.
         initialFocus={morph.panelRef}
         ref={morph.panelRef}
         className="board-card-details relative overflow-hidden p-0"
@@ -61,11 +50,7 @@ export function CardDetailsPanel({
   );
 }
 
-/**
- * The panel's one scrolling region — everything the card never carried. It
- * caps its own height rather than filling the panel, so the panel can be as
- * short as a card whose source has no description at all.
- */
+// Caps its own height rather than filling the panel, so a description-less card still opens short.
 export function CardDetailsBody({ children }: { children: ReactNode }) {
   return (
     <ScrollArea maxHeight="min(24rem, 60vh)" orientation="vertical" data-card-morph="reveal">

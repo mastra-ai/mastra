@@ -22,11 +22,7 @@ function headBranch(item: WorkItem): string | undefined {
   return typeof branch === 'string' ? branch : undefined;
 }
 
-/**
- * Resolves every card's relations in one pass over the board, so a board of N
- * cards costs one scan instead of N. Relations come back in board order, the
- * order a caller scanning the board itself would have seen.
- */
+// One scan for the whole board instead of one per card. Relations come back in board order.
 export function relatedWorkItemIndex(allItems: readonly WorkItem[]): (item: WorkItem) => WorkItem[] {
   interface Candidate {
     item: WorkItem;
@@ -34,9 +30,7 @@ export function relatedWorkItemIndex(allItems: readonly WorkItem[]): (item: Work
   }
   const byId = new Map<string, Candidate>();
   const childrenByParentId = new Map<string, Candidate[]>();
-  // A pull request that records no parent still belongs to the card whose
-  // session branch it was pushed from. Only such a pull request is open to a
-  // branch match, and only a non-pull-request card can answer one.
+  // A pull request with no recorded parent still belongs to the card whose session branch it was pushed from.
   const unlinkedPullRequestsByHeadBranch = new Map<string, Candidate[]>();
   const authorsBySessionBranch = new Map<string, Candidate[]>();
   const push = (index: Map<string, Candidate[]>, key: string, candidate: Candidate) => {

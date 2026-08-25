@@ -333,8 +333,7 @@ describe('Board card with a proposed run', () => {
     const user = userEvent.setup();
     renderWorkBoard();
 
-    // The menu stays reachable on a card with a live session, so a parked run
-    // can always be released without opening the details first.
+    // The menu stays reachable on a card with a live session, so a parked run never needs the details to be released.
     const card = await screen.findByRole('article', { name: 'Fix login bug' });
     await user.click(within(card).getByRole('button', { name: 'Actions for Fix login bug' }));
     await user.click(await screen.findByRole('menuitem', { name: 'Start suggested run' }));

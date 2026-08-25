@@ -32,7 +32,6 @@ export interface WorkItemMenuProps {
   onRemove: () => void;
 }
 
-/** Menu entries shared by the card's hover menu and the detail panel's footer menu. */
 export function WorkItemMenuItems({
   item,
   columnStage,

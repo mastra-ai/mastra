@@ -23,10 +23,7 @@ import {
 import { SourceIcon, actionIcon } from './BoardIcons';
 import { CandidateDetailsPanel } from './CandidateDetailsPanel';
 
-/**
- * A GitHub/Linear item with no work-item record yet. Acting on it is what
- * creates the record: clicking opens its details, running files it.
- */
+// Acting on it is what files the record.
 export function CandidateCard({
   candidate,
   projectRepositoryId,

@@ -1,9 +1,4 @@
-/**
- * A column renders one page of cards at a time: a board that has run for a
- * while holds hundreds of items per lane, and every card mounts a run spec, an
- * activity read and a status pass on each list poll. A card linked to by
- * `?item=` renders however deep it sits, so the board can scroll to it.
- */
+// A lane can hold hundreds of cards, and each one mounts a run spec, an activity read and a status pass on every poll.
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -49,7 +44,6 @@ const OLDEST_TITLE = 'Task 0';
 const PINNED_INDEX = REVEAL_STEP * 3 + 11;
 const PINNED_BOARD_COUNT = REVEAL_STEP * 5;
 
-/** Reports the sentinel as in view the moment it is observed. */
 function stubSentinelAlwaysInView() {
   const original = globalThis.IntersectionObserver;
   vi.stubGlobal(
@@ -133,9 +127,7 @@ describe('Board column reveal', () => {
     expect(screen.queryByLabelText(OLDEST_TITLE)).not.toBeInTheDocument();
   });
 
-  // An observer only reports crossings. A sentinel that never leaves view — a
-  // lane short enough to sit inside the root margin — reported once and the
-  // column stalled two pages in, with the rest of its cards never rendered.
+  // A sentinel that never leaves view reported once and the column stalled.
   it('keeps revealing while the sentinel stays in view', async () => {
     stubSentinelAlwaysInView();
     stubBoardEndpoints(buildWorkItems(REVEAL_STEP * 2 + 10));
@@ -145,9 +137,7 @@ describe('Board column reveal', () => {
     await waitFor(() => expect(screen.getAllByTestId('work-item-card')).toHaveLength(REVEAL_STEP * 2 + 10));
   });
 
-  // A pinned card renders everything above it, so the rendered count sits still
-  // for the first few steps while the reveal climbs under it. Keying the
-  // sentinel on what was rendered froze it there and the column stopped short.
+  // A pinned card holds the rendered count still while the reveal climbs under it.
   it('keeps revealing past a pinned card deeper than one step', async () => {
     stubSentinelAlwaysInView();
     const items = buildWorkItems(PINNED_BOARD_COUNT);
@@ -158,9 +148,7 @@ describe('Board column reveal', () => {
     await waitFor(() => expect(screen.getAllByTestId('work-item-card')).toHaveLength(PINNED_BOARD_COUNT));
   });
 
-  // Paging a column hides its oldest cards, so the board has to offer a way to
-  // reach one without scrolling for it. Filtering runs before the paging, so a
-  // match renders however deep it sat.
+  // Filtering runs before the paging, so a match renders however deep it sat.
   it('finds a card past the first page through the board search', async () => {
     stubBoardEndpoints();
     renderBoard();

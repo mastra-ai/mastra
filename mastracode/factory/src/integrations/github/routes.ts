@@ -217,7 +217,6 @@ function parseListPage(raw: string | undefined): number | null {
   return page >= 1 ? page : null;
 }
 
-/** Parse an issue or pull request number from the path. */
 function parseResourceNumber(raw: string | undefined): number | null {
   if (raw === undefined || !/^\d{1,10}$/.test(raw)) return null;
   const parsed = Number(raw);
@@ -784,7 +783,6 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
     }),
   );
 
-  // ── Fetch one issue's description (board card details) ───────────────────
   routes.push(
     registerApiRoute('/web/github/projects/:id/issues/:number', {
       method: 'GET',
@@ -876,7 +874,6 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
     }),
   );
 
-  // ── Fetch one pull request's description (board card details) ────────────
   routes.push(
     registerApiRoute('/web/github/projects/:id/prs/:number', {
       method: 'GET',

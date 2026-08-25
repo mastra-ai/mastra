@@ -399,7 +399,6 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
     }),
   );
 
-  // ── Fetch one issue's description (board card details) ───────────────────
   routes.push(
     registerApiRoute('/web/linear/issues/:identifier', {
       method: 'GET',
@@ -437,14 +436,12 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
           factoryProjectId,
           selectedIds: selection.sourceIds ?? [],
         });
-        // Nothing bound to this board is anything to read from.
         if (projectIds.length === 0) return c.json({ error: 'issue_not_found' }, 404);
 
         try {
           const accessToken = await linear.getFreshAccessToken(connection);
           const issue = await linear.fetchIssueDetail(accessToken, identifier);
-          // An issue outside the Factory project's own sources is not this
-          // board's to read, and reads exactly like one that doesn't exist.
+          // Reads exactly like an issue that doesn't exist.
           if (!issue || issue.projectId === null || !projectIds.includes(issue.projectId)) {
             return c.json({ error: 'issue_not_found' }, 404);
           }

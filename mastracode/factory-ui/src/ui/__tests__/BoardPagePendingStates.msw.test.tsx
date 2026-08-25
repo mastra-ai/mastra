@@ -571,8 +571,7 @@ describe('Board card pending states', () => {
         });
       }),
     );
-    // pointerEventsCheck is off so clicks still reach disabled controls: the
-    // disabled attribute alone wouldn't stop a programmatic re-dispatch.
+    // pointerEventsCheck off so clicks reach disabled controls: the attribute alone wouldn't stop a re-dispatch.
     const user = userEvent.setup({ pointerEventsCheck: 0 });
     const { client } = renderWorkBoard();
 
@@ -582,8 +581,7 @@ describe('Board card pending states', () => {
 
     await screen.findByText('Preparing session…');
 
-    // Reopening while the first start is still in flight must present the run
-    // as already happening, not offer a second one.
+    // Reopening mid-flight must present the run as already happening, not offer a second one.
     await user.click(await screen.findByRole('button', { name: 'Details for Fix login bug' }));
     dialog = await screen.findByRole('dialog', { name: 'Fix login bug' });
     expect(within(dialog).getByRole('button', { name: 'Starting…' })).toBeDisabled();
@@ -592,9 +590,7 @@ describe('Board card pending states', () => {
     await waitFor(() => expect(screen.queryByText('Preparing session…')).not.toBeInTheDocument());
     await waitFor(() => expect(runStarts).toHaveLength(1));
 
-    // Both activations unblock on the same gate release, so a duplicate start
-    // would already be in flight here. Draining to a settled cache is
-    // deterministic, unlike a fixed sleep that a slower duplicate can outrun.
+    // Both activations unblock on the same gate release, so a duplicate start would already be in flight here.
     await waitForMutationsIdle(client);
     expect(runStarts).toHaveLength(1);
   });
