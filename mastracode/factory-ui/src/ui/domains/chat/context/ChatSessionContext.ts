@@ -1,7 +1,5 @@
 import { createContext } from 'react';
 
-import type { PrepareProgress } from '../../workspaces/services/github';
-
 export interface FactorySessionState {
   factoryProjectId: string;
   projectRepositoryId?: string;
@@ -17,13 +15,13 @@ export interface ChatSessionContextApi {
   sessionEnabled: boolean;
   /**
    * Server-side session metadata is resolved and the agent-controller
-   * resourceId is safe to address for reads/streaming. Does NOT wait on
-   * sandbox provisioning (`/ensure`).
+   * resourceId is safe to address for reads/streaming. Never waits on a
+   * sandbox existing.
    */
   resourceReady: boolean;
   /**
-   * Session metadata resolved and runs can be sent. Does NOT wait on the
-   * `/ensure` warm-up — the server materializes sandboxes lazily on first use.
+   * Session metadata resolved and runs can be sent. The server materializes
+   * sandboxes lazily on first use, so this never waits on one.
    * Gate any write/run consumer on this flag.
    */
   sandboxReady: boolean;
@@ -32,31 +30,13 @@ export interface ChatSessionContextApi {
    * show a preparing affordance while true.
    */
   sandboxPreparing: boolean;
-  /**
-   * Latest SSE progress event from the background `/ensure` warm-up, or
-   * `undefined` before the first event arrives or when no warm-up is in
-   * progress. Informational only — never blocks the chat UI.
-   */
-  sandboxProgress: PrepareProgress | undefined;
-  /**
-   * The background `/ensure` warm-up is still in flight. Lets the prepare
-   * stepper keep "Preparing sandbox" active before the first progress event
-   * arrives instead of skipping ahead to message loading.
-   */
-  sandboxWarming?: boolean;
   resourceEnabled: boolean;
   /**
    * Failure resolving the session itself (denied/missing/errored session
    * query). Fatal — the chat surface replaces its content with an error state.
    */
   sessionError?: Error;
-  /**
-   * Failure from the background workspace warm-up (`/ensure`). Non-fatal —
-   * the run path materializes lazily — so surfaces show it as a banner with a
-   * retry affordance rather than disabling the session.
-   */
-  warmupError?: Error;
-  /** Re-runs the failed session query and/or workspace warm-up. */
+  /** Re-runs the failed session query. */
   retrySession?: () => void;
   projectPath?: string;
   /**

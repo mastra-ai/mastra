@@ -20,9 +20,8 @@ import { registerApiRoute } from '@mastra/core/server';
 import { UniqueViolationError } from '@mastra/core/storage';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { Context } from 'hono';
-import { streamSSE } from 'hono/streaming';
 import type { RouteAuth } from '../../routes/route.js';
-import type { MaterializationSandbox, PrepareProgress, ProgressFn } from '../../sandbox/materialization.js';
+import type { MaterializationSandbox } from '../../sandbox/materialization.js';
 import type { MastraFactorySandboxConfig } from '../../sandbox/session-sandbox.js';
 import { peekSessionSandbox } from '../../sandbox/session-sandbox.js';
 import { sanitizeSegment } from '../../sandbox/workdir.js';
@@ -678,59 +677,6 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
     }),
   );
 
-  // ── Materialize a project into the caller's per-user sandbox ─────────────
-  routes.push(
-    registerApiRoute('/web/github/projects/:id/ensure', {
-      method: 'POST',
-      requiresAuth: false,
-      handler: async c => {
-        const resolved = await resolveOrgTenant(loose(c), auth);
-        if ('response' in resolved) return resolved.response;
-        const { orgId, userId } = resolved.tenant;
-
-        if (!sandbox) {
-          return c.json({ error: 'sandbox_not_configured', message: 'No sandbox provider is configured.' }, 503);
-        }
-
-        const projectRepositoryId = c.req.param('id');
-        if (!projectRepositoryId) return c.json({ error: 'Project repository not found' }, 404);
-        const project = await resolveProjectRepository({ github, orgId, projectRepositoryId });
-        if (!project) {
-          return c.json({ error: 'Project repository not found' }, 404);
-        }
-
-        // Stream live server-side progress when the client asks for it (EventSource
-        // / fetch with `Accept: text/event-stream`); otherwise fall back to a single
-        // JSON response so non-streaming callers and tests keep working unchanged.
-        const wantsStream = (c.req.header('accept') ?? '').includes('text/event-stream');
-        if (wantsStream) {
-          return streamSSE(loose(c), async stream => {
-            try {
-              const result = await prepareProject({
-                github,
-                sandbox,
-                project,
-                userId,
-                onProgress: ev => void stream.writeSSE({ event: 'progress', data: JSON.stringify(ev) }),
-              });
-              await stream.writeSSE({ event: 'done', data: JSON.stringify(result) });
-            } catch (err) {
-              await stream.writeSSE({ event: 'error', data: JSON.stringify(ensureErrorPayload(err).body) });
-            }
-          });
-        }
-
-        try {
-          const result = await prepareProject({ github, sandbox, project, userId });
-          return c.json(result);
-        } catch (err) {
-          const { status, body } = ensureErrorPayload(err);
-          return c.json(body, status);
-        }
-      },
-    }),
-  );
-
   // ── List a project's open GitHub issues ──────────────────────────────────
   routes.push(
     registerApiRoute('/web/github/projects/:id/issues', {
@@ -1088,60 +1034,6 @@ async function loadOrgProject(options: {
 function identityFromUser(user: unknown): GitIdentity {
   const u = user as { name?: string; email?: string } | null | undefined;
   return { name: u?.name ?? null, email: u?.email ?? null };
-}
-
-interface EnsureResult {
-  resourceId: string;
-  factoryProjectId: string;
-  projectRepositoryId: string;
-  sandboxId: string | null;
-  sandboxWorkdir: string;
-}
-
-/**
- * Provision/reattach the caller's sandbox and materialize the repo into it,
- * emitting coarse progress events as each server step happens. Shared by both
- * the JSON and SSE variants of the `/ensure` route. Throws on failure so the
- * caller can shape the response (HTTP status vs SSE `error` event).
- */
-async function prepareProject(options: {
-  github: GithubIntegration;
-  sandbox?: MastraFactorySandboxConfig;
-  project: ResolvedProjectRepository;
-  userId: string;
-  onProgress?: ProgressFn;
-}): Promise<EnsureResult> {
-  const { project, onProgress } = options;
-  // /ensure is a metadata handshake, not a provisioner: opening a thread in
-  // the UI must never start a VM. Session sandboxes boot lazily at the first
-  // real command; file/git surfaces only ever observe them passively — when
-  // nothing is running, the panel shows nothing.
-  const result: EnsureResult = {
-    resourceId: project.factoryProjectId,
-    factoryProjectId: project.factoryProjectId,
-    projectRepositoryId: project.id,
-    // Observability-only fields kept for client compat; nothing was
-    // provisioned, so they are honestly blank.
-    sandboxId: '',
-    sandboxWorkdir: '',
-  };
-  const done: PrepareProgress = { phase: 'done', message: 'Workspace ready.' };
-  onProgress?.(done);
-  return result;
-}
-
-/** Shape an /ensure failure into an HTTP status + JSON body (also used as the SSE error payload). */
-function ensureErrorPayload(err: unknown): {
-  status: 429 | 502 | 500;
-  body: { error: string; message: string };
-} {
-  if (err instanceof MaterializeError) {
-    return { status: 502, body: { error: err.code, message: err.message } };
-  }
-  return {
-    status: 500,
-    body: { error: 'materialize_failed', message: err instanceof Error ? err.message : String(err) },
-  };
 }
 
 /** Map a sandbox/setup-command error to an actionable HTTP response. */

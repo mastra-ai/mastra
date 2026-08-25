@@ -41,9 +41,6 @@ function stubSessionDetails(updatedAt: string, { includeSessionTitles = true, sl
     http.get(`${TEST_BASE_URL}/web/user-sessions/${workSessionId}`, () =>
       HttpResponse.json(fixtures.currentSessionResponse),
     ),
-    http.post(`${TEST_BASE_URL}/web/github/projects/${projectRepositoryId}/ensure`, () =>
-      HttpResponse.json(fixtures.ensureResponse),
-    ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/work-items`, () =>
       HttpResponse.json(fixtures.workItemsResponse),
     ),

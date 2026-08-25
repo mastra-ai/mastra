@@ -422,8 +422,7 @@ describe('same repo connected by two orgs stays isolated', () => {
     expect(projectRepositoryA.id).not.toBe(projectRepositoryB.id);
     expect(tables.projectRepositories).toHaveLength(2);
 
-    // Org A cannot ensure / worktree / push against Org B's project-repository id.
-    expect((await postJson(appA, `/web/github/projects/${projectRepositoryB.id}/ensure`, {})).status).toBe(404);
+    // Org A cannot create sessions in / push against Org B's project-repository id.
     expect(
       (await postJson(appA, `/web/github/projects/${projectRepositoryB.id}/sessions`, { branch: 'feat/x' })).status,
     ).toBe(404);
@@ -444,10 +443,8 @@ describe('two users in one org each get their own sandbox + session workspace', 
     const user1 = buildApp({ workosId: 'a1', organizationId: 'orgA' });
     const user2 = buildApp({ workosId: 'a2', organizationId: 'orgA' });
 
-    // Both users open (ensure) the same org-owned project. No sandbox state
-    // is created — sessions are the only sandbox-bearing unit.
-    expect((await postJson(user1, '/web/github/projects/p1/ensure', {})).status).toBe(200);
-    expect((await postJson(user2, '/web/github/projects/p1/ensure', {})).status).toBe(200);
+    // Both users share the same org-owned project. No sandbox state exists
+    // before a session is created — sessions are the only sandbox-bearing unit.
     expect(tables.sandboxes).toHaveLength(0);
 
     // User 1 creates a session identity; materialization happens in the workspace factory.

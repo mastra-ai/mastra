@@ -39,28 +39,3 @@ export interface MaterializationSandbox {
   /** Tear down the underlying VM. Optional: providers without it are no-ops. */
   stop?(): Promise<void>;
 }
-
-/**
- * A coarse-grained step of the sandbox-preparation flow, reported as it happens
- * so the UI can show the user what the server is doing instead of a static
- * "Preparing…" toast. `phase` is a stable machine token; `message` is
- * user-facing copy.
- */
-export interface PrepareProgress {
-  /** `'reattaching'` is retained wire vocabulary for UI phase maps; the server no longer emits it. */
-  phase: 'reattaching' | 'provisioning' | 'preparing-workspace' | 'cloning' | 'pulling' | 'finalizing' | 'done';
-  message: string;
-}
-
-/** Callback invoked with each preparation step. Best-effort; never throws. */
-export type ProgressFn = (event: PrepareProgress) => void;
-
-/** Invoke a progress callback without letting it break the actual work. */
-export function reportProgress(onProgress: ProgressFn | undefined, event: PrepareProgress): void {
-  if (!onProgress) return;
-  try {
-    onProgress(event);
-  } catch {
-    // Progress reporting must never break the actual work.
-  }
-}

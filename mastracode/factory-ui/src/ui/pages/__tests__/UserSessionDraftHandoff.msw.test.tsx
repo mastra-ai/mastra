@@ -114,9 +114,6 @@ function stubDraftRoute({ factoryProjectGate, failModeSwitch = false }: DraftRou
     http.get(`${TEST_BASE_URL}/web/user-sessions/${DRAFT_SESSION_ID}`, () =>
       HttpResponse.json({ session: createdSession }),
     ),
-    http.post(`${TEST_BASE_URL}/web/github/projects/${REPOSITORY_ID}/ensure`, () =>
-      HttpResponse.json({ resourceId: DRAFT_SESSION_ID, sandboxId: null, sandboxWorkdir: '/workspace/acme' }),
-    ),
     http.post(`${AGENT_CONTROLLER_API}/sessions`, async () => {
       await workspaceReady;
       threadCreated = true;

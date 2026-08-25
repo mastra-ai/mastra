@@ -24,10 +24,10 @@ export function ChatConnectionProvider({
     factorySessionState,
     baseUrl,
     // Open the SSE stream + init the session as soon as the resource is
-    // addressable, so transcript history and live events start streaming in
-    // parallel with `/ensure`. This includes `POST /sessions` (session
-    // create) and `PUT /state` (state seed) — writes fired before the sandbox
-    // is fully provisioned. MSW proves the UI stays quiet on this path; the
+    // addressable, so transcript history and live events start streaming
+    // without waiting on a sandbox. This includes `POST /sessions` (session
+    // create) and `PUT /state` (state seed) — writes fired before any sandbox
+    // exists. MSW proves the UI stays quiet on this path; the
     // real server acceptance was NOT validated by a runtime spot-check in
     // Phase 1 (see `.mastracode/plans/factory-session-eager-render.progress.md`).
     // If the runtime spot-check surfaces a red server-error notice from

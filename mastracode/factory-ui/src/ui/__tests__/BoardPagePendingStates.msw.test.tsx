@@ -190,7 +190,6 @@ function stubBoardEndpoints() {
         ],
       }),
     ),
-    http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/ensure`, () => HttpResponse.json({ ok: true })),
   );
 
   return { transitionGate, transitionRequests };

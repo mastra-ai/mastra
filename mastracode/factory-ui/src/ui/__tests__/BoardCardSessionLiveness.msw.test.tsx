@@ -124,7 +124,6 @@ function stubFactoryWithBoundSession() {
       if (sessionListRequests > 1) await refetchGate.promise;
       return HttpResponse.json({ sessions });
     }),
-    http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/ensure`, () => HttpResponse.json({ ok: true })),
     http.delete(`${TEST_BASE_URL}/web/user-sessions/:sessionId`, ({ params }) => {
       deleted.push(String(params.sessionId));
       sessions = sessions.filter(session => session.sessionId !== params.sessionId);

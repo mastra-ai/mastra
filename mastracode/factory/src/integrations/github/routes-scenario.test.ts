@@ -418,7 +418,7 @@ afterEach(() => {
 
 // ── S1: full write-back journey ──────────────────────────────────────────
 describe('S1: full write-back journey through the real route handlers', () => {
-  it('drives create → ensure → worktree → commit → push → pr for one user', async () => {
+  it('drives create → worktree → commit → push → pr for one user', async () => {
     const repositoryAccess = githubStub.versionControl.getRepositoryAccess;
     const projectId = 'project-1';
     tables.projectRepositories.push(
@@ -435,8 +435,8 @@ describe('S1: full write-back journey through the real route handlers', () => {
     );
     const app = buildApp({ workosId: 'u1', organizationId: 'org1' });
 
-    // Seed the per-(project-repository,user) sandbox binding the way `ensure`
-    // would persist it (provisioning itself is mocked).
+    // Seed the per-(project-repository,user) sandbox binding (provisioning
+    // itself is mocked).
     tables.sandboxes.push({
       id: 'sbrow-1',
       projectRepositoryId: projectId,
@@ -446,10 +446,8 @@ describe('S1: full write-back journey through the real route handlers', () => {
       materializedAt: null,
     });
 
-    // 2. Ensure → metadata handshake only; thread-open never provisions a
-    // VM (session sandboxes boot lazily at the first real command).
-    const ensureRes = await postJson(app, `/web/github/projects/${projectId}/ensure`, {});
-    expect(ensureRes.status).toBe(200);
+    // 2. Opening the project provisions nothing: session sandboxes boot
+    // lazily at the first real command.
     expect(ensureProjectSandbox).not.toHaveBeenCalled();
     expect(materializeRepo).not.toHaveBeenCalled();
 

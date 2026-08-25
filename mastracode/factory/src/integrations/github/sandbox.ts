@@ -13,8 +13,7 @@
  * and `gh pr create`. Workdir layout lives in `../sandbox/workdir`.
  */
 
-import { reportProgress } from '../../sandbox/materialization.js';
-import type { MaterializationSandbox, ProgressFn, SandboxCommandResult } from '../../sandbox/materialization.js';
+import type { MaterializationSandbox, SandboxCommandResult } from '../../sandbox/materialization.js';
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
 import { timedPhase } from '../../timing.js';
 
@@ -223,7 +222,6 @@ export interface MaterializeRepoOptions {
   /** A freshly minted, short-lived installation access token. */
   token: string;
   storage: MaterializationStore;
-  onProgress?: ProgressFn;
   /**
    * Skip the default-branch `git pull --ff-only` when the workdir already
    * holds a checkout. Set when the checkout was just seeded from a fresh base
@@ -244,7 +242,7 @@ export async function materializeRepo(options: MaterializeRepoOptions): Promise<
 }
 
 async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<void> {
-  const { row: sandboxRow, repoInfo, sandbox, token, storage, onProgress } = options;
+  const { row: sandboxRow, repoInfo, sandbox, token, storage } = options;
   const workdir = sandboxRow.sandboxWorkdir;
   const repo = repoInfo.repoFullName;
 
@@ -288,10 +286,6 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
       // 2a. First open: shallow-clone the default branch into the workdir. A
       // shallow single-branch clone is dramatically faster for large repos; the
       // later re-open uses `git pull --ff-only`, which works on shallow clones.
-      reportProgress(onProgress, {
-        phase: 'cloning',
-        message: `Cloning ${repo} (first open can take a minute)…`,
-      });
       // The workdir holds no usable checkout of this repo, but it may not be
       // empty: a checkpoint seed or a clone that died partway (a crashed or
       // OOM-killed server) leaves a partial tree behind, and `git clone`
@@ -309,11 +303,7 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
         `git clone --depth=1 --single-branch --branch ${shellQuote(repoInfo.defaultBranch)} ${shellQuote(authUrl)} ${shellQuote(workdir)}`,
         {
           phase: 'repository clone',
-          beforeRetry: async attempt => {
-            reportProgress(onProgress, {
-              phase: 'cloning',
-              message: `Lost the connection to github.com — retrying the clone (attempt ${attempt + 1})…`,
-            });
+          beforeRetry: async () => {
             // A clone that died partway leaves the destination non-empty, which
             // git refuses to clone into. Clear its contents so the retry starts
             // clean without removing LocalSandbox's process cwd.
@@ -334,7 +324,6 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
       tokenInRemote = true;
     } else {
       // 2b. Re-open: refresh remote to the token URL and fast-forward pull.
-      reportProgress(onProgress, { phase: 'pulling', message: `Updating ${repo} to the latest changes…` });
       const setUrl = await sh(sandbox, `git -C ${shellQuote(workdir)} remote set-url origin ${shellQuote(authUrl)}`);
       if (setUrl.exitCode !== 0) {
         throw new MaterializeError(`Failed to set git remote: ${setUrl.stderr}`, 'pull-failed');
@@ -342,11 +331,6 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
       tokenInRemote = true;
       const pull = await gitTransfer(sandbox, `git -C ${shellQuote(workdir)} pull --ff-only`, {
         phase: 'repository pull',
-        beforeRetry: async attempt =>
-          reportProgress(onProgress, {
-            phase: 'pulling',
-            message: `Lost the connection to github.com — retrying the update (attempt ${attempt + 1})…`,
-          }),
       });
       if (pull.exitCode !== 0) {
         if (!isBenignNonFastForward(pull)) {
@@ -358,12 +342,6 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
         // That checkout still holds usable work — never rebase or reset it
         // here. Leave it as-is and let the session reconcile with the remote
         // itself.
-        reportProgress(onProgress, {
-          phase: 'pulling',
-          message: isDeletedUpstreamRef(pull)
-            ? 'Workspace could not be updated from its remote — keeping the existing checkout as-is.'
-            : 'Workspace has local changes that diverge from the remote — keeping them as-is.',
-        });
       }
     }
   } catch (primary) {
@@ -379,7 +357,6 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
   await scrubRemote(sandbox, workdir, repo, tokenInRemote);
 
   // 4. Mark materialized.
-  reportProgress(onProgress, { phase: 'finalizing', message: 'Finalizing workspace…' });
   await storage.markMaterialized({ id: sandboxRow.id });
 }
 
