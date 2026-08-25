@@ -1,0 +1,203 @@
+name: 2027dev Evals
+
+on:
+  deployment_status:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.deployment.ref || github.event.deployment.sha }}
+  cancel-in-progress: true
+
+jobs:
+  resolve-pr:
+    name: Resolve eligible pull request
+    if: >-
+      github.event.deployment_status.state == 'success' &&
+      github.event.deployment.environment == 'Preview – mastra-docs-1.x' &&
+      github.event.deployment.creator.login == 'vercel[bot]'
+    runs-on: starsling-ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      eligible: ${{ steps.resolve.outputs.eligible }}
+      pr-number: ${{ steps.resolve.outputs.pr-number }}
+      target-url: ${{ steps.resolve.outputs.target-url }}
+    steps:
+      - name: Reject fork and ineligible deployments
+        id: resolve
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        with:
+          script: |
+            const skip = reason => {
+              core.info(reason);
+              core.setOutput('eligible', 'false');
+            };
+
+            const deployment = context.payload.deployment;
+            const deploymentStatus = context.payload.deployment_status;
+            let targetUrl;
+
+            try {
+              targetUrl = new URL(deploymentStatus.target_url);
+            } catch {
+              skip('Skipping: deployment target URL is invalid.');
+              return;
+            }
+
+            if (targetUrl.protocol !== 'https:' || !targetUrl.hostname.endsWith('.vercel.app')) {
+              skip('Skipping: deployment target is not an HTTPS Vercel preview URL.');
+              return;
+            }
+
+            const associatedPulls = await github.paginate(
+              github.rest.repos.listPullRequestsAssociatedWithCommit,
+              {
+                ...context.repo,
+                commit_sha: deployment.sha,
+                per_page: 100,
+              },
+            );
+
+            const openPulls = associatedPulls.filter(pull => pull.state === 'open');
+            if (openPulls.length !== 1) {
+              skip(`Skipping: expected one associated open PR, found ${openPulls.length}.`);
+              return;
+            }
+
+            const candidate = openPulls[0];
+            if (
+              candidate.head.repo?.full_name !== `${context.repo.owner}/${context.repo.repo}` ||
+              candidate.head.sha !== deployment.sha
+            ) {
+              skip('Skipping: associated PR is a fork or no longer points at the deployment SHA.');
+              return;
+            }
+
+            core.setOutput('eligible', 'true');
+            core.setOutput('pr-number', candidate.number.toString());
+            core.setOutput('target-url', targetUrl.toString());
+
+  detect:
+    name: Detect matching docs evals
+    needs: resolve-pr
+    if: needs.resolve-pr.outputs.eligible == 'true'
+    runs-on: starsling-ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      has-evals: ${{ steps.detect.outputs.has-evals }}
+      matrix: ${{ steps.detect.outputs.matrix }}
+    steps:
+      - name: Checkout trusted configuration
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Select evals for changed docs
+        id: detect
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        env:
+          PR_NUMBER: ${{ needs.resolve-pr.outputs.pr-number }}
+          TARGET_URL: ${{ needs.resolve-pr.outputs.target-url }}
+        with:
+          script: |
+            const fs = require('node:fs');
+
+            const config = JSON.parse(fs.readFileSync('.github/workflows/data/2027dev-evals.json', 'utf8'));
+            if (!config || !Array.isArray(config.evals)) {
+              throw new Error('2027 eval configuration must contain an evals array.');
+            }
+
+            const promptIds = new Set();
+            for (const entry of config.evals) {
+              const allowedKeys = new Set(['promptId', 'paths']);
+              const unknownKeys = Object.keys(entry ?? {}).filter(key => !allowedKeys.has(key));
+              if (
+                !entry ||
+                typeof entry.promptId !== 'string' ||
+                !Array.isArray(entry.paths) ||
+                entry.paths.length === 0 ||
+                unknownKeys.length > 0
+              ) {
+                throw new Error('Each 2027 eval entry must contain only promptId and paths.');
+              }
+
+              if (promptIds.has(entry.promptId)) {
+                throw new Error(`Duplicate 2027 prompt ID: ${entry.promptId}`);
+              }
+              promptIds.add(entry.promptId);
+
+              if (
+                entry.paths.some(
+                  path =>
+                    typeof path !== 'string' ||
+                    !path.startsWith('docs/') ||
+                    path.includes('..') ||
+                    path.length === 0,
+                )
+              ) {
+                throw new Error(`Invalid docs path configured for prompt ${entry.promptId}.`);
+              }
+            }
+
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              ...context.repo,
+              pull_number: Number(process.env.PR_NUMBER),
+              per_page: 100,
+            });
+
+            const changedPaths = new Set();
+            for (const file of files) {
+              changedPaths.add(file.filename);
+              if (file.previous_filename) changedPaths.add(file.previous_filename);
+            }
+
+            const include = config.evals
+              .filter(entry =>
+                entry.paths.some(configuredPath =>
+                  [...changedPaths].some(changedPath =>
+                    configuredPath.endsWith('/')
+                      ? changedPath.startsWith(configuredPath)
+                      : changedPath === configuredPath,
+                  ),
+                ),
+              )
+              .map(entry => ({
+                promptId: entry.promptId,
+                urlMap: JSON.stringify({ 'mastra.ai': process.env.TARGET_URL }),
+              }));
+
+            core.setOutput('has-evals', include.length > 0 ? 'true' : 'false');
+            core.setOutput('matrix', JSON.stringify({ include }));
+
+  eval:
+    name: 2027 eval (${{ matrix.promptId }})
+    needs: detect
+    if: needs.detect.outputs.has-evals == 'true'
+    runs-on: starsling-ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: write
+      statuses: write
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.detect.outputs.matrix) }}
+    steps:
+      - name: Checkout trusted repository
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Run 2027 eval
+        uses: team2027/evals-action@07eec4116b12c164e1fdef5fa9cb37cc024ad7f1
+        with:
+          api-key: ${{ secrets.EVALS_API_KEY }}
+          prompt-id: ${{ matrix.promptId }}
+          url-map: ${{ matrix.urlMap }}
