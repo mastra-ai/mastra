@@ -256,20 +256,17 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
     // Shadow start() with the lifecycle wrapper (same pattern as
     // SandboxProcessManager) so DIRECT start() calls get the same coalescing,
     // status handling, and onStart hook as `_start()`/`ensureRunning()`.
-    // Subclasses must use METHOD syntax for `start` and for the acquisition
-    // primitives below: class-FIELD initializers run after this constructor,
-    // overwriting this wrapper and hiding the primitives from rung selection.
     const hasStartOverride = this.start !== MastraSandbox.prototype.start;
     this._implStart = this.start.bind(this);
     this.start = () => this._start();
     // Rung selection: a subclass `start()` override wins; otherwise the
-    // primitives drive acquisition when `create()` is implemented. A provider
-    // that lands on neither reaches the base `start()`, which throws.
+    // primitives drive acquisition when `create()` is implemented. Anything
+    // declared as a class field is invisible here and lands on the base
+    // `start()`, which throws.
     this._useAcquisitionPrimitives = !hasStartOverride && typeof this.create === 'function';
     // A handle nobody adopts would still report `outcome: 'connected'`, so the
-    // sandbox would look reconnected while running against nothing. Fail here
-    // instead, where the cause is visible.
-    if (this._useAcquisitionPrimitives && this.find && !this.connect) {
+    // sandbox would look reconnected while running against nothing.
+    if (this._useAcquisitionPrimitives && typeof this.find === 'function' && typeof this.connect !== 'function') {
       throw new Error(`${this.constructor.name}: find() requires connect() to adopt the handle it returns.`);
     }
 
@@ -553,9 +550,8 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
    * Calls `_start()` if status is not 'running'. Useful for lazy initialization
    * where operations should automatically start the sandbox if needed.
    *
-   * With the id-keyed getOrCreate contract (see {@link start}), this is the
-   * "resolve my id to a runnable VM" entry point: reconnect/resume when the
-   * provider finds an existing VM for this sandbox's id, create otherwise.
+   * This is the lazy entry point into the id-keyed getOrCreate contract
+   * described on {@link start}.
    *
    * @throws {SandboxNotReadyError} if the sandbox fails to reach 'running' status
    *
