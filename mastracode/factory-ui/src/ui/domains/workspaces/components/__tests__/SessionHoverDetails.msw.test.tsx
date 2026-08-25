@@ -100,6 +100,11 @@ describe('Workspace session hover details', () => {
       const card = await screen.findByLabelText(`${workName} session details`);
       expect(within(card).getByText(workName)).toBeInTheDocument();
       expect(within(card).getByText('Work session · Agent working')).toBeInTheDocument();
+      expect(within(card).getByText('Ada Lovelace')).toBeInTheDocument();
+      expect(within(card).getByRole('img', { name: 'Ada Lovelace' })).toHaveAttribute(
+        'src',
+        'https://example.com/ada.png',
+      );
       expect(within(card).getByText('Work item: Issue #42')).toBeInTheDocument();
       expect(within(card).getByText('Authentication fails after token refresh')).toBeInTheDocument();
       expect(within(card).getByText('factory/issue-42-authentication-regression')).toBeInTheDocument();
@@ -114,6 +119,7 @@ describe('Workspace session hover details', () => {
       await user.hover(workRow);
 
       const card = await screen.findByLabelText(`${workName} session details`);
+      expect(within(card).getByText('Owner')).toBeInTheDocument();
       expect(within(card).getByText('Work item')).toBeInTheDocument();
       expect(within(card).getByText('Branch')).toBeInTheDocument();
       expect(within(card).getByText('Base branch')).toBeInTheDocument();
@@ -142,6 +148,7 @@ describe('Workspace session hover details', () => {
       const card = await screen.findByLabelText(`${reviewName} session details`);
       expect(within(card).getByText(reviewName)).toBeInTheDocument();
       expect(within(card).getByText('Review session')).toBeInTheDocument();
+      expect(within(card).getByText('Ada Lovelace')).toBeInTheDocument();
       expect(within(card).getByText('Review: PR #99')).toBeInTheDocument();
       expect(within(card).getByText('Fix authentication refresh handling')).toBeInTheDocument();
       expect(within(card).getByText('factory/pr-99-authentication-refresh')).toBeInTheDocument();

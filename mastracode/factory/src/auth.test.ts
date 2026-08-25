@@ -478,14 +478,25 @@ describe('mountFactoryAuth /auth routes (enabled)', () => {
   });
 
   it('/auth/me reports the user when authenticated', async () => {
-    mockAuthenticate.mockResolvedValue({ workosId: 'user_me', email: 'user@example.com', name: 'User' });
+    mockAuthenticate.mockResolvedValue({
+      workosId: 'user_me',
+      email: 'user@example.com',
+      name: 'User',
+      avatarUrl: 'https://avatars.example/user.png',
+    });
     const { app } = buildApp();
     const res = await app.request('/auth/me');
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
       authenticated: true,
       // No-org accounts are bootstrapped into a personal org during /auth/me.
-      user: { userId: 'user_me', email: 'user@example.com', name: 'User', organizationId: 'org_new' },
+      user: {
+        userId: 'user_me',
+        email: 'user@example.com',
+        name: 'User',
+        avatarUrl: 'https://avatars.example/user.png',
+        organizationId: 'org_new',
+      },
       provider: 'workos',
     });
     expect(mockEnsureOrganization).toHaveBeenCalledWith('user_me');

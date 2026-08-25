@@ -15,7 +15,7 @@ import { randomUUID } from 'node:crypto';
 import type { MountedMastraCode } from '@mastra/code-sdk';
 import { resolveModel } from '@mastra/code-sdk/agents/model';
 import { RequestContext } from '@mastra/core/request-context';
-import type { ApiRoute } from '@mastra/core/server';
+import type { ApiRoute, IUserProvider } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import { UniqueViolationError } from '@mastra/core/storage';
 import type { FactoryStorage } from '@mastra/core/storage';
@@ -100,6 +100,8 @@ function loose(c: unknown): RouteContext {
 export interface MountGithubRoutesOptions {
   /** Host auth seam — resolves the signed-in user/tenant for each request. */
   auth: RouteAuth;
+  /** Optional user directory used to resolve session-owner display profiles. */
+  users?: SessionOwnerUserProvider;
   /**
    * Sandbox fleet for per-project sandboxes. A fleet constructed without a
    * machine config reports `enabled: false` and the sandbox-backed routes
@@ -364,7 +366,7 @@ async function ingestPolledEvents(
  */
 export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[] {
   const routes: ApiRoute[] = [];
-  const { auth, fleet, storage, github, stateSigner, controller, memorySettings, emitAudit, sessionRetirement } =
+  const { auth, users, fleet, storage, github, stateSigner, controller, memorySettings, emitAudit, sessionRetirement } =
     options;
   const diagnostics = () =>
     getGithubFeatureDiagnostics({ github, auth, appDbConfigured: storage !== undefined, stateSigner, fleet });
@@ -1051,7 +1053,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
 
   // ── Sessions / commit / push / PR ────────────────────────────────────────
   routes.push(
-    ...buildProjectGitRoutes({ github, auth, fleet, controller, memorySettings, emitAudit, sessionRetirement }),
+    ...buildProjectGitRoutes({ github, auth, users, fleet, controller, memorySettings, emitAudit, sessionRetirement }),
   );
 
   return routes;
@@ -1307,9 +1309,90 @@ function titleModel(modelId: string) {
     resolveModel(modelId, { remapForCodexOAuth: true, requestContext });
 }
 
+interface SessionOwnerProfile {
+  id: string;
+  name: string;
+  avatarUrl?: string;
+}
+
+type SessionOwnerUserProvider = Pick<IUserProvider, 'getUser'> & Partial<Pick<IUserProvider, 'getUsers'>>;
+
+const MAX_SESSION_OWNER_PROFILES = 100;
+const MAX_SESSION_OWNER_PROFILE_CACHE_ENTRIES = 500;
+const SESSION_OWNER_PROFILE_TTL_MS = 5 * 60_000;
+
+function createSessionOwnerProfileResolver(users: SessionOwnerUserProvider | undefined) {
+  const cache = new Map<string, { profile?: SessionOwnerProfile; expiresAt: number }>();
+  const cacheProfile = (userId: string, profile: SessionOwnerProfile | undefined, expiresAt: number) => {
+    cache.delete(userId);
+    cache.set(userId, { profile, expiresAt });
+    if (cache.size > MAX_SESSION_OWNER_PROFILE_CACHE_ENTRIES) {
+      const oldestUserId = cache.keys().next().value;
+      if (oldestUserId !== undefined) cache.delete(oldestUserId);
+    }
+  };
+
+  return async (userIds: string[]): Promise<Map<string, SessionOwnerProfile>> => {
+    if (!users) return new Map();
+
+    const requestedUserIds = [...new Set(userIds)].slice(0, MAX_SESSION_OWNER_PROFILES);
+    const profiles = new Map<string, SessionOwnerProfile>();
+    const unresolvedUserIds: string[] = [];
+    const now = Date.now();
+
+    for (const userId of requestedUserIds) {
+      const cached = cache.get(userId);
+      if (!cached || cached.expiresAt <= now) {
+        cache.delete(userId);
+        unresolvedUserIds.push(userId);
+      } else if (cached.profile) {
+        profiles.set(userId, cached.profile);
+      }
+    }
+
+    if (unresolvedUserIds.length === 0) return profiles;
+
+    let resolvedUsers: Array<Awaited<ReturnType<SessionOwnerUserProvider['getUser']>>>;
+    if (users.getUsers) {
+      try {
+        resolvedUsers = await users.getUsers(unresolvedUserIds);
+      } catch (error) {
+        console.warn('[GitHub Sessions] Bulk session owner profile lookup failed; falling back to individual lookups', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+        resolvedUsers = (await Promise.allSettled(unresolvedUserIds.map(userId => users.getUser(userId))))
+          .filter(result => result.status === 'fulfilled')
+          .map(result => result.value);
+      }
+    } else {
+      resolvedUsers = (await Promise.allSettled(unresolvedUserIds.map(userId => users.getUser(userId))))
+        .filter(result => result.status === 'fulfilled')
+        .map(result => result.value);
+    }
+
+    for (const user of resolvedUsers) {
+      if (!user) continue;
+      const name = user.name?.trim() || user.email?.trim();
+      if (!name) continue;
+      profiles.set(user.id, {
+        id: user.id,
+        name,
+        ...(user.avatarUrl ? { avatarUrl: user.avatarUrl } : {}),
+      });
+    }
+
+    const expiresAt = now + SESSION_OWNER_PROFILE_TTL_MS;
+    for (const userId of unresolvedUserIds) {
+      cacheProfile(userId, profiles.get(userId), expiresAt);
+    }
+    return profiles;
+  };
+}
+
 function buildProjectGitRoutes({
   github,
   auth,
+  users,
   fleet,
   controller,
   memorySettings,
@@ -1318,6 +1401,7 @@ function buildProjectGitRoutes({
 }: {
   github: GithubIntegration;
   auth: RouteAuth;
+  users?: SessionOwnerUserProvider;
   fleet: SandboxFleet;
   controller?: MountedMastraCode['controller'];
   memorySettings: MountGithubRoutesOptions['memorySettings'];
@@ -1325,6 +1409,7 @@ function buildProjectGitRoutes({
   sessionRetirement?: MountGithubRoutesOptions['sessionRetirement'];
 }): ApiRoute[] {
   const nameSession = createSessionNaming();
+  const resolveSessionOwnerProfiles = createSessionOwnerProfileResolver(users);
   return [
     // ── Create / list Factory sessions ──────────────────────────────────────
     registerApiRoute('/web/github/projects/:id/sessions', {
@@ -1343,7 +1428,13 @@ function buildProjectGitRoutes({
           projectRepositoryId: project.id,
           viewerUserId: userId,
         });
-        return c.json({ sessions });
+        const owners = await resolveSessionOwnerProfiles(sessions.map(session => session.userId));
+        return c.json({
+          sessions: sessions.map(session => {
+            const owner = owners.get(session.userId);
+            return { ...session, ...(owner ? { owner } : {}) };
+          }),
+        });
       },
     }),
     registerApiRoute('/web/github/projects/:id/sessions', {

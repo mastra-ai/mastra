@@ -1146,6 +1146,7 @@ export class GithubIntegration implements FactoryIntegration {
     return buildGithubRoutes({
       github: this,
       auth: ctx.auth,
+      ...(ctx.users ? { users: ctx.users } : {}),
       fleet: ctx.fleet,
       storage: ctx.factoryStorage,
       stateSigner: ctx.stateSigner,
@@ -1177,12 +1178,15 @@ export class GithubIntegration implements FactoryIntegration {
     const reconcile = pullRequestEnabled
       ? attachGithubReconciler(this, ctx, input => this.fetchPullRequestState(input))
       : undefined;
-    const issues = issueEnabled ? attachGithubIssueReconciler(this, ctx, input => this.fetchIssueState(input)) : undefined;
+    const issues = issueEnabled
+      ? attachGithubIssueReconciler(this, ctx, input => this.fetchIssueState(input))
+      : undefined;
     if (!reconcile && !issues) return [];
 
     const legacyInterval = reconcileInterval(process.env.MASTRACODE_GITHUB_RECONCILE_INTERVAL_MS);
     const intervalMs = reconcileInterval(process.env.MASTRACODE_GITHUB_PR_RECONCILE_INTERVAL_MS) ?? legacyInterval;
-    const issueIntervalMs = reconcileInterval(process.env.MASTRACODE_GITHUB_ISSUE_RECONCILE_INTERVAL_MS) ?? legacyInterval;
+    const issueIntervalMs =
+      reconcileInterval(process.env.MASTRACODE_GITHUB_ISSUE_RECONCILE_INTERVAL_MS) ?? legacyInterval;
     return [
       new GithubReconcileWorker({
         ...(reconcile ? { reconcile } : {}),
@@ -1255,9 +1259,7 @@ export class GithubIntegration implements FactoryIntegration {
         url: issue.html_url,
         state: issue.state === 'closed' ? 'closed' : 'open',
         ...(issue.state_reason ? { stateReason: issue.state_reason } : {}),
-        assignees: (issue.assignees ?? [])
-          .map(user => user.login)
-          .filter((login): login is string => Boolean(login)),
+        assignees: (issue.assignees ?? []).map(user => user.login).filter((login): login is string => Boolean(login)),
         labels: (issue.labels ?? [])
           .map(label => (typeof label === 'string' ? label : label.name))
           .filter((name): name is string => Boolean(name)),
@@ -1278,7 +1280,12 @@ export class GithubIntegration implements FactoryIntegration {
     const parts = splitRepoFullName(input.repository);
     if (!parts) throw new Error('GitHub triage comments require an owner/repository source.');
     const octokit = this.getInstallationOctokit(input.installationId);
-    const comments = [] as Array<{ id: number; body?: string | null; user?: { login?: string } | null; html_url: string }>;
+    const comments = [] as Array<{
+      id: number;
+      body?: string | null;
+      user?: { login?: string } | null;
+      html_url: string;
+    }>;
     for (let page = 1; ; page += 1) {
       const response = await octokit.issues.listComments({
         ...parts,
@@ -1290,13 +1297,20 @@ export class GithubIntegration implements FactoryIntegration {
       if (response.data.length < 100) break;
     }
     const existing = comments
-      .filter(comment => comment.body?.includes('<!-- mastra-factory-triage -->') && this.isFactoryCommentAuthor(comment.user?.login))
+      .filter(
+        comment =>
+          comment.body?.includes('<!-- mastra-factory-triage -->') && this.isFactoryCommentAuthor(comment.user?.login),
+      )
       .sort((left, right) => left.id - right.id)[0];
     if (existing) {
       const { data } = await octokit.issues.updateComment({ ...parts, comment_id: existing.id, body: input.body });
       return { action: 'updated', commentId: String(data.id), url: data.html_url };
     }
-    const { data } = await octokit.issues.createComment({ ...parts, issue_number: input.issueNumber, body: input.body });
+    const { data } = await octokit.issues.createComment({
+      ...parts,
+      issue_number: input.issueNumber,
+      body: input.body,
+    });
     return { action: 'created', commentId: String(data.id), url: data.html_url };
   }
 
@@ -1377,9 +1391,7 @@ function parsePullRequest(pr: GithubPullRequestData): PullRequest {
     author: pr.user?.login ?? null,
     assignees: (pr.assignees ?? []).flatMap(assignee => (assignee.login ? [assignee.login] : [])),
     requestedReviewers: (pr.requested_reviewers ?? []).flatMap(reviewer => (reviewer.login ? [reviewer.login] : [])),
-    labels: (pr.labels ?? []).flatMap(label =>
-      typeof label === 'string' ? [label] : label.name ? [label.name] : [],
-    ),
+    labels: (pr.labels ?? []).flatMap(label => (typeof label === 'string' ? [label] : label.name ? [label.name] : [])),
     body: pr.body?.trim() ? pr.body : null,
     state: pr.state === 'closed' ? 'closed' : 'open',
     draft: pr.draft ?? false,
