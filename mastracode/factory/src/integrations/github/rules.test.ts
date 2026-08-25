@@ -164,6 +164,7 @@ function pullRequest(
   deliveryId: string,
   merged = false,
   createdAt = '2030-01-01T00:00:00Z',
+  body: string | null = null,
 ) {
   return {
     event: 'pull_request',
@@ -180,6 +181,7 @@ function pullRequest(
         created_at: createdAt,
         state: merged ? 'closed' : 'open',
         merged,
+        body,
         head: { ref: 'feature' },
         base: { ref: 'main' },
       },
@@ -205,6 +207,42 @@ describe('GithubRules', () => {
     expect(decisions).toHaveLength(1);
     expect(decisions[0]?.actor).toMatchObject({ type: 'github', login: 'maintainer', trusted: true });
     expect(decisions[0]?.decision).toMatchObject({ type: 'upsertLinkedWorkItem', source: 'github-issue' });
+  });
+
+  it('links an orphaned review card to the issue its pull request closes, on any later sighting', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    const issue = await createLinkedIssue(workItems, project.id);
+    const orphan = (
+      await workItems.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        input: {
+          externalSource: {
+            integrationId: 'github',
+            type: 'pull-request',
+            externalId: 'github-pr:17',
+            url: 'https://github.com/acme/repo/pull/17',
+          },
+          title: 'PR 17',
+          stages: ['intake'],
+          sessions: {},
+          metadata: { githubRepositoryId: 10 },
+        },
+      })
+    ).item;
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules: builtInFactoryRules(),
+    });
+
+    await service.ingest(pullRequest('opened', 'poll:10:pull-request:17', false, '2030-01-01T00:00:00Z', 'Closes #42'));
+
+    expect((await workItems.get({ orgId: 'org-1', id: orphan.id }))?.parentWorkItemId).toBe(issue.id);
   });
 
   it('moves an issue-backed work card to done when its issue closes as completed', async () => {
@@ -1611,7 +1649,7 @@ describe('GithubRules', () => {
       rules: builtInFactoryRules(),
     });
 
-    await service.ingest(pullRequest('opened', 'delivery-branch-link'));
+    await service.ingest(pullRequest('opened', 'delivery-branch-link', false, '2030-01-01T00:00:00Z', 'Closes #42'));
     const decisions = await workItems.listDeferredDecisions('org-1', project.id);
     expect(decisions).toEqual([
       expect.objectContaining({
@@ -1619,7 +1657,7 @@ describe('GithubRules', () => {
         decision: expect.objectContaining({
           type: 'upsertLinkedWorkItem',
           source: 'github-pr',
-          metadata: expect.objectContaining({ headBranch: 'feature' }),
+          metadata: expect.objectContaining({ headBranch: 'feature', closesIssues: [42] }),
         }),
       }),
     ]);

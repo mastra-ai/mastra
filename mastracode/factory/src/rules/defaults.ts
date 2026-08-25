@@ -287,6 +287,7 @@ function pullRequestOpened(context: FactoryGithubRuleContext) {
       labels: context.pullRequest.labels ?? [],
       headBranch: context.pullRequest.headBranch,
       baseBranch: context.pullRequest.baseBranch,
+      ...(context.pullRequest.closesIssues?.length ? { closesIssues: context.pullRequest.closesIssues } : {}),
       ...(githubActorLogin(context) ? { author: githubActorLogin(context) } : {}),
     },
   } as const;

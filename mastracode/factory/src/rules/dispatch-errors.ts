@@ -1,3 +1,4 @@
+import { WorkItemRelationError } from '../storage/domains/work-items/base.js';
 import type { FactoryDispatchFailureCode } from '../storage/domains/work-items/base.js';
 
 interface FactoryDispatchFailureMetadata {
@@ -19,6 +20,7 @@ const FAILURE_METADATA = {
   repository_commit_failed: { canRetry: true, label: 'Repository commit failed' },
   repository_cli_missing: { canRetry: false, label: 'GitHub CLI is unavailable in the workspace' },
   repository_pr_failed: { canRetry: true, label: 'Pull request creation failed' },
+  invalid_work_item_relation: { canRetry: false, label: 'Work item relationship is invalid' },
   unknown: { canRetry: true, label: 'Factory automation failed' },
 } satisfies Record<FactoryDispatchFailureCode, FactoryDispatchFailureMetadata>;
 
@@ -34,7 +36,10 @@ export class FactoryDispatchError extends Error {
 }
 
 export function factoryDispatchFailureCode(error: unknown): FactoryDispatchFailureCode {
-  return error instanceof FactoryDispatchError ? error.code : 'unknown';
+  if (error instanceof FactoryDispatchError) return error.code;
+  // Retrying a relationship the storage layer just rejected re-runs the same
+  // rejection: the decision is wrong, not the moment.
+  return error instanceof WorkItemRelationError ? 'invalid_work_item_relation' : 'unknown';
 }
 
 export function factoryDispatchFailureMetadata(

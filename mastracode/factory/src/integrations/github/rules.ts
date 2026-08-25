@@ -19,6 +19,13 @@ import { FACTORY_PULL_REQUEST_RECONCILIATION_KEY } from '../../storage/domains/w
 import type { IntegrationContext } from '../base.js';
 import type { GithubAppIdentity } from './app-identity.js';
 import type { GithubRepositoryPermission } from './integration.js';
+import {
+  canonicalSourceKey,
+  cardBelongsToRepository,
+  closingIssueNumbers,
+  legacySourceKey,
+  pullRequestParentWorkItemId,
+} from './links.js';
 import { changeRequestTargetKey } from './subscriptions.js';
 import type { ParsedGithubWebhook } from './webhook.js';
 
@@ -103,32 +110,6 @@ function eventName(parsed: ParsedGithubWebhook): FactoryGithubEventName | undefi
   if (parsed.event === 'pull_request' && action === 'review_requested') return 'pullRequestReviewRequested';
   if (parsed.event === 'pull_request_review' && action === 'submitted') return 'pullRequestReviewSubmitted';
   return undefined;
-}
-
-/**
- * Canonical source keys (`github-issue:N`, `github-pr:N`) do not identify a
- * repository, so a project linked to several repositories could bind repo A's
- * event to repo B's same-numbered card. The card's intake-stamped URL is
- * authoritative; the intake-stamped `githubRepositoryId` covers URL-less
- * cards. A card with neither signal cannot be attributed by number alone.
- */
-function cardBelongsToRepository(item: WorkItemRow, repositoryId: number, repositoryFullName: string): boolean {
-  const url = item.externalSource?.url;
-  if (url) {
-    const match = /^https?:\/\/[^/]+\/(.+)\/(?:issues|pull)\/\d+(?:[/?#]|$)/.exec(url);
-    if (match && match[1] === repositoryFullName) return true;
-  }
-  // A renamed repository leaves the old owner/name in the card URL, so a URL
-  // mismatch still defers to the stable intake-stamped repository id.
-  return item.metadata?.githubRepositoryId === repositoryId;
-}
-
-function canonicalSourceKey(kind: 'issue' | 'pull-request', itemNumber: number): string {
-  return kind === 'issue' ? `github-issue:${itemNumber}` : `github-pr:${itemNumber}`;
-}
-
-function legacySourceKey(repositoryId: number, kind: 'issue' | 'pull-request', itemNumber: number): string {
-  return `github:${repositoryId}:${kind}:${itemNumber}`;
 }
 
 function provenanceTarget(repositoryId: number, pullRequestNumber: number): string {
@@ -289,17 +270,31 @@ export class GithubRules {
       reviewRequested || event === 'pullRequestCommentCreated' || event === 'pullRequestReviewSubmitted';
     const reReviewEvent = reviewRequested || event === 'pullRequestUpdated';
     const requestedReviewer = string(object(parsed.payload.requested_reviewer)?.login);
-    const relatedItem = await this.#relatedItem(
+    const headBranch = string(object(pullRequest?.head)?.ref);
+    const closesIssues = closingIssueNumbers(string(pullRequest?.body), repositoryName);
+    let relatedItem = await this.#relatedItem(
       project.orgId,
       project.factoryProjectId,
       repositoryId,
       repositoryName,
       issueNumber,
       pullRequestNumber,
-      string(object(pullRequest?.head)?.ref),
+      headBranch,
       reReviewEvent ? null : provenance,
       senderIsResponder && !reviewRequested,
     );
+    if (relatedItem?.externalSource?.type === 'pull-request' && relatedItem.parentWorkItemId === null) {
+      relatedItem =
+        (await this.#linkPullRequestCard({
+          project,
+          card: relatedItem,
+          provenance,
+          repositoryId,
+          repositoryFullName: repositoryName,
+          closesIssues,
+          headBranch,
+        })) ?? relatedItem;
+    }
     const actor = await githubActor(this.options.github, {
       installationId,
       repository: repositoryName,
@@ -405,8 +400,9 @@ export class GithubRules {
                 assignees: actorLogins(pullRequest?.assignees),
                 requestedReviewers: actorLogins(pullRequest?.requested_reviewers),
                 labels: labelNames(pullRequest?.labels),
-                headBranch: string(object(pullRequest?.head)?.ref) ?? '',
+                headBranch: headBranch ?? '',
                 baseBranch: string(object(pullRequest?.base)?.ref) ?? '',
+                closesIssues,
               },
             }
           : {}),
@@ -494,6 +490,39 @@ export class GithubRules {
       if (primary.status === status || secondary.status === status) return { status };
     }
     return primary;
+  }
+
+  /**
+   * Give a Review card the link it never got. A pull request opened by a person,
+   * or before Factory tracked the repository, reaches the board with no parent,
+   * and the decision path cannot repair it later: its delivery is replay-guarded
+   * after the first sighting. Any later observation still carries the facts, so
+   * it resolves the link then.
+   */
+  async #linkPullRequestCard(input: {
+    project: ExternalRepositoryProjectTarget;
+    card: WorkItemRow;
+    provenance: FactoryPullRequestProvenanceData | null;
+    repositoryId: number;
+    repositoryFullName: string;
+    closesIssues: number[];
+    headBranch: string | undefined;
+  }): Promise<WorkItemRow | undefined> {
+    const { orgId, factoryProjectId } = input.project;
+    const items = await this.options.storage.list({ orgId, factoryProjectId });
+    const authored =
+      input.provenance && items.some(item => item.id === input.provenance?.workItemId)
+        ? input.provenance.workItemId
+        : null;
+    const parentWorkItemId = authored ?? pullRequestParentWorkItemId(items, input);
+    if (!parentWorkItemId || parentWorkItemId === input.card.id) return undefined;
+    const linked = await this.options.storage.setParentWorkItemIfMissing({
+      orgId,
+      id: input.card.id,
+      userId: 'factory-github-rules',
+      parentWorkItemId,
+    });
+    return linked ?? undefined;
   }
 
   /**

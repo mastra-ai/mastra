@@ -153,6 +153,7 @@ const FACTORY_DISPATCH_FAILURE_CODES = [
   'repository_commit_failed',
   'repository_cli_missing',
   'repository_pr_failed',
+  'invalid_work_item_relation',
   'unknown',
 ] as const;
 

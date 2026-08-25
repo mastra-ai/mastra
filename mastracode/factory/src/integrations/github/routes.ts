@@ -21,6 +21,7 @@ import { UniqueViolationError } from '@mastra/core/storage';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { Context } from 'hono';
 import { streamSSE } from 'hono/streaming';
+import type { PullRequest } from '../../capabilities/version-control.js';
 import type { RouteAuth } from '../../routes/route.js';
 import { baseCheckpointIsStale } from '../../sandbox/base-checkpoint-triggers.js';
 import { SandboxBudgetError } from '../../sandbox/fleet.js';
@@ -309,38 +310,27 @@ function polledIssueEvent(
   };
 }
 
-function polledPullRequestEvent(
-  project: ResolvedProjectRepository,
-  pullRequest: {
-    number: number;
-    title: string;
-    url: string;
-    author: string | null;
-    assignees: string[];
-    requestedReviewers: string[];
-    headBranch: string;
-    baseBranch: string;
-    createdAt: string;
-  },
-): ParsedGithubWebhook {
+function polledPullRequestEvent(project: ResolvedProjectRepository, pullRequest: PullRequest): ParsedGithubWebhook {
   const repositoryId = Number(project.repository.externalId);
+  const number = Number(pullRequest.id);
   return {
     event: 'pull_request',
-    deliveryId: `poll:${repositoryId}:pull-request:${pullRequest.number}:${pullRequest.createdAt}`,
+    deliveryId: `poll:${repositoryId}:pull-request:${number}:${pullRequest.createdAt}`,
     payload: {
       action: 'opened',
       installation: { id: Number(project.installation.externalId) },
       repository: { id: repositoryId, full_name: project.repository.slug },
       sender: { login: pullRequest.author ?? '__unknown__' },
       pull_request: {
-        number: pullRequest.number,
+        number,
         title: pullRequest.title,
         html_url: pullRequest.url,
+        body: pullRequest.body,
         created_at: pullRequest.createdAt,
         state: 'open',
         merged: false,
-        assignees: pullRequest.assignees.map(login => ({ login })),
-        requested_reviewers: pullRequest.requestedReviewers.map(login => ({ login })),
+        assignees: (pullRequest.assignees ?? []).map(login => ({ login })),
+        requested_reviewers: (pullRequest.requestedReviewers ?? []).map(login => ({ login })),
         head: { ref: pullRequest.headBranch },
         base: { ref: pullRequest.baseBranch },
       },
@@ -857,7 +847,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             updatedAt: pr.updatedAt,
           }));
           await ingestPolledEvents(
-            responsePullRequests.map(pullRequest => polledPullRequestEvent(loaded.project, pullRequest)),
+            pullRequests.map(pullRequest => polledPullRequestEvent(loaded.project, pullRequest)),
             options.ingestFactoryEvent,
           );
           return c.json({

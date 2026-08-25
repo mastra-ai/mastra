@@ -100,6 +100,7 @@ export interface FactoryDecisionDispatcherOptions {
   primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
   resolveLinkedWorkItemParentId?: (input: {
     orgId: string;
+    factoryProjectId: string;
     decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>;
   }) => Promise<string | null>;
   maxInFlight?: number;
@@ -715,25 +716,39 @@ export class FactoryDecisionDispatcher {
     }
   }
 
+  /**
+   * What the card hangs off. The card the rule acted on is the answer whenever
+   * the decision produced a *different* card — a work item's run opening a pull
+   * request. It is not an answer when the rule was evaluated against the very
+   * card the decision names, which is every re-observation of something already
+   * on the board: there the link, if any, comes from the pull request's facts.
+   */
+  async #linkedItemParentId(
+    record: FactoryDeferredDecisionRecord,
+    decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>,
+    itemId: string,
+  ): Promise<string | null> {
+    if (record.workItemId && record.workItemId !== itemId) return record.workItemId;
+    const resolved = await this.#resolveLinkedWorkItemParentId?.({
+      orgId: record.orgId,
+      factoryProjectId: record.factoryProjectId,
+      decision,
+    });
+    return resolved && resolved !== itemId ? resolved : null;
+  }
+
   async #upsertLinkedItem(
     record: FactoryDeferredDecisionRecord,
     decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>,
     causalChain: FactoryRuleCausalEntry[],
   ): Promise<void> {
-    const parentWorkItemId =
-      record.workItemId ??
-      (await this.#resolveLinkedWorkItemParentId?.({
-        orgId: record.orgId,
-        decision,
-      })) ??
-      null;
     let result = await this.#storage.upsert({
       orgId: record.orgId,
       userId: 'factory-rule-dispatcher',
       factoryProjectId: record.factoryProjectId,
       input: {
         externalSource: externalSourceForDecision(decision),
-        parentWorkItemId,
+        parentWorkItemId: null,
         title: decision.title,
         stages: ['intake'],
         sessions: {},
@@ -741,14 +756,17 @@ export class FactoryDecisionDispatcher {
       },
       reuseMode: 'preserve',
     });
-    if (!result.item.parentWorkItemId && parentWorkItemId) {
-      const item = await this.#storage.setParentWorkItemIfMissing({
-        orgId: record.orgId,
-        id: result.item.id,
-        userId: 'factory-rule-dispatcher',
-        parentWorkItemId,
-      });
-      if (item) result = { ...result, item };
+    if (!result.item.parentWorkItemId) {
+      const parentWorkItemId = await this.#linkedItemParentId(record, decision, result.item.id);
+      if (parentWorkItemId) {
+        const item = await this.#storage.setParentWorkItemIfMissing({
+          orgId: record.orgId,
+          id: result.item.id,
+          userId: 'factory-rule-dispatcher',
+          parentWorkItemId,
+        });
+        if (item) result = { ...result, item };
+      }
     }
     const materializedByDecision = result.item.metadata?.[FACTORY_RULE_MATERIALIZATION_KEY] === record.idempotencyKey;
     if (!materializedByDecision && (decision.stage === 'intake' || !result.item.stages.includes('intake'))) return;

@@ -155,6 +155,8 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
     labels?: string[];
     headBranch: string;
     baseBranch: string;
+    /** Issue numbers the body declares closed, in this repository only. */
+    closesIssues?: number[];
   };
   /** Present on `pullRequestReviewRequested`: who review was (re-)requested from. */
   reviewRequest?: { reviewer: string; factoryReviewer: boolean };

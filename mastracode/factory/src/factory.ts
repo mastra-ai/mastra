@@ -39,10 +39,8 @@ import {
 } from './auth.js';
 import type { FactoryIntegration, IntegrationPostToolContext, IntegrationTools } from './integrations/base.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
-import {
-  recordFactoryPullRequestProvenance,
-  resolveFactoryPullRequestParentWorkItemId,
-} from './integrations/github/provenance.js';
+import { pullRequestLinkFacts, resolvePullRequestParentWorkItemId } from './integrations/github/links.js';
+import { recordFactoryPullRequestProvenance } from './integrations/github/provenance.js';
 import type { FactoryPullRequestProvenanceData } from './integrations/github/provenance.js';
 import { PlatformGithubIntegration } from './integrations/platform/github/integration.js';
 import { PlatformLinearIntegration } from './integrations/platform/linear/integration.js';
@@ -827,18 +825,19 @@ export class MastraFactory {
                 reconcileToolResults: () => factoryProcessor?.reconcileAllBoundThreads() ?? Promise.resolve(),
                 prepareBinding,
                 primeCredentials: tenant => primeTenantCredentials({ tenant, credentials: modelCredentialsStorage }),
-                resolveLinkedWorkItemParentId: async ({ orgId, decision }) => {
-                  if (decision.source !== 'github-pr') return null;
-                  const repositoryId = decision.metadata?.githubRepositoryId;
-                  const pullRequestNumber = decision.metadata?.githubPullRequestNumber;
-                  if (typeof repositoryId !== 'number' || typeof pullRequestNumber !== 'number') return null;
-                  return resolveFactoryPullRequestParentWorkItemId(
-                    integrationStorage.forIntegration<
-                      Record<string, unknown>,
-                      Record<string, unknown>,
-                      FactoryPullRequestProvenanceData
-                    >('github'),
-                    { orgId, repositoryId, pullRequestNumber },
+                resolveLinkedWorkItemParentId: async ({ orgId, factoryProjectId, decision }) => {
+                  const facts = decision.source === 'github-pr' ? pullRequestLinkFacts(decision.metadata) : null;
+                  if (!facts) return null;
+                  return resolvePullRequestParentWorkItemId(
+                    {
+                      integrationStorage: integrationStorage.forIntegration<
+                        Record<string, unknown>,
+                        Record<string, unknown>,
+                        FactoryPullRequestProvenanceData
+                      >('github'),
+                      workItems: storage.getDomain<WorkItemsStorage>('work-items'),
+                    },
+                    { orgId, factoryProjectId, ...facts },
                   );
                 },
               });
