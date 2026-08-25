@@ -3,14 +3,14 @@
  * otherwise: "Intake is clear" next to a dead GitHub is a lie the board must
  * not tell.
  */
-import { screen, waitFor, within } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import { createAppRoutes } from '../router';
 
 const FACTORY_ID = 'fp-1';
@@ -88,7 +88,7 @@ describe('Intake column when the candidate feed fails', () => {
         ? HttpResponse.json({ issues: [issue], nextPage: null })
         : HttpResponse.json({ error: 'GitHub is unavailable' }, { status: 502 }),
     );
-    renderWorkBoard();
+    const { client } = renderWorkBoard();
 
     const intake = await screen.findByTestId('board-column-intake');
     const alert = await within(intake).findByRole('alert');
@@ -97,8 +97,9 @@ describe('Intake column when the candidate feed fails', () => {
 
     healthy = true;
     await userEvent.click(within(intake).getByRole('button', { name: 'Retry' }));
+    await waitForMutationsIdle(client);
 
-    await waitFor(() => expect(within(intake).getByText('Fix login')).toBeInTheDocument());
+    expect(within(intake).getByText('Fix login')).toBeInTheDocument();
     expect(within(intake).queryByRole('alert')).not.toBeInTheDocument();
   });
 });
