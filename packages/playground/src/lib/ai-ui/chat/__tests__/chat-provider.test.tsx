@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useChatMessages, useChatRunning, useChatSend } from '../chat-context';
 import { ChatProvider } from '../chat-provider';
-import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
+import { useWorkingMemory, WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
 import { PlaygroundModelProvider, usePlaygroundModel } from '@/domains/agents/context/playground-model-context';
 import { server } from '@/test/msw-server';
 
@@ -480,8 +480,10 @@ describe('ChatProvider', () => {
     ] satisfies MastraDBMessage[];
 
     const bufferStatusRequests: string[] = [];
+    // A separate use() call is required for the working-memory endpoint to
+    // outrank the base handler.
+    server.use(...baseHandlers([]));
     server.use(
-      ...baseHandlers([]),
       http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json({ config: { observationalMemory: true } })),
       http.post(`${BASE_URL}/api/memory/observational-memory/buffer-status`, ({ request }) => {
         bufferStatusRequests.push(request.url);
@@ -570,8 +572,10 @@ describe('ChatProvider', () => {
     ] satisfies MastraDBMessage[];
 
     const bufferStatusRequests: string[] = [];
+    // A separate use() call is required for the working-memory endpoint to
+    // outrank the base handler.
+    server.use(...baseHandlers([]));
     server.use(
-      ...baseHandlers([]),
       http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json({ config: { observationalMemory: true } })),
       http.post(`${BASE_URL}/api/memory/observational-memory/buffer-status`, ({ request }) => {
         bufferStatusRequests.push(request.url);
@@ -746,5 +750,59 @@ describe('ChatProvider', () => {
     expect(omRequests.length).toBeGreaterThan(1);
     expect(messageRequests.length).toBeGreaterThan(1);
     expect(messageRequests.every(url => url.includes('/threads/thread-1/messages'))).toBe(true);
+  });
+
+  it('refetches working memory after awaited OM buffering completes so the provider shows the persisted value without a remount', async () => {
+    // OM persists working memory asynchronously, after the chat stream ends.
+    // The endpoint serves the stale value until buffer-status resolves, then
+    // the persisted one.
+    let bufferingComplete = false;
+
+    const WorkingMemoryProbe = () => {
+      const { workingMemoryData } = useWorkingMemory();
+      return <div data-testid="wm-data">{workingMemoryData ?? 'no-working-memory'}</div>;
+    };
+
+    server.use(...baseHandlers([]));
+    server.use(
+      http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json({ config: { observationalMemory: true } })),
+      http.post(`${BASE_URL}/api/memory/observational-memory/buffer-status`, () => {
+        bufferingComplete = true;
+        return HttpResponse.json({ record: null });
+      }),
+      http.get(`${BASE_URL}/api/memory/threads/thread-1/working-memory`, () =>
+        HttpResponse.json(
+          bufferingComplete
+            ? {
+                workingMemory: 'responseFormat: bullet list',
+                source: 'resource',
+                workingMemoryTemplate: null,
+                threadExists: true,
+              }
+            : { workingMemory: null, source: 'resource', workingMemoryTemplate: null, threadExists: true },
+        ),
+      ),
+      http.post(`${BASE_URL}/api/agents/agent-1/stream`, () => omObservationEndResponse()),
+    );
+
+    await act(async () => {
+      render(
+        <Wrapper>
+          <ChatProvider agentId="agent-1" threadId="thread-1" initialMessages={[]}>
+            <WorkingMemoryProbe />
+            <SendOnMount text="trigger WM extraction" />
+          </ChatProvider>
+        </Wrapper>,
+      );
+    });
+
+    await screen.findByTestId('wm-data');
+    expect(screen.getByTestId('wm-data').textContent).not.toBe('responseFormat: bullet list');
+
+    // The inline observation-end refresh fires before buffer-status resolves,
+    // so only the awaited-buffering refresh can surface the new value.
+    await waitFor(() => expect(screen.getByTestId('wm-data').textContent).toBe('responseFormat: bullet list'), {
+      timeout: 2000,
+    });
   });
 });
