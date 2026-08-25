@@ -406,7 +406,7 @@ export function ExperimentPageTabs({
                     collapsed={traceCollapsed}
                     onCollapsedChange={setTraceCollapsed}
                     LinkComponent={Link}
-                    traceHref={`/traces/${featuredTraceId}`}
+                    traceHref={`/traces?traceId=${encodeURIComponent(featuredTraceId)}`}
                   />
 
                   {featuredSpanId && (

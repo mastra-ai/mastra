@@ -510,7 +510,6 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
               onCollapsedChange={setTraceCollapsed}
               placement="traces-list"
               LinkComponent={Link}
-              traceHref={`/traces/${url.traceIdParam}`}
               activeTab={traceTab}
               onTabChange={setTraceTab}
               scoresTabBadge={spanScoresData?.pagination?.total ?? undefined}
