@@ -47,7 +47,7 @@ export interface ChatSessionContextApi {
    * of binding to a fresh random-id thread the route can never find.
    */
   sessionThreadId?: string;
-  /** The session's workspace row is not materialized yet, so the controller cannot connect. */
+  /** The session's workspace has never been materialized, so status reads as still setting up. */
   workspacePending?: boolean;
   draftSessionId?: string;
   factorySessionState?: FactorySessionState;

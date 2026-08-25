@@ -228,7 +228,6 @@ export interface MaterializeRepoOptions {
  * Materialize the repo inside the user's sandbox. Clones on first open, pulls on
  * re-open. Always scrubs the install token from the remote afterwards and sets
  * `materialized_at` on the per-user sandbox binding row.
- *
  */
 export async function materializeRepo(options: MaterializeRepoOptions): Promise<void> {
   return timedPhase('workspace.materialize', () => materializeRepoImpl(options));

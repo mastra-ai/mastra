@@ -421,6 +421,11 @@ describe('MastraFactory.prepare', () => {
     expect(error.message).toMatch(/'sandbox' is now a callback/);
     expect(error.message).toMatch(/FactorySandboxContext/);
     expect(error.message).toMatch(/sandbox: ctx => new E2BSandbox\(\{ id: ctx\.sessionId \}\)/);
+    // The old options had three different fates, and a host reading this
+    // message needs all three: two of them are not "pass it to the provider".
+    expect(error.message).toMatch(/'create' became the callback itself/);
+    expect(error.message).toMatch(/'enabled: false' becomes omitting 'sandbox'/);
+    expect(error.message).toMatch(/'maxSandboxes' is gone with the sandbox fleet/);
   });
 
   it('rejects a sandbox config that is neither a callback nor an object', async () => {

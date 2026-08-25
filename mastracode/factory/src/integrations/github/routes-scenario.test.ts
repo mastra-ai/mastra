@@ -24,7 +24,6 @@ interface Tables {
   repositories: Array<Record<string, any>>;
   connections: Array<Record<string, any>>;
   projectRepositories: Array<Record<string, any>>;
-  sandboxes: Array<Record<string, any>>;
   worktrees: Array<Record<string, any>>;
   sessions: Array<Record<string, any>>;
 }
@@ -33,7 +32,6 @@ const tables: Tables = {
   repositories: [],
   connections: [],
   projectRepositories: [],
-  sandboxes: [],
   worktrees: [],
   sessions: [],
 };
@@ -257,7 +255,6 @@ function tableKind(table: any): keyof Tables {
   if (table === repositoriesRef) return 'repositories';
   if (table === connectionsRef) return 'connections';
   if (table === worktreesRef) return 'worktrees';
-  if (table === sandboxesRef) return 'sandboxes';
   return 'projectRepositories';
 }
 let installationsRef: any;
@@ -265,7 +262,6 @@ let repositoriesRef: any;
 let connectionsRef: any;
 let _projectRepositoriesRef: any;
 let worktreesRef: any;
-let sandboxesRef: any;
 
 function dbNameToJsKey(table: any, dbName: string): string {
   for (const [jsKey, col] of Object.entries(table)) {
@@ -321,14 +317,12 @@ const githubInstallations = {};
 const githubRepositories = {};
 const githubConnections = {};
 const githubProjectRepositories = {};
-const githubProjectSandboxes = {};
 const githubWorktrees = {};
 installationsRef = githubInstallations;
 repositoriesRef = githubRepositories;
 connectionsRef = githubConnections;
 _projectRepositoriesRef = githubProjectRepositories;
 worktreesRef = githubWorktrees;
-sandboxesRef = githubProjectSandboxes;
 
 // A tiny deferred so S2 can control when a push resolves.
 function deferred<T = void>() {
@@ -373,14 +367,12 @@ beforeEach(() => {
   tables.repositories = [];
   tables.connections = [];
   tables.projectRepositories = [];
-  tables.sandboxes = [];
   tables.worktrees = [];
   tables.sessions = [];
   sourceControlStorage.installationsRows = tables.installations as any;
   sourceControlStorage.repositoriesRows = tables.repositories as any;
   sourceControlStorage.connectionsRows = tables.connections as any;
   sourceControlStorage.projectRepositoriesRows = tables.projectRepositories as any;
-  sourceControlStorage.sandboxesRows = tables.sandboxes as any;
   sourceControlStorage.worktreesRows = tables.worktrees as any;
   sourceControlStorage.sessionsRows = tables.sessions as any;
   featureEnabled = true;
@@ -419,20 +411,9 @@ describe('S1: full write-back journey through the real route handlers', () => {
     );
     const app = buildApp({ workosId: 'u1', organizationId: 'org1' });
 
-    // Seed the per-(project-repository,user) binding row. Nothing provisions
-    // it any more; the row exists so the git routes below have a workdir to
-    // resolve, and its presence must not cause a sandbox to be constructed.
-    tables.sandboxes.push({
-      id: 'sbrow-1',
-      projectRepositoryId: projectId,
-      userId: 'u1',
-      sandboxId: 'sb-1',
-      sandboxWorkdir: '/workspace/hello',
-      materializedAt: null,
-    });
 
-    // 2. Session creation persists identity only; AgentController's workspace
-    // factory materializes the isolated checkout when that session starts.
+    // 2. Session creation persists identity only. The isolated checkout is
+    // materialized later, by the session sandbox's start lifecycle.
     const sessionRes = await postJson(app, `/web/github/projects/${projectId}/sessions`, { branch: 'feat/x' });
     expect(sessionRes.status).toBe(200);
     const session = (await sessionRes.json()).session;
@@ -537,15 +518,6 @@ describe('S1: full write-back journey through the real route handlers', () => {
         sandboxWorkdir: '/workspace/hello',
       }),
     );
-    tables.sandboxes.push({
-      id: 'sbrow-compat',
-      projectRepositoryId: projectId,
-      userId: 'u1',
-      sandboxId: 'sb-compat',
-      sandboxWorkdir: '/workspace/hello',
-      materializedAt: new Date(),
-    });
-
     const response = await postJson(app, `/web/github/projects/${projectId}/pr`, {
       branch: 'feat/x',
       title: 'My PR',
@@ -572,14 +544,6 @@ describe('S2: concurrent pushes', () => {
         sandboxWorkdir: '/workspace/hello',
       }),
     );
-    tables.sandboxes.push({
-      id: `sbrow-${id}`,
-      projectRepositoryId: id,
-      userId,
-      sandboxId: `sb-${id}`,
-      sandboxWorkdir: '/workspace/hello',
-      materializedAt: new Date(),
-    });
     const now = new Date();
     getSessionSandbox(`stored-session-${id}`, 'seed/hello', () =>
       ({

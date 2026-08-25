@@ -481,14 +481,6 @@ describe('cross-user session workspaces are rejected', () => {
     // still scoped by project and user.
     const sessions = new Map<string, { id: string; sessionId: string }>();
     for (const userId of ['a1', 'a2']) {
-      tables.sandboxes.push({
-        id: `sbrow-${userId}`,
-        projectRepositoryId: 'p1',
-        userId,
-        sandboxId: `sb-${userId}`,
-        sandboxWorkdir: '/workspace/hello',
-        materializedAt: new Date(),
-      });
       const session = await sourceControlStorage.sessions.create({
         sessionId: `session-${userId}`,
         projectRepositoryId: 'p1',
