@@ -126,19 +126,28 @@ export const useTableKeydown = ({
     }
   };
 
-  useKeydown(
-    {
-      ArrowUp: () => navigateTo(activeIndex - 1),
-      ArrowDown: () => navigateTo(activeIndex + 1),
-      PageUp: () => navigateTo(activeIndex - pageSize),
-      PageDown: () => navigateTo(activeIndex + pageSize),
-      Home: () => navigateTo(0),
-      End: () => navigateTo(count - 1),
-      'mod+Home': () => navigateTo(0),
-      'mod+End': () => navigateTo(count - 1),
-    },
-    { target: containerRef },
-  );
+  const combos: Array<[ParsedKeyCombo, () => void]> = [
+    [parseKeyCombo('mod+Home'), () => navigateTo(0)],
+    [parseKeyCombo('mod+End'), () => navigateTo(count - 1)],
+    [parseKeyCombo('ArrowUp'), () => navigateTo(activeIndex - 1)],
+    [parseKeyCombo('ArrowDown'), () => navigateTo(activeIndex + 1)],
+    [parseKeyCombo('PageUp'), () => navigateTo(activeIndex - pageSize)],
+    [parseKeyCombo('PageDown'), () => navigateTo(activeIndex + pageSize)],
+    [parseKeyCombo('Home'), () => navigateTo(0)],
+    [parseKeyCombo('End'), () => navigateTo(count - 1)],
+  ];
+
+  // Handled at row level (not via a container listener) so keyboard nav works
+  // even when the list mounts after the hook, e.g. inside a tab panel.
+  const handleRowKeyDown = (event: { nativeEvent: KeyboardEvent; preventDefault: () => void }) => {
+    for (const [combo, handler] of combos) {
+      if (matchesCombo(event.nativeEvent, combo)) {
+        event.preventDefault();
+        handler();
+        return;
+      }
+    }
+  };
 
   useEffect(() => {
     if (activeIndex >= count) {
@@ -150,6 +159,7 @@ export const useTableKeydown = ({
     tabIndex: index === activeIndex ? 0 : -1,
     'data-row-index': index,
     onFocus: () => setActiveIndex(index),
+    onKeyDown: handleRowKeyDown,
   });
 
   const getContainerProps = () => ({});

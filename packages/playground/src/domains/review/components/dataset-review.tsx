@@ -1,7 +1,7 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
-import { DataList } from '@mastra/playground-ui/components/DataList';
+import { DataList, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import {
   Dialog,
   DialogContent,
@@ -443,6 +443,8 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
 
   const gridColumns = 'auto minmax(15rem,1fr) 10rem 8rem 6rem 6rem';
 
+  const { containerRef, getRowProps } = useDataListKeyboard({ count: displayItems.length });
+
   if (isLoadingReview) {
     return (
       <div className="flex flex-1 items-center justify-center">
@@ -764,7 +766,7 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
               />
             </div>
           ) : (
-            <DataList columns={gridColumns} className="min-w-0">
+            <DataList columns={gridColumns} className="min-w-0" scrollRef={containerRef}>
               <DataList.Top hasLeadingCell>
                 {!showCompleted ? (
                   <DataList.TopSelectCell
@@ -784,7 +786,7 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
                 </DataList.TopCells>
               </DataList.Top>
 
-              {displayItems.map(item => {
+              {displayItems.map((item, index) => {
                 const scoreEntries = item.scores ? Object.entries(item.scores) : [];
                 const isFeatured = featuredItemId === item.id;
 
@@ -884,6 +886,7 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
                       colStart={2}
                       featured={isFeatured}
                       onClick={() => handleRowClick(item.id)}
+                      {...getRowProps(index)}
                     >
                       {rowCells}
                     </DataList.RowButton>

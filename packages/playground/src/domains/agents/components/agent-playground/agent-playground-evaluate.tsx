@@ -2,7 +2,7 @@ import type { DatasetRecord } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Column, Columns } from '@mastra/playground-ui/components/Columns';
-import { DataList, DataListSkeleton } from '@mastra/playground-ui/components/DataList';
+import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@mastra/playground-ui/components/Dialog';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground-ui/components/InputGroup';
@@ -340,6 +340,16 @@ export function AgentPlaygroundEvaluate({
     });
   }, [attachedScorers, scorersSearch]);
 
+  const { containerRef: experimentsContainerRef, getRowProps: getExperimentRowProps } = useDataListKeyboard({
+    count: filteredExperiments.length,
+  });
+  const { containerRef: datasetsContainerRef, getRowProps: getDatasetRowProps } = useDataListKeyboard({
+    count: filteredDatasets.length,
+  });
+  const { containerRef: scorersContainerRef, getRowProps: getScorerRowProps } = useDataListKeyboard({
+    count: filteredScorers.length,
+  });
+
   // Close detail view when switching tabs
   const handleTabChange = useCallback((tab: AgentEvalTab) => {
     setActiveTab(tab);
@@ -501,7 +511,11 @@ export function AgentPlaygroundEvaluate({
     }
 
     return (
-      <DataList columns="auto minmax(15rem,1fr) auto auto auto auto auto" className="min-w-0">
+      <DataList
+        columns="auto minmax(15rem,1fr) auto auto auto auto auto"
+        className="min-w-0"
+        scrollRef={experimentsContainerRef}
+      >
         <DataList.Top>
           <DataList.TopCell>Experiment</DataList.TopCell>
           <DataList.TopCell>Dataset</DataList.TopCell>
@@ -512,7 +526,7 @@ export function AgentPlaygroundEvaluate({
           <DataList.TopCell>Date</DataList.TopCell>
         </DataList.Top>
 
-        {filteredExperiments.map(exp => {
+        {filteredExperiments.map((exp, index) => {
           const dsName = datasetMap.get(exp.datasetId)?.name ?? exp.datasetId.slice(0, 8);
           const status = exp.status ?? 'pending';
           const succeeded = exp.succeededCount ?? 0;
@@ -526,6 +540,7 @@ export function AgentPlaygroundEvaluate({
               key={exp.id}
               featured={isFeatured}
               onClick={() => setDetailView({ type: 'experiment', id: exp.id, datasetId: exp.datasetId })}
+              {...getExperimentRowProps(index)}
             >
               <DataList.IdCell id={exp.id} />
               <DataList.Cell height="compact" className="min-w-0">
@@ -573,7 +588,7 @@ export function AgentPlaygroundEvaluate({
     }
 
     return (
-      <DataList columns="minmax(10rem,1fr) auto auto auto auto" className="min-w-0">
+      <DataList columns="minmax(10rem,1fr) auto auto auto auto" className="min-w-0" scrollRef={datasetsContainerRef}>
         <DataList.Top>
           <DataList.TopCell>Name</DataList.TopCell>
           <DataList.TopCell>Tags</DataList.TopCell>
@@ -582,7 +597,7 @@ export function AgentPlaygroundEvaluate({
           <DataList.TopCell>Updated</DataList.TopCell>
         </DataList.Top>
 
-        {filteredDatasets.map(ds => {
+        {filteredDatasets.map((ds, index) => {
           const exp = datasetExperimentMap[ds.id];
           const genTask = generationTasks[ds.id];
           const isGenerating = genTask?.status === 'generating';
@@ -593,6 +608,7 @@ export function AgentPlaygroundEvaluate({
               key={ds.id}
               featured={isFeatured}
               onClick={() => setDetailView({ type: 'dataset', id: ds.id })}
+              {...getDatasetRowProps(index)}
             >
               <DataList.Cell height="compact" className="text-neutral4 min-w-0">
                 <span className="block truncate">{ds.name}</span>
@@ -656,7 +672,7 @@ export function AgentPlaygroundEvaluate({
     }
 
     return (
-      <DataList columns="minmax(10rem,1fr) auto auto auto" className="min-w-0">
+      <DataList columns="minmax(10rem,1fr) auto auto auto" className="min-w-0" scrollRef={scorersContainerRef}>
         <DataList.Top>
           <DataList.TopCell>Name</DataList.TopCell>
           <DataList.TopCell>Source</DataList.TopCell>
@@ -664,7 +680,7 @@ export function AgentPlaygroundEvaluate({
           <DataList.TopCell>Datasets</DataList.TopCell>
         </DataList.Top>
 
-        {filteredScorers.map(([id, scorer]) => {
+        {filteredScorers.map(([id, scorer], index) => {
           const name = scorer.scorer?.name || id;
           const description = scorer.scorer?.description || '';
           const source = scorer.source ?? 'stored';
@@ -675,7 +691,12 @@ export function AgentPlaygroundEvaluate({
           const isFeatured = detailView?.type === 'scorer' && detailView.id === id;
 
           return (
-            <DataList.RowButton key={id} featured={isFeatured} onClick={() => setDetailView({ type: 'scorer', id })}>
+            <DataList.RowButton
+              key={id}
+              featured={isFeatured}
+              onClick={() => setDetailView({ type: 'scorer', id })}
+              {...getScorerRowProps(index)}
+            >
               <DataList.Cell height="compact" className="text-neutral4 min-w-0">
                 <span className="block truncate">{name}</span>
               </DataList.Cell>
