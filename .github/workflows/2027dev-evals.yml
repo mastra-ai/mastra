@@ -108,23 +108,33 @@ jobs:
           script: |
             const fs = require('node:fs');
 
-            const config = JSON.parse(fs.readFileSync('.github/workflows/data/2027dev-evals.json', 'utf8'));
+            const configPath = '.github/workflows/data/2027dev-evals.json';
+            if (!fs.existsSync(configPath)) {
+              core.info('Skipping: trusted eval configuration is not available on the default branch yet.');
+              core.setOutput('has-evals', 'false');
+              core.setOutput('matrix', JSON.stringify({ include: [] }));
+              return;
+            }
+
+            const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
             if (!config || !Array.isArray(config.evals)) {
               throw new Error('2027 eval configuration must contain an evals array.');
             }
 
             const promptIds = new Set();
             for (const entry of config.evals) {
-              const allowedKeys = new Set(['promptId', 'paths']);
+              const allowedKeys = new Set(['title', 'promptId', 'paths']);
               const unknownKeys = Object.keys(entry ?? {}).filter(key => !allowedKeys.has(key));
               if (
                 !entry ||
+                typeof entry.title !== 'string' ||
+                entry.title.trim().length === 0 ||
                 typeof entry.promptId !== 'string' ||
                 !Array.isArray(entry.paths) ||
                 entry.paths.length === 0 ||
                 unknownKeys.length > 0
               ) {
-                throw new Error('Each 2027 eval entry must contain only promptId and paths.');
+                throw new Error('Each 2027 eval entry must contain only title, promptId, and paths.');
               }
 
               if (promptIds.has(entry.promptId)) {
@@ -168,6 +178,7 @@ jobs:
                 ),
               )
               .map(entry => ({
+                title: entry.title,
                 promptId: entry.promptId,
                 urlMap: JSON.stringify({ 'mastra.ai': process.env.TARGET_URL }),
               }));
@@ -176,7 +187,7 @@ jobs:
             core.setOutput('matrix', JSON.stringify({ include }));
 
   eval:
-    name: 2027 eval (${{ matrix.promptId }})
+    name: 2027 eval (${{ matrix.title }})
     needs: detect
     if: needs.detect.outputs.has-evals == 'true'
     runs-on: starsling-ubuntu-24.04
