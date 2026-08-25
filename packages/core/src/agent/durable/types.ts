@@ -15,6 +15,7 @@ import type { ScoringFilter } from '../../evals/predicate';
 import type { SystemMessage } from '../../llm';
 import type { ProviderOptions } from '../../llm/model/provider-options';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
+import type { IMastraLogger } from '../../logger';
 import type { ToolCallConcurrency } from '../../loop/types';
 import type { Mastra } from '../../mastra';
 import type { MastraMemory } from '../../memory/memory';
@@ -703,6 +704,7 @@ export interface RunRegistryEntry {
     messageListState: SerializedMessageListState;
     requestContext?: RequestContext;
     tracingContext?: TracingContext;
+    logger?: IMastraLogger;
   }) => Promise<void>;
   /**
    * Signal messages already present in the `messageList` at run start (from

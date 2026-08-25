@@ -26,3 +26,5 @@ for await (const chunk of stream.fullStream) {
 ```
 
 The chunk is transient, so it is never persisted as part of the conversation. The default stays fully non-blocking: without `emitEvent`, title generation still runs in the background and does not delay the stream.
+
+Durable and evented agents don't emit the chunk yet; the title is still generated and persisted, and a warning is logged when `emitEvent` is set.

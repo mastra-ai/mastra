@@ -1070,6 +1070,9 @@ type BaseMemoryConfig = {
          * Trade-off: the stream's `finish` is delayed by the title model call on the
          * first turn of a thread.
          *
+         * Durable and evented agents don't emit this chunk yet; the title is still
+         * generated and persisted, and a warning is logged.
+         *
          * @default false
          */
         emitEvent?: boolean;
