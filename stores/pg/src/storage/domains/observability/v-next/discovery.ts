@@ -46,9 +46,11 @@ import {
   TABLE_SCORE_EVENTS,
   TABLE_FEEDBACK_EVENTS,
   TABLE_SPAN_EVENTS,
+  SIGNAL_TIME_COLUMN,
 } from './ddl';
 
 const DEFAULT_TTL_SECONDS = 5 * 60; // 5 minutes
+const DEFAULT_LOOKBACK_SECONDS = 30 * 24 * 60 * 60; // 30 days
 
 /** All signal tables that contain a column. Used by cross-signal discovery. */
 const SIGNAL_TABLES_WITH_CONTEXT = [
@@ -65,6 +67,20 @@ const ENTITY_DISCOVERY_TABLES = [TABLE_SPAN_EVENTS, TABLE_METRIC_EVENTS, TABLE_L
 export interface DiscoveryConfig {
   /** TTL for cached values in seconds. Default 300 (5 minutes). */
   ttlSeconds?: number;
+  /**
+   * Only scan events newer than this many seconds when refreshing a discovery
+   * value. Default 2592000 (30 days).
+   *
+   * The predicate targets each signal table's partition range key
+   * (`SIGNAL_TIME_COLUMN`), so bounding the window lets Postgres prune
+   * partitions on native/pg_partman layouts and exclude chunks on Timescale
+   * instead of visiting all history on every refresh.
+   *
+   * Set to 0 to scan all history (the behavior before this option existed).
+   * Note that a value last seen outside the window disappears from discovery
+   * results until it is seen again.
+   */
+  lookbackSeconds?: number;
   /**
    * Logger used to report background refresh failures. Injected by the
    * domain class (`ObservabilityStoragePostgresVNext`) so discovery
@@ -156,29 +172,18 @@ async function readWithRefresh(
     [cacheKey],
   );
 
-  const refreshedAtMs = row ? new Date(row.refreshedAt).getTime() : 0;
-  const stale = !row || Date.now() - refreshedAtMs > ttlSeconds * 1000;
-
-  if (!stale) return row!.values;
-
   const dedupeKey = `${schema}:${cacheKey}`;
-  const refreshing = startOrJoinRefresh(
-    dedupeKey,
-    cacheKey,
-    refresh,
-    values => upsertCache(client, schema, cacheKey, values),
-    logger,
-  );
+  const startRefresh = () =>
+    startOrJoinRefresh(dedupeKey, cacheKey, refresh, values => upsertCache(client, schema, cacheKey, values), logger);
 
   // Force-refresh path: `ttlSeconds <= 0` is the contract used by
   // `refreshAllDiscoveryCaches()` (and the future `mastra observability
   // discovery refresh` CLI) to mean "block until the cache is rewritten".
-  // Without this branch a stale-but-existing row would serve immediately and
-  // resolve before the background refresh writes the new values, defeating
-  // the whole point of a manual refresh.
+  // Check this before cache freshness because consecutive forced refreshes can
+  // occur in the same millisecond.
   if (ttlSeconds <= 0) {
     try {
-      return await refreshing;
+      return await startRefresh();
     } catch {
       // Already logged inside startOrJoinRefresh. Fall back to whatever we
       // had cached so the caller still gets a defined value.
@@ -186,10 +191,15 @@ async function readWithRefresh(
     }
   }
 
+  const refreshedAtMs = row ? new Date(row.refreshedAt).getTime() : 0;
+  const stale = !row || Date.now() - refreshedAtMs > ttlSeconds * 1000;
+
+  if (!stale) return row!.values;
+
   if (!row) {
     // Cold path: no cached values to serve. Block on (or join) the refresh.
     try {
-      return await refreshing;
+      return await startRefresh();
     } catch {
       // Already logged inside startOrJoinRefresh; return empty so the caller
       // gets a defined value instead of throwing.
@@ -197,10 +207,93 @@ async function readWithRefresh(
     }
   }
 
-  // Stale path: serve the cached values immediately. Suppress the
-  // unhandled-rejection warning since the helper already logs.
-  refreshing.catch(() => {});
+  // Stale path: serve the cached values immediately and revalidate in the
+  // background — but only if this process wins the claim. `inFlightRefreshes`
+  // dedupes within one process; the claim extends that to every process
+  // pointing at the same database, so N frontends going stale together run
+  // one refresh instead of N.
+  const previousRefreshedAt = row.refreshedAt;
+  void claimRefresh(client, schema, cacheKey, ttlSeconds)
+    .then(claimedAt => {
+      // Lost the claim: another process is already refreshing this key.
+      if (!claimedAt) return;
+      return startRefresh().then(
+        // Success rewrites `refreshedAt` via upsertCache.
+        () => {},
+        // Failure (already logged by startOrJoinRefresh) hands the claim
+        // back by restoring the timestamp we found, so the next reader
+        // retries instead of waiting out a TTL on a stamp that never
+        // corresponded to a completed refresh.
+        () => releaseClaim(client, schema, cacheKey, previousRefreshedAt, claimedAt),
+      );
+    })
+    .catch(() => {});
   return row.values;
+}
+
+/**
+ * Try to become the process that refreshes `cacheKey`.
+ *
+ * The conditional UPDATE re-checks staleness in the database and stamps
+ * `refreshedAt` in the same statement, so exactly one caller can transition a
+ * given cache row out of the stale window — losers see zero rows updated and
+ * skip their refresh. This is the cross-process counterpart to
+ * `inFlightRefreshes`: N frontends going stale together run one refresh
+ * instead of N.
+ *
+ * It reuses the cache table rather than an advisory lock because `DbClient`
+ * is pool-backed, so a transaction-scoped lock would mean threading explicit
+ * transaction handling through the discovery read path.
+ *
+ * The stamp is provisional in both directions: a completed refresh overwrites
+ * it via `upsertCache`, and a failed one restores it via `releaseClaim`.
+ *
+ * Returns the exact provisional stamp written by the claim (or `null` when
+ * the claim was lost) so `releaseClaim` can restore the row only while it
+ * still holds this claim's stamp.
+ */
+async function claimRefresh(
+  client: DbClient,
+  schema: string,
+  cacheKey: string,
+  ttlSeconds: number,
+): Promise<string | null> {
+  const table = qualifiedTable(schema, TABLE_DISCOVERY);
+  // The stamp is returned as text so the microsecond precision Postgres
+  // stores survives the round trip — a JS Date only holds milliseconds,
+  // which would break the exact-match guard in `releaseClaim`.
+  const claimed = await client.oneOrNone<{ refreshedAt: string }>(
+    `UPDATE ${table} SET "refreshedAt" = NOW()
+      WHERE "cacheKey" = $1 AND "refreshedAt" <= NOW() - ($2 || ' seconds')::interval
+     RETURNING "refreshedAt"::text AS "refreshedAt"`,
+    [cacheKey, Math.floor(ttlSeconds)],
+  );
+  return claimed?.refreshedAt ?? null;
+}
+
+/**
+ * Hand back a claim whose refresh failed by restoring the timestamp the
+ * claiming reader observed. Guarded on the row still holding this claim's
+ * exact provisional stamp so a refresh that completed in the meantime
+ * (another process, or a later claim) isn't dragged backwards into staleness.
+ */
+async function releaseClaim(
+  client: DbClient,
+  schema: string,
+  cacheKey: string,
+  previousRefreshedAt: Date,
+  claimedAt: string,
+): Promise<void> {
+  const table = qualifiedTable(schema, TABLE_DISCOVERY);
+  try {
+    await client.query(
+      `UPDATE ${table} SET "refreshedAt" = $2
+        WHERE "cacheKey" = $1 AND "refreshedAt" = $3::timestamptz`,
+      [cacheKey, previousRefreshedAt, claimedAt],
+    );
+  } catch {
+    // Best-effort: the claim expires on its own once the TTL elapses.
+  }
 }
 
 async function upsertCache(client: DbClient, schema: string, cacheKey: string, values: string[]): Promise<void> {
@@ -219,11 +312,35 @@ async function upsertCache(client: DbClient, schema: string, cacheKey: string, v
 // Per-discovery refresh queries
 // ---------------------------------------------------------------------------
 
+/**
+ * Time predicate that bounds a discovery refresh to recent events.
+ *
+ * Each signal table is range-partitioned on its own time column
+ * (`SIGNAL_TIME_COLUMN`: `endedAt` for spans, `timestamp` for everything
+ * else), so the predicate has to be built per table rather than shared across
+ * a UNION. Bounding on that exact column is what lets the planner prune
+ * partitions/chunks instead of scanning all history.
+ *
+ * The interval is interpolated rather than bound to a parameter on purpose:
+ * the UNION branches in `distinctAcrossTables` and `getTags` all reference the
+ * same positional placeholders, so adding a per-branch parameter would break
+ * `$N` numbering. Safety comes from coercing to a finite integer here — the
+ * value originates from `DiscoveryConfig`, never from user input.
+ */
+function lookbackPredicate(table: string, lookbackSeconds: number): string {
+  if (!Number.isFinite(lookbackSeconds) || lookbackSeconds <= 0) return '';
+  const seconds = Math.floor(lookbackSeconds);
+  const timeColumn = SIGNAL_TIME_COLUMN[table as keyof typeof SIGNAL_TIME_COLUMN];
+  if (!timeColumn) return '';
+  return `AND "${timeColumn}" >= NOW() - INTERVAL '${seconds} seconds'`;
+}
+
 async function distinctAcrossTables(
   client: DbClient,
   schema: string,
   column: string,
   tables: readonly string[],
+  lookbackSeconds: number,
   filterSql: string = '',
   filterParams: unknown[] = [],
 ): Promise<string[]> {
@@ -236,7 +353,7 @@ async function distinctAcrossTables(
   const unions = tables
     .map(
       t =>
-        `SELECT DISTINCT "${safeColumn}" AS v FROM ${qualifiedTable(schema, t)} WHERE "${safeColumn}" IS NOT NULL AND "${safeColumn}" <> '' ${filterSql}`,
+        `SELECT DISTINCT "${safeColumn}" AS v FROM ${qualifiedTable(schema, t)} WHERE "${safeColumn}" IS NOT NULL AND "${safeColumn}" <> '' ${filterSql} ${lookbackPredicate(t, lookbackSeconds)}`,
     )
     .join(' UNION ');
   const rows = await client.manyOrNone<{ v: string }>(`SELECT v FROM (${unions}) sub ORDER BY v`, filterParams);
@@ -254,11 +371,12 @@ export async function getEntityTypes(
   config: DiscoveryConfig,
 ): Promise<GetEntityTypesResponse> {
   const ttl = config.ttlSeconds ?? DEFAULT_TTL_SECONDS;
+  const lookback = config.lookbackSeconds ?? DEFAULT_LOOKBACK_SECONDS;
   const values = await readWithRefresh(
     client,
     schema,
     'entity_types',
-    () => distinctAcrossTables(client, schema, 'entityType', ENTITY_DISCOVERY_TABLES),
+    () => distinctAcrossTables(client, schema, 'entityType', ENTITY_DISCOVERY_TABLES, lookback),
     ttl,
     config.logger,
   );
@@ -272,6 +390,7 @@ export async function getEntityNames(
   config: DiscoveryConfig,
 ): Promise<GetEntityNamesResponse> {
   const ttl = config.ttlSeconds ?? DEFAULT_TTL_SECONDS;
+  const lookback = config.lookbackSeconds ?? DEFAULT_LOOKBACK_SECONDS;
   const cacheKey = args.entityType ? `entity_names:${args.entityType}` : 'entity_names';
   const filterSql = args.entityType ? `AND "entityType" = $1` : '';
   const filterParams = args.entityType ? [args.entityType] : [];
@@ -279,7 +398,8 @@ export async function getEntityNames(
     client,
     schema,
     cacheKey,
-    () => distinctAcrossTables(client, schema, 'entityName', ENTITY_DISCOVERY_TABLES, filterSql, filterParams),
+    () =>
+      distinctAcrossTables(client, schema, 'entityName', ENTITY_DISCOVERY_TABLES, lookback, filterSql, filterParams),
     ttl,
     config.logger,
   );
@@ -293,11 +413,12 @@ export async function getServiceNames(
   config: DiscoveryConfig,
 ): Promise<GetServiceNamesResponse> {
   const ttl = config.ttlSeconds ?? DEFAULT_TTL_SECONDS;
+  const lookback = config.lookbackSeconds ?? DEFAULT_LOOKBACK_SECONDS;
   const values = await readWithRefresh(
     client,
     schema,
     'service_names',
-    () => distinctAcrossTables(client, schema, 'serviceName', SIGNAL_TABLES_WITH_CONTEXT),
+    () => distinctAcrossTables(client, schema, 'serviceName', SIGNAL_TABLES_WITH_CONTEXT, lookback),
     ttl,
     config.logger,
   );
@@ -311,11 +432,12 @@ export async function getEnvironments(
   config: DiscoveryConfig,
 ): Promise<GetEnvironmentsResponse> {
   const ttl = config.ttlSeconds ?? DEFAULT_TTL_SECONDS;
+  const lookback = config.lookbackSeconds ?? DEFAULT_LOOKBACK_SECONDS;
   const values = await readWithRefresh(
     client,
     schema,
     'environments',
-    () => distinctAcrossTables(client, schema, 'environment', SIGNAL_TABLES_WITH_CONTEXT),
+    () => distinctAcrossTables(client, schema, 'environment', SIGNAL_TABLES_WITH_CONTEXT, lookback),
     ttl,
     config.logger,
   );
@@ -329,6 +451,7 @@ export async function getTags(
   config: DiscoveryConfig,
 ): Promise<GetTagsResponse> {
   const ttl = config.ttlSeconds ?? DEFAULT_TTL_SECONDS;
+  const lookback = config.lookbackSeconds ?? DEFAULT_LOOKBACK_SECONDS;
   const cacheKey = args.entityType ? `tags:${args.entityType}` : 'tags';
 
   const refresh = async (): Promise<string[]> => {
@@ -336,7 +459,7 @@ export async function getTags(
     const params = args.entityType ? [args.entityType] : [];
     const unions = ENTITY_DISCOVERY_TABLES.map(
       t =>
-        `SELECT DISTINCT UNNEST("tags") AS v FROM ${qualifiedTable(schema, t)} WHERE array_length("tags", 1) > 0 ${filter}`,
+        `SELECT DISTINCT UNNEST("tags") AS v FROM ${qualifiedTable(schema, t)} WHERE array_length("tags", 1) > 0 ${filter} ${lookbackPredicate(t, lookback)}`,
     ).join(' UNION ');
     const rows = await client.manyOrNone<{ v: string }>(
       `SELECT v FROM (${unions}) sub WHERE v IS NOT NULL AND v <> '' ORDER BY v`,
@@ -356,6 +479,7 @@ export async function getMetricNames(
   config: DiscoveryConfig,
 ): Promise<GetMetricNamesResponse> {
   const ttl = config.ttlSeconds ?? DEFAULT_TTL_SECONDS;
+  const lookback = config.lookbackSeconds ?? DEFAULT_LOOKBACK_SECONDS;
   const values = await readWithRefresh(
     client,
     schema,
@@ -363,7 +487,7 @@ export async function getMetricNames(
     async () => {
       const rows = await client.manyOrNone<{ v: string }>(
         `SELECT DISTINCT "name" AS v FROM ${qualifiedTable(schema, TABLE_METRIC_EVENTS)}
-         WHERE "name" IS NOT NULL AND "name" <> '' ORDER BY "name"`,
+         WHERE "name" IS NOT NULL AND "name" <> '' ${lookbackPredicate(TABLE_METRIC_EVENTS, lookback)} ORDER BY "name"`,
       );
       return rows.map(r => r.v);
     },
@@ -383,6 +507,7 @@ export async function getMetricLabelKeys(
   config: DiscoveryConfig,
 ): Promise<GetMetricLabelKeysResponse> {
   const ttl = config.ttlSeconds ?? DEFAULT_TTL_SECONDS;
+  const lookback = config.lookbackSeconds ?? DEFAULT_LOOKBACK_SECONDS;
   const cacheKey = `metric_label_keys:${args.metricName}`;
   const values = await readWithRefresh(
     client,
@@ -392,7 +517,7 @@ export async function getMetricLabelKeys(
       const rows = await client.manyOrNone<{ v: string }>(
         `SELECT DISTINCT k AS v
          FROM ${qualifiedTable(schema, TABLE_METRIC_EVENTS)}, jsonb_object_keys("labels") k
-         WHERE "name" = $1 ORDER BY k`,
+         WHERE "name" = $1 ${lookbackPredicate(TABLE_METRIC_EVENTS, lookback)} ORDER BY k`,
         [args.metricName],
       );
       return rows.map(r => r.v);
@@ -410,6 +535,7 @@ export async function getMetricLabelValues(
   config: DiscoveryConfig,
 ): Promise<GetMetricLabelValuesResponse> {
   const ttl = config.ttlSeconds ?? DEFAULT_TTL_SECONDS;
+  const lookback = config.lookbackSeconds ?? DEFAULT_LOOKBACK_SECONDS;
   const cacheKey = `metric_label_values:${args.metricName}:${args.labelKey}`;
   const values = await readWithRefresh(
     client,
@@ -419,7 +545,7 @@ export async function getMetricLabelValues(
       const rows = await client.manyOrNone<{ v: string }>(
         `SELECT DISTINCT "labels" ->> $2 AS v
          FROM ${qualifiedTable(schema, TABLE_METRIC_EVENTS)}
-         WHERE "name" = $1 AND "labels" ? $2
+         WHERE "name" = $1 AND "labels" ? $2 ${lookbackPredicate(TABLE_METRIC_EVENTS, lookback)}
          ORDER BY v`,
         [args.metricName, args.labelKey],
       );
