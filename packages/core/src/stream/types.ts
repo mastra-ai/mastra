@@ -1134,8 +1134,25 @@ export type MastraOnFinishCallbackArgs<OUTPUT = undefined> = LLMStepResult<OUTPU
   runId?: string;
 };
 
+/**
+ * Writer for enqueueing custom `data-*` chunks onto a run stream. Chunks
+ * written while the `finish` chunk is being assembled (e.g. from onFinish
+ * callbacks) are delivered to consumers before `finish`.
+ */
+export type CustomChunkWriter = {
+  custom: (
+    data: { type: string; data?: unknown; transient?: boolean },
+    writerOptions?: { messageId?: string },
+  ) => Promise<void> | void;
+};
+
+export type MastraOnFinishCallbackContext = {
+  writer?: CustomChunkWriter;
+};
+
 export type MastraOnFinishCallback<OUTPUT = undefined> = (
   event: MastraOnFinishCallbackArgs<OUTPUT>,
+  context?: MastraOnFinishCallbackContext,
 ) => Promise<void> | void;
 
 /**

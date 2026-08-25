@@ -1016,6 +1016,22 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 }),
               };
 
+              // Create a writer from the controller so processOutputResult and onFinish
+              // callbacks can emit custom chunks. Must use both #emitChunk (for
+              // fullStream/EventEmitter consumers) and controller.enqueue (for raw stream
+              // consumers) to ensure visibility. The finish chunk is enqueued after this
+              // case completes, so chunks written here are delivered before `finish`.
+              const outputResultWriter = {
+                custom: async (
+                  data: { type: string; data?: unknown; transient?: boolean },
+                  writerOptions?: { messageId?: string },
+                ) => {
+                  persistProcessorDataChunk(self.messageList, writerOptions?.messageId ?? self.messageId, data);
+                  self.#emitChunk(data as ChunkType<OUTPUT>);
+                  controller.enqueue(data as ChunkType<OUTPUT>);
+                },
+              };
+
               try {
                 if (self.processorRunner && !self.#options.isLLMExecutionStep) {
                   // Run output processors when NOT in LLM execution step context
@@ -1024,20 +1040,6 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   // Capture original text before processing for comparison
                   const lastStep = self.#bufferedSteps[self.#bufferedSteps.length - 1];
                   const originalText = lastStep?.text || '';
-
-                  // Create a writer from the controller so processOutputResult can emit custom chunks.
-                  // Must use both #emitChunk (for fullStream/EventEmitter consumers) and
-                  // controller.enqueue (for raw stream consumers) to ensure visibility.
-                  const outputResultWriter = {
-                    custom: async (
-                      data: { type: string; data?: unknown; transient?: boolean },
-                      writerOptions?: { messageId?: string },
-                    ) => {
-                      persistProcessorDataChunk(self.messageList, writerOptions?.messageId ?? self.messageId, data);
-                      self.#emitChunk(data as ChunkType<OUTPUT>);
-                      controller.enqueue(data as ChunkType<OUTPUT>);
-                    },
-                  };
 
                   const outputResult: OutputResult = {
                     text: self.#bufferedText.join(''),
@@ -1238,7 +1240,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
                 if (!self.#finishCallbackSent) {
                   self.#finishCallbackSent = true;
-                  await options?.onFinish?.(onFinishPayload);
+                  await options?.onFinish?.(onFinishPayload, { writer: outputResultWriter });
                 }
               }
 

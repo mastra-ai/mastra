@@ -1047,13 +1047,31 @@ type BaseMemoryConfig = {
          * Language model to use for title generation.
          * Can be static or a function that receives request context for dynamic selection.
          * Accepts both Mastra models and standard AI SDK LanguageModelV1/V2.
+         * Defaults to the agent's own model.
          */
-        model: DynamicArgument<MastraModelConfig>;
+        model?: DynamicArgument<MastraModelConfig>;
         /**
          * Custom instructions for title generation.
          * Can be static or a function that receives request context for dynamic customization.
          */
         instructions?: DynamicArgument<string>;
+        /**
+         * Minimum number of thread messages required before a title is generated.
+         *
+         * @default 1
+         */
+        minMessages?: number;
+        /**
+         * Wait for the generated title and emit it as a transient `data-thread-title`
+         * chunk (`{ threadId, title }`) on the run's stream, before the `finish` chunk.
+         * Lets HTTP/stream consumers receive the title without polling the thread.
+         *
+         * Trade-off: the stream's `finish` is delayed by the title model call on the
+         * first turn of a thread.
+         *
+         * @default false
+         */
+        emitEvent?: boolean;
       };
 
   /**
@@ -1288,6 +1306,10 @@ export type SerializedMemoryConfig = {
           model: ModelRouterModelId;
           /** Custom instructions for title generation */
           instructions?: string;
+          /** Minimum number of thread messages required before a title is generated */
+          minMessages?: number;
+          /** Emit the generated title as a `data-thread-title` chunk on the run stream */
+          emitEvent?: boolean;
         };
   };
 

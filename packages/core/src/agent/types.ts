@@ -55,7 +55,12 @@ import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
 import type { SignalProvider } from '../signals/signal-provider';
 import type { AgentSkillsInput } from '../skills/types';
 import type { MastraModelOutput } from '../stream/base/output';
-import type { AgentChunkType, MastraOnFinishCallbackArgs, ModelManagerModelConfig } from '../stream/types';
+import type {
+  AgentChunkType,
+  CustomChunkWriter,
+  MastraOnFinishCallbackArgs,
+  ModelManagerModelConfig,
+} from '../stream/types';
 import type { ToolAction, ToolHooks, VercelTool, VercelToolV5 } from '../tools';
 import type { WebSearchToolPlaceholder } from '../tools/builtin/web-search';
 import type { ToolPayloadTransformPolicy } from '../tools/types';
@@ -1185,6 +1190,12 @@ export type AgentExecuteOnFinishOptions = {
    * serverless freeze-after-response without blocking `generate()`/`stream()`.
    */
   waitUntil?: WaitUntilFn;
+  /**
+   * Writer for the run's stream. Chunks written during this callback are
+   * delivered before the `finish` chunk, so post-run side effects (e.g. a
+   * generated thread title) can reach stream consumers on the wire.
+   */
+  writer?: CustomChunkWriter;
 };
 
 export type AgentMethodType = 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';

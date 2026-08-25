@@ -7480,6 +7480,7 @@ export class Agent<
     overrideScorers,
     onTitleGenerated,
     waitUntil,
+    writer,
   }: AgentExecuteOnFinishOptions) {
     const observabilityContext = createObservabilityContext({ currentSpan: agentSpan });
 
@@ -7563,6 +7564,7 @@ export class Agent<
           model: titleModel,
           instructions: titleInstructions,
           minMessages,
+          emitEvent,
         } = this.resolveTitleGenerationConfig(
           config?.generateTitle as
             | boolean
@@ -7570,6 +7572,7 @@ export class Agent<
                 model?: DynamicArgument<MastraModelConfig, TRequestContext>;
                 instructions?: DynamicArgument<string>;
                 minMessages?: number;
+                emitEvent?: boolean;
               }
             | undefined,
         );
@@ -7604,6 +7607,17 @@ export class Agent<
                       title,
                       metadata: thread.metadata,
                     });
+                    if (emitEvent && writer) {
+                      try {
+                        await writer.custom({
+                          type: 'data-thread-title',
+                          data: { threadId: thread.id, title },
+                          transient: true,
+                        });
+                      } catch (error) {
+                        this.logger.debug('Could not emit thread title chunk; stream already closed', { error });
+                      }
+                    }
                     if (typeof onTitleGenerated === 'function') {
                       await onTitleGenerated(title);
                     }
@@ -7613,7 +7627,12 @@ export class Agent<
                   this.logger.error('Error persisting generated title:', error);
                 });
 
-              if (typeof waitUntil === 'function') {
+              if (emitEvent && writer) {
+                // `generateTitle.emitEvent` trades finish latency for delivery: the run's
+                // `finish` chunk is held until the title is generated, persisted, and
+                // emitted as a transient `data-thread-title` chunk on this stream.
+                await titlePromise;
+              } else if (typeof waitUntil === 'function') {
                 waitUntil(titlePromise);
               } else {
                 void titlePromise;
@@ -9698,6 +9717,7 @@ export class Agent<
           model?: DynamicArgument<MastraModelConfig, TRequestContext>;
           instructions?: DynamicArgument<string>;
           minMessages?: number;
+          emitEvent?: boolean;
         }
       | undefined,
   ): {
@@ -9705,6 +9725,7 @@ export class Agent<
     model?: DynamicArgument<MastraModelConfig, TRequestContext>;
     instructions?: DynamicArgument<string>;
     minMessages?: number;
+    emitEvent?: boolean;
   } {
     if (typeof generateTitleConfig === 'boolean') {
       return { shouldGenerate: generateTitleConfig };
@@ -9716,6 +9737,7 @@ export class Agent<
         model: generateTitleConfig.model,
         instructions: generateTitleConfig.instructions,
         minMessages: generateTitleConfig.minMessages,
+        emitEvent: generateTitleConfig.emitEvent,
       };
     }
 
