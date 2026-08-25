@@ -26,6 +26,42 @@ export function usableObservationalMemoryModel(
 }
 
 /**
+ * Resolve the model the reminder lane runs on, preserving configured failover. Unlike
+ * {@link resolveSubconsciousAgentModel}, retry/fallback arrays pass through unchanged (the
+ * Agent materializes failover itself), and a token-routed model resolves against an estimate
+ * of the ACTUAL assembled input — instructions, prompt, and reminder history — instead of
+ * always taking the smallest tier.
+ */
+export async function resolveReminderLaneModel(options: {
+  config: ResolvedSubconsciousAgent;
+  omModel?: ObservationalMemoryModel;
+  mainAgent?: ReflectionCommittedContext['mainAgent'];
+  requestContext?: RequestContext;
+  /** Estimated input tokens for the turn about to run (chars/4 of the assembled text). */
+  estimatedInputTokens: number;
+}): Promise<SubconsciousModel | undefined> {
+  const { config, omModel, mainAgent, requestContext, estimatedInputTokens } = options;
+  if (config.model) {
+    // A per-agent model is an AgentConfig['model'] form already — hand it to the Agent whole
+    // so arrays keep their failover order and dynamic functions resolve at run time.
+    return config.model;
+  }
+  if (omModel && omModel !== 'default' && !(omModel instanceof ModelByInputTokens)) {
+    return omModel as SubconsciousModel;
+  }
+  if (omModel instanceof ModelByInputTokens) {
+    // `resolve` picks the tier for the given input size and may return a fallback array;
+    // return it unreduced.
+    return omModel.resolve(estimatedInputTokens) as SubconsciousModel;
+  }
+  if (mainAgent) return (await mainAgent.getModel({ requestContext })) as SubconsciousModel;
+  if (omModel === 'default') {
+    return OBSERVATIONAL_MEMORY_DEFAULTS.observation.model as SubconsciousModel;
+  }
+  return undefined;
+}
+
+/**
  * Resolve the model a subconscious agent runs on. Precedence: the per-agent config model,
  * then the observational memory model, then the main agent's model. Returns undefined when
  * no source is available so callers keep their existing throw/silent-return behavior.
