@@ -96,10 +96,11 @@ function loose(c: unknown): RouteContext {
 export interface MountGithubRoutesOptions {
   /** Host auth seam — resolves the signed-in user/tenant for each request. */
   auth: RouteAuth;
-  /**
-   * Sandbox surface for per-project sandboxes. Without a configured create
-   * callback it reports `enabled: false` and sandbox-backed routes respond
-   * 503.
+   /**
+   * The host's session-sandbox callback. Routes only read whether it is
+   * configured: without one, `/web/github/status` reports
+   * `sandboxEnabled: false` and sandbox-backed routes respond 503. Sandboxes
+   * themselves are constructed per session and started lazily elsewhere.
    */
   sandbox?: MastraFactorySandboxConfig;
   /** Factory storage backend used for the `appDbConfigured` diagnostic. */

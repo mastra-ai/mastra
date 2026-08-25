@@ -304,7 +304,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     // VM's own home so it resolves lazily at first start.
     // `runSetupOn` references `runSessionSetup`, defined below — it is only
     // invoked during start, long after this closure fully initializes.
-    const runSetupOn = (target: unknown, workdir: string) => runSessionSetup(target as SessionSandbox, workdir);
+    const runSetupOn = (target: unknown, workdir: string) =>
+      runSessionSetup(requireExec(target as WorkspaceSandbox), workdir);
     const guardedSetup = createSessionSetupHook(runSetupOn, session.id, repoFullName);
     // Composed start hook: marker-guarded repo setup, then per-start
     // credential install. It runs inside the provider's start lifecycle on

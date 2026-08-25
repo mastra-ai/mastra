@@ -47,7 +47,7 @@ export interface ChatSessionContextApi {
    * of binding to a fresh random-id thread the route can never find.
    */
   sessionThreadId?: string;
-  /** Workspace needs sandbox provision + clone before the controller can connect. */
+  /** The session's workspace row is not materialized yet, so the controller cannot connect. */
   workspacePending?: boolean;
   draftSessionId?: string;
   factorySessionState?: FactorySessionState;

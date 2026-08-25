@@ -217,7 +217,7 @@ const createPullRequest = vi.fn(async (..._args: any[]) => ({ url: 'https://gith
  * DI-injected sandbox callback stub — presence signals "configured".
  * A `vi.fn` so tests can assert the routes never constructed a sandbox.
  */
-const sandboxRuntime = vi.fn((ctx: { sessionId: string }) => ({ id: `sbx-${ctx.sessionId}` })) as any;
+const sandboxCallback = vi.fn((ctx: { sessionId: string }) => ({ id: `sbx-${ctx.sessionId}` })) as any;
 vi.mock('./sandbox', () => {
   class MaterializeError extends Error {
     code: string;
@@ -354,7 +354,7 @@ function buildApp(user: { workosId: string; organizationId?: string } | null) {
       github: githubStub as any,
       stateSigner,
       auth: fakeRouteAuth(),
-      sandbox: sandboxRuntime,
+      sandbox: sandboxCallback,
     }),
   );
   return app;
@@ -387,7 +387,7 @@ beforeEach(() => {
   mintCount = 0;
   repositoryAccessCount = 0;
   pushImpl = async () => {};
-  sandboxRuntime.mockClear();
+  sandboxCallback.mockClear();
   materializeRepo.mockClear();
   commitAll.mockClear();
   pushBranch.mockClear();
@@ -419,8 +419,9 @@ describe('S1: full write-back journey through the real route handlers', () => {
     );
     const app = buildApp({ workosId: 'u1', organizationId: 'org1' });
 
-    // Seed the per-(project-repository,user) sandbox binding (provisioning
-    // itself is mocked).
+    // Seed the per-(project-repository,user) binding row. Nothing provisions
+    // it any more; the row exists so the git routes below have a workdir to
+    // resolve, and its presence must not cause a sandbox to be constructed.
     tables.sandboxes.push({
       id: 'sbrow-1',
       projectRepositoryId: projectId,
@@ -430,19 +431,19 @@ describe('S1: full write-back journey through the real route handlers', () => {
       materializedAt: null,
     });
 
-    // 2. Opening the project provisions nothing: session sandboxes boot
-    // lazily at the first real command, so neither the repo materialization
-    // nor the sandbox callback has run.
-    expect(materializeRepo).not.toHaveBeenCalled();
-    expect(sandboxRuntime).not.toHaveBeenCalled();
-
-    // 3. Session creation persists identity only; AgentController's workspace
+    // 2. Session creation persists identity only; AgentController's workspace
     // factory materializes the isolated checkout when that session starts.
     const sessionRes = await postJson(app, `/web/github/projects/${projectId}/sessions`, { branch: 'feat/x' });
     expect(sessionRes.status).toBe(200);
     const session = (await sessionRes.json()).session;
     expect(session).toMatchObject({ projectRepositoryId: projectId, branch: 'feat/x', baseBranch: 'main' });
     expect(tables.sessions).toHaveLength(1);
+
+    // Creating that session provisioned nothing: session sandboxes boot lazily
+    // at the first real command, so neither the repo materialization nor the
+    // sandbox callback has run yet.
+    expect(materializeRepo).not.toHaveBeenCalled();
+    expect(sandboxCallback).not.toHaveBeenCalled();
     expect(tables.worktrees).toHaveLength(0);
     const persistedSessionWorkdir = '/workspace/session-feat-x';
     // Local-provider seed: the memo derives `<workingDirectory>/<repo name>`.

@@ -222,13 +222,6 @@ export interface MaterializeRepoOptions {
   /** A freshly minted, short-lived installation access token. */
   token: string;
   storage: MaterializationStore;
-  /**
-   * Skip the default-branch `git pull --ff-only` when the workdir already
-   * holds a checkout. Set when the checkout was just seeded from a fresh base
-   * checkpoint (rebuilt on every default-branch push), where the pull is
-   * redundant network cost: session work happens on a branch that
-   * `checkoutSessionBranch` fetches fresh regardless.
-   */
 }
 
 /**

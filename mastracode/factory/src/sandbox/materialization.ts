@@ -12,8 +12,9 @@ export interface SandboxCommandResult {
  *
  * `executeCommand` is optional on `WorkspaceSandbox` because some providers
  * only offer a filesystem. Every git and materialization helper here needs it,
- * so this type promotes it to required and is derived from core rather than
- * restated, which keeps the two from drifting apart.
+ * so this type promotes it to required. `id` is taken from core; the command
+ * signature is spelled out because core's `CommandResult` is wider than what
+ * these helpers read (see below).
  */
 export type ExecutableSandbox = Pick<WorkspaceSandbox, 'id'> & {
   /**
