@@ -53,6 +53,39 @@ describe('DataListRoot', () => {
       expect(grid?.className).not.toContain('[&_.data-list-row]:after:hidden');
     });
 
+    it.each([
+      [
+        'tinted',
+        'color-mix(in oklch, var(--surface1), var(--neutral6) 10%)',
+        'color-mix(in oklch, var(--surface1), var(--neutral6) 14%)',
+      ],
+      ['surface', 'var(--surface2)', 'color-mix(in oklch, var(--surface2), var(--neutral6) 10%)'],
+      ['transparent', 'transparent', 'transparent'],
+    ])('paints a %s sticky header with its own colour', (background, resting, hover) => {
+      const { container } = render(
+        <DataList columns="1fr 1fr" stickyHeaderBackground={background as 'tinted' | 'surface' | 'transparent'}>
+          <Header />
+        </DataList>,
+      );
+
+      const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
+      expect(grid?.style.getPropertyValue('--data-list-sticky-header-background')).toBe(resting);
+      expect(grid?.style.getPropertyValue('--data-list-sticky-header-hover-background')).toBe(hover);
+    });
+
+    it('paints a tinted sticky header unless the caller asks otherwise', () => {
+      const { container } = render(
+        <DataList columns="1fr 1fr">
+          <Header />
+        </DataList>,
+      );
+
+      const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
+      expect(grid?.style.getPropertyValue('--data-list-sticky-header-background')).toBe(
+        'color-mix(in oklch, var(--surface1), var(--neutral6) 10%)',
+      );
+    });
+
     it('forwards scrollRef to the scrolling viewport that contains the grid', () => {
       const scrollRef = createRef<HTMLDivElement>();
       const { container } = render(
@@ -79,6 +112,52 @@ describe('DataListRoot', () => {
       expect(scrollRef.current?.className).not.toContain('mask-l-from');
       expect(scrollRef.current?.className).toContain('mask-r-from');
       expect(scrollRef.current?.className).not.toContain('mask-t-from');
+    });
+
+    it('leaves the top unfaded by default, since the header sits there', () => {
+      const scrollRef = createRef<HTMLDivElement>();
+      render(
+        <DataList columns="1fr 1fr" scrollRef={scrollRef}>
+          <Header />
+        </DataList>,
+      );
+
+      expect(scrollRef.current?.className).not.toContain('mask-t-from');
+      expect(scrollRef.current?.className).toContain('mask-b-from');
+    });
+
+    it('fades the top when the caller asks for it by name', () => {
+      const scrollRef = createRef<HTMLDivElement>();
+      render(
+        <DataList columns="1fr 1fr" mask={{ top: true }} scrollRef={scrollRef}>
+          <Header />
+        </DataList>,
+      );
+
+      expect(scrollRef.current?.className).toContain('mask-t-from');
+    });
+
+    it('fades every end when the caller turns masking on outright', () => {
+      const scrollRef = createRef<HTMLDivElement>();
+      render(
+        <DataList columns="1fr 1fr" mask scrollRef={scrollRef}>
+          <Header />
+        </DataList>,
+      );
+
+      expect(scrollRef.current?.className).toContain('mask-t-from');
+      expect(scrollRef.current?.className).toContain('mask-b-from');
+    });
+
+    it('fades nothing when the caller turns masking off', () => {
+      const scrollRef = createRef<HTMLDivElement>();
+      render(
+        <DataList columns="1fr 1fr" mask={false} scrollRef={scrollRef}>
+          <Header />
+        </DataList>,
+      );
+
+      expect(scrollRef.current?.className).not.toContain('mask-');
     });
 
     it('lets max-height classes constrain the scrollable viewport', () => {

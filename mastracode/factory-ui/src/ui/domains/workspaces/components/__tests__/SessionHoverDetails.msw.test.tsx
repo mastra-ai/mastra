@@ -23,9 +23,11 @@ import {
   workSessionId,
 } from './fixtures/sessionHoverDetails';
 
-function stubSessionDetails(updatedAt: string, { includeThreadTitles = true, slackWorkSession = false } = {}) {
+function stubSessionDetails(updatedAt: string, { includeSessionTitles = true, slackWorkSession = false } = {}) {
   const fixtures = createSessionHoverDetailsFixtures(updatedAt);
-  if (!includeThreadTitles) fixtures.threadsResponse.threads = [];
+  if (!includeSessionTitles) {
+    fixtures.sessionsResponse.sessions = fixtures.sessionsResponse.sessions.map(({ title: _, ...session }) => session);
+  }
   if (slackWorkSession) fixtures.sessionsResponse.sessions[0]!.branch = 'slack/1785354600-536029';
 
   server.use(
@@ -45,8 +47,8 @@ function stubSessionDetails(updatedAt: string, { includeThreadTitles = true, sla
     http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/work-items`, () =>
       HttpResponse.json(fixtures.workItemsResponse),
     ),
-    http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/${workSessionId}/threads`, () =>
-      HttpResponse.json(fixtures.threadsResponse),
+    http.get(`${TEST_BASE_URL}/api/agent-controller/code/active-runs`, () =>
+      HttpResponse.json(fixtures.activeRunsResponse),
     ),
   );
 }
@@ -81,8 +83,8 @@ async function setupSessionRows() {
 }
 
 describe('Workspace session hover details', () => {
-  it('uses the work-item title when the session has no generated thread title', async () => {
-    stubSessionDetails(new Date().toISOString(), { includeThreadTitles: false, slackWorkSession: true });
+  it('uses the work-item title when the session has no generated title', async () => {
+    stubSessionDetails(new Date().toISOString(), { includeSessionTitles: false, slackWorkSession: true });
 
     renderSection();
 

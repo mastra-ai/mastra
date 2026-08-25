@@ -67,8 +67,8 @@ export function BoardRelevanceFilters({
     })),
   ];
 
-  return (
-    <div className="flex flex-wrap items-center gap-2" aria-label="Board filters">
+  const renderControls = (mobile: boolean) => (
+    <>
       <Combobox
         options={teammateOptions}
         value={selectedParticipantId ?? ALL_TEAMMATES}
@@ -78,7 +78,7 @@ export function BoardRelevanceFilters({
         emptyText="No teammate found."
         size="sm"
         variant="outline"
-        className="w-auto min-w-44"
+        className={mobile ? 'w-full' : 'w-auto min-w-44'}
       />
 
       <DropdownMenu>
@@ -89,6 +89,7 @@ export function BoardRelevanceFilters({
             size="sm"
             disabled={selectedParticipantId === undefined}
             aria-label="Filter by relevance"
+            className={mobile ? 'w-full justify-start' : undefined}
           >
             <ListFilter size={14} aria-hidden />
             <span className="max-w-48 truncate">{relevanceLabel || 'No relevance selected'}</span>
@@ -116,47 +117,70 @@ export function BoardRelevanceFilters({
             size="sm"
             disabled={availableLabels.length === 0 && selectedLabels.size === 0}
             aria-label="Filter by labels"
+            className={mobile ? 'w-full justify-start' : undefined}
           >
             <Tag size={14} aria-hidden />
             <span className="max-w-48 truncate">{labelButtonText}</span>
           </Button>
         </DropdownMenu.Trigger>
-        <DropdownMenu.Content align="start" className="max-h-80 min-w-56 overflow-y-auto">
-          <DropdownMenu.Label>Labels</DropdownMenu.Label>
-          <div className="px-2 pb-1">
-            <input
-              type="search"
-              value={labelSearch}
-              onChange={event => setLabelSearch(event.target.value)}
-              placeholder="Search labels..."
-              aria-label="Search labels"
-              className="border-border-1 bg-surface-3 focus:border-border-2 w-full rounded-md border px-2 py-1 text-xs outline-none"
-            />
-          </div>
-          {visibleLabels.length === 0 && (
-            <div className="text-icon3 px-3 py-1.5 text-xs">
-              {availableLabels.length === 0 ? 'No labels available.' : 'No labels match.'}
+        <DropdownMenu.Content align="start" className="flex max-h-80 min-w-56 flex-col overflow-hidden">
+          <div className="shrink-0">
+            <DropdownMenu.Label>Labels</DropdownMenu.Label>
+            <div className="px-2 pb-1">
+              <input
+                type="search"
+                value={labelSearch}
+                onChange={event => setLabelSearch(event.target.value)}
+                onKeyDown={event => event.stopPropagation()}
+                placeholder="Search labels..."
+                aria-label="Search labels"
+                className="border-border-1 bg-surface-3 focus:border-border-2 w-full rounded-md border px-2 py-1 text-xs outline-none"
+              />
             </div>
-          )}
-          {visibleLabels.map(label => (
-            <DropdownMenu.CheckboxItem
-              key={label}
-              checked={selectedLabels.has(label)}
-              onCheckedChange={checked => onLabelChange(label, checked === true)}
-              onSelect={event => event.preventDefault()}
-            >
-              {label}
-            </DropdownMenu.CheckboxItem>
-          ))}
+          </div>
+          <div className="min-h-0 overflow-y-auto">
+            {visibleLabels.length === 0 && (
+              <div className="text-icon3 px-3 py-1.5 text-xs">
+                {availableLabels.length === 0 ? 'No labels available.' : 'No labels match.'}
+              </div>
+            )}
+            {visibleLabels.map(label => (
+              <DropdownMenu.CheckboxItem
+                key={label}
+                checked={selectedLabels.has(label)}
+                onCheckedChange={checked => onLabelChange(label, checked === true)}
+                onSelect={event => event.preventDefault()}
+              >
+                {label}
+              </DropdownMenu.CheckboxItem>
+            ))}
+          </div>
         </DropdownMenu.Content>
       </DropdownMenu>
 
       {hasActiveFilters && (
-        <Button type="button" variant="ghost" size="sm" onClick={onReset}>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={onReset}
+          className={mobile ? 'w-full justify-start' : undefined}
+        >
           <RotateCcw size={14} aria-hidden />
           Reset filters
         </Button>
       )}
-    </div>
+    </>
+  );
+
+  return (
+    <>
+      <div className="flex flex-col gap-3 lg:hidden" aria-label="Board filters mobile">
+        {renderControls(true)}
+      </div>
+      <div className="hidden flex-wrap items-center gap-2 lg:flex" aria-label="Board filters">
+        {renderControls(false)}
+      </div>
+    </>
   );
 }

@@ -38,7 +38,7 @@ Each turn adds the full tool response to the agent's context window which can le
 
 With code mode, your tools keep running on the host with full validation, request context, and tracing. Only the model's orchestration code runs in the sandbox. Each `external_*` call is bridged back to the real tool on the host, and the function can reduce or aggregate results before returning one response to the agent.
 
-The function runs in a [Workspace sandbox](/docs/workspace/overview). A sandbox is required, because code mode runs model-authored code and the execution boundary must be chosen deliberately. Pass one via `sandbox`, or run the agent in a workspace that provides one. To execute on the host machine, pass `new LocalSandbox()` explicitly. This runs the function as a host `node` process with host privileges, so only use it for trusted or local development.
+The function runs in a [Workspace sandbox](/docs/sandbox/overview). A sandbox is required, because code mode runs model-authored code and the execution boundary must be chosen deliberately. Pass one via `sandbox`, or run the agent in a workspace that provides one. To execute on the host machine, pass `new LocalSandbox()` explicitly. This runs the function as a host `node` process with host privileges, so only use it for trusted or local development.
 
 Transports that bring their own execution boundary are the exception: with [`IsolatedVmCodeModeTransport`](/reference/tools/isolated-vm-transport) the program runs in an in-process V8 isolate and no sandbox is needed (see [In-process isolation](#in-process-isolation)).
 
@@ -192,5 +192,5 @@ See [Choosing a transport](/reference/tools/quickjs-transport#choosing-a-transpo
 - [createCodeMode() reference](/reference/tools/create-code-mode)
 - [IsolatedVmCodeModeTransport reference](/reference/tools/isolated-vm-transport)
 - [QuickJsCodeModeTransport reference](/reference/tools/quickjs-transport)
-- [Tools](/docs/agents/using-tools)
-- [Workspace overview](/docs/workspace/overview)
+- [Tools](/docs/agents/tools)
+- [Sandbox](/docs/sandbox/overview)

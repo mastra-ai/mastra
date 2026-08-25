@@ -17,6 +17,7 @@ vi.mock('fs-extra', () => ({
 vi.mock('@mastra/deployer/build', () => {
   class MockFileService {
     getFirstExistingFile = vi.fn().mockReturnValue('.env');
+    getExistingFiles = vi.fn((files: string[]) => files);
   }
 
   return {
@@ -73,6 +74,14 @@ describe('BuildBundler', () => {
     });
   });
 
+  describe('getEnvFiles', () => {
+    it('layers default dotenv files from base to production override', async () => {
+      const { BuildBundler } = await import('./BuildBundler');
+
+      await expect(new BuildBundler().getEnvFiles()).resolves.toEqual(['.env', '.env.local', '.env.production']);
+    });
+  });
+
   describe('bundler options', () => {
     it('defaults to externals true when no bundler config is provided', async () => {
       const { Bundler, IS_DEFAULT } = await import('@mastra/deployer/bundler');
@@ -93,7 +102,7 @@ describe('BuildBundler', () => {
       });
     });
 
-    it('optimizes dependencies when a bundler config omits externals', async () => {
+    it('defaults to externals true when a bundler config omits externals', async () => {
       const { Bundler } = await import('@mastra/deployer/bundler');
       vi.spyOn(Bundler.prototype as any, 'getUserBundlerOptions').mockResolvedValueOnce({ sourcemap: true });
       const { BuildBundler } = await import('./BuildBundler');
@@ -102,16 +111,16 @@ describe('BuildBundler', () => {
       const options = await (bundler as any).getUserBundlerOptions('/entry.ts', '/output');
 
       expect(options).toEqual({
-        sourcemap: true,
-      });
-      expect(options.externals).toBeUndefined();
-    });
-
-    it('preserves explicit externals true in a custom bundler config', async () => {
-      const { Bundler } = await import('@mastra/deployer/bundler');
-      vi.spyOn(Bundler.prototype as any, 'getUserBundlerOptions').mockResolvedValueOnce({
         externals: true,
         sourcemap: true,
+      });
+    });
+
+    it('keeps configured externals as runtime dependencies while preserving externals true', async () => {
+      const { Bundler } = await import('@mastra/deployer/bundler');
+      vi.spyOn(Bundler.prototype as any, 'getUserBundlerOptions').mockResolvedValueOnce({
+        externals: ['@duckdb/node-bindings', 'existing-package'],
+        dynamicPackages: ['existing-package', 'dynamic-package'],
       });
       const { BuildBundler } = await import('./BuildBundler');
       const bundler = new BuildBundler();
@@ -120,6 +129,23 @@ describe('BuildBundler', () => {
 
       expect(options).toEqual({
         externals: true,
+        dynamicPackages: ['existing-package', 'dynamic-package', '@duckdb/node-bindings'],
+      });
+    });
+
+    it.each([true, false])('preserves explicit externals %s in a custom bundler config', async externals => {
+      const { Bundler } = await import('@mastra/deployer/bundler');
+      vi.spyOn(Bundler.prototype as any, 'getUserBundlerOptions').mockResolvedValueOnce({
+        externals,
+        sourcemap: true,
+      });
+      const { BuildBundler } = await import('./BuildBundler');
+      const bundler = new BuildBundler();
+
+      const options = await (bundler as any).getUserBundlerOptions('/entry.ts', '/output');
+
+      expect(options).toEqual({
+        externals,
         sourcemap: true,
       });
     });

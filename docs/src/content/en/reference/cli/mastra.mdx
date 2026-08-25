@@ -236,7 +236,7 @@ The content digest excludes `experiment-worker-manifest.json` to avoid a self-re
 
 The worker implements the pinned experiment companion-worker protocol version `1`. It reads strict UTF-8 NDJSON frames from standard input and requires every frame, including the last one, to end with a newline. Frames larger than 1 MiB, malformed or truncated frames, unsupported protocol or canonicalization versions, and messages that don't match the active experiment correlation are rejected as protocol failures.
 
-A run request must match the artifact's embedded build ID and include the ordered dataset item count and SHA-256 attestation. The worker emits contiguous sequence numbers starting at `0`, timer-driven heartbeats, awaited experiment lifecycle events, and exactly one terminal event. Cancellation must match the active protocol version, experiment ID, job ID, attempt, and idempotency key.
+A run request must match the artifact's embedded build ID and include the ordered dataset item count and SHA-256 attestation. The worker emits contiguous sequence numbers starting at `0`, timer-driven heartbeats, awaited experiment lifecycle events, and exactly one terminal event. Cancellation must match the active protocol version and experiment ID, plus the job ID, attempt, and idempotency key.
 
 Protocol exit codes are:
 
@@ -542,7 +542,7 @@ Emit machine-readable JSON.
 
 Provisions and attaches a managed database, then polls until it's ready. Provisioning errors are printed with the provider's error detail.
 
-By default the database is scoped to a single environment: pass an environment argument to pick it, or omit the argument to have the CLI pick for you. When the project has one environment, that environment is used. When it has several, the CLI prompts you to select one interactively; in non-interactive contexts (CI, `--json`) an environment argument is required. Pass `--shared` to attach a project-scoped database that's shared by every environment instead.
+By default, the database is scoped to a single environment. Pass an environment argument to select it. If you omit the argument, the CLI uses the project's only environment or prompts you when several are available. In non-interactive contexts (CI, `--json`) an environment argument is required. Pass `--shared` to attach a project-scoped database that's shared by every environment instead.
 
 Environment-scoped databases inherit their provider region from the environment. Shared databases accept `--region`.
 
@@ -555,11 +555,11 @@ mastra env db create --kind neon --name my-app-db --region aws-us-east-1 --share
 
 #### `--kind`
 
-Database provider (required). One of `turso` or `neon`.
+Database provider (required). One of `turso`, `neon`, or `redis`.
 
 #### `--name`
 
-Database name. Defaults to a name derived from the project slug (for example `my-app-db`).
+Database name. Defaults to a name derived from the project slug and provider (for example `my-app-turso` or `my-app-redis`).
 
 #### `--region`
 
@@ -819,7 +819,7 @@ Lists all environment variables for the linked project. Values are partially mas
 
 ### `mastra server env set`
 
-Sets an environment variable. The CLI reads the current map, applies the change, and uploads the result.
+Sets an environment variable. The CLI reads the current map and applies the change before uploading the result.
 
 ```bash
 mastra server env set <key> <value>
@@ -1228,7 +1228,7 @@ mastra api agent get <agentId>
 
 #### `mastra api agent run`
 
-Runs an agent with JSON input. Use command help to see examples for text prompts, chat messages, and memory thread options.
+Runs an agent with JSON input. Use command help to see examples for text prompts and chat messages, including memory thread options.
 
 ```bash
 mastra api agent run <agentId> <input>
@@ -1372,7 +1372,7 @@ mastra api thread get <threadId>
 
 #### `mastra api thread create`
 
-Creates a memory thread. Pass one JSON input object; the CLI splits fields such as `agentId` into query parameters when required by the server route.
+Creates a memory thread. Pass one JSON input object. The CLI splits fields such as `agentId` into query parameters when required by the server route.
 
 ```bash
 mastra api thread create <input>
@@ -1772,6 +1772,8 @@ By default, Mastra collects anonymous information about your project like your O
 When a server started with `mastra dev` or `mastra start` has observability metrics enabled, Mastra also sends anonymous, aggregated model usage at startup: input and output token counts per provider and model, plus the command (`dev` or `start`) and `NODE_ENV`. No prompts, responses, or other message content is ever sent. You can read the [source code](https://github.com/mastra-ai/mastra/blob/main/packages/core/src/telemetry/usage-telemetry.ts) to check what's collected.
 
 At server startup, Mastra also sends an anonymous project-surface snapshot: counts of registered agents, agent controllers, workflows, tools, processors, vector stores, scorers, workspaces, MCP servers, gateways, and channels, plus booleans for memory, voice, editor, and observability usage and the coarse storage backend category. It doesn't send names or identifiers. You can read the [source code](https://github.com/mastra-ai/mastra/blob/main/packages/core/src/telemetry/feature-telemetry.ts) to check what's collected.
+
+The Studio UI also collects anonymous browser-side usage analytics, such as page views and UI interactions. You can read the [source code](https://github.com/mastra-ai/mastra/blob/main/packages/playground/src/lib/analytics.tsx) to check what's collected. Setting `MASTRA_TELEMETRY_DISABLED` disables this too: the value is injected into the served page, so it applies to `mastra dev` and self-hosted builds alike.
 
 You can opt out of all CLI and usage analytics by setting an environment variable:
 

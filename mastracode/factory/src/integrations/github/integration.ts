@@ -46,10 +46,11 @@ import type {
   ReviewComment,
   VersionControl,
 } from '../../capabilities/version-control.js';
+import { withBaseCheckpointWebhookTrigger } from '../../sandbox/base-checkpoint-triggers.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
 import { attachGithubIssueReconciler } from './issue-reconciler.js';
-import { runGithubIssueTriage } from './issue-triage.js';
 import { GithubReconcileWorker } from './reconcile-worker.js';
+import { reconcileInterval, reconciliationEnabled } from './reconciliation-config.js';
 import { buildGithubRoutes } from './routes.js';
 import { attachGithubReconciler, attachGithubRules } from './rules.js';
 import type { ReconcileIssueState, ReconcilePullRequestState } from './rules.js';
@@ -144,6 +145,13 @@ export interface GithubIntegrationConfig {
    * replica-stable OAuth/install `state` secret (see `./config.ts`).
    */
   webhookSecret?: string;
+  /**
+   * Extra bot logins authorized to trigger author-gated PR notifications
+   * (reviews and comments). Merged over the built-in defaults, matched
+   * case-insensitively. Deployments running their own reviewer bots opt them
+   * in here; every other bot stays gated.
+   */
+  authorizedBots?: string[];
 }
 
 /** Human-readable names of the required config fields, for construction errors. */
@@ -317,6 +325,7 @@ export class GithubIntegration implements FactoryIntegration {
   readonly #clientSecret: string;
   readonly #slug: string;
   readonly #webhookSecret: string | undefined;
+  readonly #authorizedBots: readonly string[];
   #storage: IntegrationContext['storage'] | undefined;
   #sourceControlStorage: IntegrationContext['storage']['sourceControl'] | undefined;
 
@@ -335,11 +344,17 @@ export class GithubIntegration implements FactoryIntegration {
     this.#clientSecret = config.clientSecret;
     this.#slug = config.slug;
     this.#webhookSecret = config.webhookSecret || undefined;
+    this.#authorizedBots = (config.authorizedBots ?? []).map(bot => bot.trim()).filter(Boolean);
   }
 
   /** App slug — the URL name used to build the install URL. */
   get slug(): string {
     return this.#slug;
+  }
+
+  /** Extra bot logins authorized to trigger author-gated PR notifications. */
+  get authorizedBots(): readonly string[] {
+    return this.#authorizedBots;
   }
 
   get genericStorage(): IntegrationContext['storage']['generic'] {
@@ -1104,7 +1119,9 @@ export class GithubIntegration implements FactoryIntegration {
    */
   routes(ctx: IntegrationContext): ApiRoute[] {
     this.#storage = ctx.storage;
-    const ingestFactoryEvent = attachGithubRules(this, ctx);
+    // Every parsed webhook also feeds the base-checkpoint triggers (merged
+    // PRs / pushes to the default branch rebuild the repo's warm checkpoint).
+    const ingestFactoryEvent = withBaseCheckpointWebhookTrigger(attachGithubRules(this, ctx), ctx.baseCheckpoints);
     return buildGithubRoutes({
       github: this,
       auth: ctx.auth,
@@ -1113,34 +1130,46 @@ export class GithubIntegration implements FactoryIntegration {
       stateSigner: ctx.stateSigner,
       baseUrl: ctx.baseUrl,
       controller: ctx.controller,
-      runIssueTriage: ctx.controller
-        ? input => runGithubIssueTriage({ controller: ctx.controller!, input })
-        : undefined,
+      memorySettings: ctx.storage.memorySettings,
       emitAudit: ctx.hooks?.emitAudit,
       projects: ctx.storage.projects,
       ingestFactoryEvent,
+      sessionRetirement: ctx.sessionRetirement,
     });
   }
 
   /**
-   * Merge-state safety net. Webhooks are the only other writer of merge state,
-   * and a self-hosted deployment GitHub cannot reach (private network, local
-   * dev) never receives one — without this sweep its PR cards stay open
-   * forever. Disable with `MASTRACODE_GITHUB_RECONCILE_ENABLED=false`.
+   * Pull-request and issue sweeps share a worker and lease, but can be enabled
+   * and paced independently. The legacy combined controls remain the fallback.
    */
   workers(ctx: IntegrationContext): MastraWorker[] {
-    if (process.env.MASTRACODE_GITHUB_RECONCILE_ENABLED?.trim().toLowerCase() === 'false') return [];
-    const reconcile = attachGithubReconciler(this, ctx, input => this.fetchPullRequestState(input));
-    if (!reconcile) return [];
-    const issues = attachGithubIssueReconciler(this, ctx, input => this.fetchIssueState(input));
-    const intervalMs = Number(process.env.MASTRACODE_GITHUB_RECONCILE_INTERVAL_MS);
-    const interval = Number.isSafeInteger(intervalMs) && intervalMs > 0 ? { intervalMs } : {};
+    const pullRequestEnabled = reconciliationEnabled(
+      process.env.MASTRACODE_GITHUB_PR_RECONCILE_ENABLED,
+      process.env.MASTRACODE_GITHUB_RECONCILE_ENABLED,
+    );
+    const issueEnabled = reconciliationEnabled(
+      process.env.MASTRACODE_GITHUB_ISSUE_RECONCILE_ENABLED,
+      process.env.MASTRACODE_GITHUB_RECONCILE_ENABLED,
+    );
+    if (!pullRequestEnabled && !issueEnabled) return [];
+
+    const reconcile = pullRequestEnabled
+      ? attachGithubReconciler(this, ctx, input => this.fetchPullRequestState(input))
+      : undefined;
+    const issues = issueEnabled ? attachGithubIssueReconciler(this, ctx, input => this.fetchIssueState(input)) : undefined;
+    if (!reconcile && !issues) return [];
+
+    const legacyInterval = reconcileInterval(process.env.MASTRACODE_GITHUB_RECONCILE_INTERVAL_MS);
+    const intervalMs = reconcileInterval(process.env.MASTRACODE_GITHUB_PR_RECONCILE_INTERVAL_MS) ?? legacyInterval;
+    const issueIntervalMs = reconcileInterval(process.env.MASTRACODE_GITHUB_ISSUE_RECONCILE_INTERVAL_MS) ?? legacyInterval;
     return [
       new GithubReconcileWorker({
-        reconcile,
+        ...(reconcile ? { reconcile } : {}),
         ...(issues ? { reconcileIssues: issues } : {}),
         sourceControl: ctx.storage.sourceControl,
-        ...interval,
+        ...(ctx.baseCheckpoints ? { sweepBaseCheckpoints: () => ctx.baseCheckpoints!.sweep() } : {}),
+        ...(intervalMs ? { intervalMs } : {}),
+        ...(issueIntervalMs ? { issueIntervalMs } : {}),
       }),
     ];
   }

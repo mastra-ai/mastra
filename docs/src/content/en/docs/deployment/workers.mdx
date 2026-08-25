@@ -4,6 +4,7 @@ description: "Separate background processing from the API layer by running workf
 packages:
   - "@mastra/core"
   - "@mastra/redis-streams"
+  - "@mastra/valkey-streams"
   - "@mastra/google-cloud-pubsub"
   - "@mastra/pg"
   - "@mastra/libsql"
@@ -45,7 +46,7 @@ Subscribes to workflow events on the [PubSub](/docs/server/pubsub) bus and execu
 
 In a split deployment, the orchestration worker pulls events from a distributed PubSub backend and delegates step execution back to the API over HTTP. In-process, it runs steps directly.
 
-The orchestration worker requires a PubSub backend that supports pull mode (e.g., [`RedisStreamsPubSub`](/reference/pubsub/redis-streams) or [`GoogleCloudPubSub`](/reference/pubsub/google-cloud-pubsub)).
+The orchestration worker requires a PubSub backend that supports pull mode (e.g., [`RedisStreamsPubSub`](/reference/pubsub/redis-streams), [`ValkeyStreamsPubSub`](/reference/pubsub/valkey-streams), or [`GoogleCloudPubSub`](/reference/pubsub/google-cloud-pubsub)).
 
 ### Scheduler worker
 
@@ -122,7 +123,7 @@ Any [supported storage backend](/reference/workers/overview#supported-storage-ba
 
 Run the same build artifact in multiple containers, each with a different [`MASTRA_WORKERS`](/reference/workers/overview#mastra_workers) value to control which worker starts in each process.
 
-Split deployments require a distributed PubSub backend ([`RedisStreamsPubSub`](/reference/pubsub/redis-streams) or [`GoogleCloudPubSub`](/reference/pubsub/google-cloud-pubsub)), a shared [storage backend](/reference/workers/overview#supported-storage-backends), and network connectivity between the orchestration worker and the API.
+Split deployments require a distributed PubSub backend ([`RedisStreamsPubSub`](/reference/pubsub/redis-streams), [`ValkeyStreamsPubSub`](/reference/pubsub/valkey-streams), or [`GoogleCloudPubSub`](/reference/pubsub/google-cloud-pubsub)), a shared [storage backend](/reference/workers/overview#supported-storage-backends), and network connectivity between the orchestration worker and the API.
 
 ### Select workers
 
@@ -144,15 +145,15 @@ mastra worker start orchestration
 
 ## Network architecture
 
-Workers are internal infrastructure. They're not exposed to end users and don't need their own subdomain, public URL, or inbound HTTP route.
+Workers are internal infrastructure. They're not exposed to end users and don't need their own subdomain or public URL, including an inbound HTTP route.
 
 In a split deployment:
 
-- **The API server is the only public-facing process**: It serves all client HTTP requests, including REST endpoints, agent interactions, workflow triggers, and any custom routes.
+- **The API server is the only public-facing process**: It serves all client HTTP requests. These requests include REST endpoints and agent interactions, plus workflow triggers and custom routes.
 - **Workers connect outbound only**: They pull events from the distributed PubSub backend and read/write to the shared storage database. They don't accept inbound traffic from clients.
 - **The orchestration worker calls the API internally**: It sends step execution requests to the API over the container network using `MASTRA_STEP_EXECUTION_URL`. This is internal service-to-service communication, not a public endpoint.
 
-All three worker types (orchestration, scheduler, background task) sit behind the API on a private network. They share access to the PubSub backend and storage database but never receive traffic directly from clients. If a worker-related feature needs an HTTP route (for example, token minting for a voice integration), that route runs on the API server, not on the worker process.
+All three worker types (orchestration, scheduler, background task) sit behind the API on a private network. They share access to the PubSub backend and storage database but never receive traffic directly from clients. HTTP routes for worker-related features run on the API server rather than the worker process. One example is token minting for a voice integration.
 
 ## Deploy split workers
 
@@ -355,9 +356,9 @@ In a fully split deployment, the orchestration worker delegates workflow step ex
 MASTRA_STEP_EXECUTION_URL=http://api:4111/api
 ```
 
-Without this variable, the orchestration worker attempts to execute steps in its own process. That process doesn't have access to the full Mastra runtime in a split deployment.
+Without this variable, the orchestration worker attempts to execute steps in its own process, which doesn't have access to the full Mastra runtime in a split deployment.
 
-The endpoint uses the server's normal auth pipeline. If the API has an auth provider, set `MASTRA_WORKER_AUTH_TOKEN` to a bearer token that provider accepts. Mastra forwards the value as an `Authorization: Bearer` credential. The configured auth provider validates the token. See [Worker authentication](/docs/server/auth/workers) for server configuration and other credential formats.
+The endpoint uses the server's normal auth pipeline. If the API has an auth provider, set `MASTRA_WORKER_AUTH_TOKEN` to a bearer token that provider accepts. Mastra forwards the value as an `Authorization: Bearer` credential. The configured auth provider validates the token. See [Worker authentication](/docs/auth/workers) for server configuration and other credential formats.
 
 ### Scale workers
 
@@ -379,22 +380,22 @@ Run exactly one scheduler worker. Multiple schedulers polling the same storage c
 
 ### Crash recovery
 
-A distributed PubSub backend persists unacknowledged events so orchestration and background task workers can resume processing after a restart. If the API is unavailable when the orchestration worker requests step execution, the request fails and the event is delivered again. An event can be processed more than once, so handlers should be idempotent when possible.
+A distributed PubSub backend persists unacknowledged events, which lets orchestration and background task workers resume after a restart. When the API is unavailable, a failed step-execution request causes the event to be delivered again. Because an event can be processed more than once, handlers should be idempotent when possible.
 
 The scheduler calculates the next fire time from the current time after it restarts. It doesn't replay schedules that elapsed while it was unavailable.
 
-If the API crashes while a step is executing, that work can be lost and the workflow run can remain in a `running` state. See [known limitations](#known-limitations) and [durable agent crash recovery](/docs/long-running-agents/durable-agents#crash-recovery).
+If the API crashes while a step is executing, that work can be lost and the workflow run can remain in a `running` state. See [known limitations](#known-limitations) and [durable agent crash recovery](/docs/harness/durable-agents#crash-recovery).
 
 ## Known limitations
 
 - **No dead-letter queue**: Failed events are nacked and retried, but there's no DLQ for events that fail after all retries.
 - **No built-in health endpoint**: Workers don't expose an HTTP health check. Use container-level liveness probes or process monitoring.
 - **Scheduler is single-instance**: Running multiple scheduler processes causes duplicate schedule fires.
-- **Runs stuck in "running" after API crash**: If the API process crashes while executing a workflow step, the run remains in `running` status with no automatic retry. For [durable agents](/docs/long-running-agents/durable-agents), set `recovery.durableAgents` to `'auto'` in the Mastra config to automatically re-drive orphaned runs on server restart. See [Crash recovery](/docs/long-running-agents/durable-agents#crash-recovery) for details.
+- **Runs stuck in "running" after API crash**: If the API process crashes while executing a workflow step, the run remains in `running` status with no automatic retry. For [durable agents](/docs/harness/durable-agents), set `recovery.durableAgents` to `'auto'` in the Mastra config to automatically re-drive orphaned runs on server restart. See [Crash recovery](/docs/harness/durable-agents#crash-recovery) for details.
 
 ## Related
 
-- [Worker authentication](/docs/server/auth/workers): Secure worker-to-API communication
+- [Worker authentication](/docs/auth/workers): Secure worker-to-API communication
 - [Workers reference](/reference/workers/overview): Details about worker environment variables and types, with a list of supported storage backends
 - [CLI reference](/reference/cli/mastra#mastra-worker-build): `mastra worker build` and `mastra worker start`
 - [PubSub](/docs/server/pubsub): Event delivery backends

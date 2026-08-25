@@ -1,0 +1,30 @@
+{
+  "attachment": ["Kimi-K2.5", "Kimi-K2.6", "Qwen3.8-Max"],
+  "temperature": [
+    "DeepSeek-V3.2",
+    "DeepSeek-V4-Flash",
+    "DeepSeek-V4-Flash-0731",
+    "DeepSeek-V4-Pro",
+    "GLM-5",
+    "GLM-5.1",
+    "GLM-5.2",
+    "Kimi-K2.6",
+    "MiMo-V2.5-Pro",
+    "MiniMax-M2.5",
+    "MiniMax-M2.7",
+    "MiniMax-M3",
+    "Qwen3.8-Max"
+  ],
+  "structuredOutput": [
+    "DeepSeek-V3.2",
+    "DeepSeek-V4-Flash",
+    "DeepSeek-V4-Flash-0731",
+    "DeepSeek-V4-Pro",
+    "GLM-5.1",
+    "GLM-5.2",
+    "Kimi-K2.5",
+    "Kimi-K2.6",
+    "Kimi-K2.7-Code",
+    "Kimi-K3"
+  ]
+}

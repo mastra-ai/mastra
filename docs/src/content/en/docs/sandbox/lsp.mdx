@@ -1,0 +1,233 @@
+---
+title: "LSP inspection"
+description: Configure Language Server Protocol support for semantic inspection of project files.
+packages:
+  - "@mastra/core"
+---
+
+# LSP inspection
+
+Language Server Protocol (LSP) inspection gives agents semantic information about project code. A language server can identify a symbol's type, declaration, implementations, and diagnostics because it understands the language and project structure.
+
+## What LSP adds
+
+File and search tools answer different questions about a codebase:
+
+| Tool | Best for |
+| - | - |
+| `read_file` | Reading the exact contents and surrounding context of a known file |
+| `grep` | Finding text or regular-expression matches across files |
+| [Search](/docs/sandbox/search) | Retrieving indexed files by keyword or semantic similarity |
+| LSP inspection | Getting type-aware information and following symbols across a project |
+
+LSP inspection complements these tools rather than replacing them. An agent can use `grep` to find a symbol and inspect it through LSP to locate its declaration. It can then use `read_file` to read the full implementation before making a change.
+
+## Set up LSP
+
+LSP starts a long-running language-server process and exchanges JSON-RPC messages with it. Before enabling LSP, ensure your configuration includes:
+
+- A static [sandbox](/docs/sandbox/overview) with a process manager whose process handles provide readable output and writable input streams. Sandbox resolvers aren't supported.
+- The `vscode-jsonrpc` and `vscode-languageserver-protocol` packages installed in the Mastra application.
+- A language-server binary and its runtime installed where the sandbox process runs.
+- An absolute project root and project files available through matching paths to both the Mastra application and the sandbox process.
+
+Mastra has built-in server definitions for TypeScript and JavaScript, Python, Go, and Rust. The matching language-server binary must still be installed. You can [register another server](#custom-language-servers) for other file types.
+
+Install the shared protocol packages:
+
+```bash npm2yarn
+npm install vscode-jsonrpc vscode-languageserver-protocol
+```
+
+Then install a language server for your project. For example, install TypeScript and its language server:
+
+```bash npm2yarn
+npm install typescript typescript-language-server
+```
+
+Create a static `LocalSandbox` and point the filesystem, sandbox, and LSP root at the same directory:
+
+```typescript title="src/mastra/workspaces.ts"
+import { resolve } from 'node:path'
+import { LocalFilesystem, LocalSandbox, Workspace } from '@mastra/core/workspace'
+
+const projectPath = resolve('./workspace')
+
+export const workspace = new Workspace({
+  filesystem: new LocalFilesystem({
+    basePath: projectPath,
+  }),
+  sandbox: new LocalSandbox({
+    workingDirectory: projectPath,
+  }),
+  lsp: {
+    root: projectPath,
+  },
+})
+```
+
+The filesystem gives the agent file tools for the project. The sandbox starts the language server in the same directory when an LSP query first needs it. If any required protocol package, process manager, or server binary is unavailable, Mastra disables LSP or returns that no language server is available.
+
+## Inspect code with the agent tool
+
+When LSP is enabled, the agent receives `mastra_workspace_lsp_inspect`. Its input identifies a file and places a cursor on one symbol:
+
+```json
+{
+  "path": "/absolute/path/to/workspace/src/orders.ts",
+  "line": 10,
+  "match": "const order = await <<<findOrder(orderId)"
+}
+```
+
+`line` is 1-indexed. Copy the content of that line into `match`, then insert exactly one `<<<` marker immediately before the symbol to inspect. The marker isn't part of the source file.
+
+The tool returns the fields that the language server can provide:
+
+| Field | Output |
+| - | - |
+| `hover` | Type information or documentation, with its markup kind |
+| `diagnostics` | Severity, message, and source for diagnostics on the inspected line |
+| `definition` | Declaration locations with a one-line preview when the file is readable |
+| `implementation` | Implementation locations |
+| `error` | A setup, server, or query error when inspection can't run |
+
+Unavailable result fields are omitted. Definition and implementation locations identify where to continue with `read_file` for full context.
+
+## Configure LSP
+
+Set `lsp: true` to use the defaults. Replace it with an object when you need to control the root, server discovery, timeouts, or retained clients:
+
+```typescript
+lsp: {
+  root: projectPath,
+  diagnosticTimeout: 4_000,
+  initTimeout: 8_000,
+  maxOpenClients: 4,
+  disableServers: ['eslint'],
+  binaryOverrides: {
+    typescript: '/opt/mastra-tools/typescript-language-server --stdio',
+  },
+  searchPaths: ['/opt/mastra-tools'],
+},
+```
+
+`binaryOverrides` maps a built-in server ID to its full startup command. `searchPaths` adds package roots whose `node_modules` may contain binaries or required modules. You can also set `packageRunner`, such as `pnpm dlx`, as a last-resort fallback. Package-runner fallback is disabled by default because it may install software or hang in some project layouts.
+
+`diagnosticTimeout` controls how long the direct `getDiagnostics()` and `getDiagnosticsMulti()` APIs wait for diagnostics. The agent inspection tool currently waits up to five seconds.
+
+Mastra normally finds a project root for each file by walking upward for that server's project markers. It falls back to `lsp.root` when it finds no marker. See the [LSP configuration reference](/reference/workspace/workspace-class) for all options and defaults.
+
+### Limit retained clients
+
+`maxOpenClients` limits the language-server clients retained for one configuration. It must be a positive integer. When the limit is reached, Mastra closes the least recently used client that has no active query lease.
+
+If every retained client has an active lease, the next acquisition waits up to five seconds for a lease to be released. If none becomes available, `prepareQuery()` and `getDiagnostics()` return `null`. `getDiagnosticsMulti()` omits a server it couldn't acquire. Omitting `maxOpenClients` leaves the number of retained clients unlimited. Mastra Code uses a default limit of `4`.
+
+### Tool name remapping
+
+Configure the agent inspection tool through `tools`. For example, add this entry to expose a shorter name:
+
+```typescript
+import { WORKSPACE_TOOLS } from '@mastra/core/workspace'
+
+const tools = {
+  [WORKSPACE_TOOLS.LSP.LSP_INSPECT]: {
+    name: 'lsp_inspect',
+  },
+}
+```
+
+Add `tools` alongside `lsp` in the configuration. The `name` changes the exposed tool name, but the configuration key remains `WORKSPACE_TOOLS.LSP.LSP_INSPECT`. Set `enabled: false` on the same entry to remove the tool.
+
+See the [tool configuration reference](/reference/workspace/workspace-class#tool-configuration) for approval settings, dynamic policies, output limits, and hooks shared by generated agent tools.
+
+## Custom language servers
+
+Add a server under `lsp.servers` when a language isn't built in or when you need to replace a built-in definition:
+
+```typescript
+lsp: {
+  root: projectPath,
+  servers: {
+    phpactor: {
+      id: 'phpactor',
+      name: 'Phpactor Language Server',
+      languageIds: ['php'],
+      extensions: ['.php'],
+      markers: ['composer.json'],
+      command: 'phpactor language-server',
+      initializationOptions: {
+        indexer: { enabled: true },
+      },
+    },
+  },
+},
+```
+
+Each definition supports these fields:
+
+| Field | Required | Description |
+| - | - | - |
+| `id` | Yes | Unique server ID. Use a built-in ID to replace that definition. |
+| `name` | Yes | Human-readable name used in logs and errors. |
+| `languageIds` | Yes | LSP language identifiers handled by the server. |
+| `extensions` | Yes | File extensions handled by the server, including the dot. |
+| `markers` | Yes | Files or directories used to find the project root. |
+| `command` | Yes | Full command that starts the server. |
+| `initializationOptions` | No | Settings sent during the LSP initialization handshake. |
+
+Custom definitions are merged with the built-in definitions. A custom definition with the same `id` replaces the built-in one. When a server lists multiple language IDs, Mastra maps each configured extension to the first ID.
+
+## Query LSP directly
+
+Application code can query the configured LSP manager directly. `getDiagnostics()` and `getDiagnosticsMulti()` manage their client leases and document open and close notifications internally.
+
+`prepareQuery()` exposes the client for hover, definition, implementation, and other direct queries. Pass it an absolute file path. It opens the file and returns a lease. Close the file before releasing that lease, and put both calls in a `finally` block:
+
+```typescript
+async function inspectHover(filePath: string, line: number, character: number) {
+  const query = await workspace.lsp?.prepareQuery(filePath)
+  if (!query) return null
+
+  try {
+    return await query.client.queryHover(query.uri, {
+      line,
+      character,
+    })
+  } finally {
+    query.client.notifyClose(filePath)
+    query.release()
+  }
+}
+```
+
+Direct client positions are 0-indexed. A leaked lease can prevent an idle client from being evicted when `maxOpenClients` is set. During teardown, Mastra waits up to five seconds for active leases before forcing the language servers to shut down. Managed LSP clients close before the sandbox is destroyed.
+
+## Limitations
+
+- LSP only works for file types with a matching built-in or custom server.
+- A filesystem alone can't run a language server. LSP requires a static sandbox with a bidirectional process manager.
+- `LocalFilesystem` containment and `allowedPaths` don't constrain LSP inspection. Restrict `lsp.root` to a trusted project, and don't expose the LSP tool when users can submit untrusted host paths.
+- External package inspection may resolve to declaration files such as `.d.ts` instead of runtime source.
+- Language servers may omit hover, diagnostic, definition, or implementation results that they don't support.
+
+### Remote sandboxes
+
+Remote LSP isn't backend-transparent. The language-server command runs through the remote sandbox process manager, but binary discovery, file reads, and some source previews still use the Mastra host.
+
+Use remote LSP only when all of these conditions are met:
+
+- The remote process manager provides readable output and writable input streams.
+- The project uses matching absolute paths on the Mastra host and in the remote sandbox.
+- The resolved server command is installed in the remote image. Configure it with `binaryOverrides` for a built-in server or `lsp.servers.command` for a custom server.
+- The host can read files needed for inspection and definition previews.
+
+A local filesystem and remote sandbox don't synchronize automatically. A binary installed only on the host can't run in the remote sandbox, and remote-only files can't provide all host-side results. For remote-only projects, use `grep`, indexed [search](/docs/sandbox/search), and sandbox commands until LSP file access is backend-transparent.
+
+## Related
+
+- [Filesystem](/docs/sandbox/filesystem)
+- [Sandboxes](/docs/sandbox/overview)
+- [Search](/docs/sandbox/search)
+- [Configuration reference](/reference/workspace/workspace-class)

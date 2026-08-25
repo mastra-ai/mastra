@@ -1,6 +1,7 @@
 export interface PlatformClientOptions {
   accessToken?: string;
   projectId?: string;
+  actingUserId?: string;
   /**
    * Advisory correlation id for the factory session driving this client.
    * Sent as `x-mastra-session-id` on every proxy request so proxy-side logs
@@ -21,6 +22,8 @@ export interface PlatformRequestOptions extends RequestInit {
   query?: Record<string, string | number | boolean | undefined>;
 }
 
+export type SandboxProvider = 'railway' | 'e2b';
+
 const DEFAULT_PROXY_URL = 'https://workspaces.mastra.ai';
 
 /**
@@ -35,11 +38,24 @@ export function requireOption(value: string | undefined, name: string): string {
   return value;
 }
 
+function resolveSandboxProvider(value: string | undefined): SandboxProvider {
+  const provider = value?.trim() || 'railway';
+  if (provider !== 'railway' && provider !== 'e2b') {
+    throw new Error('SANDBOX_PROVIDER must be either "railway" or "e2b"');
+  }
+  return provider;
+}
+
 export function resolvePlatformOptions(options: PlatformClientOptions) {
+  const configuredSandboxProvider = process.env.SANDBOX_PROVIDER?.trim();
+
   return {
     accessToken: requireOption(options.accessToken ?? process.env.MASTRA_PLATFORM_ACCESS_TOKEN, 'accessToken'),
     projectId: requireOption(options.projectId ?? process.env.MASTRA_PROJECT_ID, 'projectId'),
+    actingUserId: options.actingUserId?.trim() || undefined,
     proxyUrl: (process.env.MASTRA_WORKSPACE_PROXY_URL ?? DEFAULT_PROXY_URL).replace(/\/$/, ''),
+    sandboxProvider: resolveSandboxProvider(configuredSandboxProvider),
+    useLegacyRoutes: !configuredSandboxProvider,
     sessionId: options.sessionId,
     threadId: options.threadId,
     fetch: options.fetch ?? fetch,
@@ -97,7 +113,10 @@ export class PlatformApiError extends Error {
 export class PlatformClient {
   readonly accessToken: string;
   readonly projectId: string;
+  readonly actingUserId: string | undefined;
   readonly proxyUrl: string;
+  readonly sandboxProvider: SandboxProvider;
+  private readonly useLegacyRoutes: boolean;
   /** Advisory session correlation id — see {@link PlatformClientOptions.sessionId}. */
   readonly sessionId: string | undefined;
   /** Advisory thread correlation id — see {@link PlatformClientOptions.threadId}. */
@@ -108,20 +127,25 @@ export class PlatformClient {
     const resolved = resolvePlatformOptions(options);
     this.accessToken = resolved.accessToken;
     this.projectId = resolved.projectId;
+    this.actingUserId = resolved.actingUserId;
     this.proxyUrl = resolved.proxyUrl;
+    this.sandboxProvider = resolved.sandboxProvider;
+    this.useLegacyRoutes = resolved.useLegacyRoutes;
     this.sessionId = resolved.sessionId;
     this.threadId = resolved.threadId;
     this.fetch = resolved.fetch;
   }
 
   async request(path: string, options: PlatformRequestOptions = {}): Promise<Response> {
-    const url = new URL(`${this.proxyUrl}/v1/projects/${encodeURIComponent(this.projectId)}${path}`);
+    const providerPath = this.useLegacyRoutes ? '' : `/${this.sandboxProvider}`;
+    const url = new URL(`${this.proxyUrl}/v1${providerPath}/projects/${encodeURIComponent(this.projectId)}${path}`);
     for (const [key, value] of Object.entries(options.query ?? {})) {
       if (value !== undefined) url.searchParams.set(key, String(value));
     }
 
     const headers = new Headers(options.headers);
     headers.set('authorization', `Bearer ${this.accessToken}`);
+    if (this.actingUserId) headers.set('x-acting-user-id', this.actingUserId);
     // Advisory correlation headers — the proxy folds them into its log lines
     // so proxy-side events can be joined back to the calling factory session
     // without a cross-store hand-join. Unknown headers are passthrough for

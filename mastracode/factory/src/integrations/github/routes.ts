@@ -13,6 +13,8 @@
 
 import { randomUUID } from 'node:crypto';
 import type { MountedMastraCode } from '@mastra/code-sdk';
+import { resolveModel } from '@mastra/code-sdk/agents/model';
+import { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import { UniqueViolationError } from '@mastra/core/storage';
@@ -20,11 +22,13 @@ import type { FactoryStorage } from '@mastra/core/storage';
 import type { Context } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import type { RouteAuth } from '../../routes/route.js';
+import { baseCheckpointIsStale } from '../../sandbox/base-checkpoint-triggers.js';
 import { SandboxBudgetError } from '../../sandbox/fleet.js';
 import type { MaterializationSandbox, PrepareProgress, ProgressFn, SandboxFleet } from '../../sandbox/fleet.js';
-import { resolveFactoryDefaultModelId } from '../../session/factory-session.js';
+import { normalizeSessionTitle } from '../../session/session-title.js';
 import type { StateSigner } from '../../state-signing.js';
 import type { AuditEmitter } from '../../storage/domains/audit/domain.js';
+import type { MemorySettingsStorage } from '../../storage/domains/memory-settings/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type {
   ProjectRepository,
@@ -53,7 +57,6 @@ import {
 import type { GitIdentity } from './sandbox.js';
 
 const sessionOperationLocks = new Map<string, Promise<unknown>>();
-const MAX_SESSION_TITLE_LENGTH = 80;
 const USER_SESSION_BRANCH_PREFIX = 'user/session-';
 // lowercase only (crypto.randomUUID output), so casing cannot fork one logical ID into two sessions
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -78,7 +81,7 @@ function withSessionOperationLock<T>(sessionId: string, fn: () => Promise<T>): P
 }
 import { listPullRequestSubscriptionsForThread, subscribeToPullRequest } from './subscriptions.js';
 import { handleGithubWebhook } from './webhook.js';
-import type { GithubIssueTriageRunInput, GithubIssueTriageRunResult, ParsedGithubWebhook } from './webhook.js';
+import type { ParsedGithubWebhook } from './webhook.js';
 
 /**
  * Loose Hono context accepted by the shared GitHub route helpers. The
@@ -126,12 +129,13 @@ export interface MountGithubRoutesOptions {
   redirectUri?: string;
   /** Controller used to route verified webhook notifications to exact subscribed sessions. */
   controller?: MountedMastraCode['controller'];
-  /** Run seam used by GitHub webhooks and manual Intake triage. */
-  runIssueTriage?: (input: GithubIssueTriageRunInput) => Promise<GithubIssueTriageRunResult>;
+  /** Owner-scoped observational-memory settings — the source of the model that names a thread. */
+  memorySettings: Pick<MemorySettingsStorage, 'get'>;
   /** Best-effort audit emission supplied by the factory-owned audit domain. */
   emitAudit?: AuditEmitter['emit'];
   /** Factory projects domain — resolves a project's default triage model. */
   projects?: FactoryProjectsStorage;
+  sessionRetirement?: import('../../sandbox/session-retirement.js').SessionRetirementCoordinator;
   /** Authoritative Factory rule ingress for normalized, signature-verified GitHub deliveries. */
   ingestFactoryEvent?: (event: ParsedGithubWebhook) => Promise<unknown>;
 }
@@ -154,22 +158,6 @@ function pullRequestNumberFromUrl(value: string, expectedRepo: string): number |
   }
 }
 
-function isCanonicalGithubIssueUrl(value: string, repoFullName: string, issueNumber: number): boolean {
-  try {
-    const url = new URL(value);
-    const [owner, repo] = repoFullName.split('/');
-    return (
-      url.protocol === 'https:' &&
-      url.hostname === 'github.com' &&
-      url.pathname === `/${owner}/${repo}/issues/${issueNumber}` &&
-      url.search === '' &&
-      url.hash === ''
-    );
-  } catch {
-    return false;
-  }
-}
-
 /**
  * Validate a git branch/ref name against a strict whitelist. The value is later
  * interpolated into a shell `git clone --branch` command, so it must never
@@ -182,12 +170,6 @@ function isValidGitRef(value: unknown): value is string {
 
 function isJsonObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function normalizeSessionTitle(title: string): string | null {
-  // Cap code points, not UTF-16 units: an emoji straddling the cap would store a lone surrogate.
-  const capped = [...title.replace(/\s+/g, ' ').trim()].slice(0, MAX_SESSION_TITLE_LENGTH).join('');
-  return capped.trimEnd() || null;
 }
 
 /**
@@ -241,17 +223,6 @@ function parseIssueLabelFilter(raw: string | undefined): string | undefined | nu
   if (raw === undefined || raw === '') return undefined;
   if (VALID_ISSUE_LABEL_FILTERS.has(raw)) return raw;
   return null;
-}
-
-function parseIssueNumberParam(raw: string | undefined): number | null {
-  if (!raw || !/^\d{1,10}$/.test(raw)) return null;
-  const issueNumber = Number(raw);
-  return Number.isSafeInteger(issueNumber) && issueNumber > 0 ? issueNumber : null;
-}
-
-function parseStringList(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value.filter((item): item is string => typeof item === 'string' && item.length > 0);
 }
 
 interface ResolvedProjectRepository extends ProjectRepository {
@@ -387,7 +358,8 @@ async function ingestPolledEvents(
  */
 export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[] {
   const routes: ApiRoute[] = [];
-  const { auth, fleet, storage, github, stateSigner, controller, emitAudit } = options;
+  const { auth, fleet, storage, github, stateSigner, controller, memorySettings, emitAudit, sessionRetirement } =
+    options;
   const diagnostics = () =>
     getGithubFeatureDiagnostics({ github, auth, appDbConfigured: storage !== undefined, stateSigner, fleet });
 
@@ -456,33 +428,6 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
   const signState = (orgId: string, userId: string): string => stateSigner.sign(orgId, userId);
   const verifyState = (state: string | undefined) => stateSigner.verify(state);
 
-  const { runIssueTriage } = options;
-  const runBoardIssueTriage = runIssueTriage
-    ? async (input: GithubIssueTriageRunInput): Promise<GithubIssueTriageRunResult> => {
-        if (!input.resourceId || !input.projectPath) {
-          throw new Error('GitHub issue triage requires an explicit Factory project repository');
-        }
-        await github.addIssueLabels(input.installationId, input.repository, input.issueNumber, [
-          'status: auto-triaged',
-        ]);
-        if (input.labels.includes('status: needs triage')) {
-          await github.removeIssueLabel(
-            input.installationId,
-            input.repository,
-            input.issueNumber,
-            'status: needs triage',
-          );
-        }
-        const labels = input.labels.filter(label => label !== 'status: needs triage');
-        return runIssueTriage({
-          ...input,
-          defaultModelId:
-            input.defaultModelId ?? (await resolveFactoryDefaultModelId(options.projects, input.resourceId)),
-          labels: labels.includes('status: auto-triaged') ? labels : [...labels, 'status: auto-triaged'],
-        });
-      }
-    : undefined;
-
   routes.push(
     registerApiRoute('/web/github/subscriptions', {
       method: 'GET',
@@ -522,7 +467,6 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
       handler: async c => {
         const result = await handleGithubWebhook(loose(c), {
           github,
-          runIssueTriage: runBoardIssueTriage,
           ingestFactoryEvent: options.ingestFactoryEvent,
           ...(options.controller
             ? {
@@ -833,73 +777,6 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
     }),
   );
 
-  // ── Manually run issue triage using the same run seam as webhooks ──
-  routes.push(
-    registerApiRoute('/web/github/projects/:id/issues/:number/triage', {
-      method: 'POST',
-      requiresAuth: false,
-      handler: async c => {
-        const owned = await loadOwnedProject({ github, auth, fleet, c: loose(c) });
-        if ('response' in owned) return owned.response;
-        const { project, sandboxRow } = owned;
-        const issueNumber = parseIssueNumberParam(c.req.param('number'));
-        if (issueNumber === null) return c.json({ error: 'invalid_issue_number' }, 400);
-
-        let body: { title?: unknown; url?: unknown; labels?: unknown };
-        try {
-          body = await c.req.json();
-        } catch {
-          return c.json({ error: 'Invalid JSON body' }, 400);
-        }
-        if (typeof body.title !== 'string' || body.title.trim().length === 0 || body.title.length > 5000) {
-          return c.json({ error: 'invalid_title' }, 400);
-        }
-        if (
-          typeof body.url !== 'string' ||
-          body.url.trim().length === 0 ||
-          body.url.length > 2048 ||
-          !isCanonicalGithubIssueUrl(body.url, project.repository.slug, issueNumber)
-        ) {
-          return c.json({ error: 'invalid_url' }, 400);
-        }
-
-        if (!runBoardIssueTriage) return c.json({ error: 'triage_unavailable' }, 503);
-        const branch = `factory/issue-${issueNumber}`;
-        const projectPath = computeWorktreePath(sandboxRow.sandboxWorkdir, branch);
-        const result = await runBoardIssueTriage({
-          repository: project.repository.slug,
-          issueNumber,
-          issueTitle: body.title,
-          issueUrl: body.url,
-          labels: parseStringList(body.labels),
-          installationId: Number(project.installation.externalId),
-          resourceId: project.factoryProjectId,
-          projectPath,
-          branch,
-        });
-        await emitAudit?.({
-          context: loose(c),
-          input: {
-            action: 'factory.triage.started',
-            factoryProjectId: project.factoryProjectId,
-            projectRepositoryId: project.id,
-            targets: [{ type: 'issue', id: String(issueNumber), name: body.title }],
-            metadata: { issueNumber, branch, threadId: result.threadId },
-          },
-        });
-        return c.json(
-          {
-            ok: true,
-            threadId: result.threadId,
-            projectPath: result.projectPath ?? projectPath,
-            branch: result.branch ?? branch,
-          },
-          202,
-        );
-      },
-    }),
-  );
-
   // ── List a project's open (non-draft) pull requests ─────────────────────
   routes.push(
     registerApiRoute('/web/github/projects/:id/prs', {
@@ -958,7 +835,10 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
       handler: async c => {
         const loaded = await loadOrgProject({ github, auth, c: loose(c) });
         if ('response' in loaded) return loaded.response;
-        return c.json({ setupCommand: loaded.project.setupCommand });
+        return c.json({
+          setupCommand: loaded.project.setupCommand,
+          teardownCommand: loaded.project.teardownCommand,
+        });
       },
     }),
   );
@@ -972,36 +852,50 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
         const loaded = await loadOrgProject({ github, auth, c: loose(c) });
         if ('response' in loaded) return loaded.response;
 
-        let body: { setupCommand?: unknown };
+        let body: { setupCommand?: unknown; teardownCommand?: unknown };
         try {
           body = await c.req.json();
         } catch {
           return c.json({ error: 'Invalid JSON body' }, 400);
         }
-        if (body.setupCommand !== null && typeof body.setupCommand !== 'string') {
-          return c.json({ error: 'Invalid setupCommand' }, 400);
+
+        const commands = ['setupCommand', 'teardownCommand'] as const;
+        for (const command of commands) {
+          const value = body[command];
+          if (value === undefined) continue;
+          if (value !== null && typeof value !== 'string') {
+            return c.json({ error: `Invalid ${command}` }, 400);
+          }
+          if (typeof value === 'string' && value.length > 2000) {
+            return c.json({ error: `${command} too long (max 2000 characters)` }, 400);
+          }
+          // Reject control characters (except newline/tab). Commands are shell
+          // scripts by design, but escape sequences and NULs can spoof logs or
+          // confuse the sandbox shell.
+          if (typeof value === 'string' && /[\0-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(value)) {
+            return c.json({ error: `${command} contains control characters` }, 400);
+          }
         }
-        if (typeof body.setupCommand === 'string' && body.setupCommand.length > 2000) {
-          return c.json({ error: 'setupCommand too long (max 2000 characters)' }, 400);
-        }
-        // Reject control characters (except newline/tab). The command is a
-        // shell script by design, but escape sequences and NULs have no
-        // legitimate use and can spoof logs or confuse the sandbox shell.
-        if (typeof body.setupCommand === 'string' && /[\0-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(body.setupCommand)) {
-          return c.json({ error: 'setupCommand contains control characters' }, 400);
-        }
-        // An empty/whitespace command means "no setup step".
-        const setupCommand =
-          typeof body.setupCommand === 'string' && body.setupCommand.trim().length > 0
-            ? body.setupCommand.trim()
-            : null;
+
+        const normalizeCommand = (value: unknown): string | null | undefined => {
+          if (value === undefined) return undefined;
+          return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+        };
+        const setupCommand = normalizeCommand(body.setupCommand);
+        const teardownCommand = normalizeCommand(body.teardownCommand);
 
         await github.sourceControlStorage.projectRepositories.update({
           orgId: loaded.project.installation.orgId,
           id: loaded.project.id,
-          input: { setupCommand },
+          input: {
+            ...(setupCommand !== undefined ? { setupCommand } : {}),
+            ...(teardownCommand !== undefined ? { teardownCommand } : {}),
+          },
         });
-        return c.json({ setupCommand });
+        return c.json({
+          setupCommand: setupCommand === undefined ? loaded.project.setupCommand : setupCommand,
+          teardownCommand: teardownCommand === undefined ? loaded.project.teardownCommand : teardownCommand,
+        });
       },
     }),
   );
@@ -1067,7 +961,9 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
   );
 
   // ── Sessions / commit / push / PR ────────────────────────────────────────
-  routes.push(...buildProjectGitRoutes({ github, auth, fleet, controller, emitAudit }));
+  routes.push(
+    ...buildProjectGitRoutes({ github, auth, fleet, controller, memorySettings, emitAudit, sessionRetirement }),
+  );
 
   return routes;
 }
@@ -1118,7 +1014,7 @@ async function resolveProjectSandbox(options: {
   if (!sandboxRow.sandboxId) {
     throw new MaterializeError('Project sandbox is not provisioned. Open the project first.', 'clone-failed');
   }
-  return fleet.reattachSandbox(sandboxRow.sandboxId);
+  return fleet.reattachSandbox(sandboxRow.sandboxId, { actingUserId: sandboxRow.userId });
 }
 
 /**
@@ -1193,12 +1089,18 @@ async function prepareProject(options: {
   // there. Git clone/pull below keep the minted installation token.
   const ghCliToken =
     (await getGithubPat(() => github.integrationStorage, project.installation.orgId)) ?? access.authorization.token;
+  const seedCheckpointName =
+    project.baseCheckpoint && !baseCheckpointIsStale(project) ? project.baseCheckpoint.name : undefined;
   const sandbox = await ensureProjectSandbox({
     fleet,
     row: sandboxRow,
     storage: github.sourceControlStorage.sandboxes,
     token: ghCliToken,
     onProgress,
+    // Seed fresh provisions from the repo's warm base checkpoint so the
+    // materialize step below finds an existing checkout and skips the
+    // redundant default-branch pull.
+    ...(seedCheckpointName ? { seedCheckpointName } : {}),
   });
   // Re-read the sandbox binding so we have the freshly persisted sandboxId.
   const fresh = await github.sourceControlStorage.sandboxes.getById({ id: sandboxRow.id });
@@ -1210,6 +1112,7 @@ async function prepareProject(options: {
     token: access.authorization.token,
     storage: github.sourceControlStorage.sandboxes,
     onProgress,
+    skipPullOnExistingCheckout: Boolean(seedCheckpointName && sandbox.seedCheckpointNameUsed === seedCheckpointName),
   });
   const result: EnsureResult = {
     resourceId: project.factoryProjectId,
@@ -1290,19 +1193,49 @@ async function loadOwnedProject(options: {
   return { orgId, userId, project, sandboxRow };
 }
 
+/**
+ * One naming per session at a time: a second caller joins the run already in
+ * flight instead of paying for another model call and racing its rename.
+ */
+function createSessionNaming() {
+  const inFlight = new Map<string, Promise<string | null>>();
+  return (sessionId: string, run: () => Promise<string | null>) => {
+    const pending = inFlight.get(sessionId);
+    if (pending) return pending;
+    const started = run().finally(() => inFlight.delete(sessionId));
+    inFlight.set(sessionId, started);
+    return started;
+  };
+}
+
+/**
+ * Name a thread with a stored model id. Resolution has to go through
+ * mastracode's gateway: a bare id handed to core's model router looks for a
+ * process env key instead of the caller's stored provider credentials.
+ */
+function titleModel(modelId: string) {
+  return ({ requestContext }: { requestContext: RequestContext }) =>
+    resolveModel(modelId, { remapForCodexOAuth: true, requestContext });
+}
+
 function buildProjectGitRoutes({
   github,
   auth,
   fleet,
   controller,
+  memorySettings,
   emitAudit,
+  sessionRetirement,
 }: {
   github: GithubIntegration;
   auth: RouteAuth;
   fleet: SandboxFleet;
   controller?: MountedMastraCode['controller'];
+  memorySettings: MountGithubRoutesOptions['memorySettings'];
   emitAudit?: AuditEmitter['emit'];
+  sessionRetirement?: MountGithubRoutesOptions['sessionRetirement'];
 }): ApiRoute[] {
+  const nameSession = createSessionNaming();
   return [
     // ── Create / list Factory sessions ──────────────────────────────────────
     registerApiRoute('/web/github/projects/:id/sessions', {
@@ -1317,7 +1250,10 @@ function buildProjectGitRoutes({
           ? await resolveProjectRepository({ github, orgId, projectRepositoryId })
           : null;
         if (!project) return c.json({ error: 'Project repository not found' }, 404);
-        const sessions = await github.sourceControlStorage.sessions.list({ projectRepositoryId: project.id, userId });
+        const sessions = await github.sourceControlStorage.sessions.list({
+          projectRepositoryId: project.id,
+          viewerUserId: userId,
+        });
         return c.json({ sessions });
       },
     }),
@@ -1396,6 +1332,7 @@ function buildProjectGitRoutes({
             branch,
             baseBranch,
             title: normalizedTitle,
+            visibility: 'org',
           })
           .catch(async error => {
             if (!(error instanceof UniqueViolationError) || requestedSessionId === undefined) throw error;
@@ -1423,7 +1360,13 @@ function buildProjectGitRoutes({
         const resolved = await resolveOrgTenant(loose(c), auth);
         if ('response' in resolved) return resolved.response;
         const session = await github.sourceControlStorage.sessions.getBySessionId(c.req.param('sessionId'));
-        if (!session || session.orgId !== resolved.tenant.orgId || session.userId !== resolved.tenant.userId) {
+        // Private sessions 404 (not 403) for non-owners so their IDs do not
+        // leak existence; the body must match the genuinely-missing case.
+        if (
+          !session ||
+          session.orgId !== resolved.tenant.orgId ||
+          (session.visibility === 'private' && session.userId !== resolved.tenant.userId)
+        ) {
           return c.json({ error: 'Session not found' }, 404);
         }
         return c.json({ session });
@@ -1439,11 +1382,6 @@ function buildProjectGitRoutes({
         if (!session || session.orgId !== resolved.tenant.orgId || session.userId !== resolved.tenant.userId) {
           return c.json({ error: 'Session not found' }, 404);
         }
-        // Answer as soon as the workspace is actually gone. Reclaiming its
-        // sandbox wakes the VM and scrubs the checkout, which takes minutes on
-        // a large repository — the caller must not sit through that for a
-        // workspace that has already been removed.
-        await github.sourceControlStorage.sessions.delete(session.id);
         try {
           await controller?.deleteSession({ resourceId: session.sessionId });
         } catch (error) {
@@ -1452,18 +1390,72 @@ function buildProjectGitRoutes({
             error,
           });
         }
-        void reclaimDeletedSessionSandbox({
-          fleet,
-          sourceControl: github.sourceControlStorage,
-          session,
-        }).catch((error: unknown) => {
-          console.error('[GitHub Sessions] Failed to reclaim sandbox for deleted session', {
+        if (sessionRetirement) {
+          await sessionRetirement.retireSession({
+            sourceControl: github.sourceControlStorage,
+            orgId: session.orgId,
             sessionId: session.sessionId,
-            sandboxId: session.sandboxId,
-            error,
+            deleteSession: true,
           });
-        });
+        } else {
+          await github.sourceControlStorage.sessions.delete(session.id);
+          void reclaimDeletedSessionSandbox({
+            fleet,
+            sourceControl: github.sourceControlStorage,
+            session,
+          }).catch((error: unknown) => {
+            console.error('[GitHub Sessions] Failed to reclaim sandbox for deleted session', {
+              sessionId: session.sessionId,
+              sandboxId: session.sandboxId,
+              error,
+            });
+          });
+        }
         return c.json({ removed: true });
+      },
+    }),
+
+    // ── Re-name a session's thread with the title model ────────────────────
+    registerApiRoute('/web/user-sessions/:sessionId/title', {
+      method: 'POST',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = await resolveOrgTenant(loose(c), auth);
+        if ('response' in resolved) return resolved.response;
+        const sessionId = c.req.param('sessionId');
+        const row = await github.sourceControlStorage.sessions.getBySessionId(sessionId);
+        if (!row || row.orgId !== resolved.tenant.orgId || row.userId !== resolved.tenant.userId) {
+          return c.json({ error: 'Session not found' }, 404);
+        }
+        if (!controller) return c.json({ error: 'Sessions are not available on this server.' }, 503);
+
+        const threads = await controller.queryThreads({ resourceId: sessionId });
+        const thread = threads.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0];
+        if (!thread) return c.json({ error: 'This session has no conversation to name yet.' }, 409);
+
+        // A session that is not live carries neither the observer model that names
+        // its threads nor the identity whose provider credentials pay for it.
+        const stored = await memorySettings.get({ orgId: row.orgId, userId: row.userId });
+        const requestContext = new RequestContext();
+        requestContext.set('user', { workosId: row.userId, organizationId: row.orgId });
+
+        try {
+          const title = await nameSession(sessionId, async () => {
+            const generated = await controller.generateThreadTitle({
+              threadId: thread.id,
+              resourceId: sessionId,
+              requestContext,
+              ...(stored?.observerModelId ? { model: titleModel(stored.observerModelId) } : {}),
+            });
+            const named = generated ? normalizeSessionTitle(generated) : null;
+            if (named) await github.sourceControlStorage.sessions.rename({ sessionId, title: named });
+            return named;
+          });
+          if (!title) return c.json({ error: 'The model returned an empty title. Try again.' }, 502);
+          return c.json({ title });
+        } catch (error) {
+          return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+        }
       },
     }),
 
@@ -1694,7 +1686,9 @@ function buildProjectGitRoutes({
 
         try {
           return await withSessionOperationLock(`sandbox:${sandboxRow.id}`, async () => {
-            const sandbox = await fleet.reattachSandbox(sandboxRow.sandboxId!);
+            const sandbox = await fleet.reattachSandbox(sandboxRow.sandboxId!, {
+              actingUserId: sandboxRow.userId,
+            });
             await teardownProjectSandbox({
               fleet,
               row: sandboxRow,

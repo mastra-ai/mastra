@@ -405,6 +405,8 @@ interface PGIndexStats {
 }
 ```
 
+`count` is an exact `SELECT COUNT(*)`, which scans the whole table, so avoid calling `describeIndex()` on a hot path for a large index. Reads and writes never pay for it: they only use the index metadata, which comes from the Postgres catalog.
+
 ### `deleteIndex()`
 
 <PropertiesTable
@@ -649,7 +651,7 @@ The `PgVector` class exposes its underlying PostgreSQL connection pool as a publ
 pgVector.pool // instance of pg.Pool
 ```
 
-This enables advanced usage such as running direct SQL queries, managing transactions, or monitoring pool state. When using the pool directly:
+Direct pool access supports advanced operations such as direct SQL queries, transactions, or pool-state monitoring. When using the pool directly:
 
 - You are responsible for releasing clients (`client.release()`) after use.
 - The pool remains accessible after calling `disconnect()`, but new queries will fail.

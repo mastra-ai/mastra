@@ -1,103 +1,137 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
-import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ScrollText } from 'lucide-react';
 import { useState } from 'react';
 
 import { useAuditEvents, useAuditPortalLink } from '../../hooks/useAuditEvents';
-import { relativeTime } from '../../lib/date/relativeTime';
+import { AuditLogList } from '../domains/factory/components/audit/AuditLogList';
+import { AuditCategoryFilter } from '../domains/factory/components/audit/AuditCategoryFilter';
+import { AuditTimeline } from '../domains/factory/components/audit/AuditTimeline';
+import { DocumentFactoryPageShell } from '../domains/factory/components/FactoryPageShell';
+import {
+  AUDIT_CATEGORIES,
+  auditActionsForCategories,
+  eventInAuditRange,
+  type AuditNamespace,
+  type AuditTimeRange,
+} from '../domains/factory/auditPresentation';
 import { SkeletonRows } from '../ui/SkeletonRows';
-import { FactoryPageShell } from '../domains/factory/components/FactoryPageShell';
-import type { AuditEvent } from '../domains/factory/services/audit';
 
-/** Action-group filters mapped to the concrete v1 action taxonomy. */
-const ACTION_GROUPS = [
-  { key: 'all', label: 'All', actions: undefined },
-  {
-    key: 'work-items',
-    label: 'Work items',
-    actions: [
-      'factory.work_item.created',
-      'factory.work_item.updated',
-      'factory.work_item.stage_moved',
-      'factory.work_item.deleted',
-      'factory.work_item.transition_rejected',
-    ],
-  },
-  {
-    key: 'runs',
-    label: 'Runs',
-    actions: ['factory.run.started', 'factory.run.approved', 'factory.run.dismissed', 'factory.triage.started'],
-  },
-  { key: 'worktrees', label: 'Worktrees', actions: ['factory.worktree.created', 'factory.worktree.deleted'] },
-  { key: 'git', label: 'Git', actions: ['factory.git.commit', 'factory.git.push', 'factory.git.pr_opened'] },
-  {
-    key: 'agent',
-    label: 'Agent',
-    actions: ['factory.agent.commit', 'factory.agent.push', 'factory.agent.pr_opened'],
-  },
-  { key: 'intake', label: 'Intake', actions: ['factory.intake.config_updated'] },
-] as const;
-
-type GroupKey = (typeof ACTION_GROUPS)[number]['key'];
-
-/** Short human label for a dot-namespaced action, e.g. 'Stage moved'. */
-function actionLabel(action: string): string {
-  const leaf = action.split('.').pop() ?? action;
-  const words = leaf.replace(/_/g, ' ');
-  return words.charAt(0).toUpperCase() + words.slice(1);
+function AuditEmptyTitle({ children }: { children: string }) {
+  return (
+    <span className="flex items-center gap-2">
+      <ScrollText className="text-icon3 size-4" aria-hidden />
+      {children}
+    </span>
+  );
 }
 
-/**
- * The Factory audit log: an append-only, org-scoped record of who did what,
- * when — every work-item mutation, stage move, run start, worktree change, and
- * git action. Backed by the local `audit_events` table; the "Open in WorkOS"
- * button (shown when WorkOS is configured) opens the enterprise viewer.
- */
+function AuditLogEmptyState({
+  hasCategoryFilter,
+  range,
+  onClearCategories,
+  onClearRange,
+}: {
+  hasCategoryFilter: boolean;
+  range: AuditTimeRange | undefined;
+  onClearCategories: () => void;
+  onClearRange: () => void;
+}) {
+  if (range) {
+    return (
+      <EmptyState
+        className="min-h-48"
+        as="h2"
+        iconSlot={null}
+        titleSlot={<AuditEmptyTitle>No events in this range</AuditEmptyTitle>}
+        actionSlot={
+          <Button variant="outline" size="sm" onClick={onClearRange}>
+            Show full range
+          </Button>
+        }
+      />
+    );
+  }
+
+  if (hasCategoryFilter) {
+    return (
+      <EmptyState
+        className="min-h-48"
+        as="h2"
+        iconSlot={null}
+        titleSlot={<AuditEmptyTitle>No matching audit events</AuditEmptyTitle>}
+        actionSlot={
+          <Button variant="outline" size="sm" onClick={onClearCategories}>
+            Show all events
+          </Button>
+        }
+      />
+    );
+  }
+
+  return (
+    <EmptyState
+      className="min-h-48"
+      as="h2"
+      iconSlot={null}
+      titleSlot={<AuditEmptyTitle>No audit events yet</AuditEmptyTitle>}
+    />
+  );
+}
+
 export function AuditPage() {
-  return <FactoryPageShell>{project => <AuditContent factoryProjectId={project.id} />}</FactoryPageShell>;
+  return (
+    <DocumentFactoryPageShell>{project => <AuditContent factoryProjectId={project.id} />}</DocumentFactoryPageShell>
+  );
 }
 
 function AuditContent({ factoryProjectId }: { factoryProjectId: string | undefined }) {
-  const [group, setGroup] = useState<GroupKey>('all');
-  const actionFilter = ACTION_GROUPS.find(entry => entry.key === group);
-  const actions = actionFilter?.actions;
-  const eventsQuery = useAuditEvents(factoryProjectId, group, actions ? [...actions] : undefined);
+  const [selectedCategories, setSelectedCategories] = useState(() => new Set<AuditNamespace>());
+  const [selectedRange, setSelectedRange] = useState<AuditTimeRange>();
+  const actions = auditActionsForCategories(selectedCategories);
+  const filterKey = selectedCategories.size === 0 ? 'all' : [...selectedCategories].toSorted().join(',');
+  const eventsQuery = useAuditEvents(factoryProjectId, filterKey, actions);
   const portalQuery = useAuditPortalLink(true);
+
+  const toggleCategory = (category: AuditNamespace) => {
+    setSelectedCategories(current => {
+      const next = new Set(current);
+      if (!next.delete(category)) next.add(category);
+      return next.size === AUDIT_CATEGORIES.length ? new Set<AuditNamespace>() : next;
+    });
+    setSelectedRange(undefined);
+  };
+  const clearCategories = () => {
+    setSelectedCategories(new Set());
+    setSelectedRange(undefined);
+  };
 
   if (eventsQuery.isError) {
     const message = eventsQuery.error instanceof Error ? eventsQuery.error.message : 'Unable to load audit events.';
     return <Notice variant="destructive">{message}</Notice>;
   }
 
-  const events = eventsQuery.data?.pages.flatMap(page => page.events) ?? [];
-  const hasActionFilter = group !== 'all';
+  const pages = eventsQuery.data?.pages ?? [];
+  const events = pages.flatMap(page => page.events);
+  const actorNames = new Map<string, string>();
+  for (const page of pages) {
+    for (const [actorId, actor] of Object.entries(page.actors)) actorNames.set(actorId, actor.name);
+  }
+  const visibleEvents = selectedRange ? events.filter(event => eventInAuditRange(event, selectedRange)) : events;
+  const portalUrl = portalQuery.data;
+
   return (
-    <section className="flex min-h-0 flex-1 flex-col gap-2" aria-label="Audit history">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <ButtonsGroup spacing="close" role="group" aria-label="Audit filter">
-          {ACTION_GROUPS.map(entry => (
-            <Button
-              key={entry.key}
-              variant={group === entry.key ? 'primary' : 'outline'}
-              size="sm"
-              aria-pressed={group === entry.key}
-              onClick={() => setGroup(entry.key)}
-            >
-              {entry.label}
-            </Button>
-          ))}
-        </ButtonsGroup>
-        {portalQuery.data ? (
+    <section className="flex min-w-0 flex-1 flex-col gap-3" aria-label="Audit history">
+      <h1 className="sr-only">Audit log</h1>
+
+      <div className="min-h-form-xs flex items-center justify-end">
+        {portalUrl ? (
           <Button
             variant="outline"
-            size="sm"
+            size="xs"
             onClick={() => {
-              // Portal links are one-time use: open, then fetch a fresh one.
-              window.open(portalQuery.data!, '_blank', 'noopener,noreferrer');
+              window.open(portalUrl, '_blank', 'noopener,noreferrer');
               void portalQuery.refetch();
             }}
           >
@@ -106,87 +140,37 @@ function AuditContent({ factoryProjectId }: { factoryProjectId: string | undefin
         ) : null}
       </div>
 
-      {eventsQuery.isPending ? (
-        <div className="min-h-0 flex-1">
-          <SkeletonRows label="Loading audit events" rows={4} rowClassName="h-16 w-full" />
-        </div>
-      ) : events.length === 0 ? (
-        <EmptyState
-          className="min-h-0 flex-1"
-          as="h2"
-          iconSlot={<ScrollText className="text-icon3 size-5" aria-hidden />}
-          titleSlot={hasActionFilter ? 'No matching audit events' : 'No audit events yet'}
-          descriptionSlot={
-            hasActionFilter
-              ? `No audit events match the “${actionFilter?.label ?? 'selected'}” filter.`
-              : 'Board changes, runs, and git actions will appear here.'
-          }
-          actionSlot={
-            hasActionFilter ? (
-              <Button variant="outline" size="sm" onClick={() => setGroup('all')}>
-                Show all events
-              </Button>
-            ) : undefined
-          }
+      <div className="flex min-h-0 flex-1 flex-col gap-2">
+        <AuditTimeline events={events} range={selectedRange} onRangeChange={setSelectedRange} />
+        <AuditCategoryFilter
+          selectedCategories={selectedCategories}
+          countLabel={selectedRange ? `${visibleEvents.length} of ${events.length} loaded` : `${events.length} loaded`}
+          onToggleCategory={toggleCategory}
+          onClearCategories={clearCategories}
         />
-      ) : (
-        <ScrollArea className="min-h-0 flex-1">
-          <div className="flex flex-col gap-2 pr-1">
-            <ul className="m-0 flex list-none flex-col gap-1 p-0" aria-label="Audit events">
-              {events.map(event => (
-                <AuditEventRow key={event.id} event={event} />
-              ))}
-            </ul>
-            {eventsQuery.hasNextPage ? (
-              <Button
-                variant="outline"
-                size="sm"
-                className="self-center"
-                disabled={eventsQuery.isFetchingNextPage}
-                onClick={() => void eventsQuery.fetchNextPage()}
-              >
-                {eventsQuery.isFetchingNextPage ? 'Loading…' : 'Load more'}
-              </Button>
-            ) : null}
+        {eventsQuery.isPending ? (
+          <div className="min-h-64">
+            <SkeletonRows label="Loading audit events" rows={8} rowClassName="h-10 w-full rounded-md" />
           </div>
-        </ScrollArea>
-      )}
-    </section>
-  );
-}
-
-function AuditEventRow({ event }: { event: AuditEvent }) {
-  const target = event.targets[0];
-  const hasMetadata = Object.keys(event.metadata).length > 0;
-
-  return (
-    <li className="border-border1 bg-surface2 rounded-lg border px-3 py-2">
-      <div className="grid grid-cols-[4rem_10rem_1fr] items-baseline gap-3">
-        <Txt as="span" variant="ui-xs" className="text-icon3" title={event.occurredAt}>
-          {relativeTime(event.occurredAt)}
-        </Txt>
-        <span className="bg-surface4 text-ui-xs text-icon5 inline-flex w-fit rounded-md px-1.5 py-0.5">
-          {actionLabel(event.action)}
-        </span>
-        <div className="flex min-w-0 flex-col gap-0.5">
-          <Txt as="span" variant="ui-sm" className="text-icon6 truncate">
-            {target?.name ?? target?.id ?? '—'}
-          </Txt>
-          <Txt as="span" variant="ui-xs" className="text-icon3">
-            {event.actorType === 'agent'
-              ? `by agent${typeof event.metadata.startedBy === 'string' ? ` · started by ${event.metadata.startedBy}` : ''}`
-              : `by ${event.actorId}`}
-          </Txt>
-        </div>
+        ) : visibleEvents.length === 0 ? (
+          <AuditLogEmptyState
+            hasCategoryFilter={selectedCategories.size > 0}
+            range={selectedRange}
+            onClearCategories={clearCategories}
+            onClearRange={() => setSelectedRange(undefined)}
+          />
+        ) : (
+          <AuditLogList
+            key={filterKey}
+            events={visibleEvents}
+            actorNames={actorNames}
+            hasNextPage={eventsQuery.hasNextPage}
+            autoLoad={!selectedRange}
+            isFetchingNextPage={eventsQuery.isFetchingNextPage}
+            onLoadMore={() => void eventsQuery.fetchNextPage()}
+          />
+        )}
       </div>
-      {hasMetadata ? (
-        <details className="mt-1">
-          <summary className="text-ui-xs text-icon3 cursor-pointer">Details</summary>
-          <pre className="bg-surface1 text-ui-xs text-icon4 m-0 mt-1 overflow-x-auto rounded-md p-2">
-            {JSON.stringify(event.metadata, null, 2)}
-          </pre>
-        </details>
-      ) : null}
-    </li>
+    </section>
   );
 }

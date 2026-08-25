@@ -38,6 +38,8 @@ enableGlobalVirtualStore: true
 
 catalog:
   '@microsoft/api-extractor': ^7.57.7
+  '@stryker-mutator/core': 10.0.0
+  '@stryker-mutator/vitest-runner': 10.0.0
   '@vitest/coverage-v8': 4.1.10
   '@vitest/ui': 4.1.10
   date-fns: 4.4.0
@@ -50,6 +52,8 @@ catalog:
   oxfmt: 0.59.0
 
 patchedDependencies:
+  '@ai-sdk/provider-utils@3.0.31': patches/@ai-sdk__provider-utils@3.0.31.patch
+  '@ai-sdk/provider-utils@4.0.41': patches/@ai-sdk__provider-utils@4.0.41.patch
   '@changesets/get-dependents-graph@2.1.4': patches/@changesets__get-dependents-graph@2.1.4.patch
   '@earendil-works/pi-tui@0.80.6': patches/@earendil-works__pi-tui@0.80.6.patch
   '@manypkg/tools@2.1.1': patches/@manypkg__tools@2.1.1.patch
@@ -57,6 +61,11 @@ patchedDependencies:
   read-yaml-file@1.1.0: patches/read-yaml-file@1.1.0.patch
 
 packageExtensions:
+  # Stryker core dynamically imports TypeScript without declaring it. The
+  # global virtual store has no fallback hoist, so make that dependency explicit.
+  '@stryker-mutator/core@10.0.0':
+    dependencies:
+      typescript: ^6.0.3
   '@ai-sdk/provider-utils@3.0.25':
     dependencies:
       msw: ^2.12.11
@@ -374,3 +383,4 @@ allowBuilds:
   # node-oracledb runs in Thin mode (pure JS); its install script is a no-op stub.
   oracledb: false
   isolated-vm: true
+  '@types/koa-compose': false

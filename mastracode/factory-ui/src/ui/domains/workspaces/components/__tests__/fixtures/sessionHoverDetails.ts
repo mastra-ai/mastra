@@ -1,7 +1,6 @@
-import type { AgentControllerThreadInfo } from '@mastra/client-js';
-
 import type { WorkItem } from '../../../../factory/services/workItems';
-import type { FactoryProjectPayload, FactoryUserSession, MaterializeResult } from '../../../services/github';
+import type { FactoryProjectPayload, MaterializeResult } from '../../../services/github';
+import type { FactoryUserSession } from '../../../services/user-sessions';
 
 export const factoryId = 'fp-1';
 export const projectRepositoryId = 'ghp-1';
@@ -13,10 +12,12 @@ export const reviewName = 'Review the authentication refresh fix before release'
 function createWorkspace({
   id,
   branch,
+  title,
   updatedAt,
 }: {
   id: string;
   branch: string;
+  title: string;
   updatedAt: string;
 }): FactoryUserSession {
   return {
@@ -25,11 +26,13 @@ function createWorkspace({
     projectRepositoryId,
     orgId: 'org-1',
     userId: 'user-1',
+    visibility: 'org' as const,
+    title,
     branch,
     baseBranch: 'main',
     sandboxId: null,
     sandboxWorkdir: null,
-    materializedAt: null,
+    materializedAt: updatedAt,
     createdAt: updatedAt,
     updatedAt,
   };
@@ -59,11 +62,13 @@ export function createSessionHoverDetailsFixtures(updatedAt: string) {
   const workWorkspace = createWorkspace({
     id: workSessionId,
     branch: 'factory/issue-42-authentication-regression',
+    title: workName,
     updatedAt,
   });
   const reviewWorkspace = createWorkspace({
     id: reviewSessionId,
     branch: 'factory/pr-99-authentication-refresh',
+    title: reviewName,
     updatedAt,
   });
   const workItems: WorkItem[] = [
@@ -118,26 +123,6 @@ export function createSessionHoverDetailsFixtures(updatedAt: string) {
       updatedAt,
     },
   ];
-  const threads: AgentControllerThreadInfo[] = [
-    {
-      id: workSessionId,
-      title: workName,
-      resourceId: workSessionId,
-      tags: { projectPath: workSessionId },
-      state: 'active',
-      createdAt: updatedAt,
-      updatedAt,
-    },
-    {
-      id: reviewSessionId,
-      title: reviewName,
-      resourceId: workSessionId,
-      tags: { projectPath: reviewSessionId },
-      state: 'idle',
-      createdAt: updatedAt,
-      updatedAt,
-    },
-  ];
   const ensureResponse: MaterializeResult = {
     resourceId: workSessionId,
     factoryProjectId: factoryId,
@@ -168,6 +153,6 @@ export function createSessionHoverDetailsFixtures(updatedAt: string) {
     currentSessionResponse: { session: workWorkspace },
     ensureResponse,
     workItemsResponse: { workItems: workItems.map(toWireWorkItem) },
-    threadsResponse: { threads },
+    activeRunsResponse: { runs: [{ runId: 'run-work', resourceId: workSessionId, threadId: workSessionId }] },
   };
 }

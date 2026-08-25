@@ -13,7 +13,7 @@ Framework-agnostic handler for streaming agent chat in AI SDK-compatible format.
 
 `handleChatStream()` returns a `ReadableStream` that you can wrap with [`createUIMessageStreamResponse()`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/create-ui-message-stream-response).
 
-`handleChatStream()` keeps the existing AI SDK v5/default behavior. If your app is typed against AI SDK v6, pass `version: 'v6'`.
+`handleChatStream()` defaults to AI SDK v5 for backward compatibility. Pass the version that matches your installed AI SDK, such as `version: 'v7'` for AI SDK v7.
 
 Use [`chatRoute()`](/reference/ai-sdk/chat-route) if you want to create a chat route inside a Mastra server.
 
@@ -48,11 +48,23 @@ export async function POST(req: Request) {
   const stream = await handleChatStream({
     mastra,
     agentId: 'weatherAgent',
+    version: 'v7',
     params,
     messageMetadata: () => ({ createdAt: new Date().toISOString() }),
   })
   return createUIMessageStreamResponse({ stream })
 }
+```
+
+## Keeping connections alive
+
+Proxies and load balancers often close a connection that sends no bytes for a while, which drops the response during long reasoning bursts or slow tool calls. Wrap the encoded response with [`withSseHeartbeat()`](/reference/ai-sdk/with-sse-heartbeat) to emit periodic SSE comments while the stream is idle:
+
+```typescript title="app/api/chat/route.ts"
+import { handleChatStream, withSseHeartbeat } from '@mastra/ai-sdk'
+import { createUIMessageStreamResponse } from 'ai'
+
+return withSseHeartbeat(createUIMessageStreamResponse({ stream }), 15000)
 ```
 
 ## Parameters
@@ -61,9 +73,9 @@ export async function POST(req: Request) {
   content={[
   {
     name: 'version',
-    type: "'v5' | 'v6'",
+    type: "'v5' | 'v6' | 'v7'",
     description:
-      "Selects the AI SDK stream contract to emit. Omit it or pass `'v5'` for the existing default behavior. Pass `'v6'` when your app is typed against AI SDK v6 response helpers.",
+      "Selects the AI SDK stream contract to emit. Omit it or pass `'v5'` for the existing default behavior. Pass `'v6'` when your app is typed against AI SDK v6 response helpers. Pass `'v7'` when your app is typed against AI SDK v7.",
     isOptional: true,
     defaultValue: "'v5'",
   },
@@ -83,7 +95,7 @@ export async function POST(req: Request) {
     name: 'agentVersion',
     type: "{ versionId: string } | { status?: 'draft' | 'published' }",
     description:
-      "Selects a specific agent version. Pass `{ versionId: '<id>' }` to target an exact version, or `{ status: 'draft' }` / `{ status: 'published' }` to resolve by status. Requires the [Editor](/docs/editor/overview) to be configured.",
+      "Selects a specific agent version. Pass `{ versionId: '<id>' }` to target an exact version, or `{ status: 'draft' }` / `{ status: 'published' }` to resolve by status. Requires the [Editor](/docs/studio/editor) to be configured.",
     isOptional: true,
   },
   {

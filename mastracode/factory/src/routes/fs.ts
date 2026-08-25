@@ -9,6 +9,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
 import type { MaterializationSandbox, SandboxFleet } from '../sandbox/fleet.js';
+import { waitForPendingFilesystemCapture } from '../session/filesystem-capture.js';
 import type { FilesystemStorage } from '../storage/domains/filesystem/base.js';
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
 import type { RouteAuth } from './route.js';
@@ -458,6 +459,11 @@ export async function listSessionFilesystemFiles(
   const safeThreadId = threadId.trim();
   if (!safeThreadId) throw new Error('Missing required query param: threadId');
 
+  // The turn-end capture no longer gates agent_end, so a reader refetching on
+  // run completion could otherwise race it and serve the previous turn's
+  // listing. Await the in-flight capture (bounded) before reading.
+  await waitForPendingFilesystemCapture(session.sessionId);
+
   return {
     workspacePath: session.sessionId,
     threadId: safeThreadId,
@@ -487,7 +493,10 @@ async function sessionSandbox(
   if (!fleet.enabled || !session.sandboxId || !session.sandboxWorkdir) return null;
   let sandbox: Awaited<ReturnType<SandboxFleet['reattachSandbox']>>;
   try {
-    sandbox = await fleet.reattachSandbox(session.sandboxId, { workingDirectory: session.sandboxWorkdir });
+    sandbox = await fleet.reattachSandbox(session.sandboxId, {
+      workingDirectory: session.sandboxWorkdir,
+      actingUserId: session.userId,
+    });
   } catch {
     // Sandbox is gone (idle GC) or unreachable. Degrade to an empty view
     // rather than surfacing a 500 from a file-viewer panel.

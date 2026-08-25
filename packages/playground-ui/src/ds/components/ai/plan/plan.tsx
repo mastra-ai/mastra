@@ -1,5 +1,5 @@
 import { CheckIcon, ClipboardList, CopyIcon, Maximize2, Minimize2 } from 'lucide-react';
-import { createContext, useContext, useState } from 'react';
+import { createContext, useContext, useLayoutEffect, useRef, useState } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 
 import { Badge } from '@/ds/components/Badge';
@@ -15,6 +15,9 @@ const DEFAULT_COLLAPSED_HEIGHT = 220;
 interface PlanContextValue {
   collapsedHeight: number;
   isExpanded: boolean;
+  /** Whether the rendered content overflows the collapsed height (measured, not estimated). */
+  isClipped: boolean;
+  setClipped: (clipped: boolean) => void;
   toggleExpanded: () => void;
 }
 
@@ -36,6 +39,7 @@ export interface PlanProps extends ComponentProps<'div'> {
 
 export function Plan({ children, collapsedHeight = DEFAULT_COLLAPSED_HEIGHT, className, ...props }: PlanProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isClipped, setClipped] = useState(false);
 
   const toggleExpanded = () => {
     setIsExpanded(current => !current);
@@ -44,6 +48,8 @@ export function Plan({ children, collapsedHeight = DEFAULT_COLLAPSED_HEIGHT, cla
   const contextValue = {
     collapsedHeight,
     isExpanded,
+    isClipped,
+    setClipped,
     toggleExpanded,
   };
 
@@ -208,16 +214,44 @@ export interface PlanContentProps extends Omit<ComponentProps<'div'>, 'children'
 }
 
 export function PlanContent({ children, className, style, ...props }: PlanContentProps) {
-  const { collapsedHeight, isExpanded } = usePlanContext();
+  const { collapsedHeight, isExpanded, isClipped, setClipped } = usePlanContext();
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  // Measure the rendered content against the collapsed height so the clip hint
+  // and expand control track actual overflow — not an estimate of it.
+  useLayoutEffect(() => {
+    const element = contentRef.current;
+    if (!element) return;
+
+    const measure = () => setClipped(element.scrollHeight > collapsedHeight);
+    measure();
+
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [children, collapsedHeight, setClipped]);
+
+  const showClipHint = !isExpanded && isClipped;
 
   return (
     <div
       data-slot="plan-content"
-      className={cn('relative', !isExpanded && 'overflow-hidden', className)}
+      // The clip hint masks the content itself, so it reads correctly on any card background.
+      {...(showClipHint ? { 'data-clipped': '' } : {})}
+      className={cn(
+        'relative',
+        !isExpanded && 'overflow-hidden',
+        showClipHint && 'mask-b-from-60% mask-b-to-100%',
+        className,
+      )}
       style={!isExpanded ? { ...style, maxHeight: collapsedHeight } : style}
       {...props}
     >
-      <div className="[&_code]:bg-surface4 [&_h1]:text-header-md [&_h1]:leading-header-md [&_h2]:text-header-sm [&_h2]:leading-header-sm [&_h3]:text-ui-lg [&_h3]:leading-ui-lg [&_p]:text-ui-md [&_p]:leading-6">
+      <div
+        ref={contentRef}
+        className="[&_code]:bg-surface4 [&_h1]:text-header-md [&_h1]:leading-header-md [&_h2]:text-header-sm [&_h2]:leading-header-sm [&_h3]:text-ui-lg [&_h3]:leading-ui-lg [&_p]:text-ui-md [&_p]:leading-6"
+      >
         <MarkdownRenderer className="text-neutral6">{children}</MarkdownRenderer>
       </div>
     </div>
@@ -247,7 +281,11 @@ export function PlanControls({ children, className, ...props }: PlanControlsProp
   const hasActions = Boolean(children);
 
   return (
-    <div data-slot="plan-controls" className={cn('relative z-10 mt-4 flex justify-center', className)} {...props}>
+    <div
+      data-slot="plan-controls"
+      className={cn('relative z-10 mt-4 flex justify-center empty:hidden', className)}
+      {...props}
+    >
       {hasActions ? (
         <div className="grid w-full max-w-sm grid-cols-[1fr_auto_1fr] items-center gap-2 px-10">{children}</div>
       ) : (
@@ -272,14 +310,18 @@ export type PlanExpandButtonProps = Omit<
   'aria-label' | 'children' | 'onClick' | 'size' | 'type' | 'variant'
 >;
 
-export function PlanExpandButton(props: PlanExpandButtonProps) {
-  const { isExpanded, toggleExpanded } = usePlanContext();
+export function PlanExpandButton({ className, ...props }: PlanExpandButtonProps) {
+  const { isExpanded, isClipped, toggleExpanded } = usePlanContext();
+
+  // Nothing to expand: the collapsed card already shows the whole plan.
+  if (!isClipped && !isExpanded) return null;
 
   return (
     <Button
       {...props}
+      className={cn('shrink-0 whitespace-nowrap', className)}
       type="button"
-      variant="primary"
+      variant="default"
       size="sm"
       aria-label={isExpanded ? 'Collapse plan' : 'Expand plan'}
       onClick={toggleExpanded}

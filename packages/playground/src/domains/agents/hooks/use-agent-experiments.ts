@@ -32,7 +32,7 @@ export const useAgentExperiments = (agentId: string, attachedScorerIds: string[]
               .filter(
                 exp =>
                   (exp.targetType === 'agent' && exp.targetId === agentId) ||
-                  (exp.targetType === 'scorer' && scorerIdSet.has(exp.targetId)),
+                  (exp.targetType === 'scorer' && exp.targetId !== null && scorerIdSet.has(exp.targetId)),
               )
               .map(
                 (exp): AgentExperiment => ({

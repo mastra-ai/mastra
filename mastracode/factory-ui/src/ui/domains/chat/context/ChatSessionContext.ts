@@ -24,28 +24,41 @@ export interface ChatSessionContextApi {
    */
   resourceReady: boolean;
   /**
-   * `/ensure` has succeeded and runs can execute in the sandbox. Gate any
-   * write/run consumer on this flag.
+   * Session metadata resolved and runs can be sent. Does NOT wait on the
+   * `/ensure` warm-up — the server materializes sandboxes lazily on first use.
+   * Gate any write/run consumer on this flag.
    */
   sandboxReady: boolean;
   /**
-   * `/ensure` is in flight (or not yet started because deps aren't ready) for
-   * an in-session mount. UI should show a preparing affordance while true.
+   * Session metadata is still resolving for an in-session mount. UI should
+   * show a preparing affordance while true.
    */
   sandboxPreparing: boolean;
   /**
-   * Latest SSE progress event from `/ensure`, or `undefined` before the first
-   * event arrives or when no preparation is in progress.
+   * Latest SSE progress event from the background `/ensure` warm-up, or
+   * `undefined` before the first event arrives or when no warm-up is in
+   * progress. Informational only — never blocks the chat UI.
    */
   sandboxProgress: PrepareProgress | undefined;
+  /**
+   * The background `/ensure` warm-up is still in flight. Lets the prepare
+   * stepper keep "Preparing sandbox" active before the first progress event
+   * arrives instead of skipping ahead to message loading.
+   */
+  sandboxWarming?: boolean;
   resourceEnabled: boolean;
   /**
-   * Failure while preparing the session's workspace (sandbox provision /
-   * repo materialization). While set, the session never becomes enabled, so
-   * surfaces must show this error instead of an eternal loading state.
+   * Failure resolving the session itself (denied/missing/errored session
+   * query). Fatal — the chat surface replaces its content with an error state.
    */
   sessionError?: Error;
-  /** Re-runs workspace preparation after a `sessionError`. */
+  /**
+   * Failure from the background workspace warm-up (`/ensure`). Non-fatal —
+   * the run path materializes lazily — so surfaces show it as a banner with a
+   * retry affordance rather than disabling the session.
+   */
+  warmupError?: Error;
+  /** Re-runs the failed session query and/or workspace warm-up. */
   retrySession?: () => void;
   projectPath?: string;
   /**

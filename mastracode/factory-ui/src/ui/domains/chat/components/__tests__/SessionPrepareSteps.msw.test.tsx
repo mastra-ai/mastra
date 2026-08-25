@@ -1,20 +1,10 @@
-/**
- * Focused coverage of the `<SessionPrepareSteps>` loader: renders three
- * user-facing groups ("Preparing sandbox" → "Cloning repository" →
- * "Starting session") built on the DS `ProcessStepListItem` primitive,
- * marks each pending / running / success based on `sandboxProgress.phase`.
- *
- * SSE phase → group mapping:
- *   reattaching / provisioning / preparing-workspace  →  Preparing sandbox
- *   cloning / pulling                                 →  Cloning repository
- *   finalizing (+ post-ensure messages fetch)         →  Starting session
- */
 import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import type { PrepareProgress } from '../../../workspaces/services/github';
 import { ChatSessionContext } from '../../context/ChatSessionContext';
 import type { ChatSessionContextApi } from '../../context/ChatSessionContext';
+import { ChatThreadMessagesContext } from '../../context/ChatThreadMessagesContext';
 import { SessionPrepareSteps } from '../SessionPrepareSteps';
 
 const BASE_SESSION: ChatSessionContextApi = {
@@ -29,12 +19,24 @@ const BASE_SESSION: ChatSessionContextApi = {
   kind: 'factory',
 };
 
-function renderWithProgress(sandboxProgress: PrepareProgress | undefined) {
-  return render(
-    <ChatSessionContext.Provider value={{ ...BASE_SESSION, sandboxProgress }}>
-      <SessionPrepareSteps />
-    </ChatSessionContext.Provider>,
+function renderSteps(
+  session: Partial<ChatSessionContextApi>,
+  options?: { finishing?: boolean; historyInitializing?: boolean; loadingMessages?: boolean },
+) {
+  const steps = options?.loadingMessages ? (
+    <ChatThreadMessagesContext.Provider value={{ threadId: 'thread-1', isPending: true, error: undefined }}>
+      <SessionPrepareSteps finishing={options.finishing} historyInitializing={options.historyInitializing} />
+    </ChatThreadMessagesContext.Provider>
+  ) : (
+    <SessionPrepareSteps finishing={options?.finishing} historyInitializing={options?.historyInitializing} />
   );
+  return render(
+    <ChatSessionContext.Provider value={{ ...BASE_SESSION, ...session }}>{steps}</ChatSessionContext.Provider>,
+  );
+}
+
+function renderWithProgress(sandboxProgress: PrepareProgress | undefined) {
+  return renderSteps({ sandboxProgress });
 }
 
 function stepByTitle(title: string) {
@@ -48,9 +50,9 @@ describe('SessionPrepareSteps', () => {
   it('renders exactly three user-facing groups in the canonical order', () => {
     renderWithProgress(undefined);
     expect(screen.getByRole('status', { name: 'Preparing session' })).toBeInTheDocument();
+    expect(screen.getAllByRole('status')).toHaveLength(1);
     const stepRoots = screen.getAllByTestId('session-prepare-step');
     expect(stepRoots).toHaveLength(3);
-    // Each ProcessStepListItem auto-formats the id: preparing-sandbox → "Preparing sandbox"
     expect(within(stepRoots[0]).getByRole('heading', { name: 'Preparing sandbox' })).toBeInTheDocument();
     expect(within(stepRoots[1]).getByRole('heading', { name: 'Cloning repository' })).toBeInTheDocument();
     expect(within(stepRoots[2]).getByRole('heading', { name: 'Starting session' })).toBeInTheDocument();
@@ -127,8 +129,73 @@ describe('SessionPrepareSteps', () => {
     expect(stepByTitle('Preparing sandbox')).toHaveAttribute('data-status', 'success');
     expect(stepByTitle('Cloning repository')).toHaveAttribute('data-status', 'running');
     expect(within(stepByTitle('Cloning repository')).getByText('Cloning…')).toBeInTheDocument();
-    // Raw server text never enters the fixed-width description slot.
     expect(screen.queryByText('Cloning octo/hello…')).not.toBeInTheDocument();
     expect(screen.queryByText('Provisioning a new sandbox…')).not.toBeInTheDocument();
+  });
+
+  it('does not skip ahead to Starting session while the warm-up is still provisioning the sandbox', () => {
+    // Messages load in parallel with /ensure, so a pending messages fetch must
+    // not check off sandbox steps that have not actually happened.
+    renderSteps(
+      {
+        sandboxPreparing: false,
+        sandboxWarming: true,
+        sandboxProgress: { phase: 'provisioning', message: 'Provisioning a new sandbox…' },
+      },
+      { loadingMessages: true },
+    );
+    expect(stepByTitle('Preparing sandbox')).toHaveAttribute('data-status', 'running');
+    expect(within(stepByTitle('Preparing sandbox')).getByText('Provisioning…')).toBeInTheDocument();
+    expect(stepByTitle('Cloning repository')).toHaveAttribute('data-status', 'pending');
+    expect(stepByTitle('Starting session')).toHaveAttribute('data-status', 'pending');
+  });
+
+  it('pins Preparing sandbox while the warm-up is in flight but has not emitted an event yet', () => {
+    renderSteps(
+      { sandboxPreparing: false, sandboxWarming: true, sandboxProgress: undefined },
+      { loadingMessages: true },
+    );
+    expect(stepByTitle('Preparing sandbox')).toHaveAttribute('data-status', 'running');
+    expect(stepByTitle('Cloning repository')).toHaveAttribute('data-status', 'pending');
+    expect(stepByTitle('Starting session')).toHaveAttribute('data-status', 'pending');
+  });
+
+  it('lets message loading light up Starting session once no warm-up is running', () => {
+    renderSteps(
+      { sandboxPreparing: false, sandboxWarming: false, sandboxProgress: undefined },
+      { loadingMessages: true },
+    );
+    expect(stepByTitle('Preparing sandbox')).toHaveAttribute('data-status', 'success');
+    expect(stepByTitle('Cloning repository')).toHaveAttribute('data-status', 'success');
+    expect(stepByTitle('Starting session')).toHaveAttribute('data-status', 'running');
+    expect(within(stepByTitle('Starting session')).getByText('Loading messages…')).toBeInTheDocument();
+  });
+
+  it('keeps Starting session active while loaded history merges into the transcript', () => {
+    renderSteps(
+      { sandboxPreparing: false, sandboxWarming: false, sandboxProgress: undefined },
+      { historyInitializing: true },
+    );
+    expect(stepByTitle('Preparing sandbox')).toHaveAttribute('data-status', 'success');
+    expect(stepByTitle('Cloning repository')).toHaveAttribute('data-status', 'success');
+    expect(stepByTitle('Starting session')).toHaveAttribute('data-status', 'running');
+    expect(within(stepByTitle('Starting session')).getByText('Starting…')).toBeInTheDocument();
+  });
+
+  it('marks every step complete while the preparation loader exits', () => {
+    renderSteps({ sandboxPreparing: false, sandboxWarming: false, sandboxProgress: undefined }, { finishing: true });
+
+    for (const step of screen.getAllByTestId('session-prepare-step')) {
+      expect(step).toHaveAttribute('data-status', 'success');
+    }
+  });
+
+  it('shows Loading messages… on the done phase since done carries no sandbox work', () => {
+    renderSteps(
+      { sandboxPreparing: false, sandboxWarming: true, sandboxProgress: { phase: 'done', message: 'Ready' } },
+      { loadingMessages: true },
+    );
+    expect(stepByTitle('Starting session')).toHaveAttribute('data-status', 'running');
+    expect(within(stepByTitle('Starting session')).getByText('Loading messages…')).toBeInTheDocument();
   });
 });

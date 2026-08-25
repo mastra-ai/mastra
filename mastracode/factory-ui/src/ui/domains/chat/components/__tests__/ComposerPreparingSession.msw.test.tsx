@@ -7,34 +7,39 @@ import { waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { releaseSession, renderThread, stubPreparingSession } from './composer-session-test-fixture';
 
 describe('Composer while a session prepares its workspace', () => {
-  it('blocks sandbox actions while /ensure is pending but keeps the textarea typable', async () => {
+  it('keeps the composer fully usable while /ensure is still pending', async () => {
     const session = stubPreparingSession({ ensurePending: true });
     const user = userEvent.setup();
     const { container, client } = renderThread();
 
+    // `/ensure` is only a background warm-up now — send and attach must come
+    // online as soon as session metadata resolves, without waiting for it.
     const message = () => screen.getByRole('textbox', { name: 'Message' });
     await waitFor(() => expect(message()).toBeEnabled());
+    await user.type(message(), 'go while warming');
+    // Send only enables once the draft is non-empty and chat preparation
+    // (metadata + message load) is done — /ensure is still pending here.
     const sendButton = screen.getByRole('button', { name: 'Send message' });
-    expect(sendButton).toBeDisabled();
-
-    await user.type(message(), 'draft while initializing');
-    expect(message()).toHaveValue('draft while initializing');
-    await user.keyboard('{Enter}');
-    expect(session.posted).toEqual([]);
+    await waitFor(() => expect(sendButton).toBeEnabled());
 
     const image = new File(['png'], 'shot.png', { type: 'image/png' });
     const form = container.querySelector('form');
     assert(form);
     fireEvent.drop(form, { dataTransfer: { files: [image] } });
-    fireEvent.paste(message(), { clipboardData: { files: [image] } });
-    expect(screen.queryByRole('button', { name: 'Remove image' })).not.toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Remove image' })).toBeInTheDocument();
+
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(session.posted).toEqual(['go while warming']));
+    expect(session.postedFiles).toHaveLength(1);
+    // Delivery still queues behind the workspace, not behind /ensure.
+    expect(session.delivered).toEqual([]);
+    // Warm-up fired exactly once for the session entry.
+    expect(session.ensureRequests).toBe(1);
 
     session.finishEnsure();
-    await waitFor(() => expect(sendButton).toBeEnabled());
-    expect(message()).toHaveValue('draft while initializing');
-
     session.finishWorkspace();
     await waitForMutationsIdle(client);
+    await waitFor(() => expect(session.delivered).toEqual(['go while warming']));
   });
 
   it('sends the message straight away and shows it while the workspace comes up', async () => {
@@ -185,13 +190,16 @@ describe('Composer while a session prepares its workspace', () => {
     const message = () => screen.getByRole('textbox', { name: 'Message' });
     await waitFor(() => expect(message()).toBeEnabled());
     await waitFor(() => expect(screen.getByText('Preparing workspace…')).toBeInTheDocument());
+    // Drops are ignored while the composer is still initializing (messages
+    // loading), so type first and wait for send to come online before attaching.
+    await user.type(message(), 'what is wrong here');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Send message' })).toBeEnabled());
 
     const form = container.querySelector('form');
     assert(form);
     fireEvent.drop(form, { dataTransfer: { files: [new File(['png'], 'shot.png', { type: 'image/png' })] } });
     expect(await screen.findByRole('button', { name: 'Remove image' })).toBeInTheDocument();
 
-    await user.type(message(), 'what is wrong here');
     await user.keyboard('{Enter}');
 
     await waitFor(() => expect(session.posted).toEqual(['what is wrong here']));

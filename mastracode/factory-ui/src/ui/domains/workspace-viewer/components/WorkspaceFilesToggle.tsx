@@ -1,14 +1,21 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { PanelRightIcon } from 'lucide-react';
 
-import { useWorkspaceFiles } from '../context/useWorkspaceFiles';
+import { useWorkspacePanel } from '../context/useWorkspacePanel';
+import { popoverSizeClass } from '../layout';
 import { WorkspaceFilesContent } from './WorkspaceFilesContent';
 
 export function WorkspaceFilesToggle() {
-  const { open, setOpen, workspacePath, canDock } = useWorkspaceFiles();
+  const { open, setOpen, workspacePath, expanded, setExpanded, canDock } = useWorkspacePanel();
 
   if (!workspacePath) return null;
+
+  const setPopoverOpen = (next: boolean) => {
+    if (next) setExpanded(false);
+    setOpen(next);
+  };
 
   if (canDock) {
     return (
@@ -26,7 +33,7 @@ export function WorkspaceFilesToggle() {
   }
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={setPopoverOpen}>
       <PopoverTrigger asChild>
         <Button size="icon-sm" variant={open ? 'default' : 'ghost'} aria-label="Workspace files" aria-pressed={open}>
           <PanelRightIcon />
@@ -36,7 +43,10 @@ export function WorkspaceFilesToggle() {
         align="end"
         side="bottom"
         sideOffset={8}
-        className="h-[min(30rem,70vh)] w-[min(24rem,calc(100vw-1.5rem))] overflow-hidden p-0"
+        className={cn(
+          '[interpolate-size:allow-keywords] overflow-hidden p-0 transition-[width,height] duration-360 ease-out-custom motion-reduce:transition-none',
+          popoverSizeClass[expanded ? 'expanded' : 'compact'],
+        )}
       >
         <WorkspaceFilesContent />
       </PopoverContent>

@@ -10,6 +10,7 @@ import type {
 } from '@mastra/core/channels';
 import type { Mastra } from '@mastra/core/mastra';
 import { createSlackAdapter } from '@mastra/slack';
+import type { SlackAdapterChannelConfig } from '@mastra/slack';
 import { Card, CardText, Actions, LinkButton } from 'chat';
 
 import {
@@ -70,7 +71,8 @@ interface SlackChannelDeps {
   sourceControl?: SourceControlStorageHandle;
   /**
    * Observational-memory settings domain. When provided, a repo-backed session
-   * adopts its owner's memory settings on start, matching the web kickoff.
+   * adopts its factory project's shared memory settings on start, matching the
+   * web kickoff.
    */
   memorySettings?: MemorySettingsStorage;
   /**
@@ -80,6 +82,8 @@ interface SlackChannelDeps {
    * session. Best-effort — a failure never blocks the run. Unset → no card.
    */
   workItems?: WorkItemsStorage;
+  /** Overrides applied to the Slack channel adapter entry. */
+  adapterOptions?: SlackAdapterChannelConfig;
 }
 
 /**
@@ -348,6 +352,8 @@ export function createChannelResourceIdResolver(deps: SlackChannelDeps): Resolve
         userId: link.userId,
         branch,
         baseBranch: repo.baseBranch,
+        // DMs are the only private origin; channel threads are org-visible.
+        visibility: thread.isDM ? 'private' : 'org',
       });
       return session.sessionId;
     } catch (error) {
@@ -394,16 +400,21 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
     if (!projects || !sourceControl) return;
     if (thread.resourceId.startsWith('channel:')) return;
 
-    const modeModelKey = `modeModelId_${session.mode.get()}`;
-    if (await session.thread.getSetting({ key: modeModelKey })) return;
-
     const owner = await resolveFactoryProjectForSession({ sourceControl, sessionId: thread.resourceId });
     if (!owner) return;
+
+    // Repo-backed Slack sessions are factory sessions: stamp the owning
+    // project onto controller state so downstream reads (org-first credential
+    // resolution, authority gates) recognize them, same as board runs.
+    await session.state.set({ factoryProjectId: owner.factoryProjectId, factoryOrgId: owner.orgId });
+
+    const modeModelKey = `modeModelId_${session.mode.get()}`;
+    if (await session.thread.getSetting({ key: modeModelKey })) return;
 
     const defaultModelId = await resolveFactoryDefaultModelId(projects, owner.factoryProjectId);
     await hydrateFactorySession(session, {
       orgId: owner.orgId,
-      userId: owner.userId,
+      factoryProjectId: owner.factoryProjectId,
       defaultModelId,
       memorySettings,
     });
@@ -668,13 +679,14 @@ interface SlackCredentials {
 }
 
 export function createSlackChannelsConfig(deps: SlackChannelDeps & { slack: SlackCredentials }): FactoryChannelsConfig {
+  const adapter = createSlackAdapter(deps.slack);
+  const slack =
+    deps.adapterOptions?.streaming === false
+      ? { adapter, ...deps.adapterOptions }
+      : { adapter, ...deps.adapterOptions, streaming: deps.adapterOptions?.streaming ?? true };
+
   return {
-    adapters: {
-      slack: {
-        adapter: createSlackAdapter(deps.slack),
-        toolDisplay: 'hidden',
-      },
-    },
+    adapters: { slack },
     handlers: createHandlers(deps),
     // New linked+repo-backed threads own a Factory user-session id as their
     // resourceId, which is what makes the controller session repo-backed.

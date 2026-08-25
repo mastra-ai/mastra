@@ -9,7 +9,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { Workspace, LocalFilesystem, LocalSandbox, createWorkspaceTools } from '@mastra/core/workspace';
 import type { LSPConfig, SkillSource } from '@mastra/core/workspace';
 import { DEFAULT_CONFIG_DIR } from '../constants.js';
-import { loadSettings } from '../onboarding/settings.js';
+import { loadSettings, resolveLspSetting } from '../onboarding/settings.js';
 import type { MastraCodeState } from '../schema.js';
 import { isPathWithinRoot } from '../utils/path-security.js';
 import { getPlansDir } from '../utils/plans.js';
@@ -193,6 +193,7 @@ async function getSandboxWorkspace({
   configDir,
   mastra,
   skillExtension,
+  actingUserId,
 }: {
   projectRepositoryId: string;
   sandboxId: string;
@@ -201,18 +202,20 @@ async function getSandboxWorkspace({
   configDir: string;
   mastra?: Mastra;
   skillExtension?: WorkspaceSkillExtension;
+  actingUserId?: string;
 }): Promise<Workspace> {
   // Bind the workspace to the active worktree when one is set, so file tools and
   // command tools operate inside the feature branch's working tree rather than
   // the base checkout. Falls back to the repo root when no worktree is active.
   const boundWorkdir = worktreePath || workdir;
 
-  // Include the sandbox id *and* worktree path in the reuse key: a new sandbox
-  // (e.g. the previous one expired) or a different worktree must each get a
-  // fresh Workspace/ProcessManager instead of reusing one bound to a stale
-  // sandbox or the wrong working tree.
+  // Include the sandbox id, worktree path, and acting user in the reuse key: a
+  // new sandbox, different worktree, or different caller must each get a fresh
+  // Workspace/ProcessManager instead of reusing one bound to stale resources or
+  // another user's PlatformSandbox credentials.
   const extensionId = skillExtension ? `-${skillExtension.id}` : '';
-  const workspaceId = `${WORKSPACE_ID_PREFIX}-repository-${projectRepositoryId}-${sandboxId}-${boundWorkdir}${extensionId}`;
+  const actingUserScope = actingUserId ? `-user-${encodeURIComponent(actingUserId)}` : '';
+  const workspaceId = `${WORKSPACE_ID_PREFIX}-repository-${projectRepositoryId}-${sandboxId}-${boundWorkdir}${extensionId}${actingUserScope}`;
 
   // Reuse the existing remote workspace if already registered (preserves the
   // reattached sandbox + ProcessManager state across re-opens).
@@ -226,7 +229,7 @@ async function getSandboxWorkspace({
     // Not registered yet.
   }
 
-  const sandbox = await reattachProjectSandbox(sandboxId);
+  const sandbox = await reattachProjectSandbox(sandboxId, { actingUserId });
   const filesystem = new SandboxFilesystem({ sandbox, workdir: boundWorkdir });
   const projectSkillPaths = [path.join(configDir, 'skills'), '.claude/skills', '.agents/skills'];
   const skillPaths = [...(skillExtension?.paths ?? []), ...projectSkillPaths];
@@ -253,6 +256,9 @@ export async function getDynamicWorkspace({
 }) {
   const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
   const state = ctx?.getState();
+  const user = requestContext.get('user') as { workosId?: unknown; id?: unknown } | undefined;
+  const actingUserId =
+    typeof user?.workosId === 'string' ? user.workosId : typeof user?.id === 'string' ? user.id : undefined;
 
   // Repository-backed project: the repo lives inside a remote sandbox, not on
   // the server host. Reattach to the already-provisioned + materialized sandbox
@@ -267,6 +273,7 @@ export async function getDynamicWorkspace({
       configDir: state.configDir ?? DEFAULT_CONFIG_DIR,
       mastra,
       skillExtension,
+      actingUserId,
     });
   }
 
@@ -308,14 +315,19 @@ export async function getDynamicWorkspace({
     return existing;
   }
 
-  const userLsp = loadSettings().lsp ?? {};
-  const mcModulePath = join(dirname(fileURLToPath(import.meta.url)), '..');
-  const lspConfig: LSPConfig = {
-    maxOpenClients: 4,
-    ...userLsp,
-    packageRunner: userLsp.packageRunner || detectPackageRunner(projectPath), // Detected runner is the fallback — user's packageRunner always wins
-    searchPaths: [mcModulePath, ...(userLsp.searchPaths ?? [])],
-  };
+  // LSP is opt-in. When disabled we pass `false` so core skips the dependency
+  // check, the LSP manager, and the `lsp_inspect` tool entirely.
+  const userLsp = resolveLspSetting(loadSettings().lsp);
+  let lspConfig: LSPConfig | false = false;
+  if (userLsp !== false) {
+    const mcModulePath = join(dirname(fileURLToPath(import.meta.url)), '..');
+    lspConfig = {
+      maxOpenClients: 4,
+      ...userLsp,
+      packageRunner: userLsp.packageRunner || detectPackageRunner(projectPath), // Detected runner is the fallback — user's packageRunner always wins
+      searchPaths: [mcModulePath, ...(userLsp.searchPaths ?? [])],
+    };
+  }
 
   // First call for this project — create the workspace
   const filesystem = new LocalFilesystem({

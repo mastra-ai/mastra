@@ -10,7 +10,7 @@
  */
 
 import type { SandboxInstance } from '@blaxel/core';
-import { ProcessHandle, SandboxProcessManager } from '@mastra/core/workspace';
+import { ProcessHandle, UnsupportedStdinCloseError, SandboxProcessManager } from '@mastra/core/workspace';
 import type { CommandResult, ProcessInfo, SpawnProcessOptions } from '@mastra/core/workspace';
 import type { BlaxelSandbox } from './index';
 
@@ -122,31 +122,27 @@ class BlaxelProcessHandle extends ProcessHandle {
   async sendStdin(_data: string): Promise<void> {
     throw new Error('Blaxel sandboxes do not support stdin');
   }
+
+  async closeStdin(): Promise<void> {
+    throw new UnsupportedStdinCloseError('Blaxel sandboxes do not support closing stdin');
+  }
 }
 
 // =============================================================================
 // Blaxel Process Manager
 // =============================================================================
 
-export interface BlaxelProcessManagerOptions {
-  env?: Record<string, string | undefined>;
-}
-
 /**
  * Blaxel implementation of SandboxProcessManager.
  * Uses the Blaxel SDK's process API for background process management.
  */
 export class BlaxelProcessManager extends SandboxProcessManager<BlaxelSandbox> {
-  constructor(opts: BlaxelProcessManagerOptions = {}) {
-    super({ env: opts.env });
-  }
-
   async spawn(command: string, options: SpawnProcessOptions = {}): Promise<ProcessHandle> {
     return this.sandbox.retryOnDead(async () => {
       const blaxel = this.sandbox.blaxel;
 
-      // Merge default env with per-spawn env
-      const mergedEnv = { ...this.env, ...options.env };
+      // The base spawn wrapper already merged the sandbox env into options.env
+      const mergedEnv = { ...options.env };
       const envs = Object.fromEntries(
         Object.entries(mergedEnv).filter((entry): entry is [string, string] => entry[1] !== undefined),
       );

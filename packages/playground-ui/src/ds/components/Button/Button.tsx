@@ -32,6 +32,10 @@ export const buttonVariants = cva(
           'border border-border2 bg-surface3 text-neutral6 hover:bg-surface5 hover:text-neutral6 active:bg-surface6',
         primary:
           'border border-transparent bg-neutral6 font-medium text-surface1 hover:bg-neutral6/90 active:bg-neutral6/80',
+        destructive:
+          'border border-transparent bg-accent2 font-medium text-white hover:bg-accent2/90 active:bg-accent2/80',
+        'destructive-ghost':
+          'border border-transparent bg-transparent text-accent2 hover:bg-accent2/10 hover:text-accent2 active:bg-accent2/15',
         ghost:
           'border border-transparent bg-transparent text-neutral4 hover:bg-neutral6/5 hover:text-neutral6 active:bg-neutral6/10',
         outline:

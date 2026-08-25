@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import type { Skill, SkillMetadata, WorkspaceSkills } from '../../workspace/skills';
 import type { Workspace } from '../../workspace/workspace';
-import { SkillsProcessor } from './skills';
+import { formatSkillsCatalog, SkillsProcessor, type SkillCatalogEntry } from './skills';
 
 // =============================================================================
 // Mock Types and Helpers
@@ -356,6 +356,145 @@ describe('SkillsProcessor', () => {
       expect(mockSkills.maybeRefresh).toHaveBeenCalledWith({ requestContext });
     });
 
+    it('resolves without awaiting a slow maybeRefresh (fire-and-forget revalidation)', async () => {
+      // maybeRefresh never resolves - the step must still complete and serve the cache
+      const slowSkills = {
+        ...createMockWorkspaceSkills(),
+        maybeRefresh: vi.fn().mockReturnValue(new Promise<void>(() => {})),
+      };
+      const workspace = createMockWorkspace(slowSkills);
+      const proc = new SkillsProcessor({ workspace });
+
+      await proc.processInputStep({
+        messageList: mockMessageList as any,
+        tools: {},
+        stepNumber: 0,
+        requestContext: {},
+      } as any);
+
+      // Revalidation was fired...
+      expect(slowSkills.maybeRefresh).toHaveBeenCalledTimes(1);
+      // ...and the cached catalog was injected without waiting on it
+      const allSystemContent = mockMessageList.addSystem.mock.calls
+        .map((call: any) => call[0]?.content || call[0])
+        .join('\n');
+      expect(allSystemContent).toContain('code-review');
+    });
+
+    it('does not fail the step when maybeRefresh rejects, and warns via console fallback', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        const rejectingSkills = {
+          ...createMockWorkspaceSkills(),
+          maybeRefresh: vi.fn().mockRejectedValue(new Error('sandbox unreachable')),
+        };
+        const workspace = createMockWorkspace(rejectingSkills);
+        const proc = new SkillsProcessor({ workspace });
+
+        await expect(
+          proc.processInputStep({
+            messageList: mockMessageList as any,
+            tools: {},
+            stepNumber: 0,
+            requestContext: {},
+          } as any),
+        ).resolves.not.toThrow();
+
+        // Fire-and-forget: the catch handler runs after the step resolves
+        await vi.waitFor(() => {
+          expect(warnSpy).toHaveBeenCalledWith(
+            'SkillsProcessor: skills refresh failed',
+            expect.objectContaining({ error: expect.any(Error) }),
+          );
+        });
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
+
+    it('warns through the Mastra logger when registered and maybeRefresh rejects', async () => {
+      const rejectingSkills = {
+        ...createMockWorkspaceSkills(),
+        maybeRefresh: vi.fn().mockRejectedValue(new Error('sandbox unreachable')),
+      };
+      const workspace = createMockWorkspace(rejectingSkills);
+      const proc = new SkillsProcessor({ workspace });
+      const loggerWarn = vi.fn();
+      proc.__registerMastra({ getLogger: () => ({ warn: loggerWarn }) } as any);
+
+      await proc.processInputStep({
+        messageList: mockMessageList as any,
+        tools: {},
+        stepNumber: 0,
+        requestContext: {},
+      } as any);
+
+      await vi.waitFor(() => {
+        expect(loggerWarn).toHaveBeenCalledWith(
+          'SkillsProcessor: skills refresh failed',
+          expect.objectContaining({ error: expect.any(Error) }),
+        );
+      });
+    });
+
+    it('awaits maybeRefresh before step 0 when blockingRefresh is enabled', async () => {
+      // Gated maybeRefresh: the step must not complete until it resolves
+      let releaseRefresh!: () => void;
+      let refreshResolved = false;
+      const gatedSkills = {
+        ...createMockWorkspaceSkills(),
+        maybeRefresh: vi.fn().mockReturnValue(
+          new Promise<void>(resolve => {
+            releaseRefresh = () => {
+              refreshResolved = true;
+              resolve();
+            };
+          }),
+        ),
+      };
+      const workspace = createMockWorkspace(gatedSkills);
+      const proc = new SkillsProcessor({ workspace, blockingRefresh: true });
+
+      let stepDone = false;
+      const stepP = proc
+        .processInputStep({
+          messageList: mockMessageList as any,
+          tools: {},
+          stepNumber: 0,
+          requestContext: {},
+        } as any)
+        .then(() => {
+          stepDone = true;
+        });
+
+      // Give the step a chance to (incorrectly) complete without the refresh
+      await new Promise(resolve => setTimeout(resolve, 20));
+      expect(stepDone).toBe(false);
+
+      releaseRefresh();
+      await stepP;
+      expect(refreshResolved).toBe(true);
+      expect(stepDone).toBe(true);
+    });
+
+    it('does not fail the step when maybeRefresh rejects under blockingRefresh', async () => {
+      const rejectingSkills = {
+        ...createMockWorkspaceSkills(),
+        maybeRefresh: vi.fn().mockRejectedValue(new Error('sandbox unreachable')),
+      };
+      const workspace = createMockWorkspace(rejectingSkills);
+      const proc = new SkillsProcessor({ workspace, blockingRefresh: true });
+
+      await expect(
+        proc.processInputStep({
+          messageList: mockMessageList as any,
+          tools: {},
+          stepNumber: 0,
+          requestContext: {},
+        } as any),
+      ).resolves.not.toThrow();
+    });
+
     it('should sort skills by name for deterministic output', async () => {
       // Mock skills in reverse alphabetical order
       const reverseSkills = {
@@ -494,5 +633,102 @@ describe('SkillsProcessor', () => {
       // The instruction should be clear enough that the model knows NOT to call skill names directly
       expect(allSystemContent).toMatch(/do not.*call.*skill.*directly|skill.*not.*tool|call the skill tool/i);
     });
+  });
+});
+
+describe('formatSkillsCatalog', () => {
+  const entries: SkillCatalogEntry[] = [
+    {
+      name: 'testing',
+      description: 'A skill for writing tests',
+      location: '/skills/testing/SKILL.md',
+      source: 'external',
+    },
+    {
+      name: 'code-review',
+      description: 'A skill for code review assistance',
+      location: '/skills/code-review/SKILL.md',
+      source: 'local',
+    },
+  ];
+
+  // Skills that are listed but fail to resolve still produce a block, matching
+  // what the processor injected before the formatter was extracted.
+  it('renders an empty block rather than an empty string for an empty catalog', () => {
+    expect(formatSkillsCatalog([])).toBe('<available_skills>\n\n</available_skills>');
+    expect(formatSkillsCatalog([], 'json')).toBe('Available Skills:\n\n[]');
+    expect(formatSkillsCatalog([], 'markdown')).toBe('# Available Skills\n\n');
+  });
+
+  it('renders XML by default, sorted by name for prompt cache stability', () => {
+    expect(formatSkillsCatalog(entries)).toBe(`<available_skills>
+  <skill>
+    <name>code-review</name>
+    <description>A skill for code review assistance</description>
+    <location>/skills/code-review/SKILL.md</location>
+    <source>local</source>
+  </skill>
+  <skill>
+    <name>testing</name>
+    <description>A skill for writing tests</description>
+    <location>/skills/testing/SKILL.md</location>
+    <source>external</source>
+  </skill>
+</available_skills>`);
+  });
+
+  it('does not mutate the caller\u2019s array while sorting', () => {
+    const input = [...entries];
+    formatSkillsCatalog(input);
+    expect(input.map(entry => entry.name)).toEqual(['testing', 'code-review']);
+  });
+
+  it('escapes XML special characters', () => {
+    const output = formatSkillsCatalog([
+      { name: 'a&b', description: '<script>"x"</script>', location: "it's/here", source: 'local' },
+    ]);
+
+    expect(output).toContain('<name>a&amp;b</name>');
+    expect(output).toContain('<description>&lt;script&gt;&quot;x&quot;&lt;/script&gt;</description>');
+    expect(output).toContain('<location>it&apos;s/here</location>');
+  });
+
+  it('renders json and markdown formats', () => {
+    expect(formatSkillsCatalog(entries, 'json')).toBe(`Available Skills:
+
+${JSON.stringify(
+  [
+    {
+      name: 'code-review',
+      description: 'A skill for code review assistance',
+      location: '/skills/code-review/SKILL.md',
+      source: 'local',
+    },
+    {
+      name: 'testing',
+      description: 'A skill for writing tests',
+      location: '/skills/testing/SKILL.md',
+      source: 'external',
+    },
+  ],
+  null,
+  2,
+)}`);
+
+    expect(formatSkillsCatalog(entries, 'markdown')).toBe(`# Available Skills
+
+- **code-review** [local] (/skills/code-review/SKILL.md): A skill for code review assistance
+- **testing** [external] (/skills/testing/SKILL.md): A skill for writing tests`);
+  });
+
+  it('renders exactly what the processor injects, so audits cannot drift from the prompt', async () => {
+    const messageList = createMockMessageList();
+    await new SkillsProcessor({ workspace: createMockWorkspace(createMockWorkspaceSkills()) }).processInputStep({
+      messageList: messageList as any,
+      tools: {},
+    } as any);
+
+    const injected = messageList.addSystem.mock.calls[0]![0].content;
+    expect(injected).toBe(formatSkillsCatalog(entries));
   });
 });

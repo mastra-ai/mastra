@@ -22,6 +22,13 @@ import type {
 import { NonRetriableError } from 'inngest';
 import type { Inngest } from 'inngest';
 import { subscribe } from 'inngest/realtime';
+import type { Realtime } from 'inngest/realtime';
+import {
+  buildDurableResumeEventData,
+  buildDurableTimeTravelEventData,
+  buildDurableTriggerEventData,
+  mergeResumeRequestContext,
+} from './durable-event-payload';
 import type { InngestEngineType } from './types';
 
 export class InngestRun<
@@ -115,17 +122,15 @@ export class InngestRun<
       };
 
       // Start realtime subscription for workflow-finish event
-      let realtimeStreamPromise: ReturnType<typeof subscribe> | null = null;
+      let realtimeSubscriptionPromise: Promise<Realtime.Subscribe.CallbackSubscription> | null = null;
 
       const startRealtimeSubscription = async () => {
         try {
-          realtimeStreamPromise = subscribe(
-            {
-              channel: `workflow:${this.workflowId}:${this.runId}`,
-              topics: ['watch'],
-              app: this.inngest,
-            },
-            async (message: any) => {
+          realtimeSubscriptionPromise = subscribe({
+            channel: `workflow:${this.workflowId}:${this.runId}`,
+            topics: ['watch'],
+            app: this.inngest,
+            onMessage: async (message: any) => {
               if (resolved) return;
 
               const event = message.data;
@@ -157,14 +162,14 @@ export class InngestRun<
                 handleResult(result, 'realtime');
               }
             },
-          );
+          });
 
-          // Set unsubscribe immediately so cleanup can cancel even before await resolves
+          // Set unsubscribe immediately so cleanup can close the subscription even before setup resolves.
           unsubscribe = () => {
-            realtimeStreamPromise?.then(stream => stream.cancel().catch(() => {})).catch(() => {});
+            realtimeSubscriptionPromise?.then(subscription => subscription.close()).catch(() => {});
           };
 
-          await realtimeStreamPromise;
+          await realtimeSubscriptionPromise;
         } catch {
           // Realtime subscription failed - polling will still work as fallback
         }
@@ -360,17 +365,17 @@ export class InngestRun<
     // Send event to Inngest (fire-and-forget)
     const eventOutput = await this.inngest.send({
       name: `workflow.${this.workflowId}`,
-      data: {
+      data: buildDurableTriggerEventData({
         inputData: inputDataToUse,
         initialState: initialStateToUse,
         runId: this.runId,
         resourceId: this.resourceId,
         outputOptions: args.outputOptions,
         tracingOptions: args.tracingOptions,
-        requestContext: args.requestContext ? Object.fromEntries(args.requestContext.entries()) : {},
+        requestContext: args.requestContext,
         actor: args.actor,
         perStep: args.perStep,
-      },
+      }),
     });
 
     const eventId = eventOutput.ids[0];
@@ -431,7 +436,7 @@ export class InngestRun<
 
     const eventOutput = await this.inngest.send({
       name: eventName,
-      data: {
+      data: buildDurableTriggerEventData({
         inputData: inputDataToUse,
         initialState: initialStateToUse,
         runId: this.runId,
@@ -439,10 +444,10 @@ export class InngestRun<
         outputOptions,
         tracingOptions,
         format,
-        requestContext: requestContext ? Object.fromEntries(requestContext.entries()) : {},
+        requestContext,
         actor,
         perStep,
-      },
+      }),
     });
 
     const eventId = eventOutput.ids[0];
@@ -544,9 +549,7 @@ export class InngestRun<
     const resumeDataToUse = await this._validateResumeData(params.resumeData, suspendedStep);
 
     // Merge persisted requestContext from snapshot with any new values from params
-    const persistedRequestContext = (snapshot as any)?.requestContext ?? {};
-    const newRequestContext = params.requestContext ? Object.fromEntries(params.requestContext.entries()) : {};
-    const mergedRequestContext = { ...persistedRequestContext, ...newRequestContext };
+    const mergedRequestContext = mergeResumeRequestContext((snapshot as any)?.requestContext, params.requestContext);
 
     // Mark the snapshot as 'running' before sending the event so that
     // snapshot-based polling doesn't return the stale suspended/paused result.
@@ -567,28 +570,19 @@ export class InngestRun<
     try {
       eventOutput = await this.inngest.send({
         name: `workflow.${this.workflowId}`,
-        data: {
+        data: buildDurableResumeEventData({
           inputData: resumeDataToUse,
-          initialState: snapshot?.value ?? {},
           runId: this.runId,
           workflowId: this.workflowId,
-          stepResults: snapshot?.context as any,
           resume: {
             steps,
-            stepResults: snapshot?.context as any,
             resumePayload: resumeDataToUse,
             resumePath: steps?.[0] ? (snapshot?.suspendedPaths?.[steps?.[0]] as any) : undefined,
           },
           requestContext: mergedRequestContext,
-          // `actor` is a per-call trust signal, not rehydrated from the snapshot like
-          // `requestContext` is above. This intentionally matches the default engine,
-          // which passes `actor: params.actor` on resume and never reads it from the
-          // snapshot (see packages/core/src/workflows/workflow.ts `_resume`). The caller
-          // (a trusted background system) re-supplies `actor` on each resume; we never
-          // persist a membership-bypass signal into durable storage.
           actor: params.actor,
           perStep: params.perStep,
-        },
+        }),
       });
     } catch (err) {
       // Rollback: restore the original snapshot so the run isn't stuck in 'running'.
@@ -820,7 +814,7 @@ export class InngestRun<
     try {
       eventOutput = await this.inngest.send({
         name: `workflow.${this.workflowId}`,
-        data: {
+        data: buildDurableTimeTravelEventData({
           initialState: timeTravelData.state,
           runId: this.runId,
           workflowId: this.workflowId,
@@ -828,10 +822,10 @@ export class InngestRun<
           timeTravel: timeTravelData,
           tracingOptions: params.tracingOptions,
           outputOptions: params.outputOptions,
-          requestContext: params.requestContext ? Object.fromEntries(params.requestContext.entries()) : {},
+          requestContext: params.requestContext,
           actor: params.actor,
           perStep: params.perStep,
-        },
+        }),
       });
     } catch (err) {
       // Rollback: restore the previous snapshot so the run isn't stuck in 'running'.

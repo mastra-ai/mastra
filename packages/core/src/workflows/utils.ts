@@ -2,6 +2,7 @@ import type { StandardSchemaV1 } from '@standard-schema/spec';
 import { ErrorCategory, ErrorDomain, getErrorFromUnknown, MastraError } from '../error';
 import type { IMastraLogger } from '../logger';
 import type { RequestContext } from '../request-context';
+import { getRequestContextInputValues } from '../request-context/input-source';
 import type { StandardSchemaWithJSON } from '../schema';
 import { removeUndefinedValues } from '../utils';
 import type { ExecutionGraph } from './execution-engine';
@@ -195,8 +196,8 @@ export async function validateStepRequestContext({
   const requestContextSchema = step.requestContextSchema;
 
   if (requestContextSchema && validateInputs) {
-    // Get all values from requestContext
-    const contextValues = requestContext?.all ?? {};
+    // Get input-form values so transformed contexts can be forwarded safely.
+    const contextValues = getRequestContextInputValues(requestContext);
     const validatedRequestContext = await validateWithStandardSchema(requestContextSchema, contextValues);
     if (!validatedRequestContext.success) {
       const errorMessages = validatedRequestContext.issues.map(e => `- ${e.path?.join('.')}: ${e.message}`).join('\n');
@@ -224,6 +225,29 @@ export function getResumeLabelsByStepId(
       },
       {} as Record<string, { stepId: string; foreachIndex?: number }>,
     );
+}
+
+export function abortableSleep(duration: number, signal?: AbortSignal): Promise<void> {
+  return new Promise(resolve => {
+    if (signal?.aborted) {
+      resolve();
+      return;
+    }
+
+    const onAbort = () => {
+      clearTimeout(timeout);
+      resolve();
+    };
+    const timeout = setTimeout(
+      () => {
+        signal?.removeEventListener('abort', onAbort);
+        resolve();
+      },
+      Math.max(0, duration),
+    );
+
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
 }
 
 export const runCountDeprecationMessage =
@@ -720,6 +744,18 @@ export function cleanStepResult(stepResult: unknown): unknown {
  * (megabytes per event for durable agent runs). Result/suspended events get
  * their fresh completion fields from the current execution result instead.
  */
+export function omitPriorSuspensionFields<T extends Record<string, unknown>>(
+  stepInfo: T,
+): Omit<T, 'suspendedAt' | 'suspendPayload' | 'suspendOutput'> {
+  const {
+    suspendedAt: _suspendedAt,
+    suspendPayload: _suspendPayload,
+    suspendOutput: _suspendOutput,
+    ...rest
+  } = stepInfo;
+  return rest;
+}
+
 export function omitPriorCompletionFields<T extends Record<string, unknown>>(
   stepInfo: T,
 ): Omit<
@@ -761,6 +797,7 @@ export function resolveForeachConcurrency(
 
 const RESUME_SNAPSHOT_POLL_INTERVAL_MS = 25;
 const RESUME_SNAPSHOT_POLL_TIMEOUT_MS = 2000;
+const RESUME_SNAPSHOT_WAIT_STATUSES = new Set(['running', 'pending']);
 
 export async function waitForSuspendedSnapshot(
   workflowsStore:
@@ -768,14 +805,30 @@ export async function waitForSuspendedSnapshot(
     | undefined,
   workflowName: string,
   runId: string,
+  {
+    timeoutMs = RESUME_SNAPSHOT_POLL_TIMEOUT_MS,
+    missingSnapshotGraceReads = 1,
+  }: { timeoutMs?: number; missingSnapshotGraceReads?: number } = {},
 ): Promise<WorkflowRunState | null> {
   if (!workflowsStore) return null;
 
-  const deadline = Date.now() + RESUME_SNAPSHOT_POLL_TIMEOUT_MS;
-  let snapshot = (await workflowsStore.loadWorkflowSnapshot({ workflowName, runId })) ?? null;
-  while ((!snapshot || snapshot.status !== 'suspended') && Date.now() < deadline) {
-    await new Promise(resolve => setTimeout(resolve, RESUME_SNAPSHOT_POLL_INTERVAL_MS));
+  const deadline = Date.now() + timeoutMs;
+  let snapshot: WorkflowRunState | null = null;
+  let missingReads = 0;
+  let observedTransitionableSnapshot = false;
+
+  while (Date.now() < deadline) {
     snapshot = (await workflowsStore.loadWorkflowSnapshot({ workflowName, runId })) ?? null;
+
+    if (snapshot) {
+      if (!RESUME_SNAPSHOT_WAIT_STATUSES.has(snapshot.status)) return snapshot;
+      observedTransitionableSnapshot = true;
+    } else if (!observedTransitionableSnapshot && ++missingReads >= missingSnapshotGraceReads) {
+      return null;
+    }
+
+    await new Promise(resolve => setTimeout(resolve, RESUME_SNAPSHOT_POLL_INTERVAL_MS));
   }
+
   return snapshot;
 }

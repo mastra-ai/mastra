@@ -42,9 +42,17 @@ interface RepoMaterializationBinding {
 }
 
 /** Adapt a per-(project,user) sandbox binding row to the fleet's persistence seam. */
-function bindingStore(row: ProjectRepositorySandbox, storage: SourceControlSandboxStorage): SandboxBindingStore {
+function bindingStore(
+  row: ProjectRepositorySandbox,
+  storage: SourceControlSandboxStorage,
+  seedCheckpointName?: string,
+): SandboxBindingStore {
   return {
     sandboxId: row.sandboxId,
+    // Boot-only fallback: fresh provisions seed from the repo base checkpoint
+    // (when the builder has produced one) so materialization pulls instead of
+    // cloning. Snapshots never write here.
+    ...(seedCheckpointName ? { seedCheckpointName } : {}),
     setSandboxId: id =>
       id === null ? storage.clearBinding({ id: row.id }) : storage.setSandboxId({ id: row.id, sandboxId: id }),
     clear: () => storage.clearBinding({ id: row.id }),
@@ -61,9 +69,13 @@ export async function ensureProjectSandbox(options: {
   storage: SourceControlSandboxStorage;
   token: string;
   onProgress?: ProgressFn;
+  /** Repo base checkpoint to seed a fresh provision from (boot-only). */
+  seedCheckpointName?: string;
 }): Promise<MaterializationSandbox> {
-  const { fleet, row, storage, token, onProgress } = options;
-  return fleet.ensureSandbox(bindingStore(row, storage), { GH_TOKEN: token }, onProgress);
+  const { fleet, row, storage, token, onProgress, seedCheckpointName } = options;
+  return fleet.ensureSandbox(bindingStore(row, storage, seedCheckpointName), { GH_TOKEN: token }, onProgress, {
+    actingUserId: row.userId,
+  });
 }
 
 /**
@@ -102,7 +114,7 @@ export function shellQuote(value: string): string {
  * so a wedged sandbox surfaces a failure instead of hanging the request that
  * triggered materialization forever.
  */
-const DEFAULT_COMMAND_TIMEOUT_MS = 15 * 60_000;
+export const DEFAULT_COMMAND_TIMEOUT_MS = 15 * 60_000;
 /** Branch checkout only fetches one ref — a much tighter budget applies. */
 export const CHECKOUT_COMMAND_TIMEOUT_MS = 5 * 60_000;
 
@@ -136,7 +148,7 @@ const SH_RETRY_DELAY_MS = 2000;
  * to re-run. Hang-guard timeouts are NOT retried — the budget applies to the
  * command as a whole.
  */
-async function sh(
+export async function sh(
   sandbox: MaterializationSandbox,
   script: string,
   options: ShOptions = {},
@@ -282,6 +294,14 @@ export interface MaterializeRepoOptions {
   token: string;
   storage: MaterializationStore;
   onProgress?: ProgressFn;
+  /**
+   * Skip the default-branch `git pull --ff-only` when the workdir already
+   * holds a checkout. Set when the checkout was just seeded from a fresh base
+   * checkpoint (rebuilt on every default-branch push), where the pull is
+   * redundant network cost: session work happens on a branch that
+   * `checkoutSessionBranch` fetches fresh regardless.
+   */
+  skipPullOnExistingCheckout?: boolean;
 }
 
 /**
@@ -295,7 +315,7 @@ export async function materializeRepo(options: MaterializeRepoOptions): Promise<
 }
 
 async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<void> {
-  const { row: sandboxRow, repoInfo, sandbox, token, storage, onProgress } = options;
+  const { row: sandboxRow, repoInfo, sandbox, token, storage, onProgress, skipPullOnExistingCheckout } = options;
   const workdir = sandboxRow.sandboxWorkdir;
   const repo = repoInfo.repoFullName;
 
@@ -333,7 +353,7 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
   // trusting the row.
   const alreadyMaterialized = await hasExistingCheckout(sandbox, workdir, repo);
 
-  let succeeded = false;
+  let tokenInRemote = false;
   try {
     if (!alreadyMaterialized) {
       // 2a. First open: shallow-clone the default branch into the workdir. A
@@ -343,6 +363,18 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
         phase: 'cloning',
         message: `Cloning ${repo} (first open can take a minute)…`,
       });
+      // The workdir holds no usable checkout of this repo, but it may not be
+      // empty: a checkpoint seed or a clone that died partway (a crashed or
+      // OOM-killed server) leaves a partial tree behind, and `git clone`
+      // refuses a non-empty destination with a non-retryable fatal. Nothing
+      // here is recoverable — `hasExistingCheckout` already ruled out a
+      // checkout of this repo — so clear its contents before cloning, exactly
+      // as the retry path does. Keep the workdir itself because LocalSandbox
+      // runs commands with this directory as the child process cwd.
+      await sh(
+        sandbox,
+        `mkdir -p ${shellQuote(workdir)} && find ${shellQuote(workdir)} -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +`,
+      );
       const clone = await gitTransfer(
         sandbox,
         `git clone --depth=1 --single-branch --branch ${shellQuote(repoInfo.defaultBranch)} ${shellQuote(authUrl)} ${shellQuote(workdir)}`,
@@ -354,14 +386,34 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
               message: `Lost the connection to github.com — retrying the clone (attempt ${attempt + 1})…`,
             });
             // A clone that died partway leaves the destination non-empty, which
-            // git refuses to clone into. Clear it so the retry starts clean.
-            await sh(sandbox, `rm -rf ${shellQuote(workdir)}`);
+            // git refuses to clone into. Clear its contents so the retry starts
+            // clean without removing LocalSandbox's process cwd.
+            await sh(
+              sandbox,
+              `mkdir -p ${shellQuote(workdir)} && find ${shellQuote(workdir)} -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +`,
+            );
           },
         },
       );
       if (clone.exitCode !== 0) {
+        // git can fail after creating the checkout ("Clone succeeded, but
+        // checkout failed") with the tokenized origin persisted — probe the
+        // disk instead of assuming the failed clone left nothing behind.
+        tokenInRemote = await hasGitDir(sandbox, workdir);
         throw classifyGitFailure(clone, 'clone-failed');
       }
+      tokenInRemote = true;
+    } else if (skipPullOnExistingCheckout) {
+      // 2b'. Checkpoint-seeded checkout: the base checkpoint is rebuilt on
+      // every default-branch push, so the seeded default branch is already at
+      // (or minutes behind) HEAD. Skip the network pull — the session branch
+      // is fetched fresh by `checkoutSessionBranch` right after — but still
+      // point origin at the token URL so that fetch can authenticate.
+      const setUrl = await sh(sandbox, `git -C ${shellQuote(workdir)} remote set-url origin ${shellQuote(authUrl)}`);
+      if (setUrl.exitCode !== 0) {
+        throw new MaterializeError(`Failed to set git remote: ${setUrl.stderr}`, 'pull-failed');
+      }
+      tokenInRemote = true;
     } else {
       // 2b. Re-open: refresh remote to the token URL and fast-forward pull.
       reportProgress(onProgress, { phase: 'pulling', message: `Updating ${repo} to the latest changes…` });
@@ -369,6 +421,7 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
       if (setUrl.exitCode !== 0) {
         throw new MaterializeError(`Failed to set git remote: ${setUrl.stderr}`, 'pull-failed');
       }
+      tokenInRemote = true;
       const pull = await gitTransfer(sandbox, `git -C ${shellQuote(workdir)} pull --ff-only`, {
         phase: 'repository pull',
         beforeRetry: async attempt =>
@@ -395,15 +448,17 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
         });
       }
     }
-    succeeded = true;
-  } finally {
-    // 3. Always scrub the token from the remote so it isn't left in the VM's
-    // git config, even when the clone/pull above failed partway through. This
-    // is best-effort on the failure path (the workdir may not even exist, and
-    // a scrub error must never mask the primary failure); on the success path
-    // the scrub must succeed or we surface it.
-    await scrubRemote(sandbox, workdir, repo, succeeded);
+  } catch (primary) {
+    // 3a. The clone/pull failed — still scrub the token from the VM's git
+    // config. The scrub must never hide the actionable failure, but once the
+    // token reached the remote its own failure can't stay silent either:
+    // report both, primary cause and classification first.
+    throw await scrubbedFailure(sandbox, workdir, repo, tokenInRemote, primary, 'pull-failed');
   }
+
+  // 3b. Success — the token is in the remote and the workdir has a `.git`, so
+  // a failed scrub means the token may still be persisted: surface it.
+  await scrubRemote(sandbox, workdir, repo, tokenInRemote);
 
   // 4. Mark materialized.
   reportProgress(onProgress, { phase: 'finalizing', message: 'Finalizing workspace…' });
@@ -413,11 +468,14 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
 /**
  * Reset a pooled workdir that a new session just claimed: the previous
  * session's branch and dirty state must not leak into the new session, so
- * force-checkout the default branch and drop all local modifications. When
- * the claimed VM was reaped and re-provisioned there is no checkout yet and
- * this is a no-op (the clone path handles it). A wedged checkout falls back
- * to wiping the workdir so `materializeRepo` re-clones inside the same VM
- * instead of permanently failing the session.
+ * force-checkout the default branch, drop all local modifications, and delete
+ * every other local branch (a surviving branch would otherwise hand the next
+ * session for the same branch the previous session's stale tip instead of a
+ * fresh fork from the base branch). When the claimed VM was reaped and
+ * re-provisioned there is no checkout yet and this is a no-op (the clone path
+ * handles it). A wedged checkout falls back to wiping the workdir so
+ * `materializeRepo` re-clones inside the same VM instead of permanently
+ * failing the session.
  */
 export async function recycleClaimedWorkdir(
   sandbox: MaterializationSandbox,
@@ -437,10 +495,26 @@ export async function recycleClaimedWorkdir(
     `git -C ${w} checkout -f ${shellQuote(defaultBranch)} && git -C ${w} reset --hard && git -C ${w} clean -fdx`,
     { phase: 'claimed workdir recycle' },
   );
-  if (recycle.exitCode === 0) return;
+  let failure = recycle;
+  if (recycle.exitCode === 0) {
+    // Ref names cannot contain spaces or shell metacharacters (git rejects
+    // them), so word-splitting the for-each-ref output is safe. `update-ref -d`
+    // instead of `branch -D` so deletion never trips over "not fully merged"
+    // checks; `--no-deref` so a symbolic ref pointing at the default branch
+    // deletes the symref itself rather than following it and deleting the
+    // default branch. Broken loose refs are skipped by for-each-ref and
+    // handled by the collision fallback in `checkoutSessionBranch`.
+    const sweep = await sh(
+      sandbox,
+      `set -e; for ref in $(git -C ${w} for-each-ref --format='%(refname)' refs/heads); do [ "$ref" = ${shellQuote(`refs/heads/${defaultBranch}`)} ] || git -C ${w} update-ref --no-deref -d "$ref"; done`,
+      { phase: 'claimed workdir branch sweep' },
+    );
+    if (sweep.exitCode === 0) return;
+    failure = sweep;
+  }
   const wipe = await sh(sandbox, `rm -rf ${w}`);
   if (wipe.exitCode !== 0) {
-    throw new MaterializeError(`Failed to recycle claimed sandbox workdir: ${recycle.stderr}`, 'clone-failed');
+    throw new MaterializeError(`Failed to recycle claimed sandbox workdir: ${failure.stderr}`, 'clone-failed');
   }
 }
 
@@ -502,11 +576,47 @@ async function checkoutSessionBranchImpl(
       // Same rule as above: uncommitted work in the tree blocks the switch
       // to the new branch. Leave the checkout on its current branch.
       if (isBlockedByLocalWork(fetch)) return;
-      throw classifyGitFailure(fetch, 'clone-failed');
+      if (!isBranchCollision(fetch)) throw classifyGitFailure(fetch, 'clone-failed');
+      // The branch exists even though the show-ref probe missed it: either a
+      // concurrent materialization of this session created it between the
+      // probe and `checkout -b` (adopt it), or a reused sandbox carries a
+      // broken loose ref the probe cannot resolve (replace it and retry —
+      // "already exists" means the fetch half succeeded, so FETCH_HEAD is
+      // set).
+      const adopt = await sh(sandbox, `git -C ${shellQuote(workdir)} checkout ${shellQuote(branch)}`);
+      if (adopt.exitCode === 0 || isBlockedByLocalWork(adopt)) return;
+      const drop = await sh(
+        sandbox,
+        // `--no-deref` so a broken symref is deleted itself instead of git
+        // following it to some other branch. `update-ref -d` can still refuse
+        // a broken ref; fall back to removing the loose ref file (branch
+        // passed isValidGitRef, so the interpolation inside the double quotes
+        // is inert).
+        `git -C ${shellQuote(workdir)} update-ref --no-deref -d refs/heads/${shellQuote(branch)} || rm -f -- "$(git -C ${shellQuote(workdir)} rev-parse --absolute-git-dir)/refs/heads/${branch}"`,
+      );
+      if (drop.exitCode !== 0) throw classifyGitFailure(fetch, 'clone-failed');
+      const retry = await sh(sandbox, `git -C ${shellQuote(workdir)} checkout -b ${shellQuote(branch)} FETCH_HEAD`, {
+        timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
+        phase: 'branch checkout retry',
+      });
+      if (retry.exitCode !== 0) {
+        if (isBlockedByLocalWork(retry)) return;
+        throw classifyGitFailure(retry, 'clone-failed');
+      }
     }
   } finally {
     await sh(sandbox, `git -C ${shellQuote(workdir)} remote set-url origin ${shellQuote(cleanUrl(repoFullName))}`);
   }
+}
+
+/**
+ * True when `git checkout -b` failed only because the branch ref already
+ * exists — the collision Factory hits when a pooled sandbox carries a ref the
+ * show-ref probe could not see (broken loose ref) or a concurrent
+ * materialization created the branch after the probe ran.
+ */
+function isBranchCollision(result: SandboxCommandResult): boolean {
+  return /a branch named .* already exists/i.test(`${result.stderr || ''}\n${result.stdout || ''}`);
 }
 
 /**
@@ -527,7 +637,7 @@ function isBlockedByLocalWork(result: SandboxCommandResult): boolean {
  * this exact repo. Matches both the clean and token-auth URL forms; any other
  * remote (or no git dir at all) falls back to the clone path.
  */
-async function hasExistingCheckout(
+export async function hasExistingCheckout(
   sandbox: MaterializationSandbox,
   workdir: string,
   repoFullName: string,
@@ -539,28 +649,67 @@ async function hasExistingCheckout(
   return url.endsWith(`${suffix}.git`) || url.endsWith(suffix);
 }
 
+/** Probed without `git -C` so a missing workdir returns false instead of throwing. */
+async function hasGitDir(sandbox: MaterializationSandbox, workdir: string): Promise<boolean> {
+  const probe = await sh(sandbox, `test -d ${shellQuote(`${workdir}/.git`)}`).catch(() => null);
+  return probe?.exitCode === 0;
+}
+
 /**
- * Reset the git remote back to the tokenless URL. On a successful clone/pull the
- * workdir always has a `.git`, so a non-zero exit code here means the token may
- * still be persisted — surface it. On the failure path the workdir may not exist
- * (e.g. a failed clone), so a non-zero exit is tolerated — and never masks the
- * primary failure being thrown through the `finally`.
+ * Reset the git remote back to the tokenless URL. Strict when the token
+ * reached the remote: any failure — a non-zero exit or a provider throw —
+ * means the token may still be persisted, so it is thrown for the caller to
+ * surface. Best-effort when it never did: the workdir may not exist (e.g. a
+ * failed clone), which makes providers that spawn with `cwd` throw rather
+ * than return a non-zero exit code; both outcomes are tolerated so neither
+ * masks the primary failure.
  */
 async function scrubRemote(
   sandbox: MaterializationSandbox,
   workdir: string,
   repoFullName: string,
-  expectGitDir: boolean,
+  tokenInRemote: boolean,
 ): Promise<void> {
-  const result = await sh(
-    sandbox,
-    `git -C ${shellQuote(workdir)} remote set-url origin ${shellQuote(cleanUrl(repoFullName))}`,
-  );
-  if (result.exitCode !== 0 && expectGitDir) {
-    throw new MaterializeError(
-      `Failed to scrub installation token from git remote: ${result.stderr.trim() || result.stdout.trim()}`,
-      'pull-failed',
-    );
+  const scrub = `git -C ${shellQuote(workdir)} remote set-url origin ${shellQuote(cleanUrl(repoFullName))}`;
+  if (!tokenInRemote) {
+    await sh(sandbox, scrub).catch(() => undefined);
+    return;
+  }
+  let failure: string;
+  try {
+    const result = await sh(sandbox, scrub);
+    if (result.exitCode === 0) return;
+    failure = result.stderr.trim() || result.stdout.trim();
+  } catch (error) {
+    failure = error instanceof Error ? error.message : String(error);
+  }
+  throw new MaterializeError(`Failed to scrub installation token from git remote: ${failure}`, 'pull-failed');
+}
+
+/**
+ * Scrub after `primary` already failed and return the error to throw. A failed
+ * scrub is appended to `primary` rather than replacing it, so the caller gets
+ * the error it would have had without the scrub — same class, same `code` —
+ * carrying the leaked-token warning in its message.
+ */
+async function scrubbedFailure(
+  sandbox: MaterializationSandbox,
+  workdir: string,
+  repoFullName: string,
+  tokenInRemote: boolean,
+  primary: unknown,
+  fallback: MaterializeError['code'],
+): Promise<unknown> {
+  try {
+    await scrubRemote(sandbox, workdir, repoFullName, tokenInRemote);
+    return primary;
+  } catch (scrubError) {
+    const scrubMessage = scrubError instanceof Error ? scrubError.message : String(scrubError);
+    if (!(primary instanceof Error)) {
+      return new MaterializeError(`${String(primary)} — additionally: ${scrubMessage}`, fallback);
+    }
+    primary.message = `${primary.message} — additionally: ${scrubMessage}`;
+    return primary;
   }
 }
 
@@ -619,8 +768,8 @@ function classifyGitFailure(
 //
 // These helpers let the sandbox author and push commits safely. The install
 // token is short-lived, minted per-operation server-side, injected only into
-// the temporary remote URL inside the sandbox, and always scrubbed in a
-// `finally` so it never persists in `.git/config`.
+// the temporary remote URL inside the sandbox, and always scrubbed afterwards
+// so it never persists in `.git/config`.
 // ---------------------------------------------------------------------------
 
 /**
@@ -684,13 +833,15 @@ export async function configureGitIdentity(
 
 /**
  * Temporarily rewrite `origin` to a tokenized URL, run `fn` (e.g. a push), and
- * **always** scrub the remote back to the tokenless URL in a `finally`. The
- * token therefore only ever lives in the remote URL for the duration of the
+ * **always** scrub the remote back to the tokenless URL afterwards. The token
+ * therefore only ever lives in the remote URL for the duration of the
  * operation and is never left in the VM's git config.
  *
- * On the success path the scrub must succeed (a leaked token is a hard error);
- * if it fails we surface it. On the failure path the scrub is best-effort but
- * still attempted, and the original operation error is rethrown.
+ * Once the tokenized URL is installed a failed scrub may leave the token
+ * persisted, so it is always surfaced: on its own after a successful `fn`,
+ * appended to `fn`'s own error otherwise — `fn`'s error is never replaced.
+ * Only a failed set-url (the token never reached the remote) downgrades the
+ * scrub to best-effort.
  */
 export async function withInstallToken<T>(
   sandbox: MaterializationSandbox,
@@ -713,14 +864,16 @@ export async function withInstallToken<T>(
     throw new MaterializeError(`Failed to set git remote: ${setUrl.stderr.trim()}`, 'push-failed');
   }
 
+  let result: T;
   try {
-    return await fn();
-  } finally {
-    // Always restore the tokenless remote. The workdir has a `.git` (we just
-    // rewrote its remote) so a scrub failure means the token may still persist
-    // — surface it.
-    await scrubRemote(sandbox, workdir, repoFullName, true);
+    result = await fn();
+  } catch (primary) {
+    throw await scrubbedFailure(sandbox, workdir, repoFullName, true, primary, 'push-failed');
   }
+  // Restore the tokenless remote. The workdir has a `.git` (we just rewrote
+  // its remote) so a scrub failure means the token may still persist — surface it.
+  await scrubRemote(sandbox, workdir, repoFullName, true);
+  return result;
 }
 
 /**
@@ -804,7 +957,7 @@ export async function commitAll(
 export class WorktreeError extends Error {
   constructor(
     message: string,
-    readonly code: 'invalid-branch' | 'worktree-failed' | 'setup-failed',
+    readonly code: 'invalid-branch' | 'worktree-failed' | 'setup-failed' | 'teardown-failed',
   ) {
     super(message);
     this.name = 'WorktreeError';
@@ -944,16 +1097,50 @@ export async function ensureWorktree(
  * @param worktreePath  the server-computed worktree path the command runs in
  * @param command       the org-configured setup shell command
  */
+async function runWorktreeLifecycleCommand(
+  sandbox: MaterializationSandbox,
+  worktreePath: string,
+  command: string,
+  options: { phase: 'setup' | 'teardown'; timeoutMs?: number },
+): Promise<void> {
+  const result = await sh(sandbox, `cd ${shellQuote(worktreePath)} && { ${command}\n}`, {
+    phase: `worktree ${options.phase}`,
+    ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
+  });
+  if (result.exitCode !== 0) {
+    const detail = (result.stderr.trim() || result.stdout.trim()).slice(-1800);
+    const label = options.phase === 'setup' ? 'Setup' : 'Teardown';
+    throw new WorktreeError(
+      `${label} command failed (exit ${result.exitCode}): ${detail}`,
+      options.phase === 'setup' ? 'setup-failed' : 'teardown-failed',
+    );
+  }
+}
+
 export async function runWorktreeSetup(
   sandbox: MaterializationSandbox,
   worktreePath: string,
   command: string,
 ): Promise<void> {
-  const result = await sh(sandbox, `cd ${shellQuote(worktreePath)} && { ${command}\n}`, { phase: 'worktree setup' });
-  if (result.exitCode !== 0) {
-    const detail = (result.stderr.trim() || result.stdout.trim()).slice(-2000);
-    throw new WorktreeError(`Setup command failed (exit ${result.exitCode}): ${detail}`, 'setup-failed');
-  }
+  return runWorktreeLifecycleCommand(sandbox, worktreePath, command, { phase: 'setup' });
+}
+
+/**
+ * Run the repository's best-effort teardown command from the materialized
+ * session workdir. Callers own lifecycle policy: this helper reports failures
+ * so the retirement coordinator can log them while still continuing with
+ * scrub, pooling/destruction, cache invalidation, and row deletion.
+ */
+export async function runWorktreeTeardown(
+  sandbox: MaterializationSandbox,
+  worktreePath: string,
+  command: string,
+  options: { timeoutMs?: number } = {},
+): Promise<void> {
+  return runWorktreeLifecycleCommand(sandbox, worktreePath, command, {
+    phase: 'teardown',
+    ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
+  });
 }
 
 /**

@@ -57,6 +57,27 @@ describe('VARIABLE_PATTERN', () => {
     expect(matchAll(text)).toEqual([]);
   });
 
+  it('should match a dotted path', () => {
+    expect(matchAll('{{user.name}}')).toEqual(['{{user.name}}']);
+  });
+
+  it('should match a deeply dotted path', () => {
+    expect(matchAll('{{context.user.profile.name}}')).toEqual(['{{context.user.profile.name}}']);
+  });
+
+  it('should not match a path segment starting with a digit', () => {
+    expect(matchAll('{{user.1name}}')).toEqual([]);
+  });
+
+  it('should not match a path segment with special characters', () => {
+    expect(matchAll('{{user.n--}}')).toEqual([]);
+    expect(matchAll('{{user.first-name}}')).toEqual([]);
+  });
+
+  it('should not match a trailing dot', () => {
+    expect(matchAll('{{user.}}')).toEqual([]);
+  });
+
   it('should match in markdown context', () => {
     const text = `# Instructions
 

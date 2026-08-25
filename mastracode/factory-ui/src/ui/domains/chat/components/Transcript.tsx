@@ -28,6 +28,7 @@ import { isTerminalInvocationState } from '../services/transcript';
 import { MESSAGE_HOVER, MessageMeta } from './MessageMeta';
 import { ToolCard } from './tool/ToolCard';
 import { ToolGroup, TOOL_GROUP_MIN } from './tool/ToolGroup';
+import { SubmitPlanCard } from './SubmitPlanCard';
 import { isTranscriptToolVisible, ToolFactory } from './ToolFactory';
 import { ROW_RAIL, ROW_TRIGGER, TranscriptRow } from './TranscriptRow';
 
@@ -193,34 +194,12 @@ function SuspensionCard({
 
   if (prompt.toolName === 'submit_plan') {
     return (
-      <div className={promptCardSuspension} role="group" aria-label="Plan approval">
-        <div className={promptTitle}>Plan: {payload.plan?.title ?? payload.title ?? 'Proposed plan'}</div>
-        {payload.plan?.summary && (
-          <div className="text-ui-smd text-icon5 font-mono leading-relaxed break-words whitespace-pre-wrap">
-            {payload.plan.summary}
-          </div>
-        )}
-        <div className={promptActions}>
-          <Button
-            variant="primary"
-            size="sm"
-            aria-label="Approve the plan and switch to build"
-            autoFocus
-            disabled={isSubmitting}
-            onClick={() => onRespond(prompt.toolCallId, { action: 'approved' }, prompt.id)}
-          >
-            Approve &amp; build
-          </Button>
-          <Button
-            size="sm"
-            aria-label="Reject the plan"
-            disabled={isSubmitting}
-            onClick={() => onRespond(prompt.toolCallId, { action: 'rejected' }, prompt.id)}
-          >
-            Reject
-          </Button>
-        </div>
-      </div>
+      <SubmitPlanCard
+        toolCallId={prompt.toolCallId}
+        input={prompt.suspendPayload}
+        isSubmitting={isSubmitting}
+        onRespond={response => onRespond(prompt.toolCallId, response, prompt.id)}
+      />
     );
   }
 
@@ -499,9 +478,14 @@ function SignalRow({ kind, label, message }: { kind: string; label: string; mess
 // Transcript
 // ---------------------------------------------------------------------------
 
+interface PreparedTranscriptEntry {
+  entry: TimelineEntry;
+  content: ReactNode;
+}
+
 export function Transcript({ tail }: { tail?: ReactNode }) {
   const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
-  const { transcript, resolvePrompt } = useChatTranscript();
+  const { transcript, resolvePrompt, busy } = useChatTranscript();
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
@@ -524,9 +508,11 @@ export function Transcript({ tail }: { tail?: ReactNode }) {
   return (
     <TranscriptEntries
       entries={transcript.entries}
+      restoredHistory
       isSubmitting={approveMutation.isPending || respondMutation.isPending}
       onApprove={onApprove}
       onRespond={onRespond}
+      running={busy}
       tail={tail}
     />
   );
@@ -534,15 +520,20 @@ export function Transcript({ tail }: { tail?: ReactNode }) {
 
 export function TranscriptEntries({
   entries,
+  restoredHistory = false,
   isSubmitting = false,
   onApprove,
   onRespond,
+  running = false,
   tail,
 }: {
   entries: TimelineEntry[];
+  restoredHistory?: boolean;
   isSubmitting?: boolean;
   onApprove: (toolCallId: string, approved: boolean, promptId: string) => void;
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
+  /** Holds the room open under the live turn, and releases it when the agent stops. */
+  running?: boolean;
   /** Rendered inside the live turn (the activity line), so the reserved room stays under it. */
   tail?: ReactNode;
 }) {
@@ -558,13 +549,10 @@ export function TranscriptEntries({
         : [],
     ),
   );
-
   const renderEntry = (entry: TimelineEntry): ReactNode => {
     switch (entry.kind) {
       case 'message':
-        return (
-          <MessageBubble entry={entry} suspensions={suspensions} isSubmitting={isSubmitting} onRespond={onRespond} />
-        );
+        return renderMessageBubble({ entry, suspensions, isSubmitting, onRespond });
       case 'notice':
         return <NoticeCard entry={entry} />;
       case 'approval':
@@ -584,39 +572,57 @@ export function TranscriptEntries({
     }
   };
 
-  const turnGroups: { key: string; entries: TimelineEntry[]; opensTurn: boolean }[] = [];
-  for (const entry of entries) {
-    const opensTurn = entry.kind === 'message' && startsUserTurn(entry.message);
-    if (opensTurn || turnGroups.length === 0) turnGroups.push({ key: entry.id, entries: [], opensTurn });
-    turnGroups.at(-1)?.entries.push(entry);
+  const preparedEntries = entries.map(entry => ({ entry, content: renderEntry(entry) }));
+
+  // Ignore echoed user signals that render nothing when opening a turn.
+  const drawsContent = (entry: MessageEntry): boolean =>
+    entry.message.content.parts.some(part => isRenderablePart(part, suspensions, entry.runtimeTools));
+  const opensTurn = (entry: TimelineEntry): boolean =>
+    entry.kind === 'message' && startsUserTurn(entry.message) && drawsContent(entry);
+
+  const turnGroups: { key: string; entries: PreparedTranscriptEntry[]; opensTurn: boolean }[] = [];
+  for (const preparedEntry of preparedEntries) {
+    const opens = opensTurn(preparedEntry.entry);
+    if (!opens && turnGroups.length > 0) {
+      turnGroups.at(-1)?.entries.push(preparedEntry);
+      continue;
+    }
+    // A gap sorts above the turn it introduces but arrives after it: inside that turn the
+    // room absorbs its height, outside it shifts the transcript a beat later.
+    const previous = turnGroups.at(-1);
+    const introduction = previous && isTimeGap(previous.entries.at(-1)?.entry) ? previous.entries.splice(-1) : [];
+    turnGroups.push({
+      key: preparedEntry.entry.id,
+      entries: [...introduction, preparedEntry],
+      opensTurn: opens,
+    });
   }
+  const [restoredTurnKey] = useState(() => (restoredHistory ? turnGroups.at(-1)?.key : undefined));
 
   return (
     <>
       {turnGroups.map((group, index) => {
         const isLiveTurn = index === turnGroups.length - 1;
-        return (
-          // The room a fresh turn scrolls up into is this min-height: pure layout,
-          // filled by the streaming reply. It stays after the run — collapsing it
-          // would shift the reader — and moves to the next turn with the anchor scroll.
-          <div key={group.key} className={cn('flex flex-col', isLiveTurn && group.opensTurn && 'min-h-[50cqh]')}>
-            {group.entries.map(entry => {
-              const rendered = renderEntry(entry);
-              if (!rendered) return null;
+        // Closing turns keep their room class so reserved space releases through its transition.
+        const holdsRoom = isLiveTurn && group.opensTurn && running;
+        const openRoomClass = group.key === restoredTurnKey ? 'turn-room-restored-open' : 'turn-room-open';
 
-              return (
-                <MessageScrollerItem
-                  key={entry.id}
-                  messageId={entry.id}
-                  scrollAnchor={entry.kind === 'message' && startsUserTurn(entry.message)}
-                  // Estimated off-screen heights would make the prepend anchor restore
-                  // the wrong offset — measure the real thing.
-                  className="[content-visibility:visible]"
-                >
-                  {rendered}
-                </MessageScrollerItem>
-              );
-            })}
+        return (
+          <div
+            key={group.key}
+            className={cn('flex flex-col', group.opensTurn && 'turn-room', holdsRoom && openRoomClass)}
+          >
+            {group.entries.map(({ entry, content }) => (
+              <MessageScrollerItem
+                key={entry.id}
+                messageId={entry.id}
+                scrollAnchor={opensTurn(entry)}
+                // Prepend anchoring needs real item heights, not off-screen estimates.
+                className="[content-visibility:visible]"
+              >
+                {content}
+              </MessageScrollerItem>
+            ))}
             {isLiveTurn && tail}
           </div>
         );
@@ -666,7 +672,13 @@ export function ChannelOriginBadge({ origin }: { origin: { platform: string; aut
   );
 }
 
-function MessageBubble({
+function steeringLabel(entry: MessageEntry): string | undefined {
+  if (!entry.steer) return undefined;
+  if (entry.deliveryStatus === 'pending') return 'Steering…';
+  if (entry.deliveryStatus === 'failed') return 'Not sent';
+  return 'Steered message';
+}
+function renderMessageBubble({
   entry,
   suspensions,
   isSubmitting,
@@ -678,6 +690,7 @@ function MessageBubble({
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
 }) {
   const messageParts = entry.message.content.parts ?? [];
+
   const parts = messageParts.filter(part => isRenderablePart(part, suspensions, entry.runtimeTools));
   const message =
     parts.length === messageParts.length
@@ -688,17 +701,28 @@ function MessageBubble({
   const toolGroups = collectToolGroups(parts, suspensions, entry.runtimeTools);
   const origin = channelOrigin(entry);
   const prose = messageText(parts);
+  const steeringStatus = steeringLabel(entry);
+  const steeringPending = entry.deliveryStatus === 'pending';
+  const steeringFailed = entry.deliveryStatus === 'failed';
   const roles: MessageRoleRenderers = {
     User: ({ children }) => (
       <div className={cn(MESSAGE_HOVER, 'my-3 ml-auto flex w-fit max-w-[70%] flex-col items-end')}>
         <div
           className={cn(
-            'text-text1 rounded-xl px-4 py-2 break-words',
-            entry.steer ? 'bg-warning1/10' : 'bg-neutral6/5',
+            'text-text1 bg-neutral6/5 rounded-xl border border-transparent px-4 py-2 break-words',
+            steeringPending && 'border-border1 border-dashed',
           )}
         >
           {children}
         </div>
+        {steeringStatus && (
+          <span
+            className={cn('text-ui-xs text-icon3 mt-1', steeringFailed && 'text-notice-destructive-fg')}
+            aria-live="polite"
+          >
+            {steeringStatus}
+          </span>
+        )}
         {origin && <ChannelOriginBadge origin={origin} />}
         {prose ? <MessageMeta text={prose} createdAt={entry.message.createdAt} align="end" /> : null}
       </div>
@@ -722,7 +746,11 @@ function MessageBubble({
         return activation ? <SkillMessage activation={activation} /> : <MarkdownRenderer>{part.text}</MarkdownRenderer>;
       }
 
-      return <MarkdownRenderer className="my-3">{part.text}</MarkdownRenderer>;
+      return (
+        <MarkdownRenderer className="my-3" streaming={entry.streaming}>
+          {part.text}
+        </MarkdownRenderer>
+      );
     },
     Reasoning: (part: ReasoningPart) => (
       <div className="border-border1 my-1.5 border-l-2 pl-2.5 italic [&_p]:my-0.5">
@@ -1068,6 +1096,11 @@ function signalRowView(entry: MessageEntry): SignalRowView | undefined {
   if (signal.type === 'reactive' && tagName === 'system-reminder') return { kind: reminderKind, text };
   if (signal.type === 'reactive') return { kind: 'reactive', tagName, text };
   return undefined;
+}
+
+/** The `24 minutes later` separator, written a millisecond before the turn it introduces. */
+function isTimeGap(entry: TimelineEntry | undefined): boolean {
+  return entry?.kind === 'message' && signalRowView(entry)?.kind === 'gap';
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

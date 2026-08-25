@@ -238,6 +238,23 @@ describe('AgentCoreRuntimeSandbox', () => {
     );
   });
 
+  it('setEnv after construction reaches subsequent commands', async () => {
+    mockSend.mockResolvedValueOnce({
+      stream: streamEvents([{ stdout: 'ok' }, { exitCode: 0, status: 'COMPLETED' }]),
+    });
+
+    const sandbox = new AgentCoreRuntimeSandbox({
+      agentRuntimeArn: 'arn:aws:bedrock-agentcore:us-west-2:123456789012:runtime/my-agent',
+      runtimeSessionId: '12345678-1234-1234-1234-123456789012',
+    });
+
+    sandbox.setEnv(env => ({ ...env, GH_TOKEN: 'tok_1' }));
+    await sandbox.executeCommand('echo ok');
+
+    const body = commandInputs[0]!.input.body as { command: string };
+    expect(body.command).toMatch(/GH_TOKEN='?tok_1'?/);
+  });
+
   it('rejects invalid environment variable names', async () => {
     const sandbox = new AgentCoreRuntimeSandbox({
       agentRuntimeArn: 'arn:aws:bedrock-agentcore:us-west-2:123456789012:runtime/my-agent',

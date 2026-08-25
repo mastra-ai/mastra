@@ -17,6 +17,9 @@ vi.mock('@mastra/deployer/build', () => ({
     getFirstExistingFile() {
       return '.env';
     }
+    getExistingFiles(files: string[]) {
+      return files;
+    }
   },
 }));
 vi.mock('../utils.js', () => ({ shouldSkipDotenvLoading: vi.fn().mockReturnValue(false) }));
@@ -40,8 +43,14 @@ describe('ExperimentBundler', () => {
   };
 
   afterEach(async () => {
-    vi.clearAllMocks();
+    vi.restoreAllMocks();
     await Promise.all(temporaryDirectories.splice(0).map(directory => rm(directory, { recursive: true, force: true })));
+  });
+
+  it('layers default dotenv files from base to production override', async () => {
+    const { ExperimentBundler } = await import('./ExperimentBundler');
+
+    await expect(new ExperimentBundler().getEnvFiles()).resolves.toEqual(['.env', '.env.local', '.env.production']);
   });
 
   it('generates an isolated NDJSON experiment worker entry', async () => {
@@ -187,32 +196,93 @@ describe('ExperimentBundler', () => {
     });
   });
 
-  it('removes local database state before creating the artifact manifest', async () => {
+  it('evaluates Mastra configuration in a scratch directory and reports output-directory side effects', async () => {
+    const originalWorkingDirectory = process.cwd();
+    const output = await createTemporaryDirectory('mastra-experiment-worker-');
+    const { Bundler } = await import('@mastra/deployer/bundler');
+    vi.spyOn(Bundler.prototype as any, 'getUserBundlerOptions').mockImplementationOnce(async () => {
+      expect(process.cwd()).not.toBe(originalWorkingDirectory);
+      await mkdir(join(output, 'runtime-state'));
+      await writeFile(join(output, 'mastra.db'), 'local state');
+      await writeFile(join(output, 'runtime-state', 'vector.data'), 'local state');
+      return { externals: [] };
+    });
+    const { ExperimentBundler } = await import('./ExperimentBundler');
+
+    await expect((new ExperimentBundler() as any).getUserBundlerOptions('/entry.ts', output)).rejects.toThrow(
+      'Mastra configuration initialization created or modified unexpected files in the experiment worker artifact: mastra.db, runtime-state/vector.data',
+    );
+    expect(process.cwd()).toBe(originalWorkingDirectory);
+    await expect(readFile(join(output, 'mastra.db'), 'utf8')).resolves.toBe('local state');
+    await expect(readFile(join(output, 'runtime-state', 'vector.data'), 'utf8')).resolves.toBe('local state');
+  });
+
+  it('reports files modified during Mastra configuration initialization', async () => {
+    const output = await createTemporaryDirectory('mastra-experiment-worker-');
+    await writeFile(join(output, 'package.json'), '{"type":"module"}');
+    const { Bundler } = await import('@mastra/deployer/bundler');
+    vi.spyOn(Bundler.prototype as any, 'getUserBundlerOptions').mockImplementationOnce(async () => {
+      await writeFile(join(output, 'package.json'), '{}');
+      return { externals: [] };
+    });
+    const { ExperimentBundler } = await import('./ExperimentBundler');
+
+    await expect((new ExperimentBundler() as any).getUserBundlerOptions('/entry.ts', output)).rejects.toThrow(
+      'Mastra configuration initialization created or modified unexpected files in the experiment worker artifact: package.json',
+    );
+  });
+
+  it('reports files deleted during Mastra configuration initialization', async () => {
+    const output = await createTemporaryDirectory('mastra-experiment-worker-');
+    await writeFile(join(output, 'package.json'), '{"type":"module"}');
+    const { Bundler } = await import('@mastra/deployer/bundler');
+    vi.spyOn(Bundler.prototype as any, 'getUserBundlerOptions').mockImplementationOnce(async () => {
+      await rm(join(output, 'package.json'));
+      return { externals: [] };
+    });
+    const { ExperimentBundler } = await import('./ExperimentBundler');
+
+    await expect((new ExperimentBundler() as any).getUserBundlerOptions('/entry.ts', output)).rejects.toThrow(
+      'Mastra configuration initialization created or modified unexpected files in the experiment worker artifact: package.json',
+    );
+  });
+
+  it('restores the working directory when Mastra configuration initialization fails', async () => {
+    const originalWorkingDirectory = process.cwd();
+    const output = await createTemporaryDirectory('mastra-experiment-worker-');
+    const { Bundler } = await import('@mastra/deployer/bundler');
+    vi.spyOn(Bundler.prototype as any, 'getUserBundlerOptions').mockRejectedValueOnce(
+      new Error('configuration failed'),
+    );
+    const { ExperimentBundler } = await import('./ExperimentBundler');
+
+    await expect((new ExperimentBundler() as any).getUserBundlerOptions('/entry.ts', output)).rejects.toThrow(
+      'configuration failed',
+    );
+    expect(process.cwd()).toBe(originalWorkingDirectory);
+  });
+
+  it('preserves database assets included in the artifact', async () => {
     const { ExperimentBundler } = await import('./ExperimentBundler');
     const output = await createTemporaryDirectory('mastra-experiment-worker-');
     const nestedDirectory = join(output, 'runtime-state');
     await mkdir(nestedDirectory);
     await writeFile(join(output, 'index.mjs'), '');
     await writeFile(join(output, 'package.json'), '{}');
-    const localStorageFiles = [
-      'mastra.db',
-      'mastra.db-shm',
-      'mastra.db-wal',
-      'mastra.duckdb',
-      'mastra.duckdb.wal',
-      'runtime-state/cache.sqlite',
-      'runtime-state/cache.sqlite-wal',
-    ];
-    await Promise.all(localStorageFiles.map(path => writeFile(join(output, path), 'local state')));
+    const databaseAssets = ['seed.db', 'runtime-state/seed.sqlite'];
+    await Promise.all(databaseAssets.map(path => writeFile(join(output, path), 'seed data')));
 
     await new ExperimentBundler().writeArtifactManifest(output, '1.2.3');
 
     const manifest = JSON.parse(await readFile(join(output, 'experiment-worker-manifest.json'), 'utf8'));
-    expect(manifest.files.map((file: { path: string }) => file.path)).toEqual(['index.mjs', 'package.json']);
+    expect(manifest.files.map((file: { path: string }) => file.path)).toEqual([
+      'index.mjs',
+      'package.json',
+      'runtime-state/seed.sqlite',
+      'seed.db',
+    ]);
     await Promise.all(
-      localStorageFiles.map(path =>
-        expect(readFile(join(output, path), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' }),
-      ),
+      databaseAssets.map(path => expect(readFile(join(output, path), 'utf8')).resolves.toBe('seed data')),
     );
   });
 

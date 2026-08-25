@@ -15,7 +15,7 @@ Breaking changes may occur without a major version bump until the API is stable.
 
 A file-based agent discovers skills from its `skills/` directory and bundles them at build time. Skills are reusable procedures or reference material that the agent can load when relevant, instead of putting every detail into the always-on prompt.
 
-Use this page for the file-based convention. For code-defined skills, see [Agent skills](/docs/agents/skills). For the `SKILL.md` package format, see [Workspace skills](/docs/workspace/skills).
+Use this page for the file-based convention. For code-defined skills, see [Agent skills](/docs/skills). For the `SKILL.md` package format, see [Workspace skills](/docs/sandbox/skills).
 
 ## Quickstart
 
@@ -34,7 +34,7 @@ Always report temperatures in Celsius and Fahrenheit. Include the user's preferr
 | Need | Use | Why |
 | - | - | - |
 | Always-on identity, tone, or rules | [`instructions.md`](/reference/file-based-agents/instructions) | The model should see the guidance every turn. |
-| Callable action with inputs and outputs | [`tools/`](/reference/file-based-agents/tools) | The model needs to execute code, call APIs, or perform side effects. |
+| Callable action with inputs and outputs | [`tools/`](/reference/file-based-agents/tools) | The model needs to execute code or call APIs, including operations that perform side effects. |
 | Detailed reference or procedure loaded when relevant | `skills/` | The model only needs the full guidance for specific tasks. |
 
 ## Skill formats

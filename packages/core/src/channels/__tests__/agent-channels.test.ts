@@ -355,6 +355,166 @@ describe('AgentChannels', () => {
     });
   });
 
+  describe('repeated initialization', () => {
+    it('does not accumulate duplicate handler registrations when initialize is called again', async () => {
+      const chatMod = await getChatModule();
+      const registrationMethods = [
+        'onDirectMessage',
+        'onNewMention',
+        'onSubscribedMessage',
+        'onSlashCommand',
+        'onAction',
+      ] as const;
+      let slashHandlers: ((event: any) => Promise<void>)[] = [];
+      const spies = registrationMethods.map(method => {
+        const spy = vi.spyOn(chatMod.Chat.prototype as any, method);
+        if (method === 'onSlashCommand') {
+          spy.mockImplementation((handler: any) => {
+            slashHandlers.push(handler);
+          });
+        }
+        return spy;
+      });
+      const db = new InMemoryDB();
+      const memoryStore = new InMemoryMemory({ db });
+      const mockMastra = {
+        getStorage: () => ({ getStore: () => memoryStore }),
+        getServer: () => null,
+      } as any;
+
+      try {
+        await agentChannels.initialize(mockMastra);
+        const firstSdk = agentChannels.sdk;
+        expect(firstSdk).not.toBeNull();
+
+        // Second, sequential initialization after the first has fully resolved
+        await agentChannels.initialize(mockMastra);
+
+        // Same Chat SDK instance — a second instance would carry its own handlers
+        expect(agentChannels.sdk).toBe(firstSdk);
+
+        // Each inbound handler is registered exactly once
+        for (const spy of spies) {
+          expect(spy).toHaveBeenCalledTimes(1);
+        }
+
+        // One emitted event reaches exactly one callback and produces one agent send
+        expect(slashHandlers).toHaveLength(1);
+        await slashHandlers[0]!({
+          adapter: agentChannels.adapters.discord,
+          channel: { id: 'channel-1', isDM: false, channelVisibility: 'public' },
+          command: '/weather',
+          text: 'London',
+          triggerId: 'interaction-1',
+          user: { userId: 'user-1', userName: 'tyler', fullName: 'Tyler Barnes', isBot: false, isMe: false },
+          raw: { id: 'interaction-1' },
+          openModal: vi.fn(),
+        });
+        expect(mockAgent.sendMessage).toHaveBeenCalledTimes(1);
+      } finally {
+        for (const spy of spies) {
+          spy.mockRestore();
+        }
+      }
+    });
+  });
+
+  describe('slash command handling', () => {
+    it('registers a catch-all slash command handler and routes commands to the agent', async () => {
+      const chatMod = await getChatModule();
+      let registeredHandler: ((event: any) => Promise<void>) | undefined;
+      const spy = vi.spyOn(chatMod.Chat.prototype as any, 'onSlashCommand').mockImplementation((handler: any) => {
+        registeredHandler = handler;
+      });
+      const db = new InMemoryDB();
+      const memoryStore = new InMemoryMemory({ db });
+      const mockMastra = {
+        getStorage: () => ({ getStore: () => memoryStore }),
+        getServer: () => null,
+      } as any;
+
+      try {
+        await agentChannels.initialize(mockMastra);
+        expect(registeredHandler).toBeDefined();
+
+        await registeredHandler!({
+          adapter: agentChannels.adapters.discord,
+          channel: { id: 'channel-1', isDM: false, channelVisibility: 'public' },
+          command: '/weather',
+          text: 'London',
+          triggerId: 'interaction-1',
+          user: {
+            userId: 'user-1',
+            userName: 'tyler',
+            fullName: 'Tyler Barnes',
+            isBot: false,
+            isMe: false,
+          },
+          raw: { id: 'interaction-1' },
+          openModal: vi.fn(),
+        });
+
+        expect(mockAgent.sendMessage).toHaveBeenCalledWith(
+          expect.objectContaining({ contents: '/weather London' }),
+          expect.objectContaining({ resourceId: 'discord:user-1' }),
+        );
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    it('supports custom slash command handlers', async () => {
+      const chatMod = await getChatModule();
+      let registeredHandler: ((event: any) => Promise<void>) | undefined;
+      const spy = vi.spyOn(chatMod.Chat.prototype as any, 'onSlashCommand').mockImplementation((handler: any) => {
+        registeredHandler = handler;
+      });
+      const customHandler = vi.fn().mockResolvedValue(undefined);
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+        handlers: { onSlashCommand: customHandler },
+      });
+      channels.__setAgent(mockAgent);
+      const db = new InMemoryDB();
+      const memoryStore = new InMemoryMemory({ db });
+      const mockMastra = { getStorage: () => ({ getStore: () => memoryStore }), getServer: () => null } as any;
+      const event = { command: '/help' } as any;
+
+      try {
+        await channels.initialize(mockMastra);
+        await registeredHandler!(event);
+        expect(customHandler).toHaveBeenCalledWith(
+          event,
+          expect.any(Function),
+          expect.objectContaining({ mastra: mockMastra }),
+        );
+        expect(mockAgent.sendMessage).not.toHaveBeenCalled();
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    it('does not register slash command handling when disabled', async () => {
+      const chatMod = await getChatModule();
+      const spy = vi.spyOn(chatMod.Chat.prototype as any, 'onSlashCommand');
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+        handlers: { onSlashCommand: false },
+      });
+      channels.__setAgent(mockAgent);
+      const db = new InMemoryDB();
+      const memoryStore = new InMemoryMemory({ db });
+      const mockMastra = { getStorage: () => ({ getStore: () => memoryStore }), getServer: () => null } as any;
+
+      try {
+        await channels.initialize(mockMastra);
+        expect(spy).not.toHaveBeenCalled();
+      } finally {
+        spy.mockRestore();
+      }
+    });
+  });
+
   describe('message routing', () => {
     it('routes inbound channel messages through sendMessage with channel metadata', async () => {
       const db = new InMemoryDB();
@@ -1242,10 +1402,14 @@ describe('AgentChannels', () => {
       await registeredDMWrapper!(chatThread, message);
 
       expect(onDirectMessage).toHaveBeenCalledTimes(1);
-      // 4th arg is the handler context carrying the resolved Mastra instance
-      // and the request context for the run this message will start.
+      // 4th arg is the per-message handler context carrying the resolved
+      // Mastra instance plus run-level and Signal-level context.
       const ctx = onDirectMessage.mock.calls[0]![3];
-      expect(ctx).toEqual({ mastra: mockMastra, requestContext: expect.any(RequestContext) });
+      expect(ctx).toEqual({
+        mastra: mockMastra,
+        requestContext: expect.any(RequestContext),
+        signalMetadata: {},
+      });
 
       spy.mockRestore();
     });
@@ -1312,7 +1476,41 @@ describe('AgentChannels', () => {
       spy.mockRestore();
     });
 
-    it('does not leak one message request context into the next', async () => {
+    it('forwards handler signal metadata to sendMessage', async () => {
+      const chatMod = await getChatModule();
+      let registeredDMWrapper: ((thread: any, message: any) => unknown) | undefined;
+      const spy = vi.spyOn(chatMod.Chat.prototype as any, 'onDirectMessage').mockImplementation((handler: any) => {
+        registeredDMWrapper = handler;
+      });
+
+      const onDirectMessage = vi.fn(async (thread: any, msg: any, defaultHandler: any, ctx: any) => {
+        ctx.signalMetadata.attachments = [{ id: 'file-1', mediaType: 'application/pdf' }];
+        await defaultHandler(thread, msg);
+      });
+
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+        handlers: { onDirectMessage },
+      });
+      channels.__setAgent(mockAgent);
+      await channels.initialize(makeMastra());
+
+      const chatThread = makeChatThread({ adapter: channels.adapters.discord });
+      await registeredDMWrapper!(chatThread, message);
+
+      expect(mockAgent.sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: {
+            attachments: [{ id: 'file-1', mediaType: 'application/pdf' }],
+          },
+        }),
+        expect.anything(),
+      );
+
+      spy.mockRestore();
+    });
+
+    it('does not leak one message handler context into the next', async () => {
       const chatMod = await getChatModule();
       let registeredDMWrapper: ((thread: any, message: any) => unknown) | undefined;
       const spy = vi.spyOn(chatMod.Chat.prototype as any, 'onDirectMessage').mockImplementation((handler: any) => {
@@ -1320,11 +1518,14 @@ describe('AgentChannels', () => {
       });
 
       const seen: (unknown | undefined)[] = [];
+      const seenSignalMetadata: (unknown | undefined)[] = [];
       const onDirectMessage = vi.fn(async (_thread: any, _msg: any, _defaultHandler: any, ctx: any) => {
         // Record what this message's context already carried on arrival, then
         // write a marker that must not survive into the next message.
         seen.push(ctx.requestContext.get('leak-marker'));
         ctx.requestContext.set('leak-marker', 'from-first-message');
+        seenSignalMetadata.push(ctx.signalMetadata['leak-marker']);
+        ctx.signalMetadata['leak-marker'] = 'from-first-message';
       });
 
       const channels = new AgentChannels({
@@ -1344,10 +1545,18 @@ describe('AgentChannels', () => {
       expect(seen[0]).toBeUndefined();
       // The second message must start clean — a shared context would carry the marker.
       expect(seen[1]).toBeUndefined();
+      expect(seenSignalMetadata).toEqual([undefined, undefined]);
 
-      const first = onDirectMessage.mock.calls[0]![3] as { requestContext: RequestContext };
-      const second = onDirectMessage.mock.calls[1]![3] as { requestContext: RequestContext };
+      const first = onDirectMessage.mock.calls[0]![3] as {
+        requestContext: RequestContext;
+        signalMetadata: Record<string, unknown>;
+      };
+      const second = onDirectMessage.mock.calls[1]![3] as {
+        requestContext: RequestContext;
+        signalMetadata: Record<string, unknown>;
+      };
       expect(first.requestContext).not.toBe(second.requestContext);
+      expect(first.signalMetadata).not.toBe(second.signalMetadata);
 
       spy.mockRestore();
     });

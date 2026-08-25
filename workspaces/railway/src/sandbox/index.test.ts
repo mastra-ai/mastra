@@ -240,6 +240,41 @@ describe('RailwaySandbox', () => {
       expect(sandbox.status).toBe('running');
     });
 
+    it('falls back to seedCheckpointName when the primary checkpoint has no state', async () => {
+      mockCheckpoints.mockResolvedValueOnce([{ id: 'base-checkpoint-id', key: 'repo-base', environmentId: 'env-1' }]);
+      const sandbox = new RailwaySandbox({
+        token: 'tok',
+        checkpointName: 'session-checkpoint',
+        seedCheckpointName: 'repo-base',
+      });
+
+      await sandbox._start();
+
+      expect(mockCreate).toHaveBeenCalledWith('repo-base', expect.objectContaining({ token: 'tok' }));
+      await expect(sandbox.getInfo()).resolves.toMatchObject({
+        metadata: { restoredCheckpointName: 'repo-base' },
+      });
+    });
+
+    it('prefers checkpointName over seedCheckpointName when both have state', async () => {
+      mockCheckpoints.mockResolvedValueOnce([
+        { id: 'session-checkpoint-id', key: 'session-checkpoint', environmentId: 'env-1' },
+        { id: 'base-checkpoint-id', key: 'repo-base', environmentId: 'env-1' },
+      ]);
+      const sandbox = new RailwaySandbox({
+        token: 'tok',
+        checkpointName: 'session-checkpoint',
+        seedCheckpointName: 'repo-base',
+      });
+
+      await sandbox._start();
+
+      expect(mockCreate).toHaveBeenCalledWith('session-checkpoint', expect.objectContaining({ token: 'tok' }));
+      await expect(sandbox.getInfo()).resolves.toMatchObject({
+        metadata: { restoredCheckpointName: 'session-checkpoint' },
+      });
+    });
+
     it('refreshes checkpoints at the one-second floor when idle timeout is below the safety margin', async () => {
       vi.useFakeTimers();
       const checkpointSandbox = { ...mockSandbox, idleTimeoutMinutes: 1 };
@@ -483,6 +518,20 @@ describe('RailwaySandbox', () => {
       expect(mockSandbox.checkpoint).not.toHaveBeenCalled();
     });
 
+    it('forwards seedCheckpointName to the cloned sandbox', async () => {
+      mockCheckpoints.mockResolvedValueOnce([{ id: 'base-checkpoint-id', key: 'repo-base', environmentId: 'env-1' }]);
+      const template = new RailwaySandbox({ token: 'tok' });
+
+      const child = template.clone({
+        id: 'mc-project-1',
+        checkpointName: 'session-checkpoint',
+        seedCheckpointName: 'repo-base',
+      });
+      await child._start();
+
+      expect(mockCreate).toHaveBeenCalledWith('repo-base', expect.objectContaining({ token: 'tok' }));
+    });
+
     it('uses a derived checkpoint override when restoring an existing checkpoint', async () => {
       mockCheckpoints.mockResolvedValueOnce([
         { id: 'checkpoint-id', key: 'session-checkpoint', environmentId: 'env-1' },
@@ -539,6 +588,17 @@ describe('RailwaySandbox', () => {
 
       const sentOptions = mockSandbox.exec.mock.calls[0]![1] as { timeoutSec?: number };
       expect(sentOptions.timeoutSec).toBe(5);
+    });
+
+    it('setEnv after construction reaches subsequent commands', async () => {
+      const sandbox = new RailwaySandbox({ token: 't' });
+      await sandbox._start();
+
+      sandbox.setEnv(env => ({ ...env, GH_TOKEN: 'tok_1' }));
+      await sandbox.executeCommand!('echo hello');
+
+      const sentOptions = mockSandbox.exec.mock.calls[0]![1] as { env?: Record<string, string> };
+      expect(sentOptions.env).toEqual(expect.objectContaining({ GH_TOKEN: 'tok_1' }));
     });
 
     it('restarts a checkpoint-enabled sandbox when it is down before execution', async () => {

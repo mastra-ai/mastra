@@ -13,13 +13,13 @@ Mastra supports OpenTelemetry (OTEL) through an exporter for sending traces and 
 
 ## Exporter
 
-The OpenTelemetry exporter sends your traces and logs using standardized [OpenTelemetry Semantic Conventions for GenAI](https://opentelemetry.io/docs/specs/semconv/gen-ai/). This ensures broad compatibility with platforms like Datadog, New Relic, SigNoz, MLflow, Latitude, Dash0, Traceloop, Laminar, telemetry.dev, and more.
+The OpenTelemetry exporter sends your traces and logs using standardized [OpenTelemetry Semantic Conventions for GenAI](https://opentelemetry.io/docs/specs/semconv/gen-ai/). This ensures broad compatibility with platforms like Datadog, New Relic, Sentry, SigNoz, MLflow, Latitude, Dash0, Traceloop, Laminar, telemetry.dev, and more.
 
 ### Installation
 
 Each provider requires specific protocol packages. Install the base exporter plus the protocol package for your provider:
 
-#### For HTTP/Protobuf Providers (SigNoz, New Relic, Laminar, MLflow, Latitude, telemetry.dev)
+#### For HTTP/Protobuf Providers (SigNoz, New Relic, Sentry, Laminar, MLflow, Latitude, telemetry.dev)
 
 ```bash npm2yarn
 npm install @mastra/otel-exporter@latest @opentelemetry/exporter-trace-otlp-proto
@@ -50,6 +50,38 @@ All providers support zero-config setup via environment variables. Set the appro
 | Laminar | `LMNR_PROJECT_API_KEY` (required), `LAMINAR_ENDPOINT` (optional) |
 
 ### Provider configurations
+
+#### Sentry
+
+[Sentry](https://sentry.io/) accepts OpenTelemetry traces and logs through its OTLP endpoints. In Sentry, open [**Project Settings** > **Client Keys (DSN)**](https://sentry.io/settings/projects/) and copy the OTLP traces endpoint and authentication header. Add both values to your environment:
+
+```bash title=".env"
+SENTRY_OTLP_ENDPOINT=https://o000000.ingest.sentry.io/api/0000000/integration/otlp/v1/traces
+SENTRY_OTLP_AUTH_HEADER="sentry sentry_key=..."
+```
+
+Use the `custom` provider with HTTP/Protobuf:
+
+```typescript title="src/mastra/index.ts"
+new OtelExporter({
+  provider: {
+    custom: {
+      endpoint: process.env.SENTRY_OTLP_ENDPOINT!,
+      protocol: 'http/protobuf',
+      headers: {
+        'x-sentry-auth': process.env.SENTRY_OTLP_AUTH_HEADER!,
+      },
+    },
+  },
+})
+```
+
+See [Sentry's OTLP documentation](https://docs.sentry.io/concepts/otlp/) for endpoint setup, supported signals, and current ingestion limits.
+
+Choose an exporter based on your setup:
+
+- `OtelExporter`: Sends vendor-neutral traces and logs over OTLP. Use it with an existing OpenTelemetry pipeline or when you want backend portability.
+- [`SentryExporter`](/integrations/observability/sentry): Uses the Sentry SDK to map Mastra span types to Sentry operations, add AI monitoring attributes, and capture span errors as Sentry issues.
 
 #### MLflow
 

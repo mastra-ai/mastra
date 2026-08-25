@@ -1,20 +1,11 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import {
-  ArrowUpRight,
-  CircleSlash,
-  EllipsisVertical,
-  Link2,
-  MessageSquare,
-  MessagesSquare,
-  Play,
-  Trash2,
-} from 'lucide-react';
+import { ArrowUpRight, CircleSlash, EllipsisVertical, Trash2 } from 'lucide-react';
 import { Link, useParams } from 'react-router';
 
 import type { FactoryRunPhase } from '../../../../hooks/useStartFactoryRun';
+import { boardCardStatus } from '../boardCardStatus';
 import { setDragPayload } from '../boardDrag';
 import {
   externalLinkLabel,
@@ -24,19 +15,26 @@ import {
   pullRequestStatusForItem,
   workItemMeta,
 } from '../boardItems';
-import { RUN_PHASE_LABELS, itemRunSpec, itemSessionSpec } from '../boardRunSpecs';
+import { itemRunSpec, itemSessionSpec } from '../boardRunSpecs';
 import type { ItemRunSpec, RunAction } from '../boardRunSpecs';
 import { itemStageLabel, itemStageOptions } from '../boardStages';
 import type { AuditEventPage } from '../services/audit';
 import type { FactoryDecisionSummary } from '../services/decisions';
-import { relatedWorkItems, relationshipLabel, relationshipPath } from '../services/relationships';
+import { relatedWorkItems, relationshipPath } from '../services/relationships';
 import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 import { workItemActivity } from '../workItemActivity';
-import { CardDecisionStatus, CardLabels, CardTitleTooltip, SourceTitle } from './BoardCardParts';
-import { BoardStageIcon, SourceIcon } from './BoardIcons';
-import { actionIcon } from './FactoryItemActions';
+import {
+  CardIdleOverlay,
+  CardLabels,
+  CardStatus,
+  CardTitleTooltip,
+  REVEAL_ON_CARD_HOVER,
+  SourceTitle,
+} from './BoardCardParts';
+import { BoardStageIcon, SourceIcon, actionIcon } from './BoardIcons';
 import { PullRequestStatusIcon } from './PullRequestStatusIcon';
+import { RelatedWorkItemLink } from './RelatedWorkItemLink';
 import { WorkItemActivity } from './WorkItemActivity';
 
 interface CardPrimaryAction {
@@ -84,10 +82,12 @@ function cardPrimaryAction({
 
 export function WorkItemCard({
   item,
+  highlighted,
   columnStage,
   allItems,
   activityPage,
   liveWorktreePaths,
+  sessionLivenessResolved,
   runDisabled,
   preparing,
   evaluatingStage,
@@ -107,11 +107,13 @@ export function WorkItemCard({
   onRemove,
 }: {
   item: WorkItem;
+  highlighted: boolean;
   columnStage: BoardStageId;
   allItems: WorkItem[];
   activityPage?: AuditEventPage;
   /** Worktrees that still exist; session refs outside this set are stale. */
   liveWorktreePaths: ReadonlySet<string>;
+  sessionLivenessResolved: boolean;
   runDisabled: boolean;
   /** Status text while the click is resolving, before the run mutation starts. */
   preparing?: string;
@@ -155,6 +157,14 @@ export function WorkItemCard({
     runSpec !== undefined
       ? runSpec.actions.find(action => action.role === 'review' && action.role in sessions)
       : undefined;
+  // A card can land in a lane without its run ever starting — an approved plan
+  // transitions to Building and writes the `work` session ref itself, so the
+  // slot looks used and `runActions` filters Build out. Offer the lane's own
+  // run from the menu so the card is never a dead end.
+  const laneAction =
+    runSpec !== undefined && reReviewAction === undefined
+      ? runSpec.actions.find(action => action.stage === columnStage && action.role in sessions)
+      : undefined;
   const primaryAction = cardPrimaryAction({
     item,
     runSpec,
@@ -165,9 +175,40 @@ export function WorkItemCard({
     onCreateSession,
   });
   const threadSession = itemThreadSession(sessions);
+  const proposedRunLabel =
+    proposal === undefined
+      ? undefined
+      : (runSpec?.actions.find(action => action.role === proposal.role)?.label ??
+        defaultRunAction?.label ??
+        'Start run');
+
   const relatedItems = relatedWorkItems(item, allItems);
   const labels = metadataLabels(item.metadata);
   const activity = workItemActivity(item, activityPage);
+  const status = boardCardStatus({
+    idle:
+      threadSession !== undefined
+        ? { label: 'Open session', affordance: 'open' }
+        : { label: primaryAction.label, affordance: 'run' },
+    proposal:
+      proposal === undefined || proposedRunLabel === undefined
+        ? undefined
+        : { label: proposedRunLabel, decisionId: proposal.id },
+    moving:
+      evaluatingStage === undefined
+        ? undefined
+        : { stage: evaluatingStage, label: itemStageLabel(item, evaluatingStage) },
+    runs: [...pendingRunRoles].map(([role, phase]) => ({
+      label: runSpec?.actions.find(action => action.role === role)?.label ?? 'Starting run',
+      phase,
+    })),
+    preparing: busyLabel,
+    decision,
+    transitionReason,
+  });
+  const retryDecisionId = status.kind === 'error' ? status.retryDecisionId : undefined;
+  const showIdleAction = status.kind === 'idle';
+  const showStatusRow = activity.lastWorker !== undefined || status.kind !== 'idle';
 
   return (
     <CardTitleTooltip title={item.title}>
@@ -177,6 +218,8 @@ export function WorkItemCard({
         aria-busy={evaluating || runPending || undefined}
         data-testid="work-item-card"
         data-related={relatedItems.length > 0 ? 'true' : undefined}
+        data-work-item-id={item.id}
+        data-highlighted={highlighted || undefined}
         onDragStart={event => {
           if (!evaluating) setDragPayload(event, { kind: 'work-item', id: item.id, fromStage: columnStage });
         }}
@@ -184,6 +227,7 @@ export function WorkItemCard({
           'group relative flex flex-col gap-3 rounded-xl border border-border1/50 bg-neutral6/5 p-3 outline-none transition-colors hover:bg-surface3',
           evaluating ? 'cursor-wait' : 'cursor-grab active:cursor-grabbing',
           runPending && 'opacity-70',
+          highlighted && 'border-warning1/40 bg-warning1/5 ring-1 ring-warning1/30',
         )}
       >
         {threadSession !== undefined ? (
@@ -191,7 +235,7 @@ export function WorkItemCard({
             to={`/factories/${factoryId}/workspaces/${threadSession.sessionId}/threads/${threadSession.threadId}`}
             draggable={false}
             aria-label={`Open session for ${item.title}`}
-            className="focus-visible:outline-accent1 absolute inset-0 z-10 cursor-pointer rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
+            className="focus-visible:outline-accent1 absolute inset-0 cursor-pointer rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
           />
         ) : (
           <button
@@ -200,7 +244,7 @@ export function WorkItemCard({
             disabled={runDisabled || runPending}
             aria-busy={runPending || undefined}
             aria-label={primaryAction.ariaLabel}
-            className="focus-visible:outline-accent1 absolute inset-0 z-10 cursor-pointer rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed"
+            className="focus-visible:outline-accent1 absolute inset-0 cursor-pointer rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed"
             onClick={primaryAction.start}
           />
         )}
@@ -214,6 +258,7 @@ export function WorkItemCard({
                   size="icon-xs"
                   disabled={evaluating}
                   aria-label={`Actions for ${item.title}`}
+                  className={REVEAL_ON_CARD_HOVER}
                 >
                   <EllipsisVertical size={13} aria-hidden />
                 </Button>
@@ -241,6 +286,26 @@ export function WorkItemCard({
                 >
                   {actionIcon(reReviewAction.label)}
                   <span>{pendingRunRoles.has(reReviewAction.role) ? 'Starting…' : 'Re-review'}</span>
+                </DropdownMenu.Item>
+              )}
+              {runSpec !== undefined && laneAction !== undefined && (
+                <DropdownMenu.Item
+                  disabled={runDisabled || pendingRunRoles.has(laneAction.role)}
+                  onClick={() => onRestartRun(runSpec, laneAction)}
+                >
+                  {actionIcon(laneAction.label)}
+                  <span>{pendingRunRoles.has(laneAction.role) ? 'Starting…' : laneAction.label}</span>
+                </DropdownMenu.Item>
+              )}
+              {/* Once the card has a live session it renders as a link, so the
+                  menu is the only place left to release a proposed run. */}
+              {proposal !== undefined && (
+                <DropdownMenu.Item
+                  disabled={runDisabled || approvingDecisionId === proposal.id}
+                  onClick={() => onApproveProposal(proposal.id)}
+                >
+                  {actionIcon(proposedRunLabel ?? 'Start run')}
+                  <span>{approvingDecisionId === proposal.id ? 'Starting…' : 'Start suggested run'}</span>
                 </DropdownMenu.Item>
               )}
               {proposal !== undefined && (
@@ -271,7 +336,41 @@ export function WorkItemCard({
           </DropdownMenu>
         </div>
         <div className="flex min-w-0 flex-col gap-1.5">
-          <span className="text-ui-xs text-icon2 truncate pr-8">{workItemMeta(item)}</span>
+          <div className="flex min-w-0 items-center gap-1.5 pr-8">
+            <span className="text-ui-xs text-icon2 min-w-0 truncate">{workItemMeta(item)}</span>
+            {threadSession !== undefined && (
+              <span data-live-session-indicator aria-hidden className="bg-accent1 size-2 shrink-0 rounded-full" />
+            )}
+            {relatedItems.map(related => {
+              const relatedSession = sessionLivenessResolved
+                ? itemThreadSession(liveSessions(related.sessions, liveWorktreePaths))
+                : undefined;
+
+              if (relatedSession !== undefined) {
+                return (
+                  <RelatedWorkItemLink
+                    key={related.id}
+                    item={related}
+                    href={`/factories/${factoryId}/workspaces/${relatedSession.sessionId}/threads/${relatedSession.threadId}`}
+                    kind="session"
+                  />
+                );
+              }
+
+              if (sessionLivenessResolved && related.url !== null) {
+                return <RelatedWorkItemLink key={related.id} item={related} href={related.url} kind="external" />;
+              }
+
+              return (
+                <RelatedWorkItemLink
+                  key={related.id}
+                  item={related}
+                  href={relationshipPath(related, factoryId)}
+                  kind="board"
+                />
+              );
+            })}
+          </div>
           <div className="flex min-w-0 items-center gap-1.5">
             {item.source === 'github-pr' ? (
               <PullRequestStatusIcon status={pullRequestStatusForItem(item)} />
@@ -284,32 +383,6 @@ export function WorkItemCard({
           </div>
         </div>
         <CardLabels labels={labels} />
-        <WorkItemActivity activity={activity} actors={activityPage?.actors ?? {}} />
-        {threadSession !== undefined && (
-          <span className="text-ui-xs text-accent1 flex items-center gap-1">
-            <MessagesSquare size={11} aria-hidden />
-            <span className="truncate">Session · {threadSession.branch}</span>
-          </span>
-        )}
-        {relatedItems.map(related => {
-          const relationText = relationshipLabel(related);
-          const relatedSession = itemThreadSession(liveSessions(related.sessions, liveWorktreePaths));
-          return (
-            <Link
-              key={related.id}
-              to={
-                relatedSession
-                  ? `/factories/${factoryId}/workspaces/${relatedSession.sessionId}/threads/${relatedSession.threadId}`
-                  : relationshipPath(related, factoryId)
-              }
-              className="text-ui-xs text-icon4 hover:text-icon6 relative z-20 flex items-center gap-1 hover:underline"
-              aria-label={`Open ${relationText}`}
-            >
-              <Link2 size={11} aria-hidden />
-              <span className="truncate">{relationText}</span>
-            </Link>
-          );
-        })}
         {otherStages.length > 0 && (
           <div className="flex flex-wrap items-center gap-1.5">
             {otherStages.map(stage => (
@@ -319,54 +392,22 @@ export function WorkItemCard({
             ))}
           </div>
         )}
-        {evaluatingStage !== undefined && (
-          <span role="status" aria-live="polite" className="text-ui-xs text-icon4 flex items-center gap-1.5">
-            <Spinner size="sm" aria-hidden className="size-3" />
-            {evaluatingStage === 'done' ? 'Marking done…' : `Moving to ${itemStageLabel(item, evaluatingStage)}…`}
-          </span>
-        )}
-        {pendingRunRoles.size === 0 && busyLabel !== undefined && (
-          <span role="status" aria-live="polite" className="text-ui-xs text-icon4 flex items-center gap-1.5">
-            <Spinner size="sm" aria-hidden className="size-3" />
-            {busyLabel}
-          </span>
-        )}
-        {[...pendingRunRoles].map(([role, phase]) => (
-          <span key={role} role="status" aria-live="polite" className="text-ui-xs text-icon4 flex items-center gap-1.5">
-            <Spinner size="sm" aria-hidden className="size-3" />
-            {runSpec?.actions.find(action => action.role === role)?.label ?? 'Starting run'} —{' '}
-            {phase !== undefined ? RUN_PHASE_LABELS[phase] : 'starting…'}
-          </span>
-        ))}
-        {!evaluating && !runPending && (
-          <span
-            aria-hidden
-            className="text-ui-xs text-icon3 group-hover:text-icon5 group-focus-within:text-icon5 flex items-center gap-1.5 transition-colors motion-reduce:transition-none"
-          >
-            {threadSession !== undefined ? (
-              <>
-                <MessageSquare size={11} aria-hidden />
-                Open session
-              </>
-            ) : (
-              <>
-                <Play size={11} aria-hidden />
-                {primaryAction.label}
-              </>
+        {showIdleAction && <CardIdleOverlay status={status} />}
+        {showStatusRow && (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+            <WorkItemActivity activity={activity} actors={activityPage?.actors ?? {}} />
+            {status.kind !== 'idle' && (
+              <CardStatus
+                status={status}
+                onApprove={
+                  status.kind === 'waiting' && !runDisabled ? () => onApproveProposal(status.decisionId) : undefined
+                }
+                approving={status.kind === 'waiting' && approvingDecisionId === status.decisionId}
+                onRetry={retryDecisionId === undefined ? undefined : () => onRetryDecision(retryDecisionId)}
+                retrying={retryDecisionId !== undefined && retryDecisionId === retryingDecisionId}
+              />
             )}
-          </span>
-        )}
-        {!evaluating && decision !== undefined && (
-          <CardDecisionStatus
-            decision={decision}
-            retrying={retryingDecisionId === decision.id}
-            onRetry={() => onRetryDecision(decision.id)}
-          />
-        )}
-        {!evaluating && transitionReason !== undefined && (
-          <span role="alert" className="text-ui-xs text-error">
-            {transitionReason}
-          </span>
+          </div>
         )}
       </article>
     </CardTitleTooltip>
