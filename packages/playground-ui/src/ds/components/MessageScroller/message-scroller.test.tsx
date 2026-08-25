@@ -148,6 +148,13 @@ const setTop = (element: Element, top: number) => {
   });
 };
 
+const setRect = (element: Element, rect: { top: number; height: number }) => {
+  Object.defineProperty(element, 'getBoundingClientRect', {
+    configurable: true,
+    value: vi.fn(() => createRect(rect)),
+  });
+};
+
 const mockPreviewSizerHeight = () => {
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
     if (this.dataset.testid === 'thread-rail-preview-sizer') {
@@ -509,9 +516,14 @@ const stubLayout = (tops: Record<string, number>) => {
   });
 };
 
-const contentResizeObserver = () => {
+const getContent = (): HTMLElement => {
   const content = document.querySelector<HTMLElement>('[data-slot="message-scroller-content"]');
   if (!content) throw new Error('No scroller content');
+  return content;
+};
+
+const contentResizeObserver = () => {
+  const content = getContent();
   const observer = MockResizeObserver.instances.find(instance => instance.observed.has(content));
   if (!observer) throw new Error('No resize observer registered for content');
   return { content, observer };
@@ -862,15 +874,53 @@ describe('MessageScroller autoScroll', () => {
 
     expect(scrollTo).toHaveBeenLastCalledWith({ top: 500, behavior: 'smooth' });
 
-    // Re-attached by the turn, not by the reader having to chase it: an answer
-    // outgrowing the room it was given moves the view again.
+    // The trip lands with the turn parked at the top of the view.
+    setTop(getItem('message-2'), 0);
+    fireEvent.scroll(viewport);
+    scrollTo.mockClear();
+
+    // The answer growing into the room its turn reserved moves nothing…
     const { content, observer } = contentResizeObserver();
+    setRect(content, { top: -500, height: 1800 });
     Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 1800 });
     await act(async () => {
       observer.trigger([{ target: content }]);
     });
+    expect(scrollTo).not.toHaveBeenCalled();
 
-    expect(scrollTo).toHaveBeenLastCalledWith({ top: 1400, behavior: 'smooth' });
+    // …and re-attached by the turn, not by the reader having to chase it: only an
+    // answer outgrowing that room moves the view again.
+    setRect(getItem('message-2'), { top: 0, height: 900 });
+    await act(async () => {
+      observer.trigger([{ target: content }]);
+    });
+
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 1000, behavior: 'auto' });
+  });
+
+  it('holds a parked turn still when the reply starts streaming under it', () => {
+    stubLayout({ 'message-2': 300 });
+    const { rerender } = render(<HistoryHarness autoScroll messageIds={['message-1']} />);
+
+    const viewport = screen.getByTestId('history-viewport');
+    installScrollTo(viewport);
+    scrollReaderTo(viewport, { scrollHeight: 1000, clientHeight: 400, scrollTop: 600 });
+
+    const scrollTo = installScrollTo(viewport);
+    Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 1400 });
+    rerender(<HistoryHarness autoScroll messageIds={['message-1', 'message-2']} />);
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 900, behavior: 'smooth' });
+
+    setTop(getItem('message-2'), 0);
+    fireEvent.scroll(viewport);
+    setRect(getContent(), { top: -900, height: 1400 });
+    scrollTo.mockClear();
+
+    // The reply's first row lands inside the reserved room, above the fold: pulling
+    // the view back to the end would carry the parked message up and away.
+    rerender(<HistoryHarness autoScroll messageIds={['message-1', 'message-2']} replyIds={['reply-1']} />);
+
+    expect(scrollTo).not.toHaveBeenCalled();
   });
 
   it('holds the reading position when a marker lands above the reader', async () => {
@@ -891,7 +941,7 @@ describe('MessageScroller autoScroll', () => {
     expect(scrollTo).toHaveBeenLastCalledWith({ top: 640, behavior: 'auto' });
   });
 
-  it('keeps carrying the reader while a smooth scroll is still travelling', async () => {
+  it('re-aims a parking trip still travelling when the room opens under it', async () => {
     vi.stubGlobal('ResizeObserver', MockResizeObserver);
     stubLayout({ 'message-2': 300 });
     const { rerender } = render(<HistoryHarness autoScroll messageIds={['message-1']} />);
@@ -902,7 +952,7 @@ describe('MessageScroller autoScroll', () => {
     scrollReaderTo(viewport, { scrollHeight: 1000, clientHeight: 400, scrollTop: 200 });
 
     // A real smooth scroll spends frames travelling, so the position stays behind
-    // its target while the reply already grows past it.
+    // its target while the reserved room is still opening under the trip.
     const scrollTo = vi.fn();
     viewport.scrollTo = scrollTo;
     Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 1400 });
@@ -915,7 +965,8 @@ describe('MessageScroller autoScroll', () => {
       observer.trigger([{ target: content }]);
     });
 
-    expect(scrollTo).toHaveBeenLastCalledWith({ top: 1400, behavior: 'smooth' });
+    // The same trip, re-aimed at the same anchor — never surrendered to the end.
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 500, behavior: 'smooth' });
   });
 
   it('never offers to jump to an end it is already carrying the reader to', () => {
