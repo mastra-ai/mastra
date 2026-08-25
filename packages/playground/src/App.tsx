@@ -68,6 +68,7 @@ import { McpServerPage } from './pages/mcps/[serverId]';
 import MCPServerToolExecutor from './pages/mcps/tool';
 import Metrics from './pages/metrics';
 import PromptBlocks from './pages/prompt-blocks';
+import Pulse from './pages/pulse';
 import RequestContext from './pages/request-context';
 import Resources from './pages/resources';
 import Scorers from './pages/scorers';
@@ -387,6 +388,9 @@ export const routes: RouteObject[] = [
           { id: 'signals-agent', Component: SignalsEntityCrumb, heading: 'Agent' },
         ]),
       },
+      // Experimental Pulse page (event-first observability, hard split) —
+      // UNCOMMITTED prototype; reads ClickHouse directly (no server routes).
+      { path: '/pulse', element: <Pulse />, handle: navHandle('/pulse') },
       { path: '/traces', element: <Traces />, handle: navHandle('/traces') },
       {
         path: '/traces/:traceId',

@@ -14,7 +14,7 @@ import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { WorkspacesIcon } from '@mastra/playground-ui/icons/WorkspacesIcon';
-import { BookIcon, LayoutGrid } from 'lucide-react';
+import { BookIcon, LayoutGrid, Radio } from 'lucide-react';
 import type { ComponentType, SVGProps } from 'react';
 
 export type NavIcon = ComponentType<SVGProps<SVGSVGElement>>;
@@ -178,6 +178,14 @@ export const mainNav: NavSection[] = [
         isOnMastraPlatform: true,
       },
       signalsNavItem,
+      {
+        // Experimental Pulse page — UNCOMMITTED demo prototype.
+        name: 'Pulse',
+        url: '/pulse',
+        activePaths: ['/pulse'],
+        Icon: Radio,
+        isOnMastraPlatform: false,
+      },
       {
         name: 'Logs',
         url: '/logs',
