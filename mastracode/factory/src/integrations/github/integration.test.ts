@@ -659,7 +659,7 @@ describe('GithubIntegration OAuth', () => {
     );
 
     await expect(github.exchangeOAuthCode('code', 'https://example.com/auth/github/callback')).resolves.toBe('user-token');
-    expect(timeout).toHaveBeenCalledWith(30_000);
+    expect(timeout).toHaveBeenCalledWith(10_000);
 
     timeout.mockRestore();
     fetch.mockRestore();
