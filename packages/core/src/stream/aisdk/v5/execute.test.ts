@@ -158,7 +158,10 @@ describe('execute structured output prompt handling', () => {
       onResult: () => {},
       methodType: 'stream',
       structuredOutput: {
-        schema: z.object({ name: z.string().optional() }),
+        schema: z.object({
+          name: z.string().optional(),
+          nested: z.object({ maybeCount: z.number().optional() }).optional(),
+        }),
       },
     });
     await readStream(stream);
@@ -166,10 +169,21 @@ describe('execute structured output prompt handling', () => {
     expect(capturedResponseFormat).toMatchObject({
       type: 'json',
       schema: {
+        type: 'object',
         additionalProperties: false,
-        required: ['name'],
+        required: ['name', 'nested'],
         properties: {
           name: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+          // Nested objects must keep an explicit `type: 'object'` — OpenAI strict
+          // mode rejects object schemas without one.
+          nested: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['maybeCount'],
+            properties: {
+              maybeCount: { anyOf: [{ type: 'number' }, { type: 'null' }] },
+            },
+          },
         },
       },
     });
@@ -204,7 +218,10 @@ describe('execute structured output prompt handling', () => {
       onResult: () => {},
       methodType: 'stream',
       structuredOutput: {
-        schema: z.object({ name: z.string().optional() }),
+        schema: z.object({
+          name: z.string().optional(),
+          nested: z.object({ maybeCount: z.number().optional() }).optional(),
+        }),
       },
     });
     await readStream(stream);
@@ -212,10 +229,19 @@ describe('execute structured output prompt handling', () => {
     expect(capturedResponseFormat).toMatchObject({
       type: 'json',
       schema: {
+        type: 'object',
         additionalProperties: false,
-        required: ['name'],
+        required: ['name', 'nested'],
         properties: {
           name: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+          nested: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['maybeCount'],
+            properties: {
+              maybeCount: { anyOf: [{ type: 'number' }, { type: 'null' }] },
+            },
+          },
         },
       },
     });
