@@ -69,6 +69,7 @@ export function BoardColumn({
   totalTaskCount,
   loading = false,
   composerOpen = false,
+  feedFailed = false,
   laneRef,
   onDrop,
   headerAction,
@@ -82,6 +83,8 @@ export function BoardColumn({
   /** While loading, the task badge is hidden so a false "0/0" never flashes. */
   loading?: boolean;
   composerOpen?: boolean;
+  /** An empty column whose candidate feed failed stays open to say so. */
+  feedFailed?: boolean;
   laneRef: (element: HTMLElement | null) => void;
   onDrop: (payload: DragPayload, toStage: BoardStageId) => void;
   headerAction?: React.ReactNode;
@@ -92,7 +95,7 @@ export function BoardColumn({
   const [dragOver, setDragOver] = useState(false);
   const [dropLineTop, setDropLineTop] = useState(0);
   const cardListRef = useRef<HTMLDivElement>(null);
-  const collapsed = stage !== 'intake' && !loading && !composerOpen && taskCount === 0;
+  const collapsed = stage !== 'intake' && !loading && !composerOpen && !feedFailed && taskCount === 0;
 
   return (
     <section

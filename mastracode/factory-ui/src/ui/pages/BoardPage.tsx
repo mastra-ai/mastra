@@ -23,6 +23,7 @@ import { CandidateCard } from '../domains/factory/components/CandidateCard';
 import { FactoryPageShell } from '../domains/factory/components/FactoryPageShell';
 import { InlineWorkItemComposer } from '../domains/factory/components/InlineWorkItemComposer';
 import { IntakeColumnExtras } from '../domains/factory/components/IntakeColumnExtras';
+import { IntakeFeedNotice } from '../domains/factory/components/IntakeFeedNotice';
 import { WorkItemCard } from '../domains/factory/components/WorkItemCard';
 import { useBoardComposer } from '../domains/factory/hooks/useBoardComposer';
 import { useBoardDecisions } from '../domains/factory/hooks/useBoardDecisions';
@@ -300,8 +301,8 @@ function BoardContent({
               const stageWorkItems = workItemsForStage(stage.id);
               const taskCount = stageContentCount(stage.id, stages, stageWorkItems, filteredCandidates);
               const composerOpen = composer.stage === stage.id;
-              const intakeFeedFailed = stage.id === 'intake' && Boolean(intake.feed?.error);
-              const showEmptyState = !loading && !composerOpen && taskCount === 0 && !intakeFeedFailed;
+              const columnFeed = intake.feedByColumn[stage.id];
+              const showEmptyState = !loading && !composerOpen && taskCount === 0 && !columnFeed?.error;
               return (
                 <BoardColumn
                   key={stage.id}
@@ -311,6 +312,7 @@ function BoardContent({
                   totalTaskCount={totalTaskCount}
                   loading={loading}
                   composerOpen={composerOpen}
+                  feedFailed={Boolean(columnFeed?.error)}
                   laneRef={scroll.registerLane(stage.id)}
                   onDrop={items.handleDrop}
                   headerAction={
@@ -413,7 +415,8 @@ function BoardContent({
                       filtersExcludeAll={filtersExcludeAll}
                     />
                   )}
-                  {stage.id === 'intake' && <IntakeColumnExtras source={intake.active} feed={intake.feed} />}
+                  {columnFeed && <IntakeFeedNotice source={intake.active} feed={columnFeed} />}
+                  {stage.id === 'intake' && <IntakeColumnExtras feed={columnFeed} />}
                 </BoardColumn>
               );
             })}
