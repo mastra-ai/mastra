@@ -282,7 +282,7 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
               <>
                 <Button
                   as={Link}
-                  href={`/datasets/${datasetId}/items/${item.id}`}
+                  href={`/datasets/${datasetId}/items/${item.id}/versions`}
                   size="md"
                   tooltip="Go to item versions history"
                   aria-label="Go to item versions history"
