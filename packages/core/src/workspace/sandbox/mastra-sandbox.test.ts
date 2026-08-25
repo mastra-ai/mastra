@@ -1074,4 +1074,27 @@ describe('MastraSandbox acquisition primitives', () => {
     expect(onStart).toHaveBeenLastCalledWith(expect.objectContaining({ outcome: 'connected' }));
     expect(sandbox.status).toBe('running');
   });
+
+  it('rejects a provider that finds handles it never adopts', () => {
+    // Without connect(), a found handle would report outcome 'connected' while
+    // the sandbox runs against nothing. Fail at construction instead.
+    class UnadoptedHandleSandbox extends MastraSandbox<string> {
+      readonly id = 'unadopted';
+      readonly name = 'UnadoptedHandleSandbox';
+      readonly provider = 'test';
+      status: ProviderStatus = 'pending';
+
+      constructor() {
+        super({ name: 'UnadoptedHandleSandbox' });
+      }
+
+      protected override async find(): Promise<string | undefined> {
+        return 'vm-handle';
+      }
+
+      protected override async create(): Promise<void> {}
+    }
+
+    expect(() => new UnadoptedHandleSandbox()).toThrow(/find\(\) requires connect\(\)/);
+  });
 });

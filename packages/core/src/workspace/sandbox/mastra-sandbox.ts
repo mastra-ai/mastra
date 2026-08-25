@@ -265,6 +265,12 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
     // Rung selection: a subclass `start()` override wins; otherwise the
     // primitives drive acquisition when `create()` is implemented.
     this._useAcquisitionPrimitives = !hasStartOverride && typeof this.create === 'function';
+    // A handle nobody adopts would still report `outcome: 'connected'`, so the
+    // sandbox would look reconnected while running against nothing. Fail here
+    // instead, where the cause is visible.
+    if (this._useAcquisitionPrimitives && this.find && !this.connect) {
+      throw new Error(`${this.constructor.name}: find() requires connect() to adopt the handle it returns.`);
+    }
 
     // Automatically create MountManager if subclass implements mount()
     if (this.mount) {
@@ -348,17 +354,10 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
     return { ...this.#env };
   }
 
-  // ---------------------------------------------------------------------------
-  // Start hook
-  // ---------------------------------------------------------------------------
-
   /**
-   * Attach or replace the start hook after construction.
-   *
-   * The updater receives the installed hook (the `onStart` option, or one a
-   * previous call left) and returns its replacement, so callers compose
-   * instead of clobbering a hook they didn't know about. Ignoring `prev`
-   * replaces it deliberately.
+   * Attach or replace the start hook after construction. The updater receives
+   * the installed hook and returns its replacement, so callers compose instead
+   * of clobbering a hook they didn't know about; ignoring `prev` replaces it.
    *
    * ```typescript
    * sandbox.setOnStart(prev => async args => {
@@ -367,9 +366,8 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
    * });
    * ```
    *
-   * Hook errors stay FATAL (see the `onStart` option), so a throw stops the
-   * hooks sequenced after it. Each call wraps the current hook: attach once
-   * per sandbox, or repeated attaches stack duplicate work on every start.
+   * Errors stay FATAL, so a throw stops the hooks after it. Each call wraps
+   * the current hook, so attach once per sandbox or the work stacks.
    */
   setOnStart(update: (previous: SandboxStartHook | undefined) => SandboxStartHook): void {
     this._onStart = update(this._onStart);
