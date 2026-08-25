@@ -23,11 +23,10 @@ import type {
   MountResult,
   FilesystemMountConfig,
   MountManager,
-  CommandResult,
-  ExecuteCommandOptions,
   SandboxNetworking,
   SandboxFileInput,
   SandboxCloneOptions,
+  SandboxStartResult,
 } from '@mastra/core/workspace';
 import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
 
@@ -169,6 +168,16 @@ export interface DaytonaSandboxOptions extends Omit<MastraSandboxOptions, 'proce
    * change. Daytona defines and enforces the policy; this option selects it.
    */
   domainAllowList?: string;
+  /**
+   * Daytona Secrets to expose inside the sandbox, mapping environment variable
+   * names to Daytona Secret names (e.g. `{ GITHUB_TOKEN: 'github-token' }`).
+   *
+   * The environment variable holds an opaque placeholder; Daytona's egress
+   * proxy substitutes the real value into HTTPS request headers toward the
+   * Secret's allowed hosts, so the raw value never enters the sandbox.
+   * Secrets are created at the organization level (Daytona dashboard or SDK).
+   */
+  secrets?: Record<string, string>;
 }
 
 // =============================================================================
@@ -251,7 +260,7 @@ export class DaytonaSandbox extends MastraSandbox {
   private readonly timeout: number;
   private readonly language: 'typescript' | 'javascript' | 'python';
   private readonly resources?: DaytonaResources;
-  private readonly env: Record<string, string>;
+
   private readonly labels: Record<string, string>;
   private readonly snapshotId?: string;
   private readonly image?: string;
@@ -267,6 +276,7 @@ export class DaytonaSandbox extends MastraSandbox {
   private readonly networkBlockAll?: boolean;
   private readonly networkAllowList?: string;
   private readonly domainAllowList?: string;
+  private readonly secrets?: Record<string, string>;
   private readonly connectionOpts: { apiKey?: string; apiUrl?: string; target?: string };
   private readonly _constructorOptions: DaytonaSandboxOptions;
 
@@ -275,7 +285,6 @@ export class DaytonaSandbox extends MastraSandbox {
       ...options,
       name: 'DaytonaSandbox',
       processes: new DaytonaProcessManager({
-        env: options.env,
         defaultTimeout: options.timeout ?? 300_000,
       }),
     });
@@ -284,7 +293,6 @@ export class DaytonaSandbox extends MastraSandbox {
     this.timeout = options.timeout ?? 300_000;
     this.language = options.language ?? 'typescript';
     this.resources = options.resources;
-    this.env = options.env ?? {};
     this.labels = options.labels ?? {};
     this.snapshotId = options.snapshot;
     this.image = options.image;
@@ -299,6 +307,7 @@ export class DaytonaSandbox extends MastraSandbox {
     this.networkBlockAll = options.networkBlockAll;
     this.networkAllowList = options.networkAllowList;
     this.domainAllowList = options.domainAllowList;
+    this.secrets = options.secrets;
 
     this.connectionOpts = {
       ...(options.apiKey !== undefined && { apiKey: options.apiKey }),
@@ -368,13 +377,15 @@ export class DaytonaSandbox extends MastraSandbox {
   // ---------------------------------------------------------------------------
 
   /**
-   * Start the Daytona sandbox.
-   * Reconnects to an existing sandbox with the same logical ID if one exists,
-   * otherwise creates a new sandbox instance.
+   * Acquisition primitives (base-orchestrated start): the base derives
+   * `created` structurally from whether an existing sandbox was found, so
+   * reconnecting to one with the same logical ID reports `connected`.
+   * Lookup errors other than not-found propagate deliberately — creating a
+   * duplicate sandbox on a transient/auth error would be worse than failing.
    */
-  async start(): Promise<void> {
+  protected override async find(): Promise<Sandbox | undefined> {
     if (this._sandbox) {
-      return;
+      return this._sandbox;
     }
 
     // Create Daytona client if not exists
@@ -382,21 +393,38 @@ export class DaytonaSandbox extends MastraSandbox {
       this._daytona = new Daytona(this.connectionOpts);
     }
 
-    // Try to reconnect to an existing sandbox with the same logical ID
-    const existing = await this.findExistingSandbox();
-    if (existing) {
-      this._sandbox = existing;
-      this._daytonaSandboxId = existing.id;
-      this._createdAt = existing.createdAt ? new Date(existing.createdAt) : new Date();
-      this.logger.debug(`${LOG_PREFIX} Reconnected to existing sandbox ${existing.id} for: ${this.id}`);
+    return (await this.findExistingSandbox()) ?? undefined;
+  }
 
-      // Reconcile FUSE mounts — clean up stale mounts from a previous session
-      const expectedPaths = Array.from(this.mounts.entries.keys());
-      this.logger.debug(`${LOG_PREFIX} Running mount reconciliation...`);
-      await this.reconcileMounts(expectedPaths);
-      this.logger.debug(`${LOG_PREFIX} Mount reconciliation complete`);
-      await this.detectWorkingDir();
+  protected override async connect(existing: Sandbox): Promise<void> {
+    if (existing === this._sandbox) {
       return;
+    }
+
+    // Wake a stopped/archived sandbox before adopting it.
+    if (existing.state !== SandboxState.STARTED) {
+      this.logger.debug(`${LOG_PREFIX} Restarting sandbox ${existing.id} (state: ${existing.state})`);
+      await this.waitForStableStateAndStart(existing);
+    }
+
+    this._sandbox = existing;
+    this._daytonaSandboxId = existing.id;
+    this._createdAt = existing.createdAt ? new Date(existing.createdAt) : new Date();
+    this.logger.debug(`${LOG_PREFIX} Reconnected to existing sandbox ${existing.id} for: ${this.id}`);
+
+    // Reconcile FUSE mounts — clean up stale mounts from a previous session
+    const expectedPaths = Array.from(this.mounts.entries.keys());
+    this.logger.debug(`${LOG_PREFIX} Running mount reconciliation...`);
+    await this.reconcileMounts(expectedPaths);
+    this.logger.debug(`${LOG_PREFIX} Mount reconciliation complete`);
+    await this.detectWorkingDir();
+  }
+
+  protected override async create(): Promise<void> {
+    // find() always runs first through the base ladder and constructs the
+    // client, so reaching here without one means create() was called directly.
+    if (!this._daytona) {
+      this._daytona = new Daytona(this.connectionOpts);
     }
 
     this.logger.debug(`${LOG_PREFIX} Creating sandbox for: ${this.id}`);
@@ -416,6 +444,7 @@ export class DaytonaSandbox extends MastraSandbox {
       networkBlockAll: this.networkBlockAll,
       networkAllowList: this.networkAllowList,
       domainAllowList: this.domainAllowList,
+      secrets: this.secrets,
     });
 
     // Snapshot takes precedence. Image alone (with optional resources) triggers image-based creation.
@@ -585,20 +614,9 @@ export class DaytonaSandbox extends MastraSandbox {
   // Command Execution
   // ---------------------------------------------------------------------------
 
-  /**
-   * Execute a command in the sandbox and return the result.
-   */
-  async executeCommand(
-    command: string,
-    args: string[] = [],
-    options: ExecuteCommandOptions = {},
-  ): Promise<CommandResult> {
-    await this.ensureRunning();
-    const fullCommand = args.length > 0 ? `${command} ${args.map(shellQuote).join(' ')}` : command;
-    const handle = await this.processes!.spawn(fullCommand, options);
-    const result = await handle.wait();
-    return { ...result, command, args };
-  }
+  // No executeCommand override: the base default (built from the process
+  // manager) releases the handle when the command settles. The override that
+  // used to live here never called pm.release, so it leaked handles.
 
   /**
    * Bulk-write files into the sandbox filesystem via the SDK's native upload.
@@ -1100,11 +1118,8 @@ export class DaytonaSandbox extends MastraSandbox {
       return null;
     }
 
-    if (state !== SandboxState.STARTED) {
-      this.logger.debug(`${LOG_PREFIX} Restarting sandbox ${sandbox.id} (state: ${state})`);
-      await this.waitForStableStateAndStart(sandbox);
-    }
-
+    // Note: a stopped-but-alive sandbox is returned as-is — waking it is
+    // connect()'s job, not the lookup's.
     return sandbox;
   }
 

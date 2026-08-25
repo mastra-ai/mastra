@@ -1,5 +1,106 @@
 # @mastra/spanner
 
+## 1.6.3-alpha.0
+
+### Patch Changes
+
+- Experiment results now include isolated metadata snapshots from the dataset items that ran. ([#22005](https://github.com/mastra-ai/mastra/pull/22005))
+
+- Enforce atomic conditional background task state updates so cancellation cannot be overwritten during dispatch. Background task storage is no longer exposed by Cloudflare KV or ClickHouse, which cannot provide the required compare-and-set semantics. ([#22228](https://github.com/mastra-ai/mastra/pull/22228))
+
+- Updated dependencies [[`aa3a85d`](https://github.com/mastra-ai/mastra/commit/aa3a85daf094c683bb97efdf4b6a696d2e474af5), [`d29d06f`](https://github.com/mastra-ai/mastra/commit/d29d06fe00bbd35b4571150ea04c59d2ed783c71), [`e6516df`](https://github.com/mastra-ai/mastra/commit/e6516dfcdae4f4ac0e7971d84359a81385ee602f), [`0b2a3d1`](https://github.com/mastra-ai/mastra/commit/0b2a3d1783875c5b97b7b36ab3d03d7360e0dde7), [`6bb5d71`](https://github.com/mastra-ai/mastra/commit/6bb5d7193fe9166b219f0fccae17db7a5ae86e65), [`57de7d6`](https://github.com/mastra-ai/mastra/commit/57de7d644ba7146edb4e9e6111ec4fa98c3a59e9), [`e8e299c`](https://github.com/mastra-ai/mastra/commit/e8e299cc6abdfc39947e2fec25803493015d3882), [`edfc548`](https://github.com/mastra-ai/mastra/commit/edfc548886bc7bae17b681f8b6b41a47eb32bcd2), [`a8a4871`](https://github.com/mastra-ai/mastra/commit/a8a4871215f51da95c47129602157ce5372f634a), [`5165cdc`](https://github.com/mastra-ai/mastra/commit/5165cdcdcf50e144bb8113278535196cc9b07065), [`6bb5d71`](https://github.com/mastra-ai/mastra/commit/6bb5d7193fe9166b219f0fccae17db7a5ae86e65), [`9ee8120`](https://github.com/mastra-ai/mastra/commit/9ee8120ce17f76b9f617489e05a283353742690a), [`d975e92`](https://github.com/mastra-ai/mastra/commit/d975e924d4936f46c386bd3dee39c671720289f6), [`1cfa878`](https://github.com/mastra-ai/mastra/commit/1cfa8784d8da0dfaa0317e5048bc48b6084a5ea5), [`c118318`](https://github.com/mastra-ai/mastra/commit/c1183181c9804303db4b511c2e2648f8b714712b), [`fc07c64`](https://github.com/mastra-ai/mastra/commit/fc07c6465043e08e99193a6751a01c56ffc2e7a1), [`542dee2`](https://github.com/mastra-ai/mastra/commit/542dee254167f974ff8cbbbfc0ce10f9a2616a7b), [`a58483c`](https://github.com/mastra-ai/mastra/commit/a58483cff1a9d41fce7c931843f48cb0ac450f64), [`a58483c`](https://github.com/mastra-ai/mastra/commit/a58483cff1a9d41fce7c931843f48cb0ac450f64), [`895e9df`](https://github.com/mastra-ai/mastra/commit/895e9dfc17d6f34299eca64e317ded9e5f5e5ef8)]:
+  - @mastra/core@1.62.0-alpha.8
+
+## 1.6.2
+
+### Patch Changes
+
+- Fixed versioned dataset item lookups to return the item visible in the requested dataset snapshot. ([#21979](https://github.com/mastra-ai/mastra/pull/21979))
+
+- Added HTTP endpoints for caller-driven experiments: `POST /datasets/:datasetId/experiments` now accepts `start: false` to create an experiment without spawning the runner (with an optional target and run-level `scorerIds`), and new routes `POST /datasets/:datasetId/experiments/:experimentId/items/:itemId/run`, `POST /datasets/:datasetId/experiments/:experimentId/results`, and `POST /datasets/:datasetId/experiments/:experimentId/finalize` let external orchestrators run one item server-side, submit externally computed per-item results (idempotent upsert on retries), and finalize the run with server-computed counts. ([#21888](https://github.com/mastra-ai/mastra/pull/21888))
+
+- Fixed concurrent resume() calls on the same suspended workflow run executing downstream steps more than once. A resume now atomically claims the run before executing anything, so only one caller continues a given suspension. Losing callers throw WORKFLOW_RESUME_ALREADY_CLAIMED without running any steps. Fixes #20443 ([#21725](https://github.com/mastra-ai/mastra/pull/21725))
+
+- Added `createDatasetExperiment()`, `runExperimentItem()`, `submitExperimentResult()`, and `finalizeExperiment()` methods so a caller-owned orchestrator (for example Temporal) can drive an experiment loop while Mastra either executes each item server-side or ingests externally computed results. ([#21888](https://github.com/mastra-ai/mastra/pull/21888))
+
+- Workflow state updates now support an optional expectedStatus guard, so a status change is only applied when the stored run is in an expected state. This is what makes concurrent workflow resumes safe. ([#21725](https://github.com/mastra-ai/mastra/pull/21725))
+
+- Added `upsertExperimentResult()` to the experiments storage domain plus an `attempt` column on experiment results and a nullable target with an optional `scorerIds` column on experiments, enabling retry-safe result writes for caller-driven experiments (retried submissions with the same `(experimentId, itemId, attempt)` key converge on a single row). `saveScore()` now accepts an optional caller-supplied `id` and upserts on it, so retried experiment submissions replace their previous score rows (latest wins) instead of accumulating duplicates. ([#21888](https://github.com/mastra-ai/mastra/pull/21888))
+
+- Resume conflicts now return 409 Conflict. When a suspended workflow run has already been resumed by another caller, the resume endpoints respond with 409 instead of a generic error. ([#21725](https://github.com/mastra-ai/mastra/pull/21725))
+
+- Added caller-driven experiments so an external orchestrator (for example Temporal workers) can own the experiment loop while Mastra stays the system of record. ([#21888](https://github.com/mastra-ai/mastra/pull/21888))
+
+  Create an experiment with `dataset.createExperiment()` (idempotent when you pass your own id). With a target, Mastra runs each item for you: call `dataset.runExperimentItem()` per item and Mastra executes the registered agent or workflow, resolves scorers (experiment `scorers`, falling back to item `scorerIds`, then dataset `scorerIds`), and upserts the result. Without a target, run everything yourself and report per-item results with `dataset.submitExperimentResult()` (upsert semantics on `(experimentId, itemId, attempt)` so retried workers converge on a single row). Either way, close the run with `dataset.finalizeExperiment()` and Mastra computes per-item succeeded/failed/skipped counts from the persisted rows. Results go into the same storage as native runs, so Studio views, comparisons, and review summaries work unchanged.
+
+  ```typescript
+  // Caller drives the loop, Mastra runs each item
+  const { experimentId } = await dataset.createExperiment({
+    id: workflowRunId,
+    targetType: 'agent',
+    targetId: 'support-agent',
+    scorers: ['accuracy'],
+  });
+
+  await dataset.runExperimentItem({ experimentId, itemId });
+
+  // Or: caller runs everything, Mastra ingests results
+  const ingest = await dataset.createExperiment({ id: workflowRunId });
+  await dataset.submitExperimentResult({
+    experimentId: ingest.experimentId,
+    itemId,
+    output,
+    scores: [{ scorerId: 'accuracy', score: 0.92 }],
+  });
+
+  const experiment = await dataset.finalizeExperiment({ experimentId });
+  ```
+
+- Updated dependencies [[`88d14ca`](https://github.com/mastra-ai/mastra/commit/88d14cac008582a618fecc3d5c7fd3bdf4f6ddc3), [`480e491`](https://github.com/mastra-ai/mastra/commit/480e491588bd6a7a1c9ee4407590ad625dd33952), [`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`acc3471`](https://github.com/mastra-ai/mastra/commit/acc3471de5f3fde8027ee4e355af292b2bc1bc30), [`b6a771e`](https://github.com/mastra-ai/mastra/commit/b6a771ef23d203ddb348efca8065eff65def8191), [`84a5b69`](https://github.com/mastra-ai/mastra/commit/84a5b699f84d6bae0a34efe5a970d891090b9f41), [`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`3bb88dd`](https://github.com/mastra-ai/mastra/commit/3bb88ddf07fb98f3cd16d3bff94e51cd3b45d011), [`d23e75d`](https://github.com/mastra-ai/mastra/commit/d23e75d57cc7cf5b9bfdbee896bf5a6a2484fed7), [`c8faa4e`](https://github.com/mastra-ai/mastra/commit/c8faa4e1cfebaec56b65e754e90b9fe46d153359), [`d378d75`](https://github.com/mastra-ai/mastra/commit/d378d7511f71309ed61a8f6b93cd0361dc6cb70f), [`84a5b69`](https://github.com/mastra-ai/mastra/commit/84a5b699f84d6bae0a34efe5a970d891090b9f41), [`26d4016`](https://github.com/mastra-ai/mastra/commit/26d40160ff7f7d8bf95fee2039a52cbc83863533), [`7c60df5`](https://github.com/mastra-ai/mastra/commit/7c60df5c7872343fbac5c3e5b1175c8076a5abfd), [`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`84a5b69`](https://github.com/mastra-ai/mastra/commit/84a5b699f84d6bae0a34efe5a970d891090b9f41), [`f2031a4`](https://github.com/mastra-ai/mastra/commit/f2031a47445e8f67a89ba1309036816f97ab7a65), [`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`cad4208`](https://github.com/mastra-ai/mastra/commit/cad42082e6aa1776168a94914f523334be45d929), [`8e529d4`](https://github.com/mastra-ai/mastra/commit/8e529d4ac754efef04b225841349e0da9edf89a6), [`57c5103`](https://github.com/mastra-ai/mastra/commit/57c51035a2a36e3df3c4f32f46bb789a66ed5946), [`038b7b4`](https://github.com/mastra-ai/mastra/commit/038b7b405cb4ac25ab3f3031334111b1f87ac112), [`4132d61`](https://github.com/mastra-ai/mastra/commit/4132d61f8367077120ee9e6420d3224dffd93c93), [`d378d75`](https://github.com/mastra-ai/mastra/commit/d378d7511f71309ed61a8f6b93cd0361dc6cb70f)]:
+  - @mastra/core@1.61.0
+
+## 1.6.2-alpha.1
+
+### Patch Changes
+
+- Fixed versioned dataset item lookups to return the item visible in the requested dataset snapshot. ([#21979](https://github.com/mastra-ai/mastra/pull/21979))
+
+- Added HTTP endpoints for caller-driven experiments: `POST /datasets/:datasetId/experiments` now accepts `start: false` to create an experiment without spawning the runner (with an optional target and run-level `scorerIds`), and new routes `POST /datasets/:datasetId/experiments/:experimentId/items/:itemId/run`, `POST /datasets/:datasetId/experiments/:experimentId/results`, and `POST /datasets/:datasetId/experiments/:experimentId/finalize` let external orchestrators run one item server-side, submit externally computed per-item results (idempotent upsert on retries), and finalize the run with server-computed counts. ([#21888](https://github.com/mastra-ai/mastra/pull/21888))
+
+- Added `createDatasetExperiment()`, `runExperimentItem()`, `submitExperimentResult()`, and `finalizeExperiment()` methods so a caller-owned orchestrator (for example Temporal) can drive an experiment loop while Mastra either executes each item server-side or ingests externally computed results. ([#21888](https://github.com/mastra-ai/mastra/pull/21888))
+
+- Added `upsertExperimentResult()` to the experiments storage domain plus an `attempt` column on experiment results and a nullable target with an optional `scorerIds` column on experiments, enabling retry-safe result writes for caller-driven experiments (retried submissions with the same `(experimentId, itemId, attempt)` key converge on a single row). `saveScore()` now accepts an optional caller-supplied `id` and upserts on it, so retried experiment submissions replace their previous score rows (latest wins) instead of accumulating duplicates. ([#21888](https://github.com/mastra-ai/mastra/pull/21888))
+
+- Added caller-driven experiments so an external orchestrator (for example Temporal workers) can own the experiment loop while Mastra stays the system of record. ([#21888](https://github.com/mastra-ai/mastra/pull/21888))
+
+  Create an experiment with `dataset.createExperiment()` (idempotent when you pass your own id). With a target, Mastra runs each item for you: call `dataset.runExperimentItem()` per item and Mastra executes the registered agent or workflow, resolves scorers (experiment `scorers`, falling back to item `scorerIds`, then dataset `scorerIds`), and upserts the result. Without a target, run everything yourself and report per-item results with `dataset.submitExperimentResult()` (upsert semantics on `(experimentId, itemId, attempt)` so retried workers converge on a single row). Either way, close the run with `dataset.finalizeExperiment()` and Mastra computes per-item succeeded/failed/skipped counts from the persisted rows. Results go into the same storage as native runs, so Studio views, comparisons, and review summaries work unchanged.
+
+  ```typescript
+  // Caller drives the loop, Mastra runs each item
+  const { experimentId } = await dataset.createExperiment({
+    id: workflowRunId,
+    targetType: 'agent',
+    targetId: 'support-agent',
+    scorers: ['accuracy'],
+  });
+
+  await dataset.runExperimentItem({ experimentId, itemId });
+
+  // Or: caller runs everything, Mastra ingests results
+  const ingest = await dataset.createExperiment({ id: workflowRunId });
+  await dataset.submitExperimentResult({
+    experimentId: ingest.experimentId,
+    itemId,
+    output,
+    scores: [{ scorerId: 'accuracy', score: 0.92 }],
+  });
+
+  const experiment = await dataset.finalizeExperiment({ experimentId });
+  ```
+
+- Updated dependencies [[`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`acc3471`](https://github.com/mastra-ai/mastra/commit/acc3471de5f3fde8027ee4e355af292b2bc1bc30), [`b6a771e`](https://github.com/mastra-ai/mastra/commit/b6a771ef23d203ddb348efca8065eff65def8191), [`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`26d4016`](https://github.com/mastra-ai/mastra/commit/26d40160ff7f7d8bf95fee2039a52cbc83863533), [`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`9267e9b`](https://github.com/mastra-ai/mastra/commit/9267e9b3d9c2fcf16936050495a787054c2431ab), [`57c5103`](https://github.com/mastra-ai/mastra/commit/57c51035a2a36e3df3c4f32f46bb789a66ed5946)]:
+  - @mastra/core@1.61.0-alpha.3
+
 ## 1.6.2-alpha.0
 
 ### Patch Changes

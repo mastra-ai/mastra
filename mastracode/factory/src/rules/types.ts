@@ -3,8 +3,37 @@ export type WorkItemSource = 'github-issue' | 'github-pr' | 'linear-issue' | 'ma
 export const FACTORY_RULE_STAGES = ['intake', 'triage', 'planning', 'execute', 'review', 'done', 'canceled'] as const;
 export type FactoryRuleStage = (typeof FACTORY_RULE_STAGES)[number];
 
+export const FACTORY_TRIAGE_TYPES = [
+  'bug',
+  'feature request',
+  'docs',
+  'question/support',
+  'maintenance',
+  'duplicate',
+  'resolved',
+  'invalid',
+  'spam',
+  'out-of-scope',
+  'other',
+] as const;
+export type FactoryTriageType = (typeof FACTORY_TRIAGE_TYPES)[number];
+
+export function isFactoryTriageType(value: unknown): value is FactoryTriageType {
+  return typeof value === 'string' && FACTORY_TRIAGE_TYPES.some(type => type === value);
+}
+
 export function isFactoryRuleStage(value: unknown): value is FactoryRuleStage {
   return typeof value === 'string' && FACTORY_RULE_STAGES.some(stage => stage === value);
+}
+
+export function factoryRuleStage(stages: readonly string[]): FactoryRuleStage | undefined {
+  const stage = stages.length === 1 ? stages[0] : undefined;
+  return isFactoryRuleStage(stage) ? stage : undefined;
+}
+
+export function isTerminalFactoryRuleStage(stages: readonly string[]): boolean {
+  const stage = factoryRuleStage(stages);
+  return stage === 'done' || stage === 'canceled';
 }
 
 export const FACTORY_RULE_BOARDS = ['work', 'review'] as const;
@@ -224,7 +253,8 @@ export type FactoryRuleRejectionCode =
   | 'timeout'
   | 'rule_error'
   | 'causal_depth_exceeded'
-  | 'repeated_transition';
+  | 'repeated_transition'
+  | 'approval_required';
 
 export interface FactoryRuleRejectDecision {
   type: 'reject';

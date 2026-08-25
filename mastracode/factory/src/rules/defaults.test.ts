@@ -1092,6 +1092,36 @@ describe('defaultFactoryRules', () => {
     expect(merged.work.planning?.manual?.onEnter).toBe(unrelatedDefault);
   });
 
+  it('preserves explicitly undefined handlers when they are merged from the base rules', () => {
+    const merged = mergeFactoryRuleOverrides(
+      {
+        work: { planning: { issue: { onEnter: undefined, onExit: undefined } } },
+        tools: { submit_plan: { onResult: undefined } },
+        github: { pullRequestCommentCreated: { onEvent: undefined } },
+        linear: { issueObserved: { onEvent: undefined } },
+      },
+      {},
+    );
+
+    expect(merged.work.planning?.issue).toHaveProperty('onEnter', undefined);
+    expect(merged.work.planning?.issue).toHaveProperty('onExit', undefined);
+    expect(merged.tools.submit_plan).toHaveProperty('onResult', undefined);
+    expect(merged.github.pullRequestCommentCreated).toHaveProperty('onEvent', undefined);
+    expect(merged.linear.issueObserved).toHaveProperty('onEvent', undefined);
+  });
+
+  it('keeps a disabled built-in disabled across repeated composition', () => {
+    const configured = defaultFactoryRules({
+      version: 'deployment-9',
+      overrides: { github: { pullRequestCommentCreated: { onEvent: undefined } } },
+    });
+    const composed = mergeFactoryRuleOverrides(configured, {});
+    const effective = defaultFactoryRules({ version: 'deployment-10', overrides: composed });
+
+    expect(composed.github.pullRequestCommentCreated).toHaveProperty('onEvent', undefined);
+    expect(effective.github.pullRequestCommentCreated).toHaveProperty('onEvent', undefined);
+  });
+
   it('copies override containers so later mutation cannot replace configured leaves', () => {
     const leaf: FactoryBoardRuleLeaf = { onEnter: passThrough };
     const overrides: FactoryRulesOverrides = { work: { intake: { issue: leaf } } };

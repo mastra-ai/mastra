@@ -39,7 +39,11 @@ import {
 } from './auth.js';
 import type { FactoryIntegration, IntegrationPostToolContext, IntegrationTools } from './integrations/base.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
-import { recordFactoryPullRequestProvenance } from './integrations/github/provenance.js';
+import {
+  recordFactoryPullRequestProvenance,
+  resolveFactoryPullRequestParentWorkItemId,
+} from './integrations/github/provenance.js';
+import type { FactoryPullRequestProvenanceData } from './integrations/github/provenance.js';
 import { PlatformGithubIntegration } from './integrations/platform/github/integration.js';
 import { PlatformLinearIntegration } from './integrations/platform/linear/integration.js';
 import { createCustomProvidersPrimer, registerCustomProvidersSource } from './routes/custom-provider-source.js';
@@ -65,6 +69,8 @@ import { BaseCheckpointBuilder } from './sandbox/base-checkpoint.js';
 import { SandboxFleet } from './sandbox/fleet.js';
 import { registerSandboxReattach } from './sandbox/reattach.js';
 import { SessionRetirementCoordinator } from './sandbox/session-retirement.js';
+import { createPlaintextFactorySecretEncryption } from './secret-encryption.js';
+import type { FactorySecretEncryption } from './secret-encryption.js';
 import { handleServerError } from './server-error.js';
 import { observeSessionCheckpoint } from './session/checkpoint-capture.js';
 import { observeSessionFilesystem } from './session/filesystem-capture.js';
@@ -72,6 +78,7 @@ import { observeSessionFirstExec } from './session/first-exec-capture.js';
 import { observeSessionFirstMessage } from './session/first-message-capture.js';
 import { hydrateSessionMemorySettings } from './session/memory-settings-hydration.js';
 import { hydrateSessionModelPack } from './session/model-pack-hydration.js';
+import { observeSessionThreadTitle } from './session/thread-title-mirror.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
 import { createStateSigner } from './state-signing.js';
 import { observeAgentGitAction } from './storage/domains/audit/agent-audit.js';
@@ -161,6 +168,13 @@ export interface MastraFactoryConfig {
    */
   stateSecret?: string;
   /**
+   * Encryption boundary for persisted model credentials, custom-provider API
+   * keys, integration connections, and integration settings. Strongly
+   * recommended whenever auth is enabled — omitting it falls back to explicit
+   * plaintext compatibility with a boot-time warning.
+   */
+  secretEncryption?: FactorySecretEncryption;
+  /**
    * Registered capability providers. The factory registers the pieces each
    * `FactoryIntegration` instance provides — HTTP routes, storage domains,
    * agent/session tools, intake, source control, and diagnostics — into the
@@ -218,8 +232,11 @@ export interface MastraFactoryDispatcherConfig {
 
 const CONTROLLER_ID = 'code';
 
-function hasPlatformSecretKey(): boolean {
-  return Boolean(process.env.MASTRA_PLATFORM_SECRET_KEY?.trim());
+function hasPlatformCredentials(): boolean {
+  // MASTRA_PLATFORM_ACCESS_TOKEN is the credential Mastra Platform injects
+  // into deployed projects; MASTRA_PLATFORM_SECRET_KEY is the org secret key
+  // written by project scaffolding. Either enables the platform integrations.
+  return Boolean(process.env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim() || process.env.MASTRA_PLATFORM_SECRET_KEY?.trim());
 }
 
 /**
@@ -345,6 +362,14 @@ export class MastraFactory {
     const configuredAuth = this.#config.auth;
     const auth: IMastraAuthProvider | undefined =
       configuredAuth === null ? undefined : (configuredAuth ?? buildDefaultStudioAuth(publicOrigin));
+    if (auth && !this.#config.secretEncryption) {
+      console.warn(
+        "[factory] auth is enabled but 'secretEncryption' is not configured. Persisted model credentials, " +
+          'custom-provider API keys, and integration secrets will be stored as plaintext. Provide ' +
+          "'secretEncryption' (e.g. via FACTORY_CREDENTIAL_ENCRYPTION_KEY) to encrypt them at rest.",
+      );
+    }
+    const secretEncryption = this.#config.secretEncryption ?? createPlaintextFactorySecretEncryption();
     // One RouteAuth seam per boot, closed over the resolved provider. Every
     // factory route module receives this handle — no service locator.
     const routeAuth = createFactoryRouteAuth(auth);
@@ -352,7 +377,7 @@ export class MastraFactory {
     // Explicit integrations win. Platform credentials fill only missing GitHub
     // and Linear slots so callers can override either provider independently.
     const integrations = [...(this.#config.integrations ?? [])];
-    if (hasPlatformSecretKey()) {
+    if (hasPlatformCredentials()) {
       if (!integrations.some(integration => integration.id === 'github')) {
         integrations.push(new PlatformGithubIntegration({ slug: this.#config.platform?.githubAppSlug }));
       }
@@ -378,14 +403,14 @@ export class MastraFactory {
     const intakeStorage = storage.registerDomain(new IntakeStorage());
     const auditStorage = storage.registerDomain(new AuditStorage());
     const workItemsStorage = storage.registerDomain(new WorkItemsStorage());
-    const modelCredentialsStorage = storage.registerDomain(new ModelCredentialsStorage());
+    const modelCredentialsStorage = storage.registerDomain(new ModelCredentialsStorage(secretEncryption));
     const modelPacksStorage = storage.registerDomain(new ModelPacksStorage());
     const memorySettingsStorage = storage.registerDomain(new MemorySettingsStorage());
-    const customProvidersStorage = storage.registerDomain(new CustomProvidersStorage());
+    const customProvidersStorage = storage.registerDomain(new CustomProvidersStorage(secretEncryption));
     const queueHealthStorage = storage.registerDomain(new QueueHealthStorage());
     // Generic integration storage (connections/subscriptions/settings) — the
     // default persistence surface for integrations without a bespoke domain.
-    const integrationStorage = storage.registerDomain(new IntegrationStorage());
+    const integrationStorage = storage.registerDomain(new IntegrationStorage(secretEncryption));
     const factoryProjectsStorage = storage.registerDomain(new FactoryProjectsStorage());
     const filesystemStorage = storage.registerDomain(new FilesystemStorage());
     const sourceControlStorage = storage.registerDomain(new SourceControlStorage());
@@ -608,11 +633,12 @@ export class MastraFactory {
           ...(transitionService ? { transitionService } : {}),
           ...(githubIntegration
             ? {
-                recordPullRequestProvenance: (input: Parameters<typeof recordFactoryPullRequestProvenance>[3]) =>
+                recordPullRequestProvenance: (input: Parameters<typeof recordFactoryPullRequestProvenance>[4]) =>
                   recordFactoryPullRequestProvenance(
                     githubIntegration,
                     sourceControlStorage.forIntegration('github'),
                     integrationStorage.forIntegration('github'),
+                    workItemsStorage,
                     input,
                   ),
               }
@@ -801,6 +827,20 @@ export class MastraFactory {
                 reconcileToolResults: () => factoryProcessor?.reconcileAllBoundThreads() ?? Promise.resolve(),
                 prepareBinding,
                 primeCredentials: tenant => primeTenantCredentials({ tenant, credentials: modelCredentialsStorage }),
+                resolveLinkedWorkItemParentId: async ({ orgId, decision }) => {
+                  if (decision.source !== 'github-pr') return null;
+                  const repositoryId = decision.metadata?.githubRepositoryId;
+                  const pullRequestNumber = decision.metadata?.githubPullRequestNumber;
+                  if (typeof repositoryId !== 'number' || typeof pullRequestNumber !== 'number') return null;
+                  return resolveFactoryPullRequestParentWorkItemId(
+                    integrationStorage.forIntegration<
+                      Record<string, unknown>,
+                      Record<string, unknown>,
+                      FactoryPullRequestProvenanceData
+                    >('github'),
+                    { orgId, repositoryId, pullRequestNumber },
+                  );
+                },
               });
             },
           }),
@@ -871,6 +911,9 @@ export class MastraFactory {
         sourceControl: sourceControlStorage.forIntegration('github'),
       });
       observeSessionFirstExec(session, {
+        sourceControl: sourceControlStorage.forIntegration('github'),
+      });
+      observeSessionThreadTitle(session, {
         sourceControl: sourceControlStorage.forIntegration('github'),
       });
     });

@@ -65,6 +65,32 @@ function interceptTransactionOps(backend: any, overridesFor: (ops: any) => Recor
 }
 
 describe('WorkItemsStorage', () => {
+  it('persists a triage classification atomically, revisions it once, and replays without changing it', async () => {
+    const storage = await makeStorage();
+    const created = await storage.upsert({ orgId: 'org1', userId: 'user1', factoryProjectId: 'project1', input });
+    const commit = (identity: string, expectedRevision: number, triageType: 'feature request' | 'bug') =>
+      storage.commitTransition({
+        orgId: 'org1',
+        factoryProjectId: 'project1',
+        workItemId: created.item.id,
+        expectedRevision,
+        destinationStage: 'intake',
+        actorId: 'triage-agent',
+        ingress: { identity, triggerType: 'agent', transitionId: identity },
+        ruleSetVersion: 'rules-v1',
+        causalChain: [],
+        evaluation: { outcome: 'accepted', decisions: [] },
+        triageType,
+      });
+
+    const classified = await commit('triage-1', created.item.revision, 'feature request');
+    expect(classified).toMatchObject({ status: 'committed', item: { triageType: 'feature request', revision: 2 } });
+    const replayed = await commit('triage-1', created.item.revision, 'feature request');
+    expect(replayed).toMatchObject({ status: 'replayed', item: { triageType: 'feature request', revision: 2 } });
+    const laterAgent = await commit('triage-2', 2, 'bug');
+    expect(laterAgent).toMatchObject({ status: 'committed', item: { triageType: 'feature request', revision: 2 } });
+  });
+
   it('deduplicates external sources within a Factory project, not across projects', async () => {
     const storage = await makeStorage();
 
@@ -162,6 +188,29 @@ describe('WorkItemsStorage', () => {
     expect(await storage.delete({ orgId: 'org1', id: a.item.id })).toBeNull();
   });
 
+  it('holds list order when a later write touches an older card', async () => {
+    const storage = await makeStorage();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      vi.setSystemTime(new Date('2026-08-01T00:00:00.000Z'));
+      const older = await storage.upsert({ orgId: 'org1', userId: 'u', factoryProjectId: 'p1', input });
+      vi.setSystemTime(new Date('2026-08-02T00:00:00.000Z'));
+      const newer = await storage.upsert({
+        orgId: 'org1',
+        userId: 'u',
+        factoryProjectId: 'p1',
+        input: { ...input, externalSource: { ...input.externalSource, externalId: '43' } },
+      });
+      vi.setSystemTime(new Date('2026-08-03T00:00:00.000Z'));
+      await storage.update({ orgId: 'org1', id: older.item.id, userId: 'u', patch: { title: 'Touched' } });
+
+      const listed = await storage.list({ orgId: 'org1', factoryProjectId: 'p1' });
+      expect(listed.map(item => item.id)).toEqual([newer.item.id, older.item.id]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('validates parent relationships within a project and prevents cycles', async () => {
     const storage = await makeStorage();
     const parent = await storage.upsert({ orgId: 'org1', userId: 'u', factoryProjectId: 'p1', input });
@@ -197,6 +246,42 @@ describe('WorkItemsStorage', () => {
         },
       }),
     ).rejects.toBeInstanceOf(WorkItemRelationError);
+  });
+
+  it('fills a missing parent relationship without replacing an existing one', async () => {
+    const storage = await makeStorage();
+    const firstParent = await storage.upsert({ orgId: 'org1', userId: 'u', factoryProjectId: 'p1', input });
+    const secondParent = await storage.upsert({
+      orgId: 'org1',
+      userId: 'u',
+      factoryProjectId: 'p1',
+      input: { ...input, externalSource: { integrationId: 'github', type: 'issue', externalId: '43' } },
+    });
+    const child = await storage.upsert({
+      orgId: 'org1',
+      userId: 'u',
+      factoryProjectId: 'p1',
+      input: {
+        ...input,
+        externalSource: { integrationId: 'github', type: 'pull-request', externalId: '44' },
+      },
+    });
+
+    const linked = await storage.setParentWorkItemIfMissing({
+      orgId: 'org1',
+      id: child.item.id,
+      userId: 'u',
+      parentWorkItemId: firstParent.item.id,
+    });
+    const preserved = await storage.setParentWorkItemIfMissing({
+      orgId: 'org1',
+      id: child.item.id,
+      userId: 'u',
+      parentWorkItemId: secondParent.item.id,
+    });
+
+    expect(linked?.parentWorkItemId).toBe(firstParent.item.id);
+    expect(preserved?.parentWorkItemId).toBe(firstParent.item.id);
   });
 
   it('clears child relationships when deleting a parent', async () => {
@@ -306,6 +391,76 @@ describe('WorkItemsStorage', () => {
     releaseChildUpdate.resolve();
     await Promise.all([reparenting, deletion]);
     expect((await storage.get({ orgId: 'org1', id: child.item.id }))?.parentWorkItemId).toBeNull();
+  });
+
+  it('treats a concurrently deleted attention receipt as stale', async () => {
+    const backend = new LibSQLFactoryStorage({ id: 'attention-receipt-race-test', url: ':memory:' });
+    const storage = backend.registerDomain(new WorkItemsStorage());
+    await backend.init();
+    const scope = { orgId: 'org1', factoryProjectId: 'p1' };
+    const created = await storage.upsert({ ...scope, userId: 'u', input });
+    const now = new Date('2030-01-01T00:00:00.000Z');
+    await storage.commitRuleEvaluation({
+      ...scope,
+      workItemId: created.item.id,
+      ingress: { identity: 'receipt-race', triggerType: 'test' },
+      ruleSetVersion: 'rules-v1',
+      expectedRevision: created.item.revision,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [
+        {
+          type: 'sendMessage',
+          role: 'work',
+          message: 'Notify the session.',
+          idempotencyKey: 'receipt-race',
+        },
+      ],
+      causalChain: [],
+      now,
+    });
+    const [claimed] = await storage.claimDeferredDecisions({
+      ownerId: 'worker-1',
+      now,
+      leaseExpiresAt: new Date(now.getTime() + 30_000),
+      limit: 1,
+    });
+    if (!claimed) throw new Error('Expected a deferred decision');
+    const failed = await storage.failDeferredDecision({
+      id: claimed.id,
+      orgId: claimed.orgId,
+      factoryProjectId: claimed.factoryProjectId,
+      ownerId: 'worker-1',
+      now,
+      availableAt: now,
+      lastError: 'Session unavailable.',
+      failureCode: 'session_unavailable',
+      terminal: true,
+    });
+    if (!failed) throw new Error('Expected a failed decision');
+    await storage.setAttentionReceipt({
+      ...scope,
+      userId: 'u',
+      decisionId: failed.id,
+      failureOccurrence: failed.failureOccurrence,
+      action: 'read',
+      now,
+    });
+    interceptTransactionOps(backend, ops => ({
+      updateAtomic: (collection: string, where: unknown, updater: unknown) =>
+        collection === 'factory_attention_receipts' ? null : ops.updateAtomic(collection, where, updater),
+    }));
+
+    await expect(
+      storage.setAttentionReceipt({
+        ...scope,
+        userId: 'u',
+        decisionId: failed.id,
+        failureOccurrence: failed.failureOccurrence,
+        action: 'archive',
+        now,
+      }),
+    ).resolves.toBeNull();
   });
 
   it('uses serializable transactions for relationship writes and deletion', async () => {

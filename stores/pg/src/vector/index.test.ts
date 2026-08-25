@@ -47,6 +47,131 @@ describe('PgVector', () => {
     });
   });
 
+  describe('Namespace isolation', () => {
+    const namespaceIndex = 'test_namespace_isolation';
+    const legacyIndex = 'test_namespace_legacy_migration';
+
+    beforeAll(async () => {
+      await vectorDB.createIndex({ indexName: namespaceIndex, dimension: 3 });
+    });
+
+    afterAll(async () => {
+      await vectorDB.deleteIndex({ indexName: namespaceIndex });
+      await vectorDB.deleteIndex({ indexName: legacyIndex });
+    });
+
+    it('isolates upsert and query results by namespace while preserving the default namespace', async () => {
+      await vectorDB.upsert({
+        indexName: namespaceIndex,
+        vectors: [[1, 0, 0]],
+        ids: ['shared-id'],
+        metadata: [{ tenant: 'default' }],
+      });
+      await vectorDB.upsert({
+        indexName: namespaceIndex,
+        vectors: [[0, 1, 0]],
+        ids: ['shared-id'],
+        metadata: [{ tenant: 'acme' }],
+        namespace: 'acme',
+      });
+
+      const defaultResults = await vectorDB.query({
+        indexName: namespaceIndex,
+        queryVector: [1, 0, 0],
+        topK: 10,
+      });
+      const acmeResults = await vectorDB.query({
+        indexName: namespaceIndex,
+        queryVector: [0, 1, 0],
+        topK: 10,
+        namespace: 'acme',
+      });
+
+      expect(defaultResults).toHaveLength(1);
+      expect(defaultResults[0]?.metadata).toEqual({ tenant: 'default' });
+      expect(acmeResults).toHaveLength(1);
+      expect(acmeResults[0]?.metadata).toEqual({ tenant: 'acme' });
+    });
+
+    it('scopes update, deleteFilter, deleteVector, and namespace-only deletion', async () => {
+      await vectorDB.updateVector({
+        indexName: namespaceIndex,
+        id: 'shared-id',
+        namespace: 'acme',
+        update: { metadata: { tenant: 'acme', updated: true } },
+      });
+      await vectorDB.upsert({
+        indexName: namespaceIndex,
+        vectors: [[0, 0, 1]],
+        ids: ['replacement'],
+        metadata: [{ tenant: 'acme' }],
+        namespace: 'acme',
+        deleteFilter: { updated: true },
+      });
+
+      expect(
+        await vectorDB.query({ indexName: namespaceIndex, filter: { tenant: 'default' }, namespace: 'acme' }),
+      ).toHaveLength(0);
+      expect(
+        await vectorDB.query({ indexName: namespaceIndex, filter: { tenant: 'acme' }, namespace: 'acme' }),
+      ).toHaveLength(1);
+
+      await vectorDB.deleteVector({ indexName: namespaceIndex, id: 'replacement', namespace: 'acme' });
+      expect(
+        await vectorDB.query({ indexName: namespaceIndex, filter: { tenant: 'acme' }, namespace: 'acme' }),
+      ).toHaveLength(0);
+      expect(await vectorDB.query({ indexName: namespaceIndex, filter: { tenant: 'default' } })).toHaveLength(1);
+
+      await vectorDB.upsert({
+        indexName: namespaceIndex,
+        vectors: [[0, 0, 1]],
+        ids: ['namespace-delete'],
+        namespace: 'acme',
+      });
+      await vectorDB.deleteVectors({ indexName: namespaceIndex, namespace: 'acme' });
+      expect(
+        await vectorDB.query({ indexName: namespaceIndex, queryVector: [0, 0, 1], namespace: 'acme' }),
+      ).toHaveLength(0);
+    });
+
+    it('migrates legacy indexes into the default namespace', async () => {
+      const client = await vectorDB.pool.connect();
+      try {
+        await client.query(`
+          CREATE TABLE ${legacyIndex} (
+            id SERIAL PRIMARY KEY,
+            vector_id TEXT UNIQUE NOT NULL,
+            embedding vector(3),
+            metadata JSONB DEFAULT '{}'::jsonb
+          )
+        `);
+        await client.query(
+          `INSERT INTO ${legacyIndex} (vector_id, embedding, metadata) VALUES ($1, $2::vector, $3::jsonb)`,
+          ['legacy-id', '[1,0,0]', JSON.stringify({ source: 'legacy' })],
+        );
+      } finally {
+        client.release();
+      }
+
+      await vectorDB.createIndex({ indexName: legacyIndex, dimension: 3 });
+      await vectorDB.upsert({
+        indexName: legacyIndex,
+        vectors: [[0, 1, 0]],
+        ids: ['legacy-id'],
+        namespace: 'acme',
+      });
+
+      const defaultResults = await vectorDB.query({ indexName: legacyIndex, filter: { source: 'legacy' } });
+      const acmeResults = await vectorDB.query({
+        indexName: legacyIndex,
+        queryVector: [0, 1, 0],
+        namespace: 'acme',
+      });
+      expect(defaultResults.map(result => result.id)).toEqual(['legacy-id']);
+      expect(acmeResults.map(result => result.id)).toEqual(['legacy-id']);
+    });
+  });
+
   describe('Metadata-Only Query', () => {
     const metadataQueryIndex = 'test_metadata_only_query';
 
@@ -814,6 +939,14 @@ describe('PgVector', () => {
             metric: 'cosine',
             vectorType: 'vector',
           });
+        });
+
+        it('should report the current row count, not a cached one', async () => {
+          const before = await vectorDB.describeIndex({ indexName });
+          await vectorDB.upsert({ indexName, vectors: [[7, 8, 9]] });
+
+          const after = await vectorDB.describeIndex({ indexName });
+          expect(after.count).toBe(before.count + 1);
         });
 
         it('should throw error for non-existent index', async () => {
@@ -3323,7 +3456,8 @@ describe('PgVector', () => {
     const batchIndexName = 'test_batched_upsert';
     const dimension = 8;
 
-    const makeVector = (seed: number) => Array.from({ length: dimension }, (_, i) => (i === seed % dimension ? 1 : 0));
+    const makeVector = (seed: number) =>
+      Array.from({ length: dimension }, (_, i) => (i === 0 ? 1 : i === 1 ? seed / 128 : 0));
 
     beforeEach(async () => {
       await vectorDB.createIndex({ indexName: batchIndexName, dimension });

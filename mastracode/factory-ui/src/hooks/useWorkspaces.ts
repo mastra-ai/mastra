@@ -18,8 +18,8 @@ import {
   getUserSession,
   listUserSessions,
   USER_SESSION_BRANCH_PREFIX,
-} from '../ui/domains/workspaces/services/github';
-import type { FactoryUserSession } from '../ui/domains/workspaces/services/github';
+} from '../ui/domains/workspaces/services/user-sessions';
+import type { FactoryUserSession } from '../ui/domains/workspaces/services/user-sessions';
 
 interface AgentControllerThreadsScope {
   agentControllerId?: string;
@@ -79,6 +79,36 @@ export function addCachedSession(queryClient: QueryClient, projectRepositoryId: 
   });
 }
 
+export async function updateCachedSessionTitle(
+  queryClient: QueryClient,
+  projectRepositoryId: string | undefined,
+  sessionId: string,
+  title: string,
+) {
+  const trimmedTitle = title.trim();
+  if (!trimmedTitle) return;
+
+  const queryKey = queryKeys.sessions(projectRepositoryId);
+  if (!queryClient.getQueryData<WorkspacesData>(queryKey)) return;
+
+  // an in-flight list fetch can still carry the branch-only row and overwrite this title
+  await queryClient.cancelQueries({ queryKey });
+  queryClient.setQueryData<WorkspacesData>(queryKey, current => {
+    if (!current) return current;
+
+    let changed = false;
+    const updateTitle = (session: FactoryUserSession) => {
+      if (session.sessionId !== sessionId || session.title === trimmedTitle) return session;
+      changed = true;
+      return { ...session, title: trimmedTitle };
+    };
+    const workspaces = current.workspaces.map(updateTitle);
+    const userSessions = current.userSessions.map(updateTitle);
+
+    return changed ? { ...current, workspaces, userSessions } : current;
+  });
+}
+
 function invalidateSessionQueries(
   queryClient: QueryClient,
   projectRepositoryId: string | undefined,
@@ -94,6 +124,30 @@ function invalidateSessionQueries(
   }
 }
 
+const UNMATERIALIZED_POLL_MS = 15_000;
+/**
+ * A session created but never run stays un-materialized forever — without a
+ * bound it would keep the list polling indefinitely. Materialization follows
+ * within minutes of the activity that starts it, and every such trigger (run
+ * start, run end, attention) invalidates the sessions list, refreshing
+ * `updatedAt` and re-opening this window.
+ */
+const UNMATERIALIZED_POLL_WINDOW_MS = 10 * 60_000;
+
+/**
+ * Poll gently while any listed session has not been materialized yet. The
+ * sidebar status dots derive "initializing" from `materializedAt`, which the
+ * server stamps out-of-band (first agent exec, warm-up, another tab) — with no
+ * poll the cached `null` never resolved and dots wedged on "initializing".
+ */
+export function sessionsRefetchInterval(data: WorkspacesData | undefined, now = Date.now()): number | false {
+  if (!data) return false;
+  const unresolved = [...data.workspaces, ...data.userSessions].some(
+    session => !session.materializedAt && now - Date.parse(session.updatedAt) < UNMATERIALIZED_POLL_WINDOW_MS,
+  );
+  return unresolved ? UNMATERIALIZED_POLL_MS : false;
+}
+
 export function useWorkspacesQuery(projectRepositoryId: string | undefined) {
   const { baseUrl } = useApiConfig();
   return useQuery({
@@ -101,6 +155,7 @@ export function useWorkspacesQuery(projectRepositoryId: string | undefined) {
     queryFn: projectRepositoryId
       ? ({ signal }): Promise<WorkspacesData> => loadWorkspaces(baseUrl, projectRepositoryId, signal)
       : skipToken,
+    refetchInterval: query => sessionsRefetchInterval(query.state.data),
   });
 }
 

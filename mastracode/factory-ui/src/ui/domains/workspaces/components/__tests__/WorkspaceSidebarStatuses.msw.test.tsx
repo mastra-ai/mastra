@@ -8,7 +8,7 @@ import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../
 import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
 import type { PullRequestSubscription } from '../../../factory/services/githubSubscriptions';
 import type { WorkItemSessionRef } from '../../../factory/services/workItems';
-import type { FactoryUserSession } from '../../services/github';
+import type { FactoryUserSession } from '../../services/user-sessions';
 import { WorkspacesSection } from '../WorkspacesSection';
 
 const factoryProjectId = 'factory-project-1';

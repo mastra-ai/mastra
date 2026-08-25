@@ -24,7 +24,7 @@ import type { MessageListInput } from '../message-list';
 import { SaveQueueManager } from '../save-queue';
 import { AgentThreadLeaseConflictError, agentThreadStreamRuntime } from '../thread-stream-runtime';
 import type { AgentThreadRunRegistration } from '../thread-stream-runtime';
-import type { ToolsInput } from '../types';
+import type { AgentSubscribeToThreadOptions, ToolsInput } from '../types';
 
 import { publishAbortRequest } from './abort-transport';
 import { AGENT_STREAM_TOPIC, DurableStepIds } from './constants';
@@ -1495,7 +1495,15 @@ export class DurableAgent<
     const entry = globalRunRegistry.get(runId);
     const requestContext = entry?.requestContext;
 
-    const run = await workflow.createRun({ runId, pubsub: this.pubsub });
+    // Populate the run row's resourceId column so storage-level resource
+    // filters (listSuspendedRuns / listActiveRuns) can narrow the query,
+    // mirroring the non-durable agentic loop (loop/workflows/stream.ts).
+    const memoryInfo = (
+      workflowInput.messageListState as { memoryInfo?: { threadId?: string; resourceId?: string } } | undefined
+    )?.memoryInfo;
+    const resourceId = workflowInput.state?.resourceId ?? memoryInfo?.resourceId;
+
+    const run = await workflow.createRun({ runId, resourceId, pubsub: this.pubsub });
     // Parent the workflow run under the AGENT_RUN span so the trace exports under it.
     const result = await run.start({
       inputData: workflowInput,
@@ -1542,6 +1550,69 @@ export class DurableAgent<
     // End the root spans on error so the trace exports (mirrors the non-durable map-results-step).
     endRunSpansWithError(runId, error);
     await emitErrorEvent(this.pubsub, runId, error);
+  }
+
+  /**
+   * Abort the thread's active run.
+   *
+   * The base implementation flips the run's prepared `AbortController`, which a
+   * durable run never has: its controller lives on this agent's run registry,
+   * and the steps reading it may execute in another process. Without the abort
+   * request below, aborting a thread whose active run is durable records an
+   * intent nothing reads and lets the run stream on.
+   */
+  abortThreadStream(options: AgentSubscribeToThreadOptions): boolean {
+    // Resolve the run before the base call: aborting releases the thread lease,
+    // after which the thread no longer has an active run to look up.
+    const runId = agentThreadStreamRuntime.getActiveThreadRunId(options, this.getPubSub());
+    const aborted = super.abortThreadStream(options);
+    if (!runId) return aborted;
+
+    this.#abortDurableRun(runId);
+    return true;
+  }
+
+  /**
+   * Abort a run by id.
+   *
+   * Same gap as {@link abortThreadStream}. The abort request goes out whether
+   * or not this process knows the run: a durable run is routinely executed by
+   * another process, which is the one holding the controller that has to be
+   * flipped. A request nobody is listening for is a no-op, exactly like
+   * aborting a run that already finished, and a run that has not started yet
+   * is still covered by the intent the base implementation records.
+   */
+  abortRunStream(runId: string): boolean {
+    const aborted = super.abortRunStream(runId);
+    this.#abortDurableRun(runId);
+
+    return aborted || this.#isRunExecuting(runId);
+  }
+
+  /** Whether this process can see `runId` executing, in its registries or on the thread runtime. */
+  #isRunExecuting(runId: string): boolean {
+    return (
+      this.#runRegistry.get(runId) !== undefined ||
+      globalRunRegistry.get(runId) !== undefined ||
+      agentThreadStreamRuntime.hasThreadRun(runId, this.getPubSub())
+    );
+  }
+
+  /**
+   * Stop `runId` wherever it is executing: the controller this process holds
+   * for it, if it holds one, plus the abort request that reaches the process
+   * actually running the steps. Mirrors the `abort()` handed out with a stream
+   * result, which flips the same pair without gating on what this process
+   * happens to know about the run.
+   */
+  #abortDurableRun(runId: string): void {
+    const controller = (this.#runRegistry.get(runId) ?? globalRunRegistry.get(runId))?.abortController;
+    if (controller && !controller.signal.aborted) {
+      controller.abort(new Error('Aborted'));
+    }
+    // Best-effort, like `requestRemoteAbort` itself: the caller gets the local
+    // abort synchronously and a failed publish is logged, not thrown.
+    void this.requestRemoteAbort(runId);
   }
 
   /**
@@ -1693,6 +1764,9 @@ export class DurableAgent<
           { once: true },
         );
       }
+    }
+    if (agentThreadStreamRuntime.isRunAborted(runId, this.getPubSub())) {
+      abortController.abort();
     }
     registryEntry.abortController = abortController;
     registryEntry.abortSignal = abortController.signal;
@@ -1991,6 +2065,9 @@ export class DurableAgent<
         );
       }
     }
+    if (agentThreadStreamRuntime.isRunAborted(runId, this.getPubSub())) {
+      abortController.abort();
+    }
     entry.abortController = abortController;
     entry.abortSignal = abortController.signal;
     const globalEntryForAbort = globalRunRegistry.get(runId);
@@ -2130,7 +2207,7 @@ export class DurableAgent<
           });
         }
 
-        const run = await workflow.createRun({ runId, pubsub: this.pubsub });
+        const run = await workflow.createRun({ runId, resourceId: memoryInfo?.resourceId, pubsub: this.pubsub });
         if (this.__getGoalConfig()) {
           await beginGoalActivity({
             mastra: this.#mastra,
@@ -2374,7 +2451,10 @@ export class DurableAgent<
     const workflowExecution = this.#raceRecoveryLease(ready, recoveryLease)
       .then(async () => {
         recoveryLease.assertOwned();
-        const run = await this.#raceRecoveryLease(workflow.createRun({ runId, pubsub: recoveryPubsub }), recoveryLease);
+        const run = await this.#raceRecoveryLease(
+          workflow.createRun({ runId, resourceId, pubsub: recoveryPubsub }),
+          recoveryLease,
+        );
         recoveryLease.assertOwned();
         const result = await this.#raceRecoveryLease(
           run.restart({
@@ -2597,6 +2677,9 @@ export class DurableAgent<
           { once: true },
         );
       }
+    }
+    if (agentThreadStreamRuntime.isRunAborted(runId, this.getPubSub())) {
+      abortController.abort();
     }
     registryEntry.abortController = abortController;
     registryEntry.abortSignal = abortController.signal;
@@ -2849,6 +2932,9 @@ export class DurableAgent<
       });
     }
 
+    // resourceId is a storage column, so it is pushed down to narrow the query
+    // (the in-process check below remains as backstop for adapters that skip
+    // the filter and for rows persisted before the column was populated).
     // Filtering by agentId/threadId happens in application code because those
     // fields only exist inside each row's `snapshot` JSON — storage adapters
     // have no predicate for them. Fetch candidates in bounded batches so peak
@@ -2861,6 +2947,7 @@ export class DurableAgent<
       const { runs, total: storageTotal } = await workflowsStore.listWorkflowRuns({
         workflowName: DurableStepIds.AGENTIC_LOOP,
         status: 'running',
+        resourceId,
         fromDate,
         toDate,
         perPage: LIST_ACTIVE_RUNS_STORAGE_BATCH_SIZE,

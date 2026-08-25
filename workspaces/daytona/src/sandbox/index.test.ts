@@ -208,6 +208,14 @@ describe('DaytonaSandbox', () => {
       expect((sandbox as any).image).toBe('debian:12.9');
     });
 
+    it('stores secrets option', () => {
+      const sandbox = new DaytonaSandbox({
+        secrets: { GITHUB_TOKEN: 'github-token' },
+      });
+
+      expect((sandbox as any).secrets).toEqual({ GITHUB_TOKEN: 'github-token' });
+    });
+
     it('stores volume configs', () => {
       const sandbox = new DaytonaSandbox({
         volumes: [{ volumeId: 'vol-123', mountPath: '/data' }],
@@ -368,6 +376,19 @@ describe('DaytonaSandbox', () => {
       expect(createCall).not.toHaveProperty('networkAllowList');
     });
 
+    it('forwards secrets to the create call', async () => {
+      const sandbox = new DaytonaSandbox({
+        secrets: { GITHUB_TOKEN: 'github-token', NPM_TOKEN: 'npm-token' },
+      });
+
+      await sandbox._start();
+
+      const createCall = mockDaytona.create.mock.calls[0]![0];
+      expect(createCall).toMatchObject({
+        secrets: { GITHUB_TOKEN: 'github-token', NPM_TOKEN: 'npm-token' },
+      });
+    });
+
     it('does not include undefined params in create call', async () => {
       const sandbox = new DaytonaSandbox();
 
@@ -381,6 +402,7 @@ describe('DaytonaSandbox', () => {
       expect(createCall).not.toHaveProperty('networkBlockAll');
       expect(createCall).not.toHaveProperty('networkAllowList');
       expect(createCall).not.toHaveProperty('domainAllowList');
+      expect(createCall).not.toHaveProperty('secrets');
       expect(createCall).not.toHaveProperty('autoArchiveInterval');
       expect(createCall).not.toHaveProperty('snapshot');
     });
@@ -489,6 +511,16 @@ describe('DaytonaSandbox', () => {
 
       expect(mockDaytona.get).toHaveBeenCalledWith('mock-sandbox-id');
       expect(mockDaytona.create).toHaveBeenCalledTimes(1); // only on initial start
+    });
+
+    it("reports outcome 'created' on fresh create and 'connected' on reconnect", async () => {
+      const sandbox = new DaytonaSandbox({ id: 'my-id' });
+
+      await expect(sandbox._start()).resolves.toEqual({ outcome: 'created' });
+      await sandbox._stop();
+
+      mockDaytona.get.mockResolvedValue({ ...mockSandbox, state: 'started' });
+      await expect(sandbox._start()).resolves.toEqual({ outcome: 'connected' });
     });
 
     it('creates a fresh sandbox when no existing sandbox is found by name', async () => {
@@ -604,6 +636,17 @@ describe('DaytonaSandbox', () => {
       const cmd: string = mockSandbox.process.executeSessionCommand.mock.calls[0]![1].command;
       expect(cmd).toContain('export KEY=command-value');
       expect(cmd).not.toContain('sandbox-value');
+    });
+
+    it('setEnv after construction reaches subsequent commands', async () => {
+      const sandbox = new DaytonaSandbox();
+
+      await sandbox._start();
+      sandbox.setEnv(env => ({ ...env, GH_TOKEN: 'tok_1' }));
+      await sandbox.executeCommand('echo', ['test']);
+
+      const cmd: string = mockSandbox.process.executeSessionCommand.mock.calls[0]![1].command;
+      expect(cmd).toContain('export GH_TOKEN=tok_1');
     });
 
     it('filters out undefined env values', async () => {

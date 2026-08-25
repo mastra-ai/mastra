@@ -1,0 +1,5 @@
+{
+  "attachment": ["iteracompute/qwen3.8-27b"],
+  "temperature": ["iteracompute/qwen3.8-27b"],
+  "structuredOutput": ["iteracompute/qwen3.8-27b"]
+}

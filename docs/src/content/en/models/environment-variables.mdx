@@ -14,6 +14,8 @@ List of required environment variables for each model provider and gateway suppo
 | [302.AI](/models/providers/302ai)  | `302ai/*` | `302AI_API_KEY` |
 | [Abacus](/models/providers/abacus)  | `abacus/*` | `ABACUS_API_KEY` |
 | [abliteration.ai](/models/providers/abliteration-ai)  | `abliteration-ai/*` | `ABLIT_KEY` |
+| [AgentRouter](/models/providers/agentrouter)  | `agentrouter/*` | `AGENTROUTER_API_KEY` |
+| [Agnes AI](/models/providers/agnes)  | `agnes/*` | `AGNES_API_KEY` |
 | [AI-ROUTER](/models/providers/ai-router)  | `ai-router/*` | `AI_ROUTER_API_KEY` |
 | [ai&](/models/providers/aiand)  | `aiand/*` | `AIAND_API_KEY` |
 | [AKI.IO](/models/providers/aki-io)  | `aki-io/*` | `AKI_IO_API_KEY` |
@@ -52,6 +54,7 @@ List of required environment variables for each model provider and gateway suppo
 | [Databricks](/models/providers/databricks)  | `databricks/*` | `DATABRICKS_HOST`, `DATABRICKS_TOKEN` |
 | [Deep Infra](/models/providers/deepinfra)  | `deepinfra/*` | `DEEPINFRA_API_KEY` |
 | [DeepSeek](/models/providers/deepseek)  | `deepseek/*` | `DEEPSEEK_API_KEY` |
+| [DevPass (LLM Gateway)](/models/providers/llmgateway)  | `llmgateway/*` | `LLMGATEWAY_API_KEY` |
 | [DigitalOcean](/models/providers/digitalocean)  | `digitalocean/*` | `DIGITALOCEAN_ACCESS_TOKEN` |
 | [DInference](/models/providers/dinference)  | `dinference/*` | `DINFERENCE_API_KEY` |
 | [EBCloud](/models/providers/ebcloud)  | `ebcloud/*` | `EBCLOUD_API_KEY` |
@@ -80,6 +83,7 @@ List of required environment variables for each model provider and gateway suppo
 | [InferX](/models/providers/inferx)  | `inferx/*` | `INFERX_API_KEY` |
 | [Infomaniak](/models/providers/infomaniak)  | `infomaniak/*` | `INFOMANIAK_PRODUCT_ID`, `INFOMANIAK_API_KEY` |
 | [IO.NET](/models/providers/io-net)  | `io-net/*` | `IOINTELLIGENCE_API_KEY` |
+| [IteraCompute](/models/providers/iteracompute)  | `iteracompute/*` | `ITERACOMPUTE_API_KEY` |
 | [Jalapeno Cloud](/models/providers/jalapeno)  | `jalapeno/*` | `JALAPENO_API_KEY` |
 | [Jiekou.AI](/models/providers/jiekou)  | `jiekou/*` | `JIEKOU_API_KEY` |
 | [Kenari](/models/providers/kenari)  | `kenari/*` | `KENARI_API_KEY` |
@@ -89,7 +93,7 @@ List of required environment variables for each model provider and gateway suppo
 | [KUAE Cloud Coding Plan](/models/providers/kuae-cloud-coding-plan)  | `kuae-cloud-coding-plan/*` | `KUAE_API_KEY` |
 | [Lilac](/models/providers/lilac)  | `lilac/*` | `LILAC_API_KEY` |
 | [Llama](/models/providers/llama)  | `llama/*` | `LLAMA_API_KEY` |
-| [LLM Gateway](/models/providers/llmgateway)  | `llmgateway/*` | `LLMGATEWAY_API_KEY` |
+| [LLM Gateway](/models/providers/llmgateway-providers)  | `llmgateway-providers/*` | `LLMGATEWAY_API_KEY` |
 | [LLMTR](/models/providers/llmtr)  | `llmtr/*` | `LLMTR_API_KEY` |
 | [LMStudio](/models/providers/lmstudio)  | `lmstudio/*` | `LMSTUDIO_API_KEY` |
 | [LongCat](/models/providers/longcat)  | `longcat/*` | `LONGCAT_API_KEY` |
@@ -114,6 +118,7 @@ List of required environment variables for each model provider and gateway suppo
 | [NanoGPT](/models/providers/nano-gpt)  | `nano-gpt/*` | `NANO_GPT_API_KEY` |
 | [NEAR AI Cloud](/models/providers/nearai)  | `nearai/*` | `NEARAI_API_KEY` |
 | [Nebius Token Factory](/models/providers/nebius)  | `nebius/*` | `NEBIUS_API_KEY` |
+| [NeoSmith](/models/providers/neosmith)  | `neosmith/*` | `NEOSMITH_API_KEY` |
 | [Neuralwatt](/models/providers/neuralwatt)  | `neuralwatt/*` | `NEURALWATT_API_KEY` |
 | [Nova](/models/providers/nova)  | `nova/*` | `NOVA_API_KEY` |
 | [NovitaAI](/models/providers/novita-ai)  | `novita-ai/*` | `NOVITA_API_KEY` |
@@ -123,8 +128,10 @@ List of required environment variables for each model provider and gateway suppo
 | [OpenAI](/models/providers/openai)  | `openai/*` | `OPENAI_API_KEY` |
 | [OpenCode Go](/models/providers/opencode-go)  | `opencode-go/*` | `OPENCODE_API_KEY` |
 | [OpenCode Zen](/models/providers/opencode)  | `opencode/*` | `OPENCODE_API_KEY` |
+| [Opper](/models/providers/opper)  | `opper/*` | `OPPER_API_KEY` |
 | [OrcaRouter](/models/providers/orcarouter)  | `orcarouter/*` | `ORCAROUTER_API_KEY` |
 | [OVHcloud AI Endpoints](/models/providers/ovhcloud)  | `ovhcloud/*` | `OVHCLOUD_API_KEY` |
+| [Pendra](/models/providers/pendra)  | `pendra/*` | `PENDRA_API_KEY` |
 | [Perplexity](/models/providers/perplexity)  | `perplexity/*` | `PERPLEXITY_API_KEY` |
 | [Perplexity Agent](/models/providers/perplexity-agent)  | `perplexity-agent/*` | `PERPLEXITY_API_KEY` |
 | [Pioneer](/models/providers/pioneer)  | `pioneer/*` | `PIONEER_API_KEY` |
@@ -146,6 +153,7 @@ List of required environment variables for each model provider and gateway suppo
 | [SiliconFlow (China)](/models/providers/siliconflow-cn)  | `siliconflow-cn/*` | `SILICONFLOW_CN_API_KEY` |
 | [Snowflake Cortex](/models/providers/snowflake-cortex)  | `snowflake-cortex/*` | `SNOWFLAKE_ACCOUNT`, `SNOWFLAKE_CORTEX_PAT` |
 | [STACKIT](/models/providers/stackit)  | `stackit/*` | `STACKIT_API_KEY` |
+| [Standard Compute](/models/providers/standardcompute)  | `standardcompute/*` | `STANDARDCOMPUTE_API_KEY` |
 | [StepFun (China)](/models/providers/stepfun)  | `stepfun/*` | `STEPFUN_API_KEY` |
 | [StepFun (Global)](/models/providers/stepfun-ai)  | `stepfun-ai/*` | `STEPFUN_API_KEY` |
 | [StepFun Step Plan (China)](/models/providers/stepfun-step-plan)  | `stepfun-step-plan/*` | `STEPFUN_API_KEY` |

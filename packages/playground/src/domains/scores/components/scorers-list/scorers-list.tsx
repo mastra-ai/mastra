@@ -3,6 +3,7 @@ import { Chip } from '@mastra/playground-ui/components/Chip';
 import {
   DataList as EntityList,
   DataListSkeleton as EntityListSkeleton,
+  useDataListKeyboard,
 } from '@mastra/playground-ui/components/DataList';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { WorkflowIcon } from 'lucide-react';
@@ -42,12 +43,14 @@ export function ScorersList({ scorers, isLoading, search = '', sourceFilter = 'a
     });
   }, [scorerData, search, sourceFilter]);
 
+  const { containerRef, getRowProps } = useDataListKeyboard({ count: filteredData.length });
+
   if (isLoading) {
     return <EntityListSkeleton columns={COLUMNS} />;
   }
 
   return (
-    <EntityList columns={COLUMNS} variant="striped">
+    <EntityList columns={COLUMNS} variant="striped" scrollRef={containerRef}>
       <EntityList.Top>
         <EntityList.TopCell>Name</EntityList.TopCell>
         <EntityList.TopCell>Description</EntityList.TopCell>
@@ -66,7 +69,7 @@ export function ScorersList({ scorers, isLoading, search = '', sourceFilter = 'a
         />
       </EntityList.Top>
 
-      {filteredData.map(scorer => {
+      {filteredData.map((scorer, index) => {
         const name = scorer.scorer.config?.name || scorer.id;
         const description = scorer.scorer.config?.description || '';
         const agentCount = scorer.agentIds?.length ?? 0;
@@ -74,7 +77,12 @@ export function ScorersList({ scorers, isLoading, search = '', sourceFilter = 'a
         const isTrajectory = scorer.scorer.config?.type === 'trajectory';
 
         return (
-          <EntityList.RowLink key={scorer.id} to={paths.scorerLink(scorer.id)} LinkComponent={Link}>
+          <EntityList.RowLink
+            key={scorer.id}
+            to={paths.scorerLink(scorer.id)}
+            LinkComponent={Link}
+            {...getRowProps(index)}
+          >
             <EntityList.NameCell>
               <span className="flex max-w-full min-w-0 items-center gap-1.5">
                 <span className="min-w-0 truncate">{name}</span>

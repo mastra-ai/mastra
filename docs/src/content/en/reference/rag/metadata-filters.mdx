@@ -166,7 +166,7 @@ const results = await store.query({
   {
     name: '$size',
     description: 'Array length check',
-    example: '{ tags: { $size: 3 } }',
+    example: '{ tags: { $size: { $gt: 2 } } } — MongoDB requires an integer instead: { tags: { $size: 3 } }',
     supportedBy: ['Astra', 'libSQL', 'PgVector', 'MongoDB', 'OracleDB'],
   },
   {
@@ -329,13 +329,21 @@ const results = await store.query({
 
 ### MongoDB
 
-- Full support for MongoDB/Sift query syntax for metadata filters
-- Supports all standard comparison, array, logical, and element operators
-- Supports nested fields and arrays in metadata
-- Filtering can be applied to both `metadata` and the original document content using the `filter` and `documentFilter` options, respectively
-- `filter` applies to the metadata object; `documentFilter` applies to the original document fields
-- No artificial limits on filter size or complexity (subject to MongoDB query limits)
-- Indexing metadata fields is recommended for optimal performance
+- Requires MongoDB Atlas or a deployment with MongoDB Vector Search enabled. The store queries with the `$vectorSearch` aggregation stage.
+- Uses MongoDB query syntax directly for metadata filters, including nested fields and arrays in metadata.
+- Supports the comparison, array, logical, and element operators in the tables above, plus `$regex` and `$size`. `$size` takes an integer, as in `{ tags: { $size: 3 } }`.
+- Use `filter` to match fields in the metadata object and `documentFilter` to match the original document text. You can combine them in a single query.
+- Declare the metadata fields you filter on in `filterFields` when you create the index. Mastra passes filters that use only declared fields and the operators MongoDB Vector Search accepts (`$and`, `$or`, `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte`, `$in`, `$nin`) directly to `$vectorSearch`:
+
+```typescript
+await store.createIndex({
+  indexName: 'my_index',
+  dimension: 1536,
+  filterFields: ['category', 'price'],
+})
+```
+
+- Filters that reference an undeclared field or use another operator take a fallback path: Mastra pre-filters the collection and passes the matching document IDs to `$vectorSearch`. This works only while the ID set fits within MongoDB's 16 MB BSON document limit. On large collections the query fails once that limit is exceeded, so declare your filter fields for selective queries over large data sets.
 
 ### Couchbase
 

@@ -28,7 +28,16 @@ export class ScoresInMemory extends ScoresStorage {
   }
 
   async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
-    const newScore = { id: crypto.randomUUID(), createdAt: new Date(), updatedAt: new Date(), ...score };
+    // Caller-supplied ids give scores a stable identity: retried writes for
+    // the same id replace the previous row (latest wins).
+    const id = score.id ?? crypto.randomUUID();
+    const existing = score.id ? this.db.scores.get(id) : undefined;
+    const newScore = {
+      ...score,
+      id,
+      createdAt: existing?.createdAt ?? (score as { createdAt?: Date }).createdAt ?? new Date(),
+      updatedAt: new Date(),
+    };
     this.db.scores.set(newScore.id, newScore);
     return { score: newScore };
   }

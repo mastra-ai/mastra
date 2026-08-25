@@ -12,10 +12,6 @@ Studio on Mastra platform is a hosted visual workspace for testing agents and ru
 
 You can deploy Studio from the CLI as shown below, or link a GitHub repository for push-to-deploy. See the [GitHub integration](/docs/mastra-platform/github) for the repository-linked flow.
 
-:::note
-`mastra studio deploy` is the earlier split deploy path. New projects should use the unified [`mastra deploy`](/docs/mastra-platform/deploy) command, which adds preflight validation, environments, and CLI-managed databases.
-:::
-
 ## Quickstart
 
 <Steps>
@@ -35,7 +31,7 @@ You can deploy Studio from the CLI as shown below, or link a GitHub repository f
     Deploy Studio with a single command:
 
     ```bash
-    mastra studio deploy
+    mastra deploy
     ```
 
     On a successful deploy, the CLI outputs the URL of your deployed Studio instance.
@@ -46,11 +42,11 @@ On your first deploy, the CLI prompts you to create a new project or select an e
 
 ## How deploy works
 
-The `mastra studio deploy` command builds your project and compiles `src/mastra/` into `.mastra/output`. It packages that output as an artifact ZIP, then uploads and deploys it to a cloud sandbox.
+The `mastra deploy` command builds your project and compiles `src/mastra/` into `.mastra/output`. It packages that output as an artifact ZIP, then uploads and deploys it to a cloud sandbox.
 
 A deploy transitions through **queued → uploading → starting → running** or **failed** if something goes wrong. If a sandbox is already running for your project, the platform updates it in place with no downtime. Otherwise, it creates a fresh sandbox. Your instance URL is assigned per project slug and remains stable across deploys.
 
-See the [`mastra studio deploy` CLI reference](/reference/cli/mastra#mastra-studio-deploy) for the full list of flags and CI/CD usage.
+See the [`mastra deploy` CLI reference](/reference/cli/mastra#mastra-deploy) for the full list of flags and CI/CD usage.
 
 ## Environment files
 
@@ -59,17 +55,17 @@ A local env file is optional. When a `.env` or `.env.*` file is present in the p
 When multiple env files are present, the CLI prompts you to pick one. To select non-interactively, pass `--env-file`:
 
 ```bash
-mastra studio deploy --env-file .env.production --yes
+mastra deploy --env-file .env.production --yes
 ```
 
-To run the same codebase across `production` and `staging`, use the unified [`mastra deploy --env`](/docs/mastra-platform/deploy#deploy-to-another-environment) command instead. [Environments](/docs/mastra-platform/environments) replace the earlier pattern of one project per environment.
+To run the same codebase across `production` and `staging`, use [`mastra deploy --env`](/docs/mastra-platform/deploy#deploy-to-another-environment). See [Environments](/docs/mastra-platform/environments) for the full model.
 
 ## Create a new project non-interactively
 
-`mastra studio deploy` can create a project on first run. If `--project <name>` doesn't match an existing project, the CLI uses the value as the new project name and creates it after confirmation. Combined with `--yes`, this is fully scriptable:
+`mastra deploy` can create a project on first run. If `--project <name>` doesn't match an existing project, the CLI uses the value as the new project name and creates it after confirmation. Combined with `--yes`, this is fully scriptable:
 
 ```bash
-mastra studio deploy --project "my-new-project" --yes
+mastra deploy --project "my-new-project" --yes
 ```
 
 Use this from CI or AI coding agents instead of `mastra studio projects create`, which is interactive only.
@@ -80,4 +76,4 @@ To deploy Studio on your own infrastructure, see [Studio deployment](/docs/studi
 
 ## Related
 
-- [`mastra studio deploy`](/reference/cli/mastra#mastra-studio-deploy)
+- [`mastra deploy`](/reference/cli/mastra#mastra-deploy)
