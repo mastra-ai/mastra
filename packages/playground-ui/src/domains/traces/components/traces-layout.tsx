@@ -39,26 +39,22 @@ export function TracesLayout({
       {hasSidePanel && (
         <div
           className={cn(
-            'grid max-h-full gap-4 overflow-auto',
+            'relative grid max-h-full overflow-hidden',
             // Fill the page height so the trace panel reaches the bottom; when collapsed
-            // the column shrinks to content (items-start on the outer grid).
-            !traceCollapsed && 'h-full',
-            scorePanelSlot
-              ? traceCollapsed
-                ? 'grid-rows-[auto_3fr_3fr]'
-                : 'grid-rows-[2fr_3fr_3fr]'
-              : spanPanelSlot
-                ? traceCollapsed
-                  ? 'grid-rows-[auto_3fr]'
-                  : 'grid-rows-[2fr_3fr]'
-                : traceCollapsed
-                  ? 'grid-rows-[auto]'
-                  : 'grid-rows-[1fr]',
+            // (and nothing is stacked on top) the column shrinks to content.
+            (!traceCollapsed || spanPanelSlot || scorePanelSlot) && 'h-full',
+            traceCollapsed ? 'grid-rows-[auto]' : 'grid-rows-[1fr]',
           )}
         >
           {tracePanelSlot}
-          {spanPanelSlot}
-          {scorePanelSlot}
+          {/* Span and score panels stack over the trace panel like sheets, each offset to
+              the left so the panel underneath stays visible at its edge. */}
+          {spanPanelSlot && (
+            <div className="absolute inset-y-0 right-0 bottom-0 left-8 z-10 grid shadow-2xl">{spanPanelSlot}</div>
+          )}
+          {scorePanelSlot && (
+            <div className="absolute inset-y-0 right-0 bottom-0 left-16 z-20 grid shadow-2xl">{scorePanelSlot}</div>
+          )}
         </div>
       )}
     </div>
