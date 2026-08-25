@@ -1,6 +1,6 @@
 import { DurableAgentDefaults } from '@mastra/core/agent/durable';
 import { Inngest } from 'inngest';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { createInngestDurableAgenticWorkflow } from './create-inngest-agentic-workflow';
 
@@ -14,6 +14,22 @@ import { createInngestDurableAgenticWorkflow } from './create-inngest-agentic-wo
  * memoization/replay and across runs sharing the same workflow instance —
  * unlike a shared mutable options object.
  */
+
+function findEntry(steps: any[], predicate: (entry: any) => boolean): any {
+  for (const entry of steps ?? []) {
+    if (predicate(entry)) return entry;
+    const inner = entry.step?.executionGraph ? entry.step : entry.step?.step;
+    if (inner?.executionGraph) {
+      const nested = findEntry(inner.executionGraph.steps, predicate);
+      if (nested) return nested;
+    }
+    if (entry.steps) {
+      const nested = findEntry(entry.steps, predicate);
+      if (nested) return nested;
+    }
+  }
+  return undefined;
+}
 
 function findForeachEntry(steps: any[]): any {
   for (const entry of steps ?? []) {
@@ -96,5 +112,90 @@ describe('createInngestDurableAgenticWorkflow tool-call concurrency', () => {
         ],
       }),
     ).toBe(1);
+  });
+});
+
+/**
+ * Regression coverage for #19842: durable tool execution on the Inngest engine
+ * must run with a tracing context.
+ *
+ * 1. `extract-tool-calls` forwards the LLM step's exported MODEL_STEP span
+ *    (`stepSpanData`) onto every tool-call input, so `createDurableToolCallStep`
+ *    can rebuild it into the tool's `tracingContext` (live TOOL_CALL span +
+ *    execution-time children such as workspace_action spans).
+ * 2. `collect-tool-results` no longer creates retroactive TOOL_CALL spans (they
+ *    would duplicate the live ones) — it only bundles results for the shared
+ *    llmMappingStep, which ends the step span and emits tool-result chunks.
+ */
+describe('createInngestDurableAgenticWorkflow tool-call tracing (#19842)', () => {
+  const inngest = new Inngest({ id: 'inngest-agentic-workflow-tracing-tests' });
+  const workflow = createInngestDurableAgenticWorkflow({ inngest });
+  const steps = (workflow as any).executionGraph.steps;
+
+  const findMapping = (id: string) => findEntry(steps, entry => entry.type === 'mapping' && entry.id === id);
+
+  it('extract-tool-calls forwards stepSpanData onto every tool-call input', async () => {
+    const entry = findMapping('extract-tool-calls');
+    expect(entry).toBeDefined();
+    expect(typeof entry.mapConfig).toBe('function');
+
+    const stepSpanData = { spanId: 'step-span-1', traceId: 'trace-1' };
+    const result = await entry.mapConfig({
+      inputData: {
+        toolCalls: [
+          { toolCallId: 'call-1', toolName: 'writeFile', args: { path: 'a.txt' } },
+          { toolCallId: 'call-2', toolName: 'readFile', args: { path: 'b.txt' } },
+        ],
+        stepSpanData,
+      },
+    });
+
+    expect(result).toHaveLength(2);
+    for (const toolCall of result) {
+      expect(toolCall.stepSpanData).toEqual(stepSpanData);
+    }
+    expect(result[0]).toMatchObject({ toolCallId: 'call-1', toolName: 'writeFile' });
+  });
+
+  it('collect-tool-results does not create retroactive spans and bundles results for mapping', async () => {
+    const entry = findMapping('collect-tool-results');
+    expect(entry).toBeDefined();
+    expect(typeof entry.mapConfig).toBe('function');
+
+    const rebuildSpan = vi.fn();
+    const getSelectedInstance = vi.fn(() => ({ rebuildSpan }));
+    const llmOutput = {
+      toolCalls: [{ toolCallId: 'call-1', toolName: 'writeFile', args: {} }],
+      stepSpanData: { spanId: 'step-span-1' },
+      state: { s: 1 },
+    };
+    const toolResults = [{ toolCallId: 'call-1', toolName: 'writeFile', result: 'ok' }];
+
+    const result = await entry.mapConfig({
+      inputData: toolResults,
+      getStepResult: () => llmOutput,
+      getInitData: () => ({
+        runId: 'run-1',
+        agentId: 'agent-1',
+        messageId: 'msg-1',
+        agentSpanData: { spanId: 'agent-span-1' },
+        state: { s: 0 },
+      }),
+      mastra: { observability: { getSelectedInstance } },
+    });
+
+    // No retroactive span creation — the live TOOL_CALL span is created by the
+    // tool-call step, and llmMappingStep owns step-span end + tool-result chunks.
+    expect(getSelectedInstance).not.toHaveBeenCalled();
+    expect(rebuildSpan).not.toHaveBeenCalled();
+
+    expect(result).toEqual({
+      llmOutput,
+      toolResults,
+      runId: 'run-1',
+      agentId: 'agent-1',
+      messageId: 'msg-1',
+      state: { s: 1 },
+    });
   });
 });
