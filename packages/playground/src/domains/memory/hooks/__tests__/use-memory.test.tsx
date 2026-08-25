@@ -660,3 +660,184 @@ describe('the observational memory views, while they refresh', () => {
     expect(result.current.data).toMatchObject({ threads: 1 });
   });
 });
+
+/**
+ * Every memory read shares the same three cache rules — its own key, no retry,
+ * and no re-read on window focus. Asserted together so a new read cannot be
+ * added without them.
+ */
+describe('the cache rules every memory read follows', () => {
+  const reads = [
+    {
+      name: 'the memory status',
+      path: '/api/memory/status',
+      use: () => useMemory(AGENT_ID),
+      key: ['memory', AGENT_ID, {}],
+      otherKey: ['memory', 'agent-2', {}],
+    },
+    {
+      name: 'the memory config',
+      path: '/api/memory/config',
+      use: () => useMemoryConfig(AGENT_ID),
+      key: ['memory', 'config', AGENT_ID, {}],
+      otherKey: ['memory', 'config', 'agent-2', {}],
+    },
+    {
+      name: 'a single thread',
+      path: `/api/memory/threads/${THREAD_ID}`,
+      use: () => useThread({ threadId: THREAD_ID, agentId: AGENT_ID }),
+      key: ['memory', 'thread', THREAD_ID, AGENT_ID, {}],
+      otherKey: ['memory', 'thread', 'thread-2', AGENT_ID, {}],
+    },
+    {
+      name: 'the thread list',
+      path: '/api/memory/threads',
+      use: () => useThreads({ resourceId: RESOURCE_ID, agentId: AGENT_ID, isMemoryEnabled: true }),
+      key: ['memory', 'threads', RESOURCE_ID, AGENT_ID, {}],
+      otherKey: ['memory', 'threads', 'resource-2', AGENT_ID, {}],
+    },
+    {
+      name: 'the observations',
+      path: '/api/memory/observational-memory',
+      use: () => useObservationalMemory({ agentId: AGENT_ID, resourceId: RESOURCE_ID }),
+      key: ['observational-memory', AGENT_ID, RESOURCE_ID, undefined, {}],
+      otherKey: ['observational-memory', AGENT_ID, 'resource-2', undefined, {}],
+    },
+    {
+      name: 'the OM-aware status',
+      path: '/api/memory/status',
+      use: () => useMemoryWithOMStatus({ agentId: AGENT_ID }),
+      key: ['memory-status', AGENT_ID, undefined, undefined, {}],
+      otherKey: ['memory-status', 'agent-2', undefined, undefined, {}],
+    },
+  ] as const;
+
+  const answer = (path: string) =>
+    server.use(http.get(`${BASE_URL}${path}`, () => HttpResponse.json({ result: true, threads: [], id: THREAD_ID })));
+
+  it.each(reads)('files $name under a key of its own', async ({ path, use, key, otherKey }) => {
+    answer(path);
+    const { wrapper, queryClient } = setup();
+
+    const { result } = renderHook(use, { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(queryClient.getQueryData(key)).toBeDefined();
+    expect(queryClient.getQueryData(otherKey)).toBeUndefined();
+  });
+
+  it.each(reads)('does not re-read $name when the window regains focus', async ({ path, use }) => {
+    let calls = 0;
+    server.use(
+      http.get(`${BASE_URL}${path}`, () => {
+        calls += 1;
+        return HttpResponse.json({ result: true, threads: [], id: THREAD_ID });
+      }),
+    );
+    const { wrapper } = setup();
+
+    const { result } = renderHook(use, { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    await act(async () => {
+      window.dispatchEvent(new Event('focus'));
+      await new Promise(resolve => setTimeout(resolve, 80));
+    });
+
+    expect(calls).toBe(1);
+  });
+
+  it.each(reads)('surfaces a failure of $name without starting the request over', async ({ path, use }) => {
+    let calls = 0;
+    server.use(
+      http.get(`${BASE_URL}${path}`, () => {
+        calls += 1;
+        return new HttpResponse(null, { status: 500 });
+      }),
+    );
+    const { wrapper } = setup({ retry: true });
+
+    const { result } = renderHook(use, { wrapper });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    const afterFirstFailure = calls;
+
+    await act(async () => new Promise(resolve => setTimeout(resolve, 1500)));
+
+    expect(calls).toBe(afterFirstFailure);
+  });
+});
+
+describe('the caches the thread mutations refresh', () => {
+  it.each([
+    ['deleting', () => useDeleteThread()],
+    ['cloning', () => useCloneThread()],
+  ])("refreshes only that agent's thread list after %s", async (_label, useHook) => {
+    server.use(
+      http.delete(`${BASE_URL}/api/memory/threads/${THREAD_ID}`, () => HttpResponse.json({ result: 'ok' })),
+      http.post(`${BASE_URL}/api/memory/threads/${THREAD_ID}/clone`, () => HttpResponse.json({ id: 'thread-2' })),
+    );
+    const { wrapper, queryClient } = setup();
+    const seeded = [
+      ['memory', 'threads', AGENT_ID, AGENT_ID],
+      ['memory', 'threads', 'agent-2', 'agent-2'],
+      ['memory', AGENT_ID, {}],
+    ];
+    for (const key of seeded) queryClient.setQueryData(key, { seeded: true });
+
+    const { result } = renderHook(useHook, { wrapper });
+    await act(async () => {
+      await result.current.mutateAsync({ threadId: THREAD_ID, agentId: AGENT_ID });
+    });
+
+    expect(queryClient.getQueryState(['memory', 'threads', AGENT_ID, AGENT_ID])?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(['memory', 'threads', 'agent-2', 'agent-2'])?.isInvalidated).toBe(false);
+    expect(queryClient.getQueryState(['memory', AGENT_ID, {}])?.isInvalidated).toBe(false);
+  });
+});
+
+describe('the observational views, when the caller switches what they are looking at', () => {
+  it('keeps the previous observations on screen while the new resource loads', async () => {
+    server.use(
+      http.get(`${BASE_URL}/api/memory/observational-memory`, async ({ request }) => {
+        const resourceId = new URL(request.url).searchParams.get('resourceId');
+        if (resourceId !== RESOURCE_ID) await new Promise(resolve => setTimeout(resolve, 200));
+        return HttpResponse.json({ current: { id: `om-${resourceId}` }, history: [] });
+      }),
+    );
+    const { wrapper } = setup();
+
+    const { result, rerender } = renderHook(
+      ({ resourceId }: { resourceId: string }) => useObservationalMemory({ agentId: AGENT_ID, resourceId }),
+      { wrapper, initialProps: { resourceId: RESOURCE_ID } },
+    );
+    await waitFor(() => expect(result.current.data).toMatchObject({ current: { id: `om-${RESOURCE_ID}` } }));
+
+    rerender({ resourceId: 'resource-2' });
+
+    // A new cache key would otherwise render as empty and flash a skeleton.
+    expect(result.current.data).toMatchObject({ current: { id: `om-${RESOURCE_ID}` } });
+    await waitFor(() => expect(result.current.data).toMatchObject({ current: { id: 'om-resource-2' } }));
+  });
+
+  it('keeps the previous status on screen while a new thread loads', async () => {
+    server.use(
+      http.get(`${BASE_URL}/api/memory/status`, async ({ request }) => {
+        const threadId = new URL(request.url).searchParams.get('threadId');
+        if (threadId !== THREAD_ID) await new Promise(resolve => setTimeout(resolve, 200));
+        return HttpResponse.json({ result: true, threadId });
+      }),
+    );
+    const { wrapper } = setup();
+
+    const { result, rerender } = renderHook(
+      ({ threadId }: { threadId: string }) => useMemoryWithOMStatus({ agentId: AGENT_ID, threadId }),
+      { wrapper, initialProps: { threadId: THREAD_ID } },
+    );
+    await waitFor(() => expect(result.current.data).toMatchObject({ threadId: THREAD_ID }));
+
+    rerender({ threadId: 'thread-2' });
+
+    expect(result.current.data).toMatchObject({ threadId: THREAD_ID });
+    await waitFor(() => expect(result.current.data).toMatchObject({ threadId: 'thread-2' }));
+  });
+});

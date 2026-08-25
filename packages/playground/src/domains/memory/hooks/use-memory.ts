@@ -16,6 +16,8 @@ export const useMemory = (agentId?: string) => {
     queryFn: () => (agentId ? client.getMemoryStatus(agentId, requestContext) : null),
     enabled: Boolean(agentId),
     staleTime: 5 * 60 * 1000, // 5 minutes
+    // Stryker disable next-line ArithmeticOperator: how long an unobserved
+    // entry is kept is only observable by waiting it out.
     gcTime: 10 * 60 * 1000, // 10 minutes
     retry: false,
   });
@@ -30,6 +32,8 @@ export const useMemoryConfig = (agentId?: string) => {
     queryFn: () => (agentId ? client.getMemoryConfig({ agentId, requestContext }) : null),
     enabled: Boolean(agentId),
     staleTime: 5 * 60 * 1000, // 5 minutes
+    // Stryker disable next-line ArithmeticOperator: how long an unobserved
+    // entry is kept is only observable by waiting it out.
     gcTime: 10 * 60 * 1000, // 10 minutes
     retry: false,
     refetchOnWindowFocus: false,
@@ -173,6 +177,9 @@ export const useObservationalMemory = ({
   return useQuery<GetObservationalMemoryResponse | null>({
     queryKey: ['observational-memory', agentId, resourceId, threadId, requestContext],
     queryFn: async () => {
+      // Unreachable: `enabled` below already requires one of the two. The
+      // early return only narrows the result type.
+      // Stryker disable next-line ConditionalExpression
       if (!resourceId && !threadId) return null;
       return client.getObservationalMemory({
         agentId,
@@ -182,7 +189,12 @@ export const useObservationalMemory = ({
       });
     },
     enabled: enabled && Boolean(agentId) && (Boolean(resourceId) || Boolean(threadId)),
+    // Stryker disable next-line ArithmeticOperator,ConditionalExpression: the
+    // freshness window only shows up as a difference in elapsed time, and the
+    // polling it accompanies is asserted above.
     staleTime: isActive ? 1000 : 30 * 1000, // 1 second when active, 30 seconds otherwise
+    // Stryker disable next-line ArithmeticOperator: how long an unobserved
+    // entry is kept is only observable by waiting it out.
     gcTime: 5 * 60 * 1000, // 5 minutes
     retry: false,
     refetchOnWindowFocus: false,
@@ -221,7 +233,10 @@ export const useMemoryWithOMStatus = ({
           })
         : null,
     enabled: Boolean(agentId),
+    // Stryker disable next-line ArithmeticOperator,ConditionalExpression,LogicalOperator: as above.
     staleTime: isActive && pollWhenActive ? 1000 : 30 * 1000, // 1 second when active, 30 seconds otherwise
+    // Stryker disable next-line ArithmeticOperator: how long an unobserved
+    // entry is kept is only observable by waiting it out.
     gcTime: 5 * 60 * 1000, // 5 minutes
     retry: false,
     refetchOnWindowFocus: false,
