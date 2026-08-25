@@ -197,7 +197,6 @@ export function WorkItemCard({
           draggable={!evaluating}
           aria-label={item.title}
           aria-busy={evaluating || runPending || undefined}
-          aria-expanded={morph.open}
           data-testid="work-item-card"
           data-related={relatedItems.length > 0 ? 'true' : undefined}
           data-work-item-id={item.id}
@@ -218,6 +217,7 @@ export function WorkItemCard({
             type="button"
             draggable={false}
             aria-label={`Details for ${item.title}`}
+            aria-expanded={morph.open}
             className="focus-visible:outline-accent1 absolute inset-0 cursor-pointer rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
             onClick={morph.openDetails}
           />

@@ -539,6 +539,20 @@ describe('issue detail route', () => {
     expect(await res.json()).toMatchObject({ error: 'issue_not_found' });
   });
 
+  it('reads nothing while Linear intake is turned off', async () => {
+    await seed.intake.saveConfig({
+      orgId: 'org1',
+      userId: 'u1',
+      config: { linear: { enabled: false, sourceIds: ['proj-1'] } },
+    });
+
+    const res = await buildApp(org1()).request(`/web/linear/issues/ENG-42?factoryProjectId=${projectA}`);
+
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({ error: 'linear_intake_disabled' });
+    expect(fetchIssueDetail).not.toHaveBeenCalled();
+  });
+
   it('rejects anything that is not an issue key', async () => {
     const res = await buildApp(org1()).request(`/web/linear/issues/..%2Fprojects?factoryProjectId=${projectA}`);
 

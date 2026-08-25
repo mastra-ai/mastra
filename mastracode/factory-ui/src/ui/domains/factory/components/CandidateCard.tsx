@@ -119,7 +119,6 @@ export function CandidateCard({
         <article
           ref={morph.cardRef}
           draggable
-          aria-expanded={morph.open}
           aria-label={candidate.title}
           aria-busy={runPending || undefined}
           data-testid="candidate-card"
@@ -142,6 +141,7 @@ export function CandidateCard({
             type="button"
             draggable={false}
             aria-label={`Details for ${candidate.title}`}
+            aria-expanded={morph.open}
             className="focus-visible:outline-accent1 absolute inset-0 cursor-pointer rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
             onClick={morph.openDetails}
           />

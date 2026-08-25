@@ -5,11 +5,14 @@
 
 .board-card-details[data-slot='popover-content'] {
   --board-panel-w: min(28rem, calc(100vw - 1.5rem));
+
   /* Replaced inline with the measured content height; this is only what the
    * very first frame renders at, before the panel has been measured. */
   --board-panel-h: auto;
+
   width: var(--board-panel-w);
   height: var(--board-panel-h);
+
   /* A description arriving after the fetch retunes the height: it grows into
    * place instead of appearing at a new size. */
   transition: height 200ms cubic-bezier(0.22, 1, 0.36, 1);
@@ -23,6 +26,7 @@
     width: var(--board-card-w, 20rem);
     height: var(--board-card-h, 7rem);
   }
+
   to {
     width: var(--board-panel-w);
     height: var(--board-panel-h);
@@ -37,6 +41,7 @@
     width: var(--board-panel-w);
     height: var(--board-panel-h);
   }
+
   to {
     width: var(--board-card-w, 20rem);
     height: var(--board-card-h, 7rem);

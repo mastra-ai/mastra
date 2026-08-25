@@ -426,13 +426,19 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
           userId: resolved.tenant.userId,
           integrationIds: ['linear'],
         });
+        const selection = config.linear!;
+        if (!selection.enabled) {
+          return c.json({ error: 'linear_intake_disabled', message: 'Linear intake is turned off in Settings.' }, 404);
+        }
         const projectIds = await scopeSourceIdsToProject({
           intake,
           projects: options.projects,
           orgId: resolved.tenant.orgId,
           factoryProjectId,
-          selectedIds: config.linear!.sourceIds ?? [],
+          selectedIds: selection.sourceIds ?? [],
         });
+        // Nothing bound to this board is anything to read from.
+        if (projectIds.length === 0) return c.json({ error: 'issue_not_found' }, 404);
 
         try {
           const accessToken = await linear.getFreshAccessToken(connection);
