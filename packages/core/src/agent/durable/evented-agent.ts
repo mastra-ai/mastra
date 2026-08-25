@@ -5,7 +5,7 @@
  * fire-and-forget execution: the workflow run is started without awaiting it.
  *
  * Unlike DurableAgent which runs the workflow synchronously, EventedAgent:
- * 1. Uses startAsync() for non-blocking execution
+ * 1. Uses an un-awaited start() for non-blocking execution
  * 2. Fire-and-forget pattern - execution starts and returns immediately
  * 3. Events are streamed via pubsub as the workflow executes
  */
