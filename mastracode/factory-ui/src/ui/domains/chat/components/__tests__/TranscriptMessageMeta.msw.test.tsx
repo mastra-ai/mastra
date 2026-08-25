@@ -92,6 +92,23 @@ describe('message meta', () => {
     expect(screen.queryByRole('button', { name: 'Copy message' })).toBeNull();
   });
 
+  it('stamps the reply only when the run stops answering', () => {
+    const entries = [
+      messageEntry('user-1', 'user', [{ type: 'text', text: 'ship it' }]),
+      messageEntry('assistant-1', 'assistant', [{ type: 'text', text: 'reading the file' }]),
+    ];
+    const { container, rerender } = renderWithProviders(
+      <TranscriptEntries entries={entries} onApprove={() => {}} onRespond={() => {}} running />,
+    );
+
+    // The user's own message is finished; the reply between steps is not.
+    expect(container.querySelectorAll('time')).toHaveLength(1);
+
+    rerender(<TranscriptEntries entries={entries} onApprove={() => {}} onRespond={() => {}} />);
+
+    expect(container.querySelectorAll('time')).toHaveLength(2);
+  });
+
   it('leaves a message with nothing to copy unstamped', () => {
     const { container } = renderEntries([
       messageEntry('assistant-1', 'assistant', [

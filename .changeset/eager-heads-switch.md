@@ -33,3 +33,7 @@ An agent question fills its place in the reply without disturbing the text aroun
 The "Thinking" line now settles its sweep and fades when the run's first output arrives, instead of vanishing mid-sweep under it.
 
 A reply's parts hold their place from the start. An empty reasoning block, a blank passage or a waiting question used to be dropped from the reply and re-inserted once it had content — which grew the script ahead of the reveal clock, pulled words already on screen back out of view, and replayed their entrance. A slot is now reserved by what a part is, never by what it currently says: it renders nothing until it has something, and the words after it never move.
+
+A tool row stays in the bubble it landed in. The run rotates its assistant message at each step, and a call that started just before the rotation was claimed by the new message — the row the reader was watching was torn out of one bubble and replayed in the next, taking its open card and sweep with it. The row now stays where it played, the rotated message defers to it, and a lost result still reaches it; a reload draws canonical order.
+
+The timestamp and copy button under a reply now wait for the whole answer. A reply is one message per step, and the stamp landed after every step — appearing with a copy button mid-run, then vanishing when the next step opened. The stamp lands once, when the run stops answering.

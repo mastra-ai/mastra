@@ -375,8 +375,91 @@ describe('transcript reducer message entries', () => {
 
     expect(matchingParts).toHaveLength(1);
     expect(afterResume.entries).toHaveLength(2);
-    expect(messageParts(afterResume.entries[0])).toEqual([{ type: 'text', text: 'Before question' }]);
-    expect(messageParts(afterResume.entries[1])).toEqual(resumedMessage.content.parts);
+    // The question stays in the bubble the reader answered it in, with the
+    // resumed copy's result folded in; the new message keeps only its own text.
+    expect(messageParts(afterResume.entries[0])).toEqual([
+      { type: 'text', text: 'Before question' },
+      resumedMessage.content.parts[0],
+    ]);
+    expect(messageParts(afterResume.entries[1])).toEqual([{ type: 'text', text: 'After question' }]);
+  });
+
+  it('keeps a call where the reader watched it land when the rotated message claims it', () => {
+    // A step's first call can stream in before the engine announces the step's
+    // message, so its row is already drawn under the previous bubble when the
+    // rotated message arrives carrying the same call. Moving the part would
+    // remount the row under the reader; the drawn row keeps it.
+    const first = dbMessage('turn-1', 'assistant', [{ type: 'text', text: 'Looking around' }]);
+    let state = transcriptReducer(initialTranscript, {
+      type: 'event',
+      event: { type: 'message_start', message: first },
+    });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', message: first } });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: { type: 'tool_start', toolCallId: 'tool-1', toolName: 'view', args: { path: 'src/index.ts' } },
+    });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: {
+        type: 'message_update',
+        message: dbMessage('turn-2', 'assistant', [
+          {
+            type: 'tool-invocation',
+            toolInvocation: { state: 'call', toolCallId: 'tool-1', toolName: 'view', args: { path: 'src/index.ts' } },
+          },
+          { type: 'text', text: 'Reading the entry point' },
+        ]),
+      },
+    });
+
+    expect(state.entries).toHaveLength(2);
+    expect(messageParts(state.entries[0]).filter(isToolInvocationPart)).toHaveLength(1);
+    expect(messageParts(state.entries[1])).toEqual([{ type: 'text', text: 'Reading the entry point' }]);
+
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: { type: 'tool_end', toolCallId: 'tool-1', result: 'ok', isError: false },
+    });
+    const drawn = messageParts(state.entries[0]).filter(isToolInvocationPart);
+    expect(drawn[0]).toMatchObject({ toolInvocation: { state: 'result', toolCallId: 'tool-1' } });
+  });
+
+  it("folds a dropped copy's result into the drawn row when its tool_end was lost", () => {
+    const first = dbMessage('turn-1', 'assistant', [{ type: 'text', text: 'Looking around' }]);
+    let state = transcriptReducer(initialTranscript, {
+      type: 'event',
+      event: { type: 'message_start', message: first },
+    });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', message: first } });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: { type: 'tool_start', toolCallId: 'tool-1', toolName: 'view', args: { path: 'src/index.ts' } },
+    });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: {
+        type: 'message_update',
+        message: dbMessage('turn-2', 'assistant', [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'view',
+              args: { path: 'src/index.ts' },
+              result: 'contents',
+            },
+          },
+          { type: 'text', text: 'Found it' },
+        ]),
+      },
+    });
+
+    const drawn = messageParts(state.entries[0]).filter(isToolInvocationPart);
+    expect(drawn).toHaveLength(1);
+    expect(drawn[0]).toMatchObject({ toolInvocation: { state: 'result', result: 'contents' } });
+    expect(messageParts(state.entries[1])).toEqual([{ type: 'text', text: 'Found it' }]);
   });
 
   it('keeps tool lifecycle events visible inline before a message update re-emits the tool call', () => {

@@ -570,18 +570,23 @@ export function TranscriptEntries({
     <>
       {turnGroups.map((group, index) => {
         const isLiveTurn = index === turnGroups.length - 1;
+        const runningTurn = isLiveTurn && running;
         // Closing turns keep their room class so reserved space releases through its transition.
-        const holdsRoom = isLiveTurn && group.opensTurn && running;
+        const holdsRoom = runningTurn && group.opensTurn;
         const openRoomClass = group.key === restoredTurnKey ? 'turn-room-restored-open' : 'turn-room-open';
 
         // One reply, however many messages the server split it into: the meta row lands
-        // once, under the last of them, and copies the whole answer.
+        // once, under the last of them, and copies the whole answer. While the run is
+        // still answering there is no whole answer yet — a step ending is not the reply
+        // ending, so no stamp lands mid-turn.
         const steps = replySteps(group);
         const replyEnd = steps.at(-1);
-        const reply = steps
-          .map(step => messageText(renderableParts(step)))
-          .filter(Boolean)
-          .join('\n\n');
+        const reply = runningTurn
+          ? undefined
+          : steps
+              .map(step => messageText(renderableParts(step)))
+              .filter(Boolean)
+              .join('\n\n');
 
         return (
           <div

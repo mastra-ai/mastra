@@ -1000,7 +1000,7 @@ function upsertMessage(state: TranscriptState, message: MastraDBMessage, streami
   const prevEntry = prev?.kind === 'message' ? prev : undefined;
   const nextMessage =
     message.role === 'assistant'
-      ? preserveRuntimeToolParts(message, prevEntry?.message)
+      ? withoutToolPartsDrawnElsewhere(preserveRuntimeToolParts(message, prevEntry?.message), entries, idx)
       : preserveOptimisticUserContent(message, prevEntry?.message);
   const canonicalEntry = toMessageEntry(nextMessage, { streaming, runtimeTools: prevEntry?.runtimeTools });
   // An entry the reader is already watching keeps the identity it was drawn with:
@@ -1008,32 +1008,41 @@ function upsertMessage(state: TranscriptState, message: MastraDBMessage, streami
   // cards, group state, its entrance. The canonical id still matches on lookup.
   const entry = prevEntry ? { ...canonicalEntry, id: prevEntry.id } : canonicalEntry;
 
-  if (message.role === 'assistant') {
-    const ownedToolCallIds = new Set(
-      nextMessage.content.parts.map(toolCallIdForPart).filter((id): id is string => Boolean(id)),
-    );
-    if (ownedToolCallIds.size > 0) {
-      for (let entryIndex = 0; entryIndex < entries.length; entryIndex++) {
-        if (entryIndex === idx) continue;
-        const candidate = entries[entryIndex];
-        if (candidate.kind !== 'message' || candidate.message.role !== 'assistant') continue;
-        const parts = candidate.message.content.parts.filter(part => {
-          const toolCallId = toolCallIdForPart(part);
-          return !toolCallId || !ownedToolCallIds.has(toolCallId);
-        });
-        if (parts.length !== candidate.message.content.parts.length) {
-          entries[entryIndex] = {
-            ...candidate,
-            message: { ...candidate.message, content: { ...candidate.message.content, parts } },
-          };
-        }
-      }
-    }
-  }
-
   if (idx === -1) entries.push(entry);
   else entries[idx] = entry;
-  return { ...state, entries };
+  const next = { ...state, entries };
+  return message.role === 'assistant' ? reconcileToolResults(next, [message]) : next;
+}
+
+/**
+ * Drop tool parts already drawn under another entry. A call that starts before
+ * the run rotates its assistant message is a row in the previous bubble by the
+ * time the rotated message claims it — moving it would remount the row under
+ * the reader. The drawn row keeps the call and `reconcileToolResults` folds the
+ * dropped copy's terminal state into it; a reload draws canonical order.
+ */
+function withoutToolPartsDrawnElsewhere(
+  message: MastraDBMessage,
+  entries: TimelineEntry[],
+  own: number,
+): MastraDBMessage {
+  const drawnElsewhere = new Set<string>();
+  for (const [index, entry] of entries.entries()) {
+    if (index === own || entry.kind !== 'message' || entry.message.role !== 'assistant') continue;
+    for (const part of entry.message.content.parts) {
+      const toolCallId = toolCallIdForPart(part);
+      if (toolCallId) drawnElsewhere.add(toolCallId);
+    }
+  }
+  if (drawnElsewhere.size === 0) return message;
+
+  const parts = message.content.parts.filter(part => {
+    const toolCallId = toolCallIdForPart(part);
+    return !toolCallId || !drawnElsewhere.has(toolCallId);
+  });
+  if (parts.length === message.content.parts.length) return message;
+
+  return { ...message, content: { ...message.content, parts } };
 }
 
 function preserveOptimisticUserContent(message: MastraDBMessage, previous?: MastraDBMessage): MastraDBMessage {
