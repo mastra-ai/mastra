@@ -250,16 +250,17 @@ describe('ThreadPage document title', () => {
     await waitFor(() => expect(document.title).toBe('COR-210 | Mastra Factory'));
   });
 
-  it('leaves the default title when the thread has no title yet', async () => {
+  it('keeps the branch label when a work-session thread has no title yet', async () => {
     stubBase({
       workItems: [],
       threads: [{ id: THREAD_ID }],
     });
-    await renderRoute(`/factories/${FACTORY_ID}/user/threads/${THREAD_ID}`);
+    await renderRoute(`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`);
 
     // Give the session boundary a chance to resolve so we know we've reached
     // the branch that mounts <PageTitle/>; without a title/PR number the hook
-    // must leave the default in place.
+    // must leave the default in place and preserve the sidebar branch fallback.
     await waitFor(() => expect(document.title).toBe('Mastra Factory'), { timeout: 2000 });
+    expect(await screen.findByRole('button', { name: 'factory/pr-1567' })).toBeInTheDocument();
   });
 });
