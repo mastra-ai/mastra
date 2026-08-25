@@ -129,7 +129,7 @@ export interface IssueSummary {
 export const LIST_PAGE_SIZE = 30;
 
 /** Allow GitHub OAuth token exchanges enough time to complete during installation callbacks. */
-const GITHUB_OAUTH_TOKEN_TIMEOUT_MS = 30_000;
+const GITHUB_OAUTH_TOKEN_TIMEOUT_MS = 10_000;
 
 export interface IssuePage {
   issues: IssueSummary[];
