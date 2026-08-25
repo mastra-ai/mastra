@@ -66,6 +66,9 @@ export const useThreads = ({
   return useQuery({
     queryKey: ['memory', 'threads', resourceId, agentId, requestContext],
     queryFn: async () => {
+      // Unreachable: `enabled` below already keeps the query idle when memory
+      // is off. The early return only narrows the result type.
+      // Stryker disable next-line ConditionalExpression
       if (!isMemoryEnabled) return null;
       const result = await client.listMemoryThreads({ resourceId, agentId, requestContext });
       return result.threads;
@@ -90,6 +93,8 @@ export const useDeleteThread = () => {
     },
     onSuccess: (_, variables) => {
       const { agentId } = variables;
+      // Unreachable: `agentId` is a required argument of the mutation.
+      // Stryker disable next-line ConditionalExpression
       if (agentId) {
         void queryClient.invalidateQueries({ queryKey: ['memory', 'threads', agentId, agentId] });
       }
@@ -131,6 +136,8 @@ export const useCloneThread = () => {
     },
     onSuccess: (_, variables) => {
       const { agentId } = variables;
+      // Unreachable: `agentId` is a required argument of the mutation.
+      // Stryker disable next-line ConditionalExpression
       if (agentId) {
         void queryClient.invalidateQueries({ queryKey: ['memory', 'threads', agentId, agentId] });
       }

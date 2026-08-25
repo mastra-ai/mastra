@@ -35,6 +35,9 @@ export const useStoredScorerMutations = (scorerId?: string) => {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['stored-scorers'] });
       void queryClient.invalidateQueries({ queryKey: ['scorers'] });
+      // Unreachable: `mutationFn` throws without a `scorerId`, so `onSuccess`
+      // never runs with one missing; the check only narrows the type.
+      // Stryker disable next-line ConditionalExpression
       if (scorerId) {
         void queryClient.invalidateQueries({ queryKey: ['stored-scorer', scorerId] });
       }
@@ -49,6 +52,9 @@ export const useStoredScorerMutations = (scorerId?: string) => {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['stored-scorers'] });
       void queryClient.invalidateQueries({ queryKey: ['scorers'] });
+      // Unreachable: `mutationFn` throws without a `scorerId`, so `onSuccess`
+      // never runs with one missing; the check only narrows the type.
+      // Stryker disable next-line ConditionalExpression
       if (scorerId) {
         void queryClient.invalidateQueries({ queryKey: ['stored-scorer', scorerId] });
       }

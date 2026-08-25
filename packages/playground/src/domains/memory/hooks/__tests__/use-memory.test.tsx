@@ -52,9 +52,14 @@ const captureMemory = (body: unknown = {}) => {
   return seen;
 };
 
-const setup = () => {
+/**
+ * `retry` defaults to off so unrelated specs stay fast. The no-retry
+ * assertions pass `retry: true` instead, so what they observe is each hook's
+ * own `retry: false` rather than the client default masking it.
+ */
+const setup = ({ retry = false }: { retry?: boolean } = {}) => {
   const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    defaultOptions: { queries: { retry }, mutations: { retry: false } },
   });
   const wrapper = ({ children }: { children: ReactNode }) => (
     <MastraReactProvider baseUrl={BASE_URL}>
@@ -522,5 +527,136 @@ describe('the request context the studio is scoped to', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(seen[0].search).toContain(`requestContext=${encodeURIComponent(btoa(JSON.stringify({ tenant: 'acme' })))}`);
     expect(queryClient.getQueryData(['memory', AGENT_ID, { tenant: 'acme' }])).toBeDefined();
+  });
+});
+
+/**
+ * The memory reads are cached for five minutes and kept for ten. Both windows
+ * are only observable by unmounting and coming back: a window measured in
+ * fractions of a millisecond would have expired, so the second mount would go
+ * back to the server.
+ */
+describe('the windows the memory reads are cached for', () => {
+  const remountCases = [
+    ['the memory status', '/api/memory/status', () => useMemory(AGENT_ID)],
+    ['the memory config', '/api/memory/config', () => useMemoryConfig(AGENT_ID)],
+    [
+      'a single thread',
+      `/api/memory/threads/${THREAD_ID}`,
+      () => useThread({ threadId: THREAD_ID, agentId: AGENT_ID }),
+    ],
+  ] as const;
+
+  it.each(remountCases)('serves a remount of %s from cache', async (_label, path, useHook) => {
+    let calls = 0;
+    server.use(
+      http.get(`${BASE_URL}${path}`, () => {
+        calls += 1;
+        return HttpResponse.json({ result: true, id: THREAD_ID });
+      }),
+    );
+    const { wrapper } = setup();
+
+    const first = renderHook(useHook, { wrapper });
+    await waitFor(() => expect(first.result.current.isSuccess).toBe(true));
+    first.unmount();
+
+    await act(async () => new Promise(resolve => setTimeout(resolve, 80)));
+
+    const second = renderHook(useHook, { wrapper });
+    await waitFor(() => expect(second.result.current.isSuccess).toBe(true));
+
+    expect(calls).toBe(1);
+  });
+
+  it.each(remountCases)('does not re-read %s when the window regains focus', async (_label, path, useHook) => {
+    let calls = 0;
+    server.use(
+      http.get(`${BASE_URL}${path}`, () => {
+        calls += 1;
+        return HttpResponse.json({ result: true, id: THREAD_ID });
+      }),
+    );
+    const { wrapper } = setup();
+
+    const { result } = renderHook(useHook, { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    await act(async () => {
+      window.dispatchEvent(new Event('focus'));
+      await new Promise(resolve => setTimeout(resolve, 80));
+    });
+
+    expect(calls).toBe(1);
+  });
+
+  it.each(remountCases)('surfaces a failure of %s without starting the request over', async (_label, path, useHook) => {
+    let calls = 0;
+    server.use(
+      http.get(`${BASE_URL}${path}`, () => {
+        calls += 1;
+        return new HttpResponse(null, { status: 500 });
+      }),
+    );
+    const { wrapper } = setup({ retry: true });
+
+    const { result } = renderHook(useHook, { wrapper });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    const afterFirstFailure = calls;
+
+    await act(async () => new Promise(resolve => setTimeout(resolve, 1500)));
+
+    expect(calls).toBe(afterFirstFailure);
+  });
+});
+
+describe('the observational memory views, while they refresh', () => {
+  const OM_URL = `${BASE_URL}/api/memory/observational-memory`;
+  const STATUS_URL = `${BASE_URL}/api/memory/status`;
+
+  it('keeps showing the observations it already has, so the panel does not flash empty', async () => {
+    let calls = 0;
+    server.use(
+      http.get(OM_URL, async () => {
+        calls += 1;
+        if (calls > 1) await new Promise(resolve => setTimeout(resolve, 120));
+        return HttpResponse.json({ current: { id: `om-${calls}` }, history: [] });
+      }),
+    );
+    const { wrapper, queryClient } = setup();
+
+    const { result } = renderHook(() => useObservationalMemory({ agentId: AGENT_ID, resourceId: RESOURCE_ID }), {
+      wrapper,
+    });
+    await waitFor(() => expect(result.current.data).toMatchObject({ current: { id: 'om-1' } }));
+
+    await act(async () => {
+      void queryClient.refetchQueries({ queryKey: ['observational-memory'] });
+      await new Promise(resolve => setTimeout(resolve, 40));
+    });
+
+    expect(result.current.data).toMatchObject({ current: { id: 'om-1' } });
+  });
+
+  it('keeps showing the status it already has while a refresh is in flight', async () => {
+    let calls = 0;
+    server.use(
+      http.get(STATUS_URL, async () => {
+        calls += 1;
+        if (calls > 1) await new Promise(resolve => setTimeout(resolve, 120));
+        return HttpResponse.json({ result: true, threads: calls });
+      }),
+    );
+    const { wrapper, queryClient } = setup();
+
+    const { result } = renderHook(() => useMemoryWithOMStatus({ agentId: AGENT_ID }), { wrapper });
+    await waitFor(() => expect(result.current.data).toMatchObject({ threads: 1 }));
+
+    await act(async () => {
+      void queryClient.refetchQueries({ queryKey: ['memory-status'] });
+      await new Promise(resolve => setTimeout(resolve, 40));
+    });
+
+    expect(result.current.data).toMatchObject({ threads: 1 });
   });
 });

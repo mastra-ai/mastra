@@ -1,6 +1,6 @@
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
@@ -210,5 +210,58 @@ describe('useStoredScorerMutations', () => {
 
       expect(queryClient.getQueryState(['stored-scorers'])?.isInvalidated).toBe(false);
     });
+  });
+});
+
+describe('the cache entries the stored-scorer hooks touch', () => {
+  it('files a scorer under a key that carries its status and request context', async () => {
+    server.use(http.get(`${BASE_URL}/api/stored/scorers/scorer-1`, () => HttpResponse.json({ id: 'scorer-1' })));
+    const { wrapper, queryClient } = makeHarness();
+
+    const { result } = renderHook(() => useStoredScorer('scorer-1', { status: 'draft' }), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(queryClient.getQueryData(['stored-scorer', 'scorer-1', 'draft', {}])).toBeDefined();
+    expect(queryClient.getQueryData(['stored-scorer', 'scorer-1', undefined, {}])).toBeUndefined();
+  });
+
+  it.each([
+    ['an update', 'patch' as const],
+    ['a delete', 'delete' as const],
+  ])('refreshes both lists and the edited scorer after %s', async (_label, method) => {
+    server.use(http[method](`${BASE_URL}/api/stored/scorers/scorer-1`, () => HttpResponse.json({ id: 'scorer-1' })));
+    const { wrapper, queryClient } = makeHarness();
+    for (const key of [['stored-scorers'], ['scorers'], ['stored-scorer', 'scorer-1'], ['stored-scorer', 'other']]) {
+      queryClient.setQueryData(key, { seeded: true });
+    }
+
+    const { result } = renderHook(() => useStoredScorerMutations('scorer-1'), { wrapper });
+    await act(async () => {
+      await (method === 'patch'
+        ? result.current.updateStoredScorer.mutateAsync({ name: 'Renamed' } as never)
+        : result.current.deleteStoredScorer.mutateAsync(undefined as never));
+    });
+
+    expect(queryClient.getQueryState(['stored-scorers'])?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(['scorers'])?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(['stored-scorer', 'scorer-1'])?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(['stored-scorer', 'other'])?.isInvalidated).toBe(false);
+  });
+
+  it('refreshes only the lists after a create, since there is nothing cached yet', async () => {
+    server.use(http.post(`${BASE_URL}/api/stored/scorers`, () => HttpResponse.json({ id: 'scorer-new' })));
+    const { wrapper, queryClient } = makeHarness();
+    for (const key of [['stored-scorers'], ['scorers'], ['stored-scorer', 'scorer-1']]) {
+      queryClient.setQueryData(key, { seeded: true });
+    }
+
+    const { result } = renderHook(() => useStoredScorerMutations('scorer-1'), { wrapper });
+    await act(async () => {
+      await result.current.createStoredScorer.mutateAsync({ name: 'New' } as never);
+    });
+
+    expect(queryClient.getQueryState(['stored-scorers'])?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(['scorers'])?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(['stored-scorer', 'scorer-1'])?.isInvalidated).toBe(false);
   });
 });
