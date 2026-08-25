@@ -1,7 +1,7 @@
 import type { ClientScoreRowData } from '@mastra/client-js';
 import type { ScoreRowData } from '@mastra/core/evals';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ScoresDataList, DataListSkeleton } from '@mastra/playground-ui/components/DataList';
+import { ScoresDataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Columns3Icon } from 'lucide-react';
@@ -111,6 +111,8 @@ export function ScoresList({
         }
       : undefined;
 
+  const { containerRef, getRowProps } = useDataListKeyboard({ count: scores?.length ?? 0 });
+
   const handleClose = useCallback(() => {
     setInternalSelectedId(undefined);
     onScoreClick?.('');
@@ -177,14 +179,15 @@ export function ScoresList({
           </DropdownMenu>
         </div>
 
-        <ScoresDataList columns={columns} className="min-h-0 flex-1">
+        <ScoresDataList columns={columns} className="min-h-0 flex-1" scrollRef={containerRef}>
           {header}
 
-          {scores.map(score => (
+          {scores.map((score, index) => (
             <ScoresDataList.RowButton
               key={score.id}
               onClick={() => handleScoreClick(score.id)}
               className={selectedScoreId === score.id ? 'bg-surface4' : ''}
+              {...getRowProps(index)}
             >
               <ScoresDataList.DateCell timestamp={score.createdAt} />
               <ScoresDataList.TimeCell timestamp={score.createdAt} />

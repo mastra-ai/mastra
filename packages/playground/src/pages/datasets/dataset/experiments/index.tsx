@@ -62,9 +62,8 @@ function CompareDatasetExperimentsPage() {
                 <GitCompare /> Dataset Experiments Comparison
               </MainHeader.Title>
               <MainHeader.Description>
-                Comparing{' '}
-                <Link to={`/datasets/${datasetId}/experiments/${experimentIdA}`}>{experimentIdA.slice(0, 8)}</Link> vs{' '}
-                <Link to={`/datasets/${datasetId}/experiments/${experimentIdB}`}>{experimentIdB.slice(0, 8)}</Link>
+                Comparing <Link to={`/experiments/${experimentIdA}`}>{experimentIdA.slice(0, 8)}</Link> vs{' '}
+                <Link to={`/experiments/${experimentIdB}`}>{experimentIdB.slice(0, 8)}</Link>
               </MainHeader.Description>
             </MainHeader.Column>
             <MainHeader.Column>

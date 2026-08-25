@@ -8,6 +8,7 @@
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
+import type { FactorySecretEncryption } from '../../../secret-encryption.js';
 import { ModelCredentialsStorage } from './base.js';
 
 const oauth = (tag: string, expires: number) => ({
@@ -17,9 +18,9 @@ const oauth = (tag: string, expires: number) => ({
   expires,
 });
 
-async function makeStore(): Promise<ModelCredentialsStorage> {
+async function makeStore(encryption?: FactorySecretEncryption): Promise<ModelCredentialsStorage> {
   const backend = new LibSQLFactoryStorage({ id: 'credentials-test', url: ':memory:' });
-  const domain = backend.registerDomain(new ModelCredentialsStorage());
+  const domain = backend.registerDomain(new ModelCredentialsStorage(encryption));
   await backend.init();
   onTestFinished(() => backend.close());
   return domain;
@@ -159,5 +160,27 @@ describe('ModelCredentialsStorage', () => {
 
     await store.deleteLoginSession('s-1');
     expect(await store.getLoginSession('s-1')).toBeUndefined();
+  });
+
+  it('encrypts credential payloads before storage and decrypts them on read', async () => {
+    const envelope = 'mastra:factory-secret:v1:test-envelope';
+    const encrypt = vi.fn(async () => envelope);
+    const decrypt = vi.fn(async () => ({
+      value: { type: 'api_key' as const, key: 'sk-secret' },
+      needsReencryption: false,
+    }));
+    const store = await makeStore({ encrypt, decrypt });
+
+    await store.setCredential({ orgId: 'org1', userId: 'alice' }, 'openai', {
+      type: 'api_key',
+      key: 'sk-secret',
+    });
+    expect(encrypt).toHaveBeenCalledWith({ type: 'api_key', key: 'sk-secret' });
+
+    expect(await store.getCredential({ orgId: 'org1', userId: 'alice' }, 'openai')).toEqual({
+      type: 'api_key',
+      key: 'sk-secret',
+    });
+    expect(decrypt).toHaveBeenCalledWith(envelope);
   });
 });

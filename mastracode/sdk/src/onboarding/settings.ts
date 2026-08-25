@@ -80,6 +80,9 @@ export const MEMORY_GATEWAY_PROVIDER = MASTRA_GATEWAY_PROVIDER;
 /** @deprecated Renamed to {@link MASTRA_GATEWAY_DEFAULT_URL}. */
 export const MEMORY_GATEWAY_DEFAULT_URL = MASTRA_GATEWAY_DEFAULT_URL;
 
+/** Preferred model-independent web search/extract provider. */
+export type WebSearchProviderSetting = 'auto' | 'tavily' | 'parallel';
+
 /** Browser provider type. */
 export type BrowserProvider = 'stagehand' | 'agent-browser';
 
@@ -294,6 +297,12 @@ export interface GlobalSettings {
     quietMode: boolean;
     /** Maximum quiet-mode detail preview lines for compact tool calls. Set to 0 to hide previews. */
     quietModeMaxToolPreviewLines: number;
+    /**
+     * Default web search/extract provider. `auto` picks the first configured
+     * provider key (Tavily, then Parallel). An explicit provider is only
+     * honored while its API key is configured.
+     */
+    webSearchProvider: WebSearchProviderSetting;
   };
   // Storage backend configuration
   storage: StorageSettings;
@@ -397,6 +406,7 @@ const DEFAULTS: GlobalSettings = {
     thinkingLevel: 'off',
     quietMode: false,
     quietModeMaxToolPreviewLines: 2,
+    webSearchProvider: 'auto',
   },
   storage: { ...STORAGE_DEFAULTS },
   customModelPacks: [],
@@ -419,6 +429,7 @@ const DEFAULTS: GlobalSettings = {
   observability: { resources: {}, localTracing: false },
 };
 
+export const WEB_SEARCH_PROVIDER_VALUES: WebSearchProviderSetting[] = ['auto', 'tavily', 'parallel'];
 const QUIET_MODE_MAX_TOOL_PREVIEW_LINES_MAX = 8;
 const loadedSignalSettings = new WeakMap<GlobalSettings, SignalSettings>();
 
@@ -436,6 +447,12 @@ function signalSettingsEqual(left: SignalSettings, right: SignalSettings): boole
     left.unixSocketPubSub === right.unixSocketPubSub &&
     left.experimentalGithubSignals === right.experimentalGithubSignals
   );
+}
+
+function parseWebSearchProvider(value: unknown): WebSearchProviderSetting {
+  return typeof value === 'string' && WEB_SEARCH_PROVIDER_VALUES.includes(value as WebSearchProviderSetting)
+    ? (value as WebSearchProviderSetting)
+    : DEFAULTS.preferences.webSearchProvider;
 }
 
 function parseThinkingLevel(value: unknown): ThinkingLevelSetting {
@@ -467,6 +484,7 @@ function parsePreferences(rawPreferences: unknown): GlobalSettings['preferences'
     ...raw,
     thinkingLevel: parseThinkingLevel(raw.thinkingLevel),
     quietModeMaxToolPreviewLines: parseQuietModeMaxToolPreviewLines(raw.quietModeMaxToolPreviewLines),
+    webSearchProvider: parseWebSearchProvider(raw.webSearchProvider),
   };
 }
 

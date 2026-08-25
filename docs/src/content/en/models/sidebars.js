@@ -131,6 +131,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/agnes',
+          label: 'Agnes AI',
+        },
+        {
+          type: 'doc',
           id: 'providers/ai-router',
           label: 'AI-ROUTER',
         },
@@ -476,6 +481,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/iteracompute',
+          label: 'IteraCompute',
+        },
+        {
+          type: 'doc',
           id: 'providers/jalapeno',
           label: 'Jalapeno Cloud',
         },
@@ -638,6 +648,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/nebius',
           label: 'Nebius Token Factory',
+        },
+        {
+          type: 'doc',
+          id: 'providers/neosmith',
+          label: 'NeoSmith',
         },
         {
           type: 'doc',
@@ -808,6 +823,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/stackit',
           label: 'STACKIT',
+        },
+        {
+          type: 'doc',
+          id: 'providers/standardcompute',
+          label: 'Standard Compute',
         },
         {
           type: 'doc',

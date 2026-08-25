@@ -1,5 +1,29 @@
 # @mastra/memory
 
+## 1.28.0-alpha.3
+
+### Patch Changes
+
+- Fixed observational memory being silently wiped when every reflection attempt produced empty or degenerate output. Failed reflections now throw and leave existing observations intact. ([#22074](https://github.com/mastra-ai/mastra/pull/22074))
+
+  Threshold-triggered synchronous reflections are no longer re-run against unchanged observations after an attempt that failed or finished still over the reflection threshold. Reflection retries as soon as observations change.
+
+- Fix `continuationHints` being silently dropped when Observational Memory is configured through `Memory`. `Memory._initOMEngine` forwards the `observation`/`reflection` configs to the OM engine via explicit field lists, and `continuationHints` (added in #21302) was missing from both — so `continuationHints: { suggestedResponse: false }` had no effect unless `ObservationalMemory` was constructed directly. The Observer/Reflector prompts kept requesting the disabled sections and the injection gate kept admitting them. ([#22235](https://github.com/mastra-ai/mastra/pull/22235))
+
+- Updated dependencies [[`aa3a85d`](https://github.com/mastra-ai/mastra/commit/aa3a85daf094c683bb97efdf4b6a696d2e474af5), [`d29d06f`](https://github.com/mastra-ai/mastra/commit/d29d06fe00bbd35b4571150ea04c59d2ed783c71), [`e6516df`](https://github.com/mastra-ai/mastra/commit/e6516dfcdae4f4ac0e7971d84359a81385ee602f), [`0b2a3d1`](https://github.com/mastra-ai/mastra/commit/0b2a3d1783875c5b97b7b36ab3d03d7360e0dde7), [`6bb5d71`](https://github.com/mastra-ai/mastra/commit/6bb5d7193fe9166b219f0fccae17db7a5ae86e65), [`57de7d6`](https://github.com/mastra-ai/mastra/commit/57de7d644ba7146edb4e9e6111ec4fa98c3a59e9), [`e8e299c`](https://github.com/mastra-ai/mastra/commit/e8e299cc6abdfc39947e2fec25803493015d3882), [`edfc548`](https://github.com/mastra-ai/mastra/commit/edfc548886bc7bae17b681f8b6b41a47eb32bcd2), [`a8a4871`](https://github.com/mastra-ai/mastra/commit/a8a4871215f51da95c47129602157ce5372f634a), [`5165cdc`](https://github.com/mastra-ai/mastra/commit/5165cdcdcf50e144bb8113278535196cc9b07065), [`6bb5d71`](https://github.com/mastra-ai/mastra/commit/6bb5d7193fe9166b219f0fccae17db7a5ae86e65), [`9ee8120`](https://github.com/mastra-ai/mastra/commit/9ee8120ce17f76b9f617489e05a283353742690a), [`d975e92`](https://github.com/mastra-ai/mastra/commit/d975e924d4936f46c386bd3dee39c671720289f6), [`1cfa878`](https://github.com/mastra-ai/mastra/commit/1cfa8784d8da0dfaa0317e5048bc48b6084a5ea5), [`c118318`](https://github.com/mastra-ai/mastra/commit/c1183181c9804303db4b511c2e2648f8b714712b), [`fc07c64`](https://github.com/mastra-ai/mastra/commit/fc07c6465043e08e99193a6751a01c56ffc2e7a1), [`542dee2`](https://github.com/mastra-ai/mastra/commit/542dee254167f974ff8cbbbfc0ce10f9a2616a7b), [`a58483c`](https://github.com/mastra-ai/mastra/commit/a58483cff1a9d41fce7c931843f48cb0ac450f64), [`a58483c`](https://github.com/mastra-ai/mastra/commit/a58483cff1a9d41fce7c931843f48cb0ac450f64), [`895e9df`](https://github.com/mastra-ai/mastra/commit/895e9dfc17d6f34299eca64e317ded9e5f5e5ef8)]:
+  - @mastra/core@1.62.0-alpha.8
+
+## 1.28.0-alpha.2
+
+### Patch Changes
+
+- Observational memory now detects observer/reflector output where a multi-line block repeats many times (a model repetition loop). Previously such output could slip past the degenerate-output check and balloon stored observations, causing constant synchronous reflection churn; it is now rejected and retried like other degenerate output. ([#22072](https://github.com/mastra-ai/mastra/pull/22072))
+
+- Fixed observational memory reflection to keep retrying with stronger compression when a result remains above the token threshold. ([#22232](https://github.com/mastra-ai/mastra/pull/22232))
+
+- Updated dependencies [[`ae8790c`](https://github.com/mastra-ai/mastra/commit/ae8790c4bfaa088d2ab279d1dcc06f326b9fd109), [`04a815f`](https://github.com/mastra-ai/mastra/commit/04a815fc8971d29e97fcdcc5008a1eb472fc00ff), [`cced745`](https://github.com/mastra-ai/mastra/commit/cced745a056ec2225c5bc702e32d848847aa8b65)]:
+  - @mastra/core@1.62.0-alpha.7
+
 ## 1.28.0-alpha.1
 
 ### Minor Changes

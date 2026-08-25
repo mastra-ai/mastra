@@ -645,6 +645,7 @@ export const EXPERIMENT_RESULTS_SCHEMA: Record<string, StorageColumn> = {
   input: { type: 'jsonb', nullable: false },
   output: { type: 'jsonb', nullable: true },
   groundTruth: { type: 'jsonb', nullable: true },
+  metadata: { type: 'jsonb', nullable: true },
   error: { type: 'jsonb', nullable: true },
   startedAt: { type: 'timestamp', nullable: false },
   completedAt: { type: 'timestamp', nullable: false },

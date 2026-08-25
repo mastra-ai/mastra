@@ -113,6 +113,23 @@ describe('ensureFactorySourceSession', () => {
     expect(result.baseBranch).toBe('develop');
   });
 
+  it('attributes the session to attributeToUserId over the repo connector', async () => {
+    const { sourceControl, project } = await seedLinkedRepository();
+
+    const result = await ensureFactorySourceSession({
+      sourceControl,
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      branch: 'factory/issue-22254',
+      attributeToUserId: 'approver-1',
+    });
+
+    expect(result.userId).toBe('approver-1');
+    await expect(sourceControl.sessions.getBySessionId(result.sessionId)).resolves.toEqual(
+      expect.objectContaining({ userId: 'approver-1' }),
+    );
+  });
+
   it('rejects a factory project with no connection for this integration', async () => {
     const { seeded, project } = await seedLinkedRepository();
     const otherIntegration = seeded.sourceControl.forIntegration('gitlab');

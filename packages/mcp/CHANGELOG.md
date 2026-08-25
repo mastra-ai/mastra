@@ -1,5 +1,21 @@
 # @mastra/mcp
 
+## 1.17.2-alpha.2
+
+### Patch Changes
+
+- Preserve structured HTTP status and transport codes in aggregate MCP discovery errors while retaining legacy string errors. ([#22218](https://github.com/mastra-ai/mastra/pull/22218))
+
+  ```typescript
+  const { errorDetails } = await mcp.listToolsWithErrors();
+  if (errorDetails.weather?.httpStatus === 503) {
+    // Apply a transient-failure policy without parsing the legacy error string.
+  }
+  ```
+
+- Updated dependencies [[`ae8790c`](https://github.com/mastra-ai/mastra/commit/ae8790c4bfaa088d2ab279d1dcc06f326b9fd109), [`04a815f`](https://github.com/mastra-ai/mastra/commit/04a815fc8971d29e97fcdcc5008a1eb472fc00ff), [`cced745`](https://github.com/mastra-ai/mastra/commit/cced745a056ec2225c5bc702e32d848847aa8b65)]:
+  - @mastra/core@1.62.0-alpha.7
+
 ## 1.17.2-alpha.1
 
 ### Patch Changes

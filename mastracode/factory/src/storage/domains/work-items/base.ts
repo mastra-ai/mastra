@@ -205,6 +205,8 @@ export interface FactoryDeferredDecisionRecord {
   failureCode: FactoryDispatchFailureCode | null;
   /** When a human released this run; set once, so the gate never parks it again. */
   approvedAt: Date | null;
+  /** Who released this run — the run is attributed to them, not the repo connector. */
+  approvedBy: string | null;
   completedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -479,8 +481,8 @@ export const WORK_ITEMS_SCHEMA: CollectionSchema = {
   ],
   indexes: [
     {
-      name: 'work_items_org_project_updated_at_idx',
-      columns: ['org_id', 'factory_project_id', 'updated_at'],
+      name: 'work_items_org_project_created_at_id_idx',
+      columns: ['org_id', 'factory_project_id', 'created_at', 'id'],
     },
     {
       name: 'work_items_project_parent_idx',
@@ -742,6 +744,7 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
       last_error: { type: 'text', nullable: true },
       failure_code: { type: 'text', nullable: true },
       approved_at: { type: 'timestamp', nullable: true },
+      approved_by: { type: 'text', nullable: true },
       completed_at: { type: 'timestamp', nullable: true },
       created_at: { type: 'timestamp' },
       updated_at: { type: 'timestamp' },
@@ -911,6 +914,7 @@ function toDeferredDecision(row: GovernanceDbRow): FactoryDeferredDecisionRecord
     lastError: (row.last_error as string | null) ?? null,
     failureCode: isFactoryDispatchFailureCode(row.failure_code) ? row.failure_code : null,
     approvedAt: (row.approved_at as Date | null) ?? null,
+    approvedBy: (row.approved_by as string | null) ?? null,
     completedAt: (row.completed_at as Date | null) ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at as Date,
@@ -1139,12 +1143,21 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     const rows = await ops.findMany<WorkItemDbRow>(
       'work_items',
       { org_id: orgId, factory_project_id: factoryProjectId },
-      { orderBy: [['updated_at', 'desc']] },
+      {
+        orderBy: [
+          ['created_at', 'desc'],
+          ['id', 'desc'],
+        ],
+      },
     );
     return rows.map(toWorkItem);
   }
 
-  /** List the org's work items for a project, newest first. */
+  /**
+   * List the org's work items for a project, newest first. Ordered on `created_at` with an id
+   * tiebreak so the order is stable: `updated_at` moves under every write, which makes it useless
+   * as a cursor and non-deterministic for the callers that iterate this list.
+   */
   async list({ orgId, factoryProjectId }: { orgId: string; factoryProjectId: string }): Promise<WorkItemRow[]> {
     return this.#listWithOps(this.#db, orgId, factoryProjectId);
   }
@@ -1829,6 +1842,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     factoryProjectId: string,
     decisionId: string,
     now: Date,
+    approvedBy?: string,
   ): Promise<FactoryDeferredDecisionRecord | null> {
     return this.storage.withTransaction(async ops => {
       let settled = false;
@@ -1838,7 +1852,14 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         current => {
           if (current.status !== 'proposed') return null;
           settled = true;
-          return { status: 'pending', attempts: 0, available_at: now, approved_at: now, updated_at: now };
+          return {
+            status: 'pending',
+            attempts: 0,
+            available_at: now,
+            approved_at: now,
+            approved_by: approvedBy ?? null,
+            updated_at: now,
+          };
         },
       );
       if (!settled || !row) return null;
@@ -2293,9 +2314,9 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         let item: WorkItemRow;
         if (row) {
           row = await ops.updateAtomic<WorkItemDbRow>('work_items', { id: row.id }, current => {
-            const roles = new Set([...Object.keys(current.sessions), input.role]);
-            const sessions = Object.fromEntries([...roles].map(role => [role, input.session]));
-            return applyUpdate({ current, userId: input.userId, input: { sessions } });
+            // Stamp only the starting role — `applyUpdate` merges sessions, so
+            // other roles keep their own session and `startedBy` (#22254).
+            return applyUpdate({ current, userId: input.userId, input: { sessions: { [input.role]: input.session } } });
           });
           item = toRow(row!);
         } else {
@@ -2533,6 +2554,34 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       updated_at: now,
     });
     return { item: toWorkItem(row), created: true, previous: emptyPrior() };
+  }
+
+  async setParentWorkItemIfMissing({
+    orgId,
+    id,
+    userId,
+    parentWorkItemId,
+  }: {
+    orgId: string;
+    id: string;
+    userId: string;
+    parentWorkItemId: string;
+  }): Promise<WorkItemRow | null> {
+    const candidate = await this.#db.findOne<WorkItemDbRow>('work_items', { org_id: orgId, id });
+    if (!candidate) return null;
+
+    return this.#withProjectRelationTransaction(orgId, candidate.factory_project_id, async ops => {
+      const row = await ops.updateAtomic<WorkItemDbRow>('work_items', { org_id: orgId, id }, async current => {
+        if (current.parent_work_item_id !== null) return current;
+        validateParentRelation(
+          await this.#listWithOps(ops, orgId, current.factory_project_id),
+          current.id,
+          parentWorkItemId,
+        );
+        return applyUpdate({ current, userId, input: { parentWorkItemId } });
+      });
+      return row ? toWorkItem(row) : null;
+    });
   }
 
   async update({

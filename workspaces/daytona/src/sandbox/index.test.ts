@@ -606,6 +606,17 @@ describe('DaytonaSandbox', () => {
       expect(cmd).not.toContain('sandbox-value');
     });
 
+    it('setEnv after construction reaches subsequent commands', async () => {
+      const sandbox = new DaytonaSandbox();
+
+      await sandbox._start();
+      sandbox.setEnv(env => ({ ...env, GH_TOKEN: 'tok_1' }));
+      await sandbox.executeCommand('echo', ['test']);
+
+      const cmd: string = mockSandbox.process.executeSessionCommand.mock.calls[0]![1].command;
+      expect(cmd).toContain('export GH_TOKEN=tok_1');
+    });
+
     it('filters out undefined env values', async () => {
       const sandbox = new DaytonaSandbox({
         env: { KEEP: 'yes' },

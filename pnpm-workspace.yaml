@@ -52,6 +52,8 @@ catalog:
   oxfmt: 0.59.0
 
 patchedDependencies:
+  '@ai-sdk/provider-utils@3.0.31': patches/@ai-sdk__provider-utils@3.0.31.patch
+  '@ai-sdk/provider-utils@4.0.41': patches/@ai-sdk__provider-utils@4.0.41.patch
   '@changesets/get-dependents-graph@2.1.4': patches/@changesets__get-dependents-graph@2.1.4.patch
   '@earendil-works/pi-tui@0.80.6': patches/@earendil-works__pi-tui@0.80.6.patch
   '@manypkg/tools@2.1.1': patches/@manypkg__tools@2.1.1.patch

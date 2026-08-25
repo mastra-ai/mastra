@@ -326,7 +326,10 @@ const sidebars = {
           type: 'doc',
           id: 'observability/sentry',
           label: 'Sentry',
-          customProps: { icon: 'https://cdn.simpleicons.org/sentry/362d59/white?viewbox=auto&size=28' },
+          customProps: {
+            icon: '/img/integrations/sentry.svg',
+            iconDark: '/img/integrations/sentry-dark.svg',
+          },
         },
       ],
     },
@@ -382,6 +385,12 @@ const sidebars = {
             icon: 'https://svgl.app/library/aws_light.svg',
             iconDark: 'https://svgl.app/library/aws_dark.svg',
           },
+        },
+        {
+          type: 'doc',
+          id: 'databases/elasticsearch',
+          label: 'Elasticsearch',
+          customProps: { icon: 'https://cdn.simpleicons.org/elasticsearch?viewbox=auto&size=28' },
         },
         {
           type: 'doc',

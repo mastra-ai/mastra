@@ -156,7 +156,10 @@ class PgFactoryStorageOps implements FactoryStorageOps {
           row[name] = Boolean(value);
           break;
         case 'json':
-          row[name] = typeof value === 'string' ? JSON.parse(value) : value;
+          // node-pg parses JSONB through its type parsers, so `value` is
+          // already the stored JSON value. Parsing again would throw on a JSON
+          // string scalar (the whole column reads back as a JS string).
+          row[name] = value;
           break;
         case 'bigint':
         case 'integer':

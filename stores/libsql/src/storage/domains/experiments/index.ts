@@ -88,7 +88,16 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
     await this.#db.alterTable({
       tableName: TABLE_EXPERIMENT_RESULTS,
       schema: EXPERIMENT_RESULTS_SCHEMA,
-      ifNotExists: ['status', 'tags', 'comment', 'toolMockReport', 'organizationId', 'projectId', 'attempt'],
+      ifNotExists: [
+        'status',
+        'tags',
+        'comment',
+        'toolMockReport',
+        'metadata',
+        'organizationId',
+        'projectId',
+        'attempt',
+      ],
     });
 
     // Indexes — idempotent, safe to run on every init
@@ -241,6 +250,7 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
       input: safelyParseJSON(row.input as string),
       output: row.output ? safelyParseJSON(row.output as string) : null,
       groundTruth: row.groundTruth ? safelyParseJSON(row.groundTruth as string) : null,
+      metadata: row.metadata ? safelyParseJSON(row.metadata as string) : null,
       error: row.error ? safelyParseJSON(row.error as string) : null,
       startedAt: ensureDate(row.startedAt as string | Date)!,
       completedAt: ensureDate(row.completedAt as string | Date)!,
@@ -588,6 +598,7 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
           input: input.input,
           output: input.output,
           groundTruth: input.groundTruth,
+          metadata: input.metadata ?? null,
           error: input.error ?? null,
           startedAt: input.startedAt.toISOString(),
           completedAt: input.completedAt.toISOString(),
@@ -611,6 +622,7 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
         input: input.input,
         output: input.output,
         groundTruth: input.groundTruth,
+        metadata: input.metadata ?? null,
         error: input.error,
         startedAt: input.startedAt,
         completedAt: input.completedAt,
@@ -671,7 +683,7 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
       await this.#client.execute({
         sql: `UPDATE ${TABLE_EXPERIMENT_RESULTS} SET
           "itemDatasetVersion" = ?, "organizationId" = ?, "projectId" = ?,
-          "input" = ?, "output" = ?, "groundTruth" = ?, "error" = ?,
+          "input" = ?, "output" = ?, "groundTruth" = ?, "metadata" = ?, "error" = ?,
           "startedAt" = ?, "completedAt" = ?, "retryCount" = ?, "attempt" = ?,
           "traceId" = ?, "status" = ?, "tags" = ?, "toolMockReport" = ?
         WHERE "id" = ?`,
@@ -682,6 +694,7 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
           JSON.stringify(input.input),
           input.output != null ? JSON.stringify(input.output) : null,
           input.groundTruth != null ? JSON.stringify(input.groundTruth) : null,
+          input.metadata != null ? JSON.stringify(input.metadata) : null,
           input.error != null ? JSON.stringify(input.error) : null,
           input.startedAt.toISOString(),
           input.completedAt.toISOString(),

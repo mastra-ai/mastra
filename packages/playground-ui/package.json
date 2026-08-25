@@ -1,7 +1,7 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "51.1.0-alpha.6",
+  "version": "51.1.0-alpha.9",
   "description": "Mastra Playground components",
   "sideEffects": [
     "**/*.css"
@@ -62,6 +62,16 @@
       "require": {
         "types": "./dist/primitives/*.d.ts",
         "default": "./dist/primitives/*.cjs.js"
+      }
+    },
+    "./keyboard/*": {
+      "import": {
+        "types": "./dist/keyboard/*.d.ts",
+        "default": "./dist/keyboard/*.es.js"
+      },
+      "require": {
+        "types": "./dist/keyboard/*.d.ts",
+        "default": "./dist/keyboard/*.cjs.js"
       }
     },
     "./resize/*": {
