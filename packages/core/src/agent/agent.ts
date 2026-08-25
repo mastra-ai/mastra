@@ -4947,9 +4947,15 @@ export class Agent<
             };
 
             // Generate sub-agent thread and resource IDs early (before any rejection)
-            // These are needed for both successful execution and rejection cases
+            // These are needed for both successful execution and rejection cases.
+            // The suffix must be deterministic across resume: this wrapper's execute
+            // re-runs top-down when the run is resumed, so a randomUUID() suffix would
+            // regenerate to a different thread id than the initial pass, and the
+            // sub-agent's writer.custom() frames would then fail MessageList's
+            // "wrong threadId" guard and be dropped. toolCallId is stable across
+            // resume and unique per delegation. See #22281.
             const subAgentThreadId = inputData.threadId
-              ? `${inputData.threadId}-${randomUUID()}`
+              ? `${inputData.threadId}-${toolCallId}`
               : context?.mastra?.generateId({
                   idType: 'thread',
                   source: 'agent',
