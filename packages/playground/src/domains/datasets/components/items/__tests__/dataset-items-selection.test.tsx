@@ -73,6 +73,15 @@ describe('DatasetItems selection', () => {
     expect(screen.queryByText('Cancel')).toBeNull();
   });
 
+  it('keeps the Add Item button visible next to the selection menu', () => {
+    renderItems();
+
+    fireEvent.click(screen.getByLabelText('Select item item-a'));
+
+    expect(screen.getByRole('button', { name: /Add Item/ })).toBeDefined();
+    expect(screen.getByRole('button', { name: /1 selected/ })).toBeDefined();
+  });
+
   it('invokes the Create Dataset action with the checked items', () => {
     const onCreateDatasetClick = vi.fn();
     renderItems({ onCreateDatasetClick, onAddToDatasetClick: () => {} });
