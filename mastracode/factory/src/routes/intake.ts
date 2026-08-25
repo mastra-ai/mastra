@@ -32,6 +32,55 @@ export interface IntakeRoutesDeps extends RouteDependencies {
   integrations?: IntakeIntegration[];
 }
 
+/** One integration that failed while the rest of the aggregation succeeded. */
+export interface IntakeIntegrationFailure {
+  integrationId: string;
+  message: string;
+}
+
+type SettledIntegration<T> = { integrationId: string; value: T } | IntakeIntegrationFailure;
+
+const PROVIDER_READ_TIMEOUT_MS = 15_000;
+
+/** The Intake contract takes no abort signal, so a slow read is abandoned, not cancelled. */
+function withTimeout<T>(integrationId: string, read: () => Promise<T>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error(`${integrationId} did not answer within ${PROVIDER_READ_TIMEOUT_MS / 1000}s`)),
+      PROVIDER_READ_TIMEOUT_MS,
+    );
+    read()
+      .then(resolve, reject)
+      .finally(() => clearTimeout(timer));
+  });
+}
+
+/**
+ * Read every integration concurrently and isolate the ones that throw or hang, so a single
+ * unreachable provider degrades to a per-source error instead of failing the listing.
+ */
+async function settleByIntegration<T>(
+  requests: Array<{ integrationId: string; read: () => Promise<T> }>,
+): Promise<{ pages: Array<{ integrationId: string; value: T }>; failures: IntakeIntegrationFailure[] }> {
+  const settled = await Promise.all(
+    requests.map(async ({ integrationId, read }): Promise<SettledIntegration<T>> => {
+      try {
+        return { integrationId, value: await withTimeout(integrationId, read) };
+      } catch (error) {
+        console.error(`[factory] intake integration ${integrationId} is unavailable:`, error);
+        return { integrationId, message: error instanceof Error ? error.message : String(error) };
+      }
+    }),
+  );
+  const pages: Array<{ integrationId: string; value: T }> = [];
+  const failures: IntakeIntegrationFailure[] = [];
+  for (const entry of settled) {
+    if ('value' in entry) pages.push(entry);
+    else failures.push(entry);
+  }
+  return { pages, failures };
+}
+
 interface ParsedBinding {
   integrationId: string;
   sourceId: string;
@@ -255,16 +304,15 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
         handler: async c => {
           const tenant = await this.#resolveTenant(loose(c));
           if ('response' in tenant) return tenant.response;
-          const pages = await Promise.all(
-            integrations.map(async integration => ({
+          const { pages, failures } = await settleByIntegration(
+            integrations.map(integration => ({
               integrationId: integration.id,
-              sources: await integration.intake.listSources(tenant),
+              read: () => integration.intake.listSources(tenant),
             })),
           );
           return c.json({
-            sources: pages.flatMap(page =>
-              page.sources.map(source => ({ integrationId: page.integrationId, ...source })),
-            ),
+            sources: pages.flatMap(({ integrationId, value }) => value.map(source => ({ integrationId, ...source }))),
+            failures,
           });
         },
       }),
@@ -279,29 +327,38 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
 
           await intake.ensureReady();
           const config = await intake.getConfig({ ...tenant, integrationIds });
+          const { pages, failures } = await settleByIntegration(
+            integrations.flatMap(integration => {
+              const selection = config[integration.id];
+              if (!selection?.enabled || !selection.sourceIds?.length) return [];
+              const sourceIds = selection.sourceIds;
+              const cursor = cursors[integration.id];
+              return [
+                {
+                  integrationId: integration.id,
+                  read: () => integration.intake.listItems({ ...tenant, sourceIds, ...(cursor ? { cursor } : {}) }),
+                },
+              ];
+            }),
+          );
+
           const items: AggregatedIntakeItem[] = [];
           const nextCursors: Record<string, string> = {};
-          for (const integration of integrations) {
-            const selection = config[integration.id];
-            if (!selection?.enabled || !selection.sourceIds?.length) continue;
-            const page = await integration.intake.listItems({
-              ...tenant,
-              sourceIds: selection.sourceIds,
-              ...(cursors[integration.id] ? { cursor: cursors[integration.id] } : {}),
-            });
+          for (const { integrationId, value } of pages) {
             items.push(
-              ...page.items.map(item => {
+              ...value.items.map(item => {
                 const { source, ...candidate } = item;
-                return {
-                  ...candidate,
-                  integrationId: integration.id,
-                  externalSource: { integrationId: integration.id, ...source },
-                };
+                return { ...candidate, integrationId, externalSource: { integrationId, ...source } };
               }),
             );
-            if (page.nextCursor) nextCursors[integration.id] = page.nextCursor;
+            if (value.nextCursor) nextCursors[integrationId] = value.nextCursor;
           }
-          return c.json({ items, nextCursor: encodeCursor(nextCursors) });
+          // Keep the cursor an unavailable integration came in with, so the next page resumes there instead of replaying it.
+          for (const { integrationId } of failures) {
+            const cursor = cursors[integrationId];
+            if (cursor) nextCursors[integrationId] = cursor;
+          }
+          return c.json({ items, nextCursor: encodeCursor(nextCursors), failures });
         },
       }),
     ];

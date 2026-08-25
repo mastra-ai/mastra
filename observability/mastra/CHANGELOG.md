@@ -1,5 +1,21 @@
 # @mastra/observability
 
+## 1.17.2-alpha.2
+
+### Patch Changes
+
+- Added `span.endTree()` for closing a span together with every descendant span that is still open, so an operation that is abandoned rather than completed can still emit a full trace. The options you pass are applied to every span it closes, so a force-closed child is distinguishable from one that finished on its own. ([#22278](https://github.com/mastra-ai/mastra/pull/22278))
+
+  ```ts
+  // Ends the span and any child spans still open beneath it, marking each canceled
+  workflowSpan.endTree({ attributes: { status: 'canceled' } });
+  ```
+
+  Repeat calls to `span.end()` are now ignored. A span that was force-closed this way keeps the state it was closed with and reports its end exactly once, even if the work it covered finishes later and ends the span again.
+
+- Updated dependencies [[`b05f486`](https://github.com/mastra-ai/mastra/commit/b05f48612984d5fe2447ea2d6cdd5c604d285b97), [`7960688`](https://github.com/mastra-ai/mastra/commit/7960688828e04eaf3106e34f7758fa580257eef6)]:
+  - @mastra/core@1.62.0-alpha.10
+
 ## 1.17.2-alpha.1
 
 ### Patch Changes

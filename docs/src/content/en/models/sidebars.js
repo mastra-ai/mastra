@@ -716,6 +716,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/pendra',
+          label: 'Pendra',
+        },
+        {
+          type: 'doc',
           id: 'providers/perplexity',
           label: 'Perplexity',
         },
