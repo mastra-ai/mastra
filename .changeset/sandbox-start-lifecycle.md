@@ -6,9 +6,9 @@
 
 An error thrown by an `onStart` handler now fails the start: `start()` rejects and the sandbox is marked `error`. Previously the error was logged and swallowed, so a sandbox whose setup never ran still looked healthy, and the failure surfaced later as a confusing command error.
 
-**Added `find()`, `connect()` and `create()` for sandbox providers**
+**Added optional `find()`, `connect()` and `create()` for sandbox providers**
 
-A provider can implement these three optional methods instead of writing `start()`. Mastra calls them in order, so providers no longer hand-roll "reuse the existing sandbox, otherwise make one", and Mastra knows which one happened:
+A provider can implement these three methods instead of writing `start()`. Mastra calls them in order, so providers no longer hand-roll "reuse the existing sandbox, otherwise make one", and Mastra knows which one happened. Existing providers that override `start()` keep working unchanged:
 
 ```typescript
 class MySandbox extends MastraSandbox<MyHandle> {
@@ -23,8 +23,6 @@ class MySandbox extends MastraSandbox<MyHandle> {
   }
 }
 ```
-
-Providers whose SDK gets-or-creates in one call keep overriding `start()`.
 
 **Added the start outcome, so setup can tell a new sandbox from a resumed one**
 
