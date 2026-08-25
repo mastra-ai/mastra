@@ -5295,18 +5295,19 @@ export class Agent<
               const injectSupervisorMemory = Boolean(resourceId && threadId && !resolvedHasOwnMemoryConfig);
               const subAgentMemoryOption = injectSupervisorMemory
                 ? {
-                    // A resumed delegation must continue on the thread the suspended run
-                    // persisted, not a freshly generated one. Omitting `thread` here lets
-                    // resumeStream/resumeGenerate backfill it from the run snapshot's
-                    // memory info (the cast covers the required `thread` field for that
-                    // resume-only case). Passing the fresh `subAgentThreadId` instead makes
-                    // the resumed run tag new messages (e.g. writer.custom() data-* frames)
-                    // with a thread that doesn't match the snapshot-restored messageList,
-                    // which throws on persistence and drops the frames from the stream.
-                    // See issue #22217.
+                    // A resumed delegation must continue on the thread/resource pair the
+                    // suspended run persisted, not freshly generated ones. Omitting both
+                    // here lets resumeStream/resumeGenerate backfill them from the run
+                    // snapshot's memory info (the cast covers the required `thread` field
+                    // for that resume-only case). Passing the fresh `subAgentThreadId`
+                    // makes the resumed run tag new messages (e.g. writer.custom() data-*
+                    // frames) with a thread that doesn't match the snapshot-restored
+                    // messageList, which throws on persistence and drops the frames from
+                    // the stream (issue #22217). Passing the fresh `subAgentResourceId`
+                    // alongside the snapshot-backfilled thread trips thread-ownership
+                    // validation, since the thread belongs to the original run's resource.
                     memory: {
-                      resource: subAgentResourceId,
-                      ...(shouldResumeSubAgent ? {} : { thread: subAgentThreadId }),
+                      ...(shouldResumeSubAgent ? {} : { resource: subAgentResourceId, thread: subAgentThreadId }),
                       options: {
                         lastMessages: false as const,
                         // Title generation is a top-level thread concern. Ephemeral subagent
