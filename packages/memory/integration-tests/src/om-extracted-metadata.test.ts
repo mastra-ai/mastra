@@ -362,12 +362,12 @@ describe('Observational Memory extracted metadata persistence', () => {
     expect(observerInput).toContain('Summarize the current project status.');
     expect(observerHistory).not.toContain(seededValue);
     await expect(workingMemory.getWorkingMemory({ threadId: seededThreadId, resourceId })).resolves.toBe(seededValue);
-    expect((await memory.storage.listMessagesByResourceId({ resourceId, perPage: false })).messages).toHaveLength(2);
+    expect((await memory.listMessagesByResourceId({ resourceId, perPage: false })).messages).toHaveLength(2);
     await expect(
       omEngine!.pruneObserved({
         threadId: secondThreadId,
         resourceId,
-        messages: (await memory.storage.listMessagesByResourceId({ resourceId, perPage: false })).messages,
+        messages: (await memory.listMessagesByResourceId({ resourceId, perPage: false })).messages,
       }),
     ).resolves.toEqual(expect.arrayContaining([expect.objectContaining({ role: 'signal', type: 'working-memory' })]));
   });
