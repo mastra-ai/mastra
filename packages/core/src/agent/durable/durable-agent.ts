@@ -808,6 +808,7 @@ export class DurableAgent<
         // Keep recovered runs observable if they suspend again so a later
         // resume or recovery can pick them up.
         messageList,
+        requestContext: registryEntry.requestContext,
       });
       streamCleanup = stream.cleanup;
       await this.#raceRecoveryLease(stream.ready, recoveryLease);
@@ -925,6 +926,20 @@ export class DurableAgent<
     )?.memoryInfo;
     const threadId = workflowInput.state?.threadId ?? messageListMemoryInfo?.threadId;
     const resourceId = workflowInput.state?.resourceId ?? messageListMemoryInfo?.resourceId;
+
+    // `requestContextEntries` contains caller state captured before preparation
+    // installed the run's framework-managed memory context. Rebuild that entry
+    // from persisted run state so recovery never inherits a caller/parent thread.
+    if (threadId && resourceId) {
+      requestContext.set('MastraMemory', {
+        thread: { id: threadId },
+        resourceId,
+        memoryConfig: workflowInput.state?.memoryConfig,
+      });
+    } else {
+      requestContext.delete('MastraMemory');
+    }
+
     const messageList = new MessageList({ threadId, resourceId });
     try {
       messageList.deserialize(workflowInput.messageListState);
@@ -1832,6 +1847,7 @@ export class DurableAgent<
       closeOnSuspend: (options as any)?.[CLOSE_ON_SUSPEND] === true,
       structuredOutput: registryEntry.structuredOutput as any,
       outputProcessors: registryEntry.outputProcessors,
+      requestContext: registryEntry.requestContext,
       messageList,
     });
 
@@ -2129,6 +2145,7 @@ export class DurableAgent<
       closeOnSuspend: (resolvedOptions as any)[CLOSE_ON_SUSPEND] === true,
       structuredOutput: entry.structuredOutput as any,
       outputProcessors: entry.outputProcessors,
+      requestContext: resolvedOptions.requestContext,
       messageList: globalEntry?.messageList ?? this.#runRegistry.getMessageList(runId),
     });
 
@@ -2745,6 +2762,7 @@ export class DurableAgent<
       closeOnSuspend: true,
       structuredOutput: registryEntry.structuredOutput as any,
       outputProcessors: registryEntry.outputProcessors,
+      requestContext: registryEntry.requestContext,
       messageList,
     });
 
