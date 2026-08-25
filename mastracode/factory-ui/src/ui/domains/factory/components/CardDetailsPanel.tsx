@@ -20,22 +20,7 @@ export function CardDetailsPanel({
   labelledBy: string;
   children: ReactNode;
 }) {
-  const contentRef = useRef<HTMLDivElement>(null);
   const [contentHeight, setContentHeight] = useState<number>();
-
-  // The panel is as tall as what it holds: a card whose source has no
-  // description would otherwise open onto an empty half-screen box. The
-  // content lays out unconstrained and the box follows it, so a description
-  // arriving after the fetch grows the panel instead of being scrolled into a
-  // height decided before it existed.
-  useLayoutEffect(() => {
-    const content = contentRef.current;
-    if (content === null) return;
-    setContentHeight(content.getBoundingClientRect().height);
-    const observer = new ResizeObserver(([entry]) => setContentHeight(entry.contentRect.height));
-    observer.observe(content);
-    return () => observer.disconnect();
-  }, [morph.open]);
 
   if (!morph.mounted) return null;
 
@@ -61,13 +46,36 @@ export function CardDetailsPanel({
         ref={morph.panelRef}
         className="board-card-details relative overflow-hidden p-0"
       >
-        {/* Laid out at the panel's final width and clipped by the growing box,
-            so the header rows hold still instead of reflowing frame by frame. */}
-        <div ref={contentRef} className="absolute top-0 left-0 flex w-[var(--board-panel-w)] flex-col">
-          {children}
-        </div>
+        <PanelContent onMeasure={setContentHeight}>{children}</PanelContent>
       </PopoverContent>
     </Popover>
+  );
+}
+
+/**
+ * The panel is as tall as what it holds: a card whose source has no description
+ * would otherwise open onto an empty half-screen box. Measuring lives here, in
+ * the element itself, because the popover renders its content a commit after it
+ * opens — an effect watching the open flag would find nothing to observe.
+ */
+function PanelContent({ onMeasure, children }: { onMeasure: (height: number) => void; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    const content = ref.current;
+    if (content === null) return;
+    onMeasure(content.getBoundingClientRect().height);
+    const observer = new ResizeObserver(([entry]) => onMeasure(entry.contentRect.height));
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, [onMeasure]);
+
+  // Laid out at the panel's final width and clipped by the growing box, so the
+  // header rows hold still instead of reflowing frame by frame.
+  return (
+    <div ref={ref} className="absolute top-0 left-0 flex w-[var(--board-panel-w)] flex-col">
+      {children}
+    </div>
   );
 }
 

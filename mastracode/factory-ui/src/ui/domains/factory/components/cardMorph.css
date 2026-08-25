@@ -6,9 +6,10 @@
 .board-card-details[data-slot='popover-content'] {
   --board-panel-w: min(28rem, calc(100vw - 1.5rem));
 
-  /* Replaced inline with the measured content height; this is only what the
-   * very first frame renders at, before the panel has been measured. */
-  --board-panel-h: auto;
+  /* Replaced inline with the measured content height. The fallback is the card's
+   * own box — where the morph starts — because the content is positioned and so
+   * gives the box no intrinsic height to fall back on: `auto` is a 0px line. */
+  --board-panel-h: var(--board-card-h, 7rem);
 
   width: var(--board-panel-w);
   height: var(--board-panel-h);

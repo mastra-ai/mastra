@@ -191,6 +191,20 @@ describe('Board card details open the default run', () => {
     expect(await within(dialog).findByText('The sync runs the wrong way.')).toBeInTheDocument();
   });
 
+  // The popover renders its content one commit after it opens, so measuring from
+  // the open flag found nothing to observe and the panel stayed at its unmeasured
+  // height — a 0px line, since the content inside it is positioned.
+  it('sizes the panel from its content on the first open', async () => {
+    stubBoardEndpoints();
+    renderWorkBoard();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Details for Fix login bug' }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Fix login bug' });
+    expect(dialog.style.getPropertyValue('--board-panel-h')).not.toBe('');
+  });
+
   it('starts a persisted Linear Triage item with the Linear kickoff invocation', async () => {
     const { startRequests } = stubBoardEndpoints({ workItems: [linearWorkItem] });
     renderWorkBoard();
