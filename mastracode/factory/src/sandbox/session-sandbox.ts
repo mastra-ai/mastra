@@ -14,15 +14,6 @@ export interface FactorySandboxContext {
   /** Configured repo setup command, when present — for template keying. */
   setupCommand?: string;
   /**
-   * Factory-built session setup hook (repo materialize + branch checkout +
-   * setup command, marker-guarded). Callbacks MUST forward this to the
-   * provider constructor's `onStart` option so setup runs inside the start
-   * lifecycle — any lazy start then heals a replaced VM, and a setup failure
-   * fails the start loudly. There is no fallback: a callback that drops the
-   * hook produces sessions whose repo never materializes.
-   */
-  onStart?: SandboxStartHook;
-  /**
    * Mints a fresh short-lived GitHub App installation token for the
    * session's repository. Providers may use it for authenticated work that
    * runs outside the VM — e.g. resolving a private repo's head or cloning it
@@ -43,9 +34,13 @@ export interface FactorySandboxContext {
  * `workingDirectory` at a per-session directory (e.g.
  * `join(root, ctx.sessionId)`); the repo checks out as a subdirectory of it.
  *
+ * Factory attaches its own session setup to the returned sandbox, so the
+ * callback never has to wire it up. A callback may still pass its own
+ * `onStart`; it runs after factory's setup, against a prepared workspace.
+ *
  * @example
  * ```typescript
- * sandbox: ({ sessionId, onStart }) => new E2BSandbox({ id: sessionId, onStart })
+ * sandbox: ({ sessionId }) => new E2BSandbox({ id: sessionId })
  * ```
  */
 export type MastraFactorySandboxConfig = (ctx: FactorySandboxContext) => WorkspaceSandbox;
@@ -207,7 +202,8 @@ async function runGuardedSetup(
 }
 
 /**
- * Build the setup hook for `ctx.onStart`. Runs inside the sandbox start
+ * Build the session setup hook, which factory attaches to the constructed
+ * sandbox with `setOnStart`. Runs inside the sandbox start
  * lifecycle: a fresh VM (`outcome: 'created'`) runs setup with no probe; a
  * reconnect probes the marker first, which re-runs setup after a failed or
  * crash-interrupted attempt. Throwing fails `start()` loudly — core treats

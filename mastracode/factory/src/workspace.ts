@@ -355,18 +355,32 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         .catch(() => {});
     };
     const constructSessionEntry = () =>
-      getSessionSandbox(session.id, repoFullName, () =>
-        createSessionSandboxInstance({
+      getSessionSandbox(session.id, repoFullName, () => {
+        const sandbox = createSessionSandboxInstance({
           sessionId: session.id,
           repoFullName,
           ...(projectRepository.setupCommand ? { setupCommand: projectRepository.setupCommand } : {}),
-          onStart: setupHook,
           // Deferred call — `getRepositoryToken` is declared below and only
           // dereferenced when a provider mints (template build time).
           getGithubToken: () => getRepositoryToken(),
           actingUserId: userId,
-        }),
-      );
+        });
+        // Attached here, inside the construction closure, so it runs exactly
+        // once per instance — `constructSessionEntry` itself runs on every
+        // open and would stack a wrapper per call.
+        if (!sandbox.setOnStart) {
+          throw new Error(
+            `Sandbox '${sandbox.id}' does not support setOnStart, which Factory requires to materialize the session repo.`,
+          );
+        }
+        // Factory's setup runs first: a hook the callback installed itself
+        // expects a prepared workspace (checkout + credentials).
+        sandbox.setOnStart(previous => async args => {
+          await setupHook(args);
+          await previous?.(args);
+        });
+        return sandbox;
+      });
     const sessionEntry = constructSessionEntry();
     const workdir = sessionEntry.workdir;
     const isLocalSandbox = sessionEntry.sandbox.provider === 'local';

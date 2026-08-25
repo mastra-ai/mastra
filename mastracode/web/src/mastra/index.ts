@@ -344,7 +344,6 @@ export const factory = new MastraFactory({
               }),
             }
           : {}),
-        ...(ctx.onStart ? { onStart: ctx.onStart } : {}),
       });
     }
 
@@ -361,7 +360,6 @@ export const factory = new MastraFactory({
               }),
             }
           : {}),
-        ...(ctx.onStart ? { onStart: ctx.onStart } : {}),
       });
     }
 
@@ -375,7 +373,6 @@ export const factory = new MastraFactory({
         ctx.sessionId,
       ),
       env: localSandboxEnv(),
-      ...(ctx.onStart ? { onStart: ctx.onStart } : {}),
     });
   },
   // Per-replica cap on concurrent Factory background dispatches. Unset means

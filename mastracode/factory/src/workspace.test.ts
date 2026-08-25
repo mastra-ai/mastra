@@ -13,58 +13,58 @@ const mocks = vi.hoisted(() => ({
   updates: [] as Array<{ set: Record<string, unknown>; where: unknown }>,
   /** When set, the stub models a local-provider callback rooted at <localRoot>/<sessionId>. */
   localRoot: null as string | null,
-  createSandbox: vi.fn(
-    (ctx: {
-      sessionId: string;
-      onStart?: (hook: { sandbox: unknown; outcome?: 'created' | 'connected' }) => Promise<void>;
-    }) => {
-      // Models a well-behaved provider: lazy start via ensureRunning() on the
-      // first command/info call (coalesced, failures never latch), ctx.onStart
-      // invoked inside start() with outcome 'created', status transitions.
-      let startInFlight: Promise<void> | null = null;
-      const sandbox: any = {
-        id: `sbx-${ctx.sessionId}`,
-        provider: mocks.localRoot ? 'local' : 'stub',
-        status: 'pending',
-        ...(mocks.localRoot ? { workingDirectory: `${mocks.localRoot}/${ctx.sessionId}` } : {}),
-        start: vi.fn(async () => {
-          // Like the real base class: status flips to 'running' BEFORE the
-          // onStart hook so the hook can execute commands without
-          // self-deadlocking through ensureRunning(); a hook failure marks
-          // the sandbox errored and rejects start().
-          sandbox.status = 'running';
-          try {
-            await ctx.onStart?.({ sandbox, outcome: 'created' });
-          } catch (error) {
-            sandbox.status = 'error';
-            throw error;
-          }
-        }),
-        ensureRunning: async () => {
-          if (sandbox.status === 'running') return;
-          startInFlight ??= sandbox.start().finally(() => {
-            startInFlight = null;
-          });
-          await startInFlight;
-        },
-        stop: vi.fn(async () => {
-          sandbox.status = 'stopped';
-        }),
-        getInfo: vi.fn(async () => {
-          await sandbox.ensureRunning();
-          return { metadata: { sandboxId: `sbx-${ctx.sessionId}` } };
-        }),
-        executeCommand: vi.fn(async (command: string) => {
-          await sandbox.ensureRunning();
-          // The workdir resolver probes the VM's default cwd (its home dir).
-          if (command === 'pwd') return { exitCode: 0, stdout: '/home/user\n', stderr: '' };
-          return { exitCode: 0, stdout: '', stderr: '' };
-        }),
-        setEnv: mocks.setEnv,
-      };
-      return sandbox;
-    },
-  ),
+  createSandbox: vi.fn((ctx: { sessionId: string }) => {
+    // Models a well-behaved provider: lazy start via ensureRunning() on the
+    // first command/info call (coalesced, failures never latch), the hook
+    // installed through setOnStart invoked inside start() with outcome
+    // 'created', status transitions.
+    let startInFlight: Promise<void> | null = null;
+    let onStart: ((hook: { sandbox: unknown; outcome?: 'created' | 'connected' }) => Promise<void>) | undefined;
+    const sandbox: any = {
+      id: `sbx-${ctx.sessionId}`,
+      provider: mocks.localRoot ? 'local' : 'stub',
+      status: 'pending',
+      ...(mocks.localRoot ? { workingDirectory: `${mocks.localRoot}/${ctx.sessionId}` } : {}),
+      setOnStart: vi.fn((update: (previous: typeof onStart) => NonNullable<typeof onStart>) => {
+        onStart = update(onStart);
+      }),
+      start: vi.fn(async () => {
+        // Like the real base class: status flips to 'running' BEFORE the
+        // onStart hook so the hook can execute commands without
+        // self-deadlocking through ensureRunning(); a hook failure marks
+        // the sandbox errored and rejects start().
+        sandbox.status = 'running';
+        try {
+          await onStart?.({ sandbox, outcome: 'created' });
+        } catch (error) {
+          sandbox.status = 'error';
+          throw error;
+        }
+      }),
+      ensureRunning: async () => {
+        if (sandbox.status === 'running') return;
+        startInFlight ??= sandbox.start().finally(() => {
+          startInFlight = null;
+        });
+        await startInFlight;
+      },
+      stop: vi.fn(async () => {
+        sandbox.status = 'stopped';
+      }),
+      getInfo: vi.fn(async () => {
+        await sandbox.ensureRunning();
+        return { metadata: { sandboxId: `sbx-${ctx.sessionId}` } };
+      }),
+      executeCommand: vi.fn(async (command: string) => {
+        await sandbox.ensureRunning();
+        // The workdir resolver probes the VM's default cwd (its home dir).
+        if (command === 'pwd') return { exitCode: 0, stdout: '/home/user\n', stderr: '' };
+        return { exitCode: 0, stdout: '', stderr: '' };
+      }),
+      setEnv: mocks.setEnv,
+    };
+    return sandbox;
+  }),
   materializeRepo: vi.fn(async (_input: unknown) => {}),
   checkoutSessionBranch: vi.fn(async () => {}),
   runSetupCommand: vi.fn(async () => {}),
@@ -1054,6 +1054,47 @@ describe('GitHub session workspace preparation', () => {
     // The workdir came from the live VM's probed home, never a persisted row.
     expect(mocks.materializeRepo).toHaveBeenCalledWith(
       expect.objectContaining({ row: expect.objectContaining({ sandboxWorkdir: '/home/user/hello' }) }),
+    );
+  });
+
+  it('attaches the session setup itself, so the callback never receives a hook to forward', async () => {
+    const workspace = createRemoteFactory();
+    addProject({ sandboxProvider: 'railway' });
+    addSession({ id: 'session-a' });
+
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    const ctx = mocks.createSandbox.mock.calls[0]![0] as Record<string, unknown>;
+    expect('onStart' in ctx).toBe(false);
+    // Setup still ran — attached through setOnStart on the constructed instance.
+    expect(mocks.materializeRepo).toHaveBeenCalled();
+  });
+
+  it('attaches the setup hook once per instance, not once per open', async () => {
+    const workspace = createRemoteFactory();
+    addProject({ sandboxProvider: 'railway' });
+    addSession({ id: 'session-a' });
+
+    const context = createGithubRequestContext('project-1', 'session-a');
+    await workspace({ requestContext: context });
+    await workspace({ requestContext: context });
+
+    // Second open reuses the memoized instance: one construction, one attach.
+    expect(mocks.createSandbox).toHaveBeenCalledTimes(1);
+    const sandbox = mocks.createSandbox.mock.results[0]!.value as { setOnStart: { mock: { calls: unknown[] } } };
+    expect(sandbox.setOnStart.mock.calls).toHaveLength(1);
+  });
+
+  it('fails loudly when the callback returns a sandbox that cannot take a start hook', async () => {
+    const workspace = createRemoteFactory();
+    addProject({ sandboxProvider: 'railway' });
+    addSession({ id: 'session-a' });
+    mocks.createSandbox.mockImplementationOnce(() => ({ id: 'sbx-no-hook', provider: 'stub' }) as never);
+
+    // Silently skipping setup would produce a session whose repo never
+    // materializes — the failure mode the forwarding contract used to have.
+    await expect(workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') })).rejects.toThrow(
+      /does not support setOnStart/,
     );
   });
 
