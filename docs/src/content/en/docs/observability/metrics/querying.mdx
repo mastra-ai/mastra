@@ -8,10 +8,10 @@ packages:
 
 # Querying metrics
 
-Mastra exposes the same five OLAP queries (`getMetricAggregate`, `getMetricBreakdown`, `getMetricTimeSeries`, `getMetricPercentiles`, and discovery helpers) through three surfaces: an in-process store accessor and the runtime HTTP API, plus the `mastra api metric` CLI. All three accept the same Zod-validated input shapes, so you can move from a one-off CLI investigation to a programmatic dashboard tool without re-learning the API.
+Mastra exposes four metric analytics queries (`getMetricAggregate`, `getMetricBreakdown`, `getMetricTimeSeries`, and `getMetricPercentiles`) and metric discovery helpers through three surfaces: an in-process store accessor and the runtime HTTP API, plus the `mastra api metric` CLI. All three accept the same Zod-validated input shapes, so you can move from a one-off CLI investigation to a programmatic dashboard tool without re-learning the API.
 
 <Inject>
-  **For AI agents:** Run `npx mastra api metric aggregate '{"name":"mastra_agent_duration_ms","aggregation":"avg"}'` to query average agent latency directly instead of writing a temporary script. Querying local metrics requires a running Mastra server with an OLAP-capable observability store; start the local server with `npx mastra dev`, or pass the reachable server's base URL with `--url`. Run `npx mastra api metric aggregate --schema` before constructing a different query. Install Mastra's skill with `npx skills add mastra-ai/skills --skill mastra` for complete API CLI discovery, targeting, schema, authentication, and error-handling guidance.
+  **For AI agents:** Run `npx mastra api metric aggregate '{"name":"mastra_agent_duration_ms","aggregation":"avg"}'` to query average agent latency directly instead of writing a temporary script. Querying local metrics requires a running Mastra server whose observability store supports metric queries; start the local server with `npx mastra dev`, or pass the reachable server's base URL with `--url`. Run `npx mastra api metric aggregate --schema` before constructing a different query. Install Mastra's skill with `npx skills add mastra-ai/skills --skill mastra` for complete API CLI discovery, targeting, schema, authentication, and error-handling guidance.
 </Inject>
 
 ## When to use this
@@ -24,7 +24,7 @@ Mastra exposes the same five OLAP queries (`getMetricAggregate`, `getMetricBreak
 For setup of the observability store itself, see the [Metrics overview](/docs/observability/metrics/overview). For the list of metric names you can query, see the [Automatic metrics reference](/reference/observability/metrics/automatic-metrics).
 
 :::note
-Metric queries are served by the observability domain, which requires an OLAP-capable store (DuckDB locally, ClickHouse in production). See [Metrics overview](/docs/observability/metrics/overview) for setup. If the observability store isn't configured, `getStore('observability')` returns `null`.
+Metric queries are served by the observability domain. DuckDB, ClickHouse, and Postgres v-next support these queries. Spanner also supports them when its `disableMetrics` option is set to `false`; metrics are disabled by default because Spanner is intended only for lower-volume metrics workloads. See [Metrics overview](/docs/observability/metrics/overview) for setup. If the observability domain isn't configured, `getStore('observability')` returns `undefined`.
 :::
 
 ## Surfaces
@@ -44,7 +44,7 @@ export const agentLatencyTool = createTool({
   execute: async (_input, context) => {
     const observability = await context.mastra!.getStorage()!.getStore('observability')
     if (!observability) {
-      throw new Error('Observability domain is not configured (requires DuckDB or ClickHouse)')
+      throw new Error('Observability domain is not configured')
     }
 
     const result = await observability.getMetricAggregate({
@@ -60,7 +60,7 @@ export const agentLatencyTool = createTool({
 })
 ```
 
-`getStore('observability')` returns `null` when the configured backend doesn't support OLAP queries.
+`getStore('observability')` returns `undefined` when the observability domain isn't configured. If the domain exists but its backend doesn't implement metric queries, the query method throws a not-implemented error.
 
 ### HTTP
 
@@ -107,6 +107,7 @@ Inputs:
 
 - `name`: Array of one or more metric names.
 - `aggregation`: One of `'sum' | 'avg' | 'min' | 'max' | 'count' | 'count_distinct' | 'last'`.
+- `distinctColumn`: Required when `aggregation` is `count_distinct`. Must be an allowlisted categorical column.
 - `filters`: Optional [filter object](#filtering).
 - `comparePeriod`: Optional `'previous_period' | 'previous_day' | 'previous_week'` for period-over-period comparison.
 
@@ -257,21 +258,22 @@ curl -sS -X POST http://localhost:4111/api/observability/metrics/aggregate \
 
 ### Always provide a time range
 
-`filters.timestamp` is optional, but you should treat it as required for any query that runs against a production store. Observability tables are typically partitioned (or chunked, for TimescaleDB) by event time. When you supply `timestamp.start` (and ideally `end`), the backend can prune to the partitions that overlap the range, usually one or two. Without a time range, the planner has to scan every partition, which can be hundreds of segments over a year of retention and is the most common cause of slow OLAP queries on Postgres-backed stores.
+`filters.timestamp` is optional, but you should treat it as required for any query that runs against a production store. Observability tables are typically partitioned (or chunked, for TimescaleDB) by event time. When you supply `timestamp.start` and, ideally, `timestamp.end`, the backend can limit the scan to data that overlaps the requested range. Without a time range, the query may scan the store's full retention history, which can make analytics queries substantially slower.
 
 A safe default for ad-hoc queries is the last 24 hours; alerts and dashboards should match their actual evaluation window:
 
 ```typescript
-await observability!.getMetricAggregate({
-  name: ['mastra_agent_duration_ms'],
-  aggregation: 'p95',
+await observability!.getMetricPercentiles({
+  name: 'mastra_agent_duration_ms',
+  percentiles: [0.95],
+  interval: '1h',
   filters: {
     timestamp: { start: new Date(Date.now() - 24 * 60 * 60 * 1000) },
   },
 })
 ```
 
-This guidance applies to all backends (ClickHouse, Postgres v-next, DuckDB), but matters most for Postgres v-next where each missing time bound translates directly into one extra partition scan.
+This guidance applies to every supported metrics backend, but matters particularly for Postgres v-next because time bounds allow Postgres or TimescaleDB to exclude partitions or chunks outside the requested range.
 
 ## Example: build a custom KPI tile
 
@@ -294,7 +296,7 @@ export const tokenKpiTool = createTool({
   execute: async (_input, context) => {
     const observability = await context.mastra!.getStorage()!.getStore('observability')
     if (!observability) {
-      throw new Error('Observability domain is not configured (requires DuckDB or ClickHouse)')
+      throw new Error('Observability domain is not configured')
     }
 
     const result = await observability.getMetricAggregate({
