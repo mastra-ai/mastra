@@ -1748,6 +1748,116 @@ describe('GithubRules', () => {
     ]);
   });
 
+  it('closes the merged Review card and wakes the work item it was opened from', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read');
+    const work = await createLinkedIssue(workItems, project.id);
+    const card = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: 'github-pr:17',
+          url: 'https://github.com/acme/repo/pull/17',
+        },
+        parentWorkItemId: work.id,
+        title: 'PR 17',
+        stages: ['review'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules: builtInFactoryRules(),
+    });
+
+    await expect(service.ingest(pullRequest('closed', 'delivery-merged-both', true))).resolves.toEqual({
+      status: 'committed',
+    });
+    const merged = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(merged).toHaveLength(2);
+    expect(merged).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          workItemId: card.item.id,
+          decision: expect.objectContaining({ type: 'transition', board: 'review', stage: 'done' }),
+        }),
+        expect.objectContaining({
+          workItemId: work.id,
+          decision: expect.objectContaining({ type: 'sendMessage', role: 'work' }),
+        }),
+      ]),
+    );
+
+    // The fan-out rides the same delivery, so replaying it must stay inert for
+    // both cards rather than sending the work item a second reminder.
+    await expect(service.ingest(pullRequest('closed', 'delivery-merged-both', true))).resolves.toEqual({
+      status: 'replayed',
+    });
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toHaveLength(2);
+  });
+
+  it('closes the Review card of a merged PR that provenance bound to its work item', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read');
+    const work = await createLinkedIssue(workItems, project.id);
+    const card = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: 'github-pr:17',
+          url: 'https://github.com/acme/repo/pull/17',
+        },
+        parentWorkItemId: work.id,
+        title: 'PR 17',
+        stages: ['review'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    await integrationStorage.subscriptions.create({
+      orgId: 'org-1',
+      targetKey: 'factory-pr-provenance:10:17',
+      threadId: 'thread-1',
+      status: 'active',
+      data: { kind: 'factory-pr-provenance', workItemId: work.id },
+    });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules: builtInFactoryRules(),
+    });
+
+    await service.ingest(pullRequest('closed', 'delivery-merged-provenance', true));
+    const merged = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(merged).toHaveLength(2);
+    expect(merged).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          workItemId: work.id,
+          decision: expect.objectContaining({ type: 'sendMessage', role: 'work' }),
+        }),
+        expect.objectContaining({
+          workItemId: card.item.id,
+          decision: expect.objectContaining({ type: 'transition', board: 'review', stage: 'done' }),
+        }),
+      ]),
+    );
+  });
+
   it('evaluates the same delivery independently for every tenant project mapped to the repository', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
     const second = await projects.create({

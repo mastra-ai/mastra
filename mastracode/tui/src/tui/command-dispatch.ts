@@ -6,6 +6,7 @@ import { insertChatComponentWithBoundarySpacing } from './chat-boundary-reconcil
 import { startGoalWithDefaults } from './commands/goal.js';
 import {
   handleHelpCommand,
+  handleContextCommand,
   handleCostCommand,
   handleYoloCommand,
   handleVoiceCommand,
@@ -220,6 +221,10 @@ export async function dispatchSlashCommand(
       return true;
     case 'cost':
       handleCostCommand(ctx);
+      return true;
+    case 'context':
+    case 'ctx':
+      await handleContextCommand(ctx);
       return true;
     case 'prune':
       await handlePruneCommand(ctx, args);

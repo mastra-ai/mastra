@@ -221,6 +221,108 @@ export function isMaybeAnthropic(
   return matchesProviderPrefix(model, 'anthropic');
 }
 
+type ProviderFamily = 'anthropic' | 'openai' | 'google';
+
+function getModelProviderFamily(model: unknown): ProviderFamily | undefined {
+  if (matchesProviderPrefix(model, 'anthropic')) return 'anthropic';
+  if (matchesProviderPrefix(model, 'openai') || matchesProviderPrefix(model, 'azure')) return 'openai';
+  if (matchesProviderPrefix(model, 'google') || matchesProviderPrefix(model, 'vertex')) return 'google';
+  return undefined;
+}
+
+function getPartProviderFamily(part: { providerOptions?: unknown }): ProviderFamily | undefined {
+  if (!part.providerOptions || typeof part.providerOptions !== 'object') return undefined;
+  const providers = Object.keys(part.providerOptions);
+  if (providers.some(provider => provider === 'anthropic')) return 'anthropic';
+  if (providers.some(provider => provider === 'openai' || provider === 'azure')) return 'openai';
+  if (providers.some(provider => provider === 'google' || provider === 'vertex')) return 'google';
+  return undefined;
+}
+
+/**
+ * Provider-executed tools are provider-owned continuation state. A foreign
+ * provider cannot resolve their IDs, so remove the call and paired result from
+ * the outbound prompt while leaving persisted history untouched.
+ */
+export const stripForeignProviderExecutedTools: CompatRule = {
+  name: 'strip-foreign-provider-executed-tools',
+  applyToPrompt({ prompt, model }) {
+    const destinationProvider = getModelProviderFamily(model);
+    if (!destinationProvider) return undefined;
+
+    const foreignToolCallIds = new Set<string>();
+    for (const message of prompt) {
+      if (message.role !== 'assistant' || !Array.isArray(message.content)) continue;
+      for (const part of message.content) {
+        if (part.type !== 'tool-call' || !part.providerExecuted) continue;
+        const sourceProvider = getPartProviderFamily(part);
+        if (sourceProvider && sourceProvider !== destinationProvider) {
+          foreignToolCallIds.add(part.toolCallId);
+        }
+      }
+    }
+
+    if (foreignToolCallIds.size === 0) return undefined;
+
+    const rewritten: LanguageModelV2Prompt = [];
+    for (const message of prompt) {
+      if (message.role === 'assistant') {
+        const content = message.content.filter(
+          part => part.type !== 'tool-call' || !foreignToolCallIds.has(part.toolCallId),
+        );
+        if (content.length > 0) rewritten.push({ ...message, content });
+        continue;
+      }
+
+      if (message.role === 'tool') {
+        const content = message.content.filter(part => !foreignToolCallIds.has(part.toolCallId));
+        if (content.length > 0) rewritten.push({ ...message, content });
+        continue;
+      }
+
+      rewritten.push(message);
+    }
+    return rewritten;
+  },
+};
+
+const CLAUDE_VERSION_PATTERN = /claude-(?:(?:opus|sonnet|haiku)-)?(\d+)(?:[.-](\d+))?/i;
+
+function supportsAssistantPrefill(modelId: string): boolean | undefined {
+  const match = CLAUDE_VERSION_PATTERN.exec(modelId);
+  if (!match) return undefined;
+
+  const major = Number(match[1]);
+  const minor = Number(match[2] ?? 0);
+  return major < 4 || (major === 4 && minor < 6);
+}
+
+/**
+ * Detects Anthropic models that removed assistant-message prefill support.
+ * Claude 4.6 and later reject assistant-prefill requests, while earlier
+ * models retain support. Unknown Anthropic model versions are matched
+ * conservatively so a new model cannot silently bypass compatibility guards.
+ */
+export function isMaybeAnthropicWithoutAssistantPrefill(model: unknown): boolean {
+  if (typeof model === 'function') return true;
+
+  if (Array.isArray(model)) {
+    return model.some(entry => isMaybeAnthropicWithoutAssistantPrefill((entry as { model?: unknown }).model ?? entry));
+  }
+
+  if (!isMaybeAnthropic(model)) return false;
+
+  const modelId =
+    typeof model === 'string'
+      ? model
+      : model && typeof model === 'object' && typeof (model as { modelId?: unknown }).modelId === 'string'
+        ? (model as { modelId: string }).modelId
+        : undefined;
+
+  if (!modelId) return true;
+  return supportsAssistantPrefill(modelId) !== true;
+}
+
 export function isMaybeAzure(
   model:
     | string
@@ -453,6 +555,7 @@ export const azureSystemReminderTransform: CompatRule = {
  * `ProviderHistoryCompat` constructor.
  */
 export const DEFAULT_COMPAT_RULES: CompatRule[] = [
+  stripForeignProviderExecutedTools,
   anthropicToolIdFormat,
   cerebrasStripReasoningContent,
   anthropicStripEmptySignedReasoningContent,

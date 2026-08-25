@@ -89,7 +89,7 @@ export class VercelServerlessSandbox extends MastraSandbox {
   private _createdAt: Date | null = null;
 
   constructor(options: VercelServerlessSandboxOptions = {}) {
-    super({ name: 'VercelServerlessSandbox' });
+    super({ name: 'VercelServerlessSandbox', env: options.env });
 
     this.id = `vercel-serverless-sandbox-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     this._token = options.token || process.env.VERCEL_TOKEN || '';
@@ -283,7 +283,9 @@ export class VercelServerlessSandbox extends MastraSandbox {
     const body = {
       command,
       args: args ?? [],
-      env: options?.env ?? {},
+      // Merge the sandbox env under per-call env — this exec path bypasses the process manager.
+      // JSON.stringify drops undefined values, so unset keys never reach the executor.
+      env: { ...this.getEnv(), ...options?.env },
       cwd: options?.cwd ?? '/tmp',
       timeout: options?.timeout ?? this._commandTimeout,
     };

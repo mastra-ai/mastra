@@ -797,6 +797,7 @@ export function resolveForeachConcurrency(
 
 const RESUME_SNAPSHOT_POLL_INTERVAL_MS = 25;
 const RESUME_SNAPSHOT_POLL_TIMEOUT_MS = 2000;
+const RESUME_SNAPSHOT_WAIT_STATUSES = new Set(['running', 'pending']);
 
 export async function waitForSuspendedSnapshot(
   workflowsStore:
@@ -804,14 +805,30 @@ export async function waitForSuspendedSnapshot(
     | undefined,
   workflowName: string,
   runId: string,
+  {
+    timeoutMs = RESUME_SNAPSHOT_POLL_TIMEOUT_MS,
+    missingSnapshotGraceReads = 1,
+  }: { timeoutMs?: number; missingSnapshotGraceReads?: number } = {},
 ): Promise<WorkflowRunState | null> {
   if (!workflowsStore) return null;
 
-  const deadline = Date.now() + RESUME_SNAPSHOT_POLL_TIMEOUT_MS;
-  let snapshot = (await workflowsStore.loadWorkflowSnapshot({ workflowName, runId })) ?? null;
-  while ((!snapshot || snapshot.status !== 'suspended') && Date.now() < deadline) {
-    await new Promise(resolve => setTimeout(resolve, RESUME_SNAPSHOT_POLL_INTERVAL_MS));
+  const deadline = Date.now() + timeoutMs;
+  let snapshot: WorkflowRunState | null = null;
+  let missingReads = 0;
+  let observedTransitionableSnapshot = false;
+
+  while (Date.now() < deadline) {
     snapshot = (await workflowsStore.loadWorkflowSnapshot({ workflowName, runId })) ?? null;
+
+    if (snapshot) {
+      if (!RESUME_SNAPSHOT_WAIT_STATUSES.has(snapshot.status)) return snapshot;
+      observedTransitionableSnapshot = true;
+    } else if (!observedTransitionableSnapshot && ++missingReads >= missingSnapshotGraceReads) {
+      return null;
+    }
+
+    await new Promise(resolve => setTimeout(resolve, RESUME_SNAPSHOT_POLL_INTERVAL_MS));
   }
+
   return snapshot;
 }

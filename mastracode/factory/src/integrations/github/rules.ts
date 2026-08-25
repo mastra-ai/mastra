@@ -322,145 +322,215 @@ export class GithubRules {
     ) {
       return { status: 'ignored' };
     }
-    const context: FactoryGithubRuleContext = {
-      tenant: { orgId: project.orgId, projectId: project.factoryProjectId },
-      actor,
-      ingress: { type: 'github', id: `${installationId}:${parsed.deliveryId}` },
-      cause: `github.${event}`,
-      causalChain: [],
-      ruleSetVersion: this.options.rules.version,
-      ...(relatedItem
-        ? {
-            item: {
-              id: relatedItem.id,
-              source: workItemSource(relatedItem),
-              sourceKey: workItemSourceKey(relatedItem),
-              parentWorkItemId: relatedItem.parentWorkItemId,
-              title: relatedItem.title,
-              url: relatedItem.externalSource?.url ?? null,
-              stages: relatedItem.stages,
-              metadata: relatedItem.metadata,
-            },
-            board: relatedItem.externalSource?.type === 'pull-request' ? ('review' as const) : ('work' as const),
-            itemRevision: relatedItem.revision,
-          }
-        : {}),
-      event,
-      deliveryId: parsed.deliveryId,
-      factory: { createdAt: factoryProject.createdAt.toISOString() },
-      repository: { id: repositoryId, fullName: repositoryName },
-      ...(issueNumber && string(issue?.title) && string(issue?.html_url)
-        ? {
-            issue: {
-              number: issueNumber,
-              title: string(issue?.title)!,
-              url: string(issue?.html_url)!,
-              ...(string(issue?.created_at) ? { createdAt: string(issue?.created_at) } : {}),
-              ...(string(issue?.updated_at) ? { updatedAt: string(issue?.updated_at) } : {}),
-              assignees: actorLogins(issue?.assignees),
-              labels: labelNames(issue?.labels),
-              ...(string(issue?.state) === 'closed' || string(issue?.state) === 'open'
-                ? { state: string(issue?.state) as 'open' | 'closed' }
-                : {}),
-              ...(string(issue?.state_reason) ? { stateReason: string(issue?.state_reason) } : {}),
-            },
-          }
-        : {}),
-      ...(event === 'issueEdited'
-        ? { issueChange: { title: Boolean(object(changes?.title)), body: Boolean(object(changes?.body)) } }
-        : {}),
-      ...(number(issueComment?.id)
-        ? {
-            issueComment: {
-              id: number(issueComment?.id)!,
-              ...(string(issueComment?.body) ? { body: string(issueComment?.body) } : {}),
-              ...(string(issueComment?.html_url) ? { url: string(issueComment?.html_url) } : {}),
-              ...(string(object(issueComment?.user)?.login)
-                ? { author: string(object(issueComment?.user)?.login) }
-                : {}),
-              ...(string(object(issueComment?.user)?.type)
-                ? { authorType: string(object(issueComment?.user)?.type) }
-                : {}),
-              ...(string(issueComment?.created_at) ? { createdAt: string(issueComment?.created_at) } : {}),
-              ...(string(issueComment?.updated_at) ? { updatedAt: string(issueComment?.updated_at) } : {}),
-            },
-          }
-        : {}),
-      ...(pullRequestNumber && string(pullRequest?.title) && string(pullRequest?.html_url)
-        ? {
-            pullRequest: {
-              number: pullRequestNumber,
-              title: string(pullRequest?.title)!,
-              url: string(pullRequest?.html_url)!,
-              ...(string(pullRequest?.created_at) ? { createdAt: string(pullRequest?.created_at) } : {}),
-              state: string(pullRequest?.state) === 'closed' ? ('closed' as const) : ('open' as const),
-              draft: boolean(pullRequest?.draft) ?? false,
-              merged: boolean(pullRequest?.merged) ?? false,
-              assignees: actorLogins(pullRequest?.assignees),
-              requestedReviewers: actorLogins(pullRequest?.requested_reviewers),
-              labels: labelNames(pullRequest?.labels),
-              headBranch: string(object(pullRequest?.head)?.ref) ?? '',
-              baseBranch: string(object(pullRequest?.base)?.ref) ?? '',
-            },
-          }
-        : {}),
-      ...(reviewRequested && requestedReviewer
-        ? {
-            reviewRequest: {
-              reviewer: requestedReviewer,
-              factoryReviewer: this.#isFactoryLogin(requestedReviewer),
-            },
-          }
-        : {}),
-      ...(object(parsed.payload.review)
-        ? {
-            review: {
-              id: number(object(parsed.payload.review)?.id) ?? 0,
-              state: string(object(parsed.payload.review)?.state) ?? 'unknown',
-              url: string(object(parsed.payload.review)?.html_url) ?? '',
-            },
-          }
-        : {}),
+    // One delivery can concern two cards — a merged pull request settles both
+    // its own Review card and the Work item that authored it — and every
+    // decision a rule returns is committed against a single item, at that
+    // item's revision. So the evaluation, not the decision, is what fans out:
+    // the rule runs once per bound item, each with its own ingress identity.
+    const evaluate = async (
+      item: WorkItemRow | undefined,
+      ingressIdentity: string,
+    ): Promise<{ status: 'ignored' | 'committed' | 'replayed' | 'missing' }> => {
+      const context: FactoryGithubRuleContext = {
+        tenant: { orgId: project.orgId, projectId: project.factoryProjectId },
+        actor,
+        ingress: { type: 'github', id: ingressIdentity },
+        cause: `github.${event}`,
+        causalChain: [],
+        ruleSetVersion: this.options.rules.version,
+        ...(item
+          ? {
+              item: {
+                id: item.id,
+                source: workItemSource(item),
+                sourceKey: workItemSourceKey(item),
+                parentWorkItemId: item.parentWorkItemId,
+                title: item.title,
+                url: item.externalSource?.url ?? null,
+                stages: item.stages,
+                metadata: item.metadata,
+              },
+              board: item.externalSource?.type === 'pull-request' ? ('review' as const) : ('work' as const),
+              itemRevision: item.revision,
+            }
+          : {}),
+        event,
+        deliveryId: parsed.deliveryId,
+        factory: { createdAt: factoryProject.createdAt.toISOString() },
+        repository: { id: repositoryId, fullName: repositoryName },
+        ...(issueNumber && string(issue?.title) && string(issue?.html_url)
+          ? {
+              issue: {
+                number: issueNumber,
+                title: string(issue?.title)!,
+                url: string(issue?.html_url)!,
+                ...(string(issue?.created_at) ? { createdAt: string(issue?.created_at) } : {}),
+                ...(string(issue?.updated_at) ? { updatedAt: string(issue?.updated_at) } : {}),
+                assignees: actorLogins(issue?.assignees),
+                labels: labelNames(issue?.labels),
+                ...(string(issue?.state) === 'closed' || string(issue?.state) === 'open'
+                  ? { state: string(issue?.state) as 'open' | 'closed' }
+                  : {}),
+                ...(string(issue?.state_reason) ? { stateReason: string(issue?.state_reason) } : {}),
+              },
+            }
+          : {}),
+        ...(event === 'issueEdited'
+          ? { issueChange: { title: Boolean(object(changes?.title)), body: Boolean(object(changes?.body)) } }
+          : {}),
+        ...(number(issueComment?.id)
+          ? {
+              issueComment: {
+                id: number(issueComment?.id)!,
+                ...(string(issueComment?.body) ? { body: string(issueComment?.body) } : {}),
+                ...(string(issueComment?.html_url) ? { url: string(issueComment?.html_url) } : {}),
+                ...(string(object(issueComment?.user)?.login)
+                  ? { author: string(object(issueComment?.user)?.login) }
+                  : {}),
+                ...(string(object(issueComment?.user)?.type)
+                  ? { authorType: string(object(issueComment?.user)?.type) }
+                  : {}),
+                ...(string(issueComment?.created_at) ? { createdAt: string(issueComment?.created_at) } : {}),
+                ...(string(issueComment?.updated_at) ? { updatedAt: string(issueComment?.updated_at) } : {}),
+              },
+            }
+          : {}),
+        ...(pullRequestNumber && string(pullRequest?.title) && string(pullRequest?.html_url)
+          ? {
+              pullRequest: {
+                number: pullRequestNumber,
+                title: string(pullRequest?.title)!,
+                url: string(pullRequest?.html_url)!,
+                ...(string(pullRequest?.created_at) ? { createdAt: string(pullRequest?.created_at) } : {}),
+                state: string(pullRequest?.state) === 'closed' ? ('closed' as const) : ('open' as const),
+                draft: boolean(pullRequest?.draft) ?? false,
+                merged: boolean(pullRequest?.merged) ?? false,
+                assignees: actorLogins(pullRequest?.assignees),
+                requestedReviewers: actorLogins(pullRequest?.requested_reviewers),
+                labels: labelNames(pullRequest?.labels),
+                headBranch: string(object(pullRequest?.head)?.ref) ?? '',
+                baseBranch: string(object(pullRequest?.base)?.ref) ?? '',
+              },
+            }
+          : {}),
+        ...(reviewRequested && requestedReviewer
+          ? {
+              reviewRequest: {
+                reviewer: requestedReviewer,
+                factoryReviewer: this.#isFactoryLogin(requestedReviewer),
+              },
+            }
+          : {}),
+        ...(object(parsed.payload.review)
+          ? {
+              review: {
+                id: number(object(parsed.payload.review)?.id) ?? 0,
+                state: string(object(parsed.payload.review)?.state) ?? 'unknown',
+                url: string(object(parsed.payload.review)?.html_url) ?? '',
+              },
+            }
+          : {}),
+      };
+
+      const rule = resolveFactoryGithubRule(this.options.rules, event);
+      let decision: FactoryRuleDecision | void;
+      let decisions: Record<string, unknown>[] = [];
+      let outcome: { status: 'accepted' | 'rejected'; code?: string; reason?: string } = { status: 'accepted' };
+      try {
+        decision = rule ? await withRuleTimeout(Promise.resolve(rule(Object.freeze(context)))) : undefined;
+        if (decision?.type === 'reject') {
+          outcome = { status: 'rejected', code: decision.code, reason: decision.reason };
+        } else if (decision) {
+          decisions = validateFactoryRuleDecisions([decision]).map(entry => ({ ...entry }));
+        }
+      } catch (error) {
+        const timedOut = error instanceof Error && error.message === 'FACTORY_RULE_TIMEOUT';
+        outcome = {
+          status: 'rejected',
+          code: timedOut ? 'timeout' : 'rule_error',
+          reason: timedOut
+            ? 'Factory rule evaluation timed out.'
+            : error instanceof Error
+              ? error.message.slice(0, 2_000)
+              : 'Factory GitHub rule failed.',
+        };
+      }
+
+      const committed = await this.options.storage.commitRuleEvaluation({
+        orgId: project.orgId,
+        factoryProjectId: project.factoryProjectId,
+        workItemId: item?.id ?? null,
+        ingress: { identity: ingressIdentity, triggerType: `github.${event}` },
+        ruleSetVersion: this.options.rules.version,
+        expectedRevision: item?.revision ?? null,
+        actor: { ...actor },
+        outcome,
+        decisions,
+        causalChain: [],
+        now: new Date(),
+      });
+      return { status: committed.status };
     };
 
-    const rule = resolveFactoryGithubRule(this.options.rules, event);
-    let decision: FactoryRuleDecision | void;
-    let decisions: Record<string, unknown>[] = [];
-    let outcome: { status: 'accepted' | 'rejected'; code?: string; reason?: string } = { status: 'accepted' };
-    try {
-      decision = rule ? await withRuleTimeout(Promise.resolve(rule(Object.freeze(context)))) : undefined;
-      if (decision?.type === 'reject') {
-        outcome = { status: 'rejected', code: decision.code, reason: decision.reason };
-      } else if (decision) {
-        decisions = validateFactoryRuleDecisions([decision]).map(entry => ({ ...entry }));
-      }
-    } catch (error) {
-      const timedOut = error instanceof Error && error.message === 'FACTORY_RULE_TIMEOUT';
-      outcome = {
-        status: 'rejected',
-        code: timedOut ? 'timeout' : 'rule_error',
-        reason: timedOut
-          ? 'Factory rule evaluation timed out.'
-          : error instanceof Error
-            ? error.message.slice(0, 2_000)
-            : 'Factory GitHub rule failed.',
-      };
+    const deliveryIdentity = `${installationId}:${parsed.deliveryId}`;
+    const primary = await evaluate(relatedItem, deliveryIdentity);
+    // A merged pull request is the one event both linked cards need: the
+    // Review card has to close, and the Work item that wrote the code has to
+    // assess whether it is finished. Resolution binds the delivery to whichever
+    // card it matched first, so evaluate the other one too — under an identity
+    // suffixed with its id, because ingress identities are the replay key and
+    // reusing the delivery's own would drop this evaluation as a duplicate.
+    const linked =
+      event === 'pullRequestMerged' && relatedItem && pullRequestNumber
+        ? await this.#linkedClosureItem(
+            project.orgId,
+            project.factoryProjectId,
+            repositoryId,
+            repositoryName,
+            pullRequestNumber,
+            relatedItem,
+          )
+        : undefined;
+    if (!linked) return primary;
+    const secondary = await evaluate(linked, `${deliveryIdentity}:${linked.id}`);
+    for (const status of ['committed', 'replayed'] as const) {
+      if (primary.status === status || secondary.status === status) return { status };
     }
+    return primary;
+  }
 
-    const committed = await this.options.storage.commitRuleEvaluation({
-      orgId: project.orgId,
-      factoryProjectId: project.factoryProjectId,
-      workItemId: relatedItem?.id ?? null,
-      ingress: { identity: `${installationId}:${parsed.deliveryId}`, triggerType: `github.${event}` },
-      ruleSetVersion: this.options.rules.version,
-      expectedRevision: relatedItem?.revision ?? null,
-      actor: { ...actor },
-      outcome,
-      decisions,
-      causalChain: [],
-      now: new Date(),
-    });
-    return { status: committed.status };
+  /**
+   * The other card a closed pull request concerns, joined through the Review
+   * card's `parentWorkItemId` — the link `upsertLinkedWorkItem` records when the
+   * pull request is opened, and therefore an exact join that needs no branch
+   * heuristics. Returns nothing when the pull request has only one card, which
+   * is every pull request Factory did not open from a work item's session.
+   */
+  async #linkedClosureItem(
+    orgId: string,
+    projectId: string,
+    repositoryId: number,
+    repositoryFullName: string,
+    pullRequestNumber: number,
+    resolved: WorkItemRow,
+  ): Promise<WorkItemRow | undefined> {
+    const items = await this.options.storage.list({ orgId, factoryProjectId: projectId });
+    const linked =
+      resolved.externalSource?.type === 'pull-request'
+        ? // Bound to the pull request's own Review card: follow the recorded
+          // link back to the work item that authored it.
+          items.find(item => item.id === resolved.parentWorkItemId)
+        : // Bound to the work item (provenance): find the Review card this pull
+          // request opened, and only when it names this item as its parent — a
+          // card for the same number in another repository is not this one's.
+          items.find(
+            item =>
+              item.parentWorkItemId === resolved.id &&
+              (item.externalSource?.externalId === canonicalSourceKey('pull-request', pullRequestNumber) ||
+                item.externalSource?.externalId === legacySourceKey(repositoryId, 'pull-request', pullRequestNumber)) &&
+              cardBelongsToRepository(item, repositoryId, repositoryFullName),
+          );
+    return linked?.id === resolved.id ? undefined : linked;
   }
 
   async #relatedItem(

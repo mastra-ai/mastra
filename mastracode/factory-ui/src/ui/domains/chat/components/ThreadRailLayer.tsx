@@ -10,7 +10,7 @@ export function ThreadRailLayer() {
   if (turns.length === 0) return null;
 
   return (
-    <div className="pointer-events-none absolute inset-y-0 left-4 z-20">
+    <div className="pointer-events-none absolute inset-y-0 left-4 z-1">
       <ThreadRail turns={turns} className="pointer-events-auto sticky top-1/2 -translate-y-1/2" />
     </div>
   );

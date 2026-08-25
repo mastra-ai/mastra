@@ -16,17 +16,7 @@ export class WorkerBundler extends Bundler {
       return Promise.resolve([]);
     }
 
-    const possibleFiles = ['.env.production', '.env.local', '.env'];
-
-    try {
-      const fileService = new FileService();
-      const envFile = fileService.getFirstExistingFile(possibleFiles);
-      return Promise.resolve([envFile]);
-    } catch {
-      // ignore
-    }
-
-    return Promise.resolve([]);
+    return Promise.resolve(new FileService().getExistingFiles(['.env', '.env.local', '.env.production']));
   }
 
   async bundle(

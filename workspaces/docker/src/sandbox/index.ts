@@ -191,7 +191,6 @@ export class DockerSandbox extends MastraSandbox {
 
   constructor(options: DockerSandboxOptions = {}) {
     const processManager = new DockerProcessManager({
-      env: options.env ?? {},
       defaultTimeout: options.timeout ?? 300_000,
     });
 
