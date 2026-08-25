@@ -1,20 +1,46 @@
 ---
 '@mastra/core': minor
-'@mastra/e2b': patch
-'@mastra/daytona': patch
-'@mastra/platform-workspace': patch
-'@mastra/railway': patch
 ---
 
-Errors thrown by an `onStart` handler on a sandbox provider's constructor are now fatal: the hook rejects `start()` and marks the sandbox `error`. Previously they were logged and swallowed. This makes `onStart` the seam for once-per-VM setup that must fail loudly. `onStop` and `onDestroy` remain non-fatal, since teardown proceeds best-effort.
+**Sandbox setup failures are no longer silent**
 
-`MastraSandbox` now owns the start lifecycle. Subclass `start()` is constructor-wrapped, so direct calls get the same in-flight coalescing (cleared on settle, so a failed attempt is never latched), status transitions, and mount processing that `ensureRunning()` already had.
+An error thrown by an `onStart` handler now fails the start: `start()` rejects and the sandbox is marked `error`. Previously the error was logged and swallowed, so a sandbox whose setup never ran still looked healthy, and the failure surfaced later as a confusing command error. `onStop` and `onDestroy` stay non-fatal, since teardown proceeds best-effort.
 
-Starting a sandbox that implements neither `start()` nor `create()` now throws instead of silently doing nothing and reporting the sandbox as `running`. This also surfaces a misspelled override, and a `start` or `create` written as a class field, since field initializers run after the base constructor and are invisible to it. A sandbox with genuinely nothing to start says so with an empty `async start() {}`.
+**Added `find()`, `connect()` and `create()` for sandbox providers**
 
-Providers plug in at one of three rungs: optional `find()`, `connect()` and `create()` acquisition primitives, with the base orchestrating getOrCreate and deriving `SandboxStartResult { outcome: 'created' | 'connected' }` structurally (E2B, Daytona, Local); a `start()` override returning that result, for SDKs whose getOrCreate is fused (Platform, Railway); or a void `start()` override, which keeps today's behavior. The outcome reaches the `onStart` hook, so setup can tell a fresh VM from a reconnect.
+A provider can implement these three optional methods instead of writing `start()`. Mastra calls them in order, so providers no longer hand-roll "reuse the existing sandbox, otherwise make one", and Mastra knows which one happened:
 
-New `setOnStart(update)` attaches a start hook after construction, so a runtime that receives a sandbox it didn't build can install setup without every host threading a hook through the provider constructor. The updater receives the currently installed hook and returns its replacement, so callers compose rather than clobber:
+```typescript
+class MySandbox extends MastraSandbox<MyHandle> {
+  protected async find() {
+    return (await sdk.list({ id: this.id }))[0]
+  }
+  protected async connect(handle: MyHandle) {
+    this.vm = await sdk.resume(handle)
+  }
+  protected async create() {
+    this.vm = await sdk.create({ id: this.id })
+  }
+}
+```
+
+Providers whose SDK gets-or-creates in one call keep overriding `start()`.
+
+**Added the start outcome, so setup can tell a new sandbox from a resumed one**
+
+`onStart` now receives `outcome`, either `'created'` or `'connected'`, which is `undefined` for providers that don't report it:
+
+```typescript
+new MySandbox({
+  onStart: async ({ outcome }) => {
+    if (outcome === 'created') await installDependencies()
+  },
+})
+```
+
+**Added `setOnStart()` for attaching setup to a sandbox you didn't build**
+
+Useful when a runtime is handed a sandbox and needs setup on it without every caller passing a hook to the constructor. It takes an updater over the installed hook, so a second caller composes rather than replacing one it didn't know about:
 
 ```typescript
 sandbox.setOnStart?.(previous => async args => {
@@ -23,4 +49,6 @@ sandbox.setOnStart?.(previous => async args => {
 })
 ```
 
-Platform and Railway drop their hand-rolled start coalescing. Daytona's redundant `executeCommand` override, which leaked process handles, is removed in favor of the base default, so Daytona results now carry the joined command string in `command` and no longer include an `args` array, matching every other provider.
+**Improved concurrent starts**
+
+Two starts at once now share one attempt for every provider rather than only some, and a failed start is never cached, so the next call retries it. Starting a sandbox that implements neither `start()` nor `create()` throws instead of reporting itself `running` having provisioned nothing.
