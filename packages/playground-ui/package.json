@@ -64,6 +64,16 @@
         "default": "./dist/primitives/*.cjs.js"
       }
     },
+    "./keyboard/*": {
+      "import": {
+        "types": "./dist/keyboard/*.d.ts",
+        "default": "./dist/keyboard/*.es.js"
+      },
+      "require": {
+        "types": "./dist/keyboard/*.d.ts",
+        "default": "./dist/keyboard/*.cjs.js"
+      }
+    },
     "./resize/*": {
       "import": {
         "types": "./dist/resize/*.d.ts",
