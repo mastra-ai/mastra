@@ -526,10 +526,7 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
    *
    * Id-keyed getOrCreate contract: a sandbox constructed with a known `id`
    * resolves that id on start — reconnect/resume when the provider finds an
-   * existing VM for it, create otherwise. Note: E2B/Daytona/Local resolve
-   * logical ids natively; PlatformSandbox and RailwaySandbox currently
-   * reattach only via an explicit provider `sandboxId` hint (their
-   * logical-id lookup is a follow-up).
+   * existing VM for it, create otherwise.
    */
   async start(): Promise<SandboxStartResult | void> {
     // Default no-op — subclasses override start() or implement the

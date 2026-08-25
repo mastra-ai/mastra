@@ -300,7 +300,7 @@ export class LocalSandbox extends MastraSandbox<string> {
       await fs.stat(this.workingDirectory);
       return this.workingDirectory;
     } catch (err: unknown) {
-      if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code !== 'ENOENT') {
+      if ((err as NodeJS.ErrnoException)?.code !== 'ENOENT') {
         throw err;
       }
       return undefined;
