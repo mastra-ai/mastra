@@ -4,7 +4,17 @@ import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Column } from '@mastra/playground-ui/components/Columns';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { SearchFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
-import { Plus, Upload, FileJson, Download, FolderPlus, FolderOutput, Trash2, ChevronDown } from 'lucide-react';
+import {
+  Plus,
+  Upload,
+  FileJson,
+  Download,
+  FolderPlus,
+  FolderOutput,
+  Trash2,
+  ChevronDown,
+  ArrowRightToLineIcon,
+} from 'lucide-react';
 
 export type DatasetItemsToolbarProps = {
   // Normal mode actions
@@ -27,6 +37,8 @@ export type DatasetItemsToolbarProps = {
 
   isItemPanelOpen?: boolean;
   isViewingOldVersion?: boolean;
+  activeDatasetVersion?: number | null;
+  onReturnToLatestVersion?: () => void;
 };
 
 export function DatasetItemsToolbar({
@@ -44,7 +56,20 @@ export function DatasetItemsToolbar({
   onDeleteClick,
   isItemPanelOpen,
   isViewingOldVersion,
+  activeDatasetVersion,
+  onReturnToLatestVersion,
 }: DatasetItemsToolbarProps) {
+  const oldVersionNotice = isViewingOldVersion && activeDatasetVersion != null && (
+    <div className="text-icon3 text-ui-sm flex min-w-0 items-center gap-3">
+      <span className="truncate">You are seeing v{activeDatasetVersion}, which is an older version of the dataset</span>
+      {onReturnToLatestVersion && (
+        <Button onClick={onReturnToLatestVersion}>
+          <ArrowRightToLineIcon /> Return to latest
+        </Button>
+      )}
+    </div>
+  );
+
   const searchField = (
     <SearchFieldBlock
       name="search-items"
@@ -110,6 +135,8 @@ export function DatasetItemsToolbar({
   return (
     <div className="flex w-full items-center justify-between gap-4">
       {searchField}
+
+      {oldVersionNotice}
 
       <ButtonsGroup>
         {(hasItems || Boolean(searchQuery)) && !isItemPanelOpen && !isViewingOldVersion && (

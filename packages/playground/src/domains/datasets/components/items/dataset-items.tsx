@@ -1,9 +1,7 @@
 'use client';
 
 import type { DatasetItem } from '@mastra/client-js';
-import { Notice } from '@mastra/playground-ui/components/Notice';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { ArrowRightToLineIcon } from 'lucide-react';
 import { useEffect } from 'react';
 import { useSearchParams } from 'react-router';
 import { useDatasetItemsUrlState } from '../../hooks/use-dataset-items-url-state';
@@ -156,21 +154,9 @@ export function DatasetItems({
         onDeleteClick={onBulkDeleteClick ? () => onBulkDeleteClick(Array.from(selection.selectedIds)) : undefined}
         isItemPanelOpen={!!featuredItem}
         isViewingOldVersion={isViewingOldVersion}
+        activeDatasetVersion={activeDatasetVersion}
+        onReturnToLatestVersion={() => handleVersionChange(null)}
       />
-
-      {isViewingOldVersion && activeDatasetVersion != null && (
-        <Notice
-          variant="warning"
-          title="Previous version"
-          action={
-            <Notice.Button onClick={() => handleVersionChange(null)}>
-              <ArrowRightToLineIcon /> Return to the latest version
-            </Notice.Button>
-          }
-        >
-          <Notice.Message>Viewing version v{activeDatasetVersion}</Notice.Message>
-        </Notice>
-      )}
 
       <DatasetItemsList
         items={items}
