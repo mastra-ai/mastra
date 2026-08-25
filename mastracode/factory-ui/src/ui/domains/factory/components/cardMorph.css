@@ -73,10 +73,11 @@
   animation: board-card-conceal 140ms cubic-bezier(0.4, 0, 1, 1) forwards;
 }
 
-/* Scrolled past its own card, the panel has nothing left to expand from. */
+/* Scrolled past its own card, the panel has nothing left to expand from.
+ * `visibility` rather than `opacity`: an invisible panel must leave the tab
+ * order too, or Remove and Run stay reachable with nothing on screen. */
 [data-anchor-hidden] .board-card-details {
-  pointer-events: none;
-  opacity: 0;
+  visibility: hidden;
 }
 
 @media (prefers-reduced-motion: reduce) {
