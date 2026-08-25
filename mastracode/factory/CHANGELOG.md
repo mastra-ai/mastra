@@ -1,5 +1,11 @@
 # @mastra/factory
 
+## 0.10.0-alpha.11
+
+### Patch Changes
+
+- Fixed Factory issue triage to update its existing handoff comment across retries. ([#22303](https://github.com/mastra-ai/mastra/pull/22303))
+
 ## 0.10.0-alpha.10
 
 ### Minor Changes

@@ -26,6 +26,7 @@ export interface Credentials {
 
 export interface LoginOptions {
   skipOnInput?: boolean;
+  allowLogin?: boolean;
 }
 
 export class LoginCancelledError extends Error {
@@ -341,7 +342,7 @@ export async function getToken(signal?: AbortSignal, options: LoginOptions = {})
   const creds = await loadCredentials();
   signal?.throwIfAborted();
   if (!creds) {
-    if (!isInteractive()) {
+    if (options.allowLogin === false || !isInteractive()) {
       throw new Error('Not logged in. Run `mastra auth login` interactively or set MASTRA_API_TOKEN.');
     }
     const newCreds = await login(signal, options);
@@ -357,7 +358,7 @@ export async function getToken(signal?: AbortSignal, options: LoginOptions = {})
   if (refreshed) return refreshed;
   signal?.throwIfAborted();
 
-  if (!isInteractive()) {
+  if (options.allowLogin === false || !isInteractive()) {
     throw new Error('Session expired. Run `mastra auth login` interactively or set MASTRA_API_TOKEN.');
   }
   const newCreds = await login(signal, options);
