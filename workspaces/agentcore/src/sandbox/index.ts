@@ -297,7 +297,8 @@ export class AgentCoreRuntimeSandbox extends MastraSandbox {
   async executeCommand(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<CommandResult> {
     await this.ensureRunning();
 
-    const fullCommand = buildCommand(command, args, options);
+    // Merge the sandbox env under per-call env — this exec path bypasses the process manager
+    const fullCommand = buildCommand(command, args, { ...options, env: { ...this.getEnv(), ...options?.env } });
     const timeoutMs = options?.timeout ?? this._commandTimeout;
     const timeoutSeconds = toAgentCoreTimeoutSeconds(timeoutMs);
     const startTime = Date.now();

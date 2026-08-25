@@ -192,8 +192,8 @@ export class DockerProcessManager extends SandboxProcessManager {
   private _container: Container | null = null;
   private readonly _defaultTimeout: number;
 
-  constructor(options: { env: Record<string, string>; defaultTimeout?: number }) {
-    super(options);
+  constructor(options: { defaultTimeout?: number } = {}) {
+    super();
     this._defaultTimeout = options.defaultTimeout ?? 0;
   }
 
@@ -213,9 +213,8 @@ export class DockerProcessManager extends SandboxProcessManager {
   async spawn(command: string, options: SpawnProcessOptions = {}): Promise<ProcessHandle> {
     const container = this.container;
 
-    // Merge default env with per-spawn env
-    const mergedEnv = { ...this.env, ...options.env };
-    const envArray = Object.entries(mergedEnv)
+    // The base spawn wrapper already merged the sandbox env into options.env
+    const envArray = Object.entries({ ...options.env })
       .filter((entry): entry is [string, string] => entry[1] !== undefined)
       .map(([k, v]) => `${k}=${v}`);
 
