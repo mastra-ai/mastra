@@ -159,6 +159,14 @@ describe('flattenWorkflowTree — inline leaves', () => {
     expect(inlineRow && 'description' in inlineRow && inlineRow.description).toBeUndefined();
   });
 
+  it('draws no connector lines beside a root row', () => {
+    const rows = flattenWorkflowTree([entry('prdShipProduct')], workflowsFixture, new Set());
+
+    // A root has no ancestors to draw a line down from.
+    expect(rows[0]?.guides).toEqual([]);
+    expect(rows[0]?.depth).toBe(0);
+  });
+
   it('renders nothing below a row that is expanded but composes no workflows', () => {
     const leaf = entry('prdShipProduct');
     const rows = flattenWorkflowTree(

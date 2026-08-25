@@ -245,6 +245,17 @@ describe('extractFormToolProviders', () => {
       expect(form?.composio.tools.GMAIL_SEND).toEqual({ toolkit: 'GMail' });
     });
 
+    it('survives a stored tool entry that is null', () => {
+      const form = extractFormToolProviders({
+        composio: {
+          tools: { GMAIL_SEND: null },
+          connections: { gmail: [{ kind: 'author', toolkit: 'gmail', connectionId: 'c-1' }] },
+        },
+      });
+
+      expect(form?.composio.tools.GMAIL_SEND).toEqual({ toolkit: 'gmail' });
+    });
+
     it('prefers the toolkit the tool records over any inference', () => {
       const form = extractFormToolProviders({
         composio: {

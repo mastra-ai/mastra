@@ -58,11 +58,11 @@ describe('getConditionIconAndColor', () => {
 
   describe('when the type is unknown or missing', () => {
     it('resolves nothing for an unrecognised type', () => {
-      expect(getConditionIconAndColor('nope')).toEqual({ icon: undefined, color: undefined });
+      expect(getConditionIconAndColor('nope')).toStrictEqual({ icon: undefined, color: undefined });
     });
 
     it('resolves nothing when no type is given', () => {
-      expect(getConditionIconAndColor()).toEqual({ icon: undefined, color: undefined });
+      expect(getConditionIconAndColor()).toStrictEqual({ icon: undefined, color: undefined });
     });
   });
 });

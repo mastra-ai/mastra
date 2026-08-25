@@ -108,3 +108,17 @@ describe('getWorkflowRunErrors', () => {
     });
   });
 });
+
+describe('getWorkflowRunErrors, on shapes the runtime does not promise', () => {
+  it('ignores an error that is a bare number rather than throwing', () => {
+    expect(getWorkflowRunErrors({ steps: { a: { error: 42 } } })).toEqual([]);
+  });
+
+  it('ignores a steps field that is not a map of steps', () => {
+    expect(getWorkflowRunErrors({ steps: 'not-a-map' })).toEqual([]);
+  });
+
+  it('still reports the workflow error alongside an unusable result', () => {
+    expect(getWorkflowRunErrors({ steps: 42 }, new Error('run failed'))).toEqual(['run failed']);
+  });
+});

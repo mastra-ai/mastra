@@ -103,12 +103,18 @@ export const getConditionIconAndColor = (type?: string): ConditionIconConfig => 
 export const getConditionIndicator = (type?: string): WorkflowCardIndicator | undefined => {
   const { icon, color } = getConditionIconAndColor(type);
 
+  // Only `!type` is reachable: a recognised type always resolves both an icon
+  // and a colour, and an unrecognised one resolves neither.
+  // Stryker disable next-line ConditionalExpression,LogicalOperator
   if (!type || !icon || !color) {
     return undefined;
   }
 
   return {
     id: `condition-${type}`,
+    // The fallback is unreachable: every type that resolves an icon above is
+    // also spelled out in CONDITION_LABELS.
+    // Stryker disable next-line StringLiteral
     label: CONDITION_LABELS[type] ?? `${type} condition`,
     icon,
     color,

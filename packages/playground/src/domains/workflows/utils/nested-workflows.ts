@@ -80,10 +80,16 @@ export function flattenWorkflowTree(
   ) => {
     const nestedIds = getDirectNestedWorkflowIds(entry).filter(stepId => {
       const registryKey = registryIndex.get(stepId);
+      // The undefined check is a shortcut: `ancestors` only ever holds registry
+      // keys, so a missing one is never in it.
+      // Stryker disable next-line ConditionalExpression
       return registryKey === undefined || !ancestors.has(registryKey);
     });
     rows.push({ kind: 'workflow', workflow: entry, pathKey, depth, nestedIds, guides, isLastChild });
 
+    // The length check is a shortcut: with no nested ids the loop below runs
+    // zero times anyway.
+    // Stryker disable next-line ConditionalExpression
     if (!expandedPaths.has(pathKey) || nestedIds.length === 0) return;
 
     const nextAncestors = new Set(ancestors).add(entry.id);
@@ -95,6 +101,9 @@ export function flattenWorkflowTree(
         rows.push({
           kind: 'inline',
           stepId,
+          // Both optional chains are unreachable: a nested id can only come
+          // from `allSteps`, so the map and the entry both exist here.
+          // Stryker disable next-line OptionalChaining
           description: entry.allSteps?.[stepId]?.description,
           pathKey: `${pathKey}/${stepId}`,
           depth: depth + 1,

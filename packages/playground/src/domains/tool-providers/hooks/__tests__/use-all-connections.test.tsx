@@ -292,3 +292,72 @@ describe('useAllConnections — getConnections', () => {
     expect(result.current.getConnections('composio', 'slack')[0].connectionId).toBe('conn_slack');
   });
 });
+
+describe('useAllConnections — what it reports while the fan-out is in flight', () => {
+  it('stays loading until the toolkits of every provider have landed', async () => {
+    let releaseToolkits: () => void = () => {};
+    const toolkitsInFlight = new Promise<void>(resolve => {
+      releaseToolkits = resolve;
+    });
+    server.use(
+      http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'tester', permissions: [] })),
+      http.get(`${BASE_URL}/api/tool-providers`, () =>
+        HttpResponse.json({ providers: [{ id: 'composio', name: 'Composio' }] }),
+      ),
+      http.get(`${BASE_URL}/api/tool-providers/composio/toolkits`, async () => {
+        await toolkitsInFlight;
+        return HttpResponse.json({ data: [{ slug: 'gmail' }] });
+      }),
+      http.get(`${BASE_URL}/api/tool-providers/composio/connections`, () => HttpResponse.json({ items: [] })),
+    );
+
+    const { wrapper } = makeWrapper();
+    const { result } = renderHook(() => useAllConnections({ scopeToSelf: true }), { wrapper });
+
+    await waitFor(() => expect(result.current.isLoading).toBe(true));
+    releaseToolkits();
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+  });
+
+  it('stays loading until the connections of every pair have landed', async () => {
+    let releaseConnections: () => void = () => {};
+    const connectionsInFlight = new Promise<void>(resolve => {
+      releaseConnections = resolve;
+    });
+    server.use(
+      http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'tester', permissions: [] })),
+      http.get(`${BASE_URL}/api/tool-providers`, () =>
+        HttpResponse.json({ providers: [{ id: 'composio', name: 'Composio' }] }),
+      ),
+      http.get(`${BASE_URL}/api/tool-providers/composio/toolkits`, () =>
+        HttpResponse.json({ data: [{ slug: 'gmail' }] }),
+      ),
+      http.get(`${BASE_URL}/api/tool-providers/composio/connections`, async () => {
+        await connectionsInFlight;
+        return HttpResponse.json({ items: [{ connectionId: 'conn_a', status: 'active' }] });
+      }),
+    );
+
+    const { wrapper } = makeWrapper();
+    const { result } = renderHook(() => useAllConnections({ scopeToSelf: true }), { wrapper });
+
+    // The provider and toolkit reads have both landed by now, so any remaining
+    // loading is the per-pair connection read.
+    await waitFor(() => expect(result.current.getConnections('composio', 'gmail')).toEqual([]));
+    expect(result.current.isLoading).toBe(true);
+
+    releaseConnections();
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+  });
+
+  it("files each provider's toolkits under a key of its own", async () => {
+    server.use(...baseHandlers([{ connectionId: 'conn_a', status: 'active' }]));
+
+    const { wrapper, queryClient } = makeWrapper();
+    const { result } = renderHook(() => useAllConnections({ scopeToSelf: true }), { wrapper });
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(queryClient.getQueryData(['tool-integration-services', 'composio'])).toBeDefined();
+    expect(queryClient.getQueryData(['tool-integration-services', 'other'])).toBeUndefined();
+  });
+});

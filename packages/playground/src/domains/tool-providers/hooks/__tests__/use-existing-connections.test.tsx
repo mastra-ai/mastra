@@ -161,6 +161,16 @@ describe('useExistingConnections — request shape and gating', () => {
     expect(seen[0]?.searchParams.get('authorId')).toBeNull();
   });
 
+  it('files an unscoped read under a key that names only the pair', async () => {
+    captureConnections();
+
+    const { wrapper, queryClient } = makeWrapper();
+    const { result } = renderHook(() => useExistingConnections('composio', 'gmail'), { wrapper });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(queryClient.getQueryData(['tool-integration-connections', 'composio', 'gmail'])).toBeDefined();
+  });
+
   it('files a self-scoped read under a key that names the caller', async () => {
     captureConnections();
 

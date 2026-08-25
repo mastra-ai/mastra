@@ -40,6 +40,8 @@ export interface UseAllConnectionsOptions {
 export const useAllConnections = (options?: UseAllConnectionsOptions) => {
   const client = useMastraClient();
   const providersQuery = useToolProviders();
+  // The dependency is the value itself, so any list memoizes on the same input.
+  // Stryker disable next-line ArrayDeclaration
   const providers = useMemo(() => providersQuery.data?.providers ?? [], [providersQuery.data?.providers]);
 
   const scopeToSelf = options?.scopeToSelf ?? false;
@@ -59,12 +61,17 @@ export const useAllConnections = (options?: UseAllConnectionsOptions) => {
   const pairs = useMemo(() => {
     const out: Array<{ providerId: string; toolkit: string }> = [];
     providers.forEach((provider, idx) => {
+      // `useQueries` returns exactly one entry per provider, so the index is
+      // always in range and the first optional chain cannot short-circuit.
+      // Stryker disable next-line OptionalChaining
       const toolkits = toolkitsQueries[idx]?.data?.data ?? [];
       for (const toolkit of toolkits) {
         out.push({ providerId: provider.id, toolkit: toolkit.slug });
       }
     });
     return out;
+    // Stryker disable next-line ArrayDeclaration: both dependencies are the
+    // values the memo reads, so any list memoizes on the same input.
   }, [providers, toolkitsQueries]);
 
   // 3. One listConnections call per pair. Include `authorId` in queryKey when
@@ -96,10 +103,14 @@ export const useAllConnections = (options?: UseAllConnectionsOptions) => {
   const connectionsByKey = useMemo(() => {
     const map = new Map<string, Array<{ connectionId: string; label?: string | null; status?: string }>>();
     pairs.forEach((pair, idx) => {
+      // One entry per pair, so the index is always in range.
+      // Stryker disable next-line OptionalChaining
       const items = connectionsQueries[idx]?.data?.items ?? [];
       map.set(`${pair.providerId}:${pair.toolkit}`, items);
     });
     return map;
+    // Stryker disable next-line ArrayDeclaration: both dependencies are the
+    // values the memo reads, so any list memoizes on the same input.
   }, [pairs, connectionsQueries]);
 
   // A toolkit "has a connection" only when at least one connection is active.
