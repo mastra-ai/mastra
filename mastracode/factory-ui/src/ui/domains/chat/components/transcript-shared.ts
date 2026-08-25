@@ -9,7 +9,7 @@ export function truncate(s: string, max: number): string {
 export function stringify(v: unknown): string {
   if (typeof v === 'string') return v;
   try {
-    return JSON.stringify(v, null, 2);
+    return JSON.stringify(v, null, 2) ?? String(v);
   } catch {
     return String(v);
   }

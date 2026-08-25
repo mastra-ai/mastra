@@ -8,7 +8,7 @@
 }
 
 .mastra-arriving {
-  animation: mastra-arriving 800ms var(--ease-out-custom) backwards;
+  animation: mastra-arriving 800ms var(--ease-out-custom, ease-out) backwards;
 }
 
 @media (prefers-reduced-motion: reduce) {
