@@ -1,8 +1,13 @@
-import { skipToken, useInfiniteQuery } from '@tanstack/react-query';
+import { skipToken, useInfiniteQuery, useQuery } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import { listRepositoryIssues, listRepositoryPullRequests } from '../ui/domains/factory/services/factory';
+import {
+  getRepositoryIssue,
+  getRepositoryPullRequest,
+  listRepositoryIssues,
+  listRepositoryPullRequests,
+} from '../ui/domains/factory/services/factory';
 
 /** Board intake candidates come from external APIs (GitHub / Linear via the
  * server) — poll on a gentler cadence than the DB-backed work-items list. */
@@ -52,5 +57,32 @@ export function useProjectPullRequestsQuery(projectRepositoryId: string | undefi
     // Same intake-freshness contract as the issues feed above.
     refetchInterval: intakePollInterval,
     refetchOnWindowFocus: true,
+  });
+}
+
+// A description barely moves and each read spends the installation mint budget.
+export const DETAIL_STALE_MS = 5 * 60_000;
+
+export function useGitHubIssueDetail(projectRepositoryId: string | undefined, number: number | undefined) {
+  const { baseUrl } = useApiConfig();
+  return useQuery({
+    queryKey: queryKeys.githubIssue(projectRepositoryId, number),
+    queryFn:
+      projectRepositoryId !== undefined && number !== undefined
+        ? () => getRepositoryIssue(baseUrl, projectRepositoryId, number)
+        : skipToken,
+    staleTime: DETAIL_STALE_MS,
+  });
+}
+
+export function useGitHubPullRequestDetail(projectRepositoryId: string | undefined, number: number | undefined) {
+  const { baseUrl } = useApiConfig();
+  return useQuery({
+    queryKey: queryKeys.githubPull(projectRepositoryId, number),
+    queryFn:
+      projectRepositoryId !== undefined && number !== undefined
+        ? () => getRepositoryPullRequest(baseUrl, projectRepositoryId, number)
+        : skipToken,
+    staleTime: DETAIL_STALE_MS,
   });
 }

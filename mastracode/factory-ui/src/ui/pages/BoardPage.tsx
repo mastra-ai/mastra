@@ -7,15 +7,17 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { Plus } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router';
 
-import { useCompleteAuditEvents } from '../../hooks/useAuditEvents';
+import { useRecentAuditEvents } from '../../hooks/useAuditEvents';
 import { useFactoryAuth } from '../../hooks/useFactoryAuth';
 import { INTAKE_SOURCES, stageContentCount } from '../domains/factory/boardCandidates';
 import type { IntakeSource } from '../domains/factory/boardCandidates';
 import { boardLoadingStages, boardStages, itemAppearsInStage } from '../domains/factory/boardStages';
 import type { BoardKind } from '../domains/factory/boardStages';
 import { BoardAutoRunToggle } from '../domains/factory/components/BoardAutoRunToggle';
+import { BoardTooltipDelay } from '../domains/factory/components/BoardCardParts';
 import { BoardColumn } from '../domains/factory/components/BoardColumn';
 import { BoardColumnEmptyState } from '../domains/factory/components/BoardColumnEmptyState';
+import { ColumnReveal } from '../domains/factory/components/ColumnReveal';
 import { BoardRelevanceFilters } from '../domains/factory/components/BoardRelevanceFilters';
 import { CandidateCard } from '../domains/factory/components/CandidateCard';
 import { FactoryPageShell } from '../domains/factory/components/FactoryPageShell';
@@ -42,6 +44,8 @@ import {
   workItemMatchesRelevance,
 } from '../domains/factory/boardRelevance';
 import type { BoardRelevanceType } from '../domains/factory/boardRelevance';
+import { cardMatchesSearch } from '../domains/factory/boardItems';
+import { relatedWorkItemIndex } from '../domains/factory/services/relationships';
 import { workItemHumanActorIds } from '../domains/factory/workItemActivity';
 import type { FactoryProject, LinkedRepositoryPayload } from '../domains/workspaces/services/github';
 import { SkeletonRows } from '../ui/SkeletonRows';
@@ -111,6 +115,7 @@ function BoardContent({
   const [searchParams, setSearchParams] = useSearchParams();
   const targetItemId = searchParams.get('item') || undefined;
   const selectedParticipantId = searchParams.get('teammate') || undefined;
+  const search = searchParams.get('q') ?? '';
   const selectedRelevanceTypes = boardRelevanceFromQuery(searchParams.get('relevance'), kind);
   const selectedLabels = boardLabelsFromQuery(searchParams.getAll('label'));
 
@@ -123,10 +128,11 @@ function BoardContent({
     workItems: items.all,
     refetchItems: items.refetch,
   });
+  const relatedItemsFor = relatedWorkItemIndex(items.all);
   const decisions = useBoardDecisions(factoryProjectId);
   const composer = useBoardComposer(factoryProjectId);
   const activityProfileActorIds = [...new Set(items.all.flatMap(workItemHumanActorIds))];
-  const activity = useCompleteAuditEvents(factoryProjectId, `board-${kind}-activity`, 200, activityProfileActorIds);
+  const activity = useRecentAuditEvents(factoryProjectId, `board-${kind}-activity`, 200, activityProfileActorIds);
   const activityPage = activity.data;
   const participants = boardParticipants({
     items: items.all,
@@ -141,8 +147,16 @@ function BoardContent({
   const filteredCandidates = intake.candidates.filter(
     candidate =>
       candidateMatchesRelevance(candidate, selectedParticipantId, selectedRelevanceTypes) &&
-      candidateMatchesLabels(candidate, selectedLabels),
+      candidateMatchesLabels(candidate, selectedLabels) &&
+      cardMatchesSearch(candidate, search),
   );
+  const setSearch = (next: string) => {
+    const params = new URLSearchParams(searchParams);
+    params.delete('item');
+    if (next.trim()) params.set('q', next);
+    else params.delete('q');
+    setSearchParams(params, { replace: true });
+  };
   const setParticipant = (participantId: string | undefined) => {
     const next = new URLSearchParams(searchParams);
     next.delete('item');
@@ -179,6 +193,7 @@ function BoardContent({
     next.delete('teammate');
     next.delete('relevance');
     next.delete('label');
+    next.delete('q');
     next.delete('item');
     setSearchParams(next, { replace: true });
   };
@@ -204,7 +219,8 @@ function BoardContent({
       const liveCandidate = item.sourceKey ? participantCandidateBySourceKey.get(item.sourceKey) : undefined;
       return (
         workItemMatchesRelevance(item, activityPage, selectedParticipantId, selectedRelevanceTypes, liveCandidate) &&
-        workItemMatchesLabels(item, selectedLabels, liveCandidate)
+        workItemMatchesLabels(item, selectedLabels, liveCandidate) &&
+        cardMatchesSearch(item, search)
       );
     });
   const boardWorkItems = stages.flatMap(stage => workItemsForStage(stage.id));
@@ -238,7 +254,7 @@ function BoardContent({
   const unfilteredVisibleWorkItems = new Set(stages.flatMap(stage => unfilteredWorkItemsForStage(stage.id)));
   const totalTaskCount = visibleWorkItems.size + filteredCandidates.length;
   const unfilteredTaskCount = unfilteredVisibleWorkItems.size + intake.candidates.length;
-  const anyFilterActive = selectedParticipantId !== undefined || selectedLabels.size > 0;
+  const anyFilterActive = selectedParticipantId !== undefined || selectedLabels.size > 0 || search !== '';
   const filtersExcludeAll = anyFilterActive && totalTaskCount === 0 && unfilteredTaskCount > 0;
 
   return (
@@ -252,6 +268,8 @@ function BoardContent({
         <BoardRelevanceFilters
           kind={kind}
           participants={participants}
+          search={search}
+          onSearchChange={setSearch}
           selectedParticipantId={selectedParticipantId}
           selectedTypes={selectedRelevanceTypes}
           availableLabels={availableLabels}
@@ -266,136 +284,147 @@ function BoardContent({
           <BoardAutoRunToggle factoryProjectId={factoryProjectId} enabled={factory.autoRunEnabled ?? false} />
         </div>
       </div>
-      <ScrollArea
-        viewportRef={scroll.containerRef}
-        orientation="horizontal"
-        className="min-h-0 flex-1 [&_[data-hovering]:not([data-scrolling])]:opacity-0"
-        viewPortClassName="overscroll-x-contain pb-2 *:h-full [container-type:inline-size] lg:overscroll-x-auto"
-        aria-label="Board columns"
-        onPointerDown={scroll.claimForUser}
-        onWheel={scroll.claimForUser}
-      >
-        <div className="flex h-full min-h-0 gap-2 px-3 lg:gap-3 lg:px-0">
-          {stages.map(stage => {
-            const loading = loadingStages.has(stage.id);
-            const stageWorkItems = workItemsForStage(stage.id);
-            const taskCount = stageContentCount(stage.id, stages, stageWorkItems, filteredCandidates);
-            const composerOpen = composer.stage === stage.id;
-            return (
-              <BoardColumn
-                key={stage.id}
-                stage={stage.id}
-                label={stage.label}
-                taskCount={taskCount}
-                totalTaskCount={totalTaskCount}
-                loading={loading}
-                composerOpen={composerOpen}
-                laneRef={scroll.registerLane(stage.id)}
-                onDrop={items.handleDrop}
-                headerAction={
-                  !review &&
-                  !loading &&
-                  !isTerminalStage(stage.id) &&
-                  (composer.stage === undefined || composerOpen) ? (
-                    <Button
-                      ref={composer.registerTrigger(stage.id)}
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label={`Create work item in ${stage.label}`}
-                      title={`Create work item in ${stage.label}`}
-                      aria-expanded={composerOpen}
-                      aria-controls={`new-work-item-${stage.id}`}
-                      onClick={() => composer.open(stage.id)}
-                    >
-                      <Plus size={13} aria-hidden />
-                    </Button>
-                  ) : undefined
-                }
-                headerExtras={
-                  stage.id === 'intake' && intake.showSwitch ? (
-                    <IntakeSourceSwitch
-                      available={intake.available}
-                      active={intake.active}
-                      onSelect={setIntakeSource}
+      <BoardTooltipDelay>
+        <ScrollArea
+          viewportRef={scroll.containerRef}
+          orientation="horizontal"
+          className="min-h-0 flex-1 [&_[data-hovering]:not([data-scrolling])]:opacity-0"
+          viewPortClassName="overscroll-x-contain pb-2 *:h-full [container-type:inline-size] lg:overscroll-x-auto"
+          aria-label="Board columns"
+          onPointerDown={scroll.claimForUser}
+          onWheel={scroll.claimForUser}
+        >
+          <div className="flex h-full min-h-0 gap-2 px-3 lg:gap-3 lg:px-0">
+            {stages.map(stage => {
+              const loading = loadingStages.has(stage.id);
+              const stageWorkItems = workItemsForStage(stage.id);
+              const taskCount = stageContentCount(stage.id, stages, stageWorkItems, filteredCandidates);
+              const composerOpen = composer.stage === stage.id;
+              return (
+                <BoardColumn
+                  key={stage.id}
+                  stage={stage.id}
+                  label={stage.label}
+                  taskCount={taskCount}
+                  totalTaskCount={totalTaskCount}
+                  loading={loading}
+                  composerOpen={composerOpen}
+                  laneRef={scroll.registerLane(stage.id)}
+                  onDrop={items.handleDrop}
+                  headerAction={
+                    !review &&
+                    !loading &&
+                    !isTerminalStage(stage.id) &&
+                    (composer.stage === undefined || composerOpen) ? (
+                      <Button
+                        ref={composer.registerTrigger(stage.id)}
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={`Create work item in ${stage.label}`}
+                        title={`Create work item in ${stage.label}`}
+                        aria-expanded={composerOpen}
+                        aria-controls={`new-work-item-${stage.id}`}
+                        onClick={() => composer.open(stage.id)}
+                      >
+                        <Plus size={13} aria-hidden />
+                      </Button>
+                    ) : undefined
+                  }
+                  headerExtras={
+                    stage.id === 'intake' && intake.showSwitch ? (
+                      <IntakeSourceSwitch
+                        available={intake.available}
+                        active={intake.active}
+                        onSelect={setIntakeSource}
+                      />
+                    ) : undefined
+                  }
+                >
+                  {composerOpen ? (
+                    <InlineWorkItemComposer
+                      stage={stage.id}
+                      stageLabel={stage.label}
+                      onCreate={title => composer.submit(stage.id, title)}
+                      onClose={() => composer.close(stage.id)}
                     />
-                  ) : undefined
-                }
-              >
-                {composerOpen ? (
-                  <InlineWorkItemComposer
-                    stage={stage.id}
-                    stageLabel={stage.label}
-                    onCreate={title => composer.submit(stage.id, title)}
-                    onClose={() => composer.close(stage.id)}
+                  ) : null}
+                  <ColumnReveal
+                    items={stageWorkItems}
+                    pinned={item => item.id === targetItemId}
+                    renderItem={item => (
+                      <WorkItemCard
+                        key={`${item.id}:${stage.id}`}
+                        item={item}
+                        deepLinkRef={scroll.registerCard(item.id)}
+                        highlighted={targetItemId === item.id}
+                        columnStage={stage.id}
+                        relatedItems={relatedItemsFor(item)}
+                        projectRepositoryId={repository.projectRepositoryId}
+                        activityPage={activityPage}
+                        liveWorktreePaths={runs.liveWorktreePaths}
+                        sessionLivenessResolved={runs.sessionLivenessResolved}
+                        runDisabled={runs.disabled}
+                        preparing={runs.preparingFor(item.id)}
+                        evaluatingStage={items.evaluatingStages.get(item.id)}
+                        transitionReason={items.transitionReasons[item.id]}
+                        decision={decisions.effectByItem.get(item.id)}
+                        proposal={decisions.proposalByItem.get(item.id)}
+                        approvingDecisionId={decisions.approvingId}
+                        retryingDecisionId={decisions.retryingId}
+                        onApproveProposal={decisions.approve}
+                        onDismissProposal={decisions.dismiss}
+                        onRetryDecision={decisions.retry}
+                        pendingRunRoles={runs.pendingRolesFor(item.id)}
+                        onCreateSession={() => void runs.openOrCreateSession(item, stage.id)}
+                        onStartRun={(_spec, action) => void runs.openOrStartRun(item, action.role)}
+                        onRestartRun={(_spec, action) => void runs.restartRun(item, action.role)}
+                        onMove={toStage => items.move(item.id, toStage)}
+                        onRemove={() => items.remove(item.id)}
+                      />
+                    )}
                   />
-                ) : null}
-                {stageWorkItems.map(item => (
-                  <WorkItemCard
-                    key={`${item.id}:${stage.id}`}
-                    item={item}
-                    highlighted={targetItemId === item.id}
-                    columnStage={stage.id}
-                    allItems={items.all}
-                    activityPage={activityPage}
-                    liveWorktreePaths={runs.liveWorktreePaths}
-                    sessionLivenessResolved={runs.sessionLivenessResolved}
-                    runDisabled={runs.disabled}
-                    preparing={runs.preparingFor(item.id)}
-                    evaluatingStage={items.evaluatingStages.get(item.id)}
-                    transitionReason={items.transitionReasons[item.id]}
-                    decision={decisions.effectByItem.get(item.id)}
-                    proposal={decisions.proposalByItem.get(item.id)}
-                    approvingDecisionId={decisions.approvingId}
-                    retryingDecisionId={decisions.retryingId}
-                    onApproveProposal={decisions.approve}
-                    onDismissProposal={decisions.dismiss}
-                    onRetryDecision={decisions.retry}
-                    pendingRunRoles={runs.pendingRolesFor(item.id)}
-                    onCreateSession={() => void runs.openOrCreateSession(item, stage.id)}
-                    onStartRun={(_spec, action) => void runs.openOrStartRun(item, action.role)}
-                    onRestartRun={(_spec, action) => void runs.restartRun(item, action.role)}
-                    onMove={toStage => items.move(item.id, toStage)}
-                    onRemove={() => items.remove(item.id)}
+                  <ColumnReveal
+                    items={filteredCandidates.filter(candidate => candidate.column === stage.id)}
+                    renderItem={candidate => (
+                      <CandidateCard
+                        key={candidate.sourceKey}
+                        candidate={candidate}
+                        projectRepositoryId={repository.projectRepositoryId}
+                        factoryProjectId={factoryProjectId}
+                        pendingRunRoles={runs.pendingRolesForSource(candidate.sourceKey)}
+                        preparing={runs.preparingForSource(candidate.sourceKey)}
+                        disabled={!runs.enabled}
+                        onRun={(action, prompt) => runs.startCandidateRun(candidate, action, prompt)}
+                        onFile={() => items.handleDrop({ kind: 'candidate', candidate }, candidate.column)}
+                      />
+                    )}
                   />
-                ))}
-                {filteredCandidates
-                  .filter(candidate => candidate.column === stage.id)
-                  .map(candidate => (
-                    <CandidateCard
-                      key={candidate.sourceKey}
-                      candidate={candidate}
-                      pendingRunRoles={runs.pendingRolesForSource(candidate.sourceKey)}
-                      preparing={runs.preparingForSource(candidate.sourceKey)}
-                      disabled={!runs.enabled}
-                      onRun={(action, prompt) => runs.startCandidateRun(candidate, action, prompt)}
-                      onFile={() => items.handleDrop({ kind: 'candidate', candidate }, candidate.column)}
+                  {loading && (
+                    <SkeletonRows label={`Loading ${stage.label} column`} rows={3} rowClassName="h-24 w-full" />
+                  )}
+                  {!loading && !composerOpen && taskCount === 0 && (
+                    <BoardColumnEmptyState
+                      stage={stage.id}
+                      kind={kind}
+                      hasIntakeSource={intake.active !== undefined}
+                      filtersExcludeAll={filtersExcludeAll}
                     />
-                  ))}
-                {loading && (
-                  <SkeletonRows label={`Loading ${stage.label} column`} rows={3} rowClassName="h-24 w-full" />
-                )}
-                {!loading && !composerOpen && taskCount === 0 && (
-                  <BoardColumnEmptyState
-                    stage={stage.id}
-                    kind={kind}
-                    hasIntakeSource={intake.active !== undefined}
-                    filtersExcludeAll={filtersExcludeAll}
-                  />
-                )}
-                {stage.id === 'intake' && (
-                  <IntakeColumnExtras
-                    source={intake.active}
-                    issues={intake.issues}
-                    pulls={intake.pulls}
-                    linearIssues={intake.linearIssues}
-                  />
-                )}
-              </BoardColumn>
-            );
-          })}
-        </div>
-      </ScrollArea>
+                  )}
+                  {stage.id === 'intake' && (
+                    <IntakeColumnExtras
+                      source={intake.active}
+                      issues={intake.issues}
+                      pulls={intake.pulls}
+                      linearIssues={intake.linearIssues}
+                    />
+                  )}
+                </BoardColumn>
+              );
+            })}
+          </div>
+        </ScrollArea>
+      </BoardTooltipDelay>
     </div>
   );
 }

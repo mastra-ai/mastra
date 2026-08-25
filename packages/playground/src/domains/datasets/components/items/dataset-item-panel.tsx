@@ -25,6 +25,7 @@ import {
 import { useEffect, useState } from 'react';
 import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
 import { EditModeContent } from '../dataset-detail/dataset-item-form';
+import { CompareWithList } from './compare-with-list';
 import { useLinkComponent } from '@/lib/framework';
 
 /** Schema validation error from API */
@@ -404,6 +405,8 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
                   codeStr={JSON.stringify(item.metadata ?? null, null, 2)}
                 />
               </div>
+
+              <CompareWithList datasetId={datasetId} currentItemId={item.id} />
             </>
           )}
         </DataPanel.Content>

@@ -22,7 +22,6 @@ export interface DatasetItemsListProps {
   onToggleSelection: (id: string, shiftKey: boolean, allIds: string[]) => void;
   onSelectAll: (ids: string[]) => void;
   onClearSelection: () => void;
-  maxSelection?: number;
   // Empty state props
   onAddClick: () => void;
   onImportClick?: () => void;
@@ -61,7 +60,6 @@ export function DatasetItemsList({
   onToggleSelection,
   onSelectAll,
   onClearSelection,
-  maxSelection,
   onAddClick,
   onImportClick,
   onImportJsonClick,
@@ -96,12 +94,6 @@ export function DatasetItemsList({
   };
 
   const handleToggleSelection = (id: string, shiftKey: boolean, allIds: string[]) => {
-    if (maxSelection && !selectedIds.has(id) && selectedIds.size >= maxSelection) {
-      // Drop most recent selection, keep oldest + add new one
-      const [first] = Array.from(selectedIds);
-      onSelectAll([first, id]);
-      return;
-    }
     onToggleSelection(id, shiftKey, allIds);
   };
 
@@ -110,14 +102,13 @@ export function DatasetItemsList({
   return (
     <DataList columns={gridColumns} scrollRef={containerRef}>
       <DataList.Top hasLeadingCell={isSelectionActive}>
-        {isSelectionActive && !maxSelection && (
+        {isSelectionActive && (
           <DataList.TopSelectCell
             checked={isIndeterminate ? 'indeterminate' : isAllSelected}
             onToggle={handleSelectAllToggle}
             aria-label="Select all items"
           />
         )}
-        {isSelectionActive && maxSelection && <DataList.TopCell>&nbsp;</DataList.TopCell>}
         {isSelectionActive ? (
           <DataList.TopCells colStart={2}>
             {columns.map(col => (

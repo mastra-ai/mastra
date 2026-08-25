@@ -1,6 +1,5 @@
 'use client';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@mastra/playground-ui/components/Dialog';
 import { SelectFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Label } from '@mastra/playground-ui/components/Label';
@@ -11,9 +10,7 @@ import { SchemaConfigSection } from './schema-config-section';
 import type { DatasetTargetType } from './target-type-options';
 import { DATASET_TARGET_TYPE_OPTIONS, isDatasetTargetType } from './target-type-options';
 
-export interface EditDatasetDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+export interface EditDatasetFormProps {
   dataset: {
     id: string;
     name: string;
@@ -23,11 +20,11 @@ export interface EditDatasetDialogProps {
     groundTruthSchema?: Record<string, unknown> | null;
     requestContextSchema?: Record<string, unknown> | null;
   };
-  onSuccess?: () => void;
+  onSuccess: () => void;
+  onCancel: () => void;
 }
 
-type EditDatasetDialogFormProps = Omit<EditDatasetDialogProps, 'open'>;
-type Dataset = EditDatasetDialogProps['dataset'];
+type Dataset = EditDatasetFormProps['dataset'];
 type SchemaValue = Record<string, unknown> | null;
 
 type EditDatasetFormState = {
@@ -79,23 +76,7 @@ function editDatasetFormReducer(state: EditDatasetFormState, action: EditDataset
   }
 }
 
-export function EditDatasetDialog({ open, onOpenChange, dataset, onSuccess }: EditDatasetDialogProps) {
-  // The form lives inside DialogContent so it mounts/unmounts with the popup:
-  // Base UI unmounts the popup's children after the exit transition completes,
-  // which both resets the form state for the next open and keeps the closing
-  // popup instance alive through its own exit transition. Keying a remount on
-  // `open` here would destroy the popup mid-transition and orphan it on screen
-  // (see https://github.com/mastra-ai/mastra/issues/17890).
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
-        <EditDatasetDialogForm key={dataset.id} dataset={dataset} onOpenChange={onOpenChange} onSuccess={onSuccess} />
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function EditDatasetDialogForm({ onOpenChange, dataset, onSuccess }: EditDatasetDialogFormProps) {
+export function EditDatasetForm({ dataset, onSuccess, onCancel }: EditDatasetFormProps) {
   const [formState, dispatch] = useReducer(editDatasetFormReducer, dataset, getInitialFormState);
   const { updateDataset } = useDatasetMutations();
 
@@ -133,8 +114,7 @@ function EditDatasetDialogForm({ onOpenChange, dataset, onSuccess }: EditDataset
       });
 
       toast.success('Dataset updated successfully');
-      onOpenChange(false);
-      onSuccess?.();
+      onSuccess();
     } catch (err: unknown) {
       // Handle validation errors (existing items may fail new schema)
       // MastraClientError stores the parsed response body in `body`
@@ -152,74 +132,63 @@ function EditDatasetDialogForm({ onOpenChange, dataset, onSuccess }: EditDataset
     }
   };
 
-  const handleCancel = () => {
-    onOpenChange(false);
-  };
-
   return (
-    <>
-      <DialogHeader>
-        <DialogTitle>Edit Dataset</DialogTitle>
-      </DialogHeader>
-      <DialogBody className="max-h-[70vh] overflow-y-auto">
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="edit-dataset-name">Name *</Label>
-            <Input
-              id="edit-dataset-name"
-              value={formState.name}
-              onChange={e => dispatch({ type: 'setStringField', field: 'name', value: e.target.value })}
-              placeholder="Enter dataset name"
-              autoFocus
-            />
-          </div>
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="edit-dataset-name">Name *</Label>
+        <Input
+          id="edit-dataset-name"
+          value={formState.name}
+          onChange={e => dispatch({ type: 'setStringField', field: 'name', value: e.target.value })}
+          placeholder="Enter dataset name"
+          autoFocus
+        />
+      </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="edit-dataset-description">Description</Label>
-            <Input
-              id="edit-dataset-description"
-              value={formState.description}
-              onChange={e => dispatch({ type: 'setStringField', field: 'description', value: e.target.value })}
-              placeholder="Enter dataset description (optional)"
-            />
-          </div>
+      <div className="space-y-2">
+        <Label htmlFor="edit-dataset-description">Description</Label>
+        <Input
+          id="edit-dataset-description"
+          value={formState.description}
+          onChange={e => dispatch({ type: 'setStringField', field: 'description', value: e.target.value })}
+          placeholder="Enter dataset description (optional)"
+        />
+      </div>
 
-          <SelectFieldBlock
-            label="Target type"
-            name="edit-dataset-target-type"
-            placeholder="Select a target type (optional)"
-            options={[...DATASET_TARGET_TYPE_OPTIONS]}
-            value={formState.targetType}
-            onValueChange={value => dispatch({ type: 'setTargetType', value: value as DatasetTargetType })}
-            helpText="What this dataset evaluates. Drives the Target column and the Target filter."
-            disabled={updateDataset.isPending}
-          />
+      <SelectFieldBlock
+        label="Target type"
+        name="edit-dataset-target-type"
+        placeholder="Select a target type (optional)"
+        options={[...DATASET_TARGET_TYPE_OPTIONS]}
+        value={formState.targetType}
+        onValueChange={value => dispatch({ type: 'setTargetType', value: value as DatasetTargetType })}
+        helpText="What this dataset evaluates. Drives the Target column and the Target filter."
+        disabled={updateDataset.isPending}
+      />
 
-          <SchemaConfigSection
-            inputSchema={formState.inputSchema}
-            outputSchema={formState.groundTruthSchema}
-            requestContextSchema={formState.requestContextSchema}
-            onChange={handleSchemaChange}
-            disabled={updateDataset.isPending}
-            defaultOpen={!!(dataset.inputSchema || dataset.groundTruthSchema || dataset.requestContextSchema)}
-          />
+      <SchemaConfigSection
+        inputSchema={formState.inputSchema}
+        outputSchema={formState.groundTruthSchema}
+        requestContextSchema={formState.requestContextSchema}
+        onChange={handleSchemaChange}
+        disabled={updateDataset.isPending}
+        defaultOpen={!!(dataset.inputSchema || dataset.groundTruthSchema || dataset.requestContextSchema)}
+      />
 
-          {formState.validationError && (
-            <div className="rounded-md border border-red-900/50 bg-red-950/20 p-3">
-              <p className="text-sm text-red-200">{formState.validationError}</p>
-            </div>
-          )}
+      {formState.validationError && (
+        <div className="rounded-md border border-red-900/50 bg-red-950/20 p-3">
+          <p className="text-sm text-red-200">{formState.validationError}</p>
+        </div>
+      )}
 
-          <div className="flex justify-end gap-2 pt-4">
-            <Button type="button" onClick={handleCancel}>
-              Cancel
-            </Button>
-            <Button type="submit" variant="primary" disabled={updateDataset.isPending || !formState.name.trim()}>
-              {updateDataset.isPending ? 'Saving...' : 'Save Changes'}
-            </Button>
-          </div>
-        </form>
-      </DialogBody>
-    </>
+      <div className="flex justify-end gap-2 pt-4">
+        <Button type="button" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button type="submit" variant="primary" disabled={updateDataset.isPending || !formState.name.trim()}>
+          {updateDataset.isPending ? 'Saving...' : 'Save Changes'}
+        </Button>
+      </div>
+    </form>
   );
 }
