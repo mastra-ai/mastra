@@ -80,6 +80,16 @@ export function workItemMeta(item: WorkItem): string {
   return `${SOURCE_LABELS[item.source]} · ${age}`;
 }
 
+/** Free-text card match over what names it on the board: its title and its issue key. */
+export function cardMatchesSearch(card: Pick<WorkItem, 'source' | 'metadata' | 'title'>, query: string): boolean {
+  const needle = query.trim().toLowerCase();
+  if (needle === '') return true;
+  const number = githubNumberForItem(card);
+  const identifier = linearIdentifierForItem(card);
+  const named = [card.title, number === undefined ? '' : `#${number}`, identifier ?? ''];
+  return named.some(text => text.toLowerCase().includes(needle));
+}
+
 /**
  * The card's single conversation. A work item keeps one threadId for its whole
  * lifecycle — every run reuses the worktree's thread — so the card title links

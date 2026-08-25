@@ -44,6 +44,7 @@ import {
   workItemMatchesRelevance,
 } from '../domains/factory/boardRelevance';
 import type { BoardRelevanceType } from '../domains/factory/boardRelevance';
+import { cardMatchesSearch } from '../domains/factory/boardItems';
 import { relatedWorkItemIndex } from '../domains/factory/services/relationships';
 import { workItemHumanActorIds } from '../domains/factory/workItemActivity';
 import type { FactoryProject, LinkedRepositoryPayload } from '../domains/workspaces/services/github';
@@ -114,6 +115,7 @@ function BoardContent({
   const [searchParams, setSearchParams] = useSearchParams();
   const targetItemId = searchParams.get('item') || undefined;
   const selectedParticipantId = searchParams.get('teammate') || undefined;
+  const search = searchParams.get('q') ?? '';
   const selectedRelevanceTypes = boardRelevanceFromQuery(searchParams.get('relevance'), kind);
   const selectedLabels = boardLabelsFromQuery(searchParams.getAll('label'));
 
@@ -145,8 +147,16 @@ function BoardContent({
   const filteredCandidates = intake.candidates.filter(
     candidate =>
       candidateMatchesRelevance(candidate, selectedParticipantId, selectedRelevanceTypes) &&
-      candidateMatchesLabels(candidate, selectedLabels),
+      candidateMatchesLabels(candidate, selectedLabels) &&
+      cardMatchesSearch(candidate, search),
   );
+  const setSearch = (next: string) => {
+    const params = new URLSearchParams(searchParams);
+    params.delete('item');
+    if (next.trim()) params.set('q', next);
+    else params.delete('q');
+    setSearchParams(params, { replace: true });
+  };
   const setParticipant = (participantId: string | undefined) => {
     const next = new URLSearchParams(searchParams);
     next.delete('item');
@@ -183,6 +193,7 @@ function BoardContent({
     next.delete('teammate');
     next.delete('relevance');
     next.delete('label');
+    next.delete('q');
     next.delete('item');
     setSearchParams(next, { replace: true });
   };
@@ -208,7 +219,8 @@ function BoardContent({
       const liveCandidate = item.sourceKey ? participantCandidateBySourceKey.get(item.sourceKey) : undefined;
       return (
         workItemMatchesRelevance(item, activityPage, selectedParticipantId, selectedRelevanceTypes, liveCandidate) &&
-        workItemMatchesLabels(item, selectedLabels, liveCandidate)
+        workItemMatchesLabels(item, selectedLabels, liveCandidate) &&
+        cardMatchesSearch(item, search)
       );
     });
   const boardWorkItems = stages.flatMap(stage => workItemsForStage(stage.id));
@@ -242,7 +254,7 @@ function BoardContent({
   const unfilteredVisibleWorkItems = new Set(stages.flatMap(stage => unfilteredWorkItemsForStage(stage.id)));
   const totalTaskCount = visibleWorkItems.size + filteredCandidates.length;
   const unfilteredTaskCount = unfilteredVisibleWorkItems.size + intake.candidates.length;
-  const anyFilterActive = selectedParticipantId !== undefined || selectedLabels.size > 0;
+  const anyFilterActive = selectedParticipantId !== undefined || selectedLabels.size > 0 || search !== '';
   const filtersExcludeAll = anyFilterActive && totalTaskCount === 0 && unfilteredTaskCount > 0;
 
   return (
@@ -256,6 +268,8 @@ function BoardContent({
         <BoardRelevanceFilters
           kind={kind}
           participants={participants}
+          search={search}
+          onSearchChange={setSearch}
           selectedParticipantId={selectedParticipantId}
           selectedTypes={selectedRelevanceTypes}
           availableLabels={availableLabels}

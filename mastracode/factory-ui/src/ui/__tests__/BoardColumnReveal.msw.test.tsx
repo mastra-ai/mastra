@@ -5,7 +5,8 @@
  * `?item=` renders however deep it sits, because the board scrolls to it by
  * finding it in the DOM.
  */
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -136,6 +137,21 @@ describe('Board column reveal', () => {
     renderBoard();
 
     await waitFor(() => expect(screen.getAllByTestId('work-item-card')).toHaveLength(REVEAL_STEP * 2 + 10));
+  });
+
+  // Paging a column hides its oldest cards, so the board has to offer a way to
+  // reach one without scrolling for it. Filtering runs before the paging, so a
+  // match renders however deep it sat.
+  it('finds a card past the first page through the board search', async () => {
+    stubBoardEndpoints();
+    renderBoard();
+    await screen.findByLabelText(`Task ${ITEM_COUNT - 1}`);
+
+    const filters = within(screen.getByLabelText('Board filters'));
+    await userEvent.setup().type(filters.getByRole('textbox', { name: 'Search cards' }), OLDEST_TITLE);
+
+    expect(await screen.findByLabelText(OLDEST_TITLE)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getAllByTestId('work-item-card')).toHaveLength(1));
   });
 
   it('renders a linked card even when it sits past the first page', async () => {

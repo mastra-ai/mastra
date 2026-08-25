@@ -25,6 +25,7 @@ import {
 } from '../../../../hooks/useAgentControllerRunMutations';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { isTerminalInvocationState } from '../services/transcript';
+import { Arriving, TranscriptArrival, useArrivedLive } from './arrival';
 import { MESSAGE_HOVER, MessageMeta } from './MessageMeta';
 import { ToolCard } from './tool/ToolCard';
 import { ToolGroup, TOOL_GROUP_MIN } from './tool/ToolGroup';
@@ -506,15 +507,17 @@ export function Transcript({ tail }: { tail?: ReactNode }) {
   };
 
   return (
-    <TranscriptEntries
-      entries={transcript.entries}
-      restoredHistory
-      isSubmitting={approveMutation.isPending || respondMutation.isPending}
-      onApprove={onApprove}
-      onRespond={onRespond}
-      running={busy}
-      tail={tail}
-    />
+    <TranscriptArrival>
+      <TranscriptEntries
+        entries={transcript.entries}
+        restoredHistory
+        isSubmitting={approveMutation.isPending || respondMutation.isPending}
+        onApprove={onApprove}
+        onRespond={onRespond}
+        running={busy}
+        tail={tail}
+      />
+    </TranscriptArrival>
   );
 }
 
@@ -613,15 +616,9 @@ export function TranscriptEntries({
             className={cn('flex flex-col', group.opensTurn && 'turn-room', holdsRoom && openRoomClass)}
           >
             {group.entries.map(({ entry, content }) => (
-              <MessageScrollerItem
-                key={entry.id}
-                messageId={entry.id}
-                scrollAnchor={opensTurn(entry)}
-                // Prepend anchoring needs real item heights, not off-screen estimates.
-                className="[content-visibility:visible]"
-              >
+              <TranscriptItem key={entry.id} entry={entry} scrollAnchor={opensTurn(entry)}>
                 {content}
-              </MessageScrollerItem>
+              </TranscriptItem>
             ))}
             {isLiveTurn && tail}
           </div>
@@ -629,6 +626,29 @@ export function TranscriptEntries({
       })}
       {turnGroups.length === 0 && tail}
     </>
+  );
+}
+
+function TranscriptItem({
+  entry,
+  scrollAnchor,
+  children,
+}: {
+  entry: TimelineEntry;
+  scrollAnchor: boolean;
+  children: ReactNode;
+}) {
+  const arrivedLive = useArrivedLive();
+
+  return (
+    <MessageScrollerItem
+      messageId={entry.id}
+      scrollAnchor={scrollAnchor}
+      // Prepend anchoring needs real item heights, not off-screen estimates.
+      className={cn('[content-visibility:visible]', arrivedLive && 'mastra-arriving')}
+    >
+      {children}
+    </MessageScrollerItem>
   );
 }
 
@@ -754,29 +774,38 @@ function renderMessageBubble({
     },
     Reasoning: (part: ReasoningPart) => (
       <div className="border-border1 my-1.5 border-l-2 pl-2.5 italic [&_p]:my-0.5">
-        <MarkdownRenderer className="text-ui-sm text-icon3">{part.reasoning}</MarkdownRenderer>
+        <MarkdownRenderer className="text-ui-sm text-icon3" streaming={entry.streaming}>
+          {part.reasoning}
+        </MarkdownRenderer>
       </div>
     ),
     ToolInvocation: (part: ToolInvocationPart) => {
       const toolCallId = part.toolInvocation.toolCallId;
       const group = toolGroups.byFirstId.get(toolCallId);
-      if (group) return <ToolGroup tools={group} />;
+      if (group)
+        return (
+          <Arriving>
+            <ToolGroup tools={group} />
+          </Arriving>
+        );
       if (toolGroups.memberIds.has(toolCallId)) return null;
 
       const runtime = entry.runtimeTools?.[toolCallId];
       const tool = toolFromInvocationPart(part, runtime);
       const suspension = suspensions.get(tool.toolCallId);
       return (
-        <ToolFactory
-          toolName={tool.toolName}
-          toolCallId={tool.toolCallId}
-          input={suspension?.suspendPayload ?? tool.args}
-          output={tool.result}
-          status={suspension ? 'running' : tool.status}
-          isSubmitting={isSubmitting}
-          onRespond={suspension ? response => onRespond(tool.toolCallId, response, suspension.id) : undefined}
-          fallback={() => <ToolCard tool={tool} />}
-        />
+        <Arriving>
+          <ToolFactory
+            toolName={tool.toolName}
+            toolCallId={tool.toolCallId}
+            input={suspension?.suspendPayload ?? tool.args}
+            output={tool.result}
+            status={suspension ? 'running' : tool.status}
+            isSubmitting={isSubmitting}
+            onRespond={suspension ? response => onRespond(tool.toolCallId, response, suspension.id) : undefined}
+            fallback={() => <ToolCard tool={tool} />}
+          />
+        </Arriving>
       );
     },
     File: (part: FilePart) => <FileAttachment part={part} />,

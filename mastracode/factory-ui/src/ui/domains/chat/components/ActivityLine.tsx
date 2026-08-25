@@ -5,6 +5,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useChatTranscript } from '../context/useChatTranscript';
 import { isTerminalInvocationState } from '../services/transcript';
 import type { TimelineEntry } from '../services/transcript';
+import { Arriving } from './arrival';
 import { isTranscriptToolVisible } from './ToolFactory';
 
 /**
@@ -62,13 +63,10 @@ export function ActivityLine() {
   if (!busy || !awaitingFirstOutput(transcript.entries)) return null;
 
   return (
-    <Txt
-      as="p"
-      variant="ui-sm"
-      aria-hidden
-      className="text-icon3 motion-safe:animate-in fade-in-0 slide-in-from-bottom-1 px-1.5 py-1"
-    >
-      <Shimmer>Thinking</Shimmer>
-    </Txt>
+    <Arriving>
+      <Txt as="p" variant="ui-sm" aria-hidden className="text-icon3 px-1.5 py-1">
+        <Shimmer>Thinking</Shimmer>
+      </Txt>
+    </Arriving>
   );
 }
