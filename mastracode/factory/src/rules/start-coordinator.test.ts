@@ -132,6 +132,91 @@ function startRequest(
 }
 
 describe('FactoryStartCoordinator', () => {
+  it('uses authenticated run_start ingress to approve a classified feature into Planning', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = (
+      await storage.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        input: startRequest().workItem.input,
+      })
+    ).item;
+    const transitionService = new FactoryTransitionService({
+      storage,
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+    });
+    await transitionService.transition({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: item.id,
+      board: 'work',
+      stage: 'intake',
+      expectedRevision: item.revision,
+      actor: { type: 'agent', bindingId: 'triage', role: 'triage' },
+      ingress: { type: 'agent', identity: 'triage-classify' },
+      cause: 'await approval',
+      triageType: 'feature request',
+    });
+    const { controller } = makeController();
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      storage,
+      transitionService,
+      makeSourceControl() as never,
+    );
+
+    const prepared = await coordinator.prepare({
+      ...startRequest({ id: item.id, role: 'plan' }),
+      destinationStage: 'planning',
+    });
+
+    expect(prepared.workItemId).toBe(item.id);
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['planning']);
+  });
+
+  it('uses authenticated run_start ingress to approve a classified feature into Execute', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = (
+      await storage.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        input: { ...startRequest().workItem.input, stages: ['planning'] },
+      })
+    ).item;
+    const transitionService = new FactoryTransitionService({
+      storage,
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+    });
+    await transitionService.transition({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: item.id,
+      board: 'work',
+      stage: 'planning',
+      expectedRevision: item.revision,
+      actor: { type: 'agent', bindingId: 'triage', role: 'triage' },
+      ingress: { type: 'agent', identity: 'triage-classify-execute' },
+      cause: 'await approval',
+      triageType: 'feature request',
+    });
+    const { controller } = makeController();
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      storage,
+      transitionService,
+      makeSourceControl() as never,
+    );
+
+    await coordinator.prepare({
+      ...startRequest({ id: item.id, role: 'work' }),
+      destinationStage: 'execute',
+    });
+
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['execute']);
+  });
+
   it('commits the item session, exact binding, and durable pending start', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { controller, sendMessage } = makeController();

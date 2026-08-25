@@ -1614,6 +1614,7 @@ describe('GET /web/factory/projects/:id/metrics', () => {
         actor,
         ingress: { type: 'rule', identity },
         cause: 'auto_triage',
+        ...(actor.type === 'agent' && actor.role === 'triage' ? { triageType: 'bug' as const } : {}),
       });
     const triaged = await move('triage', workItem.revision, 'auto-1', {
       type: 'system',
