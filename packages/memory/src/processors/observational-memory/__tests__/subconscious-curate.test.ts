@@ -83,6 +83,10 @@ describe('Subconscious curator', () => {
     await memory.runCuration({ threadId: 'alpha', resourceId: 'user-42', requestContext });
 
     expect(prompt).toContain("links only from the entity's own records");
+    // Synopses target the bounded description tool; content stays long-form (create path still uses the content tool).
+    expect(prompt).toContain('knowledge_write_node_description');
+    expect(prompt).toContain('re-read it for its fresh version before writing the description');
+    expect(prompt).toContain('never shrink content into a synopsis');
     expect(prompt).toContain('knowledge_write_node_content');
     const mandateMarker = 'touched by a KnowledgeRecord in the current worklist';
     const cursorMarker = 'Do not emit a completion marker when no KnowledgeRecord was fully processed';
