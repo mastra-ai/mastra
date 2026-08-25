@@ -242,7 +242,7 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
   protected _destroyPromise?: Promise<void>;
 
   /** Lifecycle callbacks */
-  private readonly _onStart?: SandboxStartHook;
+  private _onStart?: SandboxStartHook;
   private readonly _onStop?: SandboxLifecycleHook;
   private readonly _onDestroy?: SandboxLifecycleHook;
 
@@ -360,6 +360,39 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
    */
   getEnv(): Record<string, string | undefined> {
     return { ...this.#env };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Start hook
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Attach or replace the start hook after construction.
+   *
+   * The updater receives the hook currently installed (the `onStart`
+   * constructor option, or whatever a previous call left behind) and returns
+   * the one to install, so a caller composes instead of clobbering a hook it
+   * didn't know about:
+   *
+   * ```typescript
+   * sandbox.setOnStart(prev => async args => {
+   *   await runSetup(args); // ours first: later hooks get a ready workspace
+   *   await prev?.(args);
+   * });
+   * ```
+   *
+   * This lets a host hand out plain sandboxes and let the runtime driving them
+   * install its own setup, instead of threading a hook through every provider
+   * constructor. Ignoring `prev` deliberately replaces the existing hook.
+   *
+   * Ordering matters twice over: hook errors are FATAL (see the `onStart`
+   * option), so anything sequenced after a throwing hook never runs, and each
+   * call wraps the current hook, so calling this once per start rather than
+   * once per sandbox stacks duplicate work. Only starts that begin after this
+   * call see the new hook.
+   */
+  setOnStart(update: (previous: SandboxStartHook | undefined) => SandboxStartHook): void {
+    this._onStart = update(this._onStart);
   }
 
   // ---------------------------------------------------------------------------
