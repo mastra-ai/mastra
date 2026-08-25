@@ -108,6 +108,15 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
       return;
     }
 
+    // An ended span is final. endTree() force-closes open descendants on
+    // cancellation, so a step that ignored the abort signal can still reject
+    // afterwards. Recording that failure here would leave the live span saying
+    // 'failed' while its only SPAN_ENDED event said 'canceled', and the
+    // endSpan: false path would emit a SPAN_UPDATED after the end event.
+    if (this.endTime) {
+      return;
+    }
+
     const { error, endSpan = true, attributes, metadata } = options;
 
     if (metadata) {

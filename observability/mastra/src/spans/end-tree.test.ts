@@ -132,6 +132,48 @@ describe('Span.endTree', () => {
     expect(exported?.errorInfo).toBeUndefined();
   });
 
+  it('keeps a force-closed span final when its step fails afterwards', () => {
+    const tracing = createInstance();
+
+    const root = tracing.startSpan({ type: SpanType.WORKFLOW_RUN, name: 'root' });
+    const step = root.createChildSpan({ type: SpanType.WORKFLOW_STEP, name: 'step' });
+
+    root.endTree({ attributes: { status: 'canceled' } });
+    const endTime = step.endTime;
+
+    // Mirrors how the workflow engine reports a step failure: a step that
+    // ignored the abort signal keeps running past cancel() and rejects later.
+    step.error({ error: new Error('late failure'), attributes: { status: 'failed' } });
+
+    expect(step.endTime).toBe(endTime);
+    expect(step.errorInfo).toBeUndefined();
+    expect(step.attributes?.status).toBe('canceled');
+    expect(endedIds().filter(id => id === step.id)).toHaveLength(1);
+
+    const exported = testExporter.events.find(
+      event => event.type === TracingEventType.SPAN_ENDED && event.exportedSpan.id === step.id,
+    )?.exportedSpan;
+    expect(exported?.attributes).toMatchObject({ status: 'canceled' });
+    expect(exported?.errorInfo).toBeUndefined();
+  });
+
+  it('does not emit a SPAN_UPDATED after a force-closed span records a late error', () => {
+    const tracing = createInstance();
+
+    const root = tracing.startSpan({ type: SpanType.WORKFLOW_RUN, name: 'root' });
+    const step = root.createChildSpan({ type: SpanType.WORKFLOW_STEP, name: 'step' });
+
+    root.endTree({ attributes: { status: 'canceled' } });
+
+    step.error({ error: new Error('late failure'), endSpan: false });
+
+    const updates = testExporter.events.filter(
+      event => event.type === TracingEventType.SPAN_UPDATED && event.exportedSpan.id === step.id,
+    );
+    expect(updates).toEqual([]);
+    expect(step.errorInfo).toBeUndefined();
+  });
+
   it('closes descendants of spans dropped by excludeSpanTypes', () => {
     const tracing = createInstance({ excludeSpanTypes: [SpanType.WORKFLOW_STEP] });
 

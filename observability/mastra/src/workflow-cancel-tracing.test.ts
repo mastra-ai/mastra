@@ -13,6 +13,23 @@ import { TestExporter } from './exporters';
 
 const empty = z.object({});
 
+function createDeferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>(r => {
+    resolve = r;
+  });
+  return { promise, resolve };
+}
+
+/**
+ * Resolved by the tail step as soon as its `execute` is entered, which is after
+ * the engine has opened the step's span. Tests await this instead of sleeping,
+ * so cancellation always lands on a run with a live, open step span.
+ */
+let tailStepEntered = createDeferred();
+/** Lets a test release a parked tail step so it fails after cancel() ran. */
+let releaseTailStep = createDeferred();
+
 const quickStep = createStep({
   id: 'quick',
   inputSchema: empty,
@@ -24,7 +41,10 @@ const deafStep = createStep({
   id: 'deaf',
   inputSchema: empty,
   outputSchema: empty,
-  execute: () => new Promise<Record<string, never>>(() => {}),
+  execute: () => {
+    tailStepEntered.resolve();
+    return new Promise<Record<string, never>>(() => {});
+  },
 });
 
 const cooperativeStep = createStep({
@@ -33,8 +53,21 @@ const cooperativeStep = createStep({
   outputSchema: empty,
   execute: ({ abortSignal }) =>
     new Promise<Record<string, never>>(resolve => {
+      tailStepEntered.resolve();
       abortSignal.addEventListener('abort', () => resolve({}), { once: true });
     }),
+});
+
+/** Ignores abortSignal like deafStep, but eventually rejects after cancellation. */
+const deafThenFailingStep = createStep({
+  id: 'deaf',
+  inputSchema: empty,
+  outputSchema: empty,
+  execute: async () => {
+    tailStepEntered.resolve();
+    await releaseTailStep.promise;
+    throw new Error('late failure');
+  },
 });
 
 const throwingStep = createStep({
@@ -72,6 +105,8 @@ describe('workflow run cancellation tracing', () => {
 
   beforeEach(() => {
     exporter = new TestExporter();
+    tailStepEntered = createDeferred();
+    releaseTailStep = createDeferred();
   });
 
   const endedSpans = () =>
@@ -104,7 +139,7 @@ describe('workflow run cancellation tracing', () => {
     const run = await mastra.getWorkflow('outerWorkflow').createRun();
 
     run.start({ inputData: {} }).catch(() => {});
-    await tick(300);
+    await tailStepEntered.promise;
     await run.cancel();
     await tick(100);
 
@@ -129,12 +164,39 @@ describe('workflow run cancellation tracing', () => {
     expect(quick?.attributes).toMatchObject({ status: 'success' });
   });
 
+  it('keeps the canceled record when a step that ignored abortSignal fails afterwards', async () => {
+    const mastra = buildMastra(exporter, deafThenFailingStep);
+    const run = await mastra.getWorkflow('outerWorkflow').createRun();
+
+    run.start({ inputData: {} }).catch(() => {});
+    await tailStepEntered.promise;
+    await run.cancel();
+
+    // The step only rejects once the run is canceled and its span tree already
+    // force-closed, so the engine reports the failure against a span that has
+    // already emitted its single SPAN_ENDED.
+    releaseTailStep.resolve();
+    await tick(200);
+
+    expectNoDanglingSpans();
+    expectSingleEndPerSpan();
+    expectParentsPresent();
+
+    const deaf = endedSpans().find(span => span.name === "workflow step: 'deaf'");
+    expect(deaf?.attributes).toMatchObject({ status: 'canceled' });
+    expect(deaf?.errorInfo).toBeUndefined();
+
+    const root = endedSpans().find(span => span.isRootSpan);
+    expect(root?.attributes).toMatchObject({ status: 'canceled' });
+    expect(root?.errorInfo).toBeUndefined();
+  });
+
   it('emits one end per span when the step honours abortSignal', async () => {
     const mastra = buildMastra(exporter, cooperativeStep);
     const run = await mastra.getWorkflow('outerWorkflow').createRun();
 
     const started = run.start({ inputData: {} });
-    await tick(300);
+    await tailStepEntered.promise;
     await run.cancel();
     await started;
     await tick(100);
@@ -189,7 +251,7 @@ describe('workflow run cancellation tracing', () => {
     const run = await mastra.getWorkflow('outerWorkflow').createRun();
 
     await run.startAsync({ inputData: {} });
-    await tick(300);
+    await tailStepEntered.promise;
     await run.cancel();
     await tick(100);
 
@@ -222,7 +284,7 @@ describe('workflow run cancellation tracing', () => {
     try {
       const run = await mastra.getWorkflow('eventedWorkflow').createRun();
       run.start({ inputData: {} }).catch(() => {});
-      await tick(500);
+      await tailStepEntered.promise;
       await run.cancel();
       await tick(200);
 
@@ -240,20 +302,24 @@ describe('workflow run cancellation tracing', () => {
     }
   });
 
-  it('leaves nothing open when an evented startAsync run is canceled', async () => {
+  // Characterizes a pre-existing gap rather than asserting the fix: the evented
+  // engine's startAsync() publishes workflow.start and returns without opening a
+  // run span, so an evented startAsync run emits no spans at all and cancel()
+  // has no tree to close. Asserting "nothing dangles" here would pass on an
+  // empty exporter and prove nothing. When evented startAsync gains tracing this
+  // test fails, which is the signal to cover its cancellation path properly.
+  it('emits no spans at all for an evented startAsync run', async () => {
     const mastra = buildEventedMastra('eventedAsync');
     await mastra.startWorkers();
 
     try {
       const run = await mastra.getWorkflow('eventedWorkflow').createRun();
       await run.startAsync({ inputData: {} });
-      await tick(500);
+      await tailStepEntered.promise;
       await run.cancel();
       await tick(200);
 
-      expectNoDanglingSpans();
-      expectSingleEndPerSpan();
-      expectParentsPresent();
+      expect(exporter.getAllSpans()).toHaveLength(0);
     } finally {
       await mastra.stopWorkers();
     }

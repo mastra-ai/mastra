@@ -9,4 +9,4 @@ Added `span.endTree()` for closing a span together with every descendant span th
 workflowSpan.endTree({ attributes: { status: 'canceled' } });
 ```
 
-Repeat calls to `span.end()` are now ignored. A span that was force-closed this way keeps the state it was closed with and reports its end exactly once, even if the work it covered finishes later and ends the span again.
+An ended span is now final: later `span.end()` and `span.error()` calls are ignored. A span that was force-closed this way keeps the state it was closed with and reports its end exactly once, even if the work it covered finishes or fails afterwards.
