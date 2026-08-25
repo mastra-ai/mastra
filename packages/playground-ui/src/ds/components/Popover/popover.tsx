@@ -42,7 +42,7 @@ const PopoverContent = React.forwardRef<HTMLDivElement, PopoverContentProps>(
       side = 'bottom',
       sideOffset = 4,
       anchor,
-      positionMethod,
+      positionMethod = 'fixed',
       collisionBoundary,
       collisionPadding,
       sticky,
