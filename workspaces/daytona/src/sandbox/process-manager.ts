@@ -171,7 +171,6 @@ class DaytonaProcessHandle extends ProcessHandle {
 // =============================================================================
 
 export interface DaytonaProcessManagerOptions {
-  env?: Record<string, string | undefined>;
   /** Default timeout in milliseconds for commands that don't specify one. */
   defaultTimeout?: number;
 }
@@ -185,7 +184,7 @@ export class DaytonaProcessManager extends SandboxProcessManager<DaytonaSandbox>
   private readonly _defaultTimeout?: number;
 
   constructor(opts: DaytonaProcessManagerOptions = {}) {
-    super({ env: opts.env });
+    super();
     this._defaultTimeout = opts.defaultTimeout;
   }
 
@@ -198,10 +197,9 @@ export class DaytonaProcessManager extends SandboxProcessManager<DaytonaSandbox>
       cwd: options.cwd ?? this.sandbox.mounts?.entries?.keys().next().value,
     };
 
-    // Merge default env with per-spawn env
-    const mergedEnv = { ...this.env, ...effectiveOptions.env };
+    // The base spawn wrapper already merged the sandbox env into options.env
     const envs = Object.fromEntries(
-      Object.entries(mergedEnv).filter((entry): entry is [string, string] => entry[1] !== undefined),
+      Object.entries(effectiveOptions.env ?? {}).filter((entry): entry is [string, string] => entry[1] !== undefined),
     );
 
     // Validate/build before retryOnDead so user-controlled validation errors

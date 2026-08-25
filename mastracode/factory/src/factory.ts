@@ -169,9 +169,9 @@ export interface MastraFactoryConfig {
   stateSecret?: string;
   /**
    * Encryption boundary for persisted model credentials, custom-provider API
-   * keys, integration connections, and integration settings. Required whenever
-   * auth is enabled. Local no-auth mode (`auth: null`) defaults to explicit
-   * plaintext compatibility when omitted.
+   * keys, integration connections, and integration settings. Strongly
+   * recommended whenever auth is enabled — omitting it falls back to explicit
+   * plaintext compatibility with a boot-time warning.
    */
   secretEncryption?: FactorySecretEncryption;
   /**
@@ -363,7 +363,11 @@ export class MastraFactory {
     const auth: IMastraAuthProvider | undefined =
       configuredAuth === null ? undefined : (configuredAuth ?? buildDefaultStudioAuth(publicOrigin));
     if (auth && !this.#config.secretEncryption) {
-      throw new Error("MastraFactory: 'secretEncryption' is required when auth is enabled.");
+      console.warn(
+        "[factory] auth is enabled but 'secretEncryption' is not configured. Persisted model credentials, " +
+          'custom-provider API keys, and integration secrets will be stored as plaintext. Provide ' +
+          "'secretEncryption' (e.g. via FACTORY_CREDENTIAL_ENCRYPTION_KEY) to encrypt them at rest.",
+      );
     }
     const secretEncryption = this.#config.secretEncryption ?? createPlaintextFactorySecretEncryption();
     // One RouteAuth seam per boot, closed over the resolved provider. Every

@@ -988,6 +988,49 @@ describe('GET /web/factory/projects/:id/attention', () => {
     });
   });
 
+  it('stamps the approver on the decision when a proposed run is approved', async () => {
+    const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
+    const workItem = (await created.json()).workItem;
+    const now = new Date('2030-01-01T00:00:00.000Z');
+    await seed.workItems.commitRuleEvaluation({
+      orgId: 'org1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: workItem.id,
+      ingress: { identity: 'approve-attribution', triggerType: 'test' },
+      ruleSetVersion: 'rules-v1',
+      expectedRevision: workItem.revision,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [
+        {
+          type: 'invokeSkill',
+          role: 'triage',
+          skillName: 'factory-triage',
+          idempotencyKey: 'approve-attribution-triage',
+        },
+      ],
+      causalChain: [],
+      now,
+    });
+    const [claimed] = await seed.workItems.claimDeferredDecisions({
+      ownerId: 'worker-1',
+      now,
+      leaseExpiresAt: new Date(now.getTime() + 60_000),
+      limit: 1,
+    });
+    if (!claimed) throw new Error('Expected a proposed decision');
+    await seed.workItems.proposeDeferredDecision(
+      { id: claimed.id, orgId: claimed.orgId, factoryProjectId: claimed.factoryProjectId, ownerId: 'worker-1' },
+      now,
+    );
+
+    const approved = await json('POST', `/web/factory/projects/${PROJECT_ID}/decisions/${claimed.id}/approve`);
+    expect(approved.status).toBe(200);
+
+    const decision = await seed.workItems.getDeferredDecision('org1', PROJECT_ID, claimed.id);
+    expect(decision?.approvedBy).toBe('u1');
+  });
+
   it('orders a re-failed old decision by its latest failure occurrence', async () => {
     const createdAt = new Date('2030-01-01T00:00:00.000Z');
     await seed.workItems.commitRuleEvaluation({
@@ -1620,6 +1663,35 @@ describe('run activity on the work-item listing', () => {
       kickoffMessage: null,
     });
   }
+
+  it('stamps only the starting role, preserving other roles’ sessions and startedBy (#22254)', async () => {
+    const first = await seed.workItems.prepareRunStart({
+      orgId: 'org1',
+      userId: 'u1',
+      factoryProjectId: PROJECT_ID,
+      workItem: { input: { title: 'Multi-role card', stages: ['triage', 'execute'] } },
+      role: 'triage',
+      session: { sessionId: 'session-triage', branch: 'factory/triage', threadId: 'thread-triage' },
+      resourceId: 'session-triage',
+      kickoffKey: 'kickoff-triage',
+      kickoffMessage: null,
+    });
+
+    const second = await seed.workItems.prepareRunStart({
+      orgId: 'org1',
+      userId: 'u2',
+      factoryProjectId: PROJECT_ID,
+      workItem: { id: first.item.id, input: { title: 'Multi-role card', stages: ['triage', 'execute'] } },
+      role: 'execute',
+      session: { sessionId: 'session-execute', branch: 'factory/execute', threadId: 'thread-execute' },
+      resourceId: 'session-execute',
+      kickoffKey: 'kickoff-execute',
+      kickoffMessage: null,
+    });
+
+    expect(second.item.sessions.triage).toMatchObject({ sessionId: 'session-triage', startedBy: 'u1' });
+    expect(second.item.sessions.execute).toMatchObject({ sessionId: 'session-execute', startedBy: 'u2' });
+  });
 
   it('reports the listed cards whose session has a run in flight', async () => {
     await startRun('session-running');

@@ -205,6 +205,8 @@ export interface FactoryDeferredDecisionRecord {
   failureCode: FactoryDispatchFailureCode | null;
   /** When a human released this run; set once, so the gate never parks it again. */
   approvedAt: Date | null;
+  /** Who released this run — the run is attributed to them, not the repo connector. */
+  approvedBy: string | null;
   completedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -742,6 +744,7 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
       last_error: { type: 'text', nullable: true },
       failure_code: { type: 'text', nullable: true },
       approved_at: { type: 'timestamp', nullable: true },
+      approved_by: { type: 'text', nullable: true },
       completed_at: { type: 'timestamp', nullable: true },
       created_at: { type: 'timestamp' },
       updated_at: { type: 'timestamp' },
@@ -911,6 +914,7 @@ function toDeferredDecision(row: GovernanceDbRow): FactoryDeferredDecisionRecord
     lastError: (row.last_error as string | null) ?? null,
     failureCode: isFactoryDispatchFailureCode(row.failure_code) ? row.failure_code : null,
     approvedAt: (row.approved_at as Date | null) ?? null,
+    approvedBy: (row.approved_by as string | null) ?? null,
     completedAt: (row.completed_at as Date | null) ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at as Date,
@@ -1838,6 +1842,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     factoryProjectId: string,
     decisionId: string,
     now: Date,
+    approvedBy?: string,
   ): Promise<FactoryDeferredDecisionRecord | null> {
     return this.storage.withTransaction(async ops => {
       let settled = false;
@@ -1847,7 +1852,14 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         current => {
           if (current.status !== 'proposed') return null;
           settled = true;
-          return { status: 'pending', attempts: 0, available_at: now, approved_at: now, updated_at: now };
+          return {
+            status: 'pending',
+            attempts: 0,
+            available_at: now,
+            approved_at: now,
+            approved_by: approvedBy ?? null,
+            updated_at: now,
+          };
         },
       );
       if (!settled || !row) return null;
@@ -2302,9 +2314,9 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         let item: WorkItemRow;
         if (row) {
           row = await ops.updateAtomic<WorkItemDbRow>('work_items', { id: row.id }, current => {
-            const roles = new Set([...Object.keys(current.sessions), input.role]);
-            const sessions = Object.fromEntries([...roles].map(role => [role, input.session]));
-            return applyUpdate({ current, userId: input.userId, input: { sessions } });
+            // Stamp only the starting role — `applyUpdate` merges sessions, so
+            // other roles keep their own session and `startedBy` (#22254).
+            return applyUpdate({ current, userId: input.userId, input: { sessions: { [input.role]: input.session } } });
           });
           item = toRow(row!);
         } else {

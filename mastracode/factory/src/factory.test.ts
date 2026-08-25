@@ -212,9 +212,15 @@ describe('MastraFactory constructor', () => {
 });
 
 describe('MastraFactory.prepare', () => {
-  it('requires secret encryption when auth is enabled', async () => {
-    const factory = new MastraFactory({ storage: fakeStorage(), auth: fakeProvider() });
-    await expect(factory.prepare()).rejects.toThrow(/secretEncryption.*required/);
+  it('warns and falls back to plaintext when auth is enabled without secret encryption', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const factory = new MastraFactory({ storage: fakeStorage(), auth: fakeProvider() });
+      await expect(factory.prepare()).resolves.toBeDefined();
+      expect(warn).toHaveBeenCalledWith(expect.stringMatching(/secretEncryption.*not configured/));
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it('allows auth-disabled local mode without secret encryption', async () => {
