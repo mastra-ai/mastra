@@ -149,7 +149,10 @@ describe('TranscriptEntries turn groups', () => {
   });
 
   it('keeps the room on the message you sent when the run echoes it back undrawn', () => {
-    const settledTurn = [textEntry('user-0', 'user', 'earlier question'), textEntry('assistant-0', 'assistant', 'earlier answer')];
+    const settledTurn = [
+      textEntry('user-0', 'user', 'earlier question'),
+      textEntry('assistant-0', 'assistant', 'earlier answer'),
+    ];
     const { rerender } = renderWithProviders(
       <TranscriptEntries entries={[...settledTurn, entries[0]]} onApprove={() => {}} onRespond={() => {}} running />,
     );
@@ -172,9 +175,7 @@ describe('TranscriptEntries turn groups', () => {
   });
 
   it('gives the first turn of a fresh thread no room to scroll into', () => {
-    renderWithProviders(
-      <TranscriptEntries entries={[entries[0]]} onApprove={() => {}} onRespond={() => {}} running />,
-    );
+    renderWithProviders(<TranscriptEntries entries={[entries[0]]} onApprove={() => {}} onRespond={() => {}} running />);
 
     // It opens at the top already: room under it would only put empty scroll below.
     expect(screen.getByText('first question').closest(ROOM_SELECTOR)).toBeNull();
