@@ -59,7 +59,7 @@ export function DatasetItemsToolbar({
   onReturnToLatestVersion,
 }: DatasetItemsToolbarProps) {
   const oldVersionNotice = isViewingOldVersion && activeDatasetVersion != null && (
-    <div className="text-icon3 text-ui-sm flex min-w-0 items-center gap-3">
+    <div className="text-accent6 text-ui-sm flex min-w-0 items-center gap-3">
       <span className="truncate">You are seeing v{activeDatasetVersion}, which is an older version of the dataset</span>
       {onReturnToLatestVersion && (
         <Button onClick={onReturnToLatestVersion}>
@@ -127,9 +127,10 @@ export function DatasetItemsToolbar({
 
   return (
     <div className="flex w-full items-center justify-between gap-4">
-      {searchField}
-
-      {oldVersionNotice}
+      <div className="flex min-w-0 items-center gap-4">
+        {searchField}
+        {oldVersionNotice}
+      </div>
 
       <ButtonsGroup>
         {selectionDropdown}
