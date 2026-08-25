@@ -37,6 +37,10 @@ You'll need:
 
 ## Deploy
 
+:::warning
+Configure [authentication](/docs/auth/overview) in your Mastra application before building and installing the image. The default `loadBalancer` mode creates externally reachable Services that may expose Server and Studio to the internet, depending on your cluster and cloud provider.
+:::
+
 <Steps>
   <StepItem>
     Build your Mastra project and containerize the output. Pass `--studio` so the same image can serve both Server and Studio:
@@ -114,7 +118,32 @@ You'll need:
       existingSecret: mastra-app-env
     ```
 
+    Both components reference the same Secret because this guide runs the same application image for Server and Studio. Only use separate Secrets when the Studio deployment doesn't execute routes that need your application's provider credentials.
+
     Set `global.cloud` to your platform so the chart emits the correct LoadBalancer and Ingress annotations for that cloud.
+
+    If your cluster doesn't already have access to the application image registry, create an image pull Secret:
+
+    ```bash
+    kubectl create secret docker-registry mastra-registry -n mastra \
+      --docker-server=your-registry \
+      --docker-username='<username>' \
+      --docker-password='<access-token>'
+    ```
+
+    Reference it from both components:
+
+    ```yaml title="mastra-values.yaml"
+    mastra-server:
+      imagePullSecrets:
+        - name: mastra-registry
+
+    mastra-studio:
+      imagePullSecrets:
+        - name: mastra-registry
+    ```
+
+    Public images and registries integrated with your cluster don't need an image pull Secret.
 
     This is only the minimal configuration. After `helm registry login`, inspect the selected chart version's annotated defaults and README for every available value:
 
@@ -131,15 +160,18 @@ You'll need:
     Exchange your Enterprise license key for a short-lived registry access token, log in to the private chart registry, then install the chart:
 
     ```bash
+    CHART_VERSION=0.2.0
+    CHART=oci://us-central1-docker.pkg.dev/mastra-cloud/mastra-helm-ee/mastra-projects
+
     TOKEN=$(curl -s https://license.mastra.ai/v1/registry-token \
       -H "Authorization: Bearer $MASTRA_EE_LICENSE" | jq -r .token)
 
-    helm registry login us-central1-docker.pkg.dev \
+    printf '%s' "$TOKEN" | helm registry login us-central1-docker.pkg.dev \
       --username oauth2accesstoken \
-      --password "$TOKEN"
+      --password-stdin
 
-    helm install mastra \
-      oci://us-central1-docker.pkg.dev/mastra-cloud/mastra-helm-ee/mastra-projects \
+    helm install mastra "$CHART" \
+      --version "$CHART_VERSION" \
       -n mastra -f mastra-values.yaml
     ```
 
@@ -161,10 +193,6 @@ You'll need:
     ```
 
     A `{"success":true}` response means the server is up. Open the Studio service address in a browser to reach the Mastra Studio UI.
-
-    :::warning
-    Set up [authentication](/docs/auth/overview) before exposing your endpoints publicly.
-    :::
   </StepItem>
 </Steps>
 
@@ -259,12 +287,39 @@ mastra-server:
 
 Put `S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY` in your existing Secret rather than in values. On EKS and GKE, prefer IRSA or Workload Identity over static keys.
 
+## Scale server replicas
+
+The chart starts one Server replica by default. A HorizontalPodAutoscaler can add pods, but it doesn't make Mastra's in-process state available across them.
+
+Before setting `replicaCount` above one or enabling `mastra-server.autoscaling`:
+
+- Configure a shared storage backend, such as `PostgresStore`, for persisted run state.
+- Configure a distributed PubSub backend and shared cache. The [Kubernetes guide](/integrations/deploy/kubernetes#configure-shared-infrastructure) uses `RedisStreamsPubSub` and `RedisServerCache`, with `REDIS_URL` stored in the application Secret.
+- Use [durable agents](/docs/harness/durable-agents) for streams, approvals, and runs that must continue when requests reach different pods.
+- Start with one replica to initialize the database schema before scaling. For stricter deployments, initialize the schema in a Kubernetes Job and disable initialization in each pod.
+- Review [worker roles](/docs/deployment/workers#select-workers). Run only one scheduler instance when your application uses scheduled workflows.
+
+After those requirements are in place, set resource requests and enable autoscaling:
+
+```yaml title="mastra-values.yaml"
+mastra-server:
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+```
+
 ## Production checklist
 
-- Reference credentials with `existingSecret` per component instead of plaintext values.
+- Reference credentials with `existingSecret` instead of plaintext values.
 - Set resource requests via `mastra-server.resources` and `mastra-studio.resources`.
 - Prefer standalone cert-manager and ingress controller installs over the bundled toggles; CRD lifecycle inside an umbrella chart complicates upgrades.
-- Enable autoscaling with `mastra-server.autoscaling` once resource requests are set.
+- Enable multiple replicas only after configuring shared storage, distributed PubSub, shared cache, and the required process roles.
 - The chart applies hardened defaults: non-root containers, read-only root filesystem, seccomp `RuntimeDefault`, and no service account token automount.
 
 ## Upgrade and uninstall
@@ -272,8 +327,11 @@ Put `S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY` in your existing Secret rather
 Upgrade to a new chart version or roll out a new image tag with the same command:
 
 ```bash
-helm upgrade mastra \
-  oci://us-central1-docker.pkg.dev/mastra-cloud/mastra-helm-ee/mastra-projects \
+CHART_VERSION=0.2.0
+CHART=oci://us-central1-docker.pkg.dev/mastra-cloud/mastra-helm-ee/mastra-projects
+
+helm upgrade mastra "$CHART" \
+  --version "$CHART_VERSION" \
   -n mastra -f mastra-values.yaml
 ```
 
