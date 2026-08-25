@@ -705,7 +705,11 @@ export class MastraFactory {
         // A factory reads the repository it works on and its skill, never the
         // ~/.claude instructions of whoever hosts the process. On the controller
         // rather than per session, so webhook-recreated sessions keep it too.
-        initialState: { skipGlobalInstructions: true },
+        // Factory sessions start fail-closed on org classification: the
+        // unresolved marker is set at birth, a successful org seed clears it,
+        // and a resolved `factoryOrgId` always takes precedence — so a failed
+        // (best-effort) seed can never leave a session classified as local.
+        initialState: { skipGlobalInstructions: true, factoryOrgUnresolved: true },
         storage: storage.getMastraStorage(),
         ...(mastraStorageBackend ? { storageBackend: mastraStorageBackend } : {}),
         ...(factoryProcessor ? { inputProcessors: [factoryProcessor] } : {}),
