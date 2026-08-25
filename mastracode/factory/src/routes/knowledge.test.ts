@@ -61,9 +61,9 @@ async function node(
   name: string,
   scope: KnowledgeScope,
   kind = 'concept',
-  content?: string,
+  description?: string,
 ): Promise<KnowledgeNode> {
-  return store.createNode({ name, kind, scope, ...(content !== undefined ? { content } : {}) });
+  return store.createNode({ name, kind, scope, ...(description !== undefined ? { description } : {}) });
 }
 
 async function record(
@@ -126,36 +126,33 @@ describe('KnowledgeRoutes', () => {
     expect(body.truncated).toBe(false);
   });
 
-  it('projects node content into graph snapshots without normalizing contract values', async () => {
+  it('projects the bounded description into graph snapshots and never leaks content', async () => {
     const h = await createHarness();
-    const longContent =
-      'Payments coordinates settlement and reconciliation. '.repeat(20) +
-      'Repository: https://github.com/mastra-ai/mastra/tree/main/mastracode/factory';
-    const described = await node(h.knowledge, 'Described', h.projectScope, 'service', longContent);
+    const synopsis =
+      'Payments coordinates settlement and reconciliation. Repository: https://github.com/mastra-ai/mastra/tree/main/mastracode/factory';
+    const described = await node(h.knowledge, 'Described', h.projectScope, 'service', synopsis);
     const absent = await node(h.knowledge, 'Absent', h.projectScope);
     const empty = await node(h.knowledge, 'Empty', h.projectScope, 'concept', '');
-    const whitespace = await node(h.knowledge, 'Whitespace', h.projectScope, 'concept', '   \n  ');
+    // A node with long-form content but no description must not fall back to content.
+    const contentful = await h.knowledge.createNode({
+      name: 'Contentful',
+      kind: 'doc',
+      scope: h.projectScope,
+      content: 'Long-form body that must never appear in the graph payload. '.repeat(20),
+    });
 
     const { status, body } = await graph(h);
     expect(status).toBe(200);
-    expect(body.nodes.find(node => node.id === described.id)?.content).toBe(longContent);
-    expect(body.nodes.find(node => node.id === absent.id)).not.toHaveProperty('content');
-    expect(body.nodes.find(node => node.id === empty.id)?.content).toBe('');
-    expect(body.nodes.find(node => node.id === whitespace.id)?.content).toBe('   \n  ');
+    expect(body.nodes.find(node => node.id === described.id)?.description).toBe(synopsis);
+    expect(body.nodes.find(node => node.id === absent.id)).not.toHaveProperty('description');
+    expect(body.nodes.find(node => node.id === empty.id)?.description).toBe('');
+    expect(body.nodes.find(node => node.id === contentful.id)).not.toHaveProperty('description');
+    for (const graphNode of body.nodes) {
+      expect(graphNode).not.toHaveProperty('content');
+    }
     expect(body.nodes).toHaveLength(4);
     expect(body.records).toHaveLength(0);
     expect(body.truncated).toBe(false);
-
-    const withContent = JSON.stringify(body);
-    const withoutContent = JSON.stringify({
-      ...body,
-      nodes: body.nodes.map(({ content: _content, ...node }) => node),
-    });
-    const delta = Buffer.byteLength(withContent) - Buffer.byteLength(withoutContent);
-    console.log(
-      `PAYLOAD_BYTES withoutContent=${Buffer.byteLength(withoutContent)} withContent=${Buffer.byteLength(withContent)} delta=${delta}`,
-    );
-    expect(delta).toBeGreaterThan(0);
   });
 
   // 2

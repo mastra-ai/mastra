@@ -56,7 +56,7 @@ const graphFixture: KnowledgeGraphPayload = {
       id: 'ent-1',
       name: 'Payments Service',
       kind: 'service',
-      content:
+      description:
         'Handles charging flows through [[Deploy Runbook]]. Operational reference: https://github.com/mastra-ai/mastra/tree/main/mastracode/factory',
       scope: ['org:org-1', `resource:${FACTORY_ID}`],
       rung: 'resource',
@@ -245,7 +245,7 @@ describe('KnowledgePage', () => {
     ).toBeInTheDocument();
   }, 15000);
 
-  it('shows snapshot content in the hover card without fetching node details', async () => {
+  it('shows the snapshot description in the hover card without fetching node details', async () => {
     let nodeDetailRequests = 0;
     stubKnowledgeRoute();
     server.use(
@@ -267,11 +267,11 @@ describe('KnowledgePage', () => {
     expect(nodeDetailRequests).toBe(0);
   });
 
-  it('omits hover description chrome for absent and whitespace-only content', async () => {
+  it('omits hover description chrome for absent and whitespace-only descriptions', async () => {
     stubKnowledgeRoute({
       ...graphFixture,
       nodes: graphFixture.nodes.map(node =>
-        node.id === 'ent-1' ? { ...node, content: '   \n  ' } : { ...node, content: undefined },
+        node.id === 'ent-1' ? { ...node, description: '   \n  ' } : { ...node, description: undefined },
       ),
     });
     renderRoute();
