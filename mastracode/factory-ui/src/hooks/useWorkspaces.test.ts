@@ -70,7 +70,12 @@ describe('updateCachedSessionTitle', () => {
     const queryKey = queryKeys.sessions(workspace.projectRepositoryId);
     client.setQueryData(queryKey, current);
 
-    await updateCachedSessionTitle(client, workspace.projectRepositoryId, workspace.sessionId, 'Generated workspace title');
+    await updateCachedSessionTitle(
+      client,
+      workspace.projectRepositoryId,
+      workspace.sessionId,
+      'Generated workspace title',
+    );
 
     const updated = client.getQueryData<WorkspacesData>(queryKey);
     expect(updated).toEqual(
@@ -87,7 +92,12 @@ describe('updateCachedSessionTitle', () => {
     const queryKey = queryKeys.sessions(userSession.projectRepositoryId);
     client.setQueryData(queryKey, data({ userSessions: [userSession] }));
 
-    await updateCachedSessionTitle(client, userSession.projectRepositoryId, userSession.sessionId, 'Generated user title');
+    await updateCachedSessionTitle(
+      client,
+      userSession.projectRepositoryId,
+      userSession.sessionId,
+      'Generated user title',
+    );
 
     expect(client.getQueryData<WorkspacesData>(queryKey)?.userSessions).toEqual([
       { ...userSession, title: 'Generated user title' },
@@ -114,7 +124,12 @@ describe('updateCachedSessionTitle', () => {
     await Promise.resolve();
     expect(client.getQueryState(queryKey)?.fetchStatus).toBe('fetching');
 
-    await updateCachedSessionTitle(client, workspace.projectRepositoryId, workspace.sessionId, 'Generated workspace title');
+    await updateCachedSessionTitle(
+      client,
+      workspace.projectRepositoryId,
+      workspace.sessionId,
+      'Generated workspace title',
+    );
     resolveFetch(current);
     await fetchResult;
 
@@ -133,7 +148,12 @@ describe('updateCachedSessionTitle', () => {
     await updateCachedSessionTitle(client, workspace.projectRepositoryId, 'missing-session', 'Other title');
     expect(client.getQueryData(queryKey)).toBe(current);
 
-    await updateCachedSessionTitle(client, workspace.projectRepositoryId, workspace.sessionId, 'Generated workspace title');
+    await updateCachedSessionTitle(
+      client,
+      workspace.projectRepositoryId,
+      workspace.sessionId,
+      'Generated workspace title',
+    );
     expect(client.getQueryData(queryKey)).toBe(current);
   });
 });
