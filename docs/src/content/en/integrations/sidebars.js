@@ -518,7 +518,10 @@ const sidebars = {
           type: 'doc',
           id: 'deploy/kubernetes-helm',
           label: 'Kubernetes (Helm)',
-          customProps: { icon: 'https://cdn.simpleicons.org/helm?viewbox=auto&size=28' },
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/helm?viewbox=auto&size=28',
+            iconDark: 'https://cdn.simpleicons.org/helm/white?viewbox=auto&size=28',
+          },
         },
         {
           type: 'link',
