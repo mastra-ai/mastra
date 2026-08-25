@@ -7,6 +7,8 @@ type MessagePart = MastraDBMessage['content']['parts'][number];
 
 const text = (value: string): MessagePart => ({ type: 'text', text: value });
 
+const reasoning = (value: string): MessagePart => ({ type: 'reasoning', reasoning: value, details: [] });
+
 const tool = (toolCallId: string): MessagePart => ({
   type: 'tool-invocation',
   toolInvocation: { state: 'call', toolCallId, toolName: 'read_file', args: {} },
@@ -36,14 +38,30 @@ describe('revealing a message in the order it was written', () => {
     expect(revealedParts(parts, `${MARK}\n\n${MARK}`)).toEqual([tool('call-1'), tool('call-2')]);
   });
 
+  it('paces a thinking passage word by word, not as one block', () => {
+    const parts = [reasoning('Need the core package first'), text('Done')];
+
+    expect(revealedParts(parts, 'Need the core')).toEqual([reasoning('Need the core')]);
+    expect(revealedParts(parts, 'Need the core package first')).toEqual([reasoning('Need the core package first')]);
+  });
+
+  it('holds the prose after a thinking passage until its words are down', () => {
+    const parts = [reasoning('Need the core package first'), text('Done')];
+
+    expect(revealedParts(parts, 'Need the core package first\n\nDo')).toEqual([
+      reasoning('Need the core package first'),
+      text('Do'),
+    ]);
+  });
+
   it('hands back the message untouched once the reveal has caught up', () => {
     const parts = [text('Reading the file'), tool('call-1'), text('Done')];
 
     expect(revealedParts(parts, messageScript(parts))).toBe(parts);
   });
 
-  it('keeps the copyable prose free of row marks', () => {
-    const parts = [text('Reading the file'), tool('call-1'), text('Done')];
+  it('keeps the copyable prose free of row marks and thinking', () => {
+    const parts = [reasoning('Need the core package first'), text('Reading the file'), tool('call-1'), text('Done')];
 
     expect(messageProse(parts)).toBe('Reading the file\n\nDone');
   });

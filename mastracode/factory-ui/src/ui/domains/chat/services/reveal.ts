@@ -17,9 +17,21 @@ export function messageProse(parts: MessagePart[]): string {
   return parts.flatMap(part => (part.type === 'text' ? [part.text] : [])).join(PASSAGE);
 }
 
+/**
+ * The words a part was written as, for the kinds the model writes word by word.
+ * Reasoning streams delta by delta exactly like prose, so its passage takes its
+ * words' time on the clock rather than one row's beat — a beat would hold the
+ * block back whole, then let it land at once and grow unpaced.
+ */
+function partProse(part: MessagePart): string | undefined {
+  if (part.type === 'text') return part.text;
+  if (part.type === 'reasoning') return part.reasoning;
+  return undefined;
+}
+
 /** What the reveal paces: the whole message, rows and cards written in as beats between the prose. */
 export function messageScript(parts: MessagePart[]): string {
-  return parts.map(part => (part.type === 'text' ? part.text : ROW_MARK)).join(PASSAGE);
+  return parts.map(part => partProse(part) ?? ROW_MARK).join(PASSAGE);
 }
 
 /**
@@ -40,21 +52,24 @@ export function revealedParts(parts: MessagePart[], shown: string): MessagePart[
 
   for (const part of parts) {
     const start = read === 0 ? 0 : read + PASSAGE.length;
-    read = start + (part.type === 'text' ? part.text.length : ROW_MARK.length);
 
-    if (part.type !== 'text') {
+    if (part.type !== 'text' && part.type !== 'reasoning') {
+      read = start + ROW_MARK.length;
       if (shown.length < read) break;
       revealed.push(part);
       continue;
     }
 
+    const written = part.type === 'text' ? part.text : part.reasoning;
+    read = start + written.length;
+
     const text = shown.slice(start, read);
-    if (text === part.text) {
+    if (text === written) {
       revealed.push(part);
       continue;
     }
 
-    if (text) revealed.push({ ...part, text });
+    if (text) revealed.push(part.type === 'text' ? { ...part, text } : { ...part, reasoning: text });
     break;
   }
 

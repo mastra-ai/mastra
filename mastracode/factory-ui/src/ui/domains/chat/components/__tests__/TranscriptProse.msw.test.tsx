@@ -42,31 +42,44 @@ describe('assistant prose', () => {
     expect(screen.getByText('Human-in-the-loop').tagName).toBe('STRONG');
   });
 
-  it('keeps words on screen still when the reasoning before them fills its slot', () => {
+  it('paces a thinking passage word by word instead of landing it whole', () => {
     vi.useFakeTimers();
-    const parts = (reasoning: string): MastraDBMessage['content']['parts'] => [
-      { type: 'reasoning', reasoning, details: [] },
-      { type: 'text', text: 'Let me look at the core package now.' },
-    ];
-    const { container, rerender } = renderEntries([assistant(parts(''), true)]);
+    const thought = Array.from({ length: 30 }, (_, index) => `thought${index + 1}`).join(' ');
+    const { container } = renderEntries([assistant([{ type: 'reasoning', reasoning: thought, details: [] }], true)]);
+
+    expect(container.textContent).toContain('thought10');
+    expect(container.textContent).not.toContain('thought30');
 
     act(() => void vi.advanceTimersByTime(4000));
-    const prose = () =>
-      [...container.querySelectorAll('.mastra-markdown')].find(node => node.textContent?.includes('core package'));
-    const settled = prose();
-    expect(container.textContent).toContain('Let me look at the core package now.');
+
+    expect(container.textContent).toContain('thought30');
+  });
+
+  it('keeps the thinking on screen still while the prose after it streams', () => {
+    vi.useFakeTimers();
+    const parts = (text: string): MastraDBMessage['content']['parts'] => [
+      { type: 'reasoning', reasoning: 'Need the core first.', details: [] },
+      { type: 'text', text },
+    ];
+    const { container, rerender } = renderEntries([assistant(parts('Let me look at'), true)]);
+
+    act(() => void vi.advanceTimersByTime(4000));
+    const thinking = () =>
+      [...container.querySelectorAll('.mastra-markdown')].find(node => node.textContent?.includes('Need the core'));
+    const settled = thinking();
+    expect(container.textContent).toContain('Need the core first.');
 
     rerender(
       <TranscriptEntries
-        entries={[assistant(parts('Need the core first.'), true)]}
+        entries={[assistant(parts('Let me look at the core package now.'), true)]}
         onApprove={() => {}}
         onRespond={() => {}}
       />,
     );
+    act(() => void vi.advanceTimersByTime(4000));
 
+    expect(thinking()).toBe(settled);
     expect(container.textContent).toContain('Let me look at the core package now.');
-    expect(prose()).toBe(settled);
-    expect(container.textContent).toContain('Need the core first.');
   });
 
   it('paces a streaming reply from one place, not one per part', () => {

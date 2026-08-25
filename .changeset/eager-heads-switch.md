@@ -2,7 +2,7 @@
 '@mastra/factory': patch
 ---
 
-Streamed replies now arrive with one motion. Tool rows, tool groups, cards and the thinking line fade in on the same curve as the words around them instead of popping in with a slide, and the reasoning block fades in as one when it lands. A tool's file path or command also fades in when it lands, instead of snapping into a card that was already drawn. Rows already on screen when a session is restored no longer replay their entrance.
+Streamed replies now arrive with one motion. Tool rows, tool groups, cards and the thinking line fade in on the same curve as the words around them instead of popping in with a slide. A tool's file path or command also fades in when it lands, instead of snapping into a card that was already drawn. Rows already on screen when a session is restored no longer replay their entrance.
 
 A live turn now reserves a whole screen instead of 70% of one, so a reply grows into empty space and the transcript stops moving under the reader for as long as the reply fits the window.
 
@@ -24,7 +24,7 @@ A tool row stops flashing when its run ends. The row swapped the element holding
 
 A reply arrives in the order it was written. The transcript paced each passage of prose on its own clock, so a tool row landed the moment the model called it — on top of a sentence still being laid down word by word, and cutting the reveal it was written after. One pace now runs the whole message: rows and cards wait for the words before them.
 
-Parallel tool calls cascade in one at a time. The reveal clock now paces every part of a reply — rows, cards and reasoning take a beat between the words they were written between — so a burst of simultaneous calls lands row by row at the pace the reply is moving, instead of dropping as one block, and a row never lands in the same instant as the words after it.
+Parallel tool calls cascade in one at a time. The reveal clock now paces every part of a reply — rows and cards take a beat between the words they were written between — so a burst of simultaneous calls lands row by row at the pace the reply is moving, instead of dropping as one block, and a row never lands in the same instant as the words after it.
 
 A session opened while its run is under way keeps live tool rows as rows. They used to keep folding into a "N steps" group as each new call landed — swallowing rows being read and cutting a running row's sweep mid-flight. What was already there when the reader arrived still compacts; what lands under them stays as it played.
 
@@ -37,3 +37,5 @@ A reply's parts hold their place from the start. An empty reasoning block, a bla
 A tool row stays in the bubble it landed in. The run rotates its assistant message at each step, and a call that started just before the rotation was claimed by the new message — the row the reader was watching was torn out of one bubble and replayed in the next, taking its open card and sweep with it. The row now stays where it played, the rotated message defers to it, and a lost result still reaches it; a reload draws canonical order.
 
 The timestamp and copy button under a reply now wait for the whole answer. A reply is one message per step, and the stamp landed after every step — appearing with a copy button mid-run, then vanishing when the next step opened. The stamp lands once, when the run stops answering.
+
+The thinking passage streams word by word on the same clock as the reply. It was treated as a block delivered whole — held back for one beat, then landed at once and grown raw as more thinking streamed in. Its words are now part of the reveal's script, so it is laid down at the pace it is written, and the prose after it waits its turn.

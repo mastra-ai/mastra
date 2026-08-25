@@ -786,11 +786,11 @@ function MessageBubble({
       ? new Set()
       : new Set(written.flatMap(part => (part.type === 'tool-invocation' ? [part.toolInvocation.toolCallId] : []))),
   );
-  const messageParts = entry.message.content.parts ?? [];
-  const message =
-    parts.length === messageParts.length
-      ? entry.message
-      : { ...entry.message, content: { ...entry.message.content, parts } };
+  // Always the projected parts, never the raw message: a partially revealed part
+  // keeps the same part count as the full one, so no cheap identity check can
+  // tell them apart — and this sits inside the entry's memo, so a fresh object
+  // per render reaches only the one bubble already being redrawn.
+  const message = { ...entry.message, content: { ...entry.message.content, parts } };
   const hasRenderablePart = written.some(part => draws(part, suspensions, entry.runtimeTools));
 
   const toolGroups = collectToolGroups(parts, suspensions, entry.runtimeTools, groupable);
@@ -849,15 +849,14 @@ function MessageBubble({
         </MarkdownRenderer>
       );
     },
-    // Reasoning is delivered whole, not token by token, so the block lands at once
-    // and the word pacing inside it has nothing to pace: the entrance is the
-    // container's, like a tool row's.
     Reasoning: (part: ReasoningPart) => {
       if (!part.reasoning.trim()) return null;
       return (
-        <Arriving className="border-border1 my-1.5 border-l-2 pl-2.5 italic [&_p]:my-0.5">
-          <MarkdownRenderer className="text-ui-sm text-icon3">{part.reasoning}</MarkdownRenderer>
-        </Arriving>
+        <div className="border-border1 my-1.5 border-l-2 pl-2.5 italic [&_p]:my-0.5">
+          <MarkdownRenderer className="text-ui-sm text-icon3" streaming={entry.streaming}>
+            {part.reasoning}
+          </MarkdownRenderer>
+        </div>
       );
     },
     ToolInvocation: (part: ToolInvocationPart) => {
