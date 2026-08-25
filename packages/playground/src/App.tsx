@@ -51,12 +51,13 @@ import CmsScorersCreatePage from './pages/cms/scorers/create';
 import CmsScorersEditPage from './pages/cms/scorers/edit';
 import Datasets from './pages/datasets';
 import DatasetPage from './pages/datasets/dataset';
-import DatasetExperiment from './pages/datasets/dataset/experiment';
+import EditDatasetPage from './pages/datasets/dataset/edit';
 import CompareDatasetExperimentsPage from './pages/datasets/dataset/experiments';
 import DatasetItemPage from './pages/datasets/dataset/item';
 import DatasetItemsComparePage from './pages/datasets/dataset/item/compare';
 import DatasetItemVersionsComparePage from './pages/datasets/dataset/item/versions';
 import DatasetCompareDatasetVersions from './pages/datasets/dataset/versions';
+import CreateDatasetPage from './pages/datasets/new';
 import Evaluation from './pages/evaluation';
 import Experiments from './pages/experiments';
 import ExperimentPage from './pages/experiments/experiment';
@@ -182,8 +183,8 @@ const paths: LinkComponentProviderProps['paths'] = {
   workflowRunLink: (workflowId: string, runId: string) => `/workflows/${workflowId}/graph/${runId}`,
   datasetLink: (datasetId: string) => `/datasets/${datasetId}`,
   datasetItemLink: (datasetId: string, itemId: string) => `/datasets/${datasetId}/items/${itemId}`,
-  datasetExperimentLink: (datasetId: string, experimentId: string) =>
-    `/datasets/${datasetId}/experiments/${experimentId}`,
+  datasetItemCompareLink: (datasetId: string, itemId: string, secondItemId: string) =>
+    `/datasets/${datasetId}/items/${itemId}/compare/${secondItemId}`,
   experimentLink: (experimentId: string) => `/experiments/${experimentId}`,
 };
 
@@ -579,10 +580,28 @@ export const routes: RouteObject[] = [
         ? [
             { path: '/datasets', element: <Datasets />, handle: navHandle('/datasets') },
             {
+              path: '/datasets/new',
+              element: <CreateDatasetPage />,
+              handle: {
+                crumbs: () => [navCrumb('/datasets'), { id: 'dataset-new', label: 'Create new dataset' }],
+              } satisfies RouteHeaderHandle,
+            },
+            {
               path: '/datasets/:datasetId',
               element: <DatasetPage />,
               handle: {
                 crumbs: () => [navCrumb('/datasets'), { id: 'dataset', Component: DatasetCrumb, heading: 'Dataset' }],
+              } satisfies RouteHeaderHandle,
+            },
+            {
+              path: '/datasets/:datasetId/edit',
+              element: <EditDatasetPage />,
+              handle: {
+                crumbs: () => [
+                  navCrumb('/datasets'),
+                  { id: 'dataset', Component: DatasetCrumb, heading: 'Dataset' },
+                  { id: 'dataset-edit', label: 'Edit dataset' },
+                ],
               } satisfies RouteHeaderHandle,
             },
             {
@@ -615,17 +634,6 @@ export const routes: RouteObject[] = [
                 ],
               } satisfies RouteHeaderHandle,
             },
-            {
-              path: '/datasets/:datasetId/experiments/:experimentId',
-              element: <DatasetExperiment />,
-              handle: {
-                crumbs: ({ params }) => [
-                  navCrumb('/datasets'),
-                  { id: 'dataset', Component: DatasetCrumb, heading: 'Dataset' },
-                  { id: 'dataset-experiment', label: decodeRouteParam(params.experimentId) },
-                ],
-              } satisfies RouteHeaderHandle,
-            },
             { path: '/experiments', element: <Experiments />, handle: navHandle('/experiments') },
             {
               path: '/experiments/:experimentId',
@@ -649,15 +657,22 @@ export const routes: RouteObject[] = [
               },
             },
             {
-              path: '/datasets/:datasetId/items',
+              path: '/datasets/:datasetId/items/:itemId/compare/:secondItemId',
               element: <DatasetItemsComparePage />,
               handle: {
-                crumbs: () => [
+                crumbs: ({ params }) => [
                   navCrumb('/datasets'),
                   { id: 'dataset', Component: DatasetCrumb, heading: 'Dataset' },
                   { id: 'dataset-items', label: 'Items' },
+                  {
+                    id: 'dataset-item',
+                    label: decodeRouteParam(params.itemId),
+                    to: `/datasets/${params.datasetId}/items/${params.itemId}`,
+                  },
+                  { id: 'dataset-item-compare', label: 'Compare' },
+                  { id: 'dataset-item-compare-second', label: decodeRouteParam(params.secondItemId) },
                 ],
-              },
+              } satisfies RouteHeaderHandle,
             },
             {
               path: '/datasets/:datasetId/versions',
