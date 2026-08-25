@@ -1865,7 +1865,6 @@ export type ProviderModelsMap = {
     'qwen/qwen-2.5-coder-32b-instruct',
     'qwen/qwen-plus',
     'qwen/qwen-plus-2025-07-28',
-    'qwen/qwen-plus-2025-07-28:thinking',
     'qwen/qwen2.5-vl-72b-instruct',
     'qwen/qwen3-14b',
     'qwen/qwen3-235b-a22b',
@@ -2671,6 +2670,7 @@ export type ProviderModelsMap = {
     'baidu/glm-5',
     'baidu/glm-5.1',
     'baidu/glm-5.2',
+    'baidu/glm-5.3',
     'baidu/kimi-k2.6',
     'bytedance/deepseek-v3.2',
     'bytedance/deepseek-v4-flash',
@@ -4216,7 +4216,8 @@ export type ProviderModelsMap = {
     'KBLab/kb-whisper-large',
     'Qwen/Qwen3-Embedding-8B',
     'Qwen/Qwen3-Reranker-4B',
-    'Qwen/Qwen3.6-35B-A3B-FP8',
+    'Qwen/Qwen3.6-35B-A3B',
+    'Qwen/Qwen3.8-27B',
     'evroc/roc',
     'google/gemma-4-26B-A4B-it',
     'intfloat/multilingual-e5-large-instruct',
@@ -4228,6 +4229,14 @@ export type ProviderModelsMap = {
     'openai/whisper-large-v3',
     'openai/whisper-large-v3-turbo',
     'zai-org/GLM-5.2',
+  ];
+  readonly pendra: readonly [
+    'deepseek-v4-flash',
+    'glm-4.7-flash',
+    'gpt-oss:120b',
+    'llama3.3:70b',
+    'qwen3-coder:30b',
+    'qwen3.6:27b',
   ];
   readonly '302ai': readonly [
     'MiniMax-M1',
@@ -6045,7 +6054,7 @@ export type ProviderModelsMap = {
     'deepseek-ai/DeepSeek-V4-Pro-0813',
     'nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16',
   ];
-  readonly agnes: readonly ['agnes-2.0-flash', 'agnes-2.5-flash'];
+  readonly agnes: readonly ['agnes-2.0-flash', 'agnes-2.5-flash', 'agnes-2.5-pro-alpha'];
   readonly 'alibaba-token-plan-cn': readonly [
     'MiniMax-M2.5',
     'deepseek-v3.2',
@@ -6378,7 +6387,6 @@ export type ProviderModelsMap = {
     'qwen/qwen-2.5-coder-32b-instruct',
     'qwen/qwen-plus',
     'qwen/qwen-plus-2025-07-28',
-    'qwen/qwen-plus-2025-07-28:thinking',
     'qwen/qwen2.5-vl-72b-instruct',
     'qwen/qwen3-14b',
     'qwen/qwen3-235b-a22b',

@@ -208,6 +208,14 @@ describe('DaytonaSandbox', () => {
       expect((sandbox as any).image).toBe('debian:12.9');
     });
 
+    it('stores secrets option', () => {
+      const sandbox = new DaytonaSandbox({
+        secrets: { GITHUB_TOKEN: 'github-token' },
+      });
+
+      expect((sandbox as any).secrets).toEqual({ GITHUB_TOKEN: 'github-token' });
+    });
+
     it('stores volume configs', () => {
       const sandbox = new DaytonaSandbox({
         volumes: [{ volumeId: 'vol-123', mountPath: '/data' }],
@@ -368,6 +376,19 @@ describe('DaytonaSandbox', () => {
       expect(createCall).not.toHaveProperty('networkAllowList');
     });
 
+    it('forwards secrets to the create call', async () => {
+      const sandbox = new DaytonaSandbox({
+        secrets: { GITHUB_TOKEN: 'github-token', NPM_TOKEN: 'npm-token' },
+      });
+
+      await sandbox._start();
+
+      const createCall = mockDaytona.create.mock.calls[0]![0];
+      expect(createCall).toMatchObject({
+        secrets: { GITHUB_TOKEN: 'github-token', NPM_TOKEN: 'npm-token' },
+      });
+    });
+
     it('does not include undefined params in create call', async () => {
       const sandbox = new DaytonaSandbox();
 
@@ -381,6 +402,7 @@ describe('DaytonaSandbox', () => {
       expect(createCall).not.toHaveProperty('networkBlockAll');
       expect(createCall).not.toHaveProperty('networkAllowList');
       expect(createCall).not.toHaveProperty('domainAllowList');
+      expect(createCall).not.toHaveProperty('secrets');
       expect(createCall).not.toHaveProperty('autoArchiveInterval');
       expect(createCall).not.toHaveProperty('snapshot');
     });

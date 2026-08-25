@@ -359,8 +359,8 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
    *
    * ```typescript
    * sandbox.setOnStart(prev => async args => {
-   *   await runSetup(args); // ours first: later hooks get a ready workspace
-   *   await prev?.(args);
+   *   await prev?.(args); // whatever prepared the sandbox runs first
+   *   await mySetup(args);
    * });
    * ```
    *
