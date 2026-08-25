@@ -171,10 +171,10 @@ describe('AgentConnectionRegistry', () => {
       runtimeAgent: {
         discoverThreadPeers: async () => [
           {
-            id: 'code-agent:resource-2:thread-2',
+            id: 'code-agent:resource%3A2:thread%2F2',
             agentId: 'code-agent',
-            resourceId: 'resource-2',
-            threadId: 'thread-2',
+            resourceId: 'resource:2',
+            threadId: 'thread/2',
             label: 'PubSub Peer',
             title: 'Peer Thread',
             metadata: { mode: 'build' },
@@ -185,9 +185,9 @@ describe('AgentConnectionRegistry', () => {
 
     expect(peers).toMatchObject([
       {
-        id: 'code-agent:resource-2:thread-2',
-        resourceId: 'resource-2',
-        threadId: 'thread-2',
+        id: 'code-agent:resource%3A2:thread%2F2',
+        resourceId: 'resource:2',
+        threadId: 'thread/2',
         label: 'PubSub Peer',
         title: 'Peer Thread',
         mode: 'build',

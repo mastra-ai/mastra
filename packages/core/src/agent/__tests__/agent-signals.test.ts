@@ -1467,7 +1467,10 @@ describe('Agent signals', () => {
       {
         resourceId: 'local-owner-user',
         threadId: 'local-owner-thread',
-        ifIdle: { behavior: 'wake', streamOptions: { memory: { resource: 'local-owner-user', thread: 'local-owner-thread' } } },
+        ifIdle: {
+          behavior: 'wake',
+          streamOptions: { memory: { resource: 'local-owner-user', thread: 'local-owner-thread' } },
+        },
       },
     );
 
@@ -1498,16 +1501,24 @@ describe('Agent signals', () => {
       pubsub,
     });
 
-    const subscription = await ownerRuntime.subscribeToThread(ownerAgent, {
-      resourceId: 'owner-user',
-      threadId: 'owner-thread',
-    }, pubsub);
+    const subscription = await ownerRuntime.subscribeToThread(
+      ownerAgent,
+      {
+        resourceId: 'owner-user',
+        threadId: 'owner-thread',
+      },
+      pubsub,
+    );
     const nextRun = readNextRunWithParts(subscription.stream[Symbol.asyncIterator]());
-    const claim = await ownerRuntime.claimThreadOwnership(ownerAgent, {
-      resourceId: 'owner-user',
-      threadId: 'owner-thread',
-      streamOptions: { memory: { resource: 'owner-user', thread: 'owner-thread' } },
-    }, pubsub);
+    const claim = await ownerRuntime.claimThreadOwnership(
+      ownerAgent,
+      {
+        resourceId: 'owner-user',
+        threadId: 'owner-thread',
+        streamOptions: { memory: { resource: 'owner-user', thread: 'owner-thread' } },
+      },
+      pubsub,
+    );
     expect(claim.claimed).toBe(true);
 
     const signalResult = senderRuntime.sendSignal(
@@ -1547,8 +1558,8 @@ describe('Agent signals', () => {
     });
 
     const claim = await ownerAgent.claimThreadOwnership({
-      resourceId: 'discoverable-resource',
-      threadId: 'discoverable-thread',
+      resourceId: 'discoverable:resource',
+      threadId: 'discoverable/thread',
       peer: {
         label: 'Discoverable peer',
         metadata: { mode: 'build' },
@@ -1559,10 +1570,10 @@ describe('Agent signals', () => {
 
     expect(peers).toEqual([
       expect.objectContaining({
-        id: 'discoverable-agent:discoverable-resource:discoverable-thread',
+        id: 'discoverable-agent:discoverable%3Aresource:discoverable%2Fthread',
         agentId: 'discoverable-agent',
-        resourceId: 'discoverable-resource',
-        threadId: 'discoverable-thread',
+        resourceId: 'discoverable:resource',
+        threadId: 'discoverable/thread',
         label: 'Discoverable peer',
         metadata: { mode: 'build' },
       }),
@@ -1591,14 +1602,22 @@ describe('Agent signals', () => {
       pubsub,
     });
 
-    const firstClaim = await firstRuntime.claimThreadOwnership(firstAgent, {
-      resourceId: 'claimed-user',
-      threadId: 'claimed-thread',
-    }, pubsub);
-    const secondClaim = await secondRuntime.claimThreadOwnership(secondAgent, {
-      resourceId: 'claimed-user',
-      threadId: 'claimed-thread',
-    }, pubsub);
+    const firstClaim = await firstRuntime.claimThreadOwnership(
+      firstAgent,
+      {
+        resourceId: 'claimed-user',
+        threadId: 'claimed-thread',
+      },
+      pubsub,
+    );
+    const secondClaim = await secondRuntime.claimThreadOwnership(
+      secondAgent,
+      {
+        resourceId: 'claimed-user',
+        threadId: 'claimed-thread',
+      },
+      pubsub,
+    );
 
     expect(firstClaim.claimed).toBe(true);
     expect(secondClaim.claimed).toBe(false);

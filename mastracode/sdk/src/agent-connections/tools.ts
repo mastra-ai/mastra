@@ -172,10 +172,13 @@ Use agent_connections_list first, then pass [discovered] peer ids from that resu
         const byId = new Map(current.map(peer => [peer.id, peer]));
         const changed: AgentConnectionDeltaOp[] = [];
         const now = Date.now();
+        const uniqueIds = [...new Set(ids)];
+        const discoveredById = new Map((await registry.discoverPeers(registryContext)).map(peer => [peer.id, peer]));
+        const unknownId = uniqueIds.find(id => !discoveredById.has(id));
+        if (unknownId) return errorConnectResult(`Unknown or unadvertised agent peer id: ${unknownId}`, current, []);
 
-        for (const id of ids) {
-          const peer = await registry.findDiscoveredPeer(registryContext, id);
-          if (!peer) return errorConnectResult(`Unknown or unadvertised agent peer id: ${id}`, current, changed);
+        for (const id of uniqueIds) {
+          const peer = discoveredById.get(id)!;
           const connectedAt = byId.get(peer.id)?.connectedAt ?? now;
           const connectedPeer: ConnectedAgentPeer = {
             id: peer.id,
@@ -241,7 +244,7 @@ The peer does not need to be currently advertised. Disconnecting is idempotent a
         const alreadyDisconnectedIds: string[] = [];
         const changed: AgentConnectionDeltaOp[] = [];
 
-        for (const id of ids) {
+        for (const id of new Set(ids)) {
           if (byId.delete(id)) {
             disconnectedIds.push(id);
             changed.push({ op: 'disconnect', id });

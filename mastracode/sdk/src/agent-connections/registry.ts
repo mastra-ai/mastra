@@ -62,14 +62,6 @@ export class AgentConnectionRegistry {
     return (await this.listPeers(context, savedPeers)).filter(peer => peer.relationship === 'saved');
   }
 
-  async findPeer(context: AgentConnectionContext, id: string): Promise<AgentPeerView | undefined> {
-    return (await this.listPeers(context)).find(peer => peer.id === id);
-  }
-
-  async findDiscoveredPeer(context: AgentConnectionContext, id: string): Promise<AgentPeerView | undefined> {
-    return (await this.discoverPeers(context)).find(peer => peer.id === id);
-  }
-
   async #discover(context: AgentConnectionContext): Promise<NormalizedAgentPeerIdentity[]> {
     const injected = await this.#discoverFromInjectedSource(context);
     const core = await discoverFromCoreAgent(context);

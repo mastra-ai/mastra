@@ -190,7 +190,8 @@ type PendingContinuation<OUTPUT = unknown> = {
 };
 
 type ClaimedThreadOwnerStreamOptions =
-  AgentExecutionOptions<any> | (() => AgentExecutionOptions<any> | Promise<AgentExecutionOptions<any>>);
+  | AgentExecutionOptions<any>
+  | (() => AgentExecutionOptions<any> | Promise<AgentExecutionOptions<any>>);
 
 type ClaimedThreadOwner<OUTPUT = unknown> = {
   agent: Agent<any, any, any, any>;
@@ -286,6 +287,10 @@ type AgentThreadPeerDiscoveryEvent =
 function toPublicThreadPeer(peer: AdvertisedThreadPeer): Omit<AdvertisedThreadPeer, 'unsubscribe'> {
   const { unsubscribe: _unsubscribe, ...publicPeer } = peer;
   return publicPeer;
+}
+
+function createThreadPeerId(agentId: string, resourceId: string, threadId: string): string {
+  return [agentId, resourceId, threadId].map(part => encodeURIComponent(part)).join(':');
 }
 
 function createRuntimeState(): AgentThreadRuntimeState {
@@ -672,7 +677,7 @@ export class AgentThreadStreamRuntime {
     const peerAgentId = peerOptions?.agentId ?? agent.id;
     const peer: AdvertisedThreadPeer | undefined = peerOptions
       ? {
-          id: peerOptions.id ?? `${peerAgentId}:${options.resourceId}:${options.threadId}`,
+          id: peerOptions.id ?? createThreadPeerId(peerAgentId, options.resourceId, options.threadId),
           agentId: peerAgentId,
           resourceId: options.resourceId,
           threadId: options.threadId,

@@ -103,6 +103,36 @@ describe('agent connection tools', () => {
     expect(getStored().peers).toMatchObject([{ id: PEER_ID, resourceId: 'resource-2', threadId: 'thread-2' }]);
   });
 
+  it('validates multi-peer connects atomically and deduplicates ids', async () => {
+    const otherPeer = { resourceId: 'resource-3', threadId: 'thread-3', label: 'Peer Two' };
+    const otherPeerId = stablePeerId(otherPeer);
+    const tools = createAgentConnectionTools({ registry: createRegistry(() => [PEER, otherPeer]) });
+    const failed = createContext();
+
+    await expect(
+      (tools.agent_connect as any).execute({ ids: [PEER_ID, 'missing'] }, failed.context),
+    ).resolves.toMatchObject({
+      isError: true,
+      content: 'Unknown or unadvertised agent peer id: missing',
+      connected: [],
+      changed: [],
+    });
+    expect(failed.getStored().peers).toEqual([]);
+
+    const connected = createContext();
+    await expect(
+      (tools.agent_connect as any).execute({ ids: [PEER_ID, PEER_ID, otherPeerId] }, connected.context),
+    ).resolves.toMatchObject({
+      isError: false,
+      connected: [{ id: PEER_ID }, { id: otherPeerId }],
+      changed: [
+        { op: 'connect', id: PEER_ID },
+        { op: 'connect', id: otherPeerId },
+      ],
+    });
+    expect(connected.getStored().peers).toHaveLength(2);
+  });
+
   it('rejects a discovery entry whose supplied id does not match its endpoint', async () => {
     const tools = createAgentConnectionTools({
       registry: createRegistry(() => [{ id: PEER_ID, resourceId: 'resource-changed', threadId: 'thread-2' }]),
