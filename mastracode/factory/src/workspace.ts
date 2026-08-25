@@ -365,16 +365,18 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           getGithubToken: () => getRepositoryToken(),
           actingUserId: userId,
         });
-        // Attached here, inside the construction closure, so it runs exactly
-        // once per instance — `constructSessionEntry` itself runs on every
-        // open and would stack a wrapper per call.
+        // Optional on the `WorkspaceSandbox` interface (every MastraSandbox
+        // provider has it; a hand-rolled implementation may not). Skipping
+        // setup silently is what this whole seam exists to prevent.
         if (!sandbox.setOnStart) {
           throw new Error(
             `Sandbox '${sandbox.id}' does not support setOnStart, which Factory requires to materialize the session repo.`,
           );
         }
-        // Factory's setup runs first: a hook the callback installed itself
-        // expects a prepared workspace (checkout + credentials).
+        // Attached inside the construction closure, so exactly once per
+        // instance — `constructSessionEntry` runs on every open and would
+        // stack a wrapper per call. Factory's setup runs first: a hook the
+        // callback installed itself expects a prepared workspace.
         sandbox.setOnStart(previous => async args => {
           await setupHook(args);
           await previous?.(args);
