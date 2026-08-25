@@ -521,12 +521,6 @@ const sidebars = {
           customProps: { icon: 'https://cdn.simpleicons.org/helm?viewbox=auto&size=28' },
         },
         {
-          type: 'doc',
-          id: 'deploy/kubernetes-helm-values',
-          label: 'Helm values reference',
-          customProps: { icon: 'https://cdn.simpleicons.org/helm?viewbox=auto&size=28' },
-        },
-        {
           type: 'link',
           label: 'Mastra',
           href: '/docs/mastra-platform/deploy',

@@ -116,11 +116,14 @@ You'll need:
 
     Set `global.cloud` to your platform so the chart emits the correct LoadBalancer and Ingress annotations for that cloud.
 
-    This is only the minimal configuration — see the [Helm values reference](/integrations/deploy/kubernetes-helm-values) for every available value. You can also inspect the chart's annotated defaults directly (after `helm registry login`):
+    This is only the minimal configuration. After `helm registry login`, inspect the selected chart version's annotated defaults and README for every available value:
 
     ```bash
-    helm show values oci://us-central1-docker.pkg.dev/mastra-cloud/mastra-helm-ee/mastra-projects
-    helm show readme oci://us-central1-docker.pkg.dev/mastra-cloud/mastra-helm-ee/mastra-projects
+    CHART_VERSION=0.2.0
+    CHART=oci://us-central1-docker.pkg.dev/mastra-cloud/mastra-helm-ee/mastra-projects
+
+    helm show values "$CHART" --version "$CHART_VERSION"
+    helm show readme "$CHART" --version "$CHART_VERSION"
     ```
   </StepItem>
 
@@ -295,7 +298,6 @@ Your database and object store are unaffected, because the chart never manages s
 
 ## Related
 
-- [Helm values reference](/integrations/deploy/kubernetes-helm-values): All configurable chart values
 - [Kubernetes](/integrations/deploy/kubernetes): Hand-written manifests and multi-pod scaling with shared pub/sub
 - [Mastra server](/docs/deployment/mastra-server): Build output and server behavior
 - [Deployment overview](/docs/deployment/overview)
