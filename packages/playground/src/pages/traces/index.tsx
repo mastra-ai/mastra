@@ -90,7 +90,6 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
 
   const [autoFocusFilterFieldId, setAutoFocusFilterFieldId] = useState<string | undefined>();
   const [spanScoresPage, setSpanScoresPage] = useState(0);
-  const [traceCollapsed, setTraceCollapsed] = useState(false);
   const [traceTab, setTraceTab] = useState<TraceDataPanelTab>('details');
   // Tab is per-trace; a stale "scores" tab from the previous trace shouldn't leak into the next one.
   useEffect(() => setTraceTab('details'), [url.traceIdParam, url.anchorSpanIdParam]);
@@ -309,7 +308,6 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
 
   // "Evaluate Trace" switches the trace panel to its "Scores" tab (expanding the panel if needed).
   const handleEvaluateTrace = useCallback(() => {
-    setTraceCollapsed(false);
     setTraceTab('scores');
   }, []);
 
@@ -450,7 +448,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
       {pageTopArea}
 
       <TracesLayout
-        traceCollapsed={traceCollapsed}
+        sidePanelWide={!!url.spanIdParam}
         listSlot={
           <TracesListView
             // Remount on mode switch: the virtualizer caches measurements / scroll state from
@@ -508,8 +506,6 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
               initialSpanId={url.spanIdParam}
               onPrevious={handlePreviousTrace}
               onNext={handleNextTrace}
-              collapsed={traceCollapsed}
-              onCollapsedChange={setTraceCollapsed}
               placement="traces-list"
               LinkComponent={Link}
               activeTab={traceTab}
