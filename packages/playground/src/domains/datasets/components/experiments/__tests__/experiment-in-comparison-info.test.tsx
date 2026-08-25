@@ -44,9 +44,7 @@ describe('ExperimentInComparisonInfo', () => {
 
   describe('when the experiment name is an empty string', () => {
     it('falls back to the shortened id rather than rendering an empty link', () => {
-      renderCard(
-        <ExperimentInComparisonInfo experiment={blankNameExperiment} type="contender" />,
-      );
+      renderCard(<ExperimentInComparisonInfo experiment={blankNameExperiment} type="contender" />);
 
       expect(screen.getByRole('link', { name: 'b1a11c00' })).toBeDefined();
     });
