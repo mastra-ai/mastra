@@ -35,11 +35,18 @@ export interface StreamChatProviderProps {
   clientTools?: ClientToolsInput;
   /**
    * Optional per-call system-prompt augmentation forwarded to the agent on
-   * every send via `modelSettings.instructions`. Read fresh at send time so the
-   * snapshot stays in sync with the form, but never enters the visible message
-   * list and is not persisted as a chat turn.
+   * every send. Read fresh at send time so the snapshot stays in sync with the
+   * form, but never enters the visible message list and is not persisted as a
+   * chat turn.
    */
   extraInstructions?: string;
+  /**
+   * How `extraInstructions` reaches the agent.
+   *
+   * - `'replace'` (default) replaces the agent's configured instructions.
+   * - `'append'` adds a separate system message while preserving them.
+   */
+  extraInstructionsMode?: 'replace' | 'append';
   debounceTime?: number;
   children: ReactNode;
 }
@@ -51,6 +58,7 @@ export const StreamChatProvider = ({
   initialUserMessage,
   clientTools,
   extraInstructions,
+  extraInstructionsMode = 'replace',
   debounceTime = 0,
   children,
 }: StreamChatProviderProps) => {
@@ -105,12 +113,15 @@ export const StreamChatProvider = ({
         payload.clientTools = tools;
       }
       if (instructions !== undefined && instructions.length > 0) {
-        payload.modelSettings = { ...payload.modelSettings, instructions };
+        payload.modelSettings =
+          extraInstructionsMode === 'append'
+            ? { ...payload.modelSettings, system: instructions }
+            : { ...payload.modelSettings, instructions };
       }
 
       void sendMessage(payload);
     },
-    [sendMessage, currentUser],
+    [sendMessage, currentUser, extraInstructionsMode],
   );
 
   const hasDispatchedStarterRef = useRef(false);

@@ -126,6 +126,7 @@ export const ConversationPanelProvider = ({
       initialUserMessage={starterMessageReady}
       clientTools={clientTools}
       extraInstructions={extraInstructions}
+      extraInstructionsMode="append"
       debounceTime={1000}
     >
       <ConversationContext.Provider value={conversationContextValue}>{children}</ConversationContext.Provider>

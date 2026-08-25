@@ -1,10 +1,10 @@
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, render, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
-import { FormProvider, useForm } from 'react-hook-form';
+import { FormProvider, useForm, useFormContext } from 'react-hook-form';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -59,7 +59,15 @@ type StreamBody = {
   memory?: { thread?: string };
   clientTools?: Record<string, WireTool>;
   instructions?: string;
+  system?: string;
   messages?: Array<{ content?: unknown }>;
+  maxSteps?: number;
+  modelSettings?: {
+    maxRetries?: number;
+    maxOutputTokens?: number;
+    temperature?: number;
+  };
+  providerOptions?: unknown;
 };
 
 /** Closes immediately so useChat completes without producing messages. */
@@ -82,6 +90,15 @@ const toAgentTools = (tools: Array<{ id: string; description?: string; type?: Ag
     type: t.type ?? 'tool',
   }));
 
+const FormSnapshotUpdater = () => {
+  const { setValue } = useFormContext<AgentBuilderEditFormValues>();
+  return (
+    <button type="button" data-testid="update-agent-name" onClick={() => setValue('name', 'Updated')}>
+      Update agent name
+    </button>
+  );
+};
+
 const Wrapper = ({ children }: { children: ReactNode }) => {
   const methods = useForm<AgentBuilderEditFormValues>({
     defaultValues: { name: 'Initial', instructions: '', tools: {} },
@@ -93,6 +110,7 @@ const Wrapper = ({ children }: { children: ReactNode }) => {
         <TooltipProvider>
           <MemoryRouter>
             <FormProvider {...methods}>
+              <FormSnapshotUpdater />
               <AgentColorProvider agentId={AGENT_ID}>{children}</AgentColorProvider>
             </FormProvider>
           </MemoryRouter>
@@ -197,19 +215,31 @@ describe('ConversationPanel', () => {
       expect(body.memory).toMatchObject({ thread: BUILDER_THREAD_ID });
     });
 
-    it('flattens the form snapshot onto the top-level instructions field, not the visible message', async () => {
+    it('sends the fresh form snapshot as additive system context while preserving the request settings', async () => {
       const bodies = captureStream();
-      await act(async () => {
-        renderPanel({ features: { ...allOff, tools: true }, availableTools: [{ id: 'web-search' }] });
-      });
+      const panel = renderPanel({ features: { ...allOff, tools: true }, availableTools: [{ id: 'web-search' }] });
 
-      const body = await waitForSend(bodies);
-      const instructions = body.instructions;
-      expect(typeof instructions).toBe('string');
-      expect(instructions).toContain('Current agent configuration');
-      expect(instructions).toContain('"Initial"');
-      const visible = JSON.stringify(body.messages ?? []);
-      expect(visible).not.toContain('Current agent configuration');
+      const firstBody = await waitForSend(bodies);
+      expect(firstBody.instructions).toBeUndefined();
+      expect(firstBody.system).toContain('Current agent configuration');
+      expect(firstBody.system).toContain('"Initial"');
+      expect(JSON.stringify(firstBody.messages ?? [])).not.toContain('Current agent configuration');
+      expect(firstBody.maxSteps).toBe(100);
+      expect(firstBody.modelSettings).toMatchObject({ maxRetries: 3, maxOutputTokens: 5000, temperature: 1 });
+      expect(firstBody.providerOptions).toEqual({ openai: { reasoningEffort: 'low' } });
+      expect(firstBody.clientTools?.[SET_AGENT_TOOLS_TOOL_NAME]).toBeDefined();
+
+      fireEvent.click(panel.getByTestId('update-agent-name'));
+      fireEvent.change(panel.getByTestId('agent-builder-conversation-input'), { target: { value: 'Update it' } });
+      fireEvent.click(panel.getByTestId('agent-builder-conversation-submit'));
+
+      await waitFor(() => expect(bodies).toHaveLength(2));
+      const secondBody = bodies[1];
+      expect(secondBody.instructions).toBeUndefined();
+      expect(secondBody.system).toContain('Current agent configuration');
+      expect(secondBody.system).toContain('"Updated"');
+      expect(secondBody.system).not.toContain('- Name: "Initial"');
+      expect(JSON.stringify(secondBody.messages ?? [])).not.toContain('Current agent configuration');
     });
   });
 
