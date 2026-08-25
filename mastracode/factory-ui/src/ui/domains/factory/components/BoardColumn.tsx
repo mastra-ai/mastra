@@ -176,7 +176,7 @@ export function BoardColumn({
       data-testid={`board-column-${stage}`}
       className={cn(
         columnWidthClass(collapsed),
-        'flex flex-col transition-[width,background-color]',
+        'flex flex-col transition-[width,background-color] motion-reduce:transition-none',
         collapsed && 'rounded-lg',
         collapsed && dragOver && 'bg-surface2 ring-1 ring-border1',
       )}
