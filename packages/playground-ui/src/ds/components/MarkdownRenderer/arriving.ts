@@ -2,6 +2,8 @@ import type { ExtraProps } from 'react-markdown';
 
 import { ARRIVING_CLASS } from '@/ds/tokens';
 
+import '@/ds/components/Arrival/arrival.css';
+
 type MarkdownElement = NonNullable<ExtraProps['node']>;
 type MarkdownChild = MarkdownElement['children'][number];
 

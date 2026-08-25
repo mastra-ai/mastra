@@ -2,6 +2,8 @@ import { createContext, useContext, useState } from 'react';
 
 import { ARRIVING_CLASS } from '@/ds/tokens';
 
+import './arrival.css';
+
 /** Outside any scope nothing is watched arriving, so nothing animates. */
 export const SettledContext = createContext<{ readonly current: boolean }>({ current: false });
 
