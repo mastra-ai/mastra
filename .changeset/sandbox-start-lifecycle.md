@@ -4,7 +4,7 @@
 
 **Sandbox setup failures are no longer silent**
 
-An error thrown by an `onStart` handler now fails the start: `start()` rejects and the sandbox is marked `error`. Previously the error was logged and swallowed, so a sandbox whose setup never ran still looked healthy, and the failure surfaced later as a confusing command error. `onStop` and `onDestroy` stay non-fatal, since teardown proceeds best-effort.
+An error thrown by an `onStart` handler now fails the start: `start()` rejects and the sandbox is marked `error`. Previously the error was logged and swallowed, so a sandbox whose setup never ran still looked healthy, and the failure surfaced later as a confusing command error.
 
 **Added `find()`, `connect()` and `create()` for sandbox providers**
 
