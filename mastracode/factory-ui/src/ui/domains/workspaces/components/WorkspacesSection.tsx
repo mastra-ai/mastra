@@ -14,7 +14,7 @@ import { useDeleteWorkspaceMutation, useWorkspacesQuery } from '../../../../hook
 import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { githubNumberForItem, pullRequestStatusForItem } from '../../factory/boardItems';
-import { pullRequestCandidateIndex, relatedWorkItems, relationshipLabel } from '../../factory/services/relationships';
+import { relatedWorkItemIndex, relationshipLabel } from '../../factory/services/relationships';
 import type { WorkItem } from '../../factory/services/workItems';
 import { isTerminalStage } from '../../factory/stages';
 import { usePinnedSessions } from '../hooks/usePinnedSessions';
@@ -96,12 +96,12 @@ export function WorkspacesSection() {
       ),
     ),
   );
-  const pullRequestCandidates = pullRequestCandidateIndex(allWorkItems);
+  const relatedItemsFor = relatedWorkItemIndex(allWorkItems);
   const latestPullRequestFor = (item: WorkItem) => {
     if (item.source === 'github-pr') return item;
-    return [...relatedWorkItems(item, pullRequestCandidates(item))].sort((a, b) =>
-      b.updatedAt.localeCompare(a.updatedAt),
-    )[0];
+    return relatedItemsFor(item)
+      .filter(related => related.source === 'github-pr')
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
   };
 
   const rows = workspaceRows.flatMap(workspace => {

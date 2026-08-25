@@ -1,5 +1,13 @@
 # @mastra/longmemeval
 
+## 1.1.19-alpha.10
+
+### Patch Changes
+
+- Updated dependencies [[`b05f486`](https://github.com/mastra-ai/mastra/commit/b05f48612984d5fe2447ea2d6cdd5c604d285b97), [`4bc0650`](https://github.com/mastra-ai/mastra/commit/4bc0650a49114480bf9b5bd318d679941f726823), [`7960688`](https://github.com/mastra-ai/mastra/commit/7960688828e04eaf3106e34f7758fa580257eef6)]:
+  - @mastra/core@1.62.0-alpha.10
+  - @mastra/fastembed@1.3.0-alpha.0
+
 ## 1.1.19-alpha.9
 
 ### Patch Changes

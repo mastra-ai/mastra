@@ -1,0 +1,468 @@
+---
+title: "Reference: Metric queries | Observability"
+description: "API reference for listing, aggregating, grouping, charting, and discovering Mastra metrics."
+packages:
+  - "@mastra/core"
+  - "@mastra/client-js"
+---
+
+# Metric queries
+
+Metric queries read raw and aggregated metric data from the observability storage domain. For exporter and storage setup, see the [Metrics overview](/docs/observability/metrics/overview). For automatic metric names and labels, see the [Automatic metrics reference](/reference/observability/metrics/automatic-metrics).
+
+## Access
+
+### Observability store
+
+Use the storage domain for in-process queries:
+
+```typescript
+const observability = await mastra.getStorage()?.getStore('observability')
+
+if (!observability) {
+  throw new Error('Observability storage is not configured')
+}
+
+const result = await observability.getMetricAggregate({
+  name: ['mastra_agent_duration_ms'],
+  aggregation: 'avg',
+  filters: {
+    timestamp: { start: new Date(Date.now() - 60 * 60 * 1000) },
+  },
+})
+```
+
+`getStore('observability')` returns `undefined` when the storage configuration doesn't provide the observability domain.
+
+### Client SDK
+
+`@mastra/client-js` exposes the analytics and metric discovery methods on `MastraClient`:
+
+```typescript
+import { MastraClient } from '@mastra/client-js'
+
+const client = new MastraClient({
+  baseUrl: 'http://localhost:4111',
+})
+
+const result = await client.getMetricAggregate({
+  name: ['mastra_agent_duration_ms'],
+  aggregation: 'avg',
+})
+```
+
+The client doesn't expose a raw `listMetrics()` method. Use the observability store or the `GET /api/observability/metrics` route to list raw metric records.
+
+## Shared values
+
+### Aggregations
+
+The aggregate, breakdown, and time-series methods accept these `aggregation` values:
+
+| Value | Result |
+| - | - |
+| `sum` | Sum of metric values |
+| `avg` | Average metric value |
+| `min` | Minimum metric value |
+| `max` | Maximum metric value |
+| `count` | Number of matching metric records |
+| `count_distinct` | Approximate or exact number of distinct values in `distinctColumn`, depending on the storage backend |
+| `last` | Most recent matching metric value |
+
+When `aggregation` is `count_distinct`, `distinctColumn` is required. Supported columns are:
+
+```text
+entityType
+entityName
+parentEntityType
+parentEntityName
+rootEntityType
+rootEntityName
+name
+provider
+model
+environment
+executionSource
+serviceName
+threadId
+resourceId
+```
+
+### Intervals
+
+Time-series and percentile queries accept `1m`, `5m`, `15m`, `1h`, or `1d`.
+
+### Filters
+
+All metric operations accept the same optional `filters` object. Raw list requests pass these fields as query parameters. Analytics methods pass them in the JSON request body.
+
+| Field | Type | Description |
+| - | - | - |
+| `timestamp` | `{ start?: Date; end?: Date; startExclusive?: boolean; endExclusive?: boolean }` | Timestamp range. Boundaries are inclusive unless their corresponding exclusive flag is `true`. HTTP requests use ISO date strings. |
+| `traceId` | `string` | Exact trace ID |
+| `traceIds` | `string[]` | One to 1,000 trace IDs |
+| `spanId` | `string` | Exact span ID |
+| `entityType` | `EntityType` | Entity type |
+| `entityName` | `string` | Entity name |
+| `entityVersionId` | `string` | Entity version ID |
+| `parentEntityType` | `EntityType` | Parent entity type |
+| `parentEntityName` | `string` | Parent entity name |
+| `parentEntityVersionId` | `string` | Parent entity version ID |
+| `rootEntityType` | `EntityType` | Root entity type |
+| `rootEntityName` | `string` | Root entity name |
+| `rootEntityVersionId` | `string` | Root entity version ID |
+| `userId` | `string` | User ID |
+| `organizationId` | `string` | Organization ID |
+| `experimentId` | `string` | Experiment or evaluation run ID |
+| `serviceName` | `string` | Service name |
+| `environment` | `string` | Environment name |
+| `resourceId` | `string` | Resource ID |
+| `runId` | `string` | Run ID |
+| `sessionId` | `string` | Session ID |
+| `threadId` | `string` | Thread ID |
+| `requestId` | `string` | Request ID |
+| `executionSource` | `string` | Execution source |
+| `tags` | `string[]` | Records must contain all specified tags |
+| `name` | `string[]` | One or more metric names |
+| `provider` | `string` | Model provider |
+| `model` | `string` | Model ID |
+| `costUnit` | `string` | Cost unit |
+| `labels` | `Record<string, string>` | Exact matches for all specified metric label key-value pairs |
+| `source` | `string` | Deprecated. Use `executionSource`. |
+
+## Analytics methods
+
+### `getMetricAggregate(args)`
+
+Returns one value across all matching records. The observability store and `MastraClient` expose this method.
+
+#### Arguments
+
+| Field | Type | Required | Description |
+| - | - | - | - |
+| `name` | `string[]` | Yes | One or more metric names |
+| `aggregation` | `AggregationType` | Yes | Aggregation to apply |
+| `distinctColumn` | `MetricDistinctColumn` | For `count_distinct` | Column whose distinct values are counted |
+| `filters` | `MetricsFilter` | No | Shared metric filters |
+| `comparePeriod` | `'previous_period' \| 'previous_day' \| 'previous_week'` | No | Adds comparison-period values. `previous_period` uses the duration of `filters.timestamp`. |
+
+#### Returns
+
+```typescript
+{
+  value: number | null
+  previousValue?: number | null
+  changePercent?: number | null
+  estimatedCost?: number | null
+  costUnit?: string | null
+  previousEstimatedCost?: number | null
+  costChangePercent?: number | null
+}
+```
+
+`costUnit` is `null` when the matching records don't have one shared unit. Cost fields are optional and may be `null` when the records don't include cost context.
+
+```typescript
+const result = await observability.getMetricAggregate({
+  name: ['mastra_model_total_input_tokens', 'mastra_model_total_output_tokens'],
+  aggregation: 'sum',
+  filters: {
+    timestamp: {
+      start: new Date('2026-08-24T00:00:00Z'),
+      end: new Date('2026-08-25T00:00:00Z'),
+    },
+  },
+  comparePeriod: 'previous_period',
+})
+```
+
+**HTTP:** `POST /api/observability/metrics/aggregate`
+
+### `getMetricBreakdown(args)`
+
+Groups matching records by one or more dimensions and aggregates each group. The observability store and `MastraClient` expose this method.
+
+#### Arguments
+
+| Field | Type | Required | Description |
+| - | - | - | - |
+| `name` | `string[]` | Yes | One or more metric names |
+| `groupBy` | `string[]` | Yes | One or more fields to group by |
+| `aggregation` | `AggregationType` | Yes | Aggregation for each group |
+| `distinctColumn` | `MetricDistinctColumn` | For `count_distinct` | Column whose distinct values are counted |
+| `filters` | `MetricsFilter` | No | Shared metric filters |
+| `limit` | `number` | No | Positive integer up to 1,000. Required for high-cardinality groupings. |
+| `orderDirection` | `'ASC' \| 'DESC'` | No | Sort direction for the aggregated value. Storage implementations default to `DESC`. |
+
+#### Returns
+
+```typescript
+{
+  groups: Array<{
+    dimensions: Record<string, string | null>
+    value: number
+    estimatedCost?: number | null
+    costUnit?: string | null
+  }>
+}
+```
+
+```typescript
+const result = await client.getMetricBreakdown({
+  name: ['mastra_model_total_input_tokens'],
+  groupBy: ['entityName'],
+  aggregation: 'sum',
+  limit: 10,
+  orderDirection: 'DESC',
+})
+```
+
+**HTTP:** `POST /api/observability/metrics/breakdown`
+
+### `getMetricTimeSeries(args)`
+
+Buckets matching values by time interval, with optional grouping. The observability store and `MastraClient` expose this method.
+
+#### Arguments
+
+| Field | Type | Required | Description |
+| - | - | - | - |
+| `name` | `string[]` | Yes | One or more metric names |
+| `interval` | `AggregationInterval` | Yes | Time bucket interval |
+| `aggregation` | `AggregationType` | Yes | Aggregation for each bucket |
+| `distinctColumn` | `MetricDistinctColumn` | For `count_distinct` | Column whose distinct values are counted |
+| `filters` | `MetricsFilter` | No | Shared metric filters |
+| `groupBy` | `string[]` | No | Fields used to split the result into series |
+
+#### Returns
+
+```typescript
+{
+  series: Array<{
+    name: string
+    costUnit?: string | null
+    points: Array<{
+      timestamp: Date
+      value: number
+      estimatedCost?: number | null
+    }>
+  }>
+}
+```
+
+```typescript
+const result = await client.getMetricTimeSeries({
+  name: ['mastra_model_total_input_tokens'],
+  interval: '1h',
+  aggregation: 'sum',
+  filters: {
+    timestamp: { start: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+  },
+})
+```
+
+**HTTP:** `POST /api/observability/metrics/timeseries`
+
+### `getMetricPercentiles(args)`
+
+Calculates percentile values in time buckets. The observability store and `MastraClient` expose this method.
+
+#### Arguments
+
+| Field | Type | Required | Description |
+| - | - | - | - |
+| `name` | `string` | Yes | One metric name |
+| `percentiles` | `number[]` | Yes | One or more values from `0` through `1` |
+| `interval` | `AggregationInterval` | Yes | Time bucket interval |
+| `filters` | `MetricsFilter` | No | Shared metric filters |
+
+#### Returns
+
+```typescript
+{
+  series: Array<{
+    percentile: number
+    points: Array<{
+      timestamp: Date
+      value: number
+    }>
+  }>
+}
+```
+
+```typescript
+const result = await client.getMetricPercentiles({
+  name: 'mastra_agent_duration_ms',
+  percentiles: [0.5, 0.95, 0.99],
+  interval: '1h',
+})
+```
+
+**HTTP:** `POST /api/observability/metrics/percentiles`
+
+## Raw metric records
+
+### `listMetrics(args)`
+
+Returns stored metric observations without aggregating them. This method is available on the observability store. The HTTP route accepts the same fields as query parameters.
+
+#### Arguments
+
+Page mode is the default:
+
+```typescript
+{
+  mode?: 'page'
+  filters?: MetricsFilter
+  pagination?: {
+    page?: number // Default: 0
+    perPage?: number // Default: 10; maximum: 100
+  }
+  orderBy?: {
+    field?: 'timestamp' // Default: 'timestamp'
+    direction?: 'ASC' | 'DESC' // Default: 'DESC'
+  }
+}
+```
+
+Delta mode supports incremental polling:
+
+```typescript
+{
+  mode: 'delta'
+  filters?: MetricsFilter
+  after?: string
+  limit?: number // Default: 10; maximum: 100
+}
+```
+
+`pagination` and `orderBy` aren't allowed in delta mode. `after` and `limit` aren't allowed in page mode. A backend that doesn't support delta polling returns an unsupported-operation error.
+
+#### Returns
+
+```typescript
+{
+  metrics: MetricRecord[]
+  pagination?: {
+    total: number
+    page: number
+    perPage: number | false
+    hasMore: boolean
+  }
+  delta?: {
+    limit: number
+    hasMore: boolean
+  }
+  deltaCursor?: string
+}
+```
+
+A `MetricRecord` has this shape:
+
+```typescript
+{
+  metricId?: string | null
+  timestamp: Date
+  name: string
+  value: number
+  traceId?: string | null
+  spanId?: string | null
+  entityType?: EntityType | null
+  entityId?: string | null
+  entityName?: string | null
+  parentEntityType?: EntityType | null
+  parentEntityId?: string | null
+  parentEntityName?: string | null
+  rootEntityType?: EntityType | null
+  rootEntityId?: string | null
+  rootEntityName?: string | null
+  userId?: string | null
+  organizationId?: string | null
+  resourceId?: string | null
+  runId?: string | null
+  sessionId?: string | null
+  threadId?: string | null
+  requestId?: string | null
+  environment?: string | null
+  serviceName?: string | null
+  scope?: Record<string, unknown> | null
+  entityVersionId?: string | null
+  parentEntityVersionId?: string | null
+  rootEntityVersionId?: string | null
+  experimentId?: string | null
+  executionSource?: string | null
+  tags?: string[] | null
+  source?: string | null // Deprecated
+  provider?: string | null
+  model?: string | null
+  estimatedCost?: number | null
+  costUnit?: string | null
+  costMetadata?: Record<string, unknown> | null
+  labels: Record<string, string>
+  metadata?: Record<string, unknown> | null
+}
+```
+
+**HTTP:** `GET /api/observability/metrics`
+
+## Metric discovery
+
+The observability store and `MastraClient` expose the metric discovery methods. HTTP requests pass arguments as query parameters.
+
+| Method | Arguments | Returns | HTTP route |
+| - | - | - | - |
+| `getMetricNames(args?)` | `{ prefix?: string; limit?: number }` | `{ names: string[] }` | `GET /api/observability/discovery/metric-names` |
+| `getMetricLabelKeys(args)` | `{ metricName: string }` | `{ keys: string[] }` | `GET /api/observability/discovery/metric-label-keys` |
+| `getMetricLabelValues(args)` | `{ metricName: string; labelKey: string; prefix?: string; limit?: number }` | `{ values: string[] }` | `GET /api/observability/discovery/metric-label-values` |
+
+`limit` must be a positive integer when provided.
+
+```typescript
+const { names } = await client.getMetricNames({ prefix: 'mastra_model_' })
+const { keys } = await client.getMetricLabelKeys({ metricName: names[0] })
+const { values } = await client.getMetricLabelValues({
+  metricName: names[0],
+  labelKey: keys[0],
+  limit: 20,
+})
+```
+
+The observability discovery API also exposes shared dimensions used by traces, logs, and metrics:
+
+| Store or client method | Arguments | HTTP route |
+| - | - | - |
+| `getEntityTypes()` | None in `MastraClient`; `{}` in the store | `GET /api/observability/discovery/entity-types` |
+| `getEntityNames(args?)` | `{ entityType?: EntityType }` | `GET /api/observability/discovery/entity-names` |
+| `getServiceNames()` | None in `MastraClient`; `{}` in the store | `GET /api/observability/discovery/service-names` |
+| `getEnvironments()` | None in `MastraClient`; `{}` in the store | `GET /api/observability/discovery/environments` |
+| `getTags(args?)` | `{ entityType?: EntityType }` | `GET /api/observability/discovery/tags` |
+
+## HTTP routes
+
+| Method | Route | Input |
+| - | - | - |
+| `GET` | `/api/observability/metrics` | Query parameters |
+| `POST` | `/api/observability/metrics/aggregate` | JSON body |
+| `POST` | `/api/observability/metrics/breakdown` | JSON body |
+| `POST` | `/api/observability/metrics/timeseries` | JSON body |
+| `POST` | `/api/observability/metrics/percentiles` | JSON body |
+| `GET` | `/api/observability/discovery/metric-names` | Query parameters |
+| `GET` | `/api/observability/discovery/metric-label-keys` | Query parameters |
+| `GET` | `/api/observability/discovery/metric-label-values` | Query parameters |
+| `GET` | `/api/observability/discovery/entity-types` | None |
+| `GET` | `/api/observability/discovery/entity-names` | Query parameters |
+| `GET` | `/api/observability/discovery/service-names` | None |
+| `GET` | `/api/observability/discovery/environments` | None |
+| `GET` | `/api/observability/discovery/tags` | Query parameters |
+
+All routes require a configured observability domain. The aggregate, breakdown, time-series, and percentile routes require the `observability:read` permission when runtime authorization is enabled.
+
+## Unsupported backends
+
+The base observability storage implementation throws `*_NOT_IMPLEMENTED` errors for raw listing, analytics, and discovery methods. A configured observability domain can therefore exist while its backend doesn't implement metric queries.
+
+DuckDB, ClickHouse, Postgres v-next observability storage, and in-memory observability storage implement metric queries. Google Cloud Spanner implements them only when `disableMetrics` is `false`. Metrics are disabled by default. Other storage adapters may support tracing without supporting metrics.
+
+## CLI
+
+The `mastra api metric` commands cover aggregate, breakdown, time-series, percentile, metric-name, label-key, and label-value queries. See the [`mastra api metric` CLI reference](/reference/cli/mastra#mastra-api-metric-aggregate) for commands, targeting, authentication, and schema inspection.

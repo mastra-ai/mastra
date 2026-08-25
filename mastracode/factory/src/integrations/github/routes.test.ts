@@ -270,6 +270,61 @@ const listRepoOpenPullRequests = vi.fn(async (_installationId: number, _repoFull
   ],
   nextPage: null as number | null,
 }));
+const getIssueDetail = vi.fn(
+  async (
+    _installationId: number,
+    _repoFullName: string,
+    issueId: string,
+  ): Promise<Record<string, unknown> | null> =>
+    issueId === '12'
+      ? {
+          id: '12',
+          identifier: '#12',
+          title: 'Fix flaky test',
+          url: 'https://github.com/octo/hello/issues/12',
+          author: 'ada',
+          state: 'open',
+          stateType: 'open',
+          priority: null,
+          assignee: 'grace',
+          source: 'octo/hello',
+          labels: ['bug'],
+          commentCount: 3,
+          createdAt: '2026-07-01T00:00:00Z',
+          updatedAt: '2026-07-02T00:00:00Z',
+          description: 'The test flakes on CI.',
+          comments: [],
+        }
+      : null,
+);
+const getPullRequestDetail = vi.fn(
+  async (
+    _installationId: number,
+    _repoFullName: string,
+    pullRequestId: string,
+  ): Promise<Record<string, unknown> | null> =>
+    pullRequestId === '34'
+      ? {
+          id: '34',
+          title: 'Add factory pages',
+          url: 'https://github.com/octo/hello/pull/34',
+          author: 'grace',
+          assignees: ['ada'],
+          requestedReviewers: [],
+          labels: [],
+          body: 'Implements the factory pages.',
+          state: 'open',
+          draft: false,
+          merged: false,
+          mergeable: null,
+          baseBranch: 'main',
+          headBranch: 'feat/factory',
+          headSha: 'abc123',
+          createdAt: '2026-07-03T00:00:00Z',
+          updatedAt: '2026-07-04T00:00:00Z',
+        }
+      : null,
+);
 
 // Stub GithubIntegration instance injected into `buildGithubRoutes` — real DI
 // instead of module mocking (github/client.ts no longer exists).
@@ -314,6 +369,14 @@ const githubStub = {
   listRepoOpenIssues: (installationId: number, repoFullName: string, page: number, options?: { label?: string }) =>
     listRepoOpenIssues(installationId, repoFullName, page, options),
   intake: {
+    getIssue: async (input: {
+      connection: { type: string; installationId: number };
+      sourceId?: string;
+      issueId: string;
+    }) => {
+      if (input.connection.type !== 'app-installation') throw new Error('expected installation connection');
+      return getIssueDetail(input.connection.installationId, input.sourceId ?? '', input.issueId);
+    },
     listIssues: async (input: ListIntakeIssuesInput) => {
       if (input.connection.type !== 'app-installation') throw new Error('expected installation connection');
       const result = await listRepoOpenIssues(
@@ -348,6 +411,14 @@ const githubStub = {
       cloneUrl: `https://github.com/octo/hello.git`,
       authorization: { scheme: 'bearer' as const, token: `repo-token-${repositoryId}` },
     })),
+    getPullRequest: async (input: {
+      connection: { type: string; installationId: number };
+      sourceId: string;
+      pullRequestId: string;
+    }) => {
+      if (input.connection.type !== 'app-installation') throw new Error('expected installation connection');
+      return getPullRequestDetail(input.connection.installationId, input.sourceId, input.pullRequestId);
+    },
     listPullRequests: async (input: ListPullRequestsInput) => {
       if (input.connection.type !== 'app-installation') throw new Error('expected installation connection');
       const result = await listRepoOpenPullRequests(
@@ -1628,6 +1699,50 @@ describe('issues route', () => {
   });
 });
 
+describe('issue detail route', () => {
+  it("returns one issue's description for the project repo", async () => {
+    seedMaterializedProject();
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues/12');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      number: 12,
+      title: 'Fix flaky test',
+      description: 'The test flakes on CI.',
+      comments: 3,
+    });
+  });
+
+  it('404s when the issue does not exist', async () => {
+    seedMaterializedProject();
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues/99');
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: 'issue_not_found' });
+  });
+
+  it('400s on a malformed issue number', async () => {
+    seedMaterializedProject();
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues/abc');
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'invalid_number' });
+    expect(getIssueDetail).not.toHaveBeenCalled();
+  });
+
+  it('404s for a project owned by another org', async () => {
+    seedMaterializedProject({ orgId: 'other-org' });
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues/12');
+    expect(res.status).toBe(404);
+    expect(getIssueDetail).not.toHaveBeenCalled();
+  });
+
+  it('502s when GitHub is unavailable', async () => {
+    seedMaterializedProject();
+    getIssueDetail.mockRejectedValueOnce(new Error('GitHub unavailable'));
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues/12');
+    expect(res.status).toBe(502);
+    expect(await res.json()).toMatchObject({ error: 'github_fetch_failed', message: 'GitHub unavailable' });
+  });
+});
+
 describe('prs route', () => {
   it('401s without an authenticated user', async () => {
     seedMaterializedProject();
@@ -1675,6 +1790,35 @@ describe('prs route', () => {
     const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/prs');
     expect(res.status).toBe(502);
     expect(await res.json()).toMatchObject({ error: 'github_fetch_failed' });
+  });
+});
+
+describe('pr detail route', () => {
+  it("returns one pull request's description for the project repo", async () => {
+    seedMaterializedProject();
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/prs/34');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      number: 34,
+      title: 'Add factory pages',
+      description: 'Implements the factory pages.',
+      headBranch: 'feat/factory',
+    });
+  });
+
+  it('404s when the pull request does not exist', async () => {
+    seedMaterializedProject();
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/prs/99');
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: 'pull_request_not_found' });
+  });
+
+  it('400s on a malformed pull request number', async () => {
+    seedMaterializedProject();
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/prs/abc');
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'invalid_number' });
+    expect(getPullRequestDetail).not.toHaveBeenCalled();
   });
 });
 

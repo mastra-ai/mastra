@@ -8,7 +8,7 @@ import { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import { ChatHeader } from '../../chat/components/ChatHeader';
 import { WorkspaceFilesToggle } from '../../workspace-viewer/components/WorkspaceFilesToggle';
 import { useWorkspacePanel } from '../../workspace-viewer/context/useWorkspacePanel';
-import { relatedWorkItems, relationshipLabel, relationshipPath, workItemNumber } from '../services/relationships';
+import { relatedWorkItemIndex, relationshipLabel, relationshipPath, workItemNumber } from '../services/relationships';
 import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
 import { genericExternalWorkItemUrl } from '../services/workItemPresentation';
 import { SourceIcon } from './BoardIcons';
@@ -144,7 +144,7 @@ function WorkItemActions({
           {externalItemLabel}
         </Button>
       ) : null}
-      {relatedWorkItems(item, allItems).map(related => {
+      {relatedWorkItemIndex(allItems)(item).map(related => {
         const label = relationshipLabel(related);
         const session = latestLiveSession(related, livePaths);
 
