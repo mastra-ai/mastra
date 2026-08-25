@@ -5403,6 +5403,11 @@ export class Agent<
                 // original ID) by the run that suspended; a fresh copy would duplicate it.
                 const resumedGenerateThreadId = shouldResumeSubAgent ? agentResponseMessages[0]?.threadId : undefined;
                 const effectiveGenerateThreadId = resumedGenerateThreadId ?? subAgentThreadId;
+                // Same for the resource: the restored thread belongs to the suspended run's
+                // resource, so persisting or reporting the fresh ID would trip thread
+                // ownership again (or mislabel the transcript).
+                const effectiveGenerateResourceId =
+                  (shouldResumeSubAgent ? agentResponseMessages[0]?.resourceId : undefined) ?? subAgentResourceId;
                 fullSubAgentMessages = shouldResumeSubAgent
                   ? agentResponseMessages
                   : [subAgentUserMessage, ...agentResponseMessages];
@@ -5412,7 +5417,7 @@ export class Agent<
                 if (memory) {
                   try {
                     await memory.createThread({
-                      resourceId: subAgentResourceId,
+                      resourceId: effectiveGenerateResourceId,
                       threadId: effectiveGenerateThreadId,
                     });
 
@@ -5438,7 +5443,7 @@ export class Agent<
                 result = {
                   text: generateResult.text,
                   subAgentThreadId: effectiveGenerateThreadId,
-                  subAgentResourceId,
+                  subAgentResourceId: effectiveGenerateResourceId,
                   subAgentToolResults,
                   usage: generateResult.usage,
                 };
@@ -5536,6 +5541,11 @@ export class Agent<
                 // original ID) by the run that suspended; a fresh copy would duplicate it.
                 const resumedStreamThreadId = shouldResumeSubAgent ? agentResponseMessages[0]?.threadId : undefined;
                 const effectiveStreamThreadId = resumedStreamThreadId ?? subAgentThreadId;
+                // Same for the resource: the restored thread belongs to the suspended run's
+                // resource, so persisting or reporting the fresh ID would trip thread
+                // ownership again (or mislabel the transcript).
+                const effectiveStreamResourceId =
+                  (shouldResumeSubAgent ? agentResponseMessages[0]?.resourceId : undefined) ?? subAgentResourceId;
                 fullSubAgentMessages = shouldResumeSubAgent
                   ? agentResponseMessages
                   : [subAgentUserMessage, ...agentResponseMessages];
@@ -5545,7 +5555,7 @@ export class Agent<
                 if (streamMemory) {
                   try {
                     await streamMemory.createThread({
-                      resourceId: subAgentResourceId,
+                      resourceId: effectiveStreamResourceId,
                       threadId: effectiveStreamThreadId,
                     });
 
@@ -5576,7 +5586,7 @@ export class Agent<
                 result = {
                   text: processedText,
                   subAgentThreadId: effectiveStreamThreadId,
-                  subAgentResourceId,
+                  subAgentResourceId: effectiveStreamResourceId,
                   subAgentToolResults,
                   usage: subAgentUsage,
                 };
