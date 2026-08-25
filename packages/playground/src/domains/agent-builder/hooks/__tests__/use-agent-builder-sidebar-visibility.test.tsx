@@ -132,6 +132,25 @@ describe('useAgentBuilderSidebarVisibility', () => {
     });
   });
 
+  describe('when the capabilities endpoint answers with nothing', () => {
+    it('hides the shortcut rather than crashing on a missing payload', async () => {
+      server.use(http.get(CAPABILITIES_URL, () => HttpResponse.json(null)));
+      server.use(http.get(SETTINGS_URL, () => HttpResponse.json(buildBuilderSettings())));
+
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const wrapper = ({ children }: { children: ReactNode }) => (
+        <MastraReactProvider baseUrl={BASE_URL}>
+          <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+        </MastraReactProvider>
+      );
+
+      const { result } = renderHook(() => useAgentBuilderSidebarVisibility(), { wrapper });
+
+      await waitFor(() => expect(queryClient.getQueryData(['builder-settings'])).toBeDefined());
+      expect(result.current.isVisible).toBe(false);
+    });
+  });
+
   describe('when the capabilities request fails', () => {
     it('hides the shortcut', async () => {
       server.use(http.get(CAPABILITIES_URL, () => new HttpResponse(null, { status: 500 })));

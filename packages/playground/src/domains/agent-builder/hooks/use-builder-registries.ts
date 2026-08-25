@@ -61,7 +61,7 @@ export function usePopularBuilderRegistrySkills(registryId: string | undefined) 
     queryFn: (): Promise<BuilderRegistryPopularResponse> => {
       // Unreachable: `enabled` below already keeps the query idle without a
       // registry. The throw only narrows `string | undefined` for TypeScript.
-      // Stryker disable next-line ConditionalExpression
+      // Stryker disable next-line ConditionalExpression,StringLiteral
       if (!registryId) throw new Error('Registry ID is required');
       return client.getBuilderRegistryPopular(registryId, { limit: 10, offset: 0 });
     },
@@ -87,10 +87,11 @@ export function useBuilderRegistryPreview(
     queryFn: async (): Promise<string> => {
       // Unreachable: `enabled` below already requires all four. The throw only
       // narrows `string | undefined` for TypeScript.
-      // Stryker disable next-line ConditionalExpression,LogicalOperator,StringLiteral
+      // Stryker disable all
       if (!registryId || !owner || !repo || !skillPath) {
         throw new Error('registryId, owner, repo, and skillPath are required');
       }
+      // Stryker restore all
       const data: BuilderRegistryPreviewResponse = await client.getBuilderRegistryPreview(registryId, {
         owner,
         repo,
