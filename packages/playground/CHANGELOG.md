@@ -1,5 +1,17 @@
 # @internal/playground
 
+## 1.26.1-alpha.10
+
+### Patch Changes
+
+- Improved the datasets experience in Studio: creating and editing a dataset now happens on dedicated pages (wrapped in a card) with proper breadcrumbs instead of dialogs, the dataset breadcrumb links to the dataset while a separate arrow opens the dataset switcher, item comparison moved to a path-based URL and is started from a new "Compare with" section in the item side panel, item checkboxes are always visible with contextual actions consolidated into a single "{n} selected" dropdown with a destructive Delete Items entry, experiment rows open the global experiment page (the dataset-scoped experiment route was removed), and the "Run Experiment" button keeps a stable label. Also improved dataset version selection when running experiments (with an inline old-version notice next to the items search and a link-style "Return to latest" action), and dataset item creation with a spacious sidebar and larger JSON editors. ([#21910](https://github.com/mastra-ai/mastra/pull/21910))
+
+- Updated dependencies [[`848aa11`](https://github.com/mastra-ai/mastra/commit/848aa117f344f1da0f9dda41cf6077592e957e71), [`e5166c7`](https://github.com/mastra-ai/mastra/commit/e5166c75eca48b02a9df352f8277dfe3e8f3161e), [`b05f486`](https://github.com/mastra-ai/mastra/commit/b05f48612984d5fe2447ea2d6cdd5c604d285b97), [`612ef7e`](https://github.com/mastra-ai/mastra/commit/612ef7e7054c79f889162abc9dc191a4be1d4f8a), [`7960688`](https://github.com/mastra-ai/mastra/commit/7960688828e04eaf3106e34f7758fa580257eef6)]:
+  - @mastra/playground-ui@51.1.0-alpha.10
+  - @mastra/core@1.62.0-alpha.10
+  - @mastra/client-js@1.42.1-alpha.10
+  - @mastra/react@1.4.6-alpha.10
+
 ## 1.26.1-alpha.9
 
 ### Patch Changes
