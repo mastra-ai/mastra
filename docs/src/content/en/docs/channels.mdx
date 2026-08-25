@@ -87,7 +87,7 @@ For example, a Slack adapter on an agent with the `your-agent` ID uses:
 /api/agents/your-agent/channels/slack/webhook
 ```
 
-Point the platform's webhook, event, or interactions URL to this path. Follow the guide for your platform or the [Chat SDK docs](https://chat-sdk.dev/adapters).
+Point the platform's webhook, event, or interactions URL to this path. Follow the guide for your platform or the [Chat SDK docs](https://chat-sdk.dev/adapters). The webhook acknowledges the request before the agent finishes responding. See [Error handling and delivery](#error-handling-and-delivery) for what happens when verification or a handler fails.
 
 During local development, platform webhooks need a public URL to reach your local server. Use a tunnel like [cloudflared](https://github.com/cloudflare/cloudflared) or [ngrok](https://ngrok.com/) to expose your server, `localhost:4111` by default:
 
@@ -203,6 +203,57 @@ export const yourAgent = new Agent({
 Add only JSON-serializable, non-sensitive values. Signal metadata may be stored in memory or sent through a shared publish-subscribe transport. It isn't added to the model prompt.
 
 Use `requestContext` for run-scoped configuration, such as credentials for a message that starts a run. Use `signalMetadata` for context that must stay attached to one message, including messages delivered to an active run.
+
+## Error handling and delivery
+
+A channel webhook acknowledges the platform before the agent finishes, so a `200` response means "received", not "answered". Errors behave differently depending on whether they happen before or after that acknowledgment.
+
+### Before acknowledgment: the platform retries
+
+The adapter rejects a request synchronously when it can't accept the event:
+
+- Failed request verification, such as a bad Slack signature or Telegram secret token, returns `401`.
+- An unparseable body returns `400`.
+- A transient failure while claiming or deduplicating the event returns `503`.
+
+Platforms redeliver on non-`2xx` responses, each with its own policy. Slack retries up to three times with increasing delays and also redelivers when the response takes longer than about three seconds. Telegram keeps redelivering an update until it receives a `2xx`. Discord's gateway events arrive over a socket connection rather than HTTP webhooks, so there is no HTTP acknowledgment to time out. The platform owns retries at this boundary. You don't need to add any.
+
+### After acknowledgment: Mastra owns the error
+
+Once the adapter returns `200`, the platform considers the event delivered and never retries it, no matter what happens to the agent run. Errors at this stage are handled in Mastra:
+
+- The default handler catches errors from the agent run and posts an error message back to the thread. Set `formatError` on an adapter to customize the text; the default is `❌ Error: {message}`.
+- A custom handler that throws bypasses that catch. Chat SDK logs the rejection and drops it. Nothing is posted to the thread and nothing is retried.
+
+If a custom handler does its own work before calling the default handler, catch failures and decide what to do, because no other layer will:
+
+```typescript title="src/mastra/agents/your-agent.ts"
+channels: {
+  adapters: {
+    slack: createSlackAdapter(),
+  },
+  handlers: {
+    onDirectMessage: async (thread, message, defaultHandler, ctx) => {
+      try {
+        ctx.signalMetadata.ticketId = await lookupTicket(message)
+      } catch (error) {
+        ctx.mastra?.getLogger().error('Ticket lookup failed', { error })
+        await thread.post('Something went wrong looking up your ticket. Try again in a moment.')
+        return
+      }
+      await defaultHandler(thread, message)
+    },
+  },
+},
+```
+
+Retrying inside a handler is an application decision. If you retry, make the work idempotent, because the platform may also redeliver the original event.
+
+### Duplicate delivery
+
+Retries mean the same event can arrive more than once. This happens when the acknowledgment is slow or lost, for example a Slack retry after the three-second deadline, or a Telegram redelivery after a network failure.
+
+Adapters deduplicate redelivered events: Slack checks the `x-slack-retry-num` header and a delivered-event record, and Telegram claims each `update_id` once. Both rely on channel state, so configure [storage](/docs/storage) to keep deduplication reliable across restarts. Deduplication is best effort. Keep side effects in custom handlers idempotent so a duplicate that slips through doesn't repeat work like creating a ticket or charging a customer.
 
 ## Multimodal content
 
