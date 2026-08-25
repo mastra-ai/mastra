@@ -1,7 +1,7 @@
 import { expect } from './expect.js';
 import type { McE2eInProcessApp, McE2eScenario } from './types.js';
 
-const peerId = 'expected-reply-peer';
+const peerId = 'code-agent:mc-e2e-expected-reply-peer-resource:mc-e2e-expected-reply-peer-thread';
 const messageId = 'expected-reply-request';
 const peerSummary = 'Expected reply watchdog e2e: choose whether to acknowledge this peer update';
 function getRequestBodies(requests: unknown[]): unknown[] {
@@ -109,10 +109,13 @@ export const agentConnectionsExpectedReplyWatchdogScenario = {
     await runtime.waitForScreenText(/agent_signal_send .*✓/i, terminal, 30_000);
     await runtime.waitForScreenText(/Expected reply watchdog completed/i, terminal, 30_000);
     await expect(
-      terminal.getByText(/agent_signal_send .*✗|Agent peer is not connected|Agent peer is offline/i, {
-        full: true,
-        strict: false,
-      }),
+      terminal.getByText(
+        /agent_signal_send .*✗|Cannot send: peer is not saved|Cannot send: saved peer is not currently advertised/i,
+        {
+          full: true,
+          strict: false,
+        },
+      ),
     ).not.toBeVisible();
     runtime.printScreen('after expected-reply watchdog flow', terminal);
     terminal.keyCtrlC();

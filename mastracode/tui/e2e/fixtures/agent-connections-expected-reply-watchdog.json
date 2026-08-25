@@ -31,8 +31,7 @@
             "id": "call_expected_reply_connect",
             "name": "agent_connect",
             "arguments": {
-              "ids": ["expected-reply-peer"],
-              "action": "connect"
+              "ids": ["code-agent:mc-e2e-expected-reply-peer-resource:mc-e2e-expected-reply-peer-thread"]
             }
           }
         ]
@@ -83,7 +82,7 @@
             "id": "call_expected_reply_send",
             "name": "agent_signal_send",
             "arguments": {
-              "targetId": "expected-reply-peer",
+              "targetId": "code-agent:mc-e2e-expected-reply-peer-resource:mc-e2e-expected-reply-peer-thread",
               "summary": "Expected reply watchdog e2e acknowledgement",
               "priority": "high",
               "expectsReply": false,

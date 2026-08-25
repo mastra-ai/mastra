@@ -7,9 +7,11 @@ function getRequestBodies(requests: unknown[]): unknown[] {
   );
 }
 
+const peerId = 'code-agent:mc-e2e-signal-peer-resource:mc-e2e-signal-peer-thread';
+
 const peers = JSON.stringify([
   {
-    id: 'peer-signal-target',
+    id: peerId,
     resourceId: 'mc-e2e-signal-peer-resource',
     threadId: 'mc-e2e-signal-peer-thread',
     label: 'Signal Target Peer',
@@ -51,7 +53,7 @@ export const agentConnectionsNotificationSignalScenario = {
     const serialized = JSON.stringify(getRequestBodies(requests));
     expect(serialized).toContain('agent_connect');
     expect(serialized).toContain('agent_signal_send');
-    expect(serialized).toContain('peer-signal-target');
+    expect(serialized).toContain(peerId);
     expect(serialized).toContain('Agent connection e2e signal: please review the handoff');
   },
 } satisfies McE2eScenario;

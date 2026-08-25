@@ -30,8 +30,7 @@
             "id": "call_agent_signal_connect",
             "name": "agent_connect",
             "arguments": {
-              "ids": ["peer-signal-target"],
-              "action": "connect"
+              "ids": ["code-agent:mc-e2e-signal-peer-resource:mc-e2e-signal-peer-thread"]
             }
           }
         ]
@@ -50,7 +49,7 @@
             "id": "call_agent_signal_send",
             "name": "agent_signal_send",
             "arguments": {
-              "targetId": "peer-signal-target",
+              "targetId": "code-agent:mc-e2e-signal-peer-resource:mc-e2e-signal-peer-thread",
               "summary": "Agent connection e2e signal: please review the handoff",
               "priority": "high",
               "expectsReply": false,
