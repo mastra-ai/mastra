@@ -54,7 +54,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   const components = externalLinkTarget === 'window' ? WINDOW_COMPONENTS : COMPONENTS;
 
   const spans = wordSpans(blocks);
-  const settled = useSettledWords(spans.at(-1)?.end ?? 0);
+  const settled = useSettledWords(spans.at(-1)?.end ?? 0, streaming);
 
   // A block whose words have all finished their entrance has nothing left to play,
   // which is what `undefined` says: leave it as plain text, no spans at all.

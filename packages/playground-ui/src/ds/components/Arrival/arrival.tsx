@@ -1,16 +1,14 @@
-import { ARRIVING_CLASS } from '@mastra/playground-ui/tokens';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 
-/** Outside any scope nothing is watched arriving, so nothing animates. */
-const SettledContext = createContext<{ readonly current: boolean }>({ current: false });
+import { SettledContext, useArriving } from './use-watched';
+import { cn } from '@/lib/utils';
 
 /**
  * Marks what the reader was handed. Whatever mounts with a scope is already there and
  * never animates; whatever mounts after it painted is the run happening in front of
  * them, and fades in.
  *
- * Scopes nest, and that is the whole rule: the transcript opens one for its history,
+ * Scopes nest, and that is the whole rule: a transcript opens one for its history,
  * and every element that fades in opens one for its own subtree, so a row's contents
  * ride its entrance rather than playing a second one on top of it — while a detail
  * that fills in a beat later still gets its own.
@@ -26,14 +24,6 @@ export function ArrivalScope({ children }: { children: ReactNode }) {
   }, []);
 
   return <SettledContext value={settled}>{children}</SettledContext>;
-}
-
-/** The entrance class if this element mounted while the reader was watching, nothing otherwise. */
-export function useArriving(): string | undefined {
-  const settled = useContext(SettledContext);
-  const [arriving] = useState(() => settled.current);
-
-  return arriving ? ARRIVING_CLASS : undefined;
 }
 
 /** An element that fades in when it lands, and hosts a scope for whatever lands inside it later. */

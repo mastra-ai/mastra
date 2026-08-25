@@ -1,9 +1,10 @@
+// @vitest-environment jsdom
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
-import { ARRIVING_CLASS } from '@mastra/playground-ui/tokens';
-
-import { ArrivalScope, Arriving, useArriving } from '../arrival';
+import { ArrivalScope, Arriving } from './arrival';
+import { useArriving } from './use-watched';
+import { ARRIVING_CLASS } from '@/ds/tokens';
 
 function Mark({ name }: { name: string }) {
   const arriving = useArriving();
@@ -62,7 +63,7 @@ describe('arrival scope', () => {
       </ArrivalScope>,
     );
 
-    expect(screen.getByTestId('label').parentElement).toHaveClass(ARRIVING_CLASS);
+    expect(screen.getByTestId('label').parentElement?.classList.contains(ARRIVING_CLASS)).toBe(true);
     expect(arrives('label')).toBe(false);
 
     rerender(

@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { ArrivalScope } from '../Arrival';
 import { TooltipProvider } from '../Tooltip';
 import { MarkdownRenderer } from './markdown-renderer';
 import { useRevealedText } from './use-reveal';
@@ -325,6 +326,29 @@ describe('MarkdownRenderer', () => {
     const animated = [...container.querySelectorAll('.mastra-arriving')].map(node => node.textContent);
 
     expect(animated).toEqual([word(28), word(29)]);
+  });
+
+  it('animates the first words of a passage born under the reader\u2019s eyes, then settles them', () => {
+    vi.useFakeTimers();
+    const { container, rerender } = render(
+      <ArrivalScope>
+        <div />
+      </ArrivalScope>,
+    );
+
+    rerender(
+      <ArrivalScope>
+        <div />
+        <MarkdownRenderer streaming>{'Let me look'}</MarkdownRenderer>
+      </ArrivalScope>,
+    );
+
+    const animated = [...container.querySelectorAll('.mastra-arriving')].map(node => node.textContent);
+    expect(animated).toEqual(['Let', 'me', 'look']);
+
+    settle();
+
+    expect(container.querySelectorAll('.mastra-arriving')).toHaveLength(0);
   });
 
   it('stops animating a word once its entrance is over', () => {

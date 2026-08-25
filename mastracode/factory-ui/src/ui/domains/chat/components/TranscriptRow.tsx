@@ -4,7 +4,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { ChevronRight } from 'lucide-react';
 import type { ReactNode } from 'react';
 
-import { useArriving } from './arrival';
+import { useArriving } from '@mastra/playground-ui/components/Arrival';
 
 /** Shell of a clickable transcript row: hover surface, pointer, and the `group/row` hover scope. */
 export const ROW_TRIGGER = 'group/row hover:bg-neutral6/5 w-full cursor-pointer rounded-md text-left transition-colors';

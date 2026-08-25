@@ -42,6 +42,33 @@ describe('assistant prose', () => {
     expect(screen.getByText('Human-in-the-loop').tagName).toBe('STRONG');
   });
 
+  it('keeps words on screen still when the reasoning before them fills its slot', () => {
+    vi.useFakeTimers();
+    const parts = (reasoning: string): MastraDBMessage['content']['parts'] => [
+      { type: 'reasoning', reasoning, details: [] },
+      { type: 'text', text: 'Let me look at the core package now.' },
+    ];
+    const { container, rerender } = renderEntries([assistant(parts(''), true)]);
+
+    act(() => void vi.advanceTimersByTime(4000));
+    const prose = () =>
+      [...container.querySelectorAll('.mastra-markdown')].find(node => node.textContent?.includes('core package'));
+    const settled = prose();
+    expect(container.textContent).toContain('Let me look at the core package now.');
+
+    rerender(
+      <TranscriptEntries
+        entries={[assistant(parts('Need the core first.'), true)]}
+        onApprove={() => {}}
+        onRespond={() => {}}
+      />,
+    );
+
+    expect(container.textContent).toContain('Let me look at the core package now.');
+    expect(prose()).toBe(settled);
+    expect(container.textContent).toContain('Need the core first.');
+  });
+
   it('paces a streaming reply from one place, not one per part', () => {
     vi.useFakeTimers();
     const { container } = renderEntries([

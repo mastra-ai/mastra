@@ -49,10 +49,13 @@ export function revealedParts(parts: MessagePart[], shown: string): MessagePart[
     }
 
     const text = shown.slice(start, read);
-    if (!text) break;
+    if (text === part.text) {
+      revealed.push(part);
+      continue;
+    }
 
-    revealed.push(text === part.text ? part : { ...part, text });
-    if (text.length < part.text.length) break;
+    if (text) revealed.push({ ...part, text });
+    break;
   }
 
   return revealed;

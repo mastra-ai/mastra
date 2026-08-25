@@ -27,7 +27,7 @@ import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { messageProse, messageScript, revealedParts } from '../services/reveal';
 import { isTerminalInvocationState } from '../services/transcript';
 import { groupTurns, replySteps } from '../services/turns';
-import { ArrivalScope, Arriving, useArriving } from './arrival';
+import { ArrivalScope, Arriving, useArriving } from '@mastra/playground-ui/components/Arrival';
 import { MESSAGE_HOVER, MessageMeta } from './MessageMeta';
 import { ToolCard } from './tool/ToolCard';
 import { ToolGroup, TOOL_GROUP_MIN } from './tool/ToolGroup';
@@ -559,7 +559,7 @@ export function TranscriptEntries({
 
   // Ignore echoed user signals that render nothing when opening a turn.
   const drawsContent = (entry: MessageEntry): boolean =>
-    entry.message.content.parts.some(part => isRenderablePart(part, entry.runtimeTools));
+    entry.message.content.parts.some(part => draws(part, suspensions, entry.runtimeTools));
   const opensTurn = (entry: TimelineEntry): boolean =>
     entry.kind === 'message' && startsUserTurn(entry.message) && drawsContent(entry);
 
@@ -786,7 +786,7 @@ function MessageBubble({
     parts.length === messageParts.length
       ? entry.message
       : { ...entry.message, content: { ...entry.message.content, parts } };
-  const hasRenderablePart = parts.length > 0;
+  const hasRenderablePart = written.some(part => draws(part, suspensions, entry.runtimeTools));
 
   const toolGroups = collectToolGroups(parts, suspensions, entry.runtimeTools, groupable);
   const origin = channelOrigin(entry);
@@ -832,6 +832,7 @@ function MessageBubble({
 
   const renderers = {
     Text: (part: TextPart) => {
+      if (!part.text.trim()) return null;
       if (entry.message.role === 'user') {
         const activation = parseSkillActivation(part.text);
         return activation ? <SkillMessage activation={activation} /> : <MarkdownRenderer>{part.text}</MarkdownRenderer>;
@@ -846,11 +847,14 @@ function MessageBubble({
     // Reasoning is delivered whole, not token by token, so the block lands at once
     // and the word pacing inside it has nothing to pace: the entrance is the
     // container's, like a tool row's.
-    Reasoning: (part: ReasoningPart) => (
-      <Arriving className="border-border1 my-1.5 border-l-2 pl-2.5 italic [&_p]:my-0.5">
-        <MarkdownRenderer className="text-ui-sm text-icon3">{part.reasoning}</MarkdownRenderer>
-      </Arriving>
-    ),
+    Reasoning: (part: ReasoningPart) => {
+      if (!part.reasoning.trim()) return null;
+      return (
+        <Arriving className="border-border1 my-1.5 border-l-2 pl-2.5 italic [&_p]:my-0.5">
+          <MarkdownRenderer className="text-ui-sm text-icon3">{part.reasoning}</MarkdownRenderer>
+        </Arriving>
+      );
+    },
     ToolInvocation: (part: ToolInvocationPart) => {
       const toolCallId = part.toolInvocation.toolCallId;
       const group = toolGroups.byFirstId.get(toolCallId);
@@ -950,9 +954,9 @@ function terminalInvocationStatus(invocation: ToolInvocationPart['toolInvocation
   return 'isError' in invocation && invocation.isError === true ? 'error' : 'done';
 }
 
-/** The parts a message actually draws: hidden tools and prompts drawn elsewhere fall out. */
+/** The parts holding a place in a reply: only kinds never drawn at all fall out. */
 function renderableParts(entry: MessageEntry): MessagePart[] {
-  return mergeProse((entry.message.content.parts ?? []).filter(part => isRenderablePart(part, entry.runtimeTools)));
+  return mergeProse((entry.message.content.parts ?? []).filter(part => keepsSlot(part, entry.runtimeTools)));
 }
 
 type MessagePart = MessageEntry['message']['content']['parts'][number];
@@ -980,14 +984,39 @@ function mergeProse(parts: MessagePart[]): MessagePart[] {
   return merged;
 }
 
-function isRenderablePart(part: MessagePart, runtimeTools: MessageEntry['runtimeTools']): boolean {
+/**
+ * Whether a part holds a place in the reply — decided from what it is, never from
+ * what it currently holds. Content is mutable: prose fills in, reasoning lands whole,
+ * a prompt arrives. A slot that came and went with its content would shift every part
+ * after it, remounting text the reader is looking at and pulling the reveal's cursor
+ * back through words already on screen. An empty slot renders nothing and waits.
+ */
+function keepsSlot(part: MessagePart, runtimeTools: MessageEntry['runtimeTools']): boolean {
+  switch (part.type) {
+    case 'text':
+    case 'reasoning':
+    case 'file':
+      return true;
+    case 'tool-invocation':
+      return isRenderableTool(part, runtimeTools);
+    default:
+      return false;
+  }
+}
+
+/** Whether a part puts anything on screen right now. */
+function draws(
+  part: MessagePart,
+  suspensions: ReadonlyMap<string, SuspensionPrompt>,
+  runtimeTools: MessageEntry['runtimeTools'],
+): boolean {
   switch (part.type) {
     case 'text':
       return part.text.trim().length > 0;
     case 'reasoning':
       return part.reasoning.trim().length > 0;
     case 'tool-invocation':
-      return isRenderableTool(part, runtimeTools);
+      return isRenderableTool(part, runtimeTools) && !awaitsPrompt(part, suspensions, runtimeTools);
     case 'file':
       return true;
     default:

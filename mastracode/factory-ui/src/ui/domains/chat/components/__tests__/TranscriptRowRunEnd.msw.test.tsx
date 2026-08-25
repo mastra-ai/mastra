@@ -2,7 +2,7 @@ import { ARRIVING_CLASS } from '@mastra/playground-ui/tokens';
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
-import { ArrivalScope } from '../arrival';
+import { ArrivalScope } from '@mastra/playground-ui/components/Arrival';
 import { TranscriptRow } from '../TranscriptRow';
 
 const row = (running: boolean) => (

@@ -19,7 +19,7 @@ import type { ReactNode } from 'react';
 import { highlightCode, languageForPath } from '../../../../ui/highlight';
 import { stripSerializedAnsi } from '../../services/ansi';
 import type { ToolCall } from '../../services/transcript';
-import { useArriving } from '../arrival';
+import { useArriving } from '@mastra/playground-ui/components/Arrival';
 import { presentTool } from './tool-presentation';
 
 function truncate(s: string, max: number): string {

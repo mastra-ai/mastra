@@ -33,3 +33,7 @@ const shown = useRevealedText(text, streaming);
 
 <MarkdownRenderer streaming={streaming || shown !== text}>{shown}</MarkdownRenderer>;
 ```
+
+The arrival boundary is now a primitive of its own: `ArrivalScope` marks a view the reader has been handed, `useWatched` answers whether they were watching when an element mounted, and `Arriving` fades a block in only when they were. Every entrance derives from that one answer instead of each component keeping its own idea of "new".
+
+A passage born streaming under the reader's eyes now animates from its first word. `MarkdownRenderer` treated whatever words it mounted with as already read — right for a restored transcript, wrong for a live reply, whose opening words landed plain and then replayed their entrance. The renderer now asks the arrival scope and its stream: text born streaming into a watched view plays in from word one, while a block that mounts complete — restored history, an expanded body, a card's output — lands as plain text and enters with its container.

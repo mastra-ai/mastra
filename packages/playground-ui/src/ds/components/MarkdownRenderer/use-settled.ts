@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
+import { useWatched } from '@/ds/components/Arrival';
 import { ARRIVING_MS } from '@/ds/tokens';
 
 interface Landing {
@@ -18,11 +19,18 @@ interface Landing {
  *
  * Ageing them out is the whole answer: a word carries the class only while it is new,
  * so however often the tail is rebuilt, only what is genuinely arriving animates.
+ *
+ * What counts as new at mount is not this hook's call. A reply the reader was handed
+ * is already there, and a block that mounts complete — a card's output, an expanded
+ * body — enters with its container. Only a passage born streaming under the reader's
+ * eyes is new from its first word: the reveal often lands several words in its first
+ * commit, and they enter like every word after them.
  */
-export function useSettledWords(words: number): number {
-  const [settled, setSettled] = useState(words);
+export function useSettledWords(words: number, streaming: boolean): number {
+  const watched = useWatched();
+  const [settled, setSettled] = useState(() => (watched && streaming ? 0 : words));
   const landings = useRef<Landing[]>([]);
-  const recorded = useRef(words);
+  const recorded = useRef(settled);
 
   useEffect(() => {
     if (recorded.current !== words) {

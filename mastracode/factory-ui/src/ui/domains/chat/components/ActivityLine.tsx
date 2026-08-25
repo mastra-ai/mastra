@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react';
 import { useChatTranscript } from '../context/useChatTranscript';
 import { isTerminalInvocationState } from '../services/transcript';
 import type { TimelineEntry } from '../services/transcript';
-import { Arriving } from './arrival';
+import { Arriving } from '@mastra/playground-ui/components/Arrival';
 import { isTranscriptToolVisible } from './ToolFactory';
 
 /**

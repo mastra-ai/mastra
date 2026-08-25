@@ -31,3 +31,5 @@ A session opened while its run is under way keeps live tool rows as rows. They u
 An agent question fills its place in the reply without disturbing the text around it. The waiting slot used to be dropped from the reply and re-inserted when the prompt arrived, which rebuilt every part after it — the text below blinked and replayed its entrance.
 
 The "Thinking" line now settles its sweep and fades when the run's first output arrives, instead of vanishing mid-sweep under it.
+
+A reply's parts hold their place from the start. An empty reasoning block, a blank passage or a waiting question used to be dropped from the reply and re-inserted once it had content — which grew the script ahead of the reveal clock, pulled words already on screen back out of view, and replayed their entrance. A slot is now reserved by what a part is, never by what it currently says: it renders nothing until it has something, and the words after it never move.
