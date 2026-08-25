@@ -393,6 +393,25 @@ describe('useDatasetItems, on responses the server left empty', () => {
     expect(result.current.hasNextPage).toBe(false);
   });
 
+  it('survives a page whose body names no items', async () => {
+    server.use(http.get(ITEMS_URL, () => HttpResponse.json({ pagination: { total: 0 } })));
+
+    const { result } = renderHook(() => useDatasetItems('dataset-1'), { wrapper: createWrapper() });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toEqual([]);
+    expect(result.current.hasNextPage).toBe(false);
+  });
+
+  it('reports an empty list before the first page has landed', async () => {
+    server.use(http.get(ITEMS_URL, () => HttpResponse.json(page(['a'], 1))));
+
+    const { result } = renderHook(() => useDatasetItems('dataset-1'), { wrapper: createWrapper() });
+
+    expect(result.current.data).toEqual([]);
+    await waitFor(() => expect(result.current.data).toHaveLength(1));
+  });
+
   it('survives a page that comes back with no body at all', async () => {
     server.use(http.get(ITEMS_URL, () => HttpResponse.json(null)));
 

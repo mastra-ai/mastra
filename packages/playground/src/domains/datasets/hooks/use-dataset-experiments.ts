@@ -53,6 +53,8 @@ export const useDatasetExperiment = (datasetId: string, experimentId: string) =>
     refetchInterval: query => {
       // Poll while running, stop when complete
       const status = query.state.data?.status;
+      // Stryker disable next-line BooleanLiteral: React Query treats any
+      // non-numeric interval as "do not poll", so `false` and `true` agree.
       return status === 'running' || status === 'pending' ? 2000 : false;
     },
   });
@@ -92,6 +94,8 @@ export const useDatasetExperimentResults = ({
         return undefined;
       }
       const totalFetched = (lastPageParam + 1) * RESULTS_PER_PAGE;
+      // Stryker disable next-line OptionalChaining: the early return above
+      // already rejects a missing `lastPage`.
       const total = lastPage?.pagination?.total ?? 0;
       if (totalFetched >= total) {
         return undefined;
@@ -99,17 +103,24 @@ export const useDatasetExperimentResults = ({
       return lastPageParam + 1;
     },
     enabled: Boolean(datasetId) && Boolean(experimentId),
+    // Stryker disable next-line BooleanLiteral: React Query treats any
+    // non-numeric interval as "do not poll", so `false` and `true` agree.
     refetchInterval: experimentStatus === 'running' || experimentStatus === 'pending' ? 2000 : false,
     select: data => {
       return data.pages.flatMap(page => page?.results ?? []);
     },
   });
 
+  // Destructured so the effect depends on the three stable values it reads
+  // rather than on `query`, which changes identity on every render. This
+  // matches `useWorkflowRuns`.
+  const { hasNextPage, isFetchingNextPage, fetchNextPage } = query;
+
   useEffect(() => {
-    if (isEndOfListInView && query.hasNextPage && !query.isFetchingNextPage) {
-      void query.fetchNextPage();
+    if (isEndOfListInView && hasNextPage && !isFetchingNextPage) {
+      void fetchNextPage();
     }
-  }, [isEndOfListInView, query.hasNextPage, query.isFetchingNextPage]);
+  }, [isEndOfListInView, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   return { ...query, setEndOfListElement };
 };
@@ -144,6 +155,8 @@ export const useScoresByExperimentId = (experimentId: string, experimentStatus?:
       return grouped;
     },
     enabled: Boolean(experimentId),
+    // Stryker disable next-line BooleanLiteral: React Query treats any
+    // non-numeric interval as "do not poll", so `false` and `true` agree.
     refetchInterval: experimentStatus === 'running' || experimentStatus === 'pending' ? 2000 : false,
   });
 };

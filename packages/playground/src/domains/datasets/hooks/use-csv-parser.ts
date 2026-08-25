@@ -23,59 +23,65 @@ export function useCSVParser() {
   const [isParsing, setIsParsing] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
-  const parseFile = useCallback(async (file: File): Promise<ParsedCSV> => {
-    setIsParsing(true);
-    setError(null);
+  const parseFile = useCallback(
+    async (file: File): Promise<ParsedCSV> => {
+      setIsParsing(true);
+      setError(null);
 
-    try {
-      const useWorker = file.size > WORKER_THRESHOLD;
+      try {
+        const useWorker = file.size > WORKER_THRESHOLD;
 
-      return await new Promise<ParsedCSV>((resolve, reject) => {
-        Papa.parse<Record<string, string>>(file, {
-          header: true,
-          skipEmptyLines: 'greedy',
-          dynamicTyping: false,
-          worker: useWorker,
-          complete: (results: Papa.ParseResult<Record<string, string>>) => {
-            // Extract headers from first row fields or meta
-            const headers = results.meta.fields ?? [];
+        return await new Promise<ParsedCSV>((resolve, reject) => {
+          Papa.parse<Record<string, string>>(file, {
+            header: true,
+            skipEmptyLines: 'greedy',
+            dynamicTyping: false,
+            worker: useWorker,
+            complete: (results: Papa.ParseResult<Record<string, string>>) => {
+              // Extract headers from first row fields or meta
+              const headers = results.meta.fields ?? [];
 
-            // Process each row through JSON cell parser
-            const allWarnings: string[] = [];
-            const processedData = results.data.map((row: Record<string, string>, index: number) => {
-              const parsed = parseRow(row);
+              // Process each row through JSON cell parser
+              const allWarnings: string[] = [];
+              const processedData = results.data.map((row: Record<string, string>, index: number) => {
+                const parsed = parseRow(row);
 
-              // Prefix warnings with row number
-              parsed.warnings.forEach(w => {
-                allWarnings.push(`Row ${index + 2}: ${w}`);
+                // Prefix warnings with row number
+                parsed.warnings.forEach(w => {
+                  allWarnings.push(`Row ${index + 2}: ${w}`);
+                });
+
+                return parsed.data;
               });
 
-              return parsed.data;
-            });
-
-            resolve({
-              headers,
-              data: processedData,
-              errors: results.errors,
-              warnings: allWarnings,
-            });
-          },
-          error: (err: Error) => {
-            reject(new Error(err.message));
-          },
+              resolve({
+                headers,
+                data: processedData,
+                errors: results.errors,
+                warnings: allWarnings,
+              });
+            },
+            error: (err: Error) => {
+              reject(new Error(err.message));
+            },
+          });
         });
-      });
-    } catch (err) {
-      const parseError = err instanceof Error ? err : new Error('Failed to parse CSV');
-      setError(parseError);
-      throw parseError;
-    } finally {
-      setIsParsing(false);
-    }
+      } catch (err) {
+        // The rejection is always an Error (papaparse's callback is wrapped in
+        // one), so the fallback only satisfies the `unknown` narrowing.
+        // Stryker disable next-line StringLiteral
+        const parseError = err instanceof Error ? err : new Error('Failed to parse CSV');
+        setError(parseError);
+        throw parseError;
+      } finally {
+        setIsParsing(false);
+      }
+    },
     // `parseFile` closes over nothing but the two setters React keeps stable,
     // so a different dependency list only changes the callback's identity.
     // Stryker disable next-line ArrayDeclaration
-  }, []);
+    [],
+  );
 
   return {
     parseFile,

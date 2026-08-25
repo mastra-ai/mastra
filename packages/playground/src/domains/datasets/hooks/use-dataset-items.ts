@@ -43,6 +43,8 @@ export const useDatasetItems = (datasetId: string, search?: string, version?: nu
         return undefined;
       }
       const totalFetched = (lastPageParam + 1) * PER_PAGE;
+      // Stryker disable next-line OptionalChaining: the early return above
+      // already rejects a missing `lastPage`.
       const total = lastPage?.pagination?.total ?? 0;
       if (totalFetched >= total) {
         return undefined;
@@ -56,11 +58,16 @@ export const useDatasetItems = (datasetId: string, search?: string, version?: nu
   const items = query.data?.pages.flatMap(page => page?.items ?? []) ?? [];
   const total = query.data?.pages[0]?.pagination?.total;
 
+  // Destructured so the effect depends on the three stable values it reads
+  // rather than on `query`, which changes identity on every render. This
+  // matches `useWorkflowRuns`.
+  const { hasNextPage, isFetchingNextPage, fetchNextPage } = query;
+
   useEffect(() => {
-    if (isEndOfListInView && query.hasNextPage && !query.isFetchingNextPage) {
-      void query.fetchNextPage();
+    if (isEndOfListInView && hasNextPage && !isFetchingNextPage) {
+      void fetchNextPage();
     }
-  }, [isEndOfListInView, query.hasNextPage, query.isFetchingNextPage]);
+  }, [isEndOfListInView, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   return { ...query, data: items, total, setEndOfListElement };
 };

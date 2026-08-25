@@ -223,6 +223,17 @@ describe('useDatasetExperiment', () => {
     });
   });
 
+  it('files each experiment under a key of its own', async () => {
+    server.use(http.get(url, () => HttpResponse.json(makeExperiment())));
+    const wrapper = createWrapper();
+
+    const { result } = renderHook(() => useDatasetExperiment(DATASET_ID, EXPERIMENT_ID), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(wrapper.queryClient.getQueryData(['dataset-experiment', DATASET_ID, EXPERIMENT_ID])).toBeDefined();
+    expect(wrapper.queryClient.getQueryData(['dataset-experiments', DATASET_ID, EXPERIMENT_ID])).toBeUndefined();
+  });
+
   describe('when either id is missing', () => {
     it.each([
       ['no dataset', '', EXPERIMENT_ID],
@@ -543,6 +554,19 @@ describe('useDatasetExperimentResults, as the reader scrolls', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     // 100 fetched of 100 reported: equal, not greater — the boundary case.
+    expect(result.current.hasNextPage).toBe(false);
+  });
+
+  it('survives a page whose body names no results', async () => {
+    server.use(http.get(RESULTS_URL, () => HttpResponse.json({ pagination: { total: 0 } })));
+
+    const { result } = renderHook(
+      () => useDatasetExperimentResults({ datasetId: DATASET_ID, experimentId: EXPERIMENT_ID }),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toEqual([]);
     expect(result.current.hasNextPage).toBe(false);
   });
 
