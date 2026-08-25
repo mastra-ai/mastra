@@ -250,6 +250,7 @@
     "happy-vans-admire",
     "heavy-hounds-arrive",
     "heavy-lions-listen",
+    "hungry-zebras-shine",
     "inngest-durable-single-trace",
     "jolly-buckets-retire",
     "late-planes-win",
@@ -319,6 +320,7 @@
     "workspace-shutdown-stop",
     "workspaces-sandbox-env",
     "yellow-zoos-notice",
-    "yummy-worlds-shout"
+    "yummy-worlds-shout",
+    "zero-output-other-terminal"
   ]
 }
