@@ -19,6 +19,15 @@ import { Link } from '@/lib/link';
 
 function ExperimentItemPage() {
   const { itemId } = useParams<{ itemId: string }>();
+
+  if (!itemId) return null;
+
+  // The route element stays mounted across `:itemId` changes; keying the
+  // content remounts it so panel state never leaks between items.
+  return <ExperimentItemPageContent key={itemId} itemId={itemId} />;
+}
+
+function ExperimentItemPageContent({ itemId }: { itemId: string }) {
   const {
     experimentId,
     experimentStatus,
@@ -80,8 +89,6 @@ function ExperimentItemPage() {
     featuredSpanId ?? null,
     setFeaturedSpanId,
   );
-
-  if (!itemId) return null;
 
   // Stack order mirrors the previous inline column: Result → Score → Trace → Span.
   const gridRows = (() => {

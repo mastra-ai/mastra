@@ -7,47 +7,11 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import DatasetItemVersionsComparePage from '../index';
+import { dataset, history } from './fixtures/versions-page';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
-
-const dataset = {
-  id: 'ds-1',
-  name: 'Weather evals',
-  version: 2,
-  createdAt: new Date().toISOString(),
-  updatedAt: new Date().toISOString(),
-};
-
-const now = new Date().toISOString();
-
-const history = [
-  {
-    id: 'item-a',
-    datasetId: 'ds-1',
-    datasetVersion: 2,
-    input: { q: 'newer' },
-    groundTruth: null,
-    metadata: null,
-    validTo: null,
-    isDeleted: false,
-    createdAt: now,
-    updatedAt: now,
-  },
-  {
-    id: 'item-a',
-    datasetId: 'ds-1',
-    datasetVersion: 1,
-    input: { q: 'older' },
-    groundTruth: null,
-    metadata: null,
-    validTo: 2,
-    isDeleted: false,
-    createdAt: now,
-    updatedAt: now,
-  },
-];
 
 beforeEach(() => {
   server.use(

@@ -5,31 +5,16 @@ import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { DATASET_ID, dataset, items } from './fixtures/dataset-items';
 import DatasetPage from '@/pages/datasets/dataset';
 import DatasetItemPage from '@/pages/datasets/dataset/item';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { TEST_BASE_URL } from '@/test/render';
 
-const DATASET_ID = 'ds-1';
-const now = new Date().toISOString();
-
-const dataset = {
-  id: DATASET_ID,
-  name: 'My dataset',
-  description: null,
-  version: 1,
-  createdAt: now,
-  updatedAt: now,
-};
-
 const itemsResponse = {
-  items: [
-    { id: 'item-a', datasetId: DATASET_ID, input: { q: 'alpha' }, version: 1, createdAt: now, updatedAt: now },
-    { id: 'item-b', datasetId: DATASET_ID, input: { q: 'beta' }, version: 1, createdAt: now, updatedAt: now },
-    { id: 'item-c', datasetId: DATASET_ID, input: { q: 'gamma' }, version: 1, createdAt: now, updatedAt: now },
-  ],
-  pagination: { total: 3, page: 0, perPage: 10, hasMore: false },
+  items,
+  pagination: { total: items.length, page: 0, perPage: 10, hasMore: false },
 };
 
 /**

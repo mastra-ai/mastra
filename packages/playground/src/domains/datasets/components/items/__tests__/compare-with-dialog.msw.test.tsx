@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import type { DatasetItem } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -13,12 +14,11 @@ import { StubLink, stubLinkPaths } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
-const now = new Date().toISOString();
 
-const allItems = [
+const allItems: DatasetItem[] = [
   { ...baseItem },
-  { id: 'item-b', datasetId: 'ds-1', input: { q: 'beta' }, datasetVersion: 1, createdAt: now, updatedAt: now },
-  { id: 'item-c', datasetId: 'ds-1', input: { q: 'gamma' }, datasetVersion: 1, createdAt: now, updatedAt: now },
+  { ...baseItem, id: 'item-b', input: { q: 'beta' } },
+  { ...baseItem, id: 'item-c', input: { q: 'gamma' } },
 ];
 
 beforeEach(() => {
