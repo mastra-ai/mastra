@@ -46,7 +46,7 @@ A sandbox constructed with a known `id` resolves that id on `start()`: reconnect
   content={[
   {
     name: 'outcome',
-    type: 'boolean',
+    type: "'created' | 'connected'",
     description:
       "`'created'` when a brand-new sandbox VM (or working directory) was provisioned; `'connected'` when the call reconnected to or resumed an existing one.",
   },

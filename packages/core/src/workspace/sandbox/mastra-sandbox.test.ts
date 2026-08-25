@@ -150,6 +150,10 @@ class ProcessBackedSandbox extends MastraSandbox {
   constructor(processes: SandboxProcessManager, env?: Record<string, string | undefined>) {
     super({ name: 'ProcessBackedSandbox', processes, env });
   }
+
+  // Nothing to provision: these tests exercise the process manager and the env
+  // overlay, so the sandbox declares an explicit no-op start.
+  async start(): Promise<void> {}
 }
 
 /**
@@ -1096,5 +1100,94 @@ describe('MastraSandbox acquisition primitives', () => {
     }
 
     expect(() => new UnadoptedHandleSandbox()).toThrow(/find\(\) requires connect\(\)/);
+  });
+
+  it('refuses to start a provider that implements neither start() nor create()', async () => {
+    class EmptySandbox extends MastraSandbox {
+      readonly id = 'empty';
+      readonly name = 'EmptySandbox';
+      readonly provider = 'test';
+      status: ProviderStatus = 'pending';
+
+      constructor() {
+        super({ name: 'EmptySandbox' });
+      }
+    }
+
+    const sandbox = new EmptySandbox();
+
+    await expect(sandbox._start()).rejects.toThrow(/implements neither start\(\) nor the create\(\)/);
+    // Never claims to be running with nothing behind it.
+    expect(sandbox.status).toBe('error');
+  });
+
+  it('refuses to start a provider whose start and create are class fields', async () => {
+    // Field initializers run after the base constructor, so the wrapper and
+    // rung selection never see them and the base start() runs instead.
+    let fieldCalls = 0;
+
+    class FieldStartSandbox extends MastraSandbox {
+      readonly id = 'field-start';
+      readonly name = 'FieldStartSandbox';
+      readonly provider = 'test';
+      status: ProviderStatus = 'pending';
+
+      start = async () => {
+        fieldCalls++;
+      };
+
+      constructor() {
+        super({ name: 'FieldStartSandbox' });
+      }
+    }
+
+    class FieldCreateSandbox extends MastraSandbox {
+      readonly id = 'field-create';
+      readonly name = 'FieldCreateSandbox';
+      readonly provider = 'test';
+      status: ProviderStatus = 'pending';
+
+      create = async () => {
+        fieldCalls++;
+      };
+
+      constructor() {
+        super({ name: 'FieldCreateSandbox' });
+      }
+    }
+
+    await expect(new FieldStartSandbox()._start()).rejects.toThrow(/implements neither start\(\)/);
+    await expect(new FieldCreateSandbox()._start()).rejects.toThrow(/implements neither start\(\)/);
+    expect(fieldCalls).toBe(0);
+  });
+
+  it('rejects a find() that returns a handle with no connect() to adopt it', async () => {
+    // The constructor pairing check misses a class-field connect, so acquisition
+    // enforces it at the point of use rather than reporting a false 'connected'.
+    class LateConnectSandbox extends MastraSandbox<string> {
+      readonly id = 'late-connect';
+      readonly name = 'LateConnectSandbox';
+      readonly provider = 'test';
+      status: ProviderStatus = 'pending';
+
+      constructor() {
+        super({ name: 'LateConnectSandbox' });
+      }
+
+      protected override async find(): Promise<string | undefined> {
+        return 'vm-handle';
+      }
+
+      protected override async connect(_handle: string): Promise<void> {}
+
+      protected override async create(): Promise<void> {}
+    }
+
+    const sandbox = new LateConnectSandbox();
+    // Hide connect after construction, the way a class-field initializer does
+    // by not existing when the constructor's pairing check runs.
+    Object.defineProperty(sandbox, 'connect', { value: undefined, configurable: true });
+
+    await expect(sandbox._start()).rejects.toThrow(/find\(\) requires connect\(\)/);
   });
 });

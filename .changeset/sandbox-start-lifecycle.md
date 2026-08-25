@@ -10,6 +10,8 @@ Errors thrown by an `onStart` handler on a sandbox provider's constructor are no
 
 `MastraSandbox` now owns the start lifecycle. Subclass `start()` is constructor-wrapped, so direct calls get the same in-flight coalescing (cleared on settle, so a failed attempt is never latched), status transitions, and mount processing that `ensureRunning()` already had.
 
+Starting a sandbox that implements neither `start()` nor `create()` now throws instead of silently doing nothing and reporting the sandbox as `running`. This also surfaces a misspelled override, and a `start` or `create` written as a class field, since field initializers run after the base constructor and are invisible to it. A sandbox with genuinely nothing to start says so with an empty `async start() {}`.
+
 Providers plug in at one of three rungs: optional `find()`, `connect()` and `create()` acquisition primitives, with the base orchestrating getOrCreate and deriving `SandboxStartResult { outcome: 'created' | 'connected' }` structurally (E2B, Daytona, Local); a `start()` override returning that result, for SDKs whose getOrCreate is fused (Platform, Railway); or a void `start()` override, which keeps today's behavior. The outcome reaches the `onStart` hook, so setup can tell a fresh VM from a reconnect.
 
 New `setOnStart(update)` attaches a start hook after construction, so a runtime that receives a sandbox it didn't build can install setup without every host threading a hook through the provider constructor. The updater receives the currently installed hook and returns its replacement, so callers compose rather than clobber:

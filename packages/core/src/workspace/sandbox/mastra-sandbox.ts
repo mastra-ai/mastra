@@ -256,19 +256,17 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
     // Shadow start() with the lifecycle wrapper (same pattern as
     // SandboxProcessManager) so DIRECT start() calls get the same coalescing,
     // status handling, and onStart hook as `_start()`/`ensureRunning()`.
-    // Subclasses must use METHOD syntax for `start` and for the acquisition
-    // primitives below: class-FIELD initializers run after this constructor,
-    // overwriting this wrapper and hiding the primitives from rung selection.
     const hasStartOverride = this.start !== MastraSandbox.prototype.start;
     this._implStart = this.start.bind(this);
     this.start = () => this._start();
     // Rung selection: a subclass `start()` override wins; otherwise the
-    // primitives drive acquisition when `create()` is implemented.
+    // primitives drive acquisition when `create()` is implemented. Anything
+    // declared as a class field is invisible here and lands on the base
+    // `start()`, which throws.
     this._useAcquisitionPrimitives = !hasStartOverride && typeof this.create === 'function';
     // A handle nobody adopts would still report `outcome: 'connected'`, so the
-    // sandbox would look reconnected while running against nothing. Fail here
-    // instead, where the cause is visible.
-    if (this._useAcquisitionPrimitives && this.find && !this.connect) {
+    // sandbox would look reconnected while running against nothing.
+    if (this._useAcquisitionPrimitives && typeof this.find === 'function' && typeof this.connect !== 'function') {
       throw new Error(`${this.constructor.name}: find() requires connect() to adopt the handle it returns.`);
     }
 
@@ -447,6 +445,9 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
 
     // Hook failures are FATAL: a caller must never observe a running sandbox
     // whose setup failed. Nothing latches, so the next start() retries it.
+    // The environment acquired above is NOT released first: providers that
+    // implement find() reconnect to it on retry, but a create-only provider
+    // provisions another one and leaves the first to its idle timeout.
     try {
       await this._onStart?.({ sandbox: this, outcome });
     } catch (error) {
@@ -499,7 +500,13 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
   private async _acquire(): Promise<SandboxStartResult> {
     const handle = this.find ? await this.find() : undefined;
     if (handle != null) {
-      await this.connect?.(handle);
+      // Checked rather than optional: adopting nothing would still report
+      // 'connected'. The constructor rejects this pairing, but a `connect`
+      // declared as a class field is invisible there.
+      if (!this.connect) {
+        throw new Error(`${this.constructor.name}: find() requires connect() to adopt the handle it returns.`);
+      }
+      await this.connect(handle);
       return { outcome: 'connected' };
     }
     await this.create!();
@@ -522,15 +529,19 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
    *
    * The base constructor wraps `start()` so direct calls are routed through
    * `_start()`. Use METHOD syntax when overriding — a class-field `start`
-   * initializer would overwrite the wrapper.
+   * initializer would overwrite the wrapper. Implementing neither rung throws:
+   * a sandbox with nothing to start says so with an empty `async start() {}`.
    *
    * Id-keyed getOrCreate contract: a sandbox constructed with a known `id`
    * resolves that id on start — reconnect/resume when the provider finds an
    * existing VM for it, create otherwise.
    */
   async start(): Promise<SandboxStartResult | void> {
-    // Default no-op — subclasses override start() or implement the
-    // acquisition primitives (see the rung ladder above).
+    // Also where a misspelled override and a class-FIELD `start`/`create` land,
+    // since field initializers run too late for the constructor to see them.
+    throw new Error(
+      `${this.constructor.name} implements neither start() nor the create() acquisition primitive, so starting it would do nothing. Implement one using method syntax.`,
+    );
   }
 
   /**
@@ -539,9 +550,8 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
    * Calls `_start()` if status is not 'running'. Useful for lazy initialization
    * where operations should automatically start the sandbox if needed.
    *
-   * With the id-keyed getOrCreate contract (see {@link start}), this is the
-   * "resolve my id to a runnable VM" entry point: reconnect/resume when the
-   * provider finds an existing VM for this sandbox's id, create otherwise.
+   * This is the lazy entry point into the id-keyed getOrCreate contract
+   * described on {@link start}.
    *
    * @throws {SandboxNotReadyError} if the sandbox fails to reach 'running' status
    *
