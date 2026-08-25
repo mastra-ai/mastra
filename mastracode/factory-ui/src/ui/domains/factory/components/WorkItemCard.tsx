@@ -38,7 +38,7 @@ import { WorkItemMenuItems } from './WorkItemMenuItems';
 
 export function WorkItemCard({
   item,
-  cardRef,
+  deepLinkRef,
   highlighted,
   columnStage,
   relatedItems,
@@ -65,8 +65,8 @@ export function WorkItemCard({
   onRemove,
 }: {
   item: WorkItem;
-  /** Hands the card's node to the board, which scrolls to it when it is deeplinked. */
-  cardRef: (element: HTMLElement | null) => void;
+  // Hands the card's own control to the board, which scrolls to it and focuses it when the card is deeplinked.
+  deepLinkRef: (element: HTMLElement | null) => void;
   highlighted: boolean;
   columnStage: BoardStageId;
   /** Cards linked to this one, resolved once for the whole board. */
@@ -188,9 +188,8 @@ export function WorkItemCard({
     onRemove,
   };
 
-  // Acting from inside the panel collapses it first: the card the panel came
-  // from is what the result lands on. Dismissing a suggested run is the one
-  // entry that leaves it open — nothing else about the card changed.
+  // Acting collapses the panel first, so the result lands on the card it came from.
+  // Dismissing a suggested run is the one entry that leaves it open.
   const panelMenu: WorkItemMenuProps = {
     ...menu,
     onStartRun: (spec, action) => {
@@ -244,10 +243,7 @@ export function WorkItemCard({
     <>
       <CardTitleTooltip title={item.title}>
         <article
-          ref={element => {
-            morph.cardRef.current = element;
-            cardRef(element);
-          }}
+          ref={morph.cardRef}
           draggable={!evaluating}
           aria-label={item.title}
           aria-busy={evaluating || runPending || undefined}
@@ -267,6 +263,7 @@ export function WorkItemCard({
           )}
         >
           <button
+            ref={deepLinkRef}
             type="button"
             draggable={false}
             aria-label={`Details for ${item.title}`}

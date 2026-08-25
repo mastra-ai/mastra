@@ -4,12 +4,8 @@ import type { BoardCandidate } from '../boardCandidates';
 import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 
-/**
- * Scrolls the board to its first populated lane once, on first paint, or to
- * the deeplinked card when there is one. A pointer or wheel gesture claims the
- * scroll position for the user and the board never repositions itself again
- * for that board.
- */
+// Positions the board once: at its first populated lane, or at the deeplinked card.
+// A pointer or wheel gesture claims the position for the user.
 export function useBoardScroll({
   boardKey,
   settled,
@@ -49,10 +45,7 @@ export function useBoardScroll({
 
   return {
     containerRef,
-    /**
-     * The deeplinked card positions the board as it mounts, whenever that is —
-     * it hands its own node over instead of the board searching for it.
-     */
+    // The card hands its own control over as it mounts, whenever that is.
     registerCard: (itemId: string) => (element: HTMLElement | null) => {
       if (element === null || !targetReady || itemId !== targetItemId) return;
       const targetKey = `${boardKey}:${itemId}`;
@@ -60,7 +53,7 @@ export function useBoardScroll({
       targetPositionedRef.current = targetKey;
       userPositionedRef.current = boardKey;
       element.scrollIntoView?.({ behavior: 'auto', block: 'center', inline: 'center' });
-      element.querySelector<HTMLElement>('a[href], button:not(:disabled)')?.focus({ preventScroll: true });
+      element.focus({ preventScroll: true });
     },
     registerLane: (stage: BoardStageId) => (element: HTMLElement | null) => {
       if (element) laneRefs.current.set(stage, element);
