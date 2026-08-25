@@ -100,6 +100,7 @@ const { mockSandbox, createMockSandboxApi, resetMockDefaults, createMockCommandH
     Sandbox: {
       create: vi.fn().mockResolvedValue(mockSandbox),
       connect: vi.fn().mockResolvedValue(mockSandbox),
+      getInfo: vi.fn().mockResolvedValue({ sandboxId: 'mock-sandbox-id', metadata: {}, state: 'running' }),
       list: vi.fn().mockReturnValue({
         nextItems: vi.fn().mockResolvedValue([]),
       }),
@@ -119,6 +120,11 @@ const { mockSandbox, createMockSandboxApi, resetMockDefaults, createMockCommandH
     const { Sandbox, Template } = await import('e2b');
     (Sandbox.create as any).mockResolvedValue(mockSandbox);
     (Sandbox.connect as any).mockResolvedValue(mockSandbox);
+    ((Sandbox as any).getInfo as any).mockResolvedValue({
+      sandboxId: 'mock-sandbox-id',
+      metadata: {},
+      state: 'running',
+    });
     (Sandbox.list as any).mockReturnValue({
       nextItems: vi.fn().mockResolvedValue([]),
     });
@@ -323,6 +329,173 @@ describe('E2BSandbox', () => {
       await sandbox._start();
 
       expect(Sandbox.connect).toHaveBeenCalledWith('existing-sandbox', expect.any(Object));
+    });
+
+    it("reports outcome 'created' when a new sandbox is created", async () => {
+      const sandbox = new E2BSandbox();
+
+      await expect(sandbox._start()).resolves.toEqual({ outcome: 'created' });
+    });
+
+    it("reports outcome 'connected' when reconnecting to an existing sandbox", async () => {
+      const { Sandbox } = await import('e2b');
+      (Sandbox.list as any).mockReturnValue({
+        nextItems: vi.fn().mockResolvedValue([{ sandboxId: 'existing-sandbox', state: 'running' }]),
+      });
+
+      const sandbox = new E2BSandbox({ id: 'existing-id' });
+
+      await expect(sandbox._start()).resolves.toEqual({ outcome: 'connected' });
+    });
+
+    it("reports outcome 'connected' when re-acquiring with an attached instance (find returns it, no API calls)", async () => {
+      const { Sandbox } = await import('e2b');
+      const sandbox = new E2BSandbox();
+      await sandbox._start();
+      const createCalls = (Sandbox.create as any).mock.calls.length;
+      const listCalls = (Sandbox.list as any).mock.calls.length;
+
+      // Force a re-acquisition (the base wrapper's already-running shortcut
+      // would otherwise skip it): the attached instance short-circuits find(),
+      // so no list/create round-trips happen and the outcome is 'connected'.
+      (sandbox as any).status = 'stopped';
+      await expect(sandbox.start()).resolves.toEqual({ outcome: 'connected' });
+      expect((Sandbox.create as any).mock.calls.length).toBe(createCalls);
+      expect((Sandbox.list as any).mock.calls.length).toBe(listCalls);
+    });
+  });
+
+  describe('Start - Preferred Provider Sandbox ID', () => {
+    it('connects directly to the preferred sandbox without list() or create()', async () => {
+      const { Sandbox } = await import('e2b');
+      ((Sandbox as any).getInfo as any).mockResolvedValue({
+        sandboxId: 'sbx_preferred',
+        metadata: { 'mastra-sandbox-id': 'my-logical-id' },
+        state: 'running',
+      });
+      (Sandbox.connect as any).mockResolvedValue({ ...mockSandbox, sandboxId: 'sbx_preferred' });
+
+      const sandbox = new E2BSandbox({ id: 'my-logical-id', sandboxId: 'sbx_preferred' });
+      await sandbox._start();
+
+      expect((Sandbox as any).getInfo).toHaveBeenCalledWith('sbx_preferred', expect.any(Object));
+      expect(Sandbox.connect).toHaveBeenCalledWith('sbx_preferred', expect.any(Object));
+      expect(Sandbox.list).not.toHaveBeenCalled();
+      expect(Sandbox.create).not.toHaveBeenCalled();
+      expect(sandbox.sandboxId).toBe('sbx_preferred');
+    });
+
+    it('attaches to a preferred sandbox that has no mastra-sandbox-id metadata', async () => {
+      const { Sandbox } = await import('e2b');
+      ((Sandbox as any).getInfo as any).mockResolvedValue({
+        sandboxId: 'sbx_external',
+        metadata: {},
+        state: 'running',
+      });
+
+      const sandbox = new E2BSandbox({ id: 'my-logical-id', sandboxId: 'sbx_external' });
+      await sandbox._start();
+
+      expect(Sandbox.connect).toHaveBeenCalledWith('sbx_external', expect.any(Object));
+      expect(Sandbox.create).not.toHaveBeenCalled();
+    });
+
+    it('falls through to logical-id discovery when the preferred sandbox is gone', async () => {
+      const { Sandbox } = await import('e2b');
+      ((Sandbox as any).getInfo as any).mockRejectedValue(new Error('sandbox "sbx_gone" was not found'));
+      (Sandbox.list as any).mockReturnValue({
+        nextItems: vi.fn().mockResolvedValue([{ sandboxId: 'sbx_logical', state: 'running' }]),
+      });
+
+      const sandbox = new E2BSandbox({ id: 'my-logical-id', sandboxId: 'sbx_gone' });
+      await sandbox._start();
+
+      expect(Sandbox.list).toHaveBeenCalled();
+      expect(Sandbox.connect).toHaveBeenCalledWith('sbx_logical', expect.any(Object));
+      expect(Sandbox.create).not.toHaveBeenCalled();
+    });
+
+    it('falls through to create() when the preferred sandbox is gone and no logical match exists', async () => {
+      const { Sandbox } = await import('e2b');
+      ((Sandbox as any).getInfo as any).mockRejectedValue(new Error('sandbox "sbx_gone" was not found'));
+
+      const sandbox = new E2BSandbox({ id: 'my-logical-id', sandboxId: 'sbx_gone' });
+      await sandbox._start();
+
+      expect(Sandbox.create).toHaveBeenCalled();
+    });
+
+    it.each([
+      ['auth', '401 unauthorized: invalid API key'],
+      ['rate limit', '429 too many requests'],
+      ['timeout', 'request timed out: ETIMEDOUT'],
+      ['network', 'getaddrinfo ENOTFOUND api.e2b.app'],
+    ])('propagates %s errors without creating a new sandbox', async (_kind, message) => {
+      const { Sandbox } = await import('e2b');
+      ((Sandbox as any).getInfo as any).mockRejectedValue(new Error(message));
+
+      const sandbox = new E2BSandbox({ id: 'my-logical-id', sandboxId: 'sbx_preferred' });
+      await expect(sandbox._start()).rejects.toThrow(message);
+
+      expect(Sandbox.list).not.toHaveBeenCalled();
+      expect(Sandbox.create).not.toHaveBeenCalled();
+    });
+
+    it('refuses a preferred sandbox owned by a different logical id without connecting', async () => {
+      const { Sandbox } = await import('e2b');
+      ((Sandbox as any).getInfo as any).mockResolvedValue({
+        sandboxId: 'sbx_foreign',
+        metadata: { 'mastra-sandbox-id': 'someone-else' },
+        state: 'paused',
+      });
+
+      const sandbox = new E2BSandbox({ id: 'my-logical-id', sandboxId: 'sbx_foreign' });
+      await expect(sandbox._start()).rejects.toThrow(/belongs to logical sandbox id "someone-else"/);
+
+      expect(Sandbox.connect).not.toHaveBeenCalled();
+      expect(Sandbox.create).not.toHaveBeenCalled();
+    });
+
+    it('falls through when the preferred sandbox vanishes between getInfo and connect', async () => {
+      const { Sandbox } = await import('e2b');
+      ((Sandbox as any).getInfo as any).mockResolvedValue({
+        sandboxId: 'sbx_racy',
+        metadata: {},
+        state: 'running',
+      });
+      (Sandbox.connect as any)
+        .mockRejectedValueOnce(new Error('sandbox "sbx_racy" was not found'))
+        .mockResolvedValue(mockSandbox);
+
+      const sandbox = new E2BSandbox({ id: 'my-logical-id', sandboxId: 'sbx_racy' });
+      await sandbox._start();
+
+      expect(Sandbox.create).toHaveBeenCalled();
+    });
+
+    it('exposes the resolved provider sandbox ID after create', async () => {
+      const sandbox = new E2BSandbox({ id: 'my-logical-id' });
+      expect(sandbox.sandboxId).toBeUndefined();
+
+      await sandbox._start();
+
+      expect(sandbox.sandboxId).toBe('mock-sandbox-id');
+      const info = await sandbox.getInfo();
+      expect(info.metadata?.sandboxId).toBe('mock-sandbox-id');
+    });
+
+    it('clone() does not inherit the parent preferred sandboxId but honors an explicit one', async () => {
+      const { Sandbox } = await import('e2b');
+      const parent = new E2BSandbox({ id: 'parent-id', sandboxId: 'sbx_parent' });
+
+      const child = parent.clone({ id: 'child-id' });
+      await child._start();
+      expect((Sandbox as any).getInfo).not.toHaveBeenCalled();
+
+      const reattached = parent.clone({ id: 'child2-id', sandboxId: 'sbx_child' });
+      await reattached._start();
+      expect((Sandbox as any).getInfo).toHaveBeenCalledWith('sbx_child', expect.any(Object));
+      expect(Sandbox.connect).toHaveBeenCalledWith('sbx_child', expect.any(Object));
     });
   });
 
