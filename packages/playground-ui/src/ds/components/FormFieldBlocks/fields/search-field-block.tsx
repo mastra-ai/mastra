@@ -85,8 +85,8 @@ export function SearchFieldBlock({
         </FieldBlock.Column>
       ) : null}
       <FieldBlock.Column className={layout === 'horizontal' && labelIsHidden ? 'col-span-full' : undefined}>
-        {layout === 'vertical' && label && !labelIsHidden ? (
-          <FieldBlock.Label name={name} required={required}>
+        {layout === 'vertical' && label ? (
+          <FieldBlock.Label name={name} required={required} className={labelIsHidden ? 'sr-only' : undefined}>
             {label}
           </FieldBlock.Label>
         ) : null}
@@ -94,7 +94,6 @@ export function SearchFieldBlock({
           <Input
             ref={inputRef}
             id={`input-${name}`}
-            aria-label={labelIsHidden ? label : undefined}
             name={name}
             disabled={disabled}
             value={value}
