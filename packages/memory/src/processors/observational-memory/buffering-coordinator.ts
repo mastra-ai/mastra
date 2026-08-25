@@ -126,7 +126,13 @@ export class BufferingCoordinator {
         // op was left by a crashed process — clear it (fire-and-forget) so a
         // new cycle can proceed. Single-process semantics by definition.
         omDebug('[OM:shouldTriggerAsyncObs] isBufferingObservation=true but stale (legacy storage), clearing');
-        storage.setBufferingObservationFlag(record.id, false)?.catch(() => {});
+        // try/catch as well as ?.catch(): a legacy adapter may throw
+        // synchronously, and this predicate must stay fire-and-forget.
+        try {
+          storage.setBufferingObservationFlag(record.id, false)?.catch(() => {});
+        } catch {
+          // ignore — best-effort stale-flag clear only
+        }
       }
       // Claim-capable storage: a persisted flag with no local op is NOT proof
       // of staleness — another process may own the durable claim. Let the
