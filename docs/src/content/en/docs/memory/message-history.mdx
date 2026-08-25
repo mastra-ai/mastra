@@ -180,11 +180,11 @@ for await (const chunk of stream.fullStream) {
 }
 ```
 
-The chunk is transient: it's delivered to stream consumers but never persisted as part of the conversation's messages. Because the stream waits for the title, `emitEvent` delays the stream's `finish` by the title model call on the first turn of a thread. Leave it off to keep title generation fully non-blocking.
+The chunk is transient: it's delivered to stream consumers but never persisted as part of the conversation's messages. Because the stream waits for the title, `emitEvent` delays the stream's `finish` on the turn that generates the title: the first turn of a thread, or a later turn when `minMessages` sets a higher threshold. Leave it off to keep title generation fully non-blocking.
 
 :::note
 
-[Durable agents](/docs/harness/durable-agents) don't emit this chunk yet. The title is still generated and persisted.
+[Durable and evented agents](/docs/harness/durable-agents) don't emit this chunk yet. The title is still generated and persisted.
 
 :::
 

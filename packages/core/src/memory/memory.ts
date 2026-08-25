@@ -1013,6 +1013,10 @@ https://mastra.ai/en/docs/memory/overview`,
         // Extract ModelRouterModelId from various model configurations.
         // `model` is optional (the agent's own model is the default) and
         // dynamic functions cannot be serialized - both leave modelId unset.
+        // AI SDK LanguageModel instances are also left unset on purpose: their
+        // `modelId`/`provider` values are not valid `provider/model` router IDs,
+        // and serializing one would break hydration instead of falling back to
+        // the agent's own model.
         let modelId: string | undefined;
 
         if (typeof model === 'string') {
