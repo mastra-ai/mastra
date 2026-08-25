@@ -480,10 +480,8 @@ describe('ChatProvider', () => {
     ] satisfies MastraDBMessage[];
 
     const bufferStatusRequests: string[] = [];
-    // A separate use() call is required for the working-memory endpoint to
-    // outrank the base handler.
-    server.use(...baseHandlers([]));
     server.use(
+      ...baseHandlers([]),
       http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json({ config: { observationalMemory: true } })),
       http.post(`${BASE_URL}/api/memory/observational-memory/buffer-status`, ({ request }) => {
         bufferStatusRequests.push(request.url);
@@ -572,10 +570,8 @@ describe('ChatProvider', () => {
     ] satisfies MastraDBMessage[];
 
     const bufferStatusRequests: string[] = [];
-    // A separate use() call is required for the working-memory endpoint to
-    // outrank the base handler.
-    server.use(...baseHandlers([]));
     server.use(
+      ...baseHandlers([]),
       http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json({ config: { observationalMemory: true } })),
       http.post(`${BASE_URL}/api/memory/observational-memory/buffer-status`, ({ request }) => {
         bufferStatusRequests.push(request.url);
