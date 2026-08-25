@@ -333,7 +333,7 @@ describe('agent connection tools', () => {
     });
   });
 
-  it('deduplicates retries by message id and rejects conflicting reuse', async () => {
+  it('reuses recorded sequential sends by message id and rejects conflicting reuse', async () => {
     const sendNotificationSignal = createSignalRuntime();
     const tools = createAgentConnectionTools({
       registry: createRegistry(),

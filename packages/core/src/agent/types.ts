@@ -225,11 +225,11 @@ export type SendAgentSignalOptions<OUTPUT = unknown> =
  *               `output` is the run's `MastraModelOutput` for in-process
  *               consumption. Only the runtime that actually runs the agent
  *               resolves to `wake`.
- * - `deliver` — the signal was handed off rather than started here. This covers
- *               a follow-up signal joining an already-active run and the loser
- *               of a cross-process wake race (whose signal is forwarded to the
- *               winning run). No new run was started locally and no stream is
- *               owned; `runId` is the run the signal joined.
+ * - `deliver` — the signal was admitted by a run rather than started here. This
+ *               covers a follow-up signal joining an already-active run and a
+ *               remote claimed owner acknowledging an idle wake after fencing
+ *               competing owners. No new run was started locally and no stream
+ *               is owned; `runId` is the run the signal joined.
  * - `persist` — the signal was written to memory by a `persist` behavior. To
  *               await the storage write, use the top-level `persisted` promise.
  * - `discard` — policy dropped the signal; nothing ran and nothing was stored.
@@ -258,9 +258,9 @@ export interface SendAgentSignalResult<OUTPUT = unknown> {
    * not reject here; that error surfaces on the `wake` member's `output`.
    *
    * `wake` means this process ran the agent and `output` is its
-   * `MastraModelOutput`. A signal queued onto an existing run, or one whose
-   * cross-process wake race was lost (and forwarded to the winning run),
-   * resolves to `deliver`. `blocked` means the signal targeted a suspended
+   * `MastraModelOutput`. A signal queued onto an existing run, or an idle wake
+   * acknowledged by a remote claimed owner after owner fencing, resolves to
+   * `deliver`. `blocked` means the signal targeted a suspended
    * thread that cannot accept a new idle wake. `runId` is present on
    * `wake`/`deliver`/`blocked` only; for `persist`/`discard`, correlate via
    * {@link signal}'s `id`. To await a `persist` write, use {@link persisted}.

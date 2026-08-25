@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 const tsxBin = fileURLToPath(new URL('../../../node_modules/.bin/tsx', import.meta.url));
 const childScript = fileURLToPath(new URL('./fixtures/cross-process-agent-signals-child.mts', import.meta.url));
+const activeChildren = new Set<ReturnType<typeof spawn>>();
 
 type ChildEvent = {
   event: string;
@@ -15,8 +16,10 @@ type ChildEvent = {
   [key: string]: unknown;
 };
 
-function startChild(role: 'owner' | 'sender', resourceId: string, scenario = 'request-reply') {
-  const child = spawn(tsxBin, [childScript, role, resourceId, scenario], { stdio: ['pipe', 'pipe', 'pipe'] });
+function startChild(role: 'owner' | 'sender', resourceId: string, scenario = 'request-reply', args: string[] = []) {
+  const child = spawn(tsxBin, [childScript, role, resourceId, scenario, ...args], { stdio: ['pipe', 'pipe', 'pipe'] });
+  activeChildren.add(child);
+  child.once('close', () => activeChildren.delete(child));
   const events: ChildEvent[] = [];
   const waiters = new Map<string, Array<(event: ChildEvent) => void>>();
   let stdout = '';
@@ -68,11 +71,48 @@ function startChild(role: 'owner' | 'sender', resourceId: string, scenario = 're
   };
 }
 
+async function waitForChildEvent(
+  children: Array<ReturnType<typeof startChild>>,
+  eventName: string,
+  timeoutMs = 10_000,
+) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const event = children.flatMap(child => child.events).find(candidate => candidate.event === eventName);
+    if (event) return event;
+    await new Promise(resolve => setTimeout(resolve, 25));
+  }
+  throw new Error(
+    `Timed out waiting for ${eventName}. Events: ${JSON.stringify(children.flatMap(child => child.events))}. stderr: ${children.map(child => child.stderr).join('\n')}`,
+  );
+}
+
 describe.skipIf(process.platform === 'win32')('cross-agent signals over Unix sockets', () => {
   const resourceId = `agent-signals-${randomUUID().slice(0, 8)}`;
   const socketDir = `/tmp/mc/${resourceId}`;
 
-  afterEach(() => {
+  afterEach(async () => {
+    await Promise.all(
+      [...activeChildren].map(
+        child =>
+          new Promise<void>((resolve, reject) => {
+            if (child.exitCode !== null || child.signalCode !== null) {
+              resolve();
+              return;
+            }
+            const timeout = setTimeout(
+              () => reject(new Error(`Child process ${child.pid ?? 'unknown'} did not exit after SIGKILL`)),
+              1_000,
+            );
+            child.once('close', () => {
+              clearTimeout(timeout);
+              resolve();
+            });
+            child.kill('SIGKILL');
+          }),
+      ),
+    );
+    activeChildren.clear();
     rmSync(socketDir, { recursive: true, force: true });
   });
 
@@ -195,6 +235,48 @@ describe.skipIf(process.platform === 'win32')('cross-agent signals over Unix soc
     expect(contender.stderr).toBe('');
     expect(ownerCode).toBe(0);
     expect(contenderCode).toBe(0);
+  }, 30_000);
+
+  it('fences simultaneous process claims so exactly one owner accepts an idle wake', async () => {
+    const startAt = String(Date.now() + 3_000);
+    const firstOwner = startChild('owner', resourceId, 'simultaneous-owner-wake', [startAt]);
+    const secondOwner = startChild('sender', resourceId, 'simultaneous-owner-wake', [startAt]);
+    await Promise.all([firstOwner.waitFor('ready'), secondOwner.waitFor('ready')]);
+
+    const [firstClaim, secondClaim] = await Promise.all([
+      firstOwner.waitFor('claim-result'),
+      secondOwner.waitFor('claim-result'),
+    ]);
+    const wakeSender = startChild('sender', resourceId, 'simultaneous-wake-sender');
+    const sendResult = await wakeSender.waitFor('send-result');
+    await waitForChildEvent([firstOwner, secondOwner], 'model-stream');
+    await new Promise(resolve => setTimeout(resolve, 500));
+    const modelStreams = [...firstOwner.events, ...secondOwner.events].filter(event => event.event === 'model-stream');
+
+    firstOwner.child.stdin.write('close\n');
+    secondOwner.child.stdin.write('close\n');
+    firstOwner.child.stdin.end();
+    secondOwner.child.stdin.end();
+    const [firstCode, secondCode, senderCode] = await Promise.all([
+      firstOwner.result,
+      secondOwner.result,
+      wakeSender.result,
+    ]);
+
+    expect(firstClaim.claimed).toBe(true);
+    expect(secondClaim.claimed).toBe(true);
+    expect(sendResult.action).toBe('deliver');
+    if (modelStreams.length !== 1) {
+      throw new Error(
+        `Model stream count ${modelStreams.length}. First stderr: ${firstOwner.stderr}. Second stderr: ${secondOwner.stderr}`,
+      );
+    }
+    expect(firstOwner.stderr).toBe('');
+    expect(secondOwner.stderr).toBe('');
+    expect(wakeSender.stderr).toBe('');
+    expect(firstCode).toBe(0);
+    expect(secondCode).toBe(0);
+    expect(senderCode).toBe(0);
   }, 30_000);
 
   it('stops advertising a thread after its owner process exits abruptly', async () => {

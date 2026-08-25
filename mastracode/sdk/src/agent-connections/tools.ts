@@ -290,7 +290,9 @@ The target must already be saved and freshly advertise the same exact thread end
         .string()
         .min(1)
         .optional()
-        .describe('Stable logical message id. Reuse the same id when retrying the same send.'),
+        .describe(
+          'Stable logical message id. Reuse the same id for a sequential retry; receiver-side notification coalescing also uses it.',
+        ),
       replyTo: z.string().min(1).optional().describe('Message id of the peer request this signal replies to.'),
       payload: z.unknown().optional().describe('Optional structured payload for the peer.'),
     }),

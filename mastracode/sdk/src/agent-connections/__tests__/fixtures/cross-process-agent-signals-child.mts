@@ -5,7 +5,7 @@ import { createMockModel } from '@mastra/core/test-utils/llm-mock';
 
 import { createSignalsPubSub } from '../../../utils/signals-pubsub.js';
 
-const [role, resourceIdArg, scenario = 'request-reply'] = process.argv.slice(2);
+const [role, resourceIdArg, scenario = 'request-reply', startAtArg] = process.argv.slice(2);
 if ((role !== 'owner' && role !== 'sender') || !resourceIdArg) {
   throw new Error('Expected role and resourceId arguments');
 }
@@ -22,7 +22,11 @@ const agent = new Agent({
   id: 'code-agent',
   name: role,
   instructions: 'Cross-process signal test',
-  model: createMockModel({ mockText: `${role}-response` }),
+  model: createMockModel({
+    mockText: `${role}-response`,
+    spyStream:
+      scenario === 'simultaneous-owner-wake' ? () => emit('model-stream', { threadId: contentionThreadId }) : undefined,
+  }),
   pubsub,
 });
 
@@ -138,6 +142,45 @@ async function runOwnershipContention() {
   claim.unsubscribe();
 }
 
+async function waitUntil(timestamp: number) {
+  const delay = timestamp - Date.now();
+  if (delay > 0) await new Promise(resolve => setTimeout(resolve, delay));
+}
+
+async function runSimultaneousOwnerWake() {
+  const startAt = Number(startAtArg);
+  if (!Number.isFinite(startAt)) throw new Error('Expected simultaneous claim start timestamp');
+
+  emit('ready');
+  await waitUntil(startAt);
+
+  const claim = await agent.claimThreadOwnership({
+    resourceId,
+    threadId: contentionThreadId,
+    streamOptions: { memory: { resource: resourceId, thread: contentionThreadId } },
+    peer: { label: `${role}:${contentionThreadId}`, metadata: { pid: process.pid, role } },
+  });
+  emit('claim-result', { claimed: claim.claimed, threadId: contentionThreadId });
+
+  await waitForCommand('close');
+
+  claim.unsubscribe();
+}
+
+async function runSimultaneousWakeSender() {
+  const peers = await agent.discoverThreadPeers({ timeoutMs: 1_000 });
+  const peer = peers.find(candidate => candidate.threadId === contentionThreadId);
+  if (!peer) throw new Error(`Did not discover ${contentionThreadId}`);
+  emit('discovered', { peerId: peer.id, peerThreadId: peer.threadId });
+
+  const signal = await agent.sendSignal(
+    { type: 'user-message', contents: 'wake exactly one simultaneous owner' },
+    { resourceId, threadId: contentionThreadId, ifIdle: { behavior: 'wake' } },
+  );
+  const accepted = await signal.accepted;
+  emit('send-result', { action: accepted.action, runId: 'runId' in accepted ? accepted.runId : undefined });
+}
+
 async function runThreadTransition() {
   const initialSubscription = await agent.subscribeToThread({ resourceId, threadId });
   const initialIterator = initialSubscription.stream[Symbol.asyncIterator]();
@@ -209,6 +252,8 @@ async function main() {
   else if (scenario === 'claim-only') await runClaimOnly();
   else if (scenario === 'discovery-probe') await runDiscoveryProbe();
   else if (scenario === 'ownership-contention') await runOwnershipContention();
+  else if (scenario === 'simultaneous-owner-wake') await runSimultaneousOwnerWake();
+  else if (scenario === 'simultaneous-wake-sender') await runSimultaneousWakeSender();
   else await runRequestReply();
   commandLines.close();
   await pubsub.close();
