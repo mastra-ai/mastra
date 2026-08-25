@@ -493,7 +493,9 @@ describe('GithubIntegration FactoryIntegration surface', () => {
     const github = new GithubIntegration(validConfig());
     const routes = github.routes({
       auth: fakeRouteAuth(),
-      sandbox: { enabled: false, provider: 'none' },
+      // Only presence is read here (`!!sandbox` gates route mounting); the
+      // callback is never invoked by this test.
+      sandbox: (() => ({})) as never,
       stateSigner: createStateSigner('secret'),
       storage: {
         generic: integrations.forIntegration(github.id),

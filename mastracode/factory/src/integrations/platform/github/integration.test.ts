@@ -883,7 +883,8 @@ describe('PlatformGithubIntegration', () => {
     const onEvent = vi.fn();
     const context = {
       auth: fakeAuth(),
-      sandbox: { enabled: false, provider: 'none' },
+      // Only presence is read here; the callback is never invoked.
+      sandbox: (() => ({})) as never,
       storage: {
         generic: seed.integrations.forIntegration('github'),
         sourceControl,
