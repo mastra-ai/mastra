@@ -7,9 +7,9 @@ packages:
 
 # AgentController
 
-:::experimental
+:::beta
 
-The `AgentController` feature is in beta stage and subject to breaking changes in minor versions until it graduates from its beta status.
+Breaking changes may occur without a major version bump until the API is stable.
 
 :::
 
@@ -404,6 +404,62 @@ const session = await controller.getSessionByResource('project-42', 'editor-wind
 
 Returns: `Promise<Session<TState> | undefined>`
 
+#### `onSessionCreated(listener, options?)`
+
+Subscribe to process-local notifications after `createSession()` materializes a new live session. Listener errors are isolated and don't prevent other listeners from running. Call the returned function to unsubscribe.
+
+By default listeners are fire-and-forget. Pass `{ blocking: true }` to make `createSession()` await the listener before resolving the new session, so the host can prepare session state before the caller can start a run. Blocking listeners run sequentially in registration order, before fire-and-forget listeners are notified. A blocking listener must not call `createSession()` for the same `(resourceId, scope)` pair. That call would await its own hydration and deadlock.
+
+```typescript
+const unsubscribe = controller.onSessionCreated(
+  async session => {
+    const settings = await loadSettings(session.identity.getResourceId())
+    if (settings) await session.state.set(settings)
+  },
+  { blocking: true },
+)
+
+// Default listeners stay fire-and-forget.
+controller.onSessionCreated(session => {
+  console.log(`Created ${session.identity.getResourceId()}`)
+})
+```
+
+Listeners run once per newly materialized session, not for cached sessions returned by later `createSession()` calls. They run only in the current process and aren't persisted events.
+
+Returns: `() => void`
+
+#### `onSessionDeleted(listener)`
+
+Subscribe to process-local notifications after `deleteSession()` tears down a live session. Listener errors are isolated and don't prevent other listeners from running. Call the returned function to unsubscribe.
+
+```typescript
+const unsubscribe = controller.onSessionDeleted(session => {
+  console.log(`Closed ${session.identity.getResourceId()}`)
+})
+
+await controller.createSession({ resourceId: 'project-42' })
+await controller.deleteSession({ resourceId: 'project-42' })
+unsubscribe()
+```
+
+This listener is best-effort and runs only in the current process. It isn't a persisted deletion event.
+
+Returns: `() => void`
+
+#### `deleteSession({ resourceId, scope? })`
+
+Tear down the materialized session for a resource and optional scope. The method aborts active work, then removes thread subscriptions, the active thread lock, and the live session from the controller registry. It doesn't delete persisted threads or messages.
+
+```typescript
+const deleted = await controller.deleteSession({
+  resourceId: 'project-42',
+  scope: 'editor-window-1',
+})
+```
+
+Returns: `Promise<boolean>`. The result is `true` when a live session was removed and `false` when no matching live session exists or when another deletion is already in progress for the same resource and scope.
+
 #### `setResourceId(session, { resourceId })`
 
 Move a live session to another resource and clear its active thread binding.
@@ -422,11 +478,29 @@ const resourceIds = await controller.getKnownResourceIds(session)
 
 Returns: `Promise<string[]>`
 
+#### `listActiveThreadRuns()`
+
+List every run in flight on this controller, across all resources and threads. The list comes from in-process run tracking, so it covers runs started by the current process and doesn't create or touch a session.
+
+```typescript
+const runs = controller.listActiveThreadRuns()
+```
+
+Returns: `ActiveThreadRun[]`
+
+```typescript
+interface ActiveThreadRun {
+  runId: string
+  resourceId?: string
+  threadId: string
+}
+```
+
 ### Lifecycle
 
 #### `init()`
 
-Initialize shared storage, workspace services, and configured interval handlers. Repeated calls reuse the same initialization promise.
+Initialize shared storage, propagate runtime services to agents, and start configured interval handlers. Configured workspaces initialize lazily when used. Repeated calls reuse the same initialization promise.
 
 ```typescript
 await controller.init()
@@ -488,7 +562,7 @@ Returns: `boolean`
 
 #### `getWorkspace()`
 
-Return a static controller workspace. Dynamic workspace factories return `undefined` until resolved.
+Return a static controller workspace. Dynamic workspace factories resolve per session and return `undefined` here, so use `resolveWorkspace` instead.
 
 ```typescript
 const workspace = controller.getWorkspace()
@@ -498,7 +572,7 @@ Returns: `Workspace | undefined`
 
 #### `resolveWorkspace({ session, requestContext? })`
 
-Resolve a dynamic workspace for a session and cache the result on the controller.
+Return the workspace a session runs against. Sessions resolve theirs at creation, dynamic factories included, so this returns that instance and only falls back to the factory for a session created without one.
 
 ```typescript
 const workspace = await controller.resolveWorkspace({ session, requestContext })
@@ -631,5 +705,5 @@ await controller.stopIntervals()
 - [AgentController guide](/docs/harness/agent-controller)
 - [Session reference](/reference/agent-controller/session)
 - [Agents](/docs/agents/overview)
-- [Workspace](/docs/workspace/overview)
-- [Channels](/docs/capabilities/channels/overview)
+- [Sandbox](/docs/sandbox/overview)
+- [Channels](/docs/channels)

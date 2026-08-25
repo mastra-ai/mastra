@@ -261,9 +261,13 @@ const routesManifestPlugin = (): Plugin => {
  * MASTRACODE_ALLOWED_ORIGINS) remains possible.
  */
 export default defineConfig(({ mode }) => {
+  // Absolute: Vite resolves a relative `envDir` against `root` (`src/ui`), so
+  // `MASTRACODE_ENV_DIR=../web` would silently point at a directory that does
+  // not exist and no `VITE_*` var would reach `import.meta.env`.
+  const envDir = resolve(process.env.MASTRACODE_ENV_DIR ?? resolve(here, '..'));
   // `web:dev` only wraps the API server in `varlock run`, so the package-root
   // `.env` never reaches this Vite process's `process.env` — load it here.
-  const env = { ...loadEnv(mode, process.env.MASTRACODE_ENV_DIR ?? resolve(here, '..'), ''), ...process.env };
+  const env = { ...loadEnv(mode, envDir, ''), ...process.env };
   const publicUrl = env.MASTRACODE_PUBLIC_URL;
   const channelsPublicUrl = env.MASTRACODE_CHANNELS_PUBLIC_URL;
   const allowedHosts = publicUrl ? [new URL(publicUrl).host] : [];
@@ -278,7 +282,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     root: resolve(here, 'ui'),
-    envDir: process.env.MASTRACODE_ENV_DIR ?? resolve(here, '..'),
+    envDir,
     plugins: [react(), tailwindcss(), runtimeConfigPlugin(), routesManifestPlugin()],
     resolve: {
       // Monorepo packages arrive via `link:`/`workspace:` and would otherwise

@@ -1,5 +1,9 @@
+import { DEFAULT_OM_MODEL_ID } from '@mastra/code-sdk/constants';
+import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
 
+import { DEFAULT_OBSERVATION_THRESHOLD, DEFAULT_REFLECTION_THRESHOLD } from '../session/memory-settings-hydration.js';
+import { factoryMemorySettingsUserId } from '../storage/domains/memory-settings/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { defaultFactoryRules } from './defaults.js';
 import { FactoryStartCoordinator } from './start-coordinator.js';
@@ -27,11 +31,11 @@ function makeController(sendMessage = vi.fn(async () => {})) {
       }),
     },
     getWorkspace: vi.fn(() => ({ skills: undefined })),
-    state: { set: vi.fn(async () => {}) },
+    state: { get: vi.fn(() => ({})), set: vi.fn(async () => {}) },
     model: { switch: vi.fn(async () => {}) },
     om: {
-      observer: { switchModel: vi.fn(async () => {}) },
-      reflector: { switchModel: vi.fn(async () => {}) },
+      observer: { modelId: vi.fn(() => undefined), switchModel: vi.fn(async () => {}) },
+      reflector: { modelId: vi.fn(() => undefined), switchModel: vi.fn(async () => {}) },
     },
     sendMessage,
   };
@@ -149,7 +153,11 @@ describe('FactoryStartCoordinator', () => {
     });
     expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('pending');
     const requestContext = vi.mocked(controller.createSession).mock.calls[0]?.[0].requestContext;
-    expect(requestContext?.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+    expect(requestContext?.get('user')).toEqual({
+      workosId: 'user-1',
+      organizationId: 'org-1',
+      orgFirstCredentials: true,
+    });
     expect(sendMessage).not.toHaveBeenCalled();
     const item = await storage.get({ orgId: 'org-1', id: prepared.workItemId });
     expect(item?.sessions.work).toMatchObject({
@@ -157,6 +165,47 @@ describe('FactoryStartCoordinator', () => {
       sessionId: 'session-1',
       branch: 'factory/issue-1',
       startedBy: 'user-1',
+    });
+  });
+
+  it('seeds caller identity into an existing request context', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { controller } = makeController();
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      storage,
+      undefined,
+      makeSourceControl() as never,
+    );
+    const requestContext = new RequestContext();
+
+    await coordinator.prepare({ ...startRequest(), requestContext });
+
+    expect(requestContext.get('user')).toEqual({
+      workosId: 'user-1',
+      organizationId: 'org-1',
+      orgFirstCredentials: true,
+    });
+  });
+
+  it('keeps an authenticated identity but marks the run org-first for credentials', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { controller } = makeController();
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      storage,
+      undefined,
+      makeSourceControl() as never,
+    );
+    const requestContext = new RequestContext();
+    requestContext.set('user', { workosId: 'authenticated-user', organizationId: 'org-1' });
+
+    await coordinator.prepare({ ...startRequest(), requestContext });
+
+    expect(requestContext.get('user')).toEqual({
+      workosId: 'authenticated-user',
+      organizationId: 'org-1',
+      orgFirstCredentials: true,
     });
   });
 
@@ -175,7 +224,9 @@ describe('FactoryStartCoordinator', () => {
     expect(session.model.switch).toHaveBeenCalledWith({ modelId: 'anthropic/claude-fable-5' });
   });
 
-  it('applies persisted observational-memory settings before preparing a board run', async () => {
+  it('hydrates board runs with built-in memory defaults, never per-user settings', async () => {
+    // The connection owner ("user-1") has personal OM settings stored — a
+    // board run must not inherit them: it hydrates with the built-in defaults.
     const storage = await createFactoryStorageForTests();
     await storage.memorySettings.patch({
       orgId: 'org-1',
@@ -199,12 +250,44 @@ describe('FactoryStartCoordinator', () => {
 
     await coordinator.prepare(startRequest());
 
+    expect(session.om.observer.switchModel).toHaveBeenCalledWith({ modelId: DEFAULT_OM_MODEL_ID });
+    expect(session.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: DEFAULT_OM_MODEL_ID });
+    expect(session.state.set).toHaveBeenCalledWith({
+      observationThreshold: DEFAULT_OBSERVATION_THRESHOLD,
+      reflectionThreshold: DEFAULT_REFLECTION_THRESHOLD,
+    });
+  });
+
+  it("hydrates board runs with the factory project's shared memory settings when stored", async () => {
+    const storage = await createFactoryStorageForTests();
+    await storage.memorySettings.patch({
+      orgId: 'org-1',
+      userId: factoryMemorySettingsUserId(PROJECT_ID),
+      patch: {
+        observerModelId: 'anthropic/claude-haiku-4-5',
+        reflectorModelId: 'anthropic/claude-opus-5',
+        observationThreshold: 12_000,
+        reflectionThreshold: 23_000,
+        observeAttachments: true,
+      },
+    });
+    const { controller, session } = makeController();
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      storage.workItems,
+      undefined,
+      makeSourceControl() as never,
+      storage.memorySettings,
+    );
+
+    await coordinator.prepare(startRequest());
+
     expect(session.om.observer.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-haiku-4-5' });
-    expect(session.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-haiku-4-5' });
+    expect(session.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-opus-5' });
     expect(session.state.set).toHaveBeenCalledWith({
       observationThreshold: 12_000,
       reflectionThreshold: 23_000,
-      observeAttachments: false,
+      observeAttachments: true,
     });
   });
 
@@ -294,6 +377,7 @@ describe('FactoryStartCoordinator', () => {
     expect(session.state.set).toHaveBeenCalledWith({
       factoryProjectId: PROJECT_ID,
       projectRepositoryId: 'project-repository-1',
+      factoryOrgId: 'org-1',
     });
     expect(session.thread.list).not.toHaveBeenCalled();
     expect(session.thread.switch).not.toHaveBeenCalled();
@@ -321,38 +405,43 @@ describe('FactoryStartCoordinator', () => {
     expect(session.state.set).toHaveBeenCalledWith({
       factoryProjectId: PROJECT_ID,
       projectRepositoryId: 'project-repository-1',
+      factoryOrgId: 'org-1',
       untrustedCheckout: true,
       baseRef: 'main',
     });
   });
 
-  it('tags factory-review skill kickoffs with untrustedCheckout', async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
-    const { controller, session } = makeController();
-    session.getWorkspace.mockReturnValue({
-      skills: {
-        maybeRefresh: vi.fn(async () => {}),
-        get: vi.fn(async () => ({ name: 'factory-review', description: 'Review a PR', instructions: 'Review.' })),
-      },
-    } as never);
-    const coordinator = new FactoryStartCoordinator(
-      controller as never,
-      storage,
-      undefined,
-      makeSourceControl() as never,
-    );
+  it.each(['factory-review', 'factory-rereview'] as const)(
+    'tags %s skill kickoffs with untrustedCheckout',
+    async skillName => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { controller, session } = makeController();
+      session.getWorkspace.mockReturnValue({
+        skills: {
+          maybeRefresh: vi.fn(async () => {}),
+          get: vi.fn(async () => ({ name: skillName, description: 'Review a PR', instructions: 'Review.' })),
+        },
+      } as never);
+      const coordinator = new FactoryStartCoordinator(
+        controller as never,
+        storage,
+        undefined,
+        makeSourceControl() as never,
+      );
 
-    const request = startRequest({ kickoffMessage: null });
-    request.invocation = { type: 'skill', skillName: 'factory-review', arguments: 'PR #1' } as never;
-    await coordinator.prepare(request);
+      const request = startRequest({ kickoffMessage: null });
+      request.invocation = { type: 'skill', skillName, arguments: 'PR #1' } as never;
+      await coordinator.prepare(request);
 
-    expect(session.state.set).toHaveBeenCalledWith({
-      factoryProjectId: PROJECT_ID,
-      projectRepositoryId: 'project-repository-1',
-      untrustedCheckout: true,
-      baseRef: 'main',
-    });
-  });
+      expect(session.state.set).toHaveBeenCalledWith({
+        factoryProjectId: PROJECT_ID,
+        projectRepositoryId: 'project-repository-1',
+        factoryOrgId: 'org-1',
+        untrustedCheckout: true,
+        baseRef: 'main',
+      });
+    },
+  );
 
   it('falls back to intake metadata for baseRef when the session record has no base branch', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
@@ -370,6 +459,7 @@ describe('FactoryStartCoordinator', () => {
     expect(session.state.set).toHaveBeenCalledWith({
       factoryProjectId: PROJECT_ID,
       projectRepositoryId: 'project-repository-1',
+      factoryOrgId: 'org-1',
       untrustedCheckout: true,
       baseRef: 'release-1.x',
     });
@@ -390,6 +480,7 @@ describe('FactoryStartCoordinator', () => {
     expect(session.state.set).toHaveBeenCalledWith({
       factoryProjectId: PROJECT_ID,
       projectRepositoryId: 'project-repository-1',
+      factoryOrgId: 'org-1',
     });
   });
 

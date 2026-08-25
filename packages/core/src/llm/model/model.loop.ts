@@ -127,10 +127,12 @@ export class MastraLLMVNext extends MastraBase {
     toolCallConcurrency,
     _internal,
     agentId,
+    agentVersionId,
     agentName,
     toolCallId,
     requestContext,
     actor,
+    mcp,
     methodType,
     includeRawChunks,
     experimentalTransform,
@@ -234,9 +236,11 @@ export class MastraLLMVNext extends MastraBase {
         requireToolApproval,
         toolCallConcurrency,
         agentId,
+        agentVersionId,
         agentName,
         requestContext,
         actor,
+        mcp,
         methodType,
         includeRawChunks,
         experimentalTransform,
@@ -325,6 +329,7 @@ export class MastraLLMVNext extends MastraBase {
               },
               usage: props?.totalUsage,
               providerMetadata: props?.providerMetadata,
+              stepProviderMetadata: props?.steps.map(step => step.providerMetadata),
             });
 
             try {

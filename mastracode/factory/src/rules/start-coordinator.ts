@@ -27,6 +27,8 @@ export interface FactoryStartRequest {
     input: CreateWorkItemInput;
   };
   requestContext?: RequestContext;
+  /** Arm the item's autonomy in the same transaction that prepares the run. */
+  armAutonomy?: boolean;
 }
 
 export class FactoryStartTransitionError extends Error {
@@ -65,7 +67,7 @@ async function resolveKickoffMessage(
   if (!invocation) return null;
   if (invocation.type === 'prompt') return invocation.prompt;
 
-  const skills = session.getWorkspace().skills;
+  const skills = session.getWorkspace()?.skills;
   await skills?.maybeRefresh();
   const skill = await skills?.get(invocation.skillName);
   if (!skill || skill['user-invocable'] === false) {
@@ -130,8 +132,19 @@ export class FactoryStartCoordinator {
     if (!this.#sourceControl) throw new Error('Factory source control storage is unavailable');
     const sourceSession = await resolveSourceSession(this.#sourceControl, request);
     const requestContext = request.requestContext ?? new RequestContext();
-    if (!request.requestContext) {
-      requestContext.set('user', { workosId: request.userId, organizationId: request.orgId });
+    // Factory runs resolve model credentials org > user: the org's shared keys
+    // win, with the acting user's personal credentials as a fallback — a board
+    // run should never silently prefer whoever kicked it off. The flag rides
+    // the stashed user even when a caller-provided context already has one.
+    const existingUser = requestContext.get('user');
+    if (existingUser && typeof existingUser === 'object') {
+      requestContext.set('user', { ...existingUser, orgFirstCredentials: true });
+    } else {
+      requestContext.set('user', {
+        workosId: request.userId,
+        organizationId: request.orgId,
+        orgFirstCredentials: true,
+      });
     }
     // Sessions kicked off against third-party content (a PR under review, or
     // any pull-request-sourced work item) get `untrustedCheckout` so the SDK
@@ -139,7 +152,8 @@ export class FactoryStartCoordinator {
     // or reminders — those files are attacker-writable in a PR branch.
     const untrustedCheckout =
       request.workItem.input.externalSource?.type === 'pull-request' ||
-      (request.invocation?.type === 'skill' && request.invocation.skillName === 'factory-review');
+      (request.invocation?.type === 'skill' &&
+        (request.invocation.skillName === 'factory-review' || request.invocation.skillName === 'factory-rereview'));
     // The trusted ref the SDK may serve project instruction files from on an
     // untrusted checkout (the PR's base branch). Prefer the session record's
     // base branch; fall back to the intake metadata captured from the PR.
@@ -168,11 +182,18 @@ export class FactoryStartCoordinator {
     // boolean so it rides only on state (tags are string-valued).
     await session.state.set({
       ...sessionTags,
+      // The authoritative org id for every downstream identity read (the
+      // memory seam's organizationId): the session owner is a USER id, not an
+      // org, so it must never be improvised from ownerId.
+      factoryOrgId: request.orgId,
       ...(untrustedCheckout ? { untrustedCheckout: true, ...(baseRef ? { baseRef } : {}) } : {}),
     });
+    // Board runs are org-shared: hydrate with the factory's default model and
+    // the project's shared memory settings (falling back to the built-in
+    // defaults), never any individual user's stored settings.
     await hydrateFactorySession(session, {
       orgId: request.orgId,
-      userId: request.userId,
+      factoryProjectId: request.factoryProjectId,
       defaultModelId: request.defaultModelId,
       memorySettings: this.#memorySettings,
     });
@@ -188,6 +209,7 @@ export class FactoryStartCoordinator {
       resourceId: sourceSession.sessionId,
       kickoffKey: request.kickoffKey,
       kickoffMessage,
+      armAutonomy: request.armAutonomy === true,
     });
     await session.thread.setSetting({ key: 'factoryWorkItemId', value: prepared.item.id });
 

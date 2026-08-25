@@ -25,6 +25,9 @@ import type {
   MessageScrollerVisibility,
 } from './message-scroller-context';
 
+import { VISIBILITY_EPSILON, getCurrentAnchorId, getRelativeTop, getScrollTarget } from './message-scroller-geometry';
+import type { MessageScrollerItemRecord } from './message-scroller-geometry';
+
 import { cn } from '@/lib/utils';
 
 export type {
@@ -35,13 +38,6 @@ export type {
   MessageScrollerScrollable,
   MessageScrollerVisibility,
 } from './message-scroller-context';
-
-type MessageScrollerItemRecord = {
-  element: HTMLElement;
-  scrollAnchor: boolean;
-};
-
-const VISIBILITY_EPSILON = 0.5;
 
 const mergeRefs =
   <TElement,>(...refs: Array<React.Ref<TElement> | undefined>) =>
@@ -72,21 +68,6 @@ const orderItemsByDocumentPosition = (items: Array<readonly [string, MessageScro
     return 0;
   });
 
-const getContentPadding = (contentElement: HTMLElement | null) => {
-  if (!contentElement) return { start: 0, end: 0 };
-  const styles = window.getComputedStyle(contentElement);
-  return {
-    start: Number.parseFloat(styles.paddingBlockStart || styles.paddingTop || '0') || 0,
-    end: Number.parseFloat(styles.paddingBlockEnd || styles.paddingBottom || '0') || 0,
-  };
-};
-
-const getRelativeTop = (element: HTMLElement, viewportElement: HTMLElement) => {
-  const elementRect = element.getBoundingClientRect();
-  const viewportRect = viewportElement.getBoundingClientRect();
-  return elementRect.top - viewportRect.top + viewportElement.scrollTop;
-};
-
 const scrollViewportTo = (viewportElement: HTMLElement, top: number, behavior: ScrollBehavior) => {
   if (typeof viewportElement.scrollTo === 'function') {
     viewportElement.scrollTo({ top, behavior });
@@ -105,69 +86,8 @@ const scheduleScrollSync = (callback: () => void) => {
   window.setTimeout(callback, 0);
 };
 
-const getScrollTarget = ({
-  align,
-  element,
-  scrollMargin,
-  viewportElement,
-}: {
-  align: MessageScrollerScrollAlign;
-  element: HTMLElement;
-  scrollMargin: number;
-  viewportElement: HTMLElement;
-}) => {
-  const contentPadding = getContentPadding(element.parentElement);
-  const elementTop = getRelativeTop(element, viewportElement);
-  const elementHeight = element.getBoundingClientRect().height;
-  const visibleHeight = Math.max(0, viewportElement.clientHeight - contentPadding.start - contentPadding.end);
-
-  if (align === 'center') return elementTop - contentPadding.start - (visibleHeight - elementHeight) / 2 - scrollMargin;
-  if (align === 'end')
-    return elementTop - viewportElement.clientHeight + elementHeight + contentPadding.end + scrollMargin;
-
-  if (align === 'nearest') {
-    const elementBottom = elementTop + elementHeight;
-    const viewportTop = viewportElement.scrollTop + contentPadding.start;
-    const viewportBottom = viewportElement.scrollTop + viewportElement.clientHeight - contentPadding.end;
-    if (elementTop >= viewportTop && elementBottom <= viewportBottom) return viewportElement.scrollTop;
-    return elementTop < viewportTop
-      ? elementTop - contentPadding.start - scrollMargin
-      : elementBottom - viewportElement.clientHeight + contentPadding.end + scrollMargin;
-  }
-
-  return elementTop - contentPadding.start - scrollMargin;
-};
-
-const getCurrentAnchorId = ({
-  fallbackAnchorId,
-  items,
-  scrollMargin,
-  scrollPreviousItemPeek,
-  visibleMessageIds,
-  viewportElement,
-}: {
-  fallbackAnchorId: string | undefined;
-  items: Array<readonly [string, MessageScrollerItemRecord]>;
-  scrollMargin: number;
-  scrollPreviousItemPeek: number;
-  visibleMessageIds: Set<string>;
-  viewportElement: HTMLElement;
-}) => {
-  const anchorLine = viewportElement.getBoundingClientRect().top + scrollMargin + scrollPreviousItemPeek;
-  const anchors = items.filter(([, item]) => item.scrollAnchor);
-  let anchoredAboveViewport: string | undefined;
-
-  for (const [messageId, item] of anchors) {
-    if (item.element.getBoundingClientRect().top <= anchorLine + VISIBILITY_EPSILON) {
-      anchoredAboveViewport = messageId;
-    }
-  }
-
-  if (anchoredAboveViewport) return anchoredAboveViewport;
-  return anchors.find(([messageId]) => visibleMessageIds.has(messageId))?.[0] ?? fallbackAnchorId;
-};
-
 export interface MessageScrollerProviderProps {
+  /** Carry the reader with the stream, re-attaching on a new turn. Off parks a new turn at the top instead. */
   autoScroll?: boolean;
   children?: React.ReactNode;
   defaultScrollPosition?: MessageScrollerDefaultScrollPosition;
@@ -205,9 +125,26 @@ export function MessageScrollerProvider({
   const [viewportElement, setViewportElement] = React.useState<HTMLDivElement | null>(null);
   const [contentElement, setContentElement] = React.useState<HTMLDivElement | null>(null);
   const defaultScrollAppliedRef = React.useRef(false);
+  const deferDefaultScrollRef = React.useRef(false);
+  const defaultScrollScheduledRef = React.useRef(false);
+  const seenAnchorIdsRef = React.useRef<Set<string> | null>(null);
+  seenAnchorIdsRef.current ??= new Set<string>();
+  const seenAnchorIds = seenAnchorIdsRef.current;
+  // Message ID reconciliation keeps the row element while replacing its ID.
+  const seenAnchorElementsRef = React.useRef<WeakSet<HTMLElement> | null>(null);
+  seenAnchorElementsRef.current ??= new WeakSet<HTMLElement>();
+  const seenAnchorElements = seenAnchorElementsRef.current;
+  const turnAnchoringArmedRef = React.useRef(false);
   const [scrollable, setScrollable] = React.useState<MessageScrollerScrollable>(DEFAULT_SCROLLABLE);
   const [visibility, setVisibility] = React.useState<MessageScrollerVisibility>(DEFAULT_VISIBILITY);
   const atEndRef = React.useRef(true);
+  // Attachment is a mode, not a measurement: a growing reply moves the end away
+  // without the reader having moved, so only the reader detaches it.
+  const followingRef = React.useRef(true);
+  // Sampled mid-flight, a smooth trip reads as a reader who left. It only heads
+  // for the end, so a position going backwards is what calls it off.
+  const travellingToEndRef = React.useRef(false);
+  const lastScrollTopRef = React.useRef(0);
   // Mount sits at scrollTop 0 before the default scroll lands, indistinguishable
   // from a reader asking for older history. Arms only once settled at the end.
   const reachStartArmedRef = React.useRef(false);
@@ -243,26 +180,51 @@ export function MessageScrollerProvider({
     setVisibility(current => (visibilityMatches(current, nextVisibility) ? current : nextVisibility));
   }, []);
 
-  const updateScrollable = React.useCallback(() => {
-    if (!viewportElement) {
-      atEndRef.current = true;
-      publishScrollable(DEFAULT_SCROLLABLE);
-      return;
-    }
+  const updateScrollable = React.useCallback(
+    ({ fromScroll = false }: { fromScroll?: boolean } = {}) => {
+      if (!viewportElement) {
+        atEndRef.current = true;
+        publishScrollable(DEFAULT_SCROLLABLE);
+        return;
+      }
 
-    const remainingScroll = viewportElement.scrollHeight - viewportElement.scrollTop - viewportElement.clientHeight;
-    atEndRef.current = remainingScroll < AUTO_SCROLL_ATTACH_THRESHOLD;
-    publishScrollable({
-      start: viewportElement.scrollTop > scrollEdgeThreshold,
-      end: remainingScroll > scrollEdgeThreshold,
-    });
-  }, [publishScrollable, scrollEdgeThreshold, viewportElement]);
+      const { clientHeight, scrollHeight, scrollTop } = viewportElement;
+      const remainingScroll = scrollHeight - scrollTop - clientHeight;
+      const wentBack = scrollTop < lastScrollTopRef.current;
+      atEndRef.current = remainingScroll < AUTO_SCROLL_ATTACH_THRESHOLD;
+      if (atEndRef.current || wentBack) travellingToEndRef.current = false;
+      lastScrollTopRef.current = scrollTop;
+      // Scrolling back is the only way out of the stream, the end the only way back in:
+      // a position merely left behind by a growing reply is us chasing it, not them leaving.
+      if (fromScroll && !travellingToEndRef.current && (wentBack || atEndRef.current)) {
+        followingRef.current = atEndRef.current;
+      }
+
+      publishScrollable({
+        start: scrollTop > scrollEdgeThreshold,
+        end: remainingScroll > scrollEdgeThreshold && !(autoScroll && followingRef.current),
+      });
+    },
+    [autoScroll, publishScrollable, scrollEdgeThreshold, viewportElement],
+  );
+
+  // Registration is mount order, not document order, once history is prepended.
+  const getOrderedItems = React.useCallback(() => {
+    orderedItemsRef.current ??= orderItemsByDocumentPosition(Array.from(itemsRegistry.entries()));
+    return orderedItemsRef.current;
+  }, [itemsRegistry]);
+
+  const getLastAnchorId = React.useCallback(
+    () =>
+      getOrderedItems()
+        .filter(([, item]) => item.scrollAnchor)
+        .at(-1)?.[0],
+    [getOrderedItems],
+  );
 
   const updateVisibility = React.useCallback(() => {
-    // Registration is mount order, not document order, once history is prepended.
-    orderedItemsRef.current ??= orderItemsByDocumentPosition(Array.from(itemsRegistry.entries()));
-    const items = orderedItemsRef.current;
-    const fallbackAnchorId = items.filter(([, item]) => item.scrollAnchor).at(-1)?.[0] ?? items.at(-1)?.[0];
+    const items = getOrderedItems();
+    const fallbackAnchorId = getLastAnchorId() ?? items.at(-1)?.[0];
 
     if (items.length === 0) {
       publishVisibility(DEFAULT_VISIBILITY);
@@ -306,7 +268,15 @@ export function MessageScrollerProvider({
       visibleMessageIds:
         orderedVisibleMessageIds.length > 0 ? orderedVisibleMessageIds : fallbackAnchorId ? [fallbackAnchorId] : [],
     });
-  }, [intersectingMessageIds, itemsRegistry, publishVisibility, scrollMargin, scrollPreviousItemPeek, viewportElement]);
+  }, [
+    getLastAnchorId,
+    getOrderedItems,
+    intersectingMessageIds,
+    publishVisibility,
+    scrollMargin,
+    scrollPreviousItemPeek,
+    viewportElement,
+  ]);
 
   const syncAfterScroll = React.useCallback(() => {
     updateScrollable();
@@ -315,7 +285,8 @@ export function MessageScrollerProvider({
 
   const notifyScroll = React.useCallback(() => {
     const wasScrollable = Boolean(viewportElement && viewportElement.scrollHeight > viewportElement.clientHeight);
-    syncAfterScroll();
+    updateScrollable({ fromScroll: true });
+    updateVisibility();
     if (!viewportElement) return;
 
     if (atEndRef.current && wasScrollable) reachStartArmedRef.current = true;
@@ -338,15 +309,15 @@ export function MessageScrollerProvider({
       };
     }
     onReachStartRef.current();
-  }, [preserveScrollOnPrepend, reachStartThreshold, syncAfterScroll, viewportElement]);
+  }, [preserveScrollOnPrepend, reachStartThreshold, updateScrollable, updateVisibility, viewportElement]);
 
   const notifyContentResize = React.useCallback(() => {
-    const followEnd = autoScroll && defaultScrollAppliedRef.current && atEndRef.current && viewportElement;
+    const followEnd = autoScroll && defaultScrollAppliedRef.current && followingRef.current && viewportElement;
     if (followEnd) {
       scrollViewportTo(
         viewportElement,
         Math.max(0, viewportElement.scrollHeight - viewportElement.clientHeight),
-        'auto',
+        travellingToEndRef.current ? 'smooth' : 'auto',
       );
     }
     syncAfterScroll();
@@ -394,11 +365,15 @@ export function MessageScrollerProvider({
   const scrollToEnd = React.useCallback(
     ({ behavior = 'auto' }: MessageScrollerScrollOptions = {}) => {
       if (!viewportElement) return false;
+      followingRef.current = true;
+      travellingToEndRef.current = behavior === 'smooth';
       scrollViewportTo(
         viewportElement,
         Math.max(0, viewportElement.scrollHeight - viewportElement.clientHeight),
         behavior,
       );
+      // Published now, not next frame: a button that hears about the trip late flashes.
+      syncAfterScroll();
       scheduleScrollSync(syncAfterScroll);
       return true;
     },
@@ -491,31 +466,103 @@ export function MessageScrollerProvider({
   }, [itemsVersion, updateScrollable, updateVisibility]);
 
   React.useLayoutEffect(() => {
-    if (defaultScrollAppliedRef.current || !viewportElement || itemsRegistry.size === 0) return;
-
-    let didScroll = false;
-    if (defaultScrollPosition === 'start') {
-      didScroll = scrollToStart({ behavior: 'auto' });
-    } else if (defaultScrollPosition === 'last-anchor') {
-      const lastAnchorId = Array.from(itemsRegistry.entries())
-        .filter(([, item]) => item.scrollAnchor)
-        .at(-1)?.[0];
-      didScroll = lastAnchorId
-        ? scrollToMessage(lastAnchorId, { align: 'start', behavior: 'auto' })
-        : scrollToEnd({ behavior: 'auto' });
-    } else {
-      didScroll = scrollToEnd({ behavior: 'auto' });
+    if (defaultScrollAppliedRef.current || !viewportElement) return undefined;
+    if (itemsRegistry.size === 0) {
+      deferDefaultScrollRef.current = true;
+      return undefined;
     }
 
-    if (didScroll) defaultScrollAppliedRef.current = true;
+    const applyDefaultScroll = () => {
+      const lastAnchorId = getLastAnchorId();
+      // Where a thread opens decides whether it starts attached: a restored reading
+      // position has the stream below it. `scrollToEnd` takes this back when it lands.
+      followingRef.current = false;
+      let didScroll = false;
+      if (defaultScrollPosition === 'start') {
+        didScroll = scrollToStart({ behavior: 'auto' });
+      } else if (defaultScrollPosition === 'last-anchor') {
+        didScroll = lastAnchorId
+          ? scrollToMessage(lastAnchorId, { align: 'start', behavior: 'auto' })
+          : scrollToEnd({ behavior: 'auto' });
+      } else {
+        didScroll = scrollToEnd({ behavior: 'auto' });
+      }
+
+      if (!didScroll) return;
+      defaultScrollAppliedRef.current = true;
+      turnAnchoringArmedRef.current = true;
+    };
+
+    if (!deferDefaultScrollRef.current) {
+      applyDefaultScroll();
+      return undefined;
+    }
+    if (defaultScrollScheduledRef.current) return undefined;
+
+    defaultScrollScheduledRef.current = true;
+    let cancelled = false;
+    scheduleScrollSync(() => {
+      scheduleScrollSync(() => {
+        defaultScrollScheduledRef.current = false;
+        if (!cancelled && !defaultScrollAppliedRef.current) applyDefaultScroll();
+      });
+    });
+    return () => {
+      cancelled = true;
+      defaultScrollScheduledRef.current = false;
+    };
   }, [
     defaultScrollPosition,
+    getLastAnchorId,
     itemsRegistry,
     itemsVersion,
     scrollToEnd,
     scrollToMessage,
     scrollToStart,
     viewportElement,
+  ]);
+
+  // Following has one target, the end: a turn opening re-attaches the reader there,
+  // and from then on nothing the run appends — or slips in above them — moves it.
+  React.useLayoutEffect(() => {
+    const lastAnchorId = getLastAnchorId();
+    const lastAnchor = lastAnchorId ? itemsRegistry.get(lastAnchorId) : undefined;
+    const opensTurn =
+      turnAnchoringArmedRef.current &&
+      lastAnchorId !== undefined &&
+      lastAnchor !== undefined &&
+      !seenAnchorIds.has(lastAnchorId) &&
+      !seenAnchorElements.has(lastAnchor.element);
+
+    for (const [messageId, item] of getOrderedItems()) {
+      if (!item.scrollAnchor) continue;
+      seenAnchorIds.add(messageId);
+      seenAnchorElements.add(item.element);
+    }
+    turnAnchoringArmedRef.current = defaultScrollAppliedRef.current;
+
+    if (!autoScroll) {
+      if (opensTurn && lastAnchorId) scrollToMessage(lastAnchorId, { align: 'start', behavior: 'smooth' });
+      return;
+    }
+
+    // Whatever the turn opens under itself already carries a reader who is riding the
+    // stream; animating on top of that is a competing motion. Only a return trip travels.
+    const wasFollowing = followingRef.current;
+    if (opensTurn) followingRef.current = true;
+    if (!defaultScrollAppliedRef.current || !followingRef.current) return;
+    const catchingUp = (opensTurn && !wasFollowing) || travellingToEndRef.current;
+    scrollToEnd({ behavior: catchingUp ? 'smooth' : 'auto' });
+  }, [
+    autoScroll,
+    getLastAnchorId,
+    getOrderedItems,
+    itemsRegistry,
+    itemsVersion,
+    scrollToEnd,
+    scrollToMessage,
+    seenAnchorElements,
+    seenAnchorIds,
   ]);
 
   // Older items land above the reader and shove their position down. A prepend is
@@ -537,11 +584,6 @@ export function MessageScrollerProvider({
     const grownBy = viewportElement.scrollHeight - anchor.scrollHeight;
     if (grownBy > 0) viewportElement.scrollTop = anchor.scrollTop + grownBy;
   }, [contentElement, itemsVersion, viewportElement]);
-
-  React.useLayoutEffect(() => {
-    if (!autoScroll || !defaultScrollAppliedRef.current || !atEndRef.current) return;
-    scrollToEnd({ behavior: 'auto' });
-  }, [autoScroll, itemsVersion, scrollToEnd]);
 
   const actionsContextValue = React.useMemo<MessageScrollerActionsContextValue>(
     () => ({
@@ -617,7 +659,9 @@ export const MessageScrollerViewport = React.forwardRef<HTMLDivElement, MessageS
         tabIndex={tabIndex ?? 0}
         data-slot="message-scroller-viewport"
         className={cn(
-          'size-full min-h-0 min-w-0 overflow-y-auto overscroll-contain data-autoscrolling:scrollbar-thumb-transparent data-autoscrolling:scrollbar-track-transparent',
+          // Size container so consumers can size the room under a live turn in cqh.
+          '[container-type:size] size-full min-h-0 min-w-0 overflow-y-auto overscroll-contain',
+          'data-autoscrolling:scrollbar-thumb-transparent data-autoscrolling:scrollbar-track-transparent',
           className,
         )}
         onScroll={event => {

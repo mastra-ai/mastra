@@ -69,7 +69,9 @@ The detailed breakdown metrics (everything except `total_input` and `total_outpu
 
 ### When cost context is attached
 
-Cost context is attached to token metrics when the embedded pricing registry has a matching entry for the provider and model. Mastra includes the registry and covers common providers and models. If no match is found, token metrics are still emitted but without cost fields.
+Cost context is attached to token metrics when the provider reports a valid cost for every completed model step or when the embedded pricing registry has a matching entry for the provider and model. Mastra sums the per-step provider costs into one query total. If any completed step lacks a valid reported cost, Mastra uses the pricing registry instead of reporting a partial total. If neither source is available, token metrics are still emitted without cost fields.
+
+A caller-supplied `costContext` takes precedence over provider-reported costs and pricing registry estimates. Provider-reported totals use `costMetadata.source: 'provider_reported'`, `costMetadata.scope: 'query_total'`, and `costMetadata.reportedStepCount` to identify the source, scope, and number of completed steps included in the total.
 
 ### What cost fields may be included
 
@@ -77,9 +79,9 @@ Cost context is attached to token metrics when the embedded pricing registry has
 | - | - |
 | `provider` | Provider name (e.g. `openai`, `anthropic`) |
 | `model` | Model identifier (e.g. `gpt-4o`, `claude-sonnet-4-20250514`) |
-| `estimatedCost` | Estimated cost for this metric, calculated from token count and pricing tier |
+| `estimatedCost` | Estimated cost from token count and pricing tier, or a total reported by the provider |
 | `costUnit` | Currency unit (e.g. `USD`) |
-| `costMetadata` | Additional pricing context (tier information, error details) |
+| `costMetadata` | Additional pricing context, including tier information, error details, and provider-reported cost source and scope |
 
 ## Correlation with traces
 
@@ -139,5 +141,5 @@ When you spot a spike in latency or token usage on the Metrics dashboard, correl
 ## Related
 
 - [Metrics overview](/docs/observability/metrics/overview)
-- [Querying metrics](/docs/observability/metrics/querying)
+- [Metric queries](/reference/observability/metrics/queries)
 - [Studio observability](/docs/studio/observability)

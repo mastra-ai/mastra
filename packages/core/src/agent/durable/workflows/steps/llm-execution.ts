@@ -26,6 +26,7 @@ import { EntityType } from '../../../../observability';
 import { getRootExportSpan, getStepAvailableToolNames } from '../../../../observability/utils';
 import type { CachedLLMStepResponse } from '../../../../processors';
 import { PrepareStepProcessor } from '../../../../processors/processors/prepare-step';
+import { isMaybeAnthropicWithoutAssistantPrefill } from '../../../../processors/provider-history-compat';
 import { ProcessorRunner } from '../../../../processors/runner';
 import { execute } from '../../../../stream/aisdk/v5/execute';
 import { MastraModelOutput } from '../../../../stream/base/output';
@@ -38,11 +39,11 @@ import type { CoreTool } from '../../../../tools/types';
 import { createMastraProxy, makeCoreTool } from '../../../../utils';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import { createStep } from '../../../../workflows/workflow';
-import { MessageList } from '../../../message-list';
 import { TripWire } from '../../../trip-wire';
 import { isSupportedLanguageModel } from '../../../utils';
+import { ensureRemoteAbortListener } from '../../abort-transport';
 import { DurableStepIds } from '../../constants';
-import { endRunSpansWithError, globalRunRegistry } from '../../run-registry';
+import { endRunSpansWithError, globalRunRegistry, markRunActive } from '../../run-registry';
 import { emitChunkEvent, emitStepStartEvent } from '../../stream-adapter';
 import type { DurableAgenticWorkflowInput, DurableLLMStepOutput, DurableToolCallInput } from '../../types';
 import { applyToolPayloadTransformToChunk } from '../../utils/apply-tool-payload-transform';
@@ -85,6 +86,10 @@ const durableLLMInputSchema = z.object({
   options: z.any(),
   state: z.any(),
   messageId: z.string(),
+  // JSON-safe request context snapshot, forwarded from iteration state so the
+  // rebuild-from-Mastra path resolves the model and tools with the caller's
+  // context rather than an empty one.
+  requestContextEntries: z.record(z.string(), z.any()).optional(),
   // Agent span data for model span parenting
   agentSpanData: z.any().optional(),
   // Model span data (ONE span for entire agent run, created before workflow)
@@ -169,6 +174,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
         runId,
         agentId,
         input: typedInput,
+        requestContext,
         logger,
       });
 
@@ -187,6 +193,23 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
         llmRequestInputProcessors: resolvedLlmRequestInputProcessors,
         outputProcessors: resolvedOutputProcessors,
       } = resolved;
+
+      // 1a-bis. Become responsive to abort requests from other processes. The
+      // caller that owns `abort()` may live on a different pod entirely, so
+      // without this the run has no way to hear it. Must happen before the
+      // abort check below so a request that arrives mid-step is honoured.
+      // A transport failure here costs remote abortability, not the run itself,
+      // so it is logged rather than thrown.
+      if (pubsub) {
+        try {
+          await ensureRemoteAbortListener(pubsub, runId);
+        } catch (error) {
+          logger?.warn?.('Failed to subscribe to cross-process abort requests', {
+            runId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
 
       // 1b. Check for abort signal before doing any work. If the signal is
       // already aborted (e.g. pre-aborted before the loop starts), return a
@@ -285,6 +308,13 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
         typedInput.options?.maxProcessorRetries ??
         (globalRunRegistry.get(runId)?.errorProcessors?.length ? 10 : undefined);
 
+      // Hoisted: a retry must keep the id an error processor rotated to.
+      let currentMessageId = messageId;
+      const rotateResponseMessageId = () => {
+        currentMessageId = messageList.rotateResponseMessageId(currentMessageId);
+        return currentMessageId;
+      };
+
       for (let modelIndex = 0; modelIndex < modelList.length; modelIndex++) {
         const modelEntry = modelList[modelIndex]!;
         const maxRetries = modelEntry.maxRetries || 0;
@@ -307,8 +337,6 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 `Unsupported model version: ${(model as any).specificationVersion}. Model must implement doStream.${hint}`,
               );
             }
-
-            let currentMessageId = messageId;
 
             // 5. Prepare tools - cast through unknown as CoreTool and ToolSet are structurally compatible at runtime
             let currentModel = model;
@@ -363,7 +391,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             const stepInputProcessors = registryEntry?.prepareStep
               ? [...baseInputProcessors, new PrepareStepProcessor({ prepareStep: registryEntry.prepareStep })]
               : baseInputProcessors;
-            if (stepInputProcessors.length) {
+            if (stepInputProcessors.length || isMaybeAnthropicWithoutAssistantPrefill(currentModel)) {
               const inputStepWriter = pubsub
                 ? {
                     custom: async (data: { type: string }) => {
@@ -391,10 +419,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   threadId: typedInput.state?.threadId,
                   model: currentModel,
                   messageId: currentMessageId,
-                  rotateResponseMessageId: () => {
-                    currentMessageId = crypto.randomUUID();
-                    return currentMessageId;
-                  },
+                  rotateResponseMessageId,
                   tools: currentTools,
                   toolChoice: currentToolChoice,
                   providerOptions: currentProviderOptions,
@@ -551,7 +576,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               if (isFirstModelRequest && registryEntry?.drainPendingSignals) {
                 const preRunSignals = registryEntry.drainPendingSignals('pre-run');
                 if (preRunSignals.length > 0) {
-                  currentMessageId = mastra?.generateId?.() ?? crypto.randomUUID();
+                  rotateResponseMessageId();
                 }
                 for (const preRunSignal of preRunSignals) {
                   const signalForTranscript = messageList.addSignal(preRunSignal);
@@ -941,43 +966,48 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 },
               }) as unknown as ReturnType<typeof execute>;
             } else {
-              modelResult = execute({
-                runId,
-                model: currentModel,
-                providerOptions: currentProviderOptions,
-                inputMessages,
-                tools: currentTools,
-                toolChoice: currentToolChoice,
-                activeTools: currentActiveTools,
-                options: { abortSignal: executionAbortSignal },
-                headers: mergeLlmCallHeaders({
-                  memoryHeaders: buildMemoryHeaders({
-                    threadId: typedInput.state?.threadId,
-                    resourceId: typedInput.state?.resourceId,
+              const releaseModelCallActivity = markRunActive(runId);
+              try {
+                modelResult = execute({
+                  runId,
+                  model: currentModel,
+                  providerOptions: currentProviderOptions,
+                  inputMessages,
+                  tools: currentTools,
+                  toolChoice: currentToolChoice,
+                  activeTools: currentActiveTools,
+                  options: { abortSignal: executionAbortSignal },
+                  headers: mergeLlmCallHeaders({
+                    memoryHeaders: buildMemoryHeaders({
+                      threadId: typedInput.state?.threadId,
+                      resourceId: typedInput.state?.resourceId,
+                    }),
+                    modelConfigHeaders: resolvedModelList?.find(m => m.id === modelEntry.id)?.headers,
+                    callTimeHeaders:
+                      registryEntry?.callTimeHeaders || currentModelSettings?.headers
+                        ? {
+                            ...(registryEntry?.callTimeHeaders as Record<string, string> | undefined),
+                            ...(currentModelSettings?.headers as Record<string, string> | undefined),
+                          }
+                        : undefined,
                   }),
-                  modelConfigHeaders: resolvedModelList?.find(m => m.id === modelEntry.id)?.headers,
-                  callTimeHeaders:
-                    registryEntry?.callTimeHeaders || currentModelSettings?.headers
-                      ? {
-                          ...(registryEntry?.callTimeHeaders as Record<string, string> | undefined),
-                          ...(currentModelSettings?.headers as Record<string, string> | undefined),
-                        }
-                      : undefined,
-                }),
-                modelSettings: {
-                  ...currentModelSettings,
-                  maxRetries: 0,
-                },
-                includeRawChunks: execOptions.includeRawChunks,
-                methodType: 'stream',
-                structuredOutput: structuredOutput as any,
-                onResult: ({ warnings: w, request: r, rawResponse: rr }) => {
-                  warnings = w || [];
-                  request = r || {};
-                  rawResponse = rr || {};
-                  modelSpanTracker?.updateStep?.({ request, inputMessages, warnings, messageId: currentMessageId });
-                },
-              });
+                  modelSettings: {
+                    ...currentModelSettings,
+                    maxRetries: 0,
+                  },
+                  includeRawChunks: execOptions.includeRawChunks,
+                  methodType: 'stream',
+                  structuredOutput: structuredOutput as any,
+                  onResult: ({ warnings: w, request: r, rawResponse: rr }) => {
+                    warnings = w || [];
+                    request = r || {};
+                    rawResponse = rr || {};
+                    modelSpanTracker?.updateStep?.({ request, inputMessages, warnings, messageId: currentMessageId });
+                  },
+                });
+              } finally {
+                releaseModelCallActivity();
+              }
             }
 
             // 10. Create output stream to process chunks
@@ -1018,6 +1048,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             const trackedStream = modelSpanTracker?.wrapStream(stepBoundaryStream) ?? stepBoundaryStream;
 
             let deferredStepFinishChunk: any = null;
+            const releaseStreamActivity = markRunActive(runId);
             try {
               let stepStartEmitted = false;
               for await (const rawChunk of trackedStream) {
@@ -1030,14 +1061,13 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
                 // Emit step-start before the first stream chunk so the
                 // ordering matches the regular agent: start → step-start → response-metadata → …
-                // onResult has already fired by the time the first chunk arrives,
-                // so `request` and `warnings` are populated.
+                // Keep the full model request out of the durable event stream; the helper
+                // preserves the canonical payload shape with an empty `request` object.
                 if (!stepStartEmitted && pubsub) {
                   stepStartEmitted = true;
                   await emitStepStartEvent(pubsub, runId, {
                     stepId: DurableStepIds.LLM_EXECUTION,
                     messageId: currentMessageId,
-                    request,
                     warnings,
                   });
                 }
@@ -1305,7 +1335,15 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   case 'error': {
                     const payload = rawChunk.payload as any;
                     const errorMessage = payload?.error?.message || payload?.message || 'LLM execution error';
-                    const errorObj = new Error(errorMessage);
+                    const errorObj = new Error(errorMessage, { cause: payload?.error ?? payload });
+                    // Keep the producer's stack so crashes stay attributable to their real throw site.
+                    if (typeof payload?.error?.stack === 'string') {
+                      errorObj.stack = payload.error.stack;
+                    }
+                    // Retain the producer's error name so classification (e.g. AbortError) survives transport.
+                    if (typeof payload?.error?.name === 'string' && payload.error.name) {
+                      errorObj.name = payload.error.name;
+                    }
                     // DON'T emit error event here - we might have fallback models to try
                     // Error event will be emitted after all models are exhausted
                     throw errorObj;
@@ -1370,12 +1408,12 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     agentName: typedInput.agentName ?? typedInput.agentId,
                     processorStates: registryEntryInner.processorStates,
                   });
-                  const currentMessageList = new MessageList();
-                  currentMessageList.deserialize(typedInput.messageListState);
                   const { retry } = await runner.runProcessAPIError({
                     error: lastError,
-                    messages: currentMessageList.get.all.db(),
-                    messageList: currentMessageList,
+                    messages: messageList.get.all.db(),
+                    messageList,
+                    messageId: currentMessageId,
+                    rotateResponseMessageId,
                     stepNumber: (inputData as any).stepIndex ?? 0,
                     steps: (inputData as any).accumulatedSteps ?? [],
                     retryCount: processorRetryCount,
@@ -1395,6 +1433,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
               if (attempt < maxRetries) continue; // retry same model
               break; // exhausted retries, try next model
+            } finally {
+              releaseStreamActivity();
             }
 
             // Check if the stream captured an error (MastraModelOutput swallows errors internally)
@@ -1779,12 +1819,12 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   agentName: typedInput.agentName ?? typedInput.agentId,
                   processorStates: registryEntry.processorStates,
                 });
-                const currentMessageList = new MessageList();
-                currentMessageList.deserialize(typedInput.messageListState);
                 const { retry } = await runner.runProcessAPIError({
                   error: lastError,
-                  messages: currentMessageList.get.all.db(),
-                  messageList: currentMessageList,
+                  messages: messageList.get.all.db(),
+                  messageList,
+                  messageId: currentMessageId,
+                  rotateResponseMessageId,
                   stepNumber: (inputData as any).stepIndex ?? 0,
                   steps: (inputData as any).accumulatedSteps ?? [],
                   retryCount: processorRetryCount,
@@ -1830,7 +1870,16 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
           type: 'error',
           runId,
           from: ChunkFrom.AGENT,
-          payload: { error: fatalError },
+          // Serialize explicitly: a raw Error JSON-stringifies to `{}` on plain
+          // transports, which destroys the producer stack and makes crashes
+          // unattributable on the consumer side.
+          payload: {
+            error: {
+              message: fatalError.message,
+              stack: fatalError.stack,
+              name: fatalError.name,
+            },
+          },
         });
 
         // Emit step-finish so MastraModelOutput resolves finishReason to 'error'

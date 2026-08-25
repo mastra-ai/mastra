@@ -21,6 +21,17 @@ export const INTAKE_SOURCES = [
 
 export type IntakeSource = (typeof INTAKE_SOURCES)[number]['id'];
 
+/** What a candidate feed exposes to the column rendering it. */
+export interface IntakeFeed {
+  error: Error | null;
+  /** Set when the failure came from paging, not from the stored pages. */
+  isFetchNextPageError?: boolean;
+  hasNextPage?: boolean;
+  isFetchingNextPage?: boolean;
+  fetchNextPage: () => unknown;
+  refetch: () => unknown;
+}
+
 /** A live GitHub/Linear issue or PR that has not been materialized as a work item. */
 export interface BoardCandidate {
   sourceKey: string;
@@ -37,7 +48,6 @@ export interface BoardCandidate {
   threadTitle: string;
   customPrompt: (instructions: string) => string;
   metadata: Record<string, unknown>;
-  issue?: GithubIssue;
 }
 
 export function issueCandidate(issue: GithubIssue): BoardCandidate {
@@ -52,14 +62,13 @@ export function issueCandidate(issue: GithubIssue): BoardCandidate {
     source: 'github-issue',
     title: issue.title,
     url: issue.url,
-    meta: `#${issue.number}${issue.author ? ` · ${issue.author}` : ''} · opened ${relativeTime(issue.createdAt)}`,
+    meta: `#${issue.number}${issue.author ? ` · ${issue.author}` : ''} · ${relativeTime(issue.createdAt)}`,
     column: autoTriaged ? 'triage' : 'intake',
-    runActions: needsApproval ? [approvalRunAction(ref, issue.number)] : issueRunActions(ref),
+    runActions: needsApproval ? [approvalRunAction(ref, issue.number)] : issueRunActions(ref, { triage: true }),
     branch: `factory/issue-${issue.number}`,
     threadTitle: needsApproval ? `Triage #${issue.number}: ${issue.title}` : `Issue #${issue.number}: ${issue.title}`,
     customPrompt: instructions => guidedPrompt(needsApproval ? approvalBase : investigateBase, instructions),
     metadata: { number: issue.number, author: issue.author, assignee: issue.assignee, labels },
-    issue,
   };
 }
 

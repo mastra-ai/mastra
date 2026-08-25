@@ -3,9 +3,10 @@ import { builtInFactoryRules, defaultFactoryRules } from '../../rules/defaults.j
 import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../../rules/transition-service.js';
+import { FACTORY_PULL_REQUEST_RECONCILIATION_KEY } from '../../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
-import type { GithubIntegration } from './integration.js';
-import { createGithubPullRequestReconciler, GithubRules } from './rules.js';
+import { GithubAppIdentity } from './app-identity.js';
+import { createGithubPullRequestReconciler, GithubRules, reconciledClosedEvent } from './rules.js';
 import type { ReconcileIssueState, ReconcilePullRequestState } from './rules.js';
 import { changeRequestTargetKey } from './subscriptions.js';
 
@@ -159,7 +160,7 @@ async function createLinkedIssue(
 }
 
 function pullRequest(
-  event: 'opened' | 'closed',
+  event: 'opened' | 'closed' | 'synchronize',
   deliveryId: string,
   merged = false,
   createdAt = '2030-01-01T00:00:00Z',
@@ -374,6 +375,68 @@ describe('GithubRules', () => {
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
   });
 
+  it('ignores its own handoff comment when only the resolved identity names the App', async () => {
+    // Regression: a Platform deployment has no configured slug, because that
+    // slug names a *different*, self-hosted App. Recognition therefore has to
+    // come from the resolved identity. Without it Factory's own handoff woke
+    // triage and cancelled the run that had just written it.
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    await createLinkedIssue(workItems, project.id);
+    const service = new GithubRules({
+      github: {
+        ...github,
+        slug: undefined,
+        identity: new GithubAppIdentity('mastra-platform'),
+      } as unknown as GithubIntegration,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules: builtInFactoryRules(),
+    });
+
+    await expect(
+      service.ingest(
+        issueComment('created', 'delivery-platform-handoff', {
+          sender: 'mastra-platform[bot]',
+          author: 'mastra-platform[bot]',
+          body: '<!-- mastra-factory-triage -->\nRoute: Pending',
+        }),
+      ),
+    ).resolves.toEqual({ status: 'ignored' });
+
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
+  });
+
+  it('still retriages a human handoff comment when the identity is resolved', async () => {
+    // The guard must key on authorship, not on the marker: a human quoting the
+    // marker to add a lead has to keep retriggering triage.
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    await createLinkedIssue(workItems, project.id);
+    const service = new GithubRules({
+      github: {
+        ...github,
+        slug: undefined,
+        identity: new GithubAppIdentity('mastra-platform'),
+      } as unknown as GithubIntegration,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules: builtInFactoryRules(),
+    });
+
+    await expect(
+      service.ingest(
+        issueComment('created', 'delivery-human-lead', {
+          body: '<!-- mastra-factory-triage -->\nNew investigation lead',
+        }),
+      ),
+    ).resolves.toEqual({ status: 'committed' });
+
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toHaveLength(1);
+  });
+
   it('keeps trusted issues created before the Factory in Intake', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
     const service = new GithubRules({
@@ -491,6 +554,7 @@ describe('GithubRules', () => {
       controller: controller as never,
       transitionService,
       storage: workItems,
+      isAutoRunEnabled: async () => true,
       ownerId: 'worker-1',
       primeCredentials,
       prepareBinding: async ({ record, item, role }) => {
@@ -809,7 +873,7 @@ describe('GithubRules', () => {
     ]);
   });
 
-  it('dispatches a re-review transition back into Reviewing and queues a fresh factory-review pass', async () => {
+  it('dispatches a re-review transition back into Reviewing and queues a fresh factory-rereview pass', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
     const card = await workItems.upsert({
       orgId: 'org-1',
@@ -841,6 +905,7 @@ describe('GithubRules', () => {
       controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
       transitionService: new FactoryTransitionService({ storage: workItems, rules }),
       storage: workItems,
+      isAutoRunEnabled: async () => true,
       ownerId: 'worker-1',
     });
 
@@ -876,7 +941,7 @@ describe('GithubRules', () => {
       expect.arrayContaining([
         expect.objectContaining({
           workItemId: card.item.id,
-          decision: expect.objectContaining({ type: 'invokeSkill', skillName: 'factory-review', role: 'review' }),
+          decision: expect.objectContaining({ type: 'invokeSkill', skillName: 'factory-rereview', role: 'review' }),
         }),
       ]),
     );
@@ -888,6 +953,121 @@ describe('GithubRules', () => {
     const decisions = await workItems.listDeferredDecisions('org-1', project.id);
     expect(decisions.filter(entry => entry.decision.type === 'transition')).toHaveLength(1);
     expect(decisions.filter(entry => entry.decision.type === 'invokeSkill')).toHaveLength(1);
+  });
+
+  it('re-reviews a PR when a push arrives after Reviewing finished and asks the dispatcher to cancel the in-flight pass', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    const card = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: 'github-pr:17',
+          url: 'https://github.com/acme/repo/pull/17',
+        },
+        title: 'PR 17',
+        stages: ['done'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    const rules = builtInFactoryRules();
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules,
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
+      transitionService: new FactoryTransitionService({ storage: workItems, rules }),
+      storage: workItems,
+      isAutoRunEnabled: async () => true,
+      ownerId: 'worker-1',
+    });
+
+    await expect(service.ingest(pullRequest('synchronize', 'delivery-push-1'))).resolves.toEqual({
+      status: 'committed',
+    });
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    const [item] = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
+    expect(item).toMatchObject({ id: card.item.id, stages: ['review'] });
+    const decisions = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decisions.filter(entry => entry.decision.type === 'transition')).toHaveLength(1);
+    // The onEnter review rule sees a re-entry (from a post-intake stage) and dispatches
+    // factory-rereview, asking the dispatcher to cancel any in-flight review run first.
+    const invocations = decisions.filter(entry => entry.decision.type === 'invokeSkill');
+    expect(invocations).toHaveLength(1);
+    expect(invocations[0]!.decision).toMatchObject({
+      type: 'invokeSkill',
+      skillName: 'factory-rereview',
+      role: 'review',
+      cancelInFlight: true,
+    });
+
+    // A follow-up push while the card is still Reviewing supersedes the pass it
+    // just started, which is now reading code the push replaced. Re-entering
+    // from `review` rather than `done` means there is no completed pass left to
+    // reconcile against, so the fresh run is a plain review.
+    await expect(service.ingest(pullRequest('synchronize', 'delivery-push-2'))).resolves.toEqual({
+      status: 'committed',
+    });
+    await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+
+    const afterSecondPush = await workItems.listDeferredDecisions('org-1', project.id);
+    const transitions = afterSecondPush.filter(entry => entry.decision.type === 'transition');
+    expect(transitions).toHaveLength(2);
+    // Without this the transition is inert: the card is already in the stage it
+    // is being moved to, so the entry rule would never run.
+    expect(transitions.at(-1)!.decision).toMatchObject({ stage: 'review', reenter: true });
+    const reruns = afterSecondPush.filter(entry => entry.decision.type === 'invokeSkill');
+    expect(reruns).toHaveLength(2);
+    expect(reruns.at(-1)!.decision).toMatchObject({
+      type: 'invokeSkill',
+      skillName: 'factory-review',
+      role: 'review',
+      cancelInFlight: true,
+    });
+  });
+
+  it('ignores push events on PRs whose card has not yet completed a review pass', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: 'github-pr:17',
+          url: 'https://github.com/acme/repo/pull/17',
+        },
+        title: 'PR 17',
+        stages: ['intake'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules: builtInFactoryRules(),
+    });
+
+    await expect(service.ingest(pullRequest('synchronize', 'delivery-push-intake'))).resolves.toEqual({
+      status: 'committed',
+    });
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
   });
 
   it.each(['maintain', 'triage', 'read', undefined])('fails closed for GitHub permission %s', async permission => {
@@ -906,6 +1086,446 @@ describe('GithubRules', () => {
     await service.ingest(issueOpened(`delivery-${permission ?? 'missing'}`));
     expect(seen).toHaveBeenCalledWith(expect.objectContaining({ actor: expect.objectContaining({ trusted: false }) }));
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
+  });
+
+  it('routes a changes-requested review back to the Work item that authored the pull request', async () => {
+    // Reviews used to stop at the ingress: the webhook was accepted and
+    // classified urgent, but no rule event existed, so the authoring agent was
+    // never told and the work/review loop stayed open.
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read');
+    const work = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'github:10:issue:42',
+          url: 'https://github.com/acme/repo/issues/42',
+        },
+        title: 'Issue 42',
+        stages: ['execute'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    await integrationStorage.subscriptions.create({
+      orgId: 'org-1',
+      targetKey: 'factory-pr-provenance:10:17',
+      threadId: 'thread-1',
+      status: 'active',
+      data: { kind: 'factory-pr-provenance', workItemId: work.item.id },
+    });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules: builtInFactoryRules(),
+    });
+
+    await service.ingest({
+      event: 'pull_request_review',
+      deliveryId: 'delivery-review-submitted',
+      payload: {
+        action: 'submitted',
+        installation: { id: 7 },
+        repository: { id: 10, full_name: 'acme/repo' },
+        sender: { login: 'reviewer' },
+        review: {
+          id: 99,
+          state: 'changes_requested',
+          html_url: 'https://github.com/acme/repo/pull/17#pullrequestreview-99',
+        },
+        pull_request: {
+          number: 17,
+          title: 'PR 17',
+          html_url: 'https://github.com/acme/repo/pull/17',
+          state: 'open',
+          merged: false,
+          head: { ref: 'feature' },
+          base: { ref: 'main' },
+        },
+      },
+    });
+
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          workItemId: work.item.id,
+          decision: expect.objectContaining({ type: 'sendMessage', role: 'work', priority: 'high' }),
+        }),
+      ]),
+    );
+  });
+
+  it('routes a changes-requested review through the PR card to the work item that authored it', async () => {
+    // Provenance is the happy path, but it is not always there: a PR opened
+    // outside the tracked tool call records none, so the PR-number lookup wins
+    // and returns the PR's own Review card. `addressReviewFeedback` refuses to
+    // act on the review board, so the wake was dropped and the authoring agent
+    // never heard about the feedback. The linked card names its author, so the
+    // event has to be carried back across that link.
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read');
+    const work = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'github:10:issue:42',
+          url: 'https://github.com/acme/repo/issues/42',
+        },
+        title: 'Issue 42',
+        stages: ['execute'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: 'github:10:pull-request:17',
+          url: 'https://github.com/acme/repo/pull/17',
+        },
+        parentWorkItemId: work.item.id,
+        title: 'PR 17',
+        stages: ['review'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules: builtInFactoryRules(),
+    });
+
+    await service.ingest({
+      event: 'pull_request_review',
+      deliveryId: 'delivery-review-through-pr-card',
+      payload: {
+        action: 'submitted',
+        installation: { id: 7 },
+        repository: { id: 10, full_name: 'acme/repo' },
+        sender: { login: 'reviewer' },
+        review: {
+          id: 99,
+          state: 'changes_requested',
+          html_url: 'https://github.com/acme/repo/pull/17#pullrequestreview-99',
+        },
+        pull_request: {
+          number: 17,
+          title: 'PR 17',
+          html_url: 'https://github.com/acme/repo/pull/17',
+          state: 'open',
+          merged: false,
+          head: { ref: 'feature' },
+          base: { ref: 'main' },
+        },
+      },
+    });
+
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          workItemId: work.item.id,
+          decision: expect.objectContaining({ type: 'sendMessage', role: 'work', priority: 'high' }),
+        }),
+      ]),
+    );
+  });
+
+  it('ignores a changes-requested review on a pull request card with no authoring work item', async () => {
+    // The link is what makes the hop safe. Without one there is no agent that
+    // wrote this code, and waking the PR card's own review session would put
+    // the reviewer in a loop against itself.
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read');
+    await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: 'github:10:pull-request:17',
+          url: 'https://github.com/acme/repo/pull/17',
+        },
+        title: 'PR 17',
+        stages: ['review'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules: builtInFactoryRules(),
+    });
+
+    await service.ingest({
+      event: 'pull_request_review',
+      deliveryId: 'delivery-review-orphan-pr-card',
+      payload: {
+        action: 'submitted',
+        installation: { id: 7 },
+        repository: { id: 10, full_name: 'acme/repo' },
+        sender: { login: 'reviewer' },
+        review: {
+          id: 99,
+          state: 'changes_requested',
+          html_url: 'https://github.com/acme/repo/pull/17#pullrequestreview-99',
+        },
+        pull_request: {
+          number: 17,
+          title: 'PR 17',
+          html_url: 'https://github.com/acme/repo/pull/17',
+          state: 'open',
+          merged: false,
+          head: { ref: 'feature' },
+          base: { ref: 'main' },
+        },
+      },
+    });
+
+    expect(
+      (await workItems.listDeferredDecisions('org-1', project.id)).filter(
+        record => record.decision.type === 'sendMessage',
+      ),
+    ).toEqual([]);
+  });
+
+  it('delivers a changes-requested review into the authoring agent session', async () => {
+    // The rule test above only proves a decision row of the right shape exists.
+    // This one runs the dispatcher over that row so the leg is exercised all the
+    // way to the message the authoring agent actually receives.
+    const { github, sourceControl, integrationStorage, workItems, projects, project, projectRepository } =
+      await setup('read');
+    const rules = builtInFactoryRules();
+    const transitionService = new FactoryTransitionService({ storage: workItems, rules });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules,
+    });
+
+    const notifications: Array<{ threadId: string; summary: string; priority: string }> = [];
+    let threadId: string | undefined = 'thread-work';
+    const session = {
+      thread: {
+        list: vi.fn(async () => []),
+        create: vi.fn(async () => {
+          threadId = 'thread-work';
+          return { id: threadId };
+        }),
+        switch: vi.fn(async ({ threadId: next }: { threadId: string }) => {
+          threadId = next;
+        }),
+        setSetting: vi.fn(async () => {}),
+        rename: vi.fn(async () => {}),
+        requireId: vi.fn(() => {
+          if (!threadId) throw new Error('Thread was not persisted before binding creation.');
+          return threadId;
+        }),
+        listActiveMessages: vi.fn(async () => []),
+      },
+      getWorkspace: () => ({ skills: { maybeRefresh: vi.fn(async () => {}), get: vi.fn(async () => undefined) } }),
+      subscribe: vi.fn(() => () => {}),
+      state: { set: vi.fn(async () => {}) },
+      sendMessage: vi.fn(async () => {}),
+      sendSignal: vi.fn(() => ({ accepted: Promise.resolve({ accepted: true, action: 'wake' }) })),
+      sendNotificationSignal: vi.fn(
+        async (input: { summary: string; priority: string }) => (
+          notifications.push({ threadId: threadId!, summary: input.summary, priority: input.priority }),
+          {
+            persisted: Promise.resolve(),
+            accepted: Promise.resolve({ action: 'wake', output: { consumeStream: async () => {} } }),
+          }
+        ),
+      ),
+    };
+    const controller = {
+      createSession: vi.fn(async () => session),
+      getSessionByResource: vi.fn(async () => session),
+    };
+    await sourceControl.sessions.create({
+      sessionId: 'session-work-42',
+      projectRepositoryId: projectRepository.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'factory/issue-42',
+      baseBranch: 'main',
+    });
+    const coordinator = new FactoryStartCoordinator(controller as never, workItems, transitionService, sourceControl);
+    const prepared = await coordinator.prepare({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      sessionId: 'session-work-42',
+      threadTitle: 'Issue 42',
+      kickoffKey: 'kickoff-work-42',
+      destinationStage: 'execute',
+      workItem: {
+        role: 'work',
+        input: {
+          externalSource: {
+            integrationId: 'github',
+            type: 'issue',
+            externalId: 'github:10:issue:42',
+            url: 'https://github.com/acme/repo/issues/42',
+          },
+          title: 'Issue 42',
+          stages: ['execute'],
+          sessions: {},
+          metadata: {},
+        },
+      },
+    });
+    await integrationStorage.subscriptions.create({
+      orgId: 'org-1',
+      targetKey: 'factory-pr-provenance:10:17',
+      threadId: 'thread-work',
+      status: 'active',
+      data: { kind: 'factory-pr-provenance', workItemId: prepared.workItemId },
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage: workItems,
+      isAutoRunEnabled: async () => true,
+      ownerId: 'worker-1',
+    });
+
+    await service.ingest({
+      event: 'pull_request_review',
+      deliveryId: 'delivery-review-dispatched',
+      payload: {
+        action: 'submitted',
+        installation: { id: 7 },
+        repository: { id: 10, full_name: 'acme/repo' },
+        sender: { login: 'reviewer' },
+        review: {
+          id: 99,
+          state: 'changes_requested',
+          body: 'This needs a null check.',
+          html_url: 'https://github.com/acme/repo/pull/17#pullrequestreview-99',
+        },
+        pull_request: {
+          number: 17,
+          title: 'PR 17',
+          html_url: 'https://github.com/acme/repo/pull/17',
+          state: 'open',
+          merged: false,
+          head: { ref: 'feature' },
+          base: { ref: 'main' },
+        },
+      },
+    });
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect(notifications).toEqual([
+      expect.objectContaining({
+        threadId: 'thread-work',
+        priority: 'high',
+        summary: expect.stringContaining('https://github.com/acme/repo/pull/17'),
+      }),
+    ]);
+    const decisions = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(
+      decisions.filter(decision => decision.decision.type === 'sendMessage').map(decision => decision.status),
+    ).toEqual(['succeeded']);
+  });
+
+  it('routes a comment on a pull request back to the Work item that authored it', async () => {
+    // Comments on a PR arrive as `issue_comment` and used to be dropped at the
+    // ingress, so review feedback left as a plain comment — the fallback the
+    // review skill takes on Factory-authored PRs, where GitHub refuses a formal
+    // verdict — never reached the author.
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read');
+    const work = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'github:10:issue:42',
+          url: 'https://github.com/acme/repo/issues/42',
+        },
+        title: 'Issue 42',
+        stages: ['execute'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    await integrationStorage.subscriptions.create({
+      orgId: 'org-1',
+      targetKey: 'factory-pr-provenance:10:17',
+      threadId: 'thread-1',
+      status: 'active',
+      data: { kind: 'factory-pr-provenance', workItemId: work.item.id },
+    });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules: builtInFactoryRules(),
+    });
+
+    await service.ingest({
+      event: 'issue_comment',
+      deliveryId: 'delivery-pr-comment',
+      payload: {
+        action: 'created',
+        installation: { id: 7 },
+        repository: { id: 10, full_name: 'acme/repo' },
+        sender: { login: 'reviewer' },
+        comment: {
+          id: 555,
+          body: 'This needs a null check.',
+          html_url: 'https://github.com/acme/repo/pull/17#issuecomment-555',
+          user: { login: 'reviewer' },
+        },
+        issue: {
+          number: 17,
+          title: 'PR 17',
+          html_url: 'https://github.com/acme/repo/pull/17',
+          state: 'open',
+          pull_request: { url: 'https://api.github.com/repos/acme/repo/pulls/17' },
+        },
+      },
+    });
+
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          workItemId: work.item.id,
+          decision: expect.objectContaining({ type: 'sendMessage', role: 'work', priority: 'high' }),
+        }),
+      ]),
+    );
   });
 
   it('uses verified Factory provenance to link an opened Review card and remind Work on merge', async () => {
@@ -1043,6 +1663,116 @@ describe('GithubRules', () => {
         decision: expect.objectContaining({ type: 'transition', board: 'review', stage: 'done' }),
       }),
     ]);
+  });
+
+  it('closes the merged Review card and wakes the work item it was opened from', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read');
+    const work = await createLinkedIssue(workItems, project.id);
+    const card = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: 'github-pr:17',
+          url: 'https://github.com/acme/repo/pull/17',
+        },
+        parentWorkItemId: work.id,
+        title: 'PR 17',
+        stages: ['review'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules: builtInFactoryRules(),
+    });
+
+    await expect(service.ingest(pullRequest('closed', 'delivery-merged-both', true))).resolves.toEqual({
+      status: 'committed',
+    });
+    const merged = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(merged).toHaveLength(2);
+    expect(merged).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          workItemId: card.item.id,
+          decision: expect.objectContaining({ type: 'transition', board: 'review', stage: 'done' }),
+        }),
+        expect.objectContaining({
+          workItemId: work.id,
+          decision: expect.objectContaining({ type: 'sendMessage', role: 'work' }),
+        }),
+      ]),
+    );
+
+    // The fan-out rides the same delivery, so replaying it must stay inert for
+    // both cards rather than sending the work item a second reminder.
+    await expect(service.ingest(pullRequest('closed', 'delivery-merged-both', true))).resolves.toEqual({
+      status: 'replayed',
+    });
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toHaveLength(2);
+  });
+
+  it('closes the Review card of a merged PR that provenance bound to its work item', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read');
+    const work = await createLinkedIssue(workItems, project.id);
+    const card = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: 'github-pr:17',
+          url: 'https://github.com/acme/repo/pull/17',
+        },
+        parentWorkItemId: work.id,
+        title: 'PR 17',
+        stages: ['review'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    await integrationStorage.subscriptions.create({
+      orgId: 'org-1',
+      targetKey: 'factory-pr-provenance:10:17',
+      threadId: 'thread-1',
+      status: 'active',
+      data: { kind: 'factory-pr-provenance', workItemId: work.id },
+    });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules: builtInFactoryRules(),
+    });
+
+    await service.ingest(pullRequest('closed', 'delivery-merged-provenance', true));
+    const merged = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(merged).toHaveLength(2);
+    expect(merged).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          workItemId: work.id,
+          decision: expect.objectContaining({ type: 'sendMessage', role: 'work' }),
+        }),
+        expect.objectContaining({
+          workItemId: card.item.id,
+          decision: expect.objectContaining({ type: 'transition', board: 'review', stage: 'done' }),
+        }),
+      ]),
+    );
   });
 
   it('evaluates the same delivery independently for every tenant project mapped to the repository', async () => {
@@ -1236,6 +1966,7 @@ describe('createGithubPullRequestReconciler', () => {
         assignees: [],
         requestedReviewers: [],
         labels: [],
+        [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]: 'merged',
       },
     });
     await createCard(context, { number: 18 });
@@ -1255,15 +1986,200 @@ describe('createGithubPullRequestReconciler', () => {
     expect(await context.workItems.listDeferredDecisions('org-1', context.project.id)).toHaveLength(0);
   });
 
+  it('picks up a merge on a card an approving review already moved to done', async () => {
+    const context = await setup('read');
+    const card = await createCard(context, {
+      number: 17,
+      stages: ['done'],
+      metadata: {
+        author: 'pr-author',
+        state: 'open',
+        draft: false,
+        merged: false,
+        assignees: [],
+        requestedReviewers: [],
+        labels: [],
+      },
+    });
+    const now = new Date('2030-01-01T00:00:00.000Z');
+    await context.workItems.commitRuleEvaluation({
+      orgId: 'org-1',
+      factoryProjectId: context.project.id,
+      workItemId: card.item.id,
+      ingress: { identity: 'settled-proposal', triggerType: 'test' },
+      ruleSetVersion: 'rules-v1',
+      expectedRevision: card.item.revision,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [
+        {
+          type: 'invokeSkill',
+          role: 'review',
+          skillName: 'factory-review',
+          idempotencyKey: 'settled-proposal-review',
+        },
+      ],
+      causalChain: [],
+      now,
+    });
+    const [claimed] = await context.workItems.claimDeferredDecisions({
+      ownerId: 'worker-1',
+      now,
+      leaseExpiresAt: new Date(now.getTime() + 30_000),
+      limit: 1,
+    });
+    if (!claimed) throw new Error('Expected a proposal');
+    await context.workItems.proposeDeferredDecision(
+      {
+        id: claimed.id,
+        orgId: claimed.orgId,
+        factoryProjectId: claimed.factoryProjectId,
+        ownerId: 'worker-1',
+      },
+      now,
+    );
+    const fetchPullRequest = vi.fn(async () => ({ ...mergedState(17), state: 'open' as const, merged: false }));
+    const reconcile = createReconciler(context, fetchPullRequest);
+
+    await reconcile([repositoryTarget]);
+    fetchPullRequest.mockImplementation(async () => mergedState(17));
+    await reconcile([repositoryTarget]);
+
+    expect(fetchPullRequest).toHaveBeenCalledTimes(2);
+    await reconcile([repositoryTarget]);
+    expect(fetchPullRequest).toHaveBeenCalledTimes(2);
+    await expect(context.workItems.get({ orgId: 'org-1', id: card.item.id })).resolves.toMatchObject({
+      metadata: { state: 'closed', merged: true },
+    });
+    expect(
+      (await context.workItems.listDeferredDecisions('org-1', context.project.id)).find(
+        decision => decision.id === claimed.id,
+      )?.status,
+    ).toBe('superseded');
+  });
+
+  it('settles failed attention when closed pull request metadata already matches', async () => {
+    const context = await setup('read');
+    const card = await createCard(context, {
+      number: 17,
+      stages: ['done'],
+      metadata: {
+        author: 'pr-author',
+        state: 'closed',
+        draft: false,
+        merged: true,
+        assignees: ['assignee'],
+        requestedReviewers: ['reviewer'],
+        labels: ['bug'],
+      },
+    });
+    const now = new Date('2030-01-01T00:00:00.000Z');
+    await context.workItems.commitRuleEvaluation({
+      orgId: 'org-1',
+      factoryProjectId: context.project.id,
+      workItemId: card.item.id,
+      ingress: { identity: 'failed-before-settlement', triggerType: 'test' },
+      ruleSetVersion: 'rules-v1',
+      expectedRevision: card.item.revision,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [
+        {
+          type: 'sendMessage',
+          role: 'review',
+          message: 'Notify the review session.',
+          idempotencyKey: 'failed-before-settlement',
+        },
+      ],
+      causalChain: [],
+      now,
+    });
+    const [claimed] = await context.workItems.claimDeferredDecisions({
+      ownerId: 'worker-1',
+      now,
+      leaseExpiresAt: new Date(now.getTime() + 30_000),
+      limit: 1,
+    });
+    if (!claimed) throw new Error('Expected a deferred decision');
+    await context.workItems.failDeferredDecision({
+      id: claimed.id,
+      orgId: claimed.orgId,
+      factoryProjectId: claimed.factoryProjectId,
+      ownerId: 'worker-1',
+      now,
+      availableAt: now,
+      lastError: 'No active review session.',
+      failureCode: 'session_unavailable',
+      terminal: true,
+    });
+    const fetchPullRequest = vi.fn(async () => mergedState(17));
+    const reconcile = createReconciler(context, fetchPullRequest);
+
+    await reconcile([repositoryTarget]);
+    await reconcile([repositoryTarget]);
+
+    expect(fetchPullRequest).toHaveBeenCalledTimes(1);
+    expect(
+      (await context.workItems.listDeferredDecisions('org-1', context.project.id)).find(
+        decision => decision.id === claimed.id,
+      )?.status,
+    ).toBe('superseded');
+    await expect(context.workItems.get({ orgId: 'org-1', id: card.item.id })).resolves.toMatchObject({
+      metadata: { [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]: 'merged' },
+    });
+  });
+
+  it('keeps a failed close transition actionable until the card reaches a terminal stage', async () => {
+    const context = await setup('read');
+    const card = await createCard(context, { number: 17 });
+    const rules = new GithubRules({
+      github: context.github,
+      sourceControl: context.sourceControl,
+      integrationStorage: context.integrationStorage,
+      projects: context.projects,
+      storage: context.workItems,
+      rules: builtInFactoryRules(),
+    });
+    const now = new Date('2030-01-01T00:00:00.000Z');
+    await rules.ingest(reconciledClosedEvent(repositoryTarget, 17, mergedState(17)));
+    const [claimed] = await context.workItems.claimDeferredDecisions({
+      ownerId: 'worker-1',
+      now,
+      leaseExpiresAt: new Date(now.getTime() + 30_000),
+      limit: 1,
+    });
+    if (!claimed) throw new Error('Expected a deferred decision');
+    await context.workItems.failDeferredDecision({
+      id: claimed.id,
+      orgId: claimed.orgId,
+      factoryProjectId: claimed.factoryProjectId,
+      ownerId: 'worker-1',
+      now,
+      availableAt: now,
+      lastError: 'Transition delivery failed.',
+      failureCode: 'unknown',
+      terminal: true,
+    });
+
+    await createReconciler(
+      context,
+      vi.fn(async () => mergedState(17)),
+    )([repositoryTarget]);
+
+    expect(
+      (await context.workItems.listDeferredDecisions('org-1', context.project.id)).find(
+        decision => decision.id === claimed.id,
+      )?.status,
+    ).toBe('failed');
+    await expect(context.workItems.get({ orgId: 'org-1', id: card.item.id })).resolves.toMatchObject({
+      stages: ['review'],
+    });
+  });
+
   it('backfills status once for terminal pull request cards created before status metadata existed', async () => {
     const context = await setup('read');
     const card = await createCard(context, { number: 17, stages: ['done'] });
-    const fetchPullRequest = vi.fn(async () => ({
-      ...mergedState(17),
-      state: 'open' as const,
-      draft: true,
-      merged: false,
-    }));
+    const fetchPullRequest = vi.fn(async () => ({ ...mergedState(17), merged: false, mergedBy: undefined }));
     const reconcile = createReconciler(context, fetchPullRequest);
 
     await reconcile([repositoryTarget]);
@@ -1272,8 +2188,8 @@ describe('createGithubPullRequestReconciler', () => {
     expect(fetchPullRequest).toHaveBeenCalledTimes(1);
     await expect(context.workItems.get({ orgId: 'org-1', id: card.item.id })).resolves.toMatchObject({
       metadata: {
-        state: 'open',
-        draft: true,
+        state: 'closed',
+        draft: false,
         merged: false,
         assignees: ['assignee'],
         requestedReviewers: ['reviewer'],
@@ -1437,6 +2353,38 @@ describe('createGithubPullRequestReconciler', () => {
     expect(await context.workItems.listDeferredDecisions('org-1', context.project.id)).toHaveLength(1);
   });
 
+  it('continues closed reconciliation when terminal decision cleanup fails', async () => {
+    const context = await setup('read');
+    const card = await createCard(context, { number: 17, stages: ['done'] });
+    const cleanup = vi
+      .spyOn(context.workItems, 'supersedeDecisionsForWorkItem')
+      .mockRejectedValueOnce(new Error('Decision cleanup failed'));
+    const reconcile = createReconciler(
+      context,
+      vi.fn(async () => mergedState(17)),
+    );
+
+    await expect(reconcile([repositoryTarget])).resolves.toEqual({
+      repositories: 1,
+      checked: 1,
+      merged: 1,
+      closed: 0,
+      failed: 1,
+      errors: [{ repository: 'acme/repo', pullRequestNumber: 17, error: 'Decision cleanup failed' }],
+    });
+    expect(await context.workItems.listDeferredDecisions('org-1', context.project.id)).toEqual([
+      expect.objectContaining({
+        workItemId: card.item.id,
+        decision: expect.objectContaining({ type: 'transition', board: 'review', stage: 'done' }),
+      }),
+    ]);
+    await expect(reconcile([repositoryTarget])).resolves.toMatchObject({ merged: 1, failed: 0 });
+    expect(cleanup).toHaveBeenCalledTimes(2);
+    await expect(context.workItems.get({ orgId: 'org-1', id: card.item.id })).resolves.toMatchObject({
+      metadata: { [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]: 'merged' },
+    });
+  });
+
   it('keeps sweeping the remaining PRs when one state fetch fails and reports the failure', async () => {
     const context = await setup('read');
     await createCard(context, { number: 17 });
@@ -1540,7 +2488,11 @@ describe('createGithubPullRequestReconciler', () => {
     const context = await setup('read');
     const card = await createIssueCard(context, { number: 42 });
     const fetchIssue = vi.fn(async () => closedIssueState(42, 'not_planned'));
-    const reconcile = createReconciler(context, vi.fn(async () => undefined), fetchIssue);
+    const reconcile = createReconciler(
+      context,
+      vi.fn(async () => undefined),
+      fetchIssue,
+    );
 
     await reconcile([repositoryTarget]);
 
@@ -1563,7 +2515,11 @@ describe('createGithubPullRequestReconciler', () => {
     // No repository signal at all: ambiguous, so the sweep must not guess.
     await createIssueCard(context, { number: 44, url: null });
     const fetchIssue = vi.fn(async () => closedIssueState(42, 'completed'));
-    const reconcile = createReconciler(context, vi.fn(async () => undefined), fetchIssue);
+    const reconcile = createReconciler(
+      context,
+      vi.fn(async () => undefined),
+      fetchIssue,
+    );
 
     await expect(reconcile([repositoryTarget])).resolves.toMatchObject({ issuesChecked: 1, issuesClosed: 1 });
     expect(fetchIssue).toHaveBeenCalledTimes(1);
@@ -1593,7 +2549,11 @@ describe('createGithubPullRequestReconciler', () => {
       metadata: { githubRepositoryId: 999 },
     });
     const fetchIssue = vi.fn(async () => closedIssueState(42, 'completed'));
-    const reconcile = createReconciler(context, vi.fn(async () => undefined), fetchIssue);
+    const reconcile = createReconciler(
+      context,
+      vi.fn(async () => undefined),
+      fetchIssue,
+    );
 
     await expect(reconcile([repositoryTarget])).resolves.toMatchObject({ issuesChecked: 1, issuesClosed: 1 });
     expect(fetchIssue).toHaveBeenCalledTimes(1);
@@ -1612,7 +2572,11 @@ describe('createGithubPullRequestReconciler', () => {
     await createIssueCard(context, { number: 41, stages: ['done'] });
     await createIssueCard(context, { number: 42 });
     const fetchIssue = vi.fn(async () => ({ ...closedIssueState(42), state: 'open' as const }));
-    const reconcile = createReconciler(context, vi.fn(async () => undefined), fetchIssue);
+    const reconcile = createReconciler(
+      context,
+      vi.fn(async () => undefined),
+      fetchIssue,
+    );
 
     await expect(reconcile([repositoryTarget])).resolves.toEqual({
       repositories: 1,
@@ -1636,13 +2600,22 @@ describe('createGithubPullRequestReconciler', () => {
     });
 
     // No fetcher wired: issue cards are ignored entirely.
-    await expect(createReconciler(context, vi.fn(async () => undefined))([repositoryTarget])).resolves.toMatchObject({
+    await expect(
+      createReconciler(
+        context,
+        vi.fn(async () => undefined),
+      )([repositoryTarget]),
+    ).resolves.toMatchObject({
       failed: 0,
     });
 
     // Wired but failing: the sweep records the failure with issue context.
     await expect(
-      createReconciler(context, vi.fn(async () => undefined), fetchIssue)([repositoryTarget]),
+      createReconciler(
+        context,
+        vi.fn(async () => undefined),
+        fetchIssue,
+      )([repositoryTarget]),
     ).resolves.toMatchObject({
       failed: 1,
       errors: [

@@ -15,7 +15,7 @@ import type { CallToolResult } from '@modelcontextprotocol/server';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 
-import { InternalMastraMCPClient } from './client.js';
+import { InternalMastraMCPClient, getMcpCallToolContent, getMcpCallToolMeta } from './client.js';
 
 describe('InternalMastraMCPClient - server instructions', () => {
   afterEach(() => {
@@ -845,9 +845,9 @@ describe('MastraMCPClient - no outputSchema', () => {
 });
 
 describe('MastraMCPClient - outputSchema with structuredContent', () => {
-  // When a tool has an outputSchema and returns structuredContent, the
-  // structuredContent is returned directly. We don't pass outputSchema to
-  // createTool so there's no Zod stripping — the MCP client validates via AJV.
+  // When a tool has an outputSchema and returns structuredContent, execute() still
+  // returns the structured object for callers/UI. toModelOutput maps MCP content
+  // text for the LLM without changing the execute return shape.
   let testServer: {
     httpServer: HttpServer;
     mcpServer: McpServer;
@@ -872,7 +872,173 @@ describe('MastraMCPClient - outputSchema with structuredContent', () => {
     testServer?.httpServer.close();
   });
 
-  it('should return structuredContent directly, preserving all fields', async () => {
+  it('should return content text for the model when structuredContent is also present', async () => {
+    const sdkClient = (client as any).client as Client;
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'calendar_search',
+          description: 'Search calendar events',
+          inputSchema: {
+            type: 'object' as const,
+            properties: {
+              startdate: { type: 'string' },
+              enddate: { type: 'string' },
+            },
+          },
+          outputSchema: {
+            type: 'object' as const,
+            properties: {
+              count: { type: 'number' },
+              events: { type: 'array', items: { type: 'object' } },
+            },
+          },
+        },
+      ],
+    });
+
+    const fullResult = {
+      success: true,
+      events: [{ id: 1, title: 'Meeting' }],
+      count: 1,
+      message: 'Found 1 calendar event(s)',
+      tool: 'microsoft_calendar_search',
+    };
+
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      structuredContent: fullResult,
+      content: [{ type: 'text', text: 'Found 1 calendar event(s)' }],
+      isError: false,
+    });
+
+    const tools = await client.tools();
+    const tool = tools['calendar_search'];
+    const result = await tool.execute?.({
+      startdate: '2026-02-27T00:00:00Z',
+      enddate: '2026-02-27T23:59:59Z',
+    });
+
+    expect(result).toEqual(fullResult);
+    expect(tool.toModelOutput?.(result)).toEqual({
+      type: 'text',
+      value: 'Found 1 calendar event(s)',
+    });
+  });
+
+  it('should fall back to json toModelOutput when content has no text blocks', async () => {
+    const sdkClient = (client as any).client as Client;
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'image_only_tool',
+          description: 'Returns structured output without text content',
+          inputSchema: {
+            type: 'object' as const,
+            properties: { query: { type: 'string' } },
+          },
+          outputSchema: {
+            type: 'object' as const,
+            properties: { count: { type: 'number' } },
+          },
+        },
+      ],
+    });
+
+    const fullResult = { count: 3 };
+
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      structuredContent: fullResult,
+      content: [{ type: 'image', data: 'abc', mimeType: 'image/png' }],
+      isError: false,
+    });
+
+    const tools = await client.tools();
+    const tool = tools['image_only_tool'];
+    const result = await tool.execute?.({ query: 'test' });
+
+    expect(result).toEqual(fullResult);
+    expect(tool.toModelOutput?.(result)).toEqual({
+      type: 'json',
+      value: fullResult,
+    });
+  });
+
+  it('should preserve result _meta (with serverId stamped into ui) on structured results', async () => {
+    const sdkClient = (client as any).client as Client;
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'ui_tool',
+          description: 'Returns an MCP App resource',
+          inputSchema: { type: 'object' as const, properties: {} },
+          outputSchema: {
+            type: 'object' as const,
+            properties: { count: { type: 'number' } },
+          },
+        },
+      ],
+    });
+
+    const structured = { count: 2 };
+    const content = [{ type: 'text', text: 'Found 2 items' }];
+
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      structuredContent: structured,
+      content,
+      _meta: { ui: { resourceUri: 'ui://ui_tool/app.html' }, traceId: 'trace-9' },
+      isError: false,
+    });
+
+    const tools = await client.tools();
+    const result = await tools['ui_tool'].execute?.({});
+
+    // execute() return shape is unchanged: enumerable keys are only the structured output
+    expect(result).toEqual(structured);
+    expect(Object.keys(result)).toEqual(['count']);
+    expect(JSON.stringify(result)).toBe(JSON.stringify(structured));
+
+    // Hidden channels expose the rest of the CallToolResult envelope
+    expect(getMcpCallToolContent(result)).toEqual(content);
+    expect(getMcpCallToolMeta(result)).toEqual({
+      ui: { resourceUri: 'ui://ui_tool/app.html', serverId: 'structured-content-test-client' },
+      traceId: 'trace-9',
+    });
+  });
+
+  it('should return undefined from getMcpCallToolMeta when the result has no _meta', async () => {
+    const sdkClient = (client as any).client as Client;
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'plain_tool',
+          description: 'No _meta',
+          inputSchema: { type: 'object' as const, properties: {} },
+          outputSchema: {
+            type: 'object' as const,
+            properties: { count: { type: 'number' } },
+          },
+        },
+      ],
+    });
+
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      structuredContent: { count: 0 },
+      content: [{ type: 'text', text: 'none' }],
+      isError: false,
+    });
+
+    const tools = await client.tools();
+    const result = await tools['plain_tool'].execute?.({});
+
+    expect(getMcpCallToolMeta(result)).toBeUndefined();
+    expect(getMcpCallToolContent(result)).toEqual([{ type: 'text', text: 'none' }]);
+  });
+
+  it('should use JSON content text in toModelOutput when the server mirrors structuredContent in content', async () => {
     const sdkClient = (client as any).client as Client;
 
     vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
@@ -919,11 +1085,15 @@ describe('MastraMCPClient - outputSchema with structuredContent', () => {
       enddate: '2026-02-27T23:59:59Z',
     });
 
-    // structuredContent is returned directly — all fields preserved
+    // execute() keeps returning structuredContent for callers
     expect(result).toEqual(fullResult);
+    expect(tool.toModelOutput?.(result)).toEqual({
+      type: 'text',
+      value: JSON.stringify(fullResult),
+    });
   });
 
-  it('should return structuredContent even with generic object outputSchema', async () => {
+  it('should use JSON content text in toModelOutput for generic object outputSchema', async () => {
     const sdkClient = (client as any).client as Client;
 
     vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
@@ -955,6 +1125,169 @@ describe('MastraMCPClient - outputSchema with structuredContent', () => {
     const result = await tool.execute?.({ query: 'test' });
 
     expect(result).toEqual(fullResult);
+    expect(tool.toModelOutput?.(result)).toEqual({
+      type: 'text',
+      value: JSON.stringify(fullResult),
+    });
+  });
+
+  it('should use scalar structuredContent as JSON model output', async () => {
+    const sdkClient = (client as any).client as Client;
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'count_tool',
+          description: 'Returns a scalar structured result',
+          inputSchema: {
+            type: 'object' as const,
+            properties: { query: { type: 'string' } },
+          },
+          outputSchema: {
+            type: 'number' as const,
+          },
+        },
+      ],
+    });
+
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      structuredContent: 0,
+      content: [{ type: 'text', text: 'count is zero' }],
+      isError: false,
+    });
+
+    const tools = await client.tools();
+    const tool = tools['count_tool'];
+    const result = await tool.execute?.({ query: 'test' });
+
+    expect(result).toBe(0);
+    expect(tool.toModelOutput?.(result)).toEqual({
+      type: 'json',
+      value: 0,
+    });
+  });
+
+  it('should use null structuredContent as JSON model output', async () => {
+    const sdkClient = (client as any).client as Client;
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'nullable_tool',
+          description: 'Returns null structured output',
+          inputSchema: {
+            type: 'object' as const,
+            properties: { query: { type: 'string' } },
+          },
+          outputSchema: {
+            type: 'null' as const,
+          },
+        },
+      ],
+    });
+
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      structuredContent: null,
+      content: [{ type: 'text', text: 'no data available' }],
+      isError: false,
+    });
+
+    const tools = await client.tools();
+    const tool = tools['nullable_tool'];
+    const result = await tool.execute?.({ query: 'test' });
+
+    expect(result).toBeNull();
+    expect(tool.toModelOutput?.(result)).toEqual({
+      type: 'json',
+      value: null,
+    });
+  });
+
+  it('should not retain authored content from an earlier equal scalar result', async () => {
+    const sdkClient = (client as any).client as Client;
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'count_tool',
+          description: 'Returns a scalar structured result',
+          inputSchema: {
+            type: 'object' as const,
+            properties: { query: { type: 'string' } },
+          },
+          outputSchema: {
+            type: 'number' as const,
+          },
+        },
+      ],
+    });
+
+    vi.spyOn(sdkClient, 'callTool')
+      .mockResolvedValueOnce({
+        structuredContent: 0,
+        content: [{ type: 'text', text: 'first zero' }],
+        isError: false,
+      })
+      .mockResolvedValueOnce({
+        structuredContent: 0,
+        content: [{ type: 'text', text: 'second zero' }],
+        isError: false,
+      });
+
+    const tools = await client.tools();
+    const tool = tools['count_tool'];
+
+    const first = await tool.execute?.({ query: 'first' });
+    const second = await tool.execute?.({ query: 'second' });
+
+    expect(first).toBe(0);
+    expect(second).toBe(0);
+    expect(tool.toModelOutput?.(second)).toEqual({ type: 'json', value: 0 });
+    expect(tool.toModelOutput?.(first)).toEqual({ type: 'json', value: 0 });
+  });
+
+  it('should keep concurrent equal scalar results as JSON when calls resolve out of order', async () => {
+    const sdkClient = (client as any).client as Client;
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'count_tool',
+          description: 'Returns a scalar structured result',
+          inputSchema: {
+            type: 'object' as const,
+            properties: { query: { type: 'string' } },
+          },
+          outputSchema: { type: 'number' as const },
+        },
+      ],
+    });
+
+    vi.spyOn(sdkClient, 'callTool').mockImplementation(async request => {
+      if (request.arguments?.query === 'first') {
+        await new Promise(resolve => setTimeout(resolve, 20));
+        return {
+          structuredContent: 0,
+          content: [{ type: 'text', text: 'first zero' }],
+          isError: false,
+        };
+      }
+      return {
+        structuredContent: 0,
+        content: [{ type: 'text', text: 'second zero' }],
+        isError: false,
+      };
+    });
+
+    const tools = await client.tools();
+    const tool = tools['count_tool'];
+    const [first, second] = await Promise.all([
+      tool.execute?.({ query: 'first' }),
+      tool.execute?.({ query: 'second' }),
+    ]);
+
+    expect(tool.toModelOutput?.(second)).toEqual({ type: 'json', value: 0 });
+    expect(tool.toModelOutput?.(first)).toEqual({ type: 'json', value: 0 });
   });
 });
 

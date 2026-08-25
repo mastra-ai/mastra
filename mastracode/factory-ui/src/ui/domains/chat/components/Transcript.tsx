@@ -2,22 +2,20 @@ import type { PlanResume } from '@mastra/client-js';
 import { mastraDBMessageToSignal } from '@mastra/core/signals';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { CodeBlock as DsCodeBlock } from '@mastra/playground-ui/components/CodeBlock';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
-import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { Input } from '@mastra/playground-ui/components/Input';
+import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { MessageScrollerItem } from '@mastra/playground-ui/components/MessageScroller';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { startsUserTurn } from '@mastra/playground-ui/components/ThreadRail';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { MessageFactory } from '@mastra/react/ui';
 import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvocationPart } from '@mastra/react/ui';
-import { Bell, ChevronDown, CircleDot, ExternalLink, Info, Layers, Slack, Wrench, X } from 'lucide-react';
+import { Bell, CircleDot, ExternalLink, Info, Layers, Slack } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 
-import { highlightCode, languageForPath } from '../../../ui/highlight';
 import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatTranscript } from '../context/useChatTranscript';
@@ -25,11 +23,14 @@ import {
   useApproveAgentControllerToolMutation,
   useRespondAgentControllerSuspensionMutation,
 } from '../../../../hooks/useAgentControllerRunMutations';
-import { stripSerializedAnsi } from '../services/ansi';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { isTerminalInvocationState } from '../services/transcript';
+import { MESSAGE_HOVER, MessageMeta } from './MessageMeta';
+import { ToolCard } from './tool/ToolCard';
+import { ToolGroup, TOOL_GROUP_MIN } from './tool/ToolGroup';
+import { SubmitPlanCard } from './SubmitPlanCard';
 import { isTranscriptToolVisible, ToolFactory } from './ToolFactory';
-import { Markdown } from '../../../ui/Markdown';
+import { ROW_RAIL, ROW_TRIGGER, TranscriptRow } from './TranscriptRow';
 
 import type {
   ApprovalPrompt,
@@ -71,78 +72,19 @@ function stringify(v: unknown): string {
   }
 }
 
+function messageText(parts: MessageEntry['message']['content']['parts']): string {
+  return parts
+    .flatMap(part => (part.type === 'text' ? [part.text] : []))
+    .join('\n\n')
+    .trim();
+}
+
 function lastSegment(id: string): string {
   const parts = id.split('/');
   return parts[parts.length - 1] ?? id;
 }
 
 import { parseSkillActivation, SkillMessage } from './SkillMessage';
-
-// ---------------------------------------------------------------------------
-// Tool card (collapsible)
-// ---------------------------------------------------------------------------
-
-/** Quiet status indicator: muted spinner while running, red cross on failure, nothing on success. */
-function ToolStatusIcon({ status }: { status: ToolCall['status'] }) {
-  if (status === 'running') return <Spinner size="sm" aria-label="Running" className="text-icon3 size-3.5" />;
-  if (status === 'error') return <X size={14} role="img" aria-label="Failed" className="text-error" />;
-  return null;
-}
-
-/** Label + copy header for a section inside a tool card body. */
-function ToolSection({ label, copyText, children }: { label: string; copyText: string; children: ReactNode }) {
-  return (
-    <div className="flex max-w-full min-w-0 flex-col gap-1">
-      <div className="flex items-center justify-between gap-2">
-        <Txt as="span" variant="ui-xs" className="text-icon3 tracking-wide uppercase">
-          {label}
-        </Txt>
-        <CopyButton content={copyText} size="sm" variant="ghost" />
-      </div>
-      {children}
-    </div>
-  );
-}
-
-/** A unified-diff-style view of an edit's before/after text, syntax-highlighted. */
-function DiffView({ oldText, newText, path }: { oldText: string; newText: string; path?: string }) {
-  const lang = languageForPath(path);
-  const removed = oldText.split('\n');
-  const added = newText.split('\n');
-  return (
-    <div
-      className="border-border1 bg-surface1 max-w-full min-w-0 overflow-x-auto rounded-xl border font-mono text-xs leading-normal"
-      role="group"
-      aria-label="File change"
-    >
-      {removed.map((line, i) => (
-        <div key={`r${i}`} className="bg-error/10 flex whitespace-pre">
-          <span className="text-error w-5 shrink-0 text-center opacity-70 select-none">-</span>
-          <span
-            className="text-icon6 [&_span]:font-inherit [&_span]:leading-inherit flex-1 pr-2.5 [&_span]:text-inherit dark:[&_span]:![background-color:var(--shiki-dark-bg)] dark:[&_span]:![color:var(--shiki-dark)]"
-            dangerouslySetInnerHTML={{ __html: highlightCode(line, lang) || '&nbsp;' }}
-          />
-        </div>
-      ))}
-      {added.map((line, i) => (
-        <div key={`a${i}`} className="bg-accent1/10 flex whitespace-pre">
-          <span className="text-accent1 w-5 shrink-0 text-center opacity-70 select-none">+</span>
-          <span
-            className="text-icon6 [&_span]:font-inherit [&_span]:leading-inherit flex-1 pr-2.5 [&_span]:text-inherit dark:[&_span]:![background-color:var(--shiki-dark-bg)] dark:[&_span]:![color:var(--shiki-dark)]"
-            dangerouslySetInnerHTML={{ __html: highlightCode(line, lang) || '&nbsp;' }}
-          />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-interface EditArgs {
-  path?: string;
-  old_string?: string;
-  new_string?: string;
-  content?: string;
-}
 
 function hasProperty<K extends string>(value: object, key: K): value is object & Record<K, unknown> {
   return key in value;
@@ -151,103 +93,6 @@ function hasProperty<K extends string>(value: object, key: K): value is object &
 function stringProperty(value: unknown, key: string): string | undefined {
   if (!value || typeof value !== 'object' || !hasProperty(value, key)) return undefined;
   return typeof value[key] === 'string' ? value[key] : undefined;
-}
-
-/** Detect edit-style tools whose args are better shown as a diff/code block. */
-function editArgs(toolName: string, args: unknown): EditArgs | undefined {
-  const edit = {
-    path: stringProperty(args, 'path'),
-    old_string: stringProperty(args, 'old_string'),
-    new_string: stringProperty(args, 'new_string'),
-    content: stringProperty(args, 'content'),
-  };
-  const isReplace = /string_replace|str_replace/i.test(toolName) && edit.new_string !== undefined;
-  const isWrite = /write_file|create_file/i.test(toolName) && edit.content !== undefined;
-  return isReplace || isWrite ? edit : undefined;
-}
-
-function ToolCard({ tool }: { tool: ToolCall }) {
-  const [expanded, setExpanded] = useState(false);
-  const argsPreview = tool.args !== undefined ? JSON.stringify(tool.args) : tool.argsText;
-  const argsPretty = tool.args !== undefined ? stringify(tool.args) : tool.argsText;
-  const resultText =
-    tool.status !== 'running' && tool.result !== undefined ? stripSerializedAnsi(stringify(tool.result)) : undefined;
-  const edit = editArgs(tool.toolName, tool.args);
-
-  return (
-    <Collapsible
-      open={expanded}
-      onOpenChange={setExpanded}
-      className="max-w-full min-w-0"
-      role="group"
-      aria-label={`Tool: ${tool.toolName}`}
-    >
-      {/*
-        Wrap the trigger content in a span so the chevron is not a *direct*
-        child of CollapsibleTrigger — the DS trigger rotates direct-child <svg>
-        via `[&>svg]:rotate-90` on open. Nesting keeps the chevron controlled
-        here.
-      */}
-      <CollapsibleTrigger className="hover:bg-surface2 active:bg-surface4 w-full rounded-lg text-left transition-colors">
-        <span className="flex w-full items-center gap-2 px-2 py-1.5">
-          <ChevronDown
-            size={13}
-            className={cn(
-              'shrink-0 text-icon3 transition-transform duration-150',
-              expanded ? 'rotate-0' : '-rotate-90',
-            )}
-          />
-          <span className="flex shrink-0 items-center">
-            <Wrench size={13} className="text-icon3" />
-          </span>
-          <Txt as="span" variant="ui-smd" className="text-icon5">
-            {tool.toolName}
-          </Txt>
-          {edit?.path && (
-            <Txt as="span" variant="ui-xs" font="mono" className="text-icon3 truncate">
-              {edit.path}
-            </Txt>
-          )}
-          {!edit && argsPreview && (
-            <Txt as="span" variant="ui-xs" font="mono" className="text-icon3 truncate">
-              {truncate(argsPreview, 72)}
-            </Txt>
-          )}
-          <span className="ml-auto flex shrink-0 items-center">
-            <ToolStatusIcon status={tool.status} />
-          </span>
-        </span>
-      </CollapsibleTrigger>
-      <CollapsibleContent className="max-w-full min-w-0">
-        <div className="border-border1 bg-surface2 mt-1 flex max-w-full min-w-0 flex-col gap-2 rounded-2xl border p-2">
-          {edit ? (
-            edit.new_string !== undefined ? (
-              <ToolSection label={edit.path ?? 'Change'} copyText={edit.new_string}>
-                <DiffView oldText={edit.old_string ?? ''} newText={edit.new_string} path={edit.path} />
-              </ToolSection>
-            ) : (
-              <DsCodeBlock
-                code={truncate(edit.content ?? '', 2000)}
-                lang={languageForPath(edit.path)}
-                fileName={edit.path ?? 'Change'}
-                overflow="scroll"
-              />
-            )
-          ) : argsPretty ? (
-            <DsCodeBlock code={argsPretty} lang="json" fileName="Arguments" />
-          ) : null}
-          {tool.output && (
-            <ToolSection label="Output" copyText={tool.output}>
-              <pre className="bg-surface1 text-icon3 m-0 max-h-72 max-w-full overflow-auto rounded-xl px-3 py-2 font-mono text-xs leading-normal whitespace-pre">
-                {tool.output}
-              </pre>
-            </ToolSection>
-          )}
-          {resultText !== undefined && <DsCodeBlock code={truncate(resultText, 800)} lang="json" fileName="Result" />}
-        </div>
-      </CollapsibleContent>
-    </Collapsible>
-  );
 }
 
 // ---------------------------------------------------------------------------
@@ -349,34 +194,12 @@ function SuspensionCard({
 
   if (prompt.toolName === 'submit_plan') {
     return (
-      <div className={promptCardSuspension} role="group" aria-label="Plan approval">
-        <div className={promptTitle}>Plan: {payload.plan?.title ?? payload.title ?? 'Proposed plan'}</div>
-        {payload.plan?.summary && (
-          <div className="text-ui-smd text-icon5 font-mono leading-relaxed break-words whitespace-pre-wrap">
-            {payload.plan.summary}
-          </div>
-        )}
-        <div className={promptActions}>
-          <Button
-            variant="primary"
-            size="sm"
-            aria-label="Approve the plan and switch to build"
-            autoFocus
-            disabled={isSubmitting}
-            onClick={() => onRespond(prompt.toolCallId, { action: 'approved' }, prompt.id)}
-          >
-            Approve &amp; build
-          </Button>
-          <Button
-            size="sm"
-            aria-label="Reject the plan"
-            disabled={isSubmitting}
-            onClick={() => onRespond(prompt.toolCallId, { action: 'rejected' }, prompt.id)}
-          >
-            Reject
-          </Button>
-        </div>
-      </div>
+      <SubmitPlanCard
+        toolCallId={prompt.toolCallId}
+        input={prompt.suspendPayload}
+        isSubmitting={isSubmitting}
+        onRespond={response => onRespond(prompt.toolCallId, response, prompt.id)}
+      />
     );
   }
 
@@ -546,26 +369,11 @@ function NotificationRow({
       role="group"
       aria-label={`Notification: ${label}`}
     >
-      <CollapsibleTrigger className="hover:bg-surface2 active:bg-surface4 w-full rounded-lg text-left transition-colors">
-        <span className="flex w-full items-center gap-2 px-2 py-1.5">
-          <ChevronDown
-            size={13}
-            className={cn(
-              'shrink-0 text-icon3 transition-transform duration-150',
-              expanded ? 'rotate-0' : '-rotate-90',
-            )}
-          />
-          <span className="flex shrink-0 items-center">{icon}</span>
-          <Txt as="span" variant="ui-smd" className="text-icon5 shrink-0">
-            {label}
-          </Txt>
-          <Txt as="span" variant="ui-xs" font="mono" className="text-icon3 truncate">
-            {truncate(message, 72)}
-          </Txt>
-        </span>
+      <CollapsibleTrigger className={ROW_TRIGGER}>
+        <TranscriptRow icon={icon} label={label} detail={truncate(message, 72)} expanded={expanded} />
       </CollapsibleTrigger>
       <CollapsibleContent className="max-w-full min-w-0">
-        <div className="border-border1 bg-surface2 mt-1 flex max-w-full min-w-0 flex-col gap-2 rounded-2xl border p-2">
+        <div className={cn(ROW_RAIL, 'flex flex-col gap-2')}>
           <Txt variant="ui-sm">{message}</Txt>
           {url && (
             <a
@@ -609,27 +417,36 @@ function NotificationSummaryCard({ entry }: { entry: NotificationSummaryEntry })
   );
 }
 
+/** A gap reads `1 hour 58 minutes later — 08/11/2026, 5:21 PM GMT+2`; the phrase is the signal, the stamp is detail. */
+function TimeGap({ text }: { text: string }) {
+  const [phrase, timestamp] = text.split(' — ');
+  if (!phrase) return null;
+
+  return (
+    <div className="flex items-center gap-3 py-3" role="separator" aria-label={text}>
+      <span aria-hidden className="bg-border1 h-px flex-1" />
+      <Txt as="span" variant="ui-xs" className="text-icon3 shrink-0" title={timestamp}>
+        {phrase}
+      </Txt>
+      <span aria-hidden className="bg-border1 h-px flex-1" />
+    </div>
+  );
+}
+
+const SIGNAL_ICONS: Record<string, ReactNode> = {
+  state: <Layers size={13} className="text-purple-400" />,
+  reminder: <Info size={13} className="text-accent3" />,
+};
+
 /** Compact row for state/reminder/reactive signals, collapsible when it has details. */
 function SignalRow({ kind, label, message }: { kind: string; label: string; message: string }) {
   const [expanded, setExpanded] = useState(false);
-  const icon =
-    kind === 'state' ? (
-      <Layers size={13} className="text-purple-400" />
-    ) : kind === 'reminder' ? (
-      <Info size={13} className="text-accent3" />
-    ) : (
-      <Info size={13} className="text-icon3" />
-    );
+  const icon = SIGNAL_ICONS[kind] ?? <Info size={13} className="text-icon3" />;
 
   if (!message) {
     return (
       <div className="max-w-full min-w-0" data-signal-kind={kind} role="group" aria-label={`Signal: ${label}`}>
-        <span className="flex w-full items-center gap-2 px-2 py-1.5">
-          <span className="flex shrink-0 items-center">{icon}</span>
-          <Txt as="span" variant="ui-smd" className="text-icon5 shrink-0">
-            {label}
-          </Txt>
-        </span>
+        <TranscriptRow icon={icon} label={label} />
       </div>
     );
   }
@@ -643,26 +460,11 @@ function SignalRow({ kind, label, message }: { kind: string; label: string; mess
       role="group"
       aria-label={`Signal: ${label}`}
     >
-      <CollapsibleTrigger className="hover:bg-surface2 active:bg-surface4 w-full rounded-lg text-left transition-colors">
-        <span className="flex w-full items-center gap-2 px-2 py-1.5">
-          <ChevronDown
-            size={13}
-            className={cn(
-              'shrink-0 text-icon3 transition-transform duration-150',
-              expanded ? 'rotate-0' : '-rotate-90',
-            )}
-          />
-          <span className="flex shrink-0 items-center">{icon}</span>
-          <Txt as="span" variant="ui-smd" className="text-icon5 shrink-0">
-            {label}
-          </Txt>
-          <Txt as="span" variant="ui-xs" font="mono" className="text-icon3 truncate">
-            {truncate(message, 72)}
-          </Txt>
-        </span>
+      <CollapsibleTrigger className={ROW_TRIGGER}>
+        <TranscriptRow icon={icon} label={label} detail={truncate(message, 72)} expanded={expanded} />
       </CollapsibleTrigger>
       <CollapsibleContent className="max-w-full min-w-0">
-        <div className="border-border1 bg-surface2 mt-1 max-w-full min-w-0 rounded-2xl border p-2">
+        <div className={ROW_RAIL}>
           <Txt variant="ui-sm" className="break-words whitespace-pre-wrap">
             {message}
           </Txt>
@@ -676,9 +478,14 @@ function SignalRow({ kind, label, message }: { kind: string; label: string; mess
 // Transcript
 // ---------------------------------------------------------------------------
 
-export function Transcript() {
+interface PreparedTranscriptEntry {
+  entry: TimelineEntry;
+  content: ReactNode;
+}
+
+export function Transcript({ tail }: { tail?: ReactNode }) {
   const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
-  const { transcript, resolvePrompt } = useChatTranscript();
+  const { transcript, resolvePrompt, busy } = useChatTranscript();
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
@@ -701,23 +508,34 @@ export function Transcript() {
   return (
     <TranscriptEntries
       entries={transcript.entries}
+      restoredHistory
       isSubmitting={approveMutation.isPending || respondMutation.isPending}
       onApprove={onApprove}
       onRespond={onRespond}
+      running={busy}
+      tail={tail}
     />
   );
 }
 
 export function TranscriptEntries({
   entries,
+  restoredHistory = false,
   isSubmitting = false,
   onApprove,
   onRespond,
+  running = false,
+  tail,
 }: {
   entries: TimelineEntry[];
+  restoredHistory?: boolean;
   isSubmitting?: boolean;
   onApprove: (toolCallId: string, approved: boolean, promptId: string) => void;
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
+  /** Holds the room open under the live turn, and releases it when the agent stops. */
+  running?: boolean;
+  /** Rendered inside the live turn (the activity line), so the reserved room stays under it. */
+  tail?: ReactNode;
 }) {
   const suspensions = new Map(
     entries.flatMap(entry => (entry.kind === 'suspension' ? [[entry.toolCallId, entry] as const] : [])),
@@ -731,13 +549,10 @@ export function TranscriptEntries({
         : [],
     ),
   );
-
   const renderEntry = (entry: TimelineEntry): ReactNode => {
     switch (entry.kind) {
       case 'message':
-        return (
-          <MessageBubble entry={entry} suspensions={suspensions} isSubmitting={isSubmitting} onRespond={onRespond} />
-        );
+        return renderMessageBubble({ entry, suspensions, isSubmitting, onRespond });
       case 'notice':
         return <NoticeCard entry={entry} />;
       case 'approval':
@@ -757,25 +572,62 @@ export function TranscriptEntries({
     }
   };
 
+  const preparedEntries = entries.map(entry => ({ entry, content: renderEntry(entry) }));
+
+  // Ignore echoed user signals that render nothing when opening a turn.
+  const drawsContent = (entry: MessageEntry): boolean =>
+    entry.message.content.parts.some(part => isRenderablePart(part, suspensions, entry.runtimeTools));
+  const opensTurn = (entry: TimelineEntry): boolean =>
+    entry.kind === 'message' && startsUserTurn(entry.message) && drawsContent(entry);
+
+  const turnGroups: { key: string; entries: PreparedTranscriptEntry[]; opensTurn: boolean }[] = [];
+  for (const preparedEntry of preparedEntries) {
+    const opens = opensTurn(preparedEntry.entry);
+    if (!opens && turnGroups.length > 0) {
+      turnGroups.at(-1)?.entries.push(preparedEntry);
+      continue;
+    }
+    // A gap sorts above the turn it introduces but arrives after it: inside that turn the
+    // room absorbs its height, outside it shifts the transcript a beat later.
+    const previous = turnGroups.at(-1);
+    const introduction = previous && isTimeGap(previous.entries.at(-1)?.entry) ? previous.entries.splice(-1) : [];
+    turnGroups.push({
+      key: preparedEntry.entry.id,
+      entries: [...introduction, preparedEntry],
+      opensTurn: opens,
+    });
+  }
+  const [restoredTurnKey] = useState(() => (restoredHistory ? turnGroups.at(-1)?.key : undefined));
+
   return (
     <>
-      {entries.map(entry => {
-        const rendered = renderEntry(entry);
-        if (!rendered) return null;
+      {turnGroups.map((group, index) => {
+        const isLiveTurn = index === turnGroups.length - 1;
+        // Closing turns keep their room class so reserved space releases through its transition.
+        const holdsRoom = isLiveTurn && group.opensTurn && running;
+        const openRoomClass = group.key === restoredTurnKey ? 'turn-room-restored-open' : 'turn-room-open';
 
         return (
-          <MessageScrollerItem
-            key={entry.id}
-            messageId={entry.id}
-            scrollAnchor={entry.kind === 'message' && entry.message.role === 'user'}
-            // Estimated off-screen heights would make the prepend anchor restore
-            // the wrong offset — measure the real thing.
-            className="[content-visibility:visible]"
+          <div
+            key={group.key}
+            className={cn('flex flex-col', group.opensTurn && 'turn-room', holdsRoom && openRoomClass)}
           >
-            {rendered}
-          </MessageScrollerItem>
+            {group.entries.map(({ entry, content }) => (
+              <MessageScrollerItem
+                key={entry.id}
+                messageId={entry.id}
+                scrollAnchor={opensTurn(entry)}
+                // Prepend anchoring needs real item heights, not off-screen estimates.
+                className="[content-visibility:visible]"
+              >
+                {content}
+              </MessageScrollerItem>
+            ))}
+            {isLiveTurn && tail}
+          </div>
         );
       })}
+      {turnGroups.length === 0 && tail}
     </>
   );
 }
@@ -820,7 +672,13 @@ export function ChannelOriginBadge({ origin }: { origin: { platform: string; aut
   );
 }
 
-function MessageBubble({
+function steeringLabel(entry: MessageEntry): string | undefined {
+  if (!entry.steer) return undefined;
+  if (entry.deliveryStatus === 'pending') return 'Steering…';
+  if (entry.deliveryStatus === 'failed') return 'Not sent';
+  return 'Steered message';
+}
+function renderMessageBubble({
   entry,
   suspensions,
   isSubmitting,
@@ -832,43 +690,51 @@ function MessageBubble({
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
 }) {
   const messageParts = entry.message.content.parts ?? [];
-  const parts = messageParts.filter(
-    part => part.type !== 'tool-invocation' || isTranscriptToolVisible(part.toolInvocation.toolName),
-  );
+
+  const parts = messageParts.filter(part => isRenderablePart(part, suspensions, entry.runtimeTools));
   const message =
     parts.length === messageParts.length
       ? entry.message
       : { ...entry.message, content: { ...entry.message.content, parts } };
-  const hasRenderablePart = parts.some(
-    part =>
-      (part.type === 'text' && part.text.trim().length > 0) ||
-      (part.type === 'reasoning' && part.reasoning.trim().length > 0) ||
-      part.type === 'tool-invocation' ||
-      part.type === 'file',
-  );
+  const hasRenderablePart = parts.length > 0;
 
-  const lastTextPart = (() => {
-    for (let i = parts.length - 1; i >= 0; i--) {
-      if (parts[i].type === 'text') return parts[i];
-    }
-    return undefined;
-  })();
-
+  const toolGroups = collectToolGroups(parts, suspensions, entry.runtimeTools);
   const origin = channelOrigin(entry);
+  const prose = messageText(parts);
+  const steeringStatus = steeringLabel(entry);
+  const steeringPending = entry.deliveryStatus === 'pending';
+  const steeringFailed = entry.deliveryStatus === 'failed';
   const roles: MessageRoleRenderers = {
     User: ({ children }) => (
-      <div className="my-3 flex w-full flex-col items-end">
+      <div className={cn(MESSAGE_HOVER, 'my-3 ml-auto flex w-fit max-w-[70%] flex-col items-end')}>
         <div
-          className={`text-text1 max-w-[70%] rounded-xl px-4 py-2 break-words ${
-            entry.steer ? 'bg-warning1/10' : 'bg-surface3'
-          }`}
+          className={cn(
+            'text-text1 bg-neutral6/5 rounded-xl border border-transparent px-4 py-2 break-words',
+            steeringPending && 'border-border1 border-dashed',
+          )}
         >
           {children}
         </div>
+        {steeringStatus && (
+          <span
+            className={cn('text-ui-xs text-icon3 mt-1', steeringFailed && 'text-notice-destructive-fg')}
+            aria-live="polite"
+          >
+            {steeringStatus}
+          </span>
+        )}
         {origin && <ChannelOriginBadge origin={origin} />}
+        {prose ? <MessageMeta text={prose} createdAt={entry.message.createdAt} align="end" /> : null}
       </div>
     ),
-    Assistant: ({ children }) => <div className="max-w-full">{children}</div>,
+    Assistant: ({ children }) => (
+      // The trailing margin of the last part spaced this message from the next
+      // entry; the meta row inherits it as a gap unless it moves to the wrapper.
+      <div className={cn(MESSAGE_HOVER, 'max-w-full', prose && 'mb-3 [&>*:nth-last-child(2)]:mb-0')}>
+        {children}
+        {prose ? <MessageMeta text={prose} createdAt={entry.message.createdAt} align="start" /> : null}
+      </div>
+    ),
     System: ({ children }) => <div className="text-ui-sm text-icon3">{children}</div>,
     Signal: ({ children }) => <div className="text-ui-sm text-icon3">{children}</div>,
   };
@@ -877,40 +743,29 @@ function MessageBubble({
     Text: (part: TextPart) => {
       if (entry.message.role === 'user') {
         const activation = parseSkillActivation(part.text);
-        return activation ? (
-          <SkillMessage activation={activation} />
-        ) : (
-          <div className="prose">
-            <Markdown>{part.text}</Markdown>
-          </div>
-        );
+        return activation ? <SkillMessage activation={activation} /> : <MarkdownRenderer>{part.text}</MarkdownRenderer>;
       }
 
-      const showCursor = entry.streaming && part === lastTextPart;
       return (
-        <div className="prose my-3">
-          <Markdown
-            className={
-              showCursor
-                ? "[&>:last-child]:after:bg-accent1 [&>:last-child]:after:ml-0.5 [&>:last-child]:after:inline-block [&>:last-child]:after:h-[1em] [&>:last-child]:after:w-0.5 [&>:last-child]:after:animate-pulse [&>:last-child]:after:align-text-bottom [&>:last-child]:after:content-['']"
-                : undefined
-            }
-          >
-            {part.text}
-          </Markdown>
-        </div>
+        <MarkdownRenderer className="my-3" streaming={entry.streaming}>
+          {part.text}
+        </MarkdownRenderer>
       );
     },
     Reasoning: (part: ReasoningPart) => (
-      <div className="border-border1 text-ui-sm text-icon3 my-1.5 border-l-2 pl-2.5 italic [&_p]:my-0.5">
-        <Markdown>{part.reasoning}</Markdown>
+      <div className="border-border1 my-1.5 border-l-2 pl-2.5 italic [&_p]:my-0.5">
+        <MarkdownRenderer className="text-ui-sm text-icon3">{part.reasoning}</MarkdownRenderer>
       </div>
     ),
     ToolInvocation: (part: ToolInvocationPart) => {
-      const runtime = entry.runtimeTools?.[part.toolInvocation.toolCallId];
+      const toolCallId = part.toolInvocation.toolCallId;
+      const group = toolGroups.byFirstId.get(toolCallId);
+      if (group) return <ToolGroup tools={group} />;
+      if (toolGroups.memberIds.has(toolCallId)) return null;
+
+      const runtime = entry.runtimeTools?.[toolCallId];
       const tool = toolFromInvocationPart(part, runtime);
       const suspension = suspensions.get(tool.toolCallId);
-      if (tool.toolName === 'ask_user' && tool.status === 'running' && !suspension) return null;
       return (
         <ToolFactory
           toolName={tool.toolName}
@@ -960,6 +815,7 @@ function MessageBubble({
         <SignalRow kind="state" label={`State ${signalRow.mode}: ${signalRow.stateId}`} message={signalRow.text} />
       );
     }
+    if (signalRow.kind === 'gap') return <TimeGap text={signalRow.text} />;
     if (signalRow.kind === 'reminder') {
       return <SignalRow kind="reminder" label="System reminder" message={signalRow.text} />;
     }
@@ -991,6 +847,79 @@ function terminalInvocationStatus(invocation: ToolInvocationPart['toolInvocation
   if (!isTerminalInvocationState(invocation.state)) return undefined;
   if (invocation.state !== 'result') return 'error';
   return 'isError' in invocation && invocation.isError === true ? 'error' : 'done';
+}
+
+/** Parts that draw something: step markers and blank prose leave empty bubbles and split runs of calls. */
+function isRenderablePart(
+  part: MessageEntry['message']['content']['parts'][number],
+  suspensions: ReadonlyMap<string, SuspensionPrompt>,
+  runtimeTools: MessageEntry['runtimeTools'],
+): boolean {
+  switch (part.type) {
+    case 'text':
+      return part.text.trim().length > 0;
+    case 'reasoning':
+      return part.reasoning.trim().length > 0;
+    case 'tool-invocation':
+      return isRenderableTool(part, suspensions, runtimeTools);
+    case 'file':
+      return true;
+    default:
+      return false;
+  }
+}
+
+function isRenderableTool(
+  part: ToolInvocationPart,
+  suspensions: ReadonlyMap<string, SuspensionPrompt>,
+  runtimeTools: MessageEntry['runtimeTools'],
+): boolean {
+  const tool = toolFromInvocationPart(part, runtimeTools?.[part.toolInvocation.toolCallId]);
+  if (!isTranscriptToolVisible(tool.toolName)) return false;
+
+  const awaitingPrompt = tool.toolName === 'ask_user' && tool.status === 'running' && !suspensions.has(tool.toolCallId);
+  return !awaitingPrompt;
+}
+
+/** Tools whose own card carries the turn: a group row would swallow the prompt, the plan or the skill instructions. */
+const UNGROUPABLE_TOOLS = new Set(['ask_user', 'submit_plan', 'skill']);
+
+/**
+ * Collapse runs of {@link TOOL_GROUP_MIN}+ consecutive plain tool calls into
+ * groups keyed by their first toolCallId. Suspended calls break a run too —
+ * their prompt must render inline.
+ */
+function collectToolGroups(
+  parts: MessageEntry['message']['content']['parts'],
+  suspensions: ReadonlyMap<string, SuspensionPrompt>,
+  runtimeTools: MessageEntry['runtimeTools'],
+): { byFirstId: Map<string, ToolCall[]>; memberIds: Set<string> } {
+  const byFirstId = new Map<string, ToolCall[]>();
+  const memberIds = new Set<string>();
+  let run: ToolCall[] = [];
+
+  const flush = () => {
+    if (run.length >= TOOL_GROUP_MIN) {
+      byFirstId.set(run[0].toolCallId, run);
+      for (const tool of run.slice(1)) memberIds.add(tool.toolCallId);
+    }
+    run = [];
+  };
+
+  for (const part of parts) {
+    const groupable =
+      part.type === 'tool-invocation' &&
+      !UNGROUPABLE_TOOLS.has(part.toolInvocation.toolName) &&
+      !suspensions.has(part.toolInvocation.toolCallId);
+    if (groupable) {
+      run.push(toolFromInvocationPart(part, runtimeTools?.[part.toolInvocation.toolCallId]));
+    } else {
+      flush();
+    }
+  }
+  flush();
+
+  return { byFirstId, memberIds };
 }
 
 function toolFromInvocationPart(part: ToolInvocationPart, runtime?: ToolCall): ToolCall {
@@ -1131,6 +1060,7 @@ const SUPPRESSED_STATE_SIGNAL_IDS = new Set(['tasks', 'goal']);
 
 type SignalRowView =
   | { kind: 'state'; stateId: string; mode: 'snapshot' | 'delta'; text: string }
+  | { kind: 'gap'; text: string }
   | { kind: 'reminder'; text: string }
   | { kind: 'reactive'; tagName?: string; text: string };
 
@@ -1147,6 +1077,8 @@ function signalRowView(entry: MessageEntry): SignalRowView | undefined {
 
   const tagName = typeof signal.tagName === 'string' ? signal.tagName : undefined;
   const text = signalPartsText(entry);
+  const attributes = isRecord(signal.attributes) ? signal.attributes : {};
+  const reminderKind = attributes.type === 'temporal-gap' ? 'gap' : 'reminder';
 
   if (signal.type === 'state') {
     const metadata = isRecord(signal.metadata) ? signal.metadata : {};
@@ -1160,10 +1092,15 @@ function signalRowView(entry: MessageEntry): SignalRowView | undefined {
   }
   // `normalizeSignal` maps `system-reminder` to `reactive` + `system-reminder`
   // tag before persistence, but live pre-normalized signals may carry the raw type.
-  if (signal.type === 'system-reminder') return { kind: 'reminder', text };
-  if (signal.type === 'reactive' && tagName === 'system-reminder') return { kind: 'reminder', text };
+  if (signal.type === 'system-reminder') return { kind: reminderKind, text };
+  if (signal.type === 'reactive' && tagName === 'system-reminder') return { kind: reminderKind, text };
   if (signal.type === 'reactive') return { kind: 'reactive', tagName, text };
   return undefined;
+}
+
+/** The `24 minutes later` separator, written a millisecond before the turn it introduces. */
+function isTimeGap(entry: TimelineEntry | undefined): boolean {
+  return entry?.kind === 'message' && signalRowView(entry)?.kind === 'gap';
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -1222,9 +1159,7 @@ function StatusMetadataCard({ status }: { status: StatusMetadata }) {
 function NoticeCard({ entry }: { entry: NoticeEntry }) {
   return (
     <Notice className="my-2" variant={entry.level === 'error' ? 'destructive' : 'info'}>
-      <div className="prose">
-        <Markdown>{entry.text}</Markdown>
-      </div>
+      <MarkdownRenderer className="text-current">{entry.text}</MarkdownRenderer>
     </Notice>
   );
 }

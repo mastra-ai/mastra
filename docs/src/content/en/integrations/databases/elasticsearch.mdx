@@ -1,0 +1,190 @@
+---
+title: "Elasticsearch | Database"
+description: Documentation for the Elasticsearch storage implementation in Mastra.
+packages:
+  - "@mastra/core"
+  - "@mastra/memory"
+  - "@mastra/elasticsearch"
+---
+
+# Elasticsearch
+
+The Elasticsearch storage implementation provides agent memory, workflow snapshot, and score storage on top of an Elasticsearch cluster using the official [`@elastic/elasticsearch`](https://github.com/elastic/elasticsearch-js) client. It shares the same connection configuration as `ElasticSearchVector`, so a single cluster (and even a single client instance) can serve both agent memory and semantic recall.
+
+`ElasticSearchStore` currently implements the `memory`, `workflows`, and `scores` storage domains.
+
+## Installation
+
+```bash
+npm install @mastra/elasticsearch
+```
+
+## Usage
+
+### Using a URL
+
+```typescript
+import { ElasticSearchStore } from '@mastra/elasticsearch'
+
+const storage = new ElasticSearchStore({
+  id: 'elasticsearch-storage',
+  url: 'http://localhost:9200',
+})
+
+await storage.init()
+```
+
+### Using authentication
+
+```typescript
+import { ElasticSearchStore } from '@mastra/elasticsearch'
+
+const storage = new ElasticSearchStore({
+  id: 'elasticsearch-storage',
+  url: 'https://my-cluster.example.com:9200',
+  auth: { apiKey: process.env.ELASTICSEARCH_API_KEY! },
+})
+```
+
+`auth` also accepts `{ username, password }` or `{ bearer }`.
+
+### Using a pre-configured client
+
+For advanced configurations (cloud IDs, TLS options, custom transport), pass a pre-configured client. The same client can be shared with `ElasticSearchVector`:
+
+```typescript
+import { Client } from '@elastic/elasticsearch'
+import { ElasticSearchStore, ElasticSearchVector } from '@mastra/elasticsearch'
+
+const client = new Client({
+  node: 'https://my-cluster.example.com:9200',
+  auth: { apiKey: process.env.ELASTICSEARCH_API_KEY! },
+})
+
+const storage = new ElasticSearchStore({ id: 'elasticsearch-storage', client })
+const vector = new ElasticSearchVector({ id: 'elasticsearch-vector', client })
+```
+
+When you provide your own client, `storage.close()` does not close it — you remain responsible for its lifecycle.
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Unique identifier for the storage instance',
+    isOptional: false,
+  },
+  {
+    name: 'url',
+    type: 'string',
+    description: 'Elasticsearch node URL (e.g., `http://localhost:9200`)',
+    isOptional: true,
+  },
+  {
+    name: 'auth',
+    type: 'ElasticSearchAuth',
+    description: 'Authentication options: `{ apiKey }`, `{ username, password }`, or `{ bearer }`',
+    isOptional: true,
+  },
+  {
+    name: 'client',
+    type: 'Client',
+    description: 'Pre-configured Elasticsearch client (from `@elastic/elasticsearch`) for advanced setups',
+    isOptional: true,
+  },
+  {
+    name: 'disableInit',
+    type: 'boolean',
+    description: 'Disable automatic initialization; call `storage.init()` explicitly before use',
+    isOptional: true,
+  },
+]}
+/>
+
+:::note
+You must provide either `url` or `client`. These options are mutually exclusive.
+:::
+
+## Additional Notes
+
+### Index Structure
+
+Each Mastra storage table maps to one Elasticsearch index of the same name (for example `mastra_threads`, `mastra_messages`, `mastra_workflow_snapshot`, `mastra_scorers`). Records are stored as opaque JSON documents with a keyword `key` field, so no index mappings need to be managed manually — indexes are created on first use.
+
+### Consistency
+
+Elasticsearch search is near-real-time. All writes are performed with an immediate refresh so subsequent reads and searches observe them, and point reads use real-time get-by-ID lookups.
+
+### Closing Connections
+
+When shutting down your application, close the connection:
+
+```typescript
+await storage.close()
+```
+
+This only closes clients created by `ElasticSearchStore` from a `url`; user-provided clients are left open.
+
+## Usage Example
+
+### Adding memory to an agent
+
+```typescript title="src/mastra/agents/elasticsearch-agent.ts"
+import { Memory } from '@mastra/memory'
+import { Agent } from '@mastra/core/agent'
+import { ElasticSearchStore } from '@mastra/elasticsearch'
+
+export const elasticsearchAgent = new Agent({
+  id: 'elasticsearch-agent',
+  name: 'Elasticsearch Agent',
+  instructions:
+    'You are an AI agent with the ability to automatically recall memories from previous interactions.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  memory: new Memory({
+    storage: new ElasticSearchStore({
+      id: 'elasticsearch-agent-storage',
+      url: process.env.ELASTICSEARCH_URL!,
+      auth: { apiKey: process.env.ELASTICSEARCH_API_KEY! },
+    }),
+    options: {
+      lastMessages: 10,
+    },
+  }),
+})
+```
+
+### Using with Mastra instance
+
+```typescript
+import { Mastra } from '@mastra/core'
+import { ElasticSearchStore } from '@mastra/elasticsearch'
+
+const storage = new ElasticSearchStore({
+  id: 'mastra-storage',
+  url: 'http://localhost:9200',
+})
+
+const mastra = new Mastra({
+  storage, // init() called automatically
+})
+```
+
+If using storage directly without Mastra, call `init()` explicitly:
+
+```typescript
+import { ElasticSearchStore } from '@mastra/elasticsearch'
+
+const storage = new ElasticSearchStore({
+  id: 'elasticsearch-storage',
+  url: 'http://localhost:9200',
+})
+
+await storage.init()
+
+// Access domain-specific stores via getStore()
+const memoryStore = await storage.getStore('memory')
+const thread = await memoryStore?.getThreadById({ threadId: '...' })
+```

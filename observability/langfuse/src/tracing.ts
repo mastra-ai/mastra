@@ -26,6 +26,8 @@ export interface LangfuseExporterConfig extends BaseExporterConfig {
   secretKey?: string;
   /** Langfuse host URL (defaults to https://cloud.langfuse.com) */
   baseUrl?: string;
+  /** Additional headers sent with requests to Langfuse */
+  additionalHeaders?: Record<string, string>;
   /** Enable realtime mode - flushes after each event for immediate visibility */
   realtime?: boolean;
   /** Maximum number of spans per OTEL export batch */
@@ -77,6 +79,7 @@ export class LangfuseExporter extends BaseExporter {
       publicKey,
       secretKey,
       baseUrl,
+      additionalHeaders: config.additionalHeaders,
       environment: config.environment,
       release: config.release,
       exportMode: this.#realtime ? 'immediate' : 'batched',
@@ -91,6 +94,7 @@ export class LangfuseExporter extends BaseExporter {
       publicKey,
       secretKey,
       baseUrl,
+      additionalHeaders: config.additionalHeaders,
     });
 
     this.#environment = config.environment ?? process.env.LANGFUSE_TRACING_ENVIRONMENT;
@@ -170,6 +174,7 @@ export class LangfuseExporter extends BaseExporter {
         value,
         ...(comment ? { comment } : {}),
         ...(metadata ? { metadata } : {}),
+        ...(this.#environment ? { environment: this.#environment } : {}),
         dataType: 'NUMERIC' as const,
       });
     } catch (error) {

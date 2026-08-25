@@ -12,7 +12,7 @@
  * terminated with `kill(signal)`.
  */
 
-import { ProcessHandle, SandboxProcessManager } from '@mastra/core/workspace';
+import { ProcessHandle, UnsupportedStdinCloseError, SandboxProcessManager } from '@mastra/core/workspace';
 import type { CommandResult, ProcessInfo, SpawnProcessOptions } from '@mastra/core/workspace';
 import type { ExecHandle, ExecResult } from 'railway';
 import type { RailwaySandbox } from './index';
@@ -118,15 +118,17 @@ class RailwayProcessHandle extends ProcessHandle {
     // Railway's exec API does not expose stdin streaming.
     throw new Error(`${LOG_PREFIX} sending stdin is not supported by the Railway sandbox provider`);
   }
+
+  async closeStdin(): Promise<void> {
+    throw new UnsupportedStdinCloseError(
+      `${LOG_PREFIX} closing stdin is not supported by the Railway sandbox provider`,
+    );
+  }
 }
 
 // =============================================================================
 // Railway Process Manager
 // =============================================================================
-
-export interface RailwayProcessManagerOptions {
-  env?: Record<string, string | undefined>;
-}
 
 /**
  * Railway implementation of SandboxProcessManager.
@@ -135,15 +137,11 @@ export interface RailwayProcessManagerOptions {
 export class RailwayProcessManager extends SandboxProcessManager<RailwaySandbox> {
   private _spawnCounter = 0;
 
-  constructor(opts: RailwayProcessManagerOptions = {}) {
-    super({ env: opts.env });
-  }
-
   async spawn(command: string, options: SpawnProcessOptions = {}): Promise<ProcessHandle> {
     const railway = this.sandbox.railway;
 
-    // Merge default env with per-spawn env.
-    const mergedEnv = { ...this.env, ...options.env };
+    // The base spawn wrapper already merged the sandbox env into options.env
+    const mergedEnv = { ...options.env };
     const env = Object.fromEntries(
       Object.entries(mergedEnv).filter((entry): entry is [string, string] => entry[1] !== undefined),
     );

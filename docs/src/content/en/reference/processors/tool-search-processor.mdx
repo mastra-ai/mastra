@@ -49,6 +49,14 @@ const toolSearch = new ToolSearchProcessor({
             isOptional: false,
           },
           {
+            name: 'includeResolvedTools',
+            type: 'boolean',
+            description:
+              "Also make the tools the agent resolved for this request (MCP tools requiring the caller's credentials, or anything returned by a dynamic tools function) searchable, and withhold them from the prompt until the agent loads them. The meta-tools are never withheld. Request-resolved tools are indexed per request, so each request searches and loads its own tool instances.",
+            isOptional: true,
+            default: 'false',
+          },
+          {
             name: 'search',
             type: '{ topK?: number; minScore?: number; autoLoad?: boolean }',
             description: 'Configuration for the search behavior.',
@@ -201,7 +209,37 @@ The `phase` value describes where the filter is being applied:
 - `load`: Blocks `load_tool` from loading disallowed tools.
 - `active`: Hides already-loaded tools from the current request if they're no longer allowed.
 
-If the hook throws or rejects, `ToolSearchProcessor` treats the tool as disallowed for that request. The hook may run for every matching search candidate, so keep async policy checks cheap or cached. The `search_tools` meta-tool is always available. `load_tool` is available unless `search.autoLoad` is enabled. Tools passed directly through the agent or `processInputStep` remain available unless you filter them outside `ToolSearchProcessor`.
+If the hook throws or rejects, `ToolSearchProcessor` treats the tool as disallowed for that request. The hook may run for every matching search candidate, so keep async policy checks cheap or cached. The `search_tools` meta-tool is always available. `load_tool` is available unless `search.autoLoad` is enabled. Tools passed directly through the agent or `processInputStep` remain available unless you filter them outside `ToolSearchProcessor`, or enable `includeResolvedTools`.
+
+## Searching request-resolved tools
+
+The `tools` option is fixed at construction, so you can't list tools that only exist per request (MCP tools that need the caller's credentials, or anything returned by a dynamic `tools` function). By default those tools bypass search and occupy prompt space on every turn.
+
+Set `includeResolvedTools: true` to index them for the request and withhold them from the prompt until the agent loads them:
+
+```typescript title="src/mastra/agents/mcp-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { ToolSearchProcessor } from '@mastra/core/processors'
+
+const toolSearch = new ToolSearchProcessor({
+  tools: staticTools,
+  includeResolvedTools: true,
+})
+
+const agent = new Agent({
+  id: 'mcp-agent',
+  name: 'mcp-agent',
+  instructions: 'Search for a tool when you need a capability you do not have.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  // Resolved per request, then searchable alongside staticTools
+  tools: async ({ requestContext }) => mcpClient.getTools(requestContext.get('userToken')),
+  inputProcessors: [toolSearch],
+})
+```
+
+Each request is indexed on its own, so a tool loaded by one caller never resolves to another caller's instance of the same tool name.
+
+This option applies to every tool resolved for the request, including memory, workspace, skill, and browser tools. Only the `search_tools` and `load_tool` meta-tools stay in the prompt, so any tool the agent relies on implicitly must be found through search before it can be called.
 
 ## Extended usage example
 
@@ -326,4 +364,4 @@ const agent = new Agent({
 ## Related
 
 - [Processors](/docs/agents/processors)
-- [Using Tools](/docs/agents/using-tools)
+- [Using Tools](/docs/agents/tools)

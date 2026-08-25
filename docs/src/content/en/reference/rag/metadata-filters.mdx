@@ -2,12 +2,13 @@
 title: "Reference: Metadata filters | RAG"
 description: Documentation for metadata filtering capabilities in Mastra, which allow for precise querying of vector search results across different vector stores.
 packages:
+  - "@mastra/oracledb"
   - "@mastra/pg"
 ---
 
 # Metadata filters
 
-Mastra provides a unified metadata filtering syntax across all vector stores, based on MongoDB/Sift query syntax. Each vector store translates these filters into their native format.
+Mastra provides a unified metadata filtering syntax across all vector stores, based on MongoDB/Sift query syntax. Each vector store translates these filters into its native query format. For example, PgVector uses PostgreSQL JSONB predicates, while OracleDB stores metadata as Oracle JSON and compiles filters to `JSON_VALUE`, `JSON_EXISTS`, `REGEXP_LIKE`, and `LIKE` predicates with bound values.
 
 ## Basic example
 
@@ -94,13 +95,13 @@ const results = await store.query({
     name: '$all',
     description: 'Matches arrays containing all elements',
     example: '{ tags: { $all: ["urgent", "high"] } }',
-    supportedBy: ['Astra', 'Pinecone', 'Upstash', 'MongoDB'],
+    supportedBy: ['Astra', 'Pinecone', 'Upstash', 'MongoDB', 'OracleDB'],
   },
   {
     name: '$elemMatch',
     description: 'Matches array elements meeting criteria',
     example: '{ scores: { $elemMatch: { $gt: 80 } } }',
-    supportedBy: ['libSQL', 'PgVector', 'MongoDB'],
+    supportedBy: ['libSQL', 'PgVector', 'MongoDB', 'OracleDB'],
   },
 ]}
 />
@@ -124,13 +125,13 @@ const results = await store.query({
     name: '$not',
     description: 'Logical NOT',
     example: '{ price: { $not: { $lt: 100 } } }',
-    supportedBy: ['Astra', 'Qdrant', 'Upstash', 'PgVector', 'libSQL', 'MongoDB'],
+    supportedBy: ['Astra', 'Qdrant', 'Upstash', 'PgVector', 'libSQL', 'MongoDB', 'OracleDB'],
   },
   {
     name: '$nor',
     description: 'Logical NOR',
     example: '{ $nor: [{ status: "deleted" }, { archived: true }] }',
-    supportedBy: ['Qdrant', 'Upstash', 'PgVector', 'libSQL', 'MongoDB'],
+    supportedBy: ['Qdrant', 'Upstash', 'PgVector', 'libSQL', 'MongoDB', 'OracleDB'],
   },
 ]}
 />
@@ -154,19 +155,19 @@ const results = await store.query({
     name: '$contains',
     description: 'Text contains substring',
     example: '{ description: { $contains: "sale" } }',
-    supportedBy: ['Upstash', 'libSQL', 'PgVector'],
+    supportedBy: ['Upstash', 'libSQL', 'PgVector', 'OracleDB'],
   },
   {
     name: '$regex',
     description: 'Regular expression match',
     example: '{ name: { $regex: "^test" } }',
-    supportedBy: ['Qdrant', 'PgVector', 'Upstash', 'MongoDB'],
+    supportedBy: ['Qdrant', 'PgVector', 'Upstash', 'MongoDB', 'OracleDB'],
   },
   {
     name: '$size',
     description: 'Array length check',
-    example: '{ tags: { $size: { $gt: 2 } } }',
-    supportedBy: ['Astra', 'libSQL', 'PgVector', 'MongoDB'],
+    example: '{ tags: { $size: { $gt: 2 } } } — MongoDB requires an integer instead: { tags: { $size: 3 } }',
+    supportedBy: ['Astra', 'libSQL', 'PgVector', 'MongoDB', 'OracleDB'],
   },
   {
     name: '$geo',
@@ -266,6 +267,14 @@ const results = await store.query({
 - Empty arrays in conditions are handled gracefully
 - Metadata is stored in a JSONB column for efficient querying
 
+### OracleDB
+
+- Metadata is stored as Oracle JSON alongside each `VECTOR` row
+- Scalar comparisons use `JSON_VALUE`, while array, existence, and element-match checks use `JSON_EXISTS`
+- `$regex` uses Oracle `REGEXP_LIKE`; string `$contains` uses case-insensitive `LIKE`
+- Nested fields are supported with dot notation and are converted to quoted Oracle JSON paths
+- User-provided metadata values are bound as parameters instead of interpolated into SQL
+
 ### PgVector
 
 - Full support for PostgreSQL's native JSON querying capabilities
@@ -320,13 +329,21 @@ const results = await store.query({
 
 ### MongoDB
 
-- Full support for MongoDB/Sift query syntax for metadata filters
-- Supports all standard comparison, array, logical, and element operators
-- Supports nested fields and arrays in metadata
-- Filtering can be applied to both `metadata` and the original document content using the `filter` and `documentFilter` options, respectively
-- `filter` applies to the metadata object; `documentFilter` applies to the original document fields
-- No artificial limits on filter size or complexity (subject to MongoDB query limits)
-- Indexing metadata fields is recommended for optimal performance
+- Requires MongoDB Atlas or a deployment with MongoDB Vector Search enabled. The store queries with the `$vectorSearch` aggregation stage.
+- Uses MongoDB query syntax directly for metadata filters, including nested fields and arrays in metadata.
+- Supports the comparison, array, logical, and element operators in the tables above, plus `$regex` and `$size`. `$size` takes an integer, as in `{ tags: { $size: 3 } }`.
+- Use `filter` to match fields in the metadata object and `documentFilter` to match the original document text. You can combine them in a single query.
+- Declare the metadata fields you filter on in `filterFields` when you create the index. Mastra passes filters that use only declared fields and the operators MongoDB Vector Search accepts (`$and`, `$or`, `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte`, `$in`, `$nin`) directly to `$vectorSearch`:
+
+```typescript
+await store.createIndex({
+  indexName: 'my_index',
+  dimension: 1536,
+  filterFields: ['category', 'price'],
+})
+```
+
+- Filters that reference an undeclared field or use another operator take a fallback path: Mastra pre-filters the collection and passes the matching document IDs to `$vectorSearch`. This works only while the ID set fits within MongoDB's 16 MB BSON document limit. On large collections the query fails once that limit is exceeded, so declare your filter fields for selective queries over large data sets.
 
 ### Couchbase
 
@@ -335,7 +352,7 @@ const results = await store.query({
 ### Amazon S3 Vectors
 
 - Equality values must be primitives (string/number/boolean). `null`/`undefined`, arrays, objects, and Date aren't allowed for equality. Range operators accept numbers or Date (Dates are normalized to epoch ms).
-- `$in`/`$nin` require **non-empty arrays of primitives**; Date elements are allowed and normalized to epoch ms. **Array equality** isn't supported.
+- `$in`/`$nin` require **non-empty arrays of primitives**. Date elements are allowed and normalized to epoch ms. **Array equality** isn't supported.
 - Implicit AND is canonicalized (`{a:1,b:2}` → `{$and:[{a:1},{b:2}]`). Logical operators must contain field conditions and use non-empty arrays. They may appear only at the root or within other logical operators (not inside field values).
 - Keys listed in `nonFilterableMetadataKeys` at index creation are stored but not filterable. This setting is immutable.
 - $exists requires a boolean value.
@@ -353,6 +370,7 @@ const results = await store.query({
 - [Cloudflare Vectorize](/reference/vectors/vectorize)
 - [libSQL](/reference/vectors/libsql)
 - [MongoDB](/reference/vectors/mongodb)
+- [OracleDB](/reference/vectors/oracledb)
 - [PgStore](/reference/vectors/pg)
 - [Pinecone](/reference/vectors/pinecone)
 - [Qdrant](/reference/vectors/qdrant)

@@ -9,6 +9,8 @@ import type { ApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
 import type { MaterializationSandbox, SandboxFleet } from '../sandbox/fleet.js';
+import { waitForPendingFilesystemCapture } from '../session/filesystem-capture.js';
+import type { FilesystemStorage } from '../storage/domains/filesystem/base.js';
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
 import type { RouteAuth } from './route.js';
 
@@ -72,6 +74,14 @@ export interface WorkspaceFile {
   contentType: 'text' | 'unsupported';
   content?: string;
   truncated?: boolean;
+}
+
+export interface WorkspaceFilesListing {
+  /** The Factory session resource id. */
+  workspacePath: string;
+  /** The agent thread whose terminal file list was captured. */
+  threadId: string;
+  files: Array<{ path: string }>;
 }
 
 export type WorkspaceChangeStatus =
@@ -414,6 +424,7 @@ export interface SessionFsDeps {
   auth: RouteAuth;
   fleet: SandboxFleet;
   sessions: { getBySessionId(sessionId: string): Promise<SourceControlSession | null> };
+  filesystem: Pick<FilesystemStorage, 'listFiles'>;
 }
 
 /**
@@ -440,6 +451,26 @@ async function resolveAuthorizedSession(
   return session;
 }
 
+export async function listSessionFilesystemFiles(
+  filesystem: Pick<FilesystemStorage, 'listFiles'>,
+  session: SourceControlSession,
+  threadId: string,
+): Promise<WorkspaceFilesListing> {
+  const safeThreadId = threadId.trim();
+  if (!safeThreadId) throw new Error('Missing required query param: threadId');
+
+  // The turn-end capture no longer gates agent_end, so a reader refetching on
+  // run completion could otherwise race it and serve the previous turn's
+  // listing. Await the in-flight capture (bounded) before reading.
+  await waitForPendingFilesystemCapture(session.sessionId);
+
+  return {
+    workspacePath: session.sessionId,
+    threadId: safeThreadId,
+    files: await filesystem.listFiles({ resourceId: session.sessionId, threadId: safeThreadId }),
+  };
+}
+
 interface SessionSandboxHandle {
   sandbox: MaterializationSandbox;
   filesystem: SandboxFilesystem;
@@ -462,7 +493,10 @@ async function sessionSandbox(
   if (!fleet.enabled || !session.sandboxId || !session.sandboxWorkdir) return null;
   let sandbox: Awaited<ReturnType<SandboxFleet['reattachSandbox']>>;
   try {
-    sandbox = await fleet.reattachSandbox(session.sandboxId, { workingDirectory: session.sandboxWorkdir });
+    sandbox = await fleet.reattachSandbox(session.sandboxId, {
+      workingDirectory: session.sandboxWorkdir,
+      actingUserId: session.userId,
+    });
   } catch {
     // Sandbox is gone (idle GC) or unreachable. Degrade to an empty view
     // rather than surfacing a 500 from a file-viewer panel.
@@ -521,14 +555,15 @@ export async function listSessionRenderedPath(
   return { workspacePath: session.sessionId, root: safeRoot, rootPath, entries };
 }
 
-/** Read a file under an approved rendered root inside a session's sandbox. */
+/** Read a file inside a session's sandbox. Paths outside rendered roots require a persisted-file allowlist check in the route. */
 export async function readSessionWorkspaceFile(
   fleet: SandboxFleet,
   session: SourceControlSession,
   path: string,
+  options: { allowUnapprovedPath?: boolean } = {},
 ): Promise<WorkspaceFile> {
   const safePath = assertRelativePath(path, 'path');
-  assertApprovedRenderedRoot(safePath.split('/')[0] ?? '');
+  if (!options.allowUnapprovedPath) assertApprovedRenderedRoot(safePath.split('/')[0] ?? '');
 
   const handle = await sessionSandbox(fleet, session);
   if (!handle) throw new Error('Session workspace is not available');
@@ -841,6 +876,25 @@ export function buildFsRoutes(options: { root?: string; sessionFs?: SessionFsDep
         }
       },
     }),
+    registerApiRoute('/web/workspace/files', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const workspacePath = c.req.query('workspacePath');
+        const threadId = c.req.query('threadId')?.trim();
+        if (!workspacePath) return c.json({ error: 'Missing required query param: workspacePath' }, 400);
+        if (!threadId) return c.json({ error: 'Missing required query param: threadId' }, 400);
+        try {
+          const session = await resolveAuthorizedSession(loose(c), sessionFs, workspacePath);
+          if (!session || !sessionFs) return c.json({ error: 'Session workspace is not available' }, 403);
+          return c.json(await listSessionFilesystemFiles(sessionFs.filesystem, session, threadId));
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          const status = message.includes('not available') ? 403 : 500;
+          return c.json({ error: message }, status);
+        }
+      },
+    }),
     registerApiRoute('/web/workspace/changes', {
       method: 'GET',
       requiresAuth: false,
@@ -886,13 +940,29 @@ export function buildFsRoutes(options: { root?: string; sessionFs?: SessionFsDep
       handler: async c => {
         const workspacePath = c.req.query('workspacePath');
         const path = c.req.query('path');
+        const requestedThreadId = c.req.query('threadId');
+        const threadId = requestedThreadId?.trim();
         if (!workspacePath) return c.json({ error: 'Missing required query param: workspacePath' }, 400);
         if (!path) return c.json({ error: 'Missing required query param: path' }, 400);
+        if (requestedThreadId !== undefined && !threadId) {
+          return c.json({ error: 'Missing required query param: threadId' }, 400);
+        }
         try {
           const session = await resolveAuthorizedSession(loose(c), sessionFs, workspacePath);
           if (session && sessionFs) {
+            if (threadId) {
+              const safePath = assertRelativePath(path, 'path');
+              const listing = await listSessionFilesystemFiles(sessionFs.filesystem, session, threadId);
+              if (!listing.files.some(file => file.path === safePath)) {
+                return c.json({ error: 'Path is not available for this thread' }, 404);
+              }
+              return c.json(
+                await readSessionWorkspaceFile(sessionFs.fleet, session, safePath, { allowUnapprovedPath: true }),
+              );
+            }
             return c.json(await readSessionWorkspaceFile(sessionFs.fleet, session, path));
           }
+          if (threadId) return c.json({ error: 'Session workspace is not available' }, 403);
           return c.json(await readWorkspaceFile(root, workspacePath, path));
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);

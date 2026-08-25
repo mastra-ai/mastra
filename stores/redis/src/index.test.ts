@@ -13,6 +13,7 @@ function createMockClient(): RedisClient & { [key: string]: ReturnType<typeof vi
     del: vi.fn(),
     expire: vi.fn(),
     scan: vi.fn(),
+    incr: vi.fn(),
   };
 }
 
@@ -133,6 +134,30 @@ describe('RedisServerCache', () => {
       await cache.listFromTo('my-list', 0);
 
       expect(mockClient.lrange).toHaveBeenCalledWith('mastra:cache:my-list', 0, -1);
+    });
+  });
+
+  describe('increment', () => {
+    it('should increment with prefixed key and refresh TTL', async () => {
+      mockClient.incr.mockResolvedValue(3);
+      mockClient.expire.mockResolvedValue(1);
+
+      const result = await cache.increment('counter');
+
+      expect(mockClient.incr).toHaveBeenCalledWith('mastra:cache:counter');
+      expect(mockClient.expire).toHaveBeenCalledWith('mastra:cache:counter', 300);
+      expect(result).toBe(3);
+    });
+
+    it('should not refresh TTL when ttlSeconds is 0', async () => {
+      const noTtlCache = new RedisServerCache({ client: mockClient }, { ttlSeconds: 0 });
+      mockClient.incr.mockResolvedValue(1);
+
+      const result = await noTtlCache.increment('counter');
+
+      expect(mockClient.incr).toHaveBeenCalledWith('mastra:cache:counter');
+      expect(mockClient.expire).not.toHaveBeenCalled();
+      expect(result).toBe(1);
     });
   });
 

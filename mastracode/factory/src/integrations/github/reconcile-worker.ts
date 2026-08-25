@@ -32,48 +32,63 @@ export interface GithubReconcileRepositorySource {
 }
 
 export interface GithubReconcileWorkerConfig {
-  reconcile: GithubPullRequestReconciler;
-  /**
-   * Optional issue-metadata sweep. When provided, the worker folds it into the
-   * same tick as the PR reconciler, sharing the lease and the same
-   * `ReconcileRepository` target discovery. Mirrors how webhook-driven ingress
-   * flows both issues and PRs through one path.
-   */
+  reconcile?: GithubPullRequestReconciler;
   reconcileIssues?: GithubIssueReconciler;
   sourceControl: GithubReconcileRepositorySource;
+  /**
+   * Base-checkpoint freshness sweep, run after the reconcilers within the same
+   * lease. Rebuilds stale/missing base checkpoints for configured repos.
+   */
+  sweepBaseCheckpoints?: () => Promise<void>;
   intervalMs?: number;
+  issueIntervalMs?: number;
+  now?: () => number;
 }
 
 /**
- * Periodic merge-state sweep for the self-hosted GitHub integration: webhooks
- * are the only other writer of merge state, and a deployment GitHub cannot
- * reach never receives one, so cards would stay open forever.
+ * Periodic GitHub state sweeps for the self-hosted integration. Pull requests
+ * drive review cards and issues drive work cards, but both share discovery and
+ * a lease so replicas never sweep the same configured repositories together.
  */
 export class GithubReconcileWorker extends MastraWorker {
   readonly name = 'github-pull-request-reconcile';
 
-  readonly #reconcile: GithubPullRequestReconciler;
+  readonly #reconcile: GithubPullRequestReconciler | undefined;
   readonly #reconcileIssues: GithubIssueReconciler | undefined;
   readonly #sourceControl: GithubReconcileRepositorySource;
+  readonly #sweepBaseCheckpoints: (() => Promise<void>) | undefined;
   readonly #intervalMs: number;
+  readonly #issueIntervalMs: number;
   readonly #leaseTtlMs: number;
   readonly #leaseOwner = randomUUID();
+  readonly #now: () => number;
 
   #running = false;
   #timer: ReturnType<typeof setTimeout> | undefined;
   #inFlight: Promise<void> | undefined;
   #leaseProvider: LeaseProvider = NoopLeaseProvider;
+  #nextPullRequestReconcileAt = 0;
+  #nextIssueReconcileAt = 0;
 
   constructor(config: GithubReconcileWorkerConfig) {
     super();
+    if (!config.reconcile && !config.reconcileIssues) {
+      throw new Error('GitHub reconcile worker requires a pull request or issue reconciler.');
+    }
     this.#reconcile = config.reconcile;
     this.#reconcileIssues = config.reconcileIssues;
     this.#sourceControl = config.sourceControl;
+    this.#sweepBaseCheckpoints = config.sweepBaseCheckpoints;
     this.#intervalMs = config.intervalMs ?? DEFAULT_GITHUB_RECONCILE_INTERVAL_MS;
+    this.#issueIntervalMs = config.issueIntervalMs ?? this.#intervalMs;
     if (!Number.isFinite(this.#intervalMs) || this.#intervalMs <= 0) {
       throw new Error('GitHub pull request reconcile interval must be a positive number.');
     }
-    this.#leaseTtlMs = Math.max(MIN_LEASE_TTL_MS, this.#intervalMs * 3);
+    if (!Number.isFinite(this.#issueIntervalMs) || this.#issueIntervalMs <= 0) {
+      throw new Error('GitHub issue reconcile interval must be a positive number.');
+    }
+    this.#leaseTtlMs = Math.max(MIN_LEASE_TTL_MS, Math.min(this.#intervalMs, this.#issueIntervalMs) * 3);
+    this.#now = config.now ?? Date.now;
   }
 
   async init(deps: WorkerDeps): Promise<void> {
@@ -85,7 +100,10 @@ export class GithubReconcileWorker extends MastraWorker {
     if (this.#running) return;
     if (!this.deps) throw new Error('GithubReconcileWorker: call init() before start()');
     this.#running = true;
-    this.deps.logger.info('GitHub pull request reconcile worker started', { intervalMs: this.#intervalMs });
+    this.deps.logger.info('GitHub reconcile worker started', {
+      pullRequestIntervalMs: this.#reconcile ? this.#intervalMs : undefined,
+      issueIntervalMs: this.#reconcileIssues ? this.#issueIntervalMs : undefined,
+    });
     // Sweep on boot: a restart is exactly when webhooks were most likely missed.
     this.#schedule(0);
   }
@@ -108,14 +126,30 @@ export class GithubReconcileWorker extends MastraWorker {
       this.#timer = undefined;
       const run = this.#tick().finally(() => {
         this.#inFlight = undefined;
-        this.#schedule(this.#intervalMs);
+        this.#schedule(this.#nextDelay());
       });
       this.#inFlight = run;
     }, delayMs);
     this.#timer.unref?.();
   }
 
+  #nextDelay(): number {
+    const now = this.#now();
+    const due = [
+      this.#reconcile ? this.#nextPullRequestReconcileAt : undefined,
+      this.#reconcileIssues ? this.#nextIssueReconcileAt : undefined,
+    ].filter((at): at is number => at !== undefined);
+    return Math.max(0, Math.min(...due) - now);
+  }
+
   async #tick(): Promise<void> {
+    const now = this.#now();
+    const reconcilePullRequests = Boolean(this.#reconcile && now >= this.#nextPullRequestReconcileAt);
+    const reconcileIssues = Boolean(this.#reconcileIssues && now >= this.#nextIssueReconcileAt);
+    if (!reconcilePullRequests && !reconcileIssues) return;
+    if (reconcilePullRequests) this.#nextPullRequestReconcileAt = now + this.#intervalMs;
+    if (reconcileIssues) this.#nextIssueReconcileAt = now + this.#issueIntervalMs;
+
     // Replicas share one sweep: the ingress dedupes duplicate writes, but the
     // reads still burn the installation's rate limit.
     const lease = await this.#leaseProvider
@@ -123,14 +157,7 @@ export class GithubReconcileWorker extends MastraWorker {
       .catch(() => ({ acquired: false }));
     if (!lease.acquired) return;
 
-    // Track whether this owner still holds the lease. A `renewLease` result
-    // of `false` (or a renewal error) means another replica has taken the
-    // lease. Once that happens the folded issue sweep must not run — it
-    // would race the new owner's writes.
     let hasLease = true;
-    // Folding the issue sweep into the same tick extends how long we hold the
-    // lease. Renew periodically so a replica can't grab the expired lease and
-    // start an overlapping sweep partway through this one.
     const renewalTimer = setInterval(
       () => {
         void this.#leaseProvider
@@ -157,51 +184,58 @@ export class GithubReconcileWorker extends MastraWorker {
     try {
       const targets = await this.#targets();
       if (targets.length === 0) return;
-      const startedAt = Date.now();
-      const { errors, ...counts } = await this.#reconcile(targets);
-      const context = { ...counts, candidateRepositories: targets.length, durationMs: Date.now() - startedAt };
-      if (counts.failed > 0) {
-        this.deps?.logger.warn('GitHub pull request reconcile sweep completed with failures', { ...context, errors });
-      } else if (counts.merged > 0 || counts.closed > 0) {
-        this.deps?.logger.info('GitHub pull request reconcile replayed missed merges/closes', context);
-      } else {
-        this.deps?.logger.debug('GitHub pull request reconcile sweep completed', context);
-      }
-      // Fold the issue-metadata sweep into the same tick so a single lease
-      // covers both writers of card state for these repositories. Skip it
-      // if the lease was lost during the PR sweep — running would race a
-      // replica that already re-acquired the lease.
-      if (this.#reconcileIssues && hasLease) {
-        const issueStartedAt = Date.now();
+
+      if (reconcilePullRequests && this.#reconcile) {
+        const startedAt = Date.now();
         try {
-          const { errors: issueErrors, ...issueCounts } = await this.#reconcileIssues(targets);
-          const issueContext = {
-            ...issueCounts,
-            candidateRepositories: targets.length,
-            durationMs: Date.now() - issueStartedAt,
-          };
-          if (issueCounts.failed > 0) {
-            this.deps?.logger.warn('GitHub issue reconcile sweep completed with failures', {
-              ...issueContext,
-              errors: issueErrors,
-            });
-          } else if (issueCounts.updated > 0) {
-            this.deps?.logger.info('GitHub issue reconcile patched stale metadata', issueContext);
+          const { errors, ...counts } = await this.#reconcile(targets);
+          const context = { ...counts, candidateRepositories: targets.length, durationMs: Date.now() - startedAt };
+          if (counts.failed > 0) {
+            this.deps?.logger.warn('GitHub pull request reconcile sweep completed with failures', { ...context, errors });
+          } else if (counts.merged > 0 || counts.closed > 0) {
+            this.deps?.logger.info('GitHub pull request reconcile replayed missed merges/closes', context);
           } else {
-            this.deps?.logger.debug('GitHub issue reconcile sweep completed', issueContext);
+            this.deps?.logger.debug('GitHub pull request reconcile sweep completed', context);
           }
-        } catch (issueError) {
-          this.deps?.logger.warn('GitHub issue reconcile sweep failed', {
-            error: issueError instanceof Error ? issueError.message : String(issueError),
+        } catch (error) {
+          this.deps?.logger.warn('GitHub pull request reconcile sweep failed', {
+            error: error instanceof Error ? error.message : String(error),
           });
         }
-      } else if (this.#reconcileIssues && !hasLease) {
+      }
+
+      if (reconcileIssues && this.#reconcileIssues && hasLease) {
+        const startedAt = Date.now();
+        try {
+          const { errors, ...counts } = await this.#reconcileIssues(targets);
+          const context = { ...counts, candidateRepositories: targets.length, durationMs: Date.now() - startedAt };
+          if (counts.failed > 0) {
+            this.deps?.logger.warn('GitHub issue reconcile sweep completed with failures', { ...context, errors });
+          } else if (counts.closed > 0) {
+            this.deps?.logger.info('GitHub issue reconcile replayed closed work items', context);
+          } else if (counts.updated > 0) {
+            this.deps?.logger.info('GitHub issue reconcile patched stale metadata', context);
+          } else {
+            this.deps?.logger.debug('GitHub issue reconcile sweep completed', context);
+          }
+        } catch (error) {
+          this.deps?.logger.warn('GitHub issue reconcile sweep failed', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      } else if (reconcileIssues && this.#reconcileIssues && !hasLease) {
         this.deps?.logger.debug('GitHub issue reconcile skipped: lease lost during pull-request sweep');
       }
-    } catch (error) {
-      this.deps?.logger.warn('GitHub pull request reconcile sweep failed', {
-        error: error instanceof Error ? error.message : String(error),
-      });
+
+      if (this.#sweepBaseCheckpoints && hasLease) {
+        try {
+          await this.#sweepBaseCheckpoints();
+        } catch (error) {
+          this.deps?.logger.warn('GitHub base-checkpoint freshness sweep failed', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
     } finally {
       clearInterval(renewalTimer);
       if (hasLease) {

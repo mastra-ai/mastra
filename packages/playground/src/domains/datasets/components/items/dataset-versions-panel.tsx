@@ -1,19 +1,23 @@
 'use client';
 
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
-import { Column } from '@mastra/playground-ui/components/Columns';
-import { ItemList } from '@mastra/playground-ui/components/ItemList';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import {
+  ThreadList,
+  ThreadListEmpty,
+  ThreadListItem,
+  ThreadListItems,
+} from '@mastra/playground-ui/components/ThreadList';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { format } from 'date-fns';
-import { XIcon, GitCompareIcon, ArrowRightIcon } from 'lucide-react';
+import { GitCompareIcon, ArrowRightIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useDatasetVersions } from '../../hooks/use-dataset-versions';
 import type { DatasetVersion } from '../../hooks/use-dataset-versions';
 
 export interface DatasetVersionsPanelProps {
   datasetId: string;
-  onClose: () => void;
   onVersionSelect?: (version: DatasetVersion) => void;
   onCompareVersionsClick?: (versionNumbers: string[]) => void;
   activeVersion?: number | null;
@@ -24,7 +28,6 @@ export interface DatasetVersionsPanelProps {
  */
 export function DatasetVersionsPanel({
   datasetId,
-  onClose,
   onVersionSelect,
   onCompareVersionsClick,
   activeVersion,
@@ -33,10 +36,6 @@ export function DatasetVersionsPanel({
 
   const [isSelectionActive, setIsSelectionActive] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
-
-  const handleVersionClick = (version: DatasetVersion) => {
-    onVersionSelect?.(version);
-  };
 
   const isVersionSelected = (version: DatasetVersion): boolean => {
     if (activeVersion == null) return version.isCurrent;
@@ -64,10 +63,6 @@ export function DatasetVersionsPanel({
     setSelectedKeys(new Set());
   };
 
-  const handleCompareClick = () => {
-    setIsSelectionActive(true);
-  };
-
   const handleExecuteCompare = () => {
     if (selectedKeys.size === 2) {
       onCompareVersionsClick?.(Array.from(selectedKeys));
@@ -75,111 +70,100 @@ export function DatasetVersionsPanel({
   };
 
   return (
-    <Column withLeftSeparator={true} className="w-56">
-      {isSelectionActive ? (
-        <Column.Toolbar className="grid w-full justify-stretch gap-3">
-          <ButtonsGroup>
-            <Button onClick={handleCancelSelection}>Cancel</Button>
+    <div className="border-border1 grid w-64 grid-rows-[auto_1fr] gap-2 overflow-hidden border-l pt-3 pl-3">
+      <div className="flex items-center justify-between gap-2 pr-1 pl-2">
+        <Txt as="h2" variant="ui-md" className="text-neutral3">
+          Versions
+        </Txt>
+        {isSelectionActive ? (
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="sm" onClick={handleCancelSelection}>
+              Cancel
+            </Button>
             <Button
-              variant="primary"
+              variant="ghost"
+              size="sm"
               disabled={selectedKeys.size !== 2}
               onClick={handleExecuteCompare}
               tooltip={selectedKeys.size !== 2 ? 'Select two versions to enable comparison' : undefined}
-              className="w-full"
             >
               <ArrowRightIcon /> Compare
             </Button>
-          </ButtonsGroup>
-        </Column.Toolbar>
-      ) : (
-        <Column.Toolbar>
-          <Button onClick={handleCompareClick}>
-            <GitCompareIcon /> Compare Ver.
-          </Button>
-          <Button onClick={onClose} tooltip="Hide Versions Panel">
-            <XIcon />
-          </Button>
-        </Column.Toolbar>
-      )}
-      <Column.Content>
-        {isLoading ? (
-          <DatasetVersionsListSkeleton />
+          </div>
         ) : (
-          <ItemList>
-            <ItemList.Header>
-              <ItemList.HeaderCol>Dataset Version History</ItemList.HeaderCol>
-            </ItemList.Header>
-
-            <ItemList.Scroller>
-              <ItemList.Items>
-                {versions?.map(item => {
-                  const key = String(item.version);
-                  const createdAtDate = item.createdAt
-                    ? typeof item.createdAt === 'string'
-                      ? new Date(item.createdAt)
-                      : item.createdAt
-                    : null;
-
-                  return (
-                    <ItemList.Row key={String(item.version)} isSelected={isSelectionActive && selectedKeys.has(key)}>
-                      {isSelectionActive && (
-                        <ItemList.LabelCell>
-                          <Checkbox
-                            checked={selectedKeys.has(key)}
-                            onCheckedChange={() => {}}
-                            onClick={e => {
-                              e.stopPropagation();
-                              handleToggleSelection(key);
-                            }}
-                            aria-label={`Select version ${
-                              createdAtDate
-                                ? `v${item.version} — ${format(createdAtDate, 'MMM d, yyyy HH:mm')}`
-                                : `v${item.version}`
-                            }`}
-                          />
-                        </ItemList.LabelCell>
-                      )}
-                      <ItemList.RowButton
-                        item={item}
-                        isFeatured={isVersionSelected(item)}
-                        columns={[{ name: 'version', label: 'Dataset Version History', size: '1fr' }]}
-                        onClick={() => handleVersionClick(item)}
-                        className="py-2"
-                      >
-                        <ItemList.VersionCell version={item.version} date={createdAtDate} isLatest={item.isCurrent} />
-                      </ItemList.RowButton>
-                    </ItemList.Row>
-                  );
-                })}
-              </ItemList.Items>
-              {hasNextPage && (
-                <Button size="md" onClick={() => fetchNextPage()} disabled={isFetchingNextPage} className="mt-2 w-full">
-                  {isFetchingNextPage ? 'Loading...' : 'Load More'}
-                </Button>
-              )}
-            </ItemList.Scroller>
-          </ItemList>
+          <Button variant="ghost" size="sm" onClick={() => setIsSelectionActive(true)}>
+            <GitCompareIcon /> Compare
+          </Button>
         )}
-      </Column.Content>
-    </Column>
-  );
-}
+      </div>
 
-function DatasetVersionsListSkeleton() {
-  return (
-    <ItemList>
-      <ItemList.Header>
-        <ItemList.HeaderCol>Dataset Version History</ItemList.HeaderCol>
-      </ItemList.Header>
-      <ItemList.Items>
-        {Array.from({ length: 3 }).map((_, index) => (
-          <ItemList.Row key={index}>
-            <ItemList.RowButton columns={[{ name: 'version', label: 'Dataset Version History', size: '1fr' }]}>
-              <ItemList.TextCell isLoading>Loading...</ItemList.TextCell>
-            </ItemList.RowButton>
-          </ItemList.Row>
-        ))}
-      </ItemList.Items>
-    </ItemList>
+      {isLoading ? (
+        <div className="grid content-start gap-1 px-2">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <Skeleton key={index} className="h-9" />
+          ))}
+        </div>
+      ) : (
+        <ThreadList aria-label="Dataset versions" embedded>
+          {!versions?.length ? (
+            <ThreadListEmpty>Dataset versions will appear here</ThreadListEmpty>
+          ) : (
+            <ThreadListItems>
+              {versions.map(item => {
+                const key = String(item.version);
+                const createdAtDate = item.createdAt
+                  ? typeof item.createdAt === 'string'
+                    ? new Date(item.createdAt)
+                    : item.createdAt
+                  : null;
+
+                return (
+                  <ThreadListItem
+                    key={key}
+                    isActive={isSelectionActive ? selectedKeys.has(key) : isVersionSelected(item)}
+                    onClick={() => (isSelectionActive ? handleToggleSelection(key) : onVersionSelect?.(item))}
+                  >
+                    <span className="flex w-full min-w-0 items-center gap-2.5">
+                      {/* Checkbox is purely visual — the row button handles toggling. Making it
+                          interactive causes a double toggle (checkbox + row click). */}
+                      {isSelectionActive && (
+                        <Checkbox
+                          checked={selectedKeys.has(key)}
+                          tabIndex={-1}
+                          className="pointer-events-none"
+                          aria-hidden="true"
+                        />
+                      )}
+                      <span className="flex min-w-0 flex-1 items-center gap-2 text-xs">
+                        <span className="text-neutral5 shrink-0 font-medium">v.{item.version}</span>
+                        {createdAtDate && (
+                          <span className="text-neutral3 min-w-0 flex-1 truncate">
+                            {format(createdAtDate, 'MMM d, yyyy HH:mm')}
+                          </span>
+                        )}
+                        {item.isCurrent && <span className="text-neutral3 shrink-0">latest</span>}
+                      </span>
+                    </span>
+                  </ThreadListItem>
+                );
+              })}
+              {hasNextPage && (
+                <li>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => fetchNextPage()}
+                    disabled={isFetchingNextPage}
+                    className="w-full"
+                  >
+                    {isFetchingNextPage ? 'Loading...' : 'Load More'}
+                  </Button>
+                </li>
+              )}
+            </ThreadListItems>
+          )}
+        </ThreadList>
+      )}
+    </div>
   );
 }

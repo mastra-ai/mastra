@@ -11,6 +11,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
+import { factoryDispatchFailureMetadata } from '../rules/dispatch-errors.js';
 import type {
   FactoryStartCoordinator,
   FactoryStartPreparedResult,
@@ -18,8 +19,9 @@ import type {
 } from '../rules/start-coordinator.js';
 import { FactoryStartTransitionError } from '../rules/start-coordinator.js';
 import type { FactoryTransitionRequest, FactoryTransitionService } from '../rules/transition-service.js';
-import type { FactoryRuleBoard, FactoryRuleStage } from '../rules/types.js';
-import { FACTORY_RULE_BOARDS, FACTORY_RULE_STAGES } from '../rules/types.js';
+import type { FactoryRuleBoard } from '../rules/types.js';
+import { FACTORY_RULE_BOARDS, isFactoryRuleStage } from '../rules/types.js';
+import type { LiveSessions } from '../session/live-sessions.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { QueueHealthStorage } from '../storage/domains/queue-health/base.js';
@@ -36,8 +38,13 @@ import type {
   WorkItemStage,
   WorkItemsStorage,
 } from '../storage/domains/work-items/base.js';
-import { WorkItemRelationError } from '../storage/domains/work-items/base.js';
+import {
+  FACTORY_PULL_REQUEST_RECONCILIATION_KEY,
+  FACTORY_RULE_MATERIALIZATION_KEY,
+  WorkItemRelationError,
+} from '../storage/domains/work-items/base.js';
 import { computeFactoryMetrics, parseMetricsRange } from '../storage/domains/work-items/metrics.js';
+import { buildAttentionRoutes, factoryDecisionType } from './attention.js';
 import type { RouteDependencies } from './route.js';
 import { Route } from './route.js';
 
@@ -53,6 +60,31 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
   transitionService?: Pick<FactoryTransitionService, 'transition' | 'ruleSetVersion'>;
   /** Coordinator that binds a Factory run before dispatching its kickoff. */
   startCoordinator?: Pick<FactoryStartCoordinator, 'prepare'>;
+  /** Materialized sessions, read to report which of the listed cards are being worked. */
+  liveSessions: Pick<LiveSessions, 'isRunning'>;
+}
+
+/** The card as clients see it, without the dispatcher's internal bookkeeping. */
+function toWireWorkItem(item: WorkItemRow): WorkItemRow {
+  if (
+    !item.metadata ||
+    (!(FACTORY_RULE_MATERIALIZATION_KEY in item.metadata) &&
+      !(FACTORY_PULL_REQUEST_RECONCILIATION_KEY in item.metadata))
+  ) {
+    return item;
+  }
+  return { ...item, metadata: publicWorkItemMetadata(item.metadata) ?? {} };
+}
+
+/** Session ids of the listed cards whose agent run is in flight. */
+function runningSessionIds(items: WorkItemRow[], liveSessions: Pick<LiveSessions, 'isRunning'>): string[] {
+  const running = new Set<string>();
+  for (const item of items) {
+    for (const { sessionId } of Object.values(item.sessions)) {
+      if (liveSessions.isRunning(sessionId)) running.add(sessionId);
+    }
+  }
+  return [...running];
 }
 
 function loose(c: unknown): Context {
@@ -89,6 +121,16 @@ function validMetadata(value: unknown): value is Record<string, unknown> | null 
   } catch {
     return false;
   }
+}
+
+function publicWorkItemMetadata(value: Record<string, unknown> | null): Record<string, unknown> | null {
+  if (value === null) return null;
+  const {
+    [FACTORY_RULE_MATERIALIZATION_KEY]: _materialization,
+    [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]: _reconciliation,
+    ...metadata
+  } = value;
+  return metadata;
 }
 
 function parseExternalSource(value: unknown): ExternalWorkItemSource | null | undefined {
@@ -136,7 +178,11 @@ export function parseCreateWorkItem(body: unknown): CreateWorkItemInput | null {
   if (stages !== undefined && !validStages(stages)) return null;
   const parsedSessions = sessions === undefined ? undefined : parseSessions(sessions);
   if (sessions !== undefined && parsedSessions === undefined) return null;
-  if (metadata !== undefined && !validMetadata(metadata)) return null;
+  let parsedMetadata: Record<string, unknown> | null | undefined;
+  if (metadata !== undefined) {
+    if (!validMetadata(metadata)) return null;
+    parsedMetadata = publicWorkItemMetadata(metadata);
+  }
 
   return {
     title: title.trim(),
@@ -144,7 +190,7 @@ export function parseCreateWorkItem(body: unknown): CreateWorkItemInput | null {
     ...(hasParentWorkItemId ? { parentWorkItemId: parentWorkItemId ?? null } : {}),
     ...(stages !== undefined ? { stages } : {}),
     ...(parsedSessions !== undefined ? { sessions: parsedSessions } : {}),
-    ...(metadata !== undefined ? { metadata } : {}),
+    ...(parsedMetadata !== undefined ? { metadata: parsedMetadata } : {}),
   };
 }
 
@@ -168,14 +214,18 @@ export function parseUpdateWorkItem(body: unknown): UpdateWorkItemInput | null {
   if (stages !== undefined && !validStages(stages)) return null;
   const parsedSessions = sessions === undefined ? undefined : parseSessions(sessions);
   if (sessions !== undefined && parsedSessions === undefined) return null;
-  if (metadata !== undefined && !validMetadata(metadata)) return null;
+  let parsedMetadata: Record<string, unknown> | null | undefined;
+  if (metadata !== undefined) {
+    if (!validMetadata(metadata)) return null;
+    parsedMetadata = publicWorkItemMetadata(metadata);
+  }
 
   return {
     ...(hasParentWorkItemId ? { parentWorkItemId: parentWorkItemId ?? null } : {}),
     ...(title !== undefined ? { title: title.trim() } : {}),
     ...(stages !== undefined ? { stages } : {}),
     ...(parsedSessions !== undefined ? { sessions: parsedSessions } : {}),
-    ...(metadata !== undefined ? { metadata } : {}),
+    ...(parsedMetadata !== undefined ? { metadata: parsedMetadata } : {}),
   };
 }
 
@@ -205,9 +255,7 @@ function parseTransitionBody(
   const board = FACTORY_RULE_BOARDS.includes(body.board as FactoryRuleBoard)
     ? (body.board as FactoryRuleBoard)
     : undefined;
-  const stage = FACTORY_RULE_STAGES.includes(body.stage as FactoryRuleStage)
-    ? (body.stage as FactoryRuleStage)
-    : undefined;
+  const stage = isFactoryRuleStage(body.stage) ? body.stage : undefined;
   const requestId = boundedText(body.requestId, 256);
   const cause = boundedText(body.cause, 256);
   if (
@@ -256,9 +304,7 @@ function parseStartBody(
   const threadTitle = boundedText(body.threadTitle, 512);
   const kickoffKey = boundedText(body.kickoffKey, 256);
   const invocation = parseInvocation(body.invocation);
-  const destinationStage = FACTORY_RULE_STAGES.includes(body.destinationStage as FactoryRuleStage)
-    ? (body.destinationStage as FactoryRuleStage)
-    : undefined;
+  const destinationStage = isFactoryRuleStage(body.destinationStage) ? body.destinationStage : undefined;
   const role = boundedText(body.workItem.role, 32);
   const id = body.workItem.id === undefined ? undefined : boundedText(body.workItem.id, 64);
   if (body.workItem.id !== undefined && (!id || !UUID_RE.test(id))) return null;
@@ -298,7 +344,16 @@ function parseStartBody(
   };
 }
 
-const DECISION_STATUSES = new Set<FactoryDispatchStatus>(['pending', 'leased', 'retry', 'succeeded', 'failed']);
+const DECISION_STATUSES = new Set<FactoryDispatchStatus>([
+  'pending',
+  'proposed',
+  'dismissed',
+  'superseded',
+  'leased',
+  'retry',
+  'succeeded',
+  'failed',
+]);
 const DEFAULT_DECISION_PAGE_SIZE = 25;
 const MAX_DECISION_PAGE_SIZE = 50;
 
@@ -341,14 +396,17 @@ function parseDecisionCursor(raw: string | undefined): { createdAt: Date; id: st
 }
 
 function decisionSummary(decision: FactoryDeferredDecisionRecord) {
-  const type = typeof decision.decision.type === 'string' ? decision.decision.type.slice(0, 64) : 'unknown';
   return {
     id: decision.id,
     evaluationId: decision.evaluationId,
     workItemId: decision.workItemId,
-    type,
+    type: factoryDecisionType(decision),
+    role: typeof decision.decision.role === 'string' ? decision.decision.role.slice(0, 32) : null,
     status: decision.status,
     attempts: decision.attempts,
+    failureOccurrence: decision.failureOccurrence,
+    failureCode: decision.failureCode,
+    canRetry: factoryDispatchFailureMetadata(decision.failureCode).canRetry,
     lastError: decision.lastError?.slice(0, 512) ?? null,
     createdAt: decision.createdAt.toISOString(),
     updatedAt: decision.updatedAt.toISOString(),
@@ -462,11 +520,58 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
     }
   }
 
+  /** Releasing a parked run and dropping it: same request, opposite outcomes, both audited as consent. */
+  #proposalRoute({
+    verb,
+    settle,
+  }: {
+    verb: 'approve' | 'dismiss';
+    settle: (
+      orgId: string,
+      factoryProjectId: string,
+      decisionId: string,
+      now: Date,
+      userId: string,
+    ) => Promise<FactoryDeferredDecisionRecord | null>;
+  }): ApiRoute {
+    const { audit, workItems } = this.deps;
+    return registerApiRoute(`/web/factory/projects/:id/decisions/:decisionId/${verb}`, {
+      method: 'POST',
+      requiresAuth: false,
+      handler: async c => {
+        const context = loose(c);
+        const resolved = await this.#resolveProject(context);
+        if ('response' in resolved) return resolved.response;
+        const decisionId = context.req.param('decisionId');
+        if (!decisionId || !UUID_RE.test(decisionId)) return c.json({ error: 'invalid_decision_id' }, 422);
+        await workItems.ensureReady();
+        const now = new Date();
+        const decision = await settle(resolved.orgId, resolved.factoryProjectId, decisionId, now, resolved.userId);
+        if (!decision) return c.json({ error: 'decision_not_proposed' }, 409);
+        // Releasing a proposal is a person taking the item on. Approval arms the
+        // item's autonomy inside the same storage transaction (see
+        // approveDeferredDecision), so follow-up runs no longer wait for approval.
+        await audit.emit({
+          context,
+          input: {
+            action: verb === 'approve' ? 'factory.run.approved' : 'factory.run.dismissed',
+            factoryProjectId: resolved.factoryProjectId,
+            targets: decision.workItemId
+              ? [{ type: 'work_item', id: decision.workItemId }]
+              : [{ type: 'rule_decision', id: decision.id }],
+            metadata: { decisionId: decision.id, effect: factoryDecisionType(decision) },
+          },
+        });
+        return c.json({ decision: decisionSummary(decision) });
+      },
+    });
+  }
+
   /** Build the Factory work-item routes as Mastra `apiRoutes`. */
   routes(): ApiRoute[] {
-    const { audit, workItems, queueHealth, transitionService, startCoordinator } = this.deps;
+    const { audit, workItems, queueHealth, transitionService, startCoordinator, liveSessions } = this.deps;
     return [
-      // ── List the org's work items for a project ─────────────────────────────
+      // ── List the org's work items for a project, and which are being worked ─
       registerApiRoute('/web/factory/projects/:id/work-items', {
         method: 'GET',
         requiresAuth: false,
@@ -478,7 +583,10 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             orgId: resolved.orgId,
             factoryProjectId: resolved.factoryProjectId,
           });
-          return c.json({ workItems: items });
+          return c.json({
+            workItems: items.map(toWireWorkItem),
+            runningSessionIds: runningSessionIds(items, liveSessions),
+          });
         },
       }),
 
@@ -548,6 +656,14 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
         },
       }),
 
+      ...buildAttentionRoutes({
+        workItems,
+        resolveProject: context => this.#resolveProject(loose(context)),
+      }),
+
+      this.#proposalRoute({ verb: 'approve', settle: workItems.approveDeferredDecision.bind(workItems) }),
+      this.#proposalRoute({ verb: 'dismiss', settle: workItems.dismissDeferredDecision.bind(workItems) }),
+
       registerApiRoute('/web/factory/projects/:id/decisions/:decisionId/retry', {
         method: 'POST',
         requiresAuth: false,
@@ -558,6 +674,14 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           const decisionId = context.req.param('decisionId');
           if (!decisionId || !UUID_RE.test(decisionId)) return c.json({ error: 'invalid_decision_id' }, 422);
           await workItems.ensureReady();
+          const current = await workItems.getDeferredDecision(resolved.orgId, resolved.factoryProjectId, decisionId);
+          if (
+            !current ||
+            current.status !== 'failed' ||
+            !factoryDispatchFailureMetadata(current.failureCode).canRetry
+          ) {
+            return c.json({ error: 'decision_not_retryable' }, 409);
+          }
           const decision = await workItems.retryDeferredDecision(
             resolved.orgId,
             resolved.factoryProjectId,
@@ -640,7 +764,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
                 patch: boundedPatch as unknown as Record<string, unknown>,
               });
             }
-            return c.json({ workItem: item });
+            return c.json({ workItem: toWireWorkItem(item) });
           } catch (error) {
             if (error instanceof WorkItemRelationError) {
               return c.json({ error: error.code, message: error.message }, 400);
@@ -714,6 +838,11 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           if (!input) return c.json({ error: 'invalid_factory_start' }, 400);
           input.requestContext = loose(c).get('requestContext');
           input.defaultModelId = resolved.defaultModelId ?? undefined;
+          // This route is only reached by a person pressing a run action, so
+          // reaching it is the commitment the approval gate is asking for.
+          // Arming rides inside prepareRunStart's transaction so a crash can't
+          // start the run while leaving its follow-up work waiting on approval.
+          input.armAutonomy = true;
           if (
             !input.workItem.id &&
             ((input.workItem.input.stages ?? ['intake']).length !== 1 ||
@@ -785,7 +914,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
               previous: updated.previous,
               patch: patch as Record<string, unknown>,
             });
-            return c.json({ workItem: updated.item });
+            return c.json({ workItem: toWireWorkItem(updated.item) });
           } catch (error) {
             if (error instanceof WorkItemRelationError) {
               return c.json({ error: error.code, message: error.message }, 400);

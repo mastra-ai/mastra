@@ -18,6 +18,25 @@ async function setup() {
     userId: 'user-1',
     input: { name: 'Project 1' },
   });
+  const item = (
+    await seeded.workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'github-issue:42',
+          url: 'https://github.com/acme/repo/issues/42',
+        },
+        title: 'Issue 42',
+        stages: ['execute'],
+        sessions: {},
+        metadata: {},
+      },
+    })
+  ).item;
   const installation = await sourceControl.installations.upsert({
     orgId: 'org-1',
     connectedByUserId: 'user-1',
@@ -52,7 +71,7 @@ async function setup() {
       id: 'binding-1',
       orgId: 'org-1',
       factoryProjectId: project.id,
-      workItemId: 'item-1',
+      workItemId: item.id,
       threadId: 'thread-1',
       resourceId: 'resource-1',
       projectPath: '/workspace',
@@ -63,28 +82,7 @@ async function setup() {
       createdAt: new Date(),
       revokedAt: null,
     },
-    item: {
-      id: 'item-1',
-      orgId: 'org-1',
-      userId: 'user-1',
-      createdBy: 'user-1',
-      factoryProjectId: project.id,
-      externalSource: {
-        integrationId: 'github',
-        type: 'issue',
-        externalId: 'github:10:issue:42',
-        url: 'https://github.com/acme/repo/issues/42',
-      },
-      parentWorkItemId: null,
-      title: 'Issue 42',
-      stages: ['execute'],
-      sessions: {},
-      metadata: {},
-      revision: 2,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      stageHistory: [],
-    },
+    item,
     assistantMessageId: 'message-1',
     toolCallId: 'call-1',
     toolName: 'execute_command',
@@ -92,29 +90,54 @@ async function setup() {
     toolResult: { stdout: 'https://github.com/acme/repo/pull/17\n' },
     status: 'success' as const,
   };
-  return { sourceControl, integrationStorage, project, github, pullsGet, input };
+  return { sourceControl, integrationStorage, workItems: seeded.workItems, project, github, pullsGet, input };
 }
 
 describe('recordFactoryPullRequestProvenance', () => {
   it('records only a verified gh pr create result for the exact bound Factory work item', async () => {
-    const { sourceControl, integrationStorage, github, pullsGet, input } = await setup();
-    await recordFactoryPullRequestProvenance(github, sourceControl, integrationStorage, input);
+    const { sourceControl, integrationStorage, workItems, github, pullsGet, input } = await setup();
+    await recordFactoryPullRequestProvenance(github, sourceControl, integrationStorage, workItems, input);
 
     expect(pullsGet).toHaveBeenCalledWith({ owner: 'acme', repo: 'repo', pull_number: 17 });
     expect((await integrationStorage.subscriptions.listByTarget('factory-pr-provenance:10:17'))[0]).toMatchObject({
       threadId: 'thread-1',
       data: {
         bindingId: 'binding-1',
-        workItemId: 'item-1',
+        workItemId: input.item.id,
         assistantMessageId: 'message-1',
         toolCallId: 'call-1',
       },
     });
   });
 
+  it('repairs a review card created before provenance was recorded', async () => {
+    const { sourceControl, integrationStorage, workItems, project, github, input } = await setup();
+    const review = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'factory-rule-dispatcher',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: 'github-pr:17',
+          url: 'https://github.com/acme/repo/pull/17',
+        },
+        title: 'PR 17',
+        stages: ['intake'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+
+    await recordFactoryPullRequestProvenance(github, sourceControl, integrationStorage, workItems, input);
+
+    expect((await workItems.get({ orgId: 'org-1', id: review.item.id }))?.parentWorkItemId).toBe(input.item.id);
+  });
+
   it('ignores unrelated command results and API mismatches', async () => {
-    const { sourceControl, integrationStorage, github, input, pullsGet } = await setup();
-    await recordFactoryPullRequestProvenance(github, sourceControl, integrationStorage, {
+    const { sourceControl, integrationStorage, workItems, github, input, pullsGet } = await setup();
+    await recordFactoryPullRequestProvenance(github, sourceControl, integrationStorage, workItems, {
       ...input,
       toolInput: { command: 'gh pr view 17' },
     });
@@ -123,16 +146,16 @@ describe('recordFactoryPullRequestProvenance', () => {
     pullsGet.mockResolvedValueOnce({
       data: { number: 17, html_url: 'https://github.com/other/repo/pull/17', base: { repo: { id: 99 } } },
     });
-    await recordFactoryPullRequestProvenance(github, sourceControl, integrationStorage, input);
+    await recordFactoryPullRequestProvenance(github, sourceControl, integrationStorage, workItems, input);
     expect(await integrationStorage.subscriptions.listByTarget('factory-pr-provenance:10:17')).toEqual([]);
   });
 
   it('fails closed when pull request verification is unavailable', async () => {
-    const { sourceControl, integrationStorage, github, input, pullsGet } = await setup();
+    const { sourceControl, integrationStorage, workItems, github, input, pullsGet } = await setup();
     pullsGet.mockRejectedValueOnce(new Error('GitHub unavailable'));
 
     await expect(
-      recordFactoryPullRequestProvenance(github, sourceControl, integrationStorage, input),
+      recordFactoryPullRequestProvenance(github, sourceControl, integrationStorage, workItems, input),
     ).resolves.toBeUndefined();
     expect(await integrationStorage.subscriptions.listByTarget('factory-pr-provenance:10:17')).toEqual([]);
   });

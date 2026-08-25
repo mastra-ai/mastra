@@ -10,6 +10,14 @@ import type { MastraBrowser } from '@mastra/core/browser';
 import type { LSPConfig } from '@mastra/core/workspace';
 import { AuthStorage } from '../auth/storage.js';
 import { buildCodexStagehandFetch, createCodexMiddleware } from '../providers/openai-codex.js';
+import {
+  isThinkingLevelSetting,
+  resolveDefaultThinkingLevel as resolveThinkingDefault,
+  THINKING_LEVEL_VALUES,
+} from '../thinking.js';
+import type { ThinkingLevelSetting, ThinkingLevelSource } from '../thinking.js';
+export { isThinkingLevelSetting, THINKING_LEVEL_VALUES } from '../thinking.js';
+export type { ThinkingLevelSetting, ThinkingLevelSource } from '../thinking.js';
 import { getAppDataDir } from '../utils/project.js';
 import { DEFAULT_STT_PROVIDER, resolveSTTModel } from '../voice/stt-registry.js';
 
@@ -72,8 +80,8 @@ export const MEMORY_GATEWAY_PROVIDER = MASTRA_GATEWAY_PROVIDER;
 /** @deprecated Renamed to {@link MASTRA_GATEWAY_DEFAULT_URL}. */
 export const MEMORY_GATEWAY_DEFAULT_URL = MASTRA_GATEWAY_DEFAULT_URL;
 
-/** Valid persisted thinking level values. */
-export type ThinkingLevelSetting = 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+/** Preferred model-independent web search/extract provider. */
+export type WebSearchProviderSetting = 'auto' | 'tavily' | 'parallel';
 
 /** Browser provider type. */
 export type BrowserProvider = 'stagehand' | 'agent-browser';
@@ -109,11 +117,63 @@ export interface VoiceSettings {
 /** Stagehand environment type. */
 export type StagehandEnv = 'LOCAL' | 'BROWSERBASE';
 
+/**
+ * Browser viewport: explicit dimensions, or `'window'` to follow the real
+ * browser window instead of emulating a fixed size.
+ */
+export type BrowserViewport = { width: number; height: number } | 'window';
+
+/** Named viewport sizes offered by `/browser set viewport`. */
+export const VIEWPORT_PRESETS = {
+  desktop: { width: 1280, height: 720 },
+  'desktop-hd': { width: 1920, height: 1080 },
+  laptop: { width: 1440, height: 900 },
+  tablet: { width: 768, height: 1024 },
+  mobile: { width: 390, height: 844 },
+} as const satisfies Record<string, { width: number; height: number }>;
+
+export type ViewportPreset = keyof typeof VIEWPORT_PRESETS;
+
+/**
+ * Largest viewport dimension accepted. Guards against typos that would launch a
+ * browser far larger than any display.
+ */
+const MAX_VIEWPORT_DIMENSION = 10000;
+
+function isValidDimension(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0 && value <= MAX_VIEWPORT_DIMENSION;
+}
+
+/**
+ * Parse a `WIDTHxHEIGHT` string (e.g. `1280x720`), a preset name, or `window`.
+ * Returns undefined when the input is not a usable viewport.
+ */
+export function parseViewportInput(input: string): BrowserViewport | undefined {
+  const value = input.trim().toLowerCase();
+  if (!value) return undefined;
+  if (value === 'window') return 'window';
+  if (value in VIEWPORT_PRESETS) return { ...VIEWPORT_PRESETS[value as ViewportPreset] };
+
+  const match = /^(\d+)\s*[x×]\s*(\d+)$/.exec(value);
+  if (!match) return undefined;
+  const width = Number(match[1]);
+  const height = Number(match[2]);
+  if (!isValidDimension(width) || !isValidDimension(height)) return undefined;
+  return { width, height };
+}
+
 /** Stagehand-specific browser settings. */
 export interface StagehandSettings {
   env: StagehandEnv;
   apiKey?: string;
   projectId?: string;
+  /**
+   * Model Stagehand uses for its AI operations, as `provider/model`
+   * (for example `anthropic/claude-sonnet-4-5`). Stagehand resolves the
+   * provider's API key from the environment (`ANTHROPIC_API_KEY`,
+   * `OPENAI_API_KEY`, and so on). Defaults to Stagehand's own default.
+   */
+  model?: string;
   /** Whether to preserve the user data directory after the browser closes. */
   preserveUserDataDir?: boolean;
 }
@@ -132,8 +192,11 @@ export interface BrowserSettings {
   provider: BrowserProvider;
   /** Whether to run headless (no visible browser window). */
   headless: boolean;
-  /** Browser viewport dimensions. */
-  viewport?: { width: number; height: number };
+  /**
+   * Browser viewport dimensions, or `'window'` to disable viewport emulation so
+   * the page follows the real browser window.
+   */
+  viewport?: BrowserViewport;
   /** CDP URL for connecting to an existing browser. */
   cdpUrl?: string;
   /** Path to a Chrome/Chromium user data directory (profile). */
@@ -234,6 +297,12 @@ export interface GlobalSettings {
     quietMode: boolean;
     /** Maximum quiet-mode detail preview lines for compact tool calls. Set to 0 to hide previews. */
     quietModeMaxToolPreviewLines: number;
+    /**
+     * Default web search/extract provider. `auto` picks the first configured
+     * provider key (Tavily, then Parallel). An explicit provider is only
+     * honored while its API key is configured.
+     */
+    webSearchProvider: WebSearchProviderSetting;
   };
   // Storage backend configuration
   storage: StorageSettings;
@@ -247,8 +316,9 @@ export interface GlobalSettings {
   updateDismissedVersion: string | null;
   // Mastra gateway configuration
   memoryGateway: { baseUrl?: string };
-  // LSP configuration forwarded to the workspace
-  lsp?: LSPConfig;
+  // LSP configuration forwarded to the workspace. Disabled unless the user
+  // opts in with `true` or an LSPConfig object.
+  lsp?: boolean | LSPConfig;
   // Browser automation configuration
   browser: BrowserSettings;
   // Direct TUI `!` shell passthrough configuration
@@ -257,8 +327,17 @@ export interface GlobalSettings {
   voice: VoiceSettings;
   // Signal routing configuration
   signals: SignalSettings;
+  // Read-only discovery of MCP servers configured by other coding agents
+  mcp: McpDiscoverySettings;
   // Cloud observability configuration (per-resource project IDs; tokens stored in auth.json)
   observability: ObservabilitySettings;
+}
+
+export interface McpDiscoverySettings {
+  /** Reuse top-level MCP servers from ~/.claude.json. */
+  claudeCodeGlobal: boolean;
+  /** Reuse MCP servers from $CODEX_HOME/config.toml or ~/.codex/config.toml. */
+  codexGlobal: boolean;
 }
 
 export interface SignalSettings {
@@ -327,6 +406,7 @@ const DEFAULTS: GlobalSettings = {
     thinkingLevel: 'off',
     quietMode: false,
     quietModeMaxToolPreviewLines: 2,
+    webSearchProvider: 'auto',
   },
   storage: { ...STORAGE_DEFAULTS },
   customModelPacks: [],
@@ -334,21 +414,22 @@ const DEFAULTS: GlobalSettings = {
   modelUseCounts: {},
   updateDismissedVersion: null,
   memoryGateway: {},
-  lsp: {},
+  lsp: false,
   browser: {
     enabled: false,
     provider: 'stagehand',
     headless: false,
-    viewport: { width: 1280, height: 720 },
+    viewport: { ...VIEWPORT_PRESETS.desktop },
     stagehand: { env: 'LOCAL' },
   },
   shellPassthrough: { mode: 'default' },
   voice: { enabled: false, engine: defaultVoiceEngine(), provider: DEFAULT_STT_PROVIDER },
   signals: { unixSocketPubSub: false, experimentalGithubSignals: false },
+  mcp: { claudeCodeGlobal: false, codexGlobal: false },
   observability: { resources: {}, localTracing: false },
 };
 
-export const THINKING_LEVEL_VALUES: ThinkingLevelSetting[] = ['off', 'low', 'medium', 'high', 'xhigh', 'max'];
+export const WEB_SEARCH_PROVIDER_VALUES: WebSearchProviderSetting[] = ['auto', 'tavily', 'parallel'];
 const QUIET_MODE_MAX_TOOL_PREVIEW_LINES_MAX = 8;
 const loadedSignalSettings = new WeakMap<GlobalSettings, SignalSettings>();
 
@@ -368,14 +449,14 @@ function signalSettingsEqual(left: SignalSettings, right: SignalSettings): boole
   );
 }
 
-function parseThinkingLevel(value: unknown): ThinkingLevelSetting {
-  return typeof value === 'string' && THINKING_LEVEL_VALUES.includes(value as ThinkingLevelSetting)
-    ? (value as ThinkingLevelSetting)
-    : DEFAULTS.preferences.thinkingLevel;
+function parseWebSearchProvider(value: unknown): WebSearchProviderSetting {
+  return typeof value === 'string' && WEB_SEARCH_PROVIDER_VALUES.includes(value as WebSearchProviderSetting)
+    ? (value as WebSearchProviderSetting)
+    : DEFAULTS.preferences.webSearchProvider;
 }
 
-export function isThinkingLevelSetting(value: unknown): value is ThinkingLevelSetting {
-  return typeof value === 'string' && THINKING_LEVEL_VALUES.includes(value as ThinkingLevelSetting);
+function parseThinkingLevel(value: unknown): ThinkingLevelSetting {
+  return isThinkingLevelSetting(value) ? value : DEFAULTS.preferences.thinkingLevel;
 }
 
 function parseModeThinkingDefaults(value: unknown): Record<string, ThinkingLevelSetting> {
@@ -403,6 +484,7 @@ function parsePreferences(rawPreferences: unknown): GlobalSettings['preferences'
     ...raw,
     thinkingLevel: parseThinkingLevel(raw.thinkingLevel),
     quietModeMaxToolPreviewLines: parseQuietModeMaxToolPreviewLines(raw.quietModeMaxToolPreviewLines),
+    webSearchProvider: parseWebSearchProvider(raw.webSearchProvider),
   };
 }
 
@@ -415,6 +497,14 @@ function parseSignalSettings(rawSignals: unknown): SignalSettings {
       typeof raw.experimentalGithubSignals === 'boolean'
         ? raw.experimentalGithubSignals
         : DEFAULTS.signals.experimentalGithubSignals,
+  };
+}
+
+function parseMcpDiscoverySettings(rawMcp: unknown): McpDiscoverySettings {
+  const raw = rawMcp && typeof rawMcp === 'object' ? (rawMcp as Record<string, unknown>) : {};
+  return {
+    claudeCodeGlobal: typeof raw.claudeCodeGlobal === 'boolean' ? raw.claudeCodeGlobal : DEFAULTS.mcp.claudeCodeGlobal,
+    codexGlobal: typeof raw.codexGlobal === 'boolean' ? raw.codexGlobal : DEFAULTS.mcp.codexGlobal,
   };
 }
 
@@ -534,14 +624,69 @@ const BROWSER_PROVIDERS = new Set<BrowserProvider>(['stagehand', 'agent-browser'
 const STAGEHAND_ENVS = new Set<StagehandEnv>(['LOCAL', 'BROWSERBASE']);
 
 /**
+ * Normalize a Stagehand model id, which must be provider-qualified.
+ *
+ * Stagehand reads the segment before the first slash as the provider, so a
+ * bare id like `gpt-4.1` is rejected as an unknown provider and a trailing
+ * slash leaves an empty model name that only fails once a request is made.
+ * Neither is usable, so both are dropped here rather than persisted.
+ *
+ * The provider name itself is checked where the command is issued, which can
+ * name the supported providers in an error; this module is on the startup path
+ * and only imports Stagehand lazily.
+ *
+ * @returns the trimmed model id, or undefined when it is unusable.
+ */
+function parseStagehandModel(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const model = value.trim();
+  const separator = model.indexOf('/');
+  if (separator <= 0) return undefined;
+  return model.slice(separator + 1).trim() ? model : undefined;
+}
+
+/**
+ * Validate a viewport read from settings.json, falling back to the default when
+ * it is missing or malformed.
+ */
+function parseStoredViewport(raw: unknown): BrowserViewport {
+  if (raw === 'window') return 'window';
+  if (raw && typeof raw === 'object') {
+    const { width, height } = raw as Record<string, unknown>;
+    if (isValidDimension(width) && isValidDimension(height)) return { width, height };
+  }
+  return { ...VIEWPORT_PRESETS.desktop };
+}
+
+/**
+ * Validate the `lsp` setting from JSON. Accepts both the boolean opt-in/opt-out
+ * form and the full LSPConfig object; anything else is treated as unset.
+ */
+function parseLspSettings(raw: unknown): boolean | LSPConfig | undefined {
+  if (typeof raw === 'boolean') return raw;
+  if (raw && typeof raw === 'object') return raw as LSPConfig;
+  return undefined;
+}
+
+/**
+ * Resolve the effective LSP config. LSP is opt-in: `false` and an absent
+ * setting both mean disabled, `true` means enabled with defaults.
+ */
+export function resolveLspSetting(lsp: boolean | LSPConfig | undefined): LSPConfig | false {
+  if (lsp === true) return {};
+  if (!lsp) return false;
+  return lsp;
+}
+
+/**
  * Deep-merge and validate browser settings from JSON.
  * Explicitly validates types to handle malformed settings.json gracefully.
  */
 function parseBrowserSettings(rawBrowser: unknown): BrowserSettings {
   const raw = rawBrowser && typeof rawBrowser === 'object' ? (rawBrowser as Record<string, unknown>) : {};
-  const rawViewport = raw.viewport && typeof raw.viewport === 'object' ? (raw.viewport as Record<string, unknown>) : {};
   const rawStagehand =
     raw.stagehand && typeof raw.stagehand === 'object' ? (raw.stagehand as Record<string, unknown>) : {};
+  const stagehandModel = parseStagehandModel(rawStagehand.model);
   const rawAgentBrowser =
     raw.agentBrowser && typeof raw.agentBrowser === 'object' ? (raw.agentBrowser as Record<string, unknown>) : {};
 
@@ -556,10 +701,7 @@ function parseBrowserSettings(rawBrowser: unknown): BrowserSettings {
     profile: typeof raw.profile === 'string' && raw.profile.trim() ? raw.profile.trim() : undefined,
     executablePath:
       typeof raw.executablePath === 'string' && raw.executablePath.trim() ? raw.executablePath.trim() : undefined,
-    viewport: {
-      width: typeof rawViewport.width === 'number' ? rawViewport.width : DEFAULTS.browser.viewport!.width,
-      height: typeof rawViewport.height === 'number' ? rawViewport.height : DEFAULTS.browser.viewport!.height,
-    },
+    viewport: parseStoredViewport(raw.viewport),
     scope: typeof raw.scope === 'string' && (raw.scope === 'shared' || raw.scope === 'thread') ? raw.scope : undefined,
     stagehand: {
       env:
@@ -572,6 +714,7 @@ function parseBrowserSettings(rawBrowser: unknown): BrowserSettings {
       ...(typeof rawStagehand.projectId === 'string' && rawStagehand.projectId.trim()
         ? { projectId: rawStagehand.projectId.trim() }
         : {}),
+      ...(stagehandModel ? { model: stagehandModel } : {}),
       ...(typeof rawStagehand.preserveUserDataDir === 'boolean'
         ? { preserveUserDataDir: rawStagehand.preserveUserDataDir }
         : {}),
@@ -681,11 +824,12 @@ function migrateFromAuth(settingsPath: string): boolean {
         modelUseCounts: raw.modelUseCounts && typeof raw.modelUseCounts === 'object' ? raw.modelUseCounts : {},
         updateDismissedVersion: typeof raw.updateDismissedVersion === 'string' ? raw.updateDismissedVersion : null,
         memoryGateway: raw.memoryGateway && typeof raw.memoryGateway === 'object' ? raw.memoryGateway : {},
-        lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
+        lsp: parseLspSettings(raw.lsp),
         browser: parseBrowserSettings(raw.browser),
         shellPassthrough: parseShellPassthroughSettings(raw.shellPassthrough),
         voice: parseVoiceSettings(raw.voice),
         signals: parseSignalSettings(raw.signals),
+        mcp: parseMcpDiscoverySettings(raw.mcp),
         observability: parseObservabilitySettings(raw.observability),
       };
       applyQuietModePreferenceRollout(settings, raw.onboarding);
@@ -808,11 +952,12 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
       modelUseCounts: raw.modelUseCounts && typeof raw.modelUseCounts === 'object' ? raw.modelUseCounts : {},
       updateDismissedVersion: typeof raw.updateDismissedVersion === 'string' ? raw.updateDismissedVersion : null,
       memoryGateway: raw.memoryGateway && typeof raw.memoryGateway === 'object' ? raw.memoryGateway : {},
-      lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
+      lsp: parseLspSettings(raw.lsp),
       browser: parseBrowserSettings(raw.browser),
       shellPassthrough: parseShellPassthroughSettings(raw.shellPassthrough),
       voice: parseVoiceSettings(raw.voice),
       signals: parseSignalSettings(raw.signals),
+      mcp: parseMcpDiscoverySettings(raw.mcp),
       observability: parseObservabilitySettings(raw.observability),
     };
 
@@ -948,9 +1093,6 @@ export function resolveModelDefaults(
   return modeDefaults;
 }
 
-/** Where a resolved default thinking level came from. */
-export type ThinkingLevelSource = 'mode-default' | 'global';
-
 /**
  * Resolve the default reasoning-effort level for a mode.
  *
@@ -965,9 +1107,13 @@ export function resolveDefaultThinkingLevel(
   settings: GlobalSettings,
   mode?: string | null,
 ): { level: ThinkingLevelSetting; source: ThinkingLevelSource } {
-  const modeLevel = mode ? settings.models.modeThinkingDefaults[mode] : undefined;
-  if (modeLevel) return { level: modeLevel, source: 'mode-default' };
-  return { level: settings.preferences.thinkingLevel, source: 'global' };
+  return resolveThinkingDefault(
+    {
+      globalDefault: settings.preferences.thinkingLevel,
+      modeDefaults: settings.models.modeThinkingDefaults,
+    },
+    mode,
+  );
 }
 
 /**
@@ -1142,9 +1288,16 @@ export async function createBrowserFromSettings(settings: BrowserSettings): Prom
     //     requires on every request.
     // Model is `gpt-5.4-mini`, the current ChatGPT-sign-in Codex whitelist
     // pick suited to Stagehand's vision + structured-output workload.
+    //
+    // An explicitly configured model wins: Codex is a fallback for users who
+    // have no model of their own, not an override of one they chose. Stagehand
+    // resolves the provider's API key from the environment for plain
+    // `provider/model` strings, so no key plumbing is needed here.
     const authStorage = new AuthStorage();
     const cred = authStorage.get('openai-codex');
-    if (cred?.type === 'oauth') {
+    if (stagehand?.model) {
+      stagehandOpts.model = stagehand.model;
+    } else if (cred?.type === 'oauth') {
       const accountId = (cred as any).accountId as string | undefined;
       stagehandOpts.model = {
         modelName: 'openai/gpt-5.4-mini',

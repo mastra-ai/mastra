@@ -408,6 +408,28 @@ export interface WorkflowRunState {
 }
 
 /**
+ * Info object passed to the onStart callback before a workflow run begins.
+ */
+export interface WorkflowStartCallbackInfo {
+  /** The unique workflow run ID */
+  runId: string;
+  /** The workflow identifier */
+  workflowId: string;
+  /** Resource/user identifier for multi-tenant scenarios (optional) */
+  resourceId?: string;
+  /** Function to get the initial workflow input data */
+  getInitData: () => any;
+  /** The Mastra instance (if registered) */
+  mastra?: Mastra;
+  /** The request context */
+  requestContext: RequestContext;
+  /** The Mastra logger for structured logging */
+  logger: IMastraLogger;
+  /** The initial workflow state */
+  state: Record<string, any>;
+}
+
+/**
  * Result object passed to the onFinish callback when a workflow completes.
  */
 export interface WorkflowFinishCallbackResult {
@@ -475,6 +497,11 @@ export interface WorkflowOptions {
   tracingPolicy?: TracingPolicy;
   validateInputs?: boolean;
   /**
+   * Whether workflow step lifecycle events are emitted. Defaults to true.
+   * Internal workflows may disable these events when no consumer observes them.
+   */
+  emitStepEvents?: boolean;
+  /**
    * When true, nested runs created by execute() share the parent's pubsub
    * instance instead of creating an isolated one. Used by durable agent
    * workflows so inner step events reach the outer subscriber.
@@ -486,6 +513,16 @@ export interface WorkflowOptions {
   }) => boolean;
 
   /**
+   * Acknowledges that `resume()` calls for this workflow cannot be de-duplicated
+   * via the persisted resume claim (for example because `shouldPersistSnapshot`
+   * excludes the `running` status), and suppresses the per-resume warning.
+   *
+   * Set by internal workflows that intentionally trade resume de-duplication
+   * for reduced snapshot writes and serialize their own resumes.
+   */
+  allowUnclaimedResumes?: boolean;
+
+  /**
    * Transforms the run snapshot immediately before it is persisted.
    * Called at every snapshot persist site (both engines). Must be a pure
    * function returning JSON-safe data — the snapshot may cross a pubsub
@@ -495,6 +532,20 @@ export interface WorkflowOptions {
    * read on resume (stale suspend payloads, duplicated message arrays).
    */
   pruneSnapshot?: (params: { snapshot: WorkflowRunState; workflowStatus: WorkflowRunStatus }) => WorkflowRunState;
+
+  /**
+   * Called before a workflow run starts executing, and awaited.
+   * This callback is invoked server-side without requiring client-side .watch().
+   *
+   * Unlike `onFinish`/`onError`, errors thrown here are NOT swallowed: they reject
+   * the `start()`/`stream()` call and the run never executes, so the hook can act as
+   * a pre-flight gate (quota checks, entitlement checks). This mirrors how input
+   * schema validation failures behave: no step executes. The pending run record that
+   * `createRun()` already wrote is left as-is, so a gated run stays at `pending`.
+   *
+   * Fires only when a run first starts, not on resume, restart, or time travel.
+   */
+  onStart?: (info: WorkflowStartCallbackInfo) => Promise<void> | void;
 
   /**
    * Called when workflow execution completes (success, failed, suspended, or tripwire).
@@ -528,14 +579,14 @@ export type WorkflowInfo = {
   isProcessorWorkflow?: boolean;
   /**
    * How this workflow got into the live registry. `'code'` for statically
-   * authored / `addWorkflow()`-added workflows, `'stored'` for anything
-   * hydrated or added via `addStoredWorkflow()` (HTTP or SDK).
+   * authored / `addWorkflow()`-added workflows, `'dynamic'` for anything
+   * hydrated or added via `addDynamicWorkflow()` (HTTP or SDK).
    *
    * Optional so external consumers of `WorkflowInfo` don't break; the server
    * reads it from `workflow.origin`, which `rehydrateWorkflow` sets to
-   * `'stored'` at construction time (defaults to `'code'`).
+   * `'dynamic'` at construction time (defaults to `'code'`).
    */
-  origin?: 'code' | 'stored';
+  origin?: 'code' | 'dynamic';
 };
 
 export type DefaultEngineType = {};
@@ -698,7 +749,7 @@ export type SerializedSingleStepEntry =
   | { type: 'mapping'; id: string; mapConfig: string }
   /**
    * A nested workflow referenced by its registered id (code-defined or
-   * another stored workflow). The referenced workflow must resolve on the
+   * another dynamic workflow). The referenced workflow must resolve on the
    * live Mastra registry at rehydration time; missing refs fail loudly.
    *
    * `serializedStepFlow` is the nested workflow's full graph, inlined for

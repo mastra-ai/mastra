@@ -1,12 +1,14 @@
+import { isFactoryRuleStage } from '@mastra/factory/rules/types';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useMutation, useMutationState, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { ExternalLink } from 'lucide-react';
+import { createElement, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 import { AGENT_CONTROLLER_ID } from '../ui/domains/chat/services/constants';
-import { createUserSession } from '../ui/domains/workspaces/services/github';
+import { createUserSession } from '../ui/domains/workspaces/services/user-sessions';
 import { useFactoryQuery } from './useFactories';
 import { startFactoryRun } from '../ui/domains/factory/services/workItems';
 import type { WorkItemSource } from '../ui/domains/factory/services/workItems';
@@ -95,10 +97,10 @@ export function useStartFactoryRun() {
       const setPhase = (phase: FactoryRunPhase) => setPhases(current => ({ ...current, [phaseKey]: phase }));
 
       setPhase('workspace');
-      const userSession = await createUserSession(baseUrl, repository.projectRepositoryId, branch);
+      const userSession = await createUserSession(baseUrl, repository.projectRepositoryId, { branch });
       const sessionId = userSession.sessionId;
       const desiredStage = workItem.stages.length === 1 ? workItem.stages[0] : undefined;
-      if (!desiredStage) throw new Error('Factory runs require one exclusive destination stage');
+      if (!isFactoryRuleStage(desiredStage)) throw new Error('Factory runs require one exclusive destination stage');
 
       setPhase('kickoff');
       const prepared = await startFactoryRun(baseUrl, factoryId, {
@@ -113,7 +115,7 @@ export function useStartFactoryRun() {
                 arguments: `${invocation.arguments.trim()}\n\nPrepared workspace context:\n- Session: ${sessionId}\n- Branch: ${userSession.branch}`,
               }
             : invocation,
-        destinationStage: desiredStage as 'intake' | 'triage' | 'planning' | 'execute' | 'review' | 'done',
+        destinationStage: desiredStage,
         workItem: {
           id: workItem.id,
           role: workItem.role,
@@ -148,10 +150,25 @@ export function useStartFactoryRun() {
     // the run quietly and let the toast be the way in, so several reviews can
     // be kicked off back to back from the same board.
     onSuccess: ({ factoryId: id, sessionId, threadId, threadTitle: title }) => {
+      const sessionPath = `/factories/${id}/workspaces/${sessionId}/threads/${threadId}`;
       toast(`${title} is ready`, {
         action: {
           label: 'Open',
-          onClick: () => void navigate(`/factories/${id}/workspaces/${sessionId}/threads/${threadId}`),
+          onClick: () => void navigate(sessionPath),
+        },
+        cancel: {
+          label: createElement(
+            'span',
+            { className: 'inline-flex items-center gap-1' },
+            'New Tab',
+            createElement(ExternalLink, { size: 12, 'aria-hidden': true }),
+          ),
+          onClick: () => window.open(sessionPath, '_blank', 'noopener,noreferrer'),
+        },
+        cancelButtonStyle: {
+          border: '1px solid var(--color-border1)',
+          background: 'var(--color-surface3)',
+          color: 'var(--color-neutral5)',
         },
       });
     },

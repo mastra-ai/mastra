@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-sandbox",
-  "version": "0.2.3-alpha.0",
+  "version": "0.3.4-alpha.1",
   "description": "Deploy a Mastra server into any workspace sandbox that supports networking and get a live public URL",
   "type": "module",
   "files": [
@@ -37,6 +37,7 @@
     "build": "tsdown --silent --config tsdown.config.ts",
     "build:watch": "tsdown --watch --silent --config tsdown.config.ts",
     "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
     "lint": "oxlint . && eslint .",
     "lint:fix": "oxlint --fix . && eslint --fix ."
   },

@@ -1,10 +1,11 @@
 import { HoverCardContent } from '@mastra/playground-ui/components/HoverCard';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { CircleDot, GitBranch, GitMerge } from 'lucide-react';
-import type { ReactNode } from 'react';
+import type { ReactNode, RefObject } from 'react';
 
 import { relativeTime } from '../../../../lib/date/relativeTime';
 import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
+import type { SessionRowStatus } from './SessionNavRow';
 
 export interface SessionPreviewDetails {
   kind: 'Work session' | 'Review session';
@@ -15,9 +16,10 @@ export interface SessionPreviewDetails {
   updatedAt: string;
 }
 
-function getStatusLabel(status: 'running' | 'attention' | undefined) {
-  if (status === 'running') return 'Agent working';
-  if (status === 'attention') return 'Agent finished';
+function getStatusLabel(status: SessionRowStatus | undefined) {
+  if (status === 'initializing') return 'Initializing';
+  if (status === 'working') return 'Agent working';
+  if (status === 'ready') return 'Ready';
   return undefined;
 }
 
@@ -36,12 +38,15 @@ function DetailRow({ icon, label, children }: { icon: ReactNode; label: string; 
 
 export function SessionPreviewCard({
   name,
+  anchor,
   status,
   merged,
   details,
 }: {
   name: string;
-  status?: 'running' | 'attention';
+  /** The sidebar row box — a stable anchor, unlike the label whose width follows the hover-revealed actions. */
+  anchor: RefObject<HTMLElement | null>;
+  status?: SessionRowStatus;
   merged?: boolean;
   details: SessionPreviewDetails;
 }) {
@@ -59,6 +64,7 @@ export function SessionPreviewCard({
   return (
     <HoverCardContent
       aria-label={`${name} session details`}
+      anchor={anchor}
       side="right"
       align="start"
       sideOffset={8}

@@ -44,6 +44,7 @@ import type {
   InternalMastraMCPClientOptions,
   Root,
   RequireToolApproval,
+  SerializableMCPToolDefinition,
 } from './types';
 import {
   assertHostAllowed,
@@ -66,7 +67,11 @@ export type {
   RequireToolApproval,
   RequireToolApprovalFn,
   RequireToolApprovalContext,
+  SerializableMCPToolDefinition,
 } from './types';
+
+/** A single entry from the MCP `tools/list` response. */
+type MCPToolListEntry = Awaited<ReturnType<Client['listTools']>>['tools'][0];
 
 const DEFAULT_SERVER_CONNECT_TIMEOUT_MSEC = 3000;
 const DEFAULT_INSTRUCTIONS_MAX_LENGTH = 512;
@@ -109,6 +114,17 @@ function shouldDetachPersistentTransportRequest(init?: RequestInit): boolean {
 function extractToolErrorText(content: unknown): string {
   const fallback = 'MCP tool execution failed';
   if (!Array.isArray(content)) return fallback;
+  const text = extractModelTextFromToolContent(content);
+  return text || fallback;
+}
+
+/**
+ * Extract LLM-facing text from a successful CallToolResult's `content` blocks.
+ * Per MCP spec, `content` is the human/model-readable channel; `structuredContent`
+ * is for client/UI consumption.
+ */
+function extractModelTextFromToolContent(content: unknown): string | undefined {
+  if (!Array.isArray(content)) return undefined;
   const text = content
     .filter((part): part is { type: 'text'; text: string } => {
       return !!part && typeof part === 'object' && (part as { type?: unknown }).type === 'text';
@@ -116,7 +132,80 @@ function extractToolErrorText(content: unknown): string {
     .map(part => part.text)
     .join('\n')
     .trim();
-  return text || fallback;
+  return text || undefined;
+}
+
+/**
+ * Non-enumerable metadata attached to structured tool execute results so
+ * `toModelOutput` can read MCP `content` without changing the execute return shape.
+ *
+ * When a tool has an `outputSchema` and the server returns `structuredContent`,
+ * `execute()` returns that structured value directly. The rest of the
+ * CallToolResult envelope is preserved on non-enumerable symbols:
+ * - {@link MCP_CALL_TOOL_CONTENT} holds the MCP `content` blocks (model-facing text).
+ * - {@link MCP_CALL_TOOL_META} holds the result-level `_meta` (e.g. `ui.resourceUri`
+ *   used by MCP Apps hosts), with `ui.serverId` stamped by the client.
+ *
+ * Read them with {@link getMcpCallToolContent} and {@link getMcpCallToolMeta}.
+ * Note: scalar or `null` structured results cannot carry properties, so these
+ * channels are only available when `structuredContent` is an object or array.
+ */
+export const MCP_CALL_TOOL_CONTENT = Symbol.for('mastra.mcp.callToolContent');
+
+/** Non-enumerable result-level `_meta` attached to structured tool execute results. */
+export const MCP_CALL_TOOL_META = Symbol.for('mastra.mcp.callToolMeta');
+
+function attachMcpCallToolContent(
+  structuredContent: unknown,
+  content: unknown,
+  _meta?: Record<string, unknown>,
+): unknown {
+  if (structuredContent !== null && typeof structuredContent === 'object') {
+    Object.defineProperty(structuredContent, MCP_CALL_TOOL_CONTENT, {
+      value: content,
+      enumerable: false,
+      configurable: true,
+    });
+    if (_meta !== undefined) {
+      Object.defineProperty(structuredContent, MCP_CALL_TOOL_META, {
+        value: _meta,
+        enumerable: false,
+        configurable: true,
+      });
+    }
+  }
+  return structuredContent;
+}
+
+/**
+ * Read the MCP `content` blocks preserved on a structured tool execute result.
+ * Returns `undefined` for scalar results or results without a hidden content channel.
+ */
+export function getMcpCallToolContent(output: unknown): unknown {
+  if (output === null || typeof output !== 'object') return undefined;
+  return (output as Record<PropertyKey, unknown>)[MCP_CALL_TOOL_CONTENT];
+}
+
+/**
+ * Read the result-level `_meta` preserved on a structured tool execute result
+ * (e.g. `_meta.ui.resourceUri` for MCP Apps detection). Returns `undefined` for
+ * scalar results or results whose CallToolResult had no `_meta`.
+ */
+export function getMcpCallToolMeta(output: unknown): Record<string, unknown> | undefined {
+  if (output === null || typeof output !== 'object') return undefined;
+  return (output as Record<PropertyKey, unknown>)[MCP_CALL_TOOL_META] as Record<string, unknown> | undefined;
+}
+
+function createStructuredToolToModelOutput(): (output: unknown) =>
+  | { type: 'text'; value: string }
+  | { type: 'json'; value: unknown } {
+  return output => {
+    const modelText = extractModelTextFromToolContent(getMcpCallToolContent(output));
+    if (modelText !== undefined) {
+      return { type: 'text', value: modelText };
+    }
+    return { type: 'json', value: output };
+  };
 }
 
 function getDatadogScope(): DatadogScopeLike | null {
@@ -282,6 +371,15 @@ export class InternalMastraMCPClient extends MastraBase {
       },
     };
 
+    // Opt-in protocol version negotiation. Omitted keeps the SDK default
+    // ('legacy'): the plain 2025 connect sequence, byte-identical to today.
+    // 'auto' probes with server/discover and falls back to initialize;
+    // '2026-07-28' pins that revision and fails loudly when unavailable.
+    const versionNegotiation =
+      server.protocolVersion === undefined
+        ? undefined
+        : { mode: server.protocolVersion === 'auto' ? ('auto' as const) : { pin: server.protocolVersion } };
+
     this.client = new Client(
       {
         name,
@@ -290,6 +388,7 @@ export class InternalMastraMCPClient extends MastraBase {
       {
         capabilities: clientCapabilities,
         ...(server.jsonSchemaValidator ? { jsonSchemaValidator: server.jsonSchemaValidator } : {}),
+        ...(versionNegotiation ? { versionNegotiation } : {}),
       },
     );
 
@@ -509,10 +608,9 @@ export class InternalMastraMCPClient extends MastraBase {
           throw error;
         }
 
-        // A policy violation is final: retrying the blocked host over SSE cannot
-        // succeed, and falling through would bury the policy error under a generic
-        // "could not connect" message.
-        if (isUrlPolicyError(error)) {
+        // Policy violations and pinned protocol negotiation failures are final:
+        // retrying over legacy SSE cannot succeed and would bury the typed error.
+        if (isUrlPolicyError(error) || this.serverConfig.protocolVersion === '2026-07-28') {
           throw error;
         }
 
@@ -1108,6 +1206,11 @@ export class InternalMastraMCPClient extends MastraBase {
 
   setElicitationRequestHandler(handler: ElicitationHandler): void {
     this.log('debug', 'Setting elicitation request handler');
+    // The handler serves both protocol eras: on legacy (2025-era) connections it
+    // answers elicitation/create wire requests; on negotiated 2026-07-28
+    // connections the SDK's multi-round-trip driver dispatches embedded
+    // elicitation requests from input_required results through the same
+    // registered handler and retries the originating call automatically.
     if (!this.hasElicitationCapability) {
       try {
         this.client.registerCapabilities({ elicitation: { form: {} } });
@@ -1133,9 +1236,9 @@ export class InternalMastraMCPClient extends MastraBase {
     });
   }
 
-  private async convertInputSchema(
+  private convertInputSchema(
     inputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['inputSchema'],
-  ): Promise<JSONSchema7> {
+  ): JSONSchema7 {
     return ('jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema) as JSONSchema7;
   }
 
@@ -1157,12 +1260,115 @@ export class InternalMastraMCPClient extends MastraBase {
     };
   }
 
+  /**
+   * Returns the server's tool catalog as plain, serializable definitions.
+   *
+   * Unlike {@link tools}, this performs no schema conversion and creates no executable
+   * wrappers, so the result can be cached and reused by other processes. Pass a definition
+   * back to {@link toolFromDefinition} to rebuild the executable tool without rediscovery.
+   */
+  async toolDefinitions(): Promise<Record<string, SerializableMCPToolDefinition>> {
+    this.log('debug', `Requesting tool definitions from MCP server`);
+    const { tools } = await this.client.listTools({}, { timeout: this.timeout });
+
+    const definitions: Record<string, SerializableMCPToolDefinition> = {};
+    for (const tool of tools) {
+      if (!tool.name) continue;
+      definitions[tool.name] = this.toSerializableDefinition(tool);
+    }
+    return definitions;
+  }
+
+  /**
+   * Captures a `tools/list` entry plus the server metadata that is only reachable from a live
+   * connection, so a hydrated tool is indistinguishable from a freshly discovered one.
+   */
+  private toSerializableDefinition(tool: MCPToolListEntry): SerializableMCPToolDefinition {
+    const annotations = tool.annotations;
+    const rawMeta = (tool as { _meta?: Record<string, unknown> })._meta;
+
+    return {
+      name: tool.name,
+      ...(tool.description ? { description: tool.description } : {}),
+      inputSchema: tool.inputSchema,
+      ...(tool.outputSchema ? { outputSchema: tool.outputSchema } : {}),
+      ...(annotations ? { annotations } : {}),
+      ...(rawMeta ? { _meta: rawMeta } : {}),
+      server: {
+        name: this.name,
+        ...(this.client.getServerVersion()?.version ? { version: this.client.getServerVersion()!.version } : {}),
+        ...(this.serverInstructions ? { instructions: this.serverInstructions } : {}),
+      },
+    };
+  }
+
+  /**
+   * Rebuilds an executable Mastra tool from a cached {@link SerializableMCPToolDefinition}.
+   *
+   * No connection is opened here. The client connects lazily, the first time the returned tool
+   * is actually executed, which is what makes a cached catalog useful for cold starts.
+   */
+  toolFromDefinition({ definition }: { definition: SerializableMCPToolDefinition }): Tool<any, any, any, any> {
+    const tool = {
+      name: definition.name,
+      description: definition.description,
+      inputSchema: definition.inputSchema,
+      outputSchema: definition.outputSchema,
+      annotations: definition.annotations,
+      _meta: definition._meta,
+    } as MCPToolListEntry;
+
+    const built = this.buildToolFromListEntry(tool, {
+      version: definition.server.version,
+      instructions: definition.server.instructions,
+      connectFirst: true,
+    });
+
+    if (!built) {
+      throw new MastraError({
+        id: 'MCP_CLIENT_TOOL_HYDRATION_FAILED',
+        domain: ErrorDomain.MCP,
+        category: ErrorCategory.USER,
+        text: `Failed to rebuild MCP tool "${definition.name}" from its cached definition`,
+        details: { toolName: definition.name, serverName: this.name },
+      });
+    }
+
+    return built;
+  }
+
   async tools(): Promise<Record<string, Tool<any, any, any, any>>> {
     this.log('debug', `Requesting tools from MCP server`);
     const { tools } = await this.client.listTools({}, { timeout: this.timeout });
     const toolsRes: Record<string, Tool<any, any, any, any>> = {};
     for (const tool of tools) {
       this.log('debug', `Processing tool: ${tool.name}`);
+      const mastraTool = this.buildToolFromListEntry(tool, {
+        version: this.client.getServerVersion()?.version,
+        instructions: this.serverInstructions,
+      });
+
+      if (mastraTool && tool.name) {
+        toolsRes[tool.name] = mastraTool;
+      }
+    }
+
+    return toolsRes;
+  }
+
+  /**
+   * Single conversion path shared by live discovery and cached hydration.
+   *
+   * Keeping both callers on this one method is what guarantees the issue's requirement that
+   * hydrated tools behave identically to discovered ones: strict-mode metadata, approval
+   * policies, structured content, in-band tool errors, progress metadata, abort signals and
+   * reconnect/retry all come from here rather than being reimplemented per call site.
+   */
+  private buildToolFromListEntry(
+    tool: MCPToolListEntry,
+    serverMeta: { version?: string; instructions?: string; connectFirst?: boolean },
+  ): Tool<any, any, any, any> | undefined {
+    {
       try {
         // Resolve requireToolApproval for this tool
         let requireApproval: boolean | undefined;
@@ -1210,7 +1416,7 @@ export class InternalMastraMCPClient extends MastraBase {
         const mastraTool = createTool({
           id: `${this.name}_${tool.name}`,
           description: tool.description || '',
-          inputSchema: await this.convertInputSchema(tool.inputSchema),
+          inputSchema: this.convertInputSchema(tool.inputSchema),
           outputSchema: this.convertOutputSchema(tool.outputSchema),
           strict: getMastraToolStrictMeta(toolMeta),
           // Preserve the full _meta from the remote MCP server (including ui.resourceUri
@@ -1221,11 +1427,12 @@ export class InternalMastraMCPClient extends MastraBase {
           requireApproval,
           mcpMetadata: {
             serverName: this.name,
-            serverVersion: this.client.getServerVersion()?.version,
-            serverInstructions: this.serverInstructions,
+            serverVersion: serverMeta.version,
+            serverInstructions: serverMeta.instructions,
             forwardInstructions: this.forwardInstructions,
             instructionsMaxLength: this.instructionsMaxLength,
           },
+          ...(tool.outputSchema ? { toModelOutput: createStructuredToolToModelOutput() } : {}),
           execute: async (
             input: any,
             context?: {
@@ -1235,6 +1442,13 @@ export class InternalMastraMCPClient extends MastraBase {
               _meta?: Record<string, unknown>;
             },
           ) => {
+            // A hydrated tool was rebuilt from cache without ever opening a connection, so the
+            // first execution is what establishes it. `connect()` is memoised, making this a
+            // no-op for tools that came from live discovery.
+            if (serverMeta.connectFirst) {
+              await this.connect();
+            }
+
             const operationContext = context?.requestContext ?? null;
 
             return this.operationContextStore.run(operationContext, async () => {
@@ -1279,10 +1493,12 @@ export class InternalMastraMCPClient extends MastraBase {
 
                 this.log('debug', `Tool executed successfully: ${tool.name}`);
 
-                // When a tool has an outputSchema, return the structuredContent directly
-                // so that output validation works correctly
                 if (res.structuredContent !== undefined) {
-                  return res.structuredContent;
+                  return attachMcpCallToolContent(
+                    res.structuredContent,
+                    res.content,
+                    res._meta ? this.stampServerIdInMeta(res._meta) : undefined,
+                  );
                 }
 
                 return res;
@@ -1338,19 +1554,16 @@ export class InternalMastraMCPClient extends MastraBase {
           mastraTool.needsApprovalFn = needsApprovalFn;
         }
 
-        if (tool.name) {
-          toolsRes[tool.name] = mastraTool;
-        }
+        return mastraTool;
       } catch (toolCreationError: unknown) {
         // Catch errors during tool creation itself (e.g., if createTool has issues)
         this.log('error', `Failed to create Mastra tool wrapper for MCP tool: ${tool.name}`, {
           error: toolCreationError instanceof Error ? toolCreationError.stack : String(toolCreationError),
           mcpToolDefinition: tool,
         });
+        return undefined;
       }
     }
-
-    return toolsRes;
   }
 
   private stampServerIdInMeta(meta: Record<string, unknown>): Record<string, unknown> {

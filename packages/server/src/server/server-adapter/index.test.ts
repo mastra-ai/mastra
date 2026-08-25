@@ -21,8 +21,9 @@ class TestMastraServer extends MastraServer<any, any, any> {
     await this.writeCustomRouteResponse(response, nodeRes, signal);
   }
 
-  buildCustomRouteHandlerForTest() {
-    return this.buildCustomRouteHandler();
+  async buildCustomRouteHandlerForTest() {
+    const routes = await this.registerSchemaApiRoutes();
+    return this.buildCustomRouteHandler(routes);
   }
 
   handleCustomRouteRequestForTest(
@@ -995,5 +996,62 @@ describe('validateCustomRoutePaths', () => {
     expect(() =>
       adapter.validateCustomRoutePathsForTest([{ path: '/api/anything', method: 'GET', handler: mockHandler }]),
     ).not.toThrow();
+  });
+});
+
+describe('registerUserMiddleware default implementation', () => {
+  function createAdapterWithMiddleware({
+    configMiddleware,
+    instanceMiddleware,
+  }: {
+    configMiddleware?: unknown;
+    instanceMiddleware?: Array<{ path: string; handler: () => void }>;
+  }) {
+    const warn = vi.fn();
+    const adapter = new TestMastraServer({
+      app: {},
+      mastra: {
+        getServer: () => (configMiddleware === undefined ? undefined : { middleware: configMiddleware }),
+        getServerMiddleware: () => instanceMiddleware ?? [],
+        getLogger: () => ({ warn }),
+        setMastraServer: vi.fn(),
+      } as unknown as Mastra,
+    });
+    return { adapter, warn };
+  }
+
+  it('warns when `server.middleware` is configured but the adapter cannot run it', () => {
+    const { adapter, warn } = createAdapterWithMiddleware({ configMiddleware: [async () => {}] });
+
+    adapter.registerUserMiddleware();
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]?.[0]).toContain('server.middleware');
+  });
+
+  it('warns when middleware was added via `setServerMiddleware()`', () => {
+    const { adapter, warn } = createAdapterWithMiddleware({
+      instanceMiddleware: [{ path: '/api/*', handler: () => {} }],
+    });
+
+    adapter.registerUserMiddleware();
+
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('stays silent when no user middleware is configured', () => {
+    const { adapter, warn } = createAdapterWithMiddleware({});
+
+    adapter.registerUserMiddleware();
+
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('stays silent for an empty middleware array', () => {
+    const { adapter, warn } = createAdapterWithMiddleware({ configMiddleware: [] });
+
+    adapter.registerUserMiddleware();
+
+    expect(warn).not.toHaveBeenCalled();
   });
 });

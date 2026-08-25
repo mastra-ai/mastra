@@ -230,7 +230,7 @@ describe('MastraStorageExporter', () => {
         );
       });
 
-      it('should log error if storage not available during init()', async () => {
+      it('should log a warning if storage is not available during init()', async () => {
         const mockMastraWithoutStorage = {
           getStorage: vi.fn().mockReturnValue(null),
         } as any;
@@ -242,6 +242,74 @@ describe('MastraStorageExporter', () => {
         expect(mockLogger.warn).toHaveBeenCalledWith(
           'MastraStorageExporter disabled: Storage not available. Traces will not be persisted.',
         );
+      });
+
+      it('should recover when observability storage becomes available after init', async () => {
+        mockObservabilityStore.observabilityStrategy = {
+          preferred: 'realtime',
+          supported: ['realtime', 'batch-with-updates', 'insert-only'],
+        };
+        mockStorage.getStore.mockResolvedValueOnce(undefined).mockResolvedValueOnce(mockObservabilityStore);
+
+        const exporter = new MastraStorageExporter({ logger: mockLogger });
+        await exporter.init({ mastra: mockMastra });
+
+        await exporter.exportTracingEvent(createMockEvent(TracingEventType.SPAN_STARTED));
+
+        expect(mockStorage.getStore).toHaveBeenCalledTimes(2);
+        expect(mockObservabilityStore.batchCreateSpans).toHaveBeenCalledOnce();
+        expect(mockLogger.info).toHaveBeenCalledWith(
+          'MastraStorageExporter recovered: Observability storage is available. Traces will be persisted.',
+        );
+      });
+
+      it('should recover after observability storage initialization throws', async () => {
+        mockObservabilityStore.observabilityStrategy = {
+          preferred: 'realtime',
+          supported: ['realtime', 'batch-with-updates', 'insert-only'],
+        };
+        mockStorage.getStore
+          .mockRejectedValueOnce(new Error('storage unavailable'))
+          .mockResolvedValueOnce(mockObservabilityStore);
+
+        const exporter = new MastraStorageExporter({ logger: mockLogger });
+        await expect(exporter.init({ mastra: mockMastra })).resolves.not.toThrow();
+
+        await exporter.exportTracingEvent(createMockEvent(TracingEventType.SPAN_STARTED));
+
+        expect(mockStorage.getStore).toHaveBeenCalledTimes(2);
+        expect(mockObservabilityStore.batchCreateSpans).toHaveBeenCalledOnce();
+        expect(mockLogger.warn).toHaveBeenCalledWith(
+          'MastraStorageExporter unavailable: Failed to initialize observability storage. Traces will not be persisted until storage becomes available.',
+          { error: 'storage unavailable' },
+        );
+      });
+
+      it('should share a concurrent storage recovery attempt', async () => {
+        mockObservabilityStore.observabilityStrategy = {
+          preferred: 'realtime',
+          supported: ['realtime', 'batch-with-updates', 'insert-only'],
+        };
+        let resolveStorage: (storage: typeof mockObservabilityStore) => void = () => {};
+        const recoveredStorage = new Promise<typeof mockObservabilityStore>(resolve => {
+          resolveStorage = resolve;
+        });
+        mockStorage.getStore.mockResolvedValueOnce(undefined).mockReturnValueOnce(recoveredStorage);
+
+        const exporter = new MastraStorageExporter({ logger: mockLogger });
+        await exporter.init({ mastra: mockMastra });
+
+        const firstExport = exporter.exportTracingEvent(
+          createMockEvent(TracingEventType.SPAN_STARTED, 'trace-1', 'span-1'),
+        );
+        const secondExport = exporter.exportTracingEvent(
+          createMockEvent(TracingEventType.SPAN_STARTED, 'trace-2', 'span-2'),
+        );
+        resolveStorage(mockObservabilityStore);
+        await Promise.all([firstExport, secondExport]);
+
+        expect(mockStorage.getStore).toHaveBeenCalledTimes(2);
+        expect(mockObservabilityStore.batchCreateSpans).toHaveBeenCalledTimes(2);
       });
     });
 
@@ -266,6 +334,40 @@ describe('MastraStorageExporter', () => {
             }),
           ]),
         });
+      });
+
+      it('should store bridged root spans without their external parent', async () => {
+        mockObservabilityStore.observabilityStrategy = {
+          preferred: 'realtime',
+          supported: ['realtime', 'batch-with-updates', 'insert-only'],
+        };
+        const exporter = new MastraStorageExporter({ strategy: 'realtime', logger: mockLogger });
+        await exporter.init({ mastra: mockMastra });
+
+        const rootEvent = createMockEvent(TracingEventType.SPAN_STARTED, 'trace-1', 'root-span');
+        rootEvent.exportedSpan.isRootSpan = true;
+        rootEvent.exportedSpan.externalParentSpanId = 'external-parent';
+
+        const resumedRootEvent = createMockEvent(TracingEventType.SPAN_STARTED, 'trace-1', 'resumed-root-span');
+        resumedRootEvent.exportedSpan.isRootSpan = true;
+        resumedRootEvent.exportedSpan.parentSpanId = 'suspended-span';
+
+        const childEvent = createMockEvent(TracingEventType.SPAN_STARTED, 'trace-1', 'child-span');
+        childEvent.exportedSpan.isRootSpan = false;
+        childEvent.exportedSpan.parentSpanId = 'root-span';
+
+        await exporter.exportTracingEvent(rootEvent);
+        await exporter.exportTracingEvent(resumedRootEvent);
+        await exporter.exportTracingEvent(childEvent);
+
+        const records = mockObservabilityStore.batchCreateSpans.mock.calls.flatMap((call: any) => call[0].records);
+        expect(records).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ spanId: 'root-span', parentSpanId: null }),
+            expect.objectContaining({ spanId: 'resumed-root-span', parentSpanId: 'suspended-span' }),
+            expect.objectContaining({ spanId: 'child-span', parentSpanId: 'root-span' }),
+          ]),
+        );
       });
     });
 

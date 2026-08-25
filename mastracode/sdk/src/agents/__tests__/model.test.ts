@@ -234,6 +234,7 @@ describe('resolveModel', () => {
     delete process.env.OPENAI_BASE_URL;
     delete process.env.MOONSHOT_API_KEY;
     delete process.env.MOONSHOT_AI_API_KEY;
+    delete process.env.DEEPSEEK_API_KEY;
     delete process.env.MASTRA_GATEWAY_API_KEY;
     delete process.env.MASTRA_GATEWAY_URL;
   });
@@ -739,6 +740,33 @@ describe('resolveModel', () => {
       );
     });
 
+    it('does not pass the Mastra Gateway key to an unprefixed DeepSeek model', () => {
+      process.env.DEEPSEEK_API_KEY = 'sk-deepseek-env-fixture';
+      mockAuthStorageInstance.get.mockReturnValue(undefined);
+
+      const result = resolveModel('deepseek/deepseek-v4-flash') as Record<string, unknown>;
+
+      expect(result.__provider).toBe('model-router');
+      expect(result.modelId).toBe('deepseek/deepseek-v4-flash');
+      expect(result.apiKey).toBe('');
+    });
+
+    it('prefers a stored DeepSeek key over the stored Mastra Gateway key', () => {
+      process.env.DEEPSEEK_API_KEY = 'sk-deepseek-env-fixture';
+      mockAuthStorageInstance.get.mockReturnValue(undefined);
+      mockAuthStorageInstance.getStoredApiKey.mockImplementation((providerId: string) => {
+        if (providerId === 'deepseek') return 'sk-deepseek-stored-fixture';
+        if (providerId === 'mastra-gateway') return 'msk_gateway_key_123';
+        return undefined;
+      });
+
+      const result = resolveModel('deepseek/deepseek-v4-flash') as Record<string, unknown>;
+
+      expect(result.__provider).toBe('model-router');
+      expect(result.modelId).toBe('deepseek/deepseek-v4-flash');
+      expect(result.apiKey).toBe('sk-deepseek-stored-fixture');
+    });
+
     it('routes explicit mastra-prefixed anthropic model through gateway', () => {
       mockAuthStorageInstance.get.mockReturnValue(undefined);
       const result = resolveModel('mastra/anthropic/claude-sonnet-4') as Record<string, unknown>;
@@ -1114,6 +1142,16 @@ describe('resolveRequestThinkingLevel', () => {
     const level = resolveRequestThinkingLevel({ state: {}, session: { modeId: 'plan' } } as any);
 
     expect(level).toBe('medium');
+  });
+
+  it('treats a null session value as a cleared override', () => {
+    mockLoadSettings.mockImplementation(() =>
+      settingsWithThinking({ modeThinkingDefaults: { build: 'high' }, thinkingLevel: 'medium' }),
+    );
+
+    const level = resolveRequestThinkingLevel({ state: { thinkingLevel: null }, session: { modeId: 'build' } });
+
+    expect(level).toBe('high');
   });
 
   it('resolves defaults when no controller context exists at all', () => {

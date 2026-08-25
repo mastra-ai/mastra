@@ -41,7 +41,38 @@ import { emitAutoExtractedMetrics, emitTokenMetricsForUsage } from '../metrics/a
 import { CardinalityFilter } from '../metrics/cardinality';
 import { resolveModelId } from '../model-id';
 import { NoOpSpan } from '../spans';
+import { isPlainRecord, mergeMetadata } from '../spans/metadata';
 import { addUsageStats } from '../usage';
+
+function hasMetadataKey(metadata: unknown, key: string): boolean {
+  if (!metadata || typeof metadata !== 'object') {
+    return false;
+  }
+
+  try {
+    return Object.prototype.hasOwnProperty.call(Object.getOwnPropertyDescriptors(metadata), key);
+  } catch {
+    return true;
+  }
+}
+
+function injectEnvironmentMetadata(
+  metadata: unknown,
+  environment: string | undefined,
+): Record<string, any> | undefined {
+  if (environment === undefined || hasMetadataKey(metadata, 'environment')) {
+    return metadata as Record<string, any> | undefined;
+  }
+
+  // Only plain records can be merged without losing the original value's shape.
+  // A Map, Date, or class instance would otherwise be replaced by `{ environment }`,
+  // discarding all user-provided metadata.
+  if (metadata && !isPlainRecord(metadata)) {
+    return metadata as Record<string, any>;
+  }
+
+  return mergeMetadata(metadata, { environment });
+}
 
 // ============================================================================
 // Abstract Base Class
@@ -204,7 +235,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
 
     // Merge tracingOptions.metadata with span metadata (tracingOptions.metadata takes precedence for root spans)
     const tracingMetadata = !options.parent ? tracingOptions?.metadata : undefined;
-    const mergedMetadata = metadata || tracingMetadata ? { ...metadata, ...tracingMetadata } : undefined;
+    const mergedMetadata = mergeMetadata(metadata, tracingMetadata);
 
     // Extract metadata from RequestContext
     const enrichedMetadata = this.extractMetadataFromRequestContext(requestContext, mergedMetadata, traceState);
@@ -216,27 +247,28 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     // getCorrelationContext) is what lets the storage record-builders populate
     // the `environment` column on SpanRecord, which is then read by stored
     // score/feedback events via RecordedSpan / RecordedTrace.addScore.
-    const finalMetadata =
-      !options.parent &&
-      this.#mastraEnvironment !== undefined &&
-      (enrichedMetadata === undefined || enrichedMetadata.environment === undefined)
-        ? { ...(enrichedMetadata ?? {}), environment: this.#mastraEnvironment }
-        : enrichedMetadata;
+    const finalMetadata = !options.parent
+      ? injectEnvironmentMetadata(enrichedMetadata, this.#mastraEnvironment)
+      : enrichedMetadata;
 
     // Tags are only passed for root spans (no parent)
     const tags = !options.parent ? tracingOptions?.tags : undefined;
 
-    // Extract traceId and parentSpanId from tracingOptions for root spans (no parent)
-    // These allow nested workflows to join the parent workflow's trace
+    // Extract traceId and parent ids from tracingOptions for root spans (no parent)
+    // These allow nested workflows to join the parent workflow's trace.
+    // tracingOptions.parentSpanId is the public external-correlation channel,
+    // so it feeds externalParentSpanId — not Mastra's own parent link.
     const traceId = !options.parent ? (options.traceId ?? tracingOptions?.traceId) : options.traceId;
-    const parentSpanId = !options.parent
-      ? (options.parentSpanId ?? tracingOptions?.parentSpanId)
-      : options.parentSpanId;
+    const parentSpanId = options.parentSpanId;
+    const externalParentSpanId = !options.parent
+      ? (options.externalParentSpanId ?? tracingOptions?.parentSpanId)
+      : options.externalParentSpanId;
 
     const span = this.createSpan<TType>({
       ...rest,
       traceId,
       parentSpanId,
+      externalParentSpanId,
       metadata: finalMetadata,
       traceState,
       tags,
@@ -522,6 +554,10 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
         return;
       }
 
+      if (span.endTime) {
+        return;
+      }
+
       // Capture rollup usage BEFORE originalEnd runs: excluded spans
       // drop end-time attributes (see DefaultSpan#end), so the only
       // place to read MODEL_GENERATION usage for a filtered span is the
@@ -625,10 +661,8 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       return undefined;
     }
 
-    return {
-      ...extracted,
-      ...explicitMetadata, // Explicit metadata always wins
-    };
+    // Explicit metadata always wins.
+    return mergeMetadata(extracted, explicitMetadata);
   }
 
   /**

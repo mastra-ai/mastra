@@ -17,6 +17,7 @@ import type {
 import { BaseToolProvider } from '@mastra/core/tool-provider';
 import type { ToolAction } from '@mastra/core/tools';
 import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
+import type { RequestContext } from '@mastra/core/request-context';
 
 import { Composio } from '@composio/core';
 import type {
@@ -31,20 +32,60 @@ import type { MastraToolCollection } from '@composio/mastra';
 export interface ComposioToolProviderConfig extends BaseToolProviderOptions {
   /** Composio API key. */
   apiKey: string;
+  /**
+   * Server-side resolver mapping request context to the Composio `userId` the
+   * call should execute as. Runs for `kind: 'invoker'` and `caller-supplied`
+   * resolution, so the host application (for example, its FGA layer) can
+   * derive and authorize the effective user before execution.
+   *
+   * Only server-populated fields within request context are trusted. When the
+   * resolver is absent (or returns `undefined`), invoker connections require
+   * the authenticated user (`MASTRA_USER_KEY`). Legacy `caller-supplied`
+   * connections retain their existing resource-id fallback.
+   *
+   * The exact `connectedAccountId` always comes from the stored connection
+   * pin — the resolver cannot override it.
+   */
+  userIdResolver?: ComposioUserIdResolver;
 }
+
+/** Inputs handed to {@link ComposioToolProviderConfig.userIdResolver}. */
+export interface ComposioUserIdResolverInput {
+  /** Live per-request context. Use `get()` for declared keys and `getRaw()` for reserved runtime keys. */
+  requestContext?: RequestContext;
+  /** Toolkit slug the identity is being resolved for, when known. */
+  toolkit?: string;
+  /**
+   * The stored connection pin being resolved, when one exists. Hosts can use
+   * it to validate that the invoker is allowed to use this exact account.
+   */
+  connectedAccountId?: string;
+}
+
+/**
+ * Server-side resolver returning the effective Composio `userId` for a
+ * request. Returning `undefined` falls back to the provider's default
+ * identity resolution. Must never trust client-supplied context values.
+ */
+export type ComposioUserIdResolver = (
+  input: ComposioUserIdResolverInput,
+) => Promise<string | undefined> | string | undefined;
 
 const COMPOSIO_PROVIDER_ID = 'composio' as const;
 const DEFAULT_INTERNAL_USER_ID = 'default';
+const COMPOSIO_CONNECTION_MANAGEMENT_TOOLS = new Set(['COMPOSIO_MANAGE_CONNECTIONS', 'COMPOSIO_WAIT_FOR_CONNECTIONS']);
 
 /**
  * Composio implementation of the {@link BaseToolProvider} contract.
  *
  * Discovery (`listAllToolkits`, `listAllTools`) uses the raw Composio
  * client. Runtime (`resolveToolsVNext`) uses {@link MastraProvider} so resolved
- * tools are already in `createTool()` shape; each tool gets a
- * `beforeExecute` modifier that injects
- * `connectedAccountId = connectionId`, and `outputSchema` is cleared
- * because Composio returns union schemas that Mastra's runtime rejects.
+ * tools are already in `createTool()` shape. Ordinary tools use Composio's
+ * direct-tools API, while connection-management tools use a caller-scoped
+ * Tool Router session. Resolved tools keep the `outputSchema` supplied by
+ * `@composio/mastra`, which pre-relaxes Composio's strict API schemas
+ * (nullable fields, extra properties, no `required`) so real third-party
+ * responses validate while structurally invalid output is still rejected.
  *
  * Allowlist filtering is layered by {@link BaseToolProvider}; this class
  * never reads `allowedToolkits` / `allowedTools` directly.
@@ -62,6 +103,8 @@ export class ComposioToolProvider extends BaseToolProvider {
     supportsRevoke: true,
   };
 
+  readonly userIdResolver?: ComposioUserIdResolver;
+
   private readonly apiKey: string;
   private rawClient: Composio | null = null;
   private mastraClient: Composio<MastraProvider> | null = null;
@@ -73,6 +116,7 @@ export class ComposioToolProvider extends BaseToolProvider {
       defaultScope: config.defaultScope,
     });
     this.apiKey = config.apiKey;
+    this.userIdResolver = config.userIdResolver;
   }
 
   // ── client cache ──────────────────────────────────────────────────────
@@ -165,53 +209,62 @@ export class ComposioToolProvider extends BaseToolProvider {
   async resolveToolsVNext(opts: ResolveToolsOpts): Promise<Record<string, ToolAction<any, any, any>>> {
     if (opts.toolSlugs.length === 0) return {};
 
-    // For author-bound connections, the runtime fan-out passes the agent's
-    // author id explicitly. Use it as the Composio user bucket so the pin
-    // resolves for any invoker (not just the original author).
-    const internalUserId =
-      opts.authorId && opts.authorId.length > 0 ? opts.authorId : resolveInternalUserId(opts.requestContext);
+    const identity = await this.resolveExecutionIdentity(opts);
     const composio = this.getMastraClient();
+    const sessionToolSlugs = opts.toolSlugs.filter(slug => COMPOSIO_CONNECTION_MANAGEMENT_TOOLS.has(slug));
+    const directToolSlugs = opts.toolSlugs.filter(slug => !COMPOSIO_CONNECTION_MANAGEMENT_TOOLS.has(slug));
+    const mastraTools: MastraToolCollection = {};
 
-    const modifiers = {
-      // `connectedAccountId` is not threaded through Composio's `execute`
-      // option bag in @composio/mastra; the only documented per-call hook
-      // is `beforeExecute`, which receives the params object that flows
-      // into the API call. Mutating `params.connectedAccountId` routes
-      // the call to a specific account.
-      beforeExecute: ({ params }: { params: { connectedAccountId?: string; userId?: string } }) => {
-        // Under `caller-supplied` scope the user bucket (`internalUserId`,
-        // resolved from the host app's resourceId) already scopes the call to
-        // the right tenant. Pinning a specific `connectedAccountId` would defeat
-        // Composio's per-user-bucket auto-resolve, so we let Composio pick the
-        // connected account within the bucket instead of forcing one.
-        if (opts.scope !== 'caller-supplied') {
-          params.connectedAccountId = opts.connectionId;
-        }
-        return params;
-      },
-    };
+    if (directToolSlugs.length > 0) {
+      const modifiers = {
+        // `connectedAccountId` is not threaded through Composio's `execute`
+        // option bag in @composio/mastra; the only documented per-call hook
+        // is `beforeExecute`, which receives the params object that flows
+        // into the API call. Mutating `params.connectedAccountId` routes
+        // the call to a specific account.
+        beforeExecute: ({ params }: { params: { connectedAccountId?: string; userId?: string } }) => {
+          if (identity.connectionId) {
+            params.connectedAccountId = identity.connectionId;
+          }
+          return params;
+        },
+      };
 
-    const mastraTools = (await composio.tools.get(
-      internalUserId,
-      { tools: opts.toolSlugs },
-      modifiers,
-    )) as MastraToolCollection;
+      Object.assign(
+        mastraTools,
+        (await composio.tools.get(identity.userId, { tools: directToolSlugs }, modifiers)) as MastraToolCollection,
+      );
+    }
+
+    if (sessionToolSlugs.length > 0) {
+      const selectedToolkits = [
+        ...new Set(
+          Object.values(opts.toolMeta)
+            .map(meta => meta.toolkit)
+            .filter(
+              (toolkit): toolkit is string =>
+                typeof toolkit === 'string' && toolkit.toLowerCase() !== COMPOSIO_PROVIDER_ID,
+            ),
+        ),
+      ];
+      const session = await composio.sessions.create(identity.userId, {
+        ...(selectedToolkits.length > 0 ? { toolkits: selectedToolkits } : {}),
+        manageConnections: { enable: true, waitForConnections: true },
+        sandbox: { enable: false },
+      });
+      const sessionTools = (await session.tools()) as MastraToolCollection;
+
+      for (const slug of sessionToolSlugs) {
+        const tool = sessionTools[slug];
+        if (tool) mastraTools[slug] = tool;
+      }
+    }
 
     const result: Record<string, ToolAction<any, any, any>> = {};
 
-    for (const [key, tool] of Object.entries(mastraTools ?? {})) {
+    for (const [key, tool] of Object.entries(mastraTools)) {
       if (!tool) continue;
       const slug = (tool as { id?: string }).id ?? key;
-
-      // Composio returns union output schemas (`successful: true | false`) that
-      // Mastra's runtime cannot validate; clearing avoids per-tool validation
-      // errors at execute time. The property may be non-writable on some SDK
-      // versions, so we swallow assignment errors.
-      try {
-        (tool as unknown as { outputSchema: unknown }).outputSchema = undefined;
-      } catch {
-        // ignore
-      }
 
       const descOverride = opts.toolMeta?.[slug]?.description;
       if (descOverride) {
@@ -226,6 +279,77 @@ export class ComposioToolProvider extends BaseToolProvider {
     }
 
     return result;
+  }
+
+  /**
+   * Run the configured `userIdResolver` and validate its result. Returns
+   * the resolved user id, or `undefined` when no resolver is configured or
+   * the resolver declined (returned `undefined`). Throws when the resolver
+   * returns an empty or non-string value — an empty execution identity must
+   * fail closed instead of silently falling back.
+   */
+  private async runUserIdResolver(input: ComposioUserIdResolverInput): Promise<string | undefined> {
+    if (!this.userIdResolver) return undefined;
+    const resolved = await this.userIdResolver(input);
+    if (resolved === undefined) return undefined;
+    if (typeof resolved !== 'string') {
+      throw new Error('[composio] userIdResolver must return a non-empty string or undefined');
+    }
+    const normalized = resolved.trim();
+    if (normalized.length === 0) {
+      throw new Error('[composio] userIdResolver must return a non-empty string or undefined');
+    }
+    return normalized;
+  }
+
+  /**
+   * Resolve the effective Composio execution identity for one
+   * `resolveToolsVNext` call: the `userId` bucket to fetch tools under and
+   * the exact `connectedAccountId` to route execution to (absent = let
+   * Composio auto-resolve within the bucket).
+   */
+  private async resolveExecutionIdentity(opts: ResolveToolsOpts): Promise<{ userId: string; connectionId?: string }> {
+    // The unpinned caller-supplied bootstrap fan-out passes the user bucket
+    // itself as `connectionId` (connectionId === authorId). That is not an
+    // account pin, so execution must stay on Composio's per-bucket
+    // auto-resolve.
+    const hasAccountPin = opts.connectionId !== opts.authorId;
+
+    if (opts.kind === 'invoker') {
+      const resolvedUserId = await this.runUserIdResolver({
+        requestContext: opts.requestContext,
+        toolkit: opts.toolkit,
+        connectedAccountId: opts.connectionId,
+      });
+      // Invoker connections execute as the authenticated user — never the
+      // Memory resource id — against the exact stored account pin (which may
+      // be an account another user shared with the invoker via Composio ACL).
+      return {
+        userId: resolvedUserId ?? resolveInvokerUserId(opts.requestContext),
+        connectionId: opts.connectionId,
+      };
+    }
+
+    if (opts.scope === 'caller-supplied') {
+      const resolvedUserId = await this.runUserIdResolver({
+        requestContext: opts.requestContext,
+        toolkit: opts.toolkit,
+        connectedAccountId: hasAccountPin ? opts.connectionId : undefined,
+      });
+      return {
+        userId: resolvedUserId ?? resolveInternalUserId(opts.requestContext),
+        connectionId: hasAccountPin ? opts.connectionId : undefined,
+      };
+    }
+
+    // Author-bound (and legacy) connections: the runtime fan-out passes the
+    // agent author's id explicitly. Use it as the Composio user bucket so the
+    // pin resolves for any invoker (not just the original author), and always
+    // route execution to the pinned account.
+    return {
+      userId: opts.authorId && opts.authorId.length > 0 ? opts.authorId : resolveInternalUserId(opts.requestContext),
+      connectionId: opts.connectionId,
+    };
   }
 
   // ── auth surface ──────────────────────────────────────────────────────
@@ -353,7 +477,7 @@ export class ComposioToolProvider extends BaseToolProvider {
       return { items: [], pagination: { page, perPage, hasMore: false } };
     }
 
-    // Composio SDK 0.6.x uses cursor-based pagination on the wire. We surface
+    // Composio SDK uses cursor-based pagination on the wire. We surface
     // page-based pagination to keep the Mastra contract consistent with every
     // other list API. For now we only fetch the first page (page=1); paginated
     // requests for page > 1 are a follow-up — the UI does not yet paginate.
@@ -505,6 +629,12 @@ function mapComposioStatus(status: string, isDisabled: boolean): ExistingConnect
 // reverse dependency from `editor` onto `server`.
 const MASTRA_USER_KEY = 'mastra__user';
 
+function readAuthenticatedUserId(requestContext?: RequestContext): string | undefined {
+  const user = requestContext?.getRaw(MASTRA_USER_KEY);
+  if (!user || typeof user !== 'object' || !('id' in user)) return undefined;
+  return typeof user.id === 'string' && user.id.length > 0 ? user.id : undefined;
+}
+
 /**
  * Read the internal user id (Composio `userId`) from per-request context.
  *
@@ -512,21 +642,24 @@ const MASTRA_USER_KEY = 'mastra__user';
  * author id (or `'default'`) into `requestContext` under
  * {@link MASTRA_RESOURCE_ID_KEY}.
  */
-function resolveInternalUserId(requestContext?: Record<string, unknown>): string {
-  const resourceId = requestContext?.[MASTRA_RESOURCE_ID_KEY];
+function resolveInternalUserId(requestContext?: RequestContext): string {
+  const resourceId = requestContext?.getRaw(MASTRA_RESOURCE_ID_KEY);
   if (typeof resourceId === 'string' && resourceId.length > 0) {
     return resourceId;
   }
 
-  const user = requestContext?.[MASTRA_USER_KEY];
-  if (user && typeof user === 'object' && 'id' in user) {
-    const id = (user as { id: unknown }).id;
-    if (typeof id === 'string' && id.length > 0) {
-      return id;
-    }
-  }
+  return readAuthenticatedUserId(requestContext) ?? DEFAULT_INTERNAL_USER_ID;
+}
 
-  return DEFAULT_INTERNAL_USER_ID;
+/**
+ * Read the authenticated invoker's Composio `userId` from per-request
+ * context. Invoker connections must never fall back to the Memory resource id
+ * because a project or thread is not an authenticated connector principal.
+ */
+function resolveInvokerUserId(requestContext?: RequestContext): string {
+  const userId = readAuthenticatedUserId(requestContext);
+  if (userId) return userId;
+  throw new Error('[composio] kind "invoker" requires an authenticated user or a userIdResolver result');
 }
 
 /**

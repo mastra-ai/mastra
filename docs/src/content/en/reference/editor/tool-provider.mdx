@@ -9,7 +9,7 @@ packages:
 
 The `ToolProvider` interface defines how the editor discovers and resolves integration tools from external platforms. Mastra includes two built-in implementations: `ComposioToolProvider` and `ArcadeToolProvider`.
 
-See [Editor tools](/docs/editor/overview#tools) for provider setup and the Studio workflow. See [tool configuration](/reference/editor/tools) for stored selections and resolution behavior.
+See [Editor tools](/docs/studio/editor#tools) for provider setup and the Studio workflow. See [tool configuration](/reference/editor/tools) for stored selections and resolution behavior.
 
 ## ToolProvider interface
 
@@ -174,6 +174,13 @@ const editor = new MastraEditor({
     isOptional: true,
     defaultValue: "'per-author'",
   },
+  {
+    name: 'userIdResolver',
+    type: 'ComposioUserIdResolver',
+    description:
+      'Server-side resolver that derives the effective Composio userId from authenticated context fields. Used for invoker and caller-supplied execution. The exact connected account always comes from the stored connection pin.',
+    isOptional: true,
+  },
 ]}
 />
 
@@ -183,7 +190,156 @@ Composio tools use uppercase slug format: `GITHUB_CREATE_ISSUE`, `SLACK_SEND_MES
 
 ### Authentication
 
-Connections use per-author scope by default. Set `defaultScope: 'caller-supplied'` to bucket authorization by the caller identity resolved from request context.
+Connections use per-author scope by default. Set `defaultScope: 'caller-supplied'` to bucket authorization by the caller identity resolved from `MASTRA_RESOURCE_ID_KEY` in request context. Ensure each authenticated request provides a stable, unique resource ID. When using `MastraAuthWorkos`, configure `mapUserToResourceId` to set this value from the authenticated user.
+
+How the provider resolves the Composio user for a tool call depends on the connection:
+
+- **Author-bound connections** (`kind: 'author'`) execute as the agent author's user against the pinned connected account.
+- **Invoker-bound connections** (`kind: 'invoker'`) execute as the authenticated invoker against the exact pinned account, which may be an account another user shared with the invoker through Composio's access control list (ACL). The user ID comes from `userIdResolver` when configured, then the authenticated user, and never from the Memory `resourceId`. Invoker resolution fails when no authenticated user or resolver result exists.
+- **Caller-supplied scope** (`scope: 'caller-supplied'`) uses `userIdResolver` when configured. Otherwise, it falls back to the legacy `resourceId` from request context for backward compatibility. When a specific connected account is pinned, execution routes to that exact account. Otherwise, Composio auto-resolves within the user's bucket.
+
+### Execute with a shared account
+
+Bob needs to run a Salesforce tool with an account that Alice shared through Composio. Keep each identity separate:
+
+| Identity | Value |
+| - | - |
+| Memory resource | `project_123` |
+| Composio user ID | `bob` |
+| Connected account | `ca_alice_salesforce` |
+
+Register the provider normally. Mastra server authentication writes the authenticated user to request context, so most applications don't need a `userIdResolver`:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { MastraEditor } from '@mastra/editor'
+import { ComposioToolProvider } from '@mastra/editor/composio'
+
+const editor = new MastraEditor({
+  toolProviders: {
+    composio: new ComposioToolProvider({
+      apiKey: process.env.COMPOSIO_API_KEY!,
+    }),
+  },
+})
+
+export const mastra = new Mastra({ editor })
+```
+
+Configure the agent with an invoker connection pinned to `ca_alice_salesforce`. When Bob invokes the agent, Mastra sends `bob` as the Composio user and the pinned account ID as the exact connected account. The Memory resource stays `project_123`. Composio then checks whether the account's ACL permits Bob to execute it.
+
+### Map application users to Composio users
+
+Use `userIdResolver` when your Composio user IDs differ from the IDs returned by Mastra authentication, or when your application must authorize the stored account pin before execution.
+
+```typescript
+type ComposioUserIdResolver = (
+  input: ComposioUserIdResolverInput,
+) => Promise<string | undefined> | string | undefined
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'requestContext',
+    type: 'RequestContext',
+    description:
+      'Live per-request context. Client-provided non-reserved entries are untrusted. Derive identity and authorize connectedAccountId only from validated, server-populated fields such as MASTRA_USER_KEY, read with getRaw().',
+    isOptional: true,
+  },
+  {
+    name: 'toolkit',
+    type: 'string',
+    description: 'Toolkit slug the identity is being resolved for, when known.',
+    isOptional: true,
+  },
+  {
+    name: 'connectedAccountId',
+    type: 'string',
+    description:
+      'Stored connection pin being resolved, when one exists. Use it to validate that the invoker may use this exact account.',
+    isOptional: true,
+  },
+]}
+/>
+
+The resolver returns the Composio user ID, or `undefined` to use the provider's default resolution. Returning an empty string throws instead of silently falling back. The resolver can't replace the connected account.
+
+This example namespaces the Composio user by organization and asks the application's authorization layer to approve the exact account pin:
+
+```typescript title="src/mastra/index.ts"
+import { MASTRA_USER_KEY } from '@mastra/server/auth'
+import { ComposioToolProvider } from '@mastra/editor/composio'
+import { canUseConnectedAccount } from './integration-authorization'
+
+type AuthenticatedUser = {
+  id: string
+  organizationId: string
+}
+
+function isAuthenticatedUser(value: unknown): value is AuthenticatedUser {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'id' in value &&
+    typeof value.id === 'string' &&
+    'organizationId' in value &&
+    typeof value.organizationId === 'string'
+  )
+}
+
+const composio = new ComposioToolProvider({
+  apiKey: process.env.COMPOSIO_API_KEY!,
+  userIdResolver: async ({ requestContext, toolkit, connectedAccountId }) => {
+    const user = requestContext?.getRaw(MASTRA_USER_KEY)
+    if (!isAuthenticatedUser(user)) return undefined
+
+    if (connectedAccountId) {
+      const allowed = await canUseConnectedAccount({
+        actorId: user.id,
+        organizationId: user.organizationId,
+        provider: 'composio',
+        toolkit,
+        connectedAccountId,
+      })
+      if (!allowed) {
+        throw new Error('User cannot access this connected account')
+      }
+    }
+
+    return `${user.organizationId}:${user.id}`
+  },
+})
+```
+
+Use the same namespaced ID when creating Composio connections and shared-account ACL entries. For example, Bob's Composio user ID in this setup is `acme:bob`.
+
+Throw from `userIdResolver` to deny the request. During stored-agent resolution, Mastra logs the failure and omits tools associated with that connection, so no tool call reaches Composio. Other connections continue to resolve. When calling `resolveToolsVNext()` directly, the error is returned to the caller instead.
+
+### Connection management tools
+
+Composio provides tools for starting and monitoring authorization from an agent chat. When `allowedToolkits` is set, include `composio` to make these tools available:
+
+```typescript title="src/mastra/index.ts"
+const editor = new MastraEditor({
+  toolProviders: {
+    composio: new ComposioToolProvider({
+      apiKey: process.env.COMPOSIO_API_KEY!,
+      allowedToolkits: ['composio', 'gmail'],
+      defaultScope: 'caller-supplied',
+    }),
+  },
+})
+```
+
+Add only the connection management tools that the agent needs:
+
+| Tool | Behavior |
+| - | - |
+| `COMPOSIO_MANAGE_CONNECTIONS` | Creates an authorization link in chat through a session owned by the caller. |
+| `COMPOSIO_WAIT_FOR_CONNECTIONS` | Waits for the caller to finish authorization before the agent continues. |
+
+`COMPOSIO_WAIT_FOR_CONNECTIONS` is optional. Without it, complete authorization and return to the chat. Then ask the agent to continue. The connected account remains associated with the caller resource ID for later requests.
 
 ---
 

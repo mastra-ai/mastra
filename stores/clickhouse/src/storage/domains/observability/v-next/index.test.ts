@@ -183,15 +183,15 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       }
     }
 
-    it('advertises delta list capabilities when the feature is enabled', () => {
-      expect(storage.getFeatures()).toEqual(['delta-polling']);
+    it('advertises metrics, logs, and delta polling when the feature is enabled', () => {
+      expect(storage.getFeatures()).toEqual(['metrics', 'logs', 'delta-polling']);
     });
 
-    it('hides delta list capabilities when the feature is disabled', () => {
+    it('advertises metrics and logs when delta polling is disabled', () => {
       coreFeatures.delete('observability-delta-polling');
 
       try {
-        expect(storage.getFeatures()).toBeUndefined();
+        expect(storage.getFeatures()).toEqual(['metrics', 'logs']);
       } finally {
         coreFeatures.add('observability-delta-polling');
       }
@@ -2032,7 +2032,92 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       }
     });
 
-    it('fails before creating vNext tables when replication is enabled with existing local tables', async () => {
+    it('init() recreates legacy non-APPEND discovery MVs while keeping their target tables', async () => {
+      // Simulates an upgrade from a release whose discovery MVs refreshed
+      // without APPEND. Non-APPEND refreshes swap the target table
+      // atomically, which fails (error 36) when the target table is
+      // Replicated inside a non-Replicated database. init() should drop
+      // only the stale views and recreate them with the current APPEND
+      // definition — the helper tables (and their data) must survive.
+      const adminClient = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+      });
+      const database = `mig_append_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+      await adminClient.command({ query: `CREATE DATABASE ${database}` });
+
+      const scopedClient = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+        database,
+      });
+
+      try {
+        // Current ReplacingMergeTree helper tables — the engine reconcile
+        // path must leave these alone.
+        await scopedClient.command({
+          query: `CREATE TABLE ${TABLE_DISCOVERY_VALUES} (kind LowCardinality(String), key1 String, value String) ENGINE = ReplacingMergeTree ORDER BY (kind, key1, value)`,
+        });
+        await scopedClient.command({
+          query: `CREATE TABLE ${TABLE_DISCOVERY_PAIRS} (kind LowCardinality(String), key1 String, key2 String, value String) ENGINE = ReplacingMergeTree ORDER BY (kind, key1, key2, value)`,
+        });
+        // Legacy views without APPEND, as created by older releases.
+        await scopedClient.command({
+          query: `CREATE MATERIALIZED VIEW ${MV_DISCOVERY_VALUES} REFRESH EVERY 1 MINUTE TO ${TABLE_DISCOVERY_VALUES} AS SELECT CAST('' AS LowCardinality(String)) AS kind, '' AS key1, '' AS value WHERE 0`,
+        });
+        await scopedClient.command({
+          query: `CREATE MATERIALIZED VIEW ${MV_DISCOVERY_PAIRS} REFRESH EVERY 5 MINUTE TO ${TABLE_DISCOVERY_PAIRS} AS SELECT CAST('' AS LowCardinality(String)) AS kind, '' AS key1, '' AS key2, '' AS value WHERE 0`,
+        });
+
+        // Marker row proving the table (and its data) survives init()'s view
+        // migration. Inserted after the legacy views because a non-APPEND
+        // view's initial refresh atomically swaps the target table — the very
+        // behavior this fix removes.
+        await scopedClient.command({
+          query: `INSERT INTO ${TABLE_DISCOVERY_VALUES} VALUES ('entityType', '', 'marker-survivor')`,
+        });
+
+        const migratedStorage = new ObservabilityStorageClickhouseVNext({ client: scopedClient });
+        try {
+          await migratedStorage.init();
+
+          // Both views must exist again with an APPEND refresh definition.
+          const mvs = (await (
+            await scopedClient.query({
+              query: `SELECT name, create_table_query FROM system.tables WHERE database = currentDatabase() AND name IN ({mvs:Array(String)}) ORDER BY name`,
+              query_params: { mvs: [MV_DISCOVERY_VALUES, MV_DISCOVERY_PAIRS] },
+              format: 'JSONEachRow',
+            })
+          ).json()) as Array<{ name: string; create_table_query: string }>;
+          expect(mvs.map(r => r.name).sort()).toEqual([MV_DISCOVERY_PAIRS, MV_DISCOVERY_VALUES].sort());
+          for (const row of mvs) {
+            expect(
+              /REFRESH EVERY \d+ MINUTE APPEND/i.test(row.create_table_query),
+              `expected ${row.name} to have an APPEND refresh definition but got: ${row.create_table_query.slice(0, 200)}`,
+            ).toBe(true);
+          }
+
+          // The helper table was not dropped: the marker row survives.
+          const markerRows = (await (
+            await scopedClient.query({
+              query: `SELECT value FROM ${TABLE_DISCOVERY_VALUES} WHERE value = 'marker-survivor'`,
+              format: 'JSONEachRow',
+            })
+          ).json()) as Array<{ value: string }>;
+          expect(markerRows).toHaveLength(1);
+        } finally {
+          await migratedStorage.dangerouslyClearAll();
+        }
+      } finally {
+        await scopedClient.close();
+        await adminClient.command({ query: `DROP DATABASE IF EXISTS ${database} SYNC` });
+        await adminClient.close();
+      }
+    });
+
+    it('warns and proceeds when replication is enabled with existing local tables', async () => {
       const adminClient = createClient({
         url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
         username: process.env.CLICKHOUSE_USERNAME || 'default',
@@ -2049,26 +2134,42 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       });
 
       try {
-        await scopedClient.command({
-          query: `CREATE TABLE ${TABLE_SPAN_EVENTS} (id String) ENGINE = MergeTree ORDER BY id`,
-        });
+        const localStorage = new ObservabilityStorageClickhouseVNext({ client: scopedClient });
+        await localStorage.init();
+
+        const enginesBefore = (await (
+          await scopedClient.query({
+            query: `SELECT name, engine FROM system.tables WHERE database = currentDatabase() AND name = {name:String}`,
+            query_params: { name: TABLE_SPAN_EVENTS },
+            format: 'JSONEachRow',
+          })
+        ).json()) as Array<{ name: string; engine: string }>;
+        expect(enginesBefore).toHaveLength(1);
 
         const replicatedStorage = new ObservabilityStorageClickhouseVNext({
           client: scopedClient,
-          replication: { cluster: 'company_cluster' },
+          replication: {
+            zookeeperPath: `/clickhouse/tables/test/${database}/{table}`,
+            replicaName: 'replica1',
+          },
         });
+        const warn = vi.fn();
+        replicatedStorage.__setLogger({ warn } as any);
 
-        await expect(replicatedStorage.init()).rejects.toThrow(
-          /existing Mastra tables use non-replicated local engines/,
-        );
+        await replicatedStorage.init();
 
-        const tables = (await (
+        expect(warn).toHaveBeenCalledOnce();
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('pre-existing observability table'));
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('ReplacingMergeTree'));
+
+        const enginesAfter = (await (
           await scopedClient.query({
-            query: `SELECT name FROM system.tables WHERE database = currentDatabase() ORDER BY name`,
+            query: `SELECT name, engine FROM system.tables WHERE database = currentDatabase() AND name = {name:String}`,
+            query_params: { name: TABLE_SPAN_EVENTS },
             format: 'JSONEachRow',
           })
-        ).json()) as Array<{ name: string }>;
-        expect(tables.map(table => table.name)).toEqual([TABLE_SPAN_EVENTS]);
+        ).json()) as Array<{ name: string; engine: string }>;
+        expect(enginesAfter).toEqual(enginesBefore);
       } finally {
         await scopedClient.close();
         await adminClient.command({ query: `DROP DATABASE IF EXISTS ${database} SYNC` });

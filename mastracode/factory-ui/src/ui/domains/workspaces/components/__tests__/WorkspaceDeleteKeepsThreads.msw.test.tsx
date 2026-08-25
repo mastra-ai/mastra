@@ -15,7 +15,7 @@ import { describe, expect, it, onTestFinished } from 'vitest';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
-import type { FactoryUserSession } from '../../services/github';
+import type { FactoryUserSession } from '../../services/user-sessions';
 import { WorkspacesSection } from '../WorkspacesSection';
 
 const projectRepositoryId = 'ghp-1';
@@ -27,6 +27,7 @@ const workspace: FactoryUserSession = {
   projectRepositoryId,
   orgId: 'org-1',
   userId: 'user-1',
+  visibility: 'org' as const,
   branch: 'factory/pr-20474',
   baseBranch: 'main',
   sandboxId: 'sbx-1',
@@ -45,6 +46,10 @@ function renderSection() {
           // exactly the state in which the old cascade had something to delete.
           resourceId: 'resource-1',
           sessionEnabled: true,
+          resourceReady: true,
+          sandboxReady: true,
+          sandboxPreparing: false,
+          sandboxProgress: undefined,
           resourceEnabled: true,
           factorySessionState: { factoryProjectId: 'fp-1', projectRepositoryId },
           baseUrl: TEST_BASE_URL,

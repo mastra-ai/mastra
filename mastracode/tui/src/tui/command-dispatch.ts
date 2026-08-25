@@ -6,6 +6,7 @@ import { insertChatComponentWithBoundarySpacing } from './chat-boundary-reconcil
 import { startGoalWithDefaults } from './commands/goal.js';
 import {
   handleHelpCommand,
+  handleContextCommand,
   handleCostCommand,
   handleYoloCommand,
   handleVoiceCommand,
@@ -30,6 +31,7 @@ import {
   handleCustomProvidersCommand,
   handleSubagentsCommand,
   handleOMCommand,
+  handleKnowledgeCommand,
   handleSettingsCommand,
   handleLoginCommand,
   handleReviewCommand as handleReviewCmd,
@@ -45,7 +47,9 @@ import {
   handleObservabilityCommand,
   handleGithubCommand,
   handleGoalCommand,
+  handleWorkflowsCommand,
   handlePruneCommand,
+  handleProfileCommand,
 } from './commands/index.js';
 import { isCurrentThreadActive, sendSlashCommandMessage } from './commands/send-slash-command-message.js';
 import type { SlashCommandContext } from './commands/types.js';
@@ -171,6 +175,10 @@ export async function dispatchSlashCommand(
     case 'sandbox':
       await handleSandboxCmd(ctx, args);
       return true;
+    case 'workflows':
+    case 'workflow':
+      await handleWorkflowsCommand(ctx, args, rawArgsText);
+      return true;
     case 'mode':
       await handleModeCommand(ctx, args);
       return true;
@@ -186,6 +194,9 @@ export async function dispatchSlashCommand(
     case 'memory':
     case 'om':
       await handleOMCommand(ctx);
+      return true;
+    case 'knowledge':
+      await handleKnowledgeCommand(ctx);
       return true;
     case 'think':
       await handleThinkCommand(ctx, args);
@@ -211,8 +222,15 @@ export async function dispatchSlashCommand(
     case 'cost':
       handleCostCommand(ctx);
       return true;
+    case 'context':
+    case 'ctx':
+      await handleContextCommand(ctx);
+      return true;
     case 'prune':
       await handlePruneCommand(ctx, args);
+      return true;
+    case 'profile':
+      await handleProfileCommand(ctx, args);
       return true;
     case 'diff':
       await handleDiffCommand(ctx, args[0]);

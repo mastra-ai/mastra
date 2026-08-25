@@ -67,7 +67,48 @@ export interface MountLinearRoutesOptions {
    * project filter; when absent, only the disabled `status` route is served.
    */
   intake?: IntakeStorage;
+  /**
+   * Factory project domain, used to keep single-project installs working
+   * without any source binding. When absent, unbound sources are treated as
+   * belonging to no project.
+   */
+  projects?: { list(input: { orgId: string }): Promise<unknown[]> };
   ingestFactoryIssues?: (input: LinearRulesIngress) => Promise<unknown>;
+}
+
+/**
+ * Narrow the caller's selected Linear sources to the ones that feed this
+ * Factory project.
+ *
+ * A Linear issue carries no Factory project of its own, so without a binding
+ * every board view would ingest every selected source's issues into whichever
+ * project happened to be on screen. Bound sources win; when the org has no
+ * bindings at all we fall back to the full selection for single-project
+ * installs, where "which project" is unambiguous.
+ */
+async function scopeSourceIdsToProject({
+  intake,
+  projects,
+  orgId,
+  factoryProjectId,
+  selectedIds,
+}: {
+  intake: IntakeStorage;
+  projects: MountLinearRoutesOptions['projects'];
+  orgId: string;
+  factoryProjectId: string;
+  selectedIds: string[];
+}): Promise<string[]> {
+  const bound = await intake.listBoundSourceIds({ orgId, integrationId: 'linear', factoryProjectId });
+  if (bound.length > 0) {
+    const boundSet = new Set(bound);
+    return selectedIds.filter(id => boundSet.has(id));
+  }
+  const orgBindings = await intake.listBindings({ orgId, integrationId: 'linear' });
+  if (orgBindings.length > 0) return [];
+  if (!projects) return [];
+  const all = await projects.list({ orgId });
+  return all.length <= 1 ? selectedIds : [];
 }
 
 /**
@@ -106,6 +147,9 @@ function parseAfterCursor(raw: string | undefined): string | undefined | null {
   if (raw.length > 512 || !/^[\w+/=.:-]+$/.test(raw)) return null;
   return raw;
 }
+
+/** Human issue key as it appears on a card (`ENG-123`). */
+const ISSUE_IDENTIFIER_RE = /^[A-Za-z][A-Za-z0-9]{0,9}-\d{1,7}$/;
 
 /** Map a Linear read failure to the API response for the SPA. */
 function linearFetchError(c: RouteContext, err: unknown) {
@@ -301,7 +345,18 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
         }
 
         // No projects selected means nothing is synced — don't fan out to Linear.
-        const projectIds = selection.sourceIds ?? [];
+        const selectedIds = selection.sourceIds ?? [];
+        // A board request is also an ingest, so it only ever sees the sources
+        // bound to that Factory project.
+        const projectIds = factoryProjectId
+          ? await scopeSourceIdsToProject({
+              intake,
+              projects: options.projects,
+              orgId: resolved.tenant.orgId,
+              factoryProjectId,
+              selectedIds,
+            })
+          : selectedIds;
         if (projectIds.length === 0) {
           return c.json({ issues: [], nextCursor: null });
         }
@@ -337,6 +392,65 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
             });
           }
           return c.json({ issues: issuePayload, nextCursor });
+        } catch (err) {
+          return linearFetchError(loose(c), err);
+        }
+      },
+    }),
+  );
+
+  routes.push(
+    registerApiRoute('/web/linear/issues/:identifier', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = await resolveOrgTenant(loose(c), auth);
+        if ('response' in resolved) return resolved.response;
+
+        const identifier = c.req.param('identifier');
+        if (!ISSUE_IDENTIFIER_RE.test(identifier)) return c.json({ error: 'invalid_identifier' }, 400);
+        const factoryProjectId = c.req.query('factoryProjectId');
+        if (!factoryProjectId || !UUID_RE.test(factoryProjectId)) {
+          return c.json({ error: 'invalid_factory_project_id' }, 400);
+        }
+
+        const connection = await linear.loadConnection(resolved.tenant.orgId);
+        if (!connection) {
+          return c.json({ error: 'linear_not_connected', message: 'Connect Linear to see intake issues.' }, 409);
+        }
+
+        await intake.ensureReady();
+        const config = await intake.getConfig({
+          orgId: resolved.tenant.orgId,
+          userId: resolved.tenant.userId,
+          integrationIds: ['linear'],
+        });
+        const selection = config.linear!;
+        if (!selection.enabled) {
+          return c.json({ error: 'linear_intake_disabled', message: 'Linear intake is turned off in Settings.' }, 404);
+        }
+        const projectIds = await scopeSourceIdsToProject({
+          intake,
+          projects: options.projects,
+          orgId: resolved.tenant.orgId,
+          factoryProjectId,
+          selectedIds: selection.sourceIds ?? [],
+        });
+        if (projectIds.length === 0) return c.json({ error: 'issue_not_found' }, 404);
+
+        try {
+          const accessToken = await linear.getFreshAccessToken(connection);
+          const issue = await linear.fetchIssueDetail(accessToken, identifier);
+          // Reads exactly like an issue that doesn't exist.
+          if (!issue || issue.projectId === null || !projectIds.includes(issue.projectId)) {
+            return c.json({ error: 'issue_not_found' }, 404);
+          }
+          return c.json({
+            identifier: issue.identifier,
+            title: issue.title,
+            url: issue.url,
+            description: issue.description,
+          });
         } catch (err) {
           return linearFetchError(loose(c), err);
         }

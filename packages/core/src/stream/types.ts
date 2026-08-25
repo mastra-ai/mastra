@@ -17,6 +17,7 @@ import type { CallSettings, ModelMessage, StepResult, ToolSet, TypedToolCall, UI
 import type { AIV5ResponseMessage } from '../agent/message-list';
 import type { AIV5Type, MastraDBMessage } from '../agent/message-list/types';
 import type { StructuredOutputOptions } from '../agent/types';
+import type { ModelConfigModelSettings } from '../llm/model/model-settings';
 import type { MastraLanguageModel, SharedProviderOptions } from '../llm/model/shared.types';
 import type { ScorerResult } from '../loop';
 import type { ClientObservabilityCarrier, ObservabilityContext } from '../observability';
@@ -144,6 +145,20 @@ export interface FilePayload {
   data: string | Uint8Array;
   base64?: string;
   mimeType: string;
+  filename?: string;
+  providerMetadata?: ProviderMetadata;
+}
+
+export interface ReasoningFilePayload {
+  data: string | Uint8Array;
+  base64?: string;
+  mimeType: string;
+  providerMetadata?: ProviderMetadata;
+}
+
+export interface CustomPayload {
+  /** The kind of custom content, in the format `{provider}.{provider-type}`. */
+  kind: string;
   providerMetadata?: ProviderMetadata;
 }
 
@@ -237,6 +252,8 @@ interface FinishPayload<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
   stepResult: {
     /** Includes 'tripwire' and 'retry' for processor scenarios */
     reason: LanguageModelV2FinishReason | 'tripwire' | 'retry';
+    /** Provider's own finish reason (e.g. 'MALFORMED_FUNCTION_CALL'), when the provider reports one */
+    rawReason?: string;
     warnings?: LanguageModelV2CallWarning[];
     isContinued?: boolean;
     logprobs?: LanguageModelV1LogProbs;
@@ -296,6 +313,8 @@ export interface StepFinishPayload<Tools extends ToolSet = ToolSet, OUTPUT = und
     isContinued?: boolean;
     warnings?: LanguageModelV2CallWarning[];
     reason: LanguageModelV2FinishReason;
+    /** Provider's own finish reason (e.g. 'MALFORMED_FUNCTION_CALL'), when the provider reports one */
+    rawReason?: string;
   };
   output: {
     text?: string;
@@ -849,6 +868,8 @@ export type AgentChunkType<OUTPUT = undefined> =
   | (BaseChunkType & { type: 'redacted-reasoning'; payload: RedactedReasoningPayload })
   | (BaseChunkType & { type: 'source'; payload: SourcePayload })
   | (BaseChunkType & { type: 'file'; payload: FilePayload })
+  | (BaseChunkType & { type: 'reasoning-file'; payload: ReasoningFilePayload })
+  | (BaseChunkType & { type: 'custom'; payload: CustomPayload })
   | (BaseChunkType & { type: 'tool-call'; payload: ToolCallPayload })
   | (BaseChunkType & { type: 'tool-call-approval'; payload: ToolCallApprovalPayload })
   | (BaseChunkType & { type: 'tool-call-suspended'; payload: ToolCallSuspendedPayload })
@@ -1045,6 +1066,8 @@ export type CreateStream = () => Promise<LanguageModelV2StreamResult>;
 
 export type SourceChunk = BaseChunkType & { type: 'source'; payload: SourcePayload };
 export type FileChunk = BaseChunkType & { type: 'file'; payload: FilePayload };
+export type ReasoningFileChunk = BaseChunkType & { type: 'reasoning-file'; payload: ReasoningFilePayload };
+export type CustomChunk = BaseChunkType & { type: 'custom'; payload: CustomPayload };
 export type ToolCallChunk = BaseChunkType & { type: 'tool-call'; payload: ToolCallPayload };
 export type ToolResultChunk = BaseChunkType & { type: 'tool-result'; payload: ToolResultPayload };
 export type ToolOutputDeniedChunk = BaseChunkType & { type: 'tool-output-denied'; payload: ToolOutputDeniedPayload };
@@ -1067,9 +1090,10 @@ export type ExecuteStreamModelManager<T> = (
 export type ModelManagerModelConfig = {
   model: MastraLanguageModel;
   maxRetries: number;
+  maxRetriesConfigured?: boolean;
   id: string;
   headers?: Record<string, string>;
-  modelSettings?: Omit<CallSettings, 'abortSignal' | 'maxRetries' | 'headers'>;
+  modelSettings?: ModelConfigModelSettings;
   providerOptions?: SharedProviderOptions;
 };
 
@@ -1081,6 +1105,8 @@ export type LanguageModelUsage = LanguageModelV2Usage & {
   reasoningTokens?: number;
   cachedInputTokens?: number;
   cacheCreationInputTokens?: number;
+  cacheCreationInputTokens5m?: number;
+  cacheCreationInputTokens1h?: number;
   /**
    * Raw usage data from the provider, preserved for advanced use cases.
    * For V3 models, contains the full nested structure:
@@ -1140,6 +1166,14 @@ export type MastraModelOutputOptions<OUTPUT = undefined> = {
    * processor processing (isLLMExecutionStep) AND final promise resolution.
    */
   resolveFinalPromises?: boolean;
+  /**
+   * When true, `error` chunks and `finish` chunks with stepResult.reason
+   * 'error' bypass the per-chunk output processor pass. These chunks describe a
+   * single model call that the caller may still recover from via an error
+   * processor retry or a fallback model, so the caller becomes responsible for
+   * running output processors on the error once recovery has been ruled out.
+   */
+  deferErrorChunks?: boolean;
   returnScorerData?: boolean;
   processorStates?: Map<string, any>;
   requestContext?: RequestContext;

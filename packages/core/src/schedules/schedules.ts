@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import slugify from '@sindresorhus/slugify';
 import type { AgentSignalAttributes, AgentSignalType } from '../agent/signals';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import type { Mastra } from '../mastra';
 import type { Schedule, SchedulesStorage } from '../storage/domains/schedules/base';
+import { slugify } from '../utils/slugify';
 import { computeNextFireAt, validateCron } from '../workflows/scheduler/cron';
 import type { ScheduleIfActive, ScheduleIfIdle } from './types';
 import { AGENT_SCHEDULE_PREFIX, WORKFLOW_SCHEDULE_PREFIX } from './types';
@@ -42,6 +42,7 @@ function normalizeScheduleId(rawId: string, prefix: string): string {
       id: 'SCHEDULES_INVALID_ID',
       domain: ErrorDomain.AGENT,
       category: ErrorCategory.USER,
+      details: { status: 400 },
       text: `schedules.create: id "${rawId}" is empty after normalization. Provide an id with at least one alphanumeric character.`,
     });
   }
@@ -275,6 +276,7 @@ export class Schedules {
         id: 'SCHEDULES_MISSING_TARGET_ID',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
+        details: { status: 400 },
         text: 'schedules.create requires `agentId` or `workflowId`.',
       });
     }
@@ -284,6 +286,7 @@ export class Schedules {
         id: 'SCHEDULES_MISSING_RESOURCE_ID',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
+        details: { status: 400 },
         text: 'schedules.create requires `resourceId` when `threadId` is set.',
       });
     }
@@ -298,6 +301,7 @@ export class Schedules {
           id: 'SCHEDULES_THREADLESS_OPTIONS',
           domain: ErrorDomain.AGENT,
           category: ErrorCategory.USER,
+          details: { status: 400 },
           text: `schedules.create: ${offenders.join(', ')} require a threadId.`,
         });
       }
@@ -398,6 +402,7 @@ export class Schedules {
         id: 'SCHEDULES_ID_EXISTS',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
+        details: { status: 409 },
         text: `schedules.create: a schedule with id "${id}" already exists. Use update() to modify it or choose a different id.`,
       });
     }
@@ -441,6 +446,7 @@ export class Schedules {
         id: 'SCHEDULES_NOT_FOUND',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
+        details: { status: 404 },
         text: `Schedule "${id}" not found.`,
       });
     }
@@ -495,6 +501,7 @@ export class Schedules {
           id: 'SCHEDULES_THREADLESS_OPTIONS',
           domain: ErrorDomain.AGENT,
           category: ErrorCategory.USER,
+          details: { status: 400 },
           text: `schedules.update: ${offenders.join(', ')} require a threadId.`,
         });
       }
@@ -530,6 +537,7 @@ export class Schedules {
         id: 'SCHEDULES_INVALID_WORKFLOW_PATCH',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
+        details: { status: 400 },
         text: `schedules.update: ${offenders.join(', ')} only apply to agent schedules.`,
       });
     }
@@ -557,6 +565,7 @@ export class Schedules {
         id: 'SCHEDULES_NOT_FOUND',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
+        details: { status: 404 },
         text: `Schedule "${id}" not found.`,
       });
     }
@@ -573,6 +582,7 @@ export class Schedules {
         id: 'SCHEDULES_NOT_FOUND',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
+        details: { status: 404 },
         text: `Schedule "${id}" not found.`,
       });
     }
@@ -592,6 +602,7 @@ export class Schedules {
         id: 'SCHEDULES_NOT_FOUND',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
+        details: { status: 404 },
         text: `Schedule "${id}" not found.`,
       });
     }

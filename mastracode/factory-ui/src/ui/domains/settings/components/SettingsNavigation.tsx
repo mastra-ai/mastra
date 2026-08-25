@@ -3,7 +3,9 @@ import { MainSidebar, useMainSidebar } from '@mastra/playground-ui/components/Ma
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import {
   ArrowLeft,
+  BookOpen,
   Bot,
+  Brain,
   Building2,
   Cable,
   CircleUserRound,
@@ -90,7 +92,19 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         label: SETTINGS_SECTION_LABELS.models,
         icon: Bot,
         searchText:
-          'models thinking level factory default model packs api keys providers credentials sign in oauth custom endpoints memory observational recall',
+          'models thinking level factory default model packs api keys providers credentials sign in oauth custom endpoints',
+      },
+      {
+        id: 'memory',
+        label: SETTINGS_SECTION_LABELS.memory,
+        icon: Brain,
+        searchText: 'memory observational recall observer reflector thresholds attachments summarize context',
+      },
+      {
+        id: 'skills',
+        label: SETTINGS_SECTION_LABELS.skills,
+        icon: BookOpen,
+        searchText: 'skills factory triage plan review agent instructions prompts stages',
       },
       {
         id: 'behavior',

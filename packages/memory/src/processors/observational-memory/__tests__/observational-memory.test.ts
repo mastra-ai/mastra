@@ -38,14 +38,15 @@ import {
   buildObserverHistoryMessage,
   buildMultiThreadObserverHistoryMessage,
   parseObserverOutput,
-  optimizeObservationsForContext,
   formatMessagesForObserver,
   hasCurrentTaskSection,
   extractCurrentTask,
   sanitizeObservationLines,
   detectDegenerateRepetition,
+  describeDegenerateOutput,
 } from '../observer-agent';
 import { ObserverRunner } from '../observer-runner';
+import { registerOp, unregisterOp, isOpActiveInProcess } from '../operation-registry';
 import { ObservationalMemoryProcessor } from '../processor';
 import type { MemoryContextProvider } from '../processor';
 
@@ -3294,52 +3295,110 @@ User asked about </current-task> parsing and how it works
       expect(result.degenerate).toBe(true);
       expect(result.observations).toBe('');
     });
+
+    // Long-period multi-line loops defeat the window-sampling strategy: with a
+    // repeating block of period P chars, sampled windows only collide when two
+    // sample positions are congruent mod P, so ~50 samples land on ~50 distinct
+    // phases and find zero duplicates. Both cases below reproduce real observer
+    // output found in production records (2026-08-21).
+    it('should detect a long-period multi-line repetition loop (21-line block x 62)', () => {
+      const block = Array.from(
+        { length: 21 },
+        (_, i) =>
+          `* 🟡 (08:44) Found \`API.md\` lines ${200 + i * 10}-${210 + i * 10}: \`/api/learning/entities/:entityId/route-${i}\` accepts \`signalName\` — no catalog enrichment currently present.`,
+      ).join('\n');
+      const uniquePrefix = Array.from(
+        { length: 30 },
+        (_, i) =>
+          `* 🔴 (0${(i % 9) + 1}:1${i % 6}) User asked about distinct topic number ${i} with unique detail ${i * 37}`,
+      ).join('\n');
+      const text = `${uniquePrefix}\n${Array(62).fill(block).join('\n')}`;
+      expect(detectDegenerateRepetition(text)).toBe(true);
+
+      const description = describeDegenerateOutput(text);
+      expect(description).toContain('duplicateRatio=0.00');
+      expect(description).toContain('duplicateLineRatio=0.96');
+      expect(description).toContain('countedLines=1332');
+    });
+
+    it('should detect a short-period multi-line repetition loop (8-line block x 140)', () => {
+      const block = Array.from(
+        { length: 8 },
+        (_, i) =>
+          `* 🟡 (14:0${i}) Verified \`verifier-runner.ts\` line ${100 + i}: baseline replay hook number ${i} registered against the lifecycle map.`,
+      ).join('\n');
+      const text = Array(140).fill(block).join('\n');
+      expect(detectDegenerateRepetition(text)).toBe(true);
+    });
+
+    it('should detect duplicate substantial lines just over the ratio threshold', () => {
+      const repeatedConstraint =
+        '- 🔴 User requires every production change to preserve backwards compatibility and include documented rollback instructions.';
+      const uniqueObservations = Array.from(
+        { length: 8 },
+        (_, i) =>
+          `- 🟡 Distinct reflected project fact ${i}: ${String.fromCharCode(65 + i).repeat(150 + i * 17)} terminal-${i}`,
+      );
+      const lines = uniqueObservations.flatMap(unique => [repeatedConstraint, unique]);
+      lines.push(repeatedConstraint, repeatedConstraint, repeatedConstraint, repeatedConstraint);
+      const text = lines.join('\n');
+
+      expect(text.length).toBeGreaterThan(2000);
+      expect(detectDegenerateRepetition(text)).toBe(true);
+    });
+
+    it('should not flag long legitimate output with unique lines', () => {
+      const text = Array.from(
+        { length: 300 },
+        (_, i) =>
+          `* 🟡 (1${i % 10}:${String(i % 60).padStart(2, '0')}) Observation number ${i}: examined file-${i}.ts and found unique detail ${i * 13} relating to subsystem ${i % 7}`,
+      ).join('\n');
+      expect(text.length).toBeGreaterThan(2000);
+      expect(detectDegenerateRepetition(text)).toBe(false);
+    });
+
+    it('should not flag output where only short lines repeat', () => {
+      const unique = Array.from(
+        { length: 40 },
+        (_, i) =>
+          `* 🟡 (12:${String(i % 60).padStart(2, '0')}) Unique observation ${i} with distinct content token ${i * 31}`,
+      );
+      // Interleave legitimately repetitive short separators/bullets
+      const text = unique.flatMap(line => [line, '---', '## Current Task']).join('\n');
+      expect(detectDegenerateRepetition(text)).toBe(false);
+    });
   });
 
-  describe('optimizeObservationsForContext', () => {
-    it('should strip yellow and green emojis', () => {
-      const observations = `
-- 🔴 Critical info
-- 🟡 Medium info
-- 🟢 Low info
-      `;
-
-      const optimized = optimizeObservationsForContext(observations);
-      expect(optimized).toContain('🔴 Critical info');
-      expect(optimized).not.toContain('🟡');
-      expect(optimized).not.toContain('🟢');
+  describe('describeDegenerateOutput', () => {
+    it('reports length, duplicate stats, and the most-repeated window on one line', () => {
+      const block =
+        'getLanguageModel().doGenerate(options: LanguageModelV2CallOptions): PromiseLike<LanguageModelV2GenerateResult>, ';
+      const text = block.repeat(100);
+      const description = describeDegenerateOutput(text);
+      expect(description).toContain(`length=${text.length}`);
+      expect(description).toMatch(/duplicateRatio=0\.\d+/);
+      expect(description).toMatch(/duplicateLineRatio=(?:\d+\.\d+|n\/a)/);
+      expect(description).toMatch(/countedLines=\d+/);
+      expect(description).toMatch(/topWindowCount=\d+/);
+      expect(description).toContain('topWindow="');
+      expect(description).toContain('head="');
+      expect(description).toContain('tail="');
+      expect(description).not.toContain('\n');
     });
 
-    it('should strip anchor IDs before injecting context', () => {
-      const observations = '[O1] - 🔴 Critical info\n[O2] - 🟡 Medium info';
-      const optimized = optimizeObservationsForContext(observations);
-
-      expect(optimized).toContain('🔴 Critical info');
-      expect(optimized).toContain('- Medium info');
-      expect(optimized).not.toContain('[O1]');
-      expect(optimized).not.toContain('[O2]');
+    it('bounds snippets to the requested size', () => {
+      const text = 'x'.repeat(10_000);
+      const description = describeDegenerateOutput(text, 100);
+      const head = /head="(x+)"/.exec(description)?.[1];
+      const tail = /tail="(x+)"/.exec(description)?.[1];
+      expect(head?.length).toBe(100);
+      expect(tail?.length).toBe(100);
     });
 
-    it('should preserve red emojis', () => {
-      const observations = '- 🔴 Critical user preference';
-      const optimized = optimizeObservationsForContext(observations);
-      expect(optimized).toContain('🔴');
-    });
-
-    it('should simplify arrows', () => {
-      const observations = '- Task -> completed successfully';
-      const optimized = optimizeObservationsForContext(observations);
-      expect(optimized).not.toContain('->');
-    });
-
-    it('should collapse multiple newlines', () => {
-      const observations = `Line 1
-
-
-
-Line 2`;
-      const optimized = optimizeObservationsForContext(observations);
-      expect(optimized).not.toContain('\n\n\n');
+    it('omits the tail when the text is short', () => {
+      const description = describeDegenerateOutput('short text', 400);
+      expect(description).toContain('head="short text"');
+      expect(description).not.toContain('tail=');
     });
   });
 });
@@ -3584,6 +3643,26 @@ _range: \`ignored-by-reconciler\`_
       const result = parseReflectorOutput(output);
       expect(result.observations).toContain('Project Context');
       expect(result.observations).toContain('Completed auth implementation');
+    });
+
+    it('should preserve substantial repeated lines at the duplicate ratio boundary', () => {
+      const repeatedConstraint =
+        '- 🔴 User requires every production change to preserve backwards compatibility and include documented rollback instructions.';
+      const uniqueObservations = Array.from(
+        { length: 9 },
+        (_, i) =>
+          `- 🟡 Distinct reflected project fact ${i}: ${String.fromCharCode(65 + i).repeat(150 + i * 17)} terminal-${i}`,
+      );
+      const lines = uniqueObservations.flatMap(unique => [repeatedConstraint, unique]);
+      lines.push(repeatedConstraint, repeatedConstraint);
+      const output = lines.join('\n');
+
+      expect(output.length).toBeGreaterThan(2000);
+      const result = parseReflectorOutput(output);
+
+      expect(result.degenerate).not.toBe(true);
+      expect(result.observations).toContain(repeatedConstraint);
+      expect(result.observations).toContain('Distinct reflected project fact 8');
     });
 
     it('should strip ephemeral anchor IDs from reflector output', () => {
@@ -6463,6 +6542,130 @@ describe('Locking Behavior', () => {
     // Verify the flag was cleared in storage
     const updatedRecord = await storage.getObservationalMemory('thread-1', 'resource-1');
     expect(updatedRecord!.isReflecting).toBe(false);
+  });
+
+  it('manual reflect() skips quietly when a reflection is already in flight in this process', async () => {
+    const storage = createInMemoryStorage();
+
+    let reflectorCalled = false;
+    const mockReflectorModel = createStreamCapableMockModel({
+      doGenerate: async () => {
+        reflectorCalled = true;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+          content: [
+            {
+              type: 'text' as const,
+              text: `<observations>
+- Consolidated observation
+</observations>
+<current-task>None</current-task>
+<suggested-response>Continue</suggested-response>`,
+            },
+          ],
+          warnings: [],
+        };
+      },
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      observation: { messageTokens: 100, model: mockReflectorModel as any },
+      reflection: { observationTokens: 100, model: mockReflectorModel as any },
+      scope: 'thread',
+    });
+
+    await storage.initializeObservationalMemory({
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      scope: 'thread',
+      config: {},
+    });
+    const record = await storage.getObservationalMemory('thread-1', 'resource-1');
+    await storage.updateActiveObservations({
+      id: record!.id,
+      observations: '- Some observation about the user',
+      tokenCount: 500,
+      lastObservedAt: new Date(),
+    });
+
+    // Simulate an IN-FLIGHT reflection in this process: flag set AND op registered.
+    await storage.setReflectingFlag(record!.id, true);
+    registerOp(record!.id, 'reflecting');
+    try {
+      const result = await om.reflect('thread-1', 'resource-1');
+
+      expect(result.reflected).toBe(false);
+      expect(reflectorCalled).toBe(false);
+
+      // The skip must not clobber the in-flight reflection's lock.
+      const after = await storage.getObservationalMemory('thread-1', 'resource-1');
+      expect(after!.isReflecting).toBe(true);
+      expect(isOpActiveInProcess(record!.id, 'reflecting')).toBe(true);
+    } finally {
+      unregisterOp(record!.id, 'reflecting');
+      await storage.setReflectingFlag(record!.id, false);
+    }
+  });
+
+  it('manual reflect() clears a stale isReflecting flag from a dead process and proceeds', async () => {
+    const storage = createInMemoryStorage();
+
+    let reflectorCalled = false;
+    const mockReflectorModel = createStreamCapableMockModel({
+      doGenerate: async () => {
+        reflectorCalled = true;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+          content: [
+            {
+              type: 'text' as const,
+              text: `<observations>
+- Consolidated observation
+</observations>
+<current-task>None</current-task>
+<suggested-response>Continue</suggested-response>`,
+            },
+          ],
+          warnings: [],
+        };
+      },
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      observation: { messageTokens: 100, model: mockReflectorModel as any },
+      reflection: { observationTokens: 100, model: mockReflectorModel as any },
+      scope: 'thread',
+    });
+
+    await storage.initializeObservationalMemory({
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      scope: 'thread',
+      config: {},
+    });
+    const record = await storage.getObservationalMemory('thread-1', 'resource-1');
+    await storage.updateActiveObservations({
+      id: record!.id,
+      observations: '- Some observation about the user',
+      tokenCount: 500,
+      lastObservedAt: new Date(),
+    });
+
+    // Stale scenario: flag set in storage but NO op registered in this process.
+    await storage.setReflectingFlag(record!.id, true);
+
+    const result = await om.reflect('thread-1', 'resource-1');
+
+    expect(result.reflected).toBe(true);
+    expect(reflectorCalled).toBe(true);
+    const after = await storage.getObservationalMemory('thread-1', 'resource-1');
+    expect(after!.isReflecting).toBe(false);
   });
 
   it('should not force reflection when activateAfterIdle has expired below threshold', async () => {
@@ -12351,6 +12554,90 @@ describe('Full Async Buffering Flow', () => {
       expect(remaining).toHaveLength(1);
     });
 
+    it('forceMaxActivation: no observable effect with the documented defaults', async () => {
+      // Documented defaults: messageTokens=30k, bufferActivation=0.8 → retentionFloor=6k,
+      // blockAfter=1.2 → 36k. currentPending=36000, target=30000.
+      // Six 6k chunks: boundary 5 is the lowest over boundary (30k, overshoot=0),
+      // so the forced branch and the normal branch pick the same boundary and one
+      // chunk stays buffered. The docs must not describe this as draining the buffer.
+      const chunks = Array.from({ length: 6 }, (_, i) => ({
+        cycleId: `c-${i}`,
+        messageTokens: 6000,
+        observationTokens: 100,
+        obs: `Chunk ${i}`,
+      }));
+
+      const forced = await setupAndActivate({
+        chunks,
+        activationRatio: 0.8,
+        messageTokensThreshold: 30000,
+        currentPendingTokens: 36000,
+        forceMaxActivation: true,
+      });
+      const normal = await setupAndActivate({
+        chunks,
+        activationRatio: 0.8,
+        messageTokensThreshold: 30000,
+        currentPendingTokens: 36000,
+      });
+
+      expect(forced.result.chunksActivated).toBe(5);
+      expect(forced.result.chunksActivated).toBe(normal.result.chunksActivated);
+      expect(forced.result.messageTokensActivated).toBe(normal.result.messageTokensActivated);
+      expect(forced.remaining).toHaveLength(1);
+    });
+
+    it('forceMaxActivation: activates one extra chunk only when the retention floor is large', async () => {
+      // threshold=100k, ratio=0.7 → retentionFloor=30000, maxOvershoot=28500, minRemaining=1000
+      // currentPending=100000, target=70000
+      // Chunk 0: 69k (under). Chunk 1: 30k → cumulative 99k (over, overshoot=29000).
+      // Normal: overshoot 29000 > 28500 → falls back to the under boundary (1 chunk).
+      // Forced: remainingAfterOver = 1000 >= minRemaining → takes the over boundary (2 chunks).
+      const chunks = [
+        { cycleId: 'c-0', messageTokens: 69000, observationTokens: 500, obs: 'Chunk 0' },
+        { cycleId: 'c-1', messageTokens: 30000, observationTokens: 300, obs: 'Chunk 1' },
+      ];
+
+      const forced = await setupAndActivate({
+        chunks,
+        activationRatio: 0.7,
+        messageTokensThreshold: 100000,
+        currentPendingTokens: 100000,
+        forceMaxActivation: true,
+      });
+      const normal = await setupAndActivate({
+        chunks,
+        activationRatio: 0.7,
+        messageTokensThreshold: 100000,
+        currentPendingTokens: 100000,
+      });
+
+      // Forced activation never goes past the lowest boundary that reaches the target.
+      expect(forced.result.chunksActivated).toBe(2);
+      expect(forced.result.messageTokensActivated).toBe(99000);
+      expect(normal.result.chunksActivated).toBe(1);
+      expect(normal.result.messageTokensActivated).toBe(69000);
+    });
+
+    it('single buffered chunk covering the whole window leaves less than the minimum remaining', async () => {
+      // threshold=30k, ratio=0.8 → retentionFloor=6000, minRemaining=1000
+      // currentPending=36000, target=30000. One 36k chunk is the only boundary:
+      // overshoot=6000 > maxOvershoot=5700 and remainingAfterOver=0 < 1000, and there is
+      // no under boundary, so the final fallback activates it anyway and leaves 0 tokens.
+      const chunks = [{ cycleId: 'c-0', messageTokens: 36000, observationTokens: 400, obs: 'Chunk 0' }];
+
+      const { result, remaining } = await setupAndActivate({
+        chunks,
+        activationRatio: 0.8,
+        messageTokensThreshold: 30000,
+        currentPendingTokens: 36000,
+      });
+
+      expect(result.chunksActivated).toBe(1);
+      expect(result.messageTokensActivated).toBe(36000);
+      expect(remaining).toHaveLength(0);
+    });
+
     it('large message scenario: safeguard falls back to small chunk when oversized message dominates', async () => {
       // Real-world scenario: a small chunk (2k) followed by a huge web_search result (46k).
       // threshold=30k, absolute retention=1000 → ratio ≈ 0.967
@@ -16039,10 +16326,14 @@ describe('Processor stream events: buffering status and activation markers', () 
     // record (e.g. setBufferingObservationFlag) are visible everywhere. Real DBs
     // return fresh rows on each query, so the cached record remains stale.
     const originalGetOrCreate = om.getOrCreateRecord.bind(om);
-    om.getOrCreateRecord = async (...args: Parameters<typeof om.getOrCreateRecord>) => {
-      const record = await originalGetOrCreate(...args);
-      return JSON.parse(JSON.stringify(record));
-    };
+    const getOrCreateSpy = vi
+      .spyOn(om, 'getOrCreateRecord')
+      .mockImplementation(async (...args: Parameters<typeof om.getOrCreateRecord>) => {
+        const record = await originalGetOrCreate(...args);
+        return JSON.parse(JSON.stringify(record));
+      });
+    const setPendingSpy = vi.spyOn(storage, 'setPendingMessageTokens');
+    const emitProgressSpy = vi.spyOn(om, 'emitProgress');
 
     await storage.saveThread({
       thread: {
@@ -16137,12 +16428,14 @@ describe('Processor stream events: buffering status and activation markers', () 
       await new Promise(r => setTimeout(r, 50));
     }
 
+    expect(emitProgressSpy).toHaveBeenCalledTimes(1);
+    expect(setPendingSpy).toHaveBeenCalledTimes(1);
+    expect(getOrCreateSpy.mock.calls.length).toBeLessThan(3);
     expect(capturedStatusParts.length).toBeGreaterThanOrEqual(1);
 
     const lastStatus = capturedStatusParts[capturedStatusParts.length - 1];
-    // emitProgress should use a fresh record from storage (not the stale cached
-    // one from turn.start()). The fresh record reflects the isBufferingObservation
-    // flag set by buffer(), so the status should NOT be 'idle'.
+    // The turn-scoped record is updated before the asynchronous buffer work yields,
+    // so progress remains current without another storage fetch.
     expect(lastStatus.data.windows.buffered.observations.status).not.toBe('idle');
   });
 

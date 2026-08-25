@@ -13,7 +13,7 @@
  * still reaches the Mastra server — same pattern as the shared API client.
  */
 
-export const USER_SESSION_BRANCH_PREFIX = 'user/';
+import { postRepositoryGitOp, readJsonOrThrow } from './http';
 
 export interface GithubInstallation {
   installationId: number;
@@ -203,6 +203,8 @@ export interface FactoryProjectPayload {
   defaultModelId?: string | null;
   /** Whether new Slack sessions create Work-board items for this Factory. */
   slackWorkItemsEnabled?: boolean;
+  /** Whether Factory rules may start agent runs without someone asking for them. */
+  autoRunEnabled?: boolean;
 }
 
 /** `{...projectRepository, repository}` payload from the Factory project routes. */
@@ -234,11 +236,6 @@ export interface FactoryProjectSnapshot extends FactoryProjectPayload {
 }
 
 export type FactoryProject = FactoryProjectSnapshot;
-
-async function readJsonOrThrow<T>(res: Response, failure: string): Promise<T> {
-  if (!res.ok) throw new Error(`${failure} (${res.status})`);
-  return (await res.json()) as T;
-}
 
 function toLinkedRepositoryPayload(
   project: FactoryProjectPayload,
@@ -332,6 +329,22 @@ export async function updateFactoryDefaultModel(
     res,
     'Failed to update Factory default model',
   );
+  return project;
+}
+
+/** Enable or disable rule-started agent runs (review, triage, planning) for this Factory. */
+export async function updateFactoryAutoRun(
+  baseUrl: string,
+  factoryProjectId: string,
+  autoRunEnabled: boolean,
+): Promise<FactoryProjectPayload> {
+  const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`, {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: { 'content-type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ autoRunEnabled }),
+  });
+  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(res, 'Failed to update automatic runs');
   return project;
 }
 
@@ -559,113 +572,6 @@ async function readSSE(
   }
 }
 
-/**
- * An error from a git write operation (worktree/commit/push/pr) that carries the
- * server's error code so the UI can distinguish actionable failures (e.g.
- * `authRequired` for a 401, `Invalid branch` for a 400) from generic failures.
- */
-export interface GitOpError extends Error {
-  code?: string;
-  status?: number;
-  authRequired?: boolean;
-}
-
-/**
- * POST helper for the per-project git endpoints. Parses the server's JSON body,
- * surfacing `error`/`message` codes on failure (and `authRequired` for 401) so
- * callers can react without re-implementing the parsing dance each time.
- */
-async function postRepositoryGitOp<T>(
-  baseUrl: string,
-  projectRepositoryId: string,
-  action: string,
-  payload: unknown,
-): Promise<T> {
-  const res = await fetch(`${baseUrl}/web/github/projects/${encodeURIComponent(projectRepositoryId)}/${action}`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'content-type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify(payload ?? {}),
-  });
-  if (!res.ok) {
-    let code = `http_${res.status}`;
-    let message = `Request failed (${res.status})`;
-    try {
-      const body = (await res.json()) as { error?: string; message?: string };
-      if (body.error) code = body.error;
-      if (body.message) message = body.message;
-      else if (body.error) message = body.error;
-    } catch {
-      /* ignore non-JSON */
-    }
-    const err = new Error(message) as GitOpError;
-    err.code = code;
-    err.status = res.status;
-    if (res.status === 401) err.authRequired = true;
-    throw err;
-  }
-  return (await res.json()) as T;
-}
-
-export interface FactoryUserSession {
-  id: string;
-  sessionId: string;
-  projectRepositoryId: string;
-  orgId: string;
-  userId: string;
-  branch: string;
-  baseBranch: string;
-  sandboxId: string | null;
-  sandboxWorkdir: string | null;
-  materializedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export async function listUserSessions(
-  baseUrl: string,
-  projectRepositoryId: string,
-  signal?: AbortSignal,
-): Promise<FactoryUserSession[]> {
-  const res = await fetch(`${baseUrl}/web/github/projects/${encodeURIComponent(projectRepositoryId)}/sessions`, {
-    headers: { Accept: 'application/json' },
-    credentials: 'include',
-    signal,
-  });
-  const body = await readJsonOrThrow<{ sessions: FactoryUserSession[] }>(res, 'Failed to list sessions');
-  return body.sessions;
-}
-
-export async function createUserSession(
-  baseUrl: string,
-  projectRepositoryId: string,
-  branch: string,
-  baseBranch?: string,
-): Promise<FactoryUserSession> {
-  const result = await postRepositoryGitOp<{ session: FactoryUserSession }>(baseUrl, projectRepositoryId, 'sessions', {
-    branch,
-    baseBranch,
-  });
-  return result.session;
-}
-
-export async function getUserSession(baseUrl: string, sessionId: string): Promise<FactoryUserSession> {
-  const res = await fetch(`${baseUrl}/web/user-sessions/${encodeURIComponent(sessionId)}`, {
-    headers: { Accept: 'application/json' },
-    credentials: 'include',
-  });
-  if (!res.ok) throw new Error(`Failed to load session (${res.status})`);
-  return ((await res.json()) as { session: FactoryUserSession }).session;
-}
-
-export async function deleteUserSession(baseUrl: string, sessionId: string): Promise<void> {
-  const res = await fetch(`${baseUrl}/web/user-sessions/${encodeURIComponent(sessionId)}`, {
-    method: 'DELETE',
-    credentials: 'include',
-  });
-  if (!res.ok) throw new Error(`Failed to delete session (${res.status})`);
-}
-
 export interface CommitResult {
   committed: boolean;
 }
@@ -722,9 +628,11 @@ export interface RepositorySettings {
    * configured.
    */
   setupCommand: string | null;
+  /** Best-effort shell command run before a session workspace is retired. */
+  teardownCommand: string | null;
 }
 
-/** Read a repository's settings (currently just the worktree setup command). */
+/** Read a repository's worktree lifecycle settings. */
 export async function fetchRepositorySettings(
   baseUrl: string,
   projectRepositoryId: string,
@@ -737,7 +645,7 @@ export async function fetchRepositorySettings(
   return (await res.json()) as RepositorySettings;
 }
 
-/** Persist a repository's setup command. Pass `null` (or blank) to clear it. */
+/** Persist a repository's lifecycle commands. Pass `null` (or blank) to clear one. */
 export async function saveRepositorySettings(
   baseUrl: string,
   projectRepositoryId: string,

@@ -77,9 +77,70 @@ describe('credential store provider registry', () => {
     expect(resolveTenantFromRequestContext(ctx)).toEqual({ orgId: undefined, userId: 'prov_2' });
   });
 
+  it('reads a session-shaped user, whose org lives on the session half', () => {
+    const ctx = new RequestContext();
+    ctx.set('user', { session: { activeOrganizationId: 'org_1' }, user: { id: 'prov_3' } });
+    expect(resolveTenantFromRequestContext(ctx)).toEqual({ orgId: 'org_1', userId: 'prov_3' });
+  });
+
+  it('takes a session-shaped user org from the session half only, never the inner user', () => {
+    const ctx = new RequestContext();
+    ctx.set('user', { session: {}, user: { id: 'prov_4', organizationId: 'org_9' } });
+    // `toFactoryAuthUser` in `@mastra/factory` reads the session half and nothing
+    // else. Falling back to the inner user here would resolve a tenant the
+    // Factory refuses, and the two would disagree about who the caller is.
+    expect(resolveTenantFromRequestContext(ctx)).toEqual({ orgId: undefined, userId: 'prov_4' });
+  });
+
+  it('carries the org-first flag only when it is exactly true', () => {
+    const flagged = new RequestContext();
+    flagged.set('user', { workosId: 'user_1', organizationId: 'org_1', orgFirstCredentials: true });
+    expect(resolveTenantFromRequestContext(flagged)).toEqual({ orgId: 'org_1', userId: 'user_1', orgFirst: true });
+
+    const truthy = new RequestContext();
+    truthy.set('user', { workosId: 'user_1', organizationId: 'org_1', orgFirstCredentials: 'yes' });
+    expect(resolveTenantFromRequestContext(truthy)).toEqual({ orgId: 'org_1', userId: 'user_1' });
+  });
+
+  it('reads the org-first flag stamped on a session-shaped wrapper', () => {
+    const ctx = new RequestContext();
+    ctx.set('user', {
+      session: { activeOrganizationId: 'org_1' },
+      user: { id: 'prov_6' },
+      orgFirstCredentials: true,
+    });
+    expect(resolveTenantFromRequestContext(ctx)).toEqual({ orgId: 'org_1', userId: 'prov_6', orgFirst: true });
+  });
+
+  it('flips org-first for runs on a factory-owned session, keyed off controller state', () => {
+    const ctx = new RequestContext();
+    ctx.set('user', { workosId: 'user_1', organizationId: 'org_1' });
+    ctx.set('controller', { state: { factoryProjectId: 'project-1' } });
+    expect(resolveTenantFromRequestContext(ctx)).toEqual({ orgId: 'org_1', userId: 'user_1', orgFirst: true });
+  });
+
+  it('keeps user-first when controller state carries no factory project', () => {
+    const ctx = new RequestContext();
+    ctx.set('user', { workosId: 'user_1', organizationId: 'org_1' });
+    ctx.set('controller', { state: { projectPath: '/tmp/x' } });
+    expect(resolveTenantFromRequestContext(ctx)).toEqual({ orgId: 'org_1', userId: 'user_1' });
+  });
+
   it('ignores malformed user values', () => {
     const ctx = new RequestContext();
     ctx.set('user', 'not-a-user');
+    expect(resolveTenantFromRequestContext(ctx)).toBeUndefined();
+  });
+
+  it('refuses a tenant whose resolved user id is not a string', () => {
+    const ctx = new RequestContext();
+    ctx.set('user', { session: { activeOrganizationId: 'org_1' }, user: { id: 7 } });
+    expect(resolveTenantFromRequestContext(ctx)).toBeUndefined();
+  });
+
+  it('refuses a tenant whose resolved org id is not a string', () => {
+    const ctx = new RequestContext();
+    ctx.set('user', { session: { activeOrganizationId: 7 }, user: { id: 'prov_5' } });
     expect(resolveTenantFromRequestContext(ctx)).toBeUndefined();
   });
 });

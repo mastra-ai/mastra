@@ -1,7 +1,7 @@
+import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 
-import { useStartIssueTriageMutation } from '../../../../hooks/useFactoryData';
 import { useStartFactoryRun } from '../../../../hooks/useStartFactoryRun';
 import type { FactoryRunPhase } from '../../../../hooks/useStartFactoryRun';
 import type { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
@@ -10,7 +10,6 @@ import type { BoardCandidate } from '../boardCandidates';
 import { itemThreadSession, liveSessions } from '../boardItems';
 import { itemRunSpec, itemSessionSpec } from '../boardRunSpecs';
 import type { RunAction } from '../boardRunSpecs';
-import type { GithubIssue } from '../services/factory';
 import { inferredParentWorkItemId } from '../services/relationships';
 import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
 
@@ -31,7 +30,6 @@ export function useBoardRuns({
   refetchItems: ReturnType<typeof useWorkItemsQuery>['refetch'];
 }) {
   const { start, pendingRuns, enabled } = useStartFactoryRun();
-  const { triage, pendingIssueNumbers } = useStartIssueTriageMutation(projectRepositoryId, factoryProjectId);
   const navigate = useNavigate();
 
   // Workspaces that still exist. A card's session ref whose workspace was
@@ -73,11 +71,20 @@ export function useBoardRuns({
     navigate(`/factories/${factoryProjectId}/workspaces/${session.sessionId}/threads/${session.threadId}`);
   };
 
+  // Refetch failures here used to be silent: an expired auth cookie made every
+  // board click a no-op with no feedback. Toast so the click never dies quietly.
   const refreshItemAndWorktrees = async (itemId: string) => {
     const [refreshedWorkspaces, refreshedItems] = await Promise.all([workspaces.refetch(), refetchItems()]);
-    if (!refreshedWorkspaces.isSuccess || !refreshedItems.isSuccess) return;
+    if (!refreshedWorkspaces.isSuccess || !refreshedItems.isSuccess) {
+      const cause = refreshedWorkspaces.error ?? refreshedItems.error;
+      toast.error(cause instanceof Error ? cause.message : 'Failed to refresh the board — try reloading the page');
+      return;
+    }
     const item = refreshedItems.data.find(candidate => candidate.id === itemId);
-    if (!item) return;
+    if (!item) {
+      toast.error('This card no longer exists — the board may be out of date');
+      return;
+    }
     return {
       item,
       paths: new Set(refreshedWorkspaces.data.workspaces.map(workspace => workspace.sessionId)),
@@ -148,7 +155,10 @@ export function useBoardRuns({
     }
     const spec = itemRunSpec(refreshed.item);
     const action = spec?.actions.find(candidate => candidate.role === role);
-    if (!spec || !action) return;
+    if (!spec || !action) {
+      toast.error(`This card can't start a ${role} run from its current state`);
+      return;
+    }
     await start.mutateAsync({
       branch: spec.branch,
       threadTitle: spec.threadTitle,
@@ -205,9 +215,9 @@ export function useBoardRuns({
     // ref looks stale — a card title would render as a create button and a click
     // would mint a replacement session for a perfectly live thread.
     disabled: !enabled || !workspaces.isSuccess,
+    sessionLivenessResolved: workspaces.isSuccess,
     liveWorktreePaths,
-    error: [start, triage].find(mutation => mutation.isError)?.error,
-    triagingIssueNumbers: new Set(pendingIssueNumbers),
+    error: start.error,
     pendingRolesFor: (itemId: string): PendingRoles => pendingByItem.get(itemId) ?? EMPTY_PENDING_ROLES,
     preparingFor: (itemId: string): string | undefined => preparingItems[itemId],
     pendingRolesForSource: (sourceKey: string): PendingRoles => pendingBySource.get(sourceKey) ?? EMPTY_PENDING_ROLES,
@@ -216,7 +226,6 @@ export function useBoardRuns({
     openOrStartRun,
     restartRun,
     startCandidateRun,
-    triageCandidate: (issue: GithubIssue) => triage.mutate(issue),
   };
 }
 

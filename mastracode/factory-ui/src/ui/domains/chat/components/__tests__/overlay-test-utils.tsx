@@ -1,7 +1,7 @@
 import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
-import { MemoryRouter, Route, Routes } from 'react-router';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 
 import { ChatSessionTestProvider as ChatSessionProvider } from '../../context/ChatSessionTestProvider';
 import { server } from '../../../../../../e2e/ui/msw-server';
@@ -129,10 +129,21 @@ export function useOverlayControllerHandlers() {
           headers: { 'content-type': 'text/event-stream' },
         }),
     ),
+    http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => HttpResponse.json({ subscriptions: [] })),
     http.get(`${TEST_BASE_URL}/web/fs/list`, () =>
       HttpResponse.json({ root: '/tmp', path: '/tmp', parent: null, entries: [] }),
     ),
     http.put(`${API}/sessions/:resourceId/state`, () => HttpResponse.json({})),
+  );
+}
+
+/** Renders where a command navigated and the location it carries back, so tests can assert both. */
+function NavigatedPath() {
+  const { pathname, state } = useLocation();
+  return (
+    <span data-testid="navigated-path" data-return-to={JSON.stringify(state)}>
+      {pathname}
+    </span>
   );
 }
 
@@ -152,6 +163,7 @@ export function OverlayTestProviders({ children }: { children: ReactNode }) {
             </MainSidebarProvider>
           }
         />
+        <Route path="*" element={<NavigatedPath />} />
       </Routes>
     </MemoryRouter>
   );

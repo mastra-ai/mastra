@@ -1,11 +1,14 @@
 import { randomUUID } from 'node:crypto';
 
+import { resolveProviderOMDefault } from '@mastra/code-sdk/onboarding/packs';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController } from '@mastra/core/agent-controller';
 
-import type { MemorySettingsRecord, MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
+import { factoryMemorySettingsUserId } from '../storage/domains/memory-settings/base.js';
+import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
+import { applyStoredMemorySettings } from './memory-settings-hydration.js';
 
 type FactorySession = Awaited<ReturnType<AgentController<MastraCodeState>['createSession']>>;
 
@@ -39,6 +42,11 @@ export interface EnsureFactorySourceSessionArgs {
   branch: string;
   /** Pick a specific linked repository by slug. Defaults to the first linked repository. */
   repositorySlug?: string;
+  /**
+   * Attribute the run to this user instead of the repo connector. Set when the
+   * run has an interactive user — e.g. the person who approved a proposed run.
+   */
+  attributeToUserId?: string;
 }
 
 export interface EnsuredFactorySourceSession {
@@ -47,6 +55,17 @@ export interface EnsuredFactorySourceSession {
   projectRepositoryId: string;
   branch: string;
   baseBranch: string;
+}
+
+export class FactorySourceSessionResolutionError extends Error {
+  constructor(readonly reason: 'connection' | 'repository') {
+    super(
+      reason === 'connection'
+        ? 'Factory source-control connection not found.'
+        : 'Factory source-control repository not found.',
+    );
+    this.name = 'FactorySourceSessionResolutionError';
+  }
 }
 
 export interface ResolvedFactorySourceRepository {
@@ -84,27 +103,41 @@ export async function resolveFactorySourceRepository(args: {
   const { sourceControl, orgId, factoryProjectId, repositorySlug } = args;
 
   const connections = await sourceControl.connections.list({ orgId, factoryProjectId });
-  const connection = connections.find(candidate => candidate.integrationId === sourceControl.integrationId);
-  if (!connection) return { found: false, reason: 'connection' };
+  const candidates = connections.filter(candidate => candidate.integrationId === sourceControl.integrationId);
+  if (candidates.length === 0) return { found: false, reason: 'connection' };
 
-  const projectRepositories = await sourceControl.projectRepositories.list({ orgId, connectionId: connection.id });
-  const resolvedRepositories = await Promise.all(
-    projectRepositories.map(async projectRepository => ({
-      projectRepository,
-      repository: await sourceControl.repositories.get({ orgId, id: projectRepository.repositoryId }),
-    })),
-  );
-  const resolved = resolvedRepositories.find(
-    candidate => candidate.repository && (!repositorySlug || candidate.repository.slug === repositorySlug),
-  );
-  if (!resolved?.repository) return { found: false, reason: 'repository' };
+  // A project can carry stale connections: a provider-app reinstall leaves the
+  // old connection pointing at an installation that no longer exists, and that
+  // row can sit ahead of the healthy one. Try every candidate and skip the ones
+  // that no longer resolve rather than failing on the first.
+  for (const connection of candidates) {
+    let resolved;
+    try {
+      const projectRepositories = await sourceControl.projectRepositories.list({ orgId, connectionId: connection.id });
+      const resolvedRepositories = await Promise.all(
+        projectRepositories.map(async projectRepository => ({
+          projectRepository,
+          repository: await sourceControl.repositories.get({ orgId, id: projectRepository.repositoryId }),
+        })),
+      );
+      resolved = resolvedRepositories.find(
+        candidate => candidate.repository && (!repositorySlug || candidate.repository.slug === repositorySlug),
+      );
+    } catch {
+      // The connection no longer resolves (e.g. its installation was deleted).
+      continue;
+    }
+    if (!resolved?.repository) continue;
 
-  return {
-    found: true,
-    projectRepositoryId: resolved.projectRepository.id,
-    baseBranch: resolved.projectRepository.branch ?? resolved.repository.defaultBranch,
-    connectedByUserId: connection.createdByUserId,
-  };
+    return {
+      found: true,
+      projectRepositoryId: resolved.projectRepository.id,
+      baseBranch: resolved.projectRepository.branch ?? resolved.repository.defaultBranch,
+      connectedByUserId: connection.createdByUserId,
+    };
+  }
+
+  return { found: false, reason: 'repository' };
 }
 
 /**
@@ -145,9 +178,10 @@ export async function resolveFactoryProjectForSession(args: {
  * its linked repositories, and a session on the requested branch with the
  * repository's pinned or default branch as the base.
  *
- * The run is attributed to whoever connected the repository
- * (`connection.createdByUserId`), because an autonomous run has no interactive
- * user of its own.
+ * The run is attributed to `attributeToUserId` when the caller has an
+ * interactive user (e.g. the approver of a proposed run), and otherwise falls
+ * back to whoever connected the repository (`connection.createdByUserId`),
+ * because a genuinely autonomous run has no interactive user of its own.
  */
 export async function ensureFactorySourceSession(
   args: EnsureFactorySourceSessionArgs,
@@ -155,15 +189,9 @@ export async function ensureFactorySourceSession(
   const { sourceControl, orgId, factoryProjectId, branch, repositorySlug } = args;
 
   const resolved = await resolveFactorySourceRepository({ sourceControl, orgId, factoryProjectId, repositorySlug });
-  if (!resolved.found) {
-    throw new Error(
-      resolved.reason === 'connection'
-        ? 'Factory source-control connection not found.'
-        : 'Factory source-control repository not found.',
-    );
-  }
+  if (!resolved.found) throw new FactorySourceSessionResolutionError(resolved.reason);
 
-  const userId = resolved.connectedByUserId;
+  const userId = args.attributeToUserId ?? resolved.connectedByUserId;
   const session = await sourceControl.sessions.create({
     sessionId: randomUUID(),
     projectRepositoryId: resolved.projectRepositoryId,
@@ -171,6 +199,7 @@ export async function ensureFactorySourceSession(
     userId,
     branch,
     baseBranch: resolved.baseBranch,
+    visibility: 'org',
   });
   return {
     sessionId: session.sessionId,
@@ -181,24 +210,21 @@ export async function ensureFactorySourceSession(
   };
 }
 
-async function applyMemorySettings(session: FactorySession, record: MemorySettingsRecord | null): Promise<void> {
-  if (record?.observerModelId) await session.om.observer.switchModel({ modelId: record.observerModelId });
-  if (record?.reflectorModelId) await session.om.reflector.switchModel({ modelId: record.reflectorModelId });
-
-  const state = {
-    ...(record?.observationThreshold != null ? { observationThreshold: record.observationThreshold } : {}),
-    ...(record?.reflectionThreshold != null ? { reflectionThreshold: record.reflectionThreshold } : {}),
-    ...(record?.observeAttachments != null ? { observeAttachments: record.observeAttachments } : {}),
-  };
-  if (Object.keys(state).length > 0) await session.state.set(state);
-}
-
 export interface HydrateFactorySessionArgs {
   orgId: string;
-  userId: string;
+  /**
+   * The factory project whose shared memory settings apply. Factory sessions
+   * never read an individual user's personal memory settings — the project's
+   * own row (or the built-in defaults) is what they run with.
+   */
+  factoryProjectId?: string;
   /** The factory project's default model. Without it the session keeps the SDK's built-in mode default. */
   defaultModelId?: string;
-  /** Omitted when the storage domain is unavailable, in which case the session runs on memory defaults. */
+  /**
+   * When provided, the factory project's stored memory-settings row is
+   * applied. When omitted (or no row exists) the session is reset to the
+   * built-in memory defaults.
+   */
   memorySettings?: MemorySettingsStorage;
 }
 
@@ -211,15 +237,24 @@ export interface HydrateFactorySessionArgs {
  * default it was created with, and the reason is logged.
  */
 export async function hydrateFactorySession(session: FactorySession, args: HydrateFactorySessionArgs): Promise<void> {
-  if (args.memorySettings) {
-    try {
-      const record = await args.memorySettings.get({ orgId: args.orgId, userId: args.userId });
-      await applyMemorySettings(session, record);
-    } catch (error) {
-      console.warn('[Factory Start] Failed to apply observational-memory settings', {
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
+  try {
+    const record =
+      args.memorySettings && args.factoryProjectId
+        ? await args.memorySettings.get({
+            orgId: args.orgId,
+            userId: factoryMemorySettingsUserId(args.factoryProjectId),
+          })
+        : null;
+    // Without a stored row, fall back to the low-cost OM model of the factory
+    // default model's provider — a factory connected only to Anthropic should
+    // not observe with the (uncredentialed) built-in Google default.
+    const provider = args.defaultModelId?.split('/')[0];
+    const fallbackOmModelId = provider ? resolveProviderOMDefault(provider, args.defaultModelId).modelId : undefined;
+    await applyStoredMemorySettings(session, record, fallbackOmModelId);
+  } catch (error) {
+    console.warn('[Factory Start] Failed to apply observational-memory settings', {
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
   if (args.defaultModelId) {
     try {

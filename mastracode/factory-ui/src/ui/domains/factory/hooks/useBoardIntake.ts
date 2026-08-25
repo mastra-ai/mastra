@@ -1,13 +1,15 @@
 import { useMemo, useState } from 'react';
 
+import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { useProjectIssuesQuery, useProjectPullRequestsQuery } from '../../../../hooks/useFactoryData';
-import { useIntakeConfigQuery } from '../../../../hooks/useIntakeConfig';
+import { useIntakeBindingsQuery, useIntakeConfigQuery } from '../../../../hooks/useIntakeConfig';
 import { useLinearIssuesQuery, useLinearStatusQuery } from '../../../../hooks/useLinearData';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
 import { issueCandidate, linearCandidate, pullRequestCandidate } from '../boardCandidates';
-import type { BoardCandidate, IntakeSource } from '../boardCandidates';
+import type { BoardCandidate, IntakeFeed, IntakeSource } from '../boardCandidates';
 import { AUTO_TRIAGED_LABEL, hasLabel } from '../boardItems';
 import type { BoardKind } from '../boardStages';
+import type { BoardStageId } from '../stages';
 
 /**
  * The Intake swimlane's feed: which candidate source is browsed, the queries
@@ -38,8 +40,20 @@ export function useBoardIntake({
   const githubSelected = config ? (config.github.sourceIds?.includes(repository.slug) ?? false) : true;
   const linearFeature = linearStatusQuery.data?.enabled ?? false;
   const linearConnected = Boolean(linearFeature && linearStatusQuery.data?.connected);
+  // Linear sources route to one Factory project. Once any routing exists, a board
+  // only offers the Linear feed when a source points at the project being viewed —
+  // otherwise every board would list (and ingest) every selected Linear project.
+  // With no routing at all the server still serves single-Factory orgs, where the
+  // destination is unambiguous; mirror that here so the feed is never offered empty.
+  const bindingsQuery = useIntakeBindingsQuery();
+  const factoriesQuery = useFactoriesQuery();
+  const linearBindings = (bindingsQuery.data ?? []).filter(binding => binding.integrationId === 'linear');
+  const linearRouted =
+    linearBindings.length === 0
+      ? (factoriesQuery.data?.length ?? 0) <= 1
+      : linearBindings.some(binding => binding.factoryProjectId === factoryProjectId);
   const linearReady =
-    (config?.linear.enabled ?? false) && linearConnected && (config?.linear.sourceIds?.length ?? 0) > 0;
+    (config?.linear.enabled ?? false) && linearConnected && (config?.linear.sourceIds?.length ?? 0) > 0 && linearRouted;
 
   // Work intake owns issues; Review intake owns pull requests. Keeping the
   // feeds on separate routes prevents review-producing PR work from being
@@ -80,6 +94,14 @@ export function useBoardIntake({
     return all.filter(candidate => !knownSourceKeys.has(candidate.sourceKey));
   }, [knownSourceKeys, participantCandidates, intakeIssues, triageIssues.data, linearIssues.data, active, review]);
 
+  const browsed = { github: issues, 'github-prs': pulls, linear: linearIssues };
+  const feed = active ? browsed[active] : undefined;
+  // Triage is fed by its own labelled query, so it fails (and retries) on its own.
+  const feedByColumn: Partial<Record<BoardStageId, IntakeFeed>> = {
+    intake: feed,
+    triage: active === 'github' ? triageIssues : undefined,
+  };
+
   return {
     available,
     active,
@@ -87,14 +109,10 @@ export function useBoardIntake({
     select: setSelected,
     candidates,
     participantCandidates,
-    issues,
-    pulls,
-    linearIssues,
+    feedByColumn,
     isPending:
       (!review && (configQuery.isPending || ((config?.linear.enabled ?? false) && linearStatusQuery.isPending))) ||
-      (active === 'github' && issues.isPending) ||
-      (active === 'github-prs' && pulls.isPending) ||
-      (active === 'linear' && linearIssues.isPending),
+      Boolean(feed?.isPending),
     isTriagePending: !review && active === 'github' && triageIssues.isPending,
   };
 }

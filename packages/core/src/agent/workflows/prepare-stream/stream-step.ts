@@ -3,6 +3,7 @@ import type { BackgroundTaskManager } from '../../../background-tasks';
 import type { AgentBackgroundConfig } from '../../../background-tasks/types';
 import { getModelMethodFromAgentMethod } from '../../../llm/model/model-method-from-agent';
 import type { ModelLoopStreamArgs, ModelMethodType } from '../../../llm/model/model.loop.types';
+import type { ToolCallConcurrency } from '../../../loop/types';
 import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfigInternal } from '../../../memory/types';
 import { resolveObservabilityContext } from '../../../observability';
@@ -23,12 +24,13 @@ interface StreamStepOptions<OUTPUT = undefined> {
   runId: string;
   returnScorerData?: boolean;
   requireToolApproval?: RequireToolApproval;
-  toolCallConcurrency?: number;
+  toolCallConcurrency?: ToolCallConcurrency;
   resumeContext?: {
     resumeData: any;
     snapshot: any;
   };
   agentId: string;
+  agentVersionId?: string;
   agentName?: string;
   toolCallId?: string;
   methodType: AgentMethodType;
@@ -59,6 +61,7 @@ export function createStreamStep<OUTPUT = undefined>({
   toolCallConcurrency,
   resumeContext,
   agentId,
+  agentVersionId,
   agentName,
   toolCallId,
   methodType,
@@ -123,6 +126,7 @@ export function createStreamStep<OUTPUT = undefined>({
           initialSignalEchoes: loopOptions.initialSignalEchoes,
         },
         agentId,
+        agentVersionId,
         agentName,
         toolCallId,
         methodType: modelMethodType,

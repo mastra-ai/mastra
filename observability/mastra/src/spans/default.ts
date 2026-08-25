@@ -24,6 +24,9 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
       if (options.parentSpanId) {
         this.parentSpanId = options.parentSpanId;
       }
+      if (options.externalParentSpanId) {
+        this.externalParentSpanId = options.externalParentSpanId;
+      }
       return;
     }
 
@@ -34,7 +37,11 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
       if (bridgeIds) {
         this.id = bridgeIds.spanId;
         this.traceId = bridgeIds.traceId;
-        this.parentSpanId = bridgeIds.parentSpanId;
+        // Caller-supplied links win over bridge parentage. Per the SpanIds
+        // contract, bridges report a Mastra parent (in storage) as
+        // parentSpanId and an ambient parent as externalParentSpanId.
+        this.parentSpanId = options.parentSpanId ?? bridgeIds.parentSpanId;
+        this.externalParentSpanId = options.externalParentSpanId ?? bridgeIds.externalParentSpanId;
         return;
       }
     }
@@ -59,26 +66,45 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
         );
       }
     }
+    if (options.externalParentSpanId) {
+      if (isValidSpanId(options.externalParentSpanId)) {
+        this.externalParentSpanId = options.externalParentSpanId;
+      } else {
+        console.error(
+          `[Mastra Tracing] Invalid externalParentSpanId: must be 1-16 hexadecimal characters, got "${options.externalParentSpanId}". Ignoring.`,
+        );
+      }
+    }
   }
 
   end(options?: EndSpanOptions<TType>): void {
     if (this.isEvent) {
       return;
     }
+    if (this.endTime) {
+      return;
+    }
     this.endTime = new Date();
+    this.detachFromParent();
     // Metadata is always updated (read by correlation/logger/metrics contexts).
     if (options?.metadata) {
-      this.metadata = { ...this.metadata, ...deepClean(options.metadata, this.deepCleanOptions) };
+      this.metadata = {
+        ...this.metadata,
+        ...deepClean(this.prepareSpanMetadata(options.metadata), this.deepCleanOptions),
+      };
     }
     if (this.isExcluded) {
       // Span is filtered before export; skip attaching heavy fields.
       return;
     }
     if (options?.output !== undefined) {
-      this.output = deepClean(options.output, this.deepCleanOptions);
+      this.output = deepClean(this.prepareSpanOutput(options.output), this.deepCleanOptions);
     }
     if (options?.attributes) {
-      this.attributes = { ...this.attributes, ...deepClean(options.attributes, this.deepCleanOptions) };
+      this.attributes = {
+        ...this.attributes,
+        ...deepClean(options.attributes, this.deepCleanOptions),
+      };
     }
     // Tracing events automatically handled by base class
   }
@@ -91,7 +117,10 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
     const { error, endSpan = true, attributes, metadata } = options;
 
     if (metadata) {
-      this.metadata = { ...this.metadata, ...deepClean(metadata, this.deepCleanOptions) };
+      this.metadata = {
+        ...this.metadata,
+        ...deepClean(this.prepareSpanMetadata(metadata), this.deepCleanOptions),
+      };
     }
 
     if (!this.isExcluded) {
@@ -118,7 +147,10 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
       );
 
       if (attributes) {
-        this.attributes = { ...this.attributes, ...deepClean(attributes, this.deepCleanOptions) };
+        this.attributes = {
+          ...this.attributes,
+          ...deepClean(attributes, this.deepCleanOptions),
+        };
       }
     }
 
@@ -140,7 +172,10 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
     }
     // Metadata is always updated (read by correlation/logger/metrics contexts).
     if (options.metadata) {
-      this.metadata = { ...this.metadata, ...deepClean(options.metadata, this.deepCleanOptions) };
+      this.metadata = {
+        ...this.metadata,
+        ...deepClean(this.prepareSpanMetadata(options.metadata), this.deepCleanOptions),
+      };
     }
     if (this.isExcluded) {
       return;
@@ -149,10 +184,13 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
       this.input = deepClean(options.input, this.deepCleanOptions);
     }
     if (options.output !== undefined) {
-      this.output = deepClean(options.output, this.deepCleanOptions);
+      this.output = deepClean(this.prepareSpanOutput(options.output), this.deepCleanOptions);
     }
     if (options.attributes) {
-      this.attributes = { ...this.attributes, ...deepClean(options.attributes, this.deepCleanOptions) };
+      this.attributes = {
+        ...this.attributes,
+        ...deepClean(options.attributes, this.deepCleanOptions),
+      };
     }
     // Tracing events automatically handled by base class
   }

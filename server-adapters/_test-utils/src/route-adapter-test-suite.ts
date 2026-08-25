@@ -139,6 +139,10 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       // Recover requires both a durable agent and a persisted workflow run.
       // Its stateful behavior is covered by packages/server/src/server/handlers/agents.test.ts.
       '/agents/:agentId/recover',
+      // Reading a submitted plan requires an agent exposing the core submit_plan tool
+      // and a workspace filesystem containing the plan. The generic agent has neither;
+      // capability, path, and filesystem behavior are covered by plans.test.ts.
+      '/agents/:agentId/plans/file',
       // Tool-provider connection routes that require a persisted connection
       // row matching the supplied connectionId. The test suite uses a generic
       // 'test-connection-id' that isn't seeded, so the fail-closed ownership

@@ -50,6 +50,15 @@ export class FileService {
   }
 
   /**
+   * Returns every existing file from the provided array in the same order.
+   * Callers supply files from the lowest to highest precedence so later dotenv
+   * files override earlier values when the bundler loads them.
+   */
+  public getExistingFiles(files: string[]): string[] {
+    return files.filter(file => fs.existsSync(file));
+  }
+
+  /**
    * Returns the first existing file from the provided array, or undefined if none exist
    * @param files array of file paths to check
    * @returns the first existing file path or undefined

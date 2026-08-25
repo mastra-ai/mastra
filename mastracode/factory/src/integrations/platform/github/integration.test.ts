@@ -76,6 +76,48 @@ function createIntegration(fetchImpl?: typeof fetch): PlatformGithubIntegration 
 }
 
 describe('PlatformGithubIntegration', () => {
+  it('updates the oldest Platform-owned triage marker across comment pages and learns the actual writer', async () => {
+    const older = { id: 10, body: '<!-- mastra-factory-triage --> oldest', htmlUrl: 'https://github.com/acme/app/issues/7#issuecomment-10', user: { login: 'mastra-platform[bot]', avatarUrl: null, htmlUrl: 'https://github.com/apps/mastra-platform' }, createdAt: '2026-07-01T00:00:00Z', updatedAt: '2026-07-01T00:00:00Z' };
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(json({ comments: [
+        { ...older, id: 20, user: { ...older.user, login: 'person' } },
+        { ...older, id: 30 },
+        ...Array.from({ length: 28 }, (_, index) => ({ ...older, id: 100 + index, body: 'unmarked', user: { ...older.user, login: 'person' } })),
+      ] }))
+      .mockResolvedValueOnce(json({ comments: [older] }))
+      .mockResolvedValueOnce(json({ ...older, user: { ...older.user, login: 'actual-factory-writer[bot]' } }));
+    const integration = createIntegration(fetchImpl);
+
+    await expect(
+      integration.upsertFactoryTriageComment({ installationId: 7, repository: 'acme/app', issueNumber: 7, body: '<!-- mastra-factory-triage -->\nFinal' }),
+    ).resolves.toEqual({ action: 'updated', commentId: '10', url: older.htmlUrl });
+
+    expect(fetchImpl.mock.calls.map(([url, init]) => `${init?.method ?? 'GET'} ${new URL(String(url)).pathname}${new URL(String(url)).search}`)).toEqual([
+      'GET /v1/server/github/repos/acme/app/issues/7/comments?page=1&per_page=30',
+      'GET /v1/server/github/repos/acme/app/issues/7/comments?page=2&per_page=30',
+      'PATCH /v1/server/github/repos/acme/app/issues/comments/10',
+    ]);
+    expect(JSON.parse(String(fetchImpl.mock.calls[2]![1]?.body))).toEqual({ body: '<!-- mastra-factory-triage -->\nFinal' });
+    expect(integration.isFactoryCommentAuthor('actual-factory-writer[bot]')).toBe(true);
+  });
+
+  it('creates a triage marker through the Platform proxy when no Factory marker exists', async () => {
+    const created = { id: 42, body: '<!-- mastra-factory-triage --> Pending', htmlUrl: 'https://github.com/acme/app/issues/7#issuecomment-42', user: { login: 'mastra-platform[bot]', avatarUrl: null, htmlUrl: 'https://github.com/apps/mastra-platform' }, createdAt: '2026-07-01T00:00:00Z', updatedAt: '2026-07-01T00:00:00Z' };
+    const fetchImpl = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(json({ comments: [{ ...created, id: 9, user: { ...created.user, login: 'person' } }] }))
+      .mockResolvedValueOnce(json(created));
+    const integration = createIntegration(fetchImpl);
+
+    await expect(
+      integration.upsertFactoryTriageComment({ installationId: 7, repository: 'acme/app', issueNumber: 7, body: '<!-- mastra-factory-triage -->\nPending' }),
+    ).resolves.toEqual({ action: 'created', commentId: '42', url: created.htmlUrl });
+    expect(fetchImpl.mock.calls.map(([url, init]) => `${init?.method ?? 'GET'} ${new URL(String(url)).pathname}${new URL(String(url)).search}`)).toEqual([
+      'GET /v1/server/github/repos/acme/app/issues/7/comments?page=1&per_page=30',
+      'POST /v1/server/github/repos/acme/app/issues/7/comments',
+    ]);
+  });
+
   it('lists platform-owned installations and repositories as Intake sources', async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()
@@ -742,6 +784,7 @@ describe('PlatformGithubIntegration', () => {
     });
     expect(Object.keys(integration.sessionTools({ requestContext }))).toEqual([
       'github_refresh_token',
+      'github_upsert_factory_triage_comment',
       'github_subscribe_pr',
       'github_unsubscribe_pr',
     ]);
@@ -750,7 +793,10 @@ describe('PlatformGithubIntegration', () => {
       mode: 'platform',
       endpointHost: 'platform.example.com',
       polling: { enabled: true },
-      reconcile: { enabled: true },
+      reconcile: {
+        pullRequests: { enabled: true },
+        issues: { enabled: true },
+      },
     });
     expect(JSON.stringify(integration.diagnostics())).not.toContain(config.accessToken);
   });
@@ -1063,13 +1109,16 @@ describe('PlatformGithubIntegration', () => {
     });
   });
 
-  it('defaults the Platform base URL and requires MASTRA_PLATFORM_SECRET_KEY', () => {
+  it('defaults the Platform base URL and requires a platform credential', () => {
     vi.stubEnv('MASTRA_SHARED_API_URL', '');
     expect(new PlatformGithubIntegration().diagnostics()).toMatchObject({ endpointHost: 'platform.mastra.ai' });
 
     vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', '');
-    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'legacy-token');
-    expect(() => new PlatformGithubIntegration()).toThrow(/MASTRA_PLATFORM_SECRET_KEY/);
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'injected-token');
+    expect(() => new PlatformGithubIntegration()).not.toThrow();
+
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', '');
+    expect(() => new PlatformGithubIntegration()).toThrow(/MASTRA_PLATFORM_ACCESS_TOKEN/);
   });
 
   it('exposes an explicitly configured GitHub App slug to webhook rules', () => {
@@ -1099,19 +1148,59 @@ describe('PlatformGithubIntegration', () => {
       mode: 'platform',
       endpointHost: 'platform.example.com',
       polling: { enabled: false, intervalMs: 9_000 },
-      reconcile: { enabled: false },
+      reconcile: {
+        pullRequests: { enabled: false },
+        issues: { enabled: false },
+      },
     });
   });
 
-  it('keeps the reconcile worker alive when polling is disabled but reconcile stays enabled', () => {
+  it('keeps the reconciliation worker alive when polling is disabled', async () => {
     vi.stubEnv('MASTRA_PLATFORM_GITHUB_POLLING_ENABLED', 'false');
+    const seed = await createPlatformStorageForTests();
     const integration = createIntegration();
+    const context = {
+      controller: {},
+      storage: {
+        generic: seed.integrations.forIntegration('github'),
+        sourceControl: seed.sourceControl.forIntegration('github'),
+      },
+    } as unknown as IntegrationContext;
+    integration.versionControl.initialize({ storage: context.storage.sourceControl });
 
-    const workers = integration.workers({ controller: {}, storage: { generic: {} } } as unknown as IntegrationContext);
+    const workers = integration.workers(context);
     expect(workers).toHaveLength(1);
     expect(integration.diagnostics()).toMatchObject({
       polling: { enabled: false },
-      reconcile: { enabled: true },
+      reconcile: {
+        pullRequests: { enabled: true },
+        issues: { enabled: true },
+      },
+    });
+  });
+
+  it('allows issue reconciliation to override a disabled legacy reconcile switch', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_GITHUB_POLLING_ENABLED', 'false');
+    vi.stubEnv('MASTRA_PLATFORM_GITHUB_RECONCILE_ENABLED', 'false');
+    vi.stubEnv('MASTRACODE_PLATFORM_GITHUB_ISSUE_RECONCILE_ENABLED', 'true');
+    const seed = await createPlatformStorageForTests();
+    const integration = createIntegration();
+    const context = {
+      controller: {},
+      storage: {
+        generic: seed.integrations.forIntegration('github'),
+        sourceControl: seed.sourceControl.forIntegration('github'),
+      },
+    } as unknown as IntegrationContext;
+    integration.versionControl.initialize({ storage: context.storage.sourceControl });
+
+    const workers = integration.workers(context);
+    expect(workers).toHaveLength(1);
+    expect(integration.diagnostics()).toMatchObject({
+      reconcile: {
+        pullRequests: { enabled: false },
+        issues: { enabled: true },
+      },
     });
   });
 
@@ -1315,132 +1404,5 @@ describe('PlatformGithubIntegration', () => {
     });
   });
 
-  describe('runIssueTriage wiring', () => {
-    async function buildTriageApp(options: {
-      constructorRunIssueTriage?: (input: any) => Promise<any>;
-      controller?: object | undefined;
-    }) {
-      const seed = await createPlatformStorageForTests();
-      const fetchImpl = vi.fn<typeof fetch>(async input => {
-        const url = String(input);
-        // addIssueLabels calls the platform label endpoint
-        if (url.includes('/labels')) return json({ labels: ['auto-triaged'] });
-        throw new Error(`Unexpected fetch: ${url}`);
-      });
-      // Stub fetch BEFORE constructing the integration — PlatformApiClient
-      // captures `globalThis.fetch` at construction time.
-      vi.stubGlobal('fetch', fetchImpl);
-      const integration = options.constructorRunIssueTriage
-        ? new PlatformGithubIntegration({ runIssueTriage: options.constructorRunIssueTriage })
-        : new PlatformGithubIntegration();
 
-      const sourceControl = seed.sourceControl.forIntegration('github');
-      const project = await seed.projects.create({
-        orgId: 'org-1',
-        userId: 'user-1',
-        input: { name: 'Test App' },
-      });
-      const installation = await sourceControl.installations.upsert({
-        orgId: 'org-1',
-        connectedByUserId: 'user-1',
-        externalId: '7',
-      });
-      const repository = await sourceControl.repositories.upsert({
-        orgId: 'org-1',
-        input: { installationId: installation.id, externalId: '101', slug: 'acme/app', defaultBranch: 'main' },
-      });
-      const connection = await sourceControl.connections.create({
-        orgId: 'org-1',
-        factoryProjectId: project.id,
-        installationId: installation.id,
-        createdByUserId: 'user-1',
-      });
-      const projectRepository = await sourceControl.projectRepositories.link({
-        orgId: 'org-1',
-        connectionId: connection.id,
-        repositoryId: repository.id,
-        createdByUserId: 'user-1',
-        sandboxProvider: 'local',
-        sandboxWorkdir: '/tmp/app',
-      });
-
-      const context = {
-        auth: fakeAuth(),
-        fleet: { enabled: true },
-        storage: {
-          generic: seed.integrations.forIntegration('github'),
-          sourceControl,
-          projects: seed.projects,
-          intake: seed.intake,
-        },
-        controller: options.controller,
-        stateSigner: {},
-      } as unknown as IntegrationContext;
-      integration.initialize?.({ storage: context.storage.generic, projects: context.storage.projects });
-      integration.versionControl.initialize({ storage: sourceControl });
-
-      const app = new Hono();
-      app.use('*', async (c, next) => {
-        c.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
-        await next();
-      });
-      mountApiRoutes(app as never, integration.routes(context));
-
-      return { app, projectRepository };
-    }
-
-    function triageRequest(projectRepositoryId: string) {
-      return [
-        `/web/github/projects/${projectRepositoryId}/issues/42/triage`,
-        {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            title: 'Fix the bug',
-            url: 'https://github.com/acme/app/issues/42',
-            labels: ['bug'],
-          }),
-        },
-      ] as const;
-    }
-
-    it('derives runIssueTriage from the controller when no explicit option is given', async () => {
-      const createSession = vi.fn(async () => {
-        throw new Error('mock-createSession-called');
-      });
-      const { app, projectRepository } = await buildTriageApp({
-        controller: { createSession },
-      });
-
-      const res = await app.request(...triageRequest(projectRepository.id));
-      // The route attempted the controller-derived runner (which invokes
-      // runGithubIssueTriage → controller.createSession) rather than
-      // returning 503 triage_unavailable.
-      expect(res.status).not.toBe(503);
-      expect(createSession).toHaveBeenCalledOnce();
-    });
-
-    it('uses an explicit constructor runIssueTriage over the controller default', async () => {
-      const explicitRunner = vi.fn(async () => ({ threadId: 'explicit-thread' }));
-      const { app, projectRepository } = await buildTriageApp({
-        constructorRunIssueTriage: explicitRunner,
-        controller: {}, // controller present but the explicit option should win
-      });
-
-      const res = await app.request(...triageRequest(projectRepository.id));
-      expect(res.status).toBe(202);
-      expect(explicitRunner).toHaveBeenCalledOnce();
-      await expect(res.json()).resolves.toMatchObject({ ok: true, threadId: 'explicit-thread' });
-    });
-
-    it('returns 503 triage_unavailable when neither controller nor option is provided', async () => {
-      const { app, projectRepository } = await buildTriageApp({
-        controller: undefined,
-      });
-
-      const res = await app.request(...triageRequest(projectRepository.id));
-      expect(res.status).toBe(503);
-      await expect(res.json()).resolves.toEqual({ error: 'triage_unavailable' });
-    });
-  });
 });

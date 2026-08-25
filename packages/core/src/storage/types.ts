@@ -436,6 +436,22 @@ export interface StorageConditionalVariant<T> {
 export type StorageConditionalField<T> = T | StorageConditionalVariant<T>[];
 
 /**
+ * Serializable subset of `AgentDurableOption` that can be persisted on a stored
+ * agent version snapshot. `cache` and `pubsub` are live runtime objects and are
+ * intentionally excluded — they are inherited from the Mastra instance at
+ * hydration time. `id`/`name` are excluded because a stored agent's durable
+ * wrapper must keep the agent's own id/name to stay addressable.
+ */
+export type StorageDurableConfig =
+  | boolean
+  | {
+      /** Maximum steps for the durable agentic loop. */
+      maxSteps?: number;
+      /** Auto-cleanup timer for durable stream state (ms). `0` disables cleanup. */
+      cleanupTimeoutMs?: number;
+    };
+
+/**
  * Agent version snapshot type containing ALL agent configuration fields.
  * These fields live exclusively in version snapshot rows, not on the agent record.
  */
@@ -486,6 +502,12 @@ export interface StorageAgentSnapshotType {
   skills?: StorageConditionalField<Record<string, StorageSkillConfig>>;
   /** Skill format for system message injection (default: 'xml') */
   skillsFormat?: 'xml' | 'json' | 'markdown';
+  /**
+   * Opt the hydrated agent into durable execution. Serializable subset of
+   * `AgentDurableOption` — `cache`/`pubsub` are live objects and stay code-level.
+   * Not conditional: durability is decided at registration time, not per request.
+   */
+  durable?: StorageDurableConfig;
   /** JSON Schema for validating request context values. Stored as JSON Schema since Zod is not serializable. */
   requestContextSchema?: Record<string, unknown>;
 }
@@ -2216,6 +2238,31 @@ export interface UpdateWorkflowStateOptions {
     spanId?: string;
     parentSpanId?: string;
   };
+  /**
+   * Optional compare-and-set guard. When provided, the update is applied only if the
+   * persisted snapshot's status matches one of these values. Otherwise the update is a
+   * no-op and `updateWorkflowState` resolves to `undefined`.
+   *
+   * This is only enforced atomically by stores that report `supportsConcurrentUpdates()`,
+   * because those stores load and write the snapshot inside a single critical section.
+   * Stores without concurrent update support apply it on a best-effort basis.
+   *
+   * This field is a guard only: it is never merged into the persisted snapshot.
+   */
+  expectedStatus?: WorkflowRunStatus | WorkflowRunStatus[];
+}
+
+/**
+ * Returns true when a snapshot's current status satisfies an `expectedStatus` guard.
+ * Stores call this inside their `updateWorkflowState` critical section.
+ */
+export function matchesExpectedWorkflowStatus(
+  currentStatus: WorkflowRunStatus | undefined,
+  expectedStatus: UpdateWorkflowStateOptions['expectedStatus'],
+): boolean {
+  if (expectedStatus === undefined) return true;
+  const expected = Array.isArray(expectedStatus) ? expectedStatus : [expectedStatus];
+  return currentStatus !== undefined && expected.includes(currentStatus);
 }
 
 function unwrapSchema(schema: z.ZodTypeAny): { base: z.ZodTypeAny; nullable: boolean } {
@@ -2847,13 +2894,19 @@ export interface Experiment {
   /**
    * The kind of executor this experiment runs against (agent / workflow / scorer / processor).
    *
-   * Required: an experiment by definition replays inputs against a specific target, so the runner
-   * always needs a target type to resolve the executor. This differs from
-   * {@link CreateDatasetInput.targetType} (optional) — a dataset can exist without a designated
-   * target, but a dataset without one is not experiment-eligible.
+   * `null` for caller-driven ingestion experiments: the caller executes items
+   * itself and submits results, so there is no registered target to resolve.
+   * Runner-owned and item-run experiments always carry a non-null target.
    */
-  targetType: TargetType;
-  targetId: string;
+  targetType: TargetType | null;
+  targetId: string | null;
+  /**
+   * Run-level scorer IDs pinned at create time for caller-driven experiments.
+   * Acts as the highest-priority scorer source when Mastra executes items
+   * (`runExperimentItem`), mirroring the runner's `scorers` option. `null`
+   * falls through to item-level then dataset-level scorer IDs.
+   */
+  scorerIds?: string[] | null;
   status: ExperimentStatus;
   totalItems: number;
   succeededCount: number;
@@ -2880,10 +2933,19 @@ export interface ExperimentResult {
   input: unknown;
   output: unknown | null;
   groundTruth: unknown | null;
+  metadata: Record<string, unknown> | null;
   error: { message: string; stack?: string; code?: string } | null;
   startedAt: Date;
   completedAt: Date;
   retryCount: number;
+  /**
+   * Zero-based repetition index for this item within the experiment. Part of
+   * the natural result identity `(experimentId, itemId, attempt)` used by
+   * {@link ExperimentsStorage.upsertExperimentResult} so external runners can
+   * retry submissions safely (retries converge on one row) while repeated
+   * trials use distinct attempt values on purpose.
+   */
+  attempt: number;
   traceId: string | null;
   status: ExperimentResultStatus | null;
   tags: string[] | null;
@@ -2920,13 +2982,15 @@ export interface CreateExperimentInput {
   datasetVersion: number | null;
   agentVersion?: string;
   /**
-   * Discriminator for the target this experiment runs against. Required because
-   * an experiment by definition replays inputs through a specific target; the
-   * runner uses this to resolve the correct executor. Datasets whose
-   * {@link CreateDatasetInput.targetType} is absent are not experiment-eligible.
+   * Discriminator for the target this experiment runs against. `null` for
+   * caller-driven ingestion experiments where the caller owns execution and
+   * submits results; non-null whenever Mastra executes items (runner loop or
+   * per-item `runExperimentItem`).
    */
-  targetType: TargetType;
-  targetId: string;
+  targetType: TargetType | null;
+  targetId: string | null;
+  /** Run-level scorer IDs pinned at create time. See {@link Experiment.scorerIds}. */
+  scorerIds?: string[] | null;
   totalItems: number;
   /**
    * Multi-tenant organization/account scope. Should be hydrated from the parent
@@ -2963,10 +3027,16 @@ export interface AddExperimentResultInput {
   input: unknown;
   output: unknown | null;
   groundTruth: unknown | null;
+  metadata?: Record<string, unknown> | null;
   error: { message: string; stack?: string; code?: string } | null;
   startedAt: Date;
   completedAt: Date;
   retryCount: number;
+  /**
+   * Zero-based repetition index. Defaults to `0`. See
+   * {@link ExperimentResult.attempt} for the identity contract.
+   */
+  attempt?: number;
   traceId?: string | null;
   status?: ExperimentResultStatus | null;
   tags?: string[] | null;
@@ -2981,6 +3051,15 @@ export interface AddExperimentResultInput {
   /** Platform project scope. Hydrated from the parent experiment on insert. */
   projectId?: string | null;
 }
+
+/**
+ * Input for {@link ExperimentsStorage.upsertExperimentResult}. Identical to
+ * {@link AddExperimentResultInput} minus the caller-supplied `id`: the row is
+ * identified by the natural key `(experimentId, itemId, attempt)` instead.
+ * Submitting the same key twice converges on a single row (last write wins),
+ * which makes retried external submissions idempotent.
+ */
+export type UpsertExperimentResultInput = Omit<AddExperimentResultInput, 'id'>;
 
 /**
  * Multi-tenant scoping filters for experiment queries. Mirrors

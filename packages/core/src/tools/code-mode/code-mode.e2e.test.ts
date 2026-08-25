@@ -1,21 +1,24 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { RequestContext } from '../../request-context';
 import { LocalSandbox } from '../../workspace/sandbox/local-sandbox';
+import { Workspace } from '../../workspace/workspace';
 import { createTool } from '../tool';
 import { createCodeMode } from './code-mode';
 import { StdioCodeModeTransport } from './transport';
 import type { CodeModeToolResult, CodeModeTransport } from './types';
 
 // Minimal execution context the tool needs (observe + abortSignal).
-const ctx = () => ({
+const ctx = (overrides: Record<string, unknown> = {}) => ({
   observe: {
     span: async (_n: string, fn: () => any) => fn(),
     log: () => {},
   },
+  ...overrides,
 });
 
-function run(tool: any, code: string): Promise<CodeModeToolResult> {
-  return tool.execute({ code }, ctx());
+function run(tool: any, code: string, context = ctx()): Promise<CodeModeToolResult> {
+  return tool.execute({ code }, context);
 }
 
 describe('Code Mode e2e (LocalSandbox)', () => {
@@ -156,13 +159,55 @@ describe('Code Mode e2e (LocalSandbox)', () => {
     expect(result.error?.name).toBe('TimeoutError');
   }, 30_000);
 
+  it('resolves a workspace sandbox with the current request context', async () => {
+    const sandbox = new LocalSandbox();
+    const requestContext = new RequestContext([['tenant', 'acme']]);
+    const resolver = vi.fn(({ requestContext: resolvedContext }) => {
+      expect(resolvedContext).toBe(requestContext);
+      return sandbox;
+    });
+    const workspace = new Workspace({ sandbox: resolver });
+    const transport: CodeModeTransport = {
+      run: async opts => {
+        expect(opts.sandbox).toBe(sandbox);
+        return { success: true, result: 'workspace-ran', logs: [] };
+      },
+    };
+    const { tool } = createCodeMode({ tools: { getTopProducts } }, transport);
+
+    const result = await run(tool, `return 1;`, ctx({ workspace, requestContext }));
+
+    expect(result).toEqual({ success: true, result: 'workspace-ran', logs: [] });
+    expect(resolver).toHaveBeenCalledOnce();
+  });
+
+  it('prefers an explicitly configured sandbox over a workspace resolver', async () => {
+    const sandbox = new LocalSandbox();
+    const resolver = vi.fn(() => new LocalSandbox());
+    const workspace = new Workspace({ sandbox: resolver });
+    const transport: CodeModeTransport = {
+      run: async opts => {
+        expect(opts.sandbox).toBe(sandbox);
+        return { success: true, result: 'explicit-ran', logs: [] };
+      },
+    };
+    const { tool } = createCodeMode({ tools: { getTopProducts }, sandbox }, transport);
+
+    const result = await run(tool, `return 1;`, ctx({ workspace }));
+
+    expect(result).toEqual({ success: true, result: 'explicit-ran', logs: [] });
+    expect(resolver).not.toHaveBeenCalled();
+  });
+
   it('throws when no sandbox is configured (no implicit host fallback)', async () => {
     const { tool } = createCodeMode({ tools: { getTopProducts } });
     await expect(run(tool, `return 1;`)).rejects.toThrow(/requires a sandbox/);
   });
 
-  it('runs without a sandbox when the transport declares requiresSandbox: false', async () => {
+  it('runs without resolving a sandbox when the transport declares requiresSandbox: false', async () => {
     const seen: { sandbox?: unknown } = {};
+    const resolver = vi.fn(() => new LocalSandbox());
+    const workspace = new Workspace({ sandbox: resolver });
     const transport: CodeModeTransport = {
       requiresSandbox: false,
       run: async opts => {
@@ -171,8 +216,9 @@ describe('Code Mode e2e (LocalSandbox)', () => {
       },
     };
     const { tool } = createCodeMode({ tools: { getTopProducts } }, transport);
-    const result = await run(tool, `return 1;`);
+    const result = await run(tool, `return 1;`, ctx({ workspace }));
     expect(result).toEqual({ success: true, result: 'isolate-ran', logs: [] });
     expect(seen.sandbox).toBeUndefined();
+    expect(resolver).not.toHaveBeenCalled();
   });
 });

@@ -82,6 +82,44 @@ export function createStorageWorkflows(ctx: WorkflowCreatorContext) {
     };
   }
 
+  // Test: parallel result returned by execute matches the persisted run result
+  {
+    const shoutAction = vi.fn().mockImplementation(async ({ inputData }: any) => {
+      await new Promise(resolve => setTimeout(resolve, 20));
+      return { shouted: String(inputData.text).toUpperCase() };
+    });
+    const countAction = vi.fn().mockImplementation(async ({ inputData }: any) => ({
+      count: String(inputData.text).length,
+    }));
+
+    const shout = createStep({
+      id: 'shout',
+      execute: shoutAction,
+      inputSchema: z.object({ text: z.string() }),
+      outputSchema: z.object({ shouted: z.string() }),
+    });
+
+    const countChars = createStep({
+      id: 'countChars',
+      execute: countAction,
+      inputSchema: z.object({ text: z.string() }),
+      outputSchema: z.object({ count: z.number() }),
+    });
+
+    const workflow = createWorkflow({
+      id: 'storage-parallel-result-workflow',
+      inputSchema: z.object({ text: z.string() }),
+      outputSchema: z.object({}),
+    });
+
+    workflow.parallel([shout, countChars]).commit();
+
+    workflows['storage-parallel-result-workflow'] = {
+      workflow,
+      mocks: { shoutAction, countAction },
+    };
+  }
+
   // Test: should persist resourceId when creating workflow runs
   {
     const stepAction = vi.fn().mockResolvedValue({ result: 'success' });
@@ -350,6 +388,22 @@ export function createStorageTests(ctx: WorkflowTestContext, registry?: Workflow
       expect(deleted).toBeNull();
     });
 
+    it.skipIf(skipTests.storageGetDelete)(
+      'should return the same parallel result from execute and from storage',
+      async () => {
+        const { workflow } = registry!['storage-parallel-result-workflow']!;
+
+        const runId = `storage-parallel-result-test-${Date.now()}`;
+        const result: any = await execute(workflow, { text: 'hello world' }, { runId });
+
+        const expected = { shout: { shouted: 'HELLO WORLD' }, countChars: { count: 11 } };
+        expect(result.result).toEqual(expected);
+
+        const workflowRun = await (workflow as any).getWorkflowRunById(runId);
+        expect(workflowRun?.result?.output ?? workflowRun?.result).toEqual(expected);
+      },
+    );
+
     it.skipIf(skipTests.storageResourceId)('should persist resourceId when creating workflow runs', async () => {
       const { workflow } = registry!['storage-resourceid-workflow']!;
 
@@ -514,11 +568,19 @@ export function createStorageTests(ctx: WorkflowTestContext, registry?: Workflow
         });
         expect(resumeResult.status).toBe('success');
 
-        // After resume, snapshot should still be the suspended one (success is not persisted)
         const { runs: afterRuns, total: afterTotal } = await (workflow as any).listWorkflowRuns();
-        expect(afterTotal).toBe(1);
-        expect(afterRuns).toHaveLength(1);
-        expect((afterRuns[0]?.snapshot as any)?.status).toBe('suspended');
+        if (ctx.deletesDeclinedTerminalSnapshots) {
+          // Engines that delete declined terminal snapshots (evented, #22209)
+          // drop the row entirely once the run finishes: a terminal run the
+          // workflow declined to persist can never be resumed.
+          expect(afterTotal).toBe(0);
+          expect(afterRuns).toHaveLength(0);
+        } else {
+          // After resume, snapshot should still be the suspended one (success is not persisted)
+          expect(afterTotal).toBe(1);
+          expect(afterRuns).toHaveLength(1);
+          expect((afterRuns[0]?.snapshot as any)?.status).toBe('suspended');
+        }
       },
     );
   });

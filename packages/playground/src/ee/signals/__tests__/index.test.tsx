@@ -10,6 +10,7 @@ import { navHandleWithChildren } from '../../../lib/nav';
 import { RouteHeader } from '../../../lib/route-header/route-header';
 import { SignalsEntityCrumb } from '../signals-entity-crumb';
 import {
+  allThemePathsResponse,
   drilldownThemeFlowResponse,
   firstThemeExamplesResponse,
   themeDetailResponse,
@@ -31,6 +32,27 @@ import {
 import { server } from '@/test/msw-server';
 
 const BASE_URL = window.location.origin;
+
+// Chart nodes only render once the responsive container observes a real size.
+class ChartResizeObserver implements ResizeObserver {
+  constructor(private readonly callback: ResizeObserverCallback) {}
+
+  observe(target: Element) {
+    const size = { blockSize: 680, inlineSize: 800 };
+    const entry = {
+      target,
+      contentRect: new DOMRectReadOnly(0, 0, 800, 680),
+      borderBoxSize: [size],
+      contentBoxSize: [size],
+      devicePixelContentBoxSize: [size],
+    } satisfies ResizeObserverEntry;
+    this.callback([entry], this);
+  }
+
+  unobserve() {}
+
+  disconnect() {}
+}
 
 function renderSignalsPage(initialEntry = '/') {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -68,6 +90,12 @@ function renderSignalsPageWithShell() {
 function headerAgentSelector() {
   return within(screen.getByRole('navigation', { name: 'Breadcrumb' })).getByRole('combobox');
 }
+
+beforeEach(() => {
+  vi.stubGlobal('ResizeObserver', ChartResizeObserver);
+  vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(800);
+  vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(680);
+});
 
 afterEach(() => {
   cleanup();
@@ -167,6 +195,21 @@ describe('Trace Intelligence page', () => {
       renderSignalsPage();
 
       expect(await screen.findByRole('region', { name: 'Trace signal theme flow' })).not.toBeNull();
+    });
+
+    it('requests signals in processing order: goal, sentiment, behavior, outcome', async () => {
+      const snapshotSignalNames: Array<string | undefined> = [];
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, ({ request }) => {
+          snapshotSignalNames.push(new URL(request.url).searchParams.get('signalNames') ?? undefined);
+          return HttpResponse.json(themeSnapshotsResponse);
+        }),
+      );
+
+      renderSignalsPage();
+
+      await screen.findByRole('region', { name: 'Trace signal theme flow' });
+      expect(snapshotSignalNames[0]).toBe('goal,sentiment,behavior,outcome');
     });
 
     it('keeps exactly one Trace intelligence documentation action across the shell and page', async () => {
@@ -349,7 +392,7 @@ describe('Trace Intelligence page', () => {
   });
 
   describe('when a snapshot range changes with theme details open', () => {
-    it('clears the range-local theme selection', async () => {
+    it('keeps the selected theme open', async () => {
       server.use(
         http.get(`${BASE_URL}/api/learning/entities`, () => HttpResponse.json(populatedThemeEntitiesResponse)),
         http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
@@ -367,15 +410,18 @@ describe('Trace Intelligence page', () => {
         http.get(`${BASE_URL}/api/learning/entities/support-agent/themes/:themeId/history`, () =>
           HttpResponse.json(themeHistoryResponse),
         ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-paths`, () =>
+          HttpResponse.json(allThemePathsResponse),
+        ),
       );
       renderSignalsPage();
-      fireEvent.click(await screen.findByRole('button', { name: 'View theme details for Add transcript' }));
+      fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
       await screen.findByRole('dialog', { name: 'Add transcript' });
 
       fireEvent.click(screen.getByRole('button', { name: 'Last 7 days' }));
       fireEvent.click(await screen.findByText('Last 24 hours'));
 
-      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add transcript' })).toBeNull());
+      expect(await screen.findByRole('dialog', { name: 'Add transcript' })).not.toBeNull();
     });
   });
 
@@ -398,11 +444,14 @@ describe('Trace Intelligence page', () => {
         http.get(`${BASE_URL}/api/learning/entities/support-agent/themes/:themeId/history`, () =>
           HttpResponse.json(themeHistoryResponse),
         ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-paths`, () =>
+          HttpResponse.json(allThemePathsResponse),
+        ),
         http.get(`${BASE_URL}/api/learning/traces/trace-1/summary`, () => HttpResponse.json(traceInsightResponse)),
       );
       renderSignalsPage();
 
-      fireEvent.click(await screen.findByRole('button', { name: 'View theme details for Add transcript' }));
+      fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
       await screen.findByRole('dialog', { name: 'Add transcript' });
       fireEvent.click(
         await screen.findByRole('button', { name: 'View trace insight for Add this transcript to my workspace.' }),
@@ -513,8 +562,7 @@ describe('Trace Intelligence page', () => {
   });
 
   describe('when switching between eligible agents', () => {
-    it("loads the selected agent's latest snapshot", async () => {
-      let billingFlowSnapshotId: string | null = null;
+    it("loads the selected agent's first snapshot", async () => {
       server.use(
         http.get(`${BASE_URL}/api/learning/entities`, () => HttpResponse.json(multiEligibleThemeEntitiesResponse)),
         http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
@@ -527,11 +575,10 @@ describe('Trace Intelligence page', () => {
           HttpResponse.json(billingThemeSnapshotsResponse),
         ),
         http.get(`${BASE_URL}/api/learning/entities/billing-agent/theme-flow`, ({ request }) => {
-          billingFlowSnapshotId = new URL(request.url).searchParams.get('snapshotId');
-          return HttpResponse.json({
-            ...themeFlowResponse,
-            snapshot: billingThemeSnapshotsResponse.snapshots[1],
-          });
+          const snapshotId = new URL(request.url).searchParams.get('snapshotId');
+          const snapshot = billingThemeSnapshotsResponse.snapshots.find(item => item.snapshotId === snapshotId);
+          if (!snapshot) return HttpResponse.json({ error: 'Unknown snapshot' }, { status: 400 });
+          return HttpResponse.json({ ...themeFlowResponse, snapshot });
         }),
       );
       renderSignalsPageWithShell();
@@ -542,8 +589,7 @@ describe('Trace Intelligence page', () => {
       fireEvent.pointerDown(billingAgent, { pointerType: 'mouse' });
       fireEvent.click(billingAgent, { detail: 1 });
 
-      expect(await screen.findByText('Snapshot 2/2 · Jul 8–15, 2026 · 30 traces')).not.toBeNull();
-      expect(billingFlowSnapshotId).toBe('billing-snapshot-2');
+      expect(await screen.findByText('Snapshot 1/2 · Jul 1–8, 2026 · 20 traces')).not.toBeNull();
     });
   });
 

@@ -57,6 +57,7 @@
     "build:observability": "pnpm turbo build --filter \"./observability/*\"",
     "build:workspaces": "pnpm turbo build --filter \"./workspaces/*\"",
     "dev:playground": "pnpm turbo run dev --filter ./packages/playground-ui --filter ./packages/playground --filter ./client-sdks/react",
+    "dev:playground:full": "pnpm install && pnpm setup && pnpm --dir examples/agent install && pnpm --dir examples/agent dev:ui",
     "generate:integration": "tsx ./integration-generator/index.ts",
     "test": "vitest run",
     "test:watch": "vitest watch",
@@ -111,7 +112,7 @@
     "pnpm": ">=11.0.0"
   },
   "license": "Apache-2.0",
-  "packageManager": "pnpm@11.13.1+sha512.b2fc7683b8a6525414e7d13e1ba28caaddde96bf66ec540bfaeb7e702b81f3e0be4d1f295edf7f9fe0396740a8dce4509c582ddf79891f4543fea32d37645f25",
+  "packageManager": "pnpm@11.21.0+sha512.521705bce689924eac72f5a3587122f362689ef6571e55ba80076fd637c11132ecffada26fad4ea79c485bfddbfd3d5a2a5b05805a77e893de71ec8a6cca3bb1",
   "dependencies": {
     "node-forge": "1.4.0",
     "resolve-from": "^5.0.0",

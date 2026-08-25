@@ -14,7 +14,7 @@ import { format } from 'date-fns';
 import { ArrowLeft, HistoryIcon, GitCompareIcon, ColumnsIcon, GitCompareArrowsIcon } from 'lucide-react';
 import { Fragment, useState } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router';
-import { DatasetItemContent } from '@/domains/datasets';
+import { DatasetItemContent, DatasetItemVersionsPanel } from '@/domains/datasets';
 import { useDatasetItemVersion, useDatasetItemVersions } from '@/domains/datasets/hooks/use-dataset-item-versions';
 import type { DatasetItemVersion } from '@/domains/datasets/hooks/use-dataset-item-versions';
 import { useDataset } from '@/domains/datasets/hooks/use-datasets';
@@ -27,6 +27,7 @@ function versionToText(version: DatasetItemVersion): string {
     {
       input: version.input ?? null,
       groundTruth: version.groundTruth ?? null,
+      scorerIds: version.scorerIds ?? null,
       metadata: version.metadata ?? null,
     },
     null,
@@ -84,15 +85,28 @@ function DatasetItemVersionsComparePage() {
     );
   }
 
-  if (!datasetId || !itemId || versionNumbers.length < 2) {
+  if (!datasetId || !itemId) {
     return (
       <MainContentLayout>
         <MainContentContent>
           <div className="text-neutral4 py-8 text-center">
-            <p>Select at least two versions to compare.</p>
+            <p>Item not found.</p>
           </div>
         </MainContentContent>
       </MainContentLayout>
+    );
+  }
+
+  // No versions selected: show the item's version history, letting the user
+  // pick two versions to enter compare mode (sets `?ids=a,b`).
+  if (versionNumbers.length < 2) {
+    return (
+      <DatasetItemVersionHistory
+        datasetId={datasetId}
+        itemId={itemId}
+        Link={FrameworkLink}
+        onCompare={versionIds => setSearchParams({ ids: versionIds.join(',') })}
+      />
     );
   }
 
@@ -175,6 +189,87 @@ function DatasetItemVersionsComparePage() {
   );
 }
 
+function DatasetItemVersionHistory({
+  datasetId,
+  itemId,
+  Link: FrameworkLink,
+  onCompare,
+}: {
+  datasetId: string;
+  itemId: string;
+  Link: ReturnType<typeof useLinkComponent>['Link'];
+  onCompare: (versionIds: string[]) => void;
+}) {
+  const [previewVersion, setPreviewVersion] = useState<number | null>(null);
+  const { data: allVersions, isLoading } = useDatasetItemVersions(datasetId, itemId);
+  const version =
+    (previewVersion != null ? allVersions?.find(v => v.datasetVersion === previewVersion) : undefined) ??
+    allVersions?.[0];
+
+  const displayItem = version
+    ? {
+        id: version.id,
+        datasetId,
+        datasetVersion: version.datasetVersion,
+        input: version.input,
+        groundTruth: version.groundTruth,
+        scorerIds: version.scorerIds,
+        metadata: version.metadata,
+        createdAt: version.createdAt,
+        updatedAt: version.updatedAt,
+      }
+    : null;
+
+  return (
+    <MainContentLayout>
+      <RouteHeaderActions owner="dataset-item-versions-history">
+        <Button as={Link} to={`/datasets/${datasetId}/items/${itemId}`} variant="outline">
+          <ArrowLeft />
+          Back to Item
+        </Button>
+      </RouteHeaderActions>
+
+      <div className="h-full overflow-hidden px-[3vw] pb-4">
+        <div className="mx-auto grid h-full max-w-[140rem] grid-rows-[auto_1fr] gap-6">
+          <MainHeader>
+            <MainHeader.Column>
+              <MainHeader.Title>
+                <HistoryIcon />
+                Item Version History
+              </MainHeader.Title>
+              <MainHeader.Description>
+                <TextAndIcon>Versions of {itemId}</TextAndIcon>
+              </MainHeader.Description>
+            </MainHeader.Column>
+          </MainHeader>
+
+          <Columns className="grid-cols-[1fr_auto]">
+            <Column>
+              <Column.Content>
+                {isLoading ? (
+                  <div className="text-neutral4 text-sm">Loading...</div>
+                ) : displayItem ? (
+                  <DatasetItemContent item={displayItem} Link={FrameworkLink} />
+                ) : (
+                  <div className="text-neutral4 text-sm">Item data not available</div>
+                )}
+              </Column.Content>
+            </Column>
+            <DatasetItemVersionsPanel
+              datasetId={datasetId}
+              itemId={itemId}
+              onClose={() => {}}
+              onVersionSelect={v => setPreviewVersion(v.datasetVersion)}
+              onCompareVersionsClick={onCompare}
+              activeVersion={previewVersion}
+            />
+          </Columns>
+        </div>
+      </div>
+    </MainContentLayout>
+  );
+}
+
 function CompareVersionColumn({
   datasetId,
   itemId,
@@ -226,6 +321,7 @@ function CompareVersionColumn({
         datasetVersion: version.datasetVersion,
         input: version.input,
         groundTruth: version.groundTruth,
+        scorerIds: version.scorerIds,
         metadata: version.metadata,
         createdAt: version.createdAt,
         updatedAt: version.updatedAt,

@@ -1,0 +1,304 @@
+---
+title: "MongoDB | Database"
+description: Documentation for the MongoDB storage implementation in Mastra.
+packages:
+  - "@mastra/core"
+  - "@mastra/memory"
+  - "@mastra/mongodb"
+---
+
+# MongoDB
+
+The MongoDB storage implementation provides a high-capacity storage solution using MongoDB databases with support for both document storage and vector operations.
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/mongodb@latest
+```
+
+## Usage
+
+Ensure you have a [MongoDB Atlas Local (via Docker)](https://www.mongodb.com/docs/atlas/cli/current/atlas-cli-deploy-docker/) or [MongoDB Atlas Cloud](https://www.mongodb.com/docs/atlas/cli/current/atlas-cli-getting-started/) instance with MongoDB Search enabled. MongoDB 7.0+ is recommended.
+
+```typescript
+import { MongoDBStore } from '@mastra/mongodb'
+
+const storage = new MongoDBStore({
+  id: 'mongodb-storage',
+  uri: process.env.MONGODB_URI,
+  dbName: process.env.MONGODB_DB_NAME,
+})
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Unique identifier for this storage instance.',
+    isOptional: false,
+  },
+  {
+    name: 'uri',
+    type: 'string',
+    description: 'MongoDB connection string (e.g., mongodb+srv://user:password@cluster.mongodb.net)',
+    isOptional: false,
+  },
+  {
+    name: 'url',
+    type: 'string',
+    description: 'Deprecated. Use `uri` instead. MongoDB connection string (supported for backward compatibility).',
+    isOptional: true,
+  },
+  {
+    name: 'dbName',
+    type: 'string',
+    description: 'The name of the database you want the storage to use.',
+    isOptional: false,
+  },
+  {
+    name: 'options',
+    type: 'MongoClientOptions',
+    description:
+      'MongoDB client options for advanced configuration (SSL, connection pooling, etc.). See [Connection Options](https://www.mongodb.com/docs/drivers/node/current/fundamentals/connection/connection-options/)',
+    isOptional: true,
+  },
+  {
+    name: 'disableInit',
+    type: 'boolean',
+    description:
+      'When true, automatic initialization (collection creation) is disabled. Useful for CI/CD pipelines where you want to run migrations explicitly. You must call storage.init() manually when this is true.',
+    isOptional: true,
+  },
+  {
+    name: 'skipDefaultIndexes',
+    type: 'boolean',
+    description:
+      'When true, default indexes will not be created during initialization. Useful when managing indexes separately or using only custom indexes.',
+    isOptional: true,
+  },
+  {
+    name: 'indexes',
+    type: 'MongoDBIndexConfig[]',
+    description:
+      'Custom indexes to create during initialization. Each index must specify a collection, keys, and optional index options. See [Indexes](https://www.mongodb.com/docs/manual/indexes/)',
+    isOptional: true,
+  },
+  {
+    name: 'connectorHandler',
+    type: 'ConnectorHandler',
+    description:
+      'Custom connection handler for advanced connection management. Alternative to providing uri/dbName directly.',
+    isOptional: true,
+  },
+]}
+/>
+
+:::note[Deprecation Notice]
+The `url` parameter is deprecated but still supported for backward compatibility. Please use `uri` instead in all new code.
+:::
+
+## Constructor examples
+
+You can instantiate `MongoDBStore` in the following ways:
+
+```ts
+import { MongoDBStore } from '@mastra/mongodb'
+
+// Basic connection without custom options
+const store1 = new MongoDBStore({
+  id: 'mongodb-storage-01',
+  uri: 'mongodb+srv://user:password@cluster.mongodb.net',
+  dbName: 'mastra_storage',
+})
+
+// Using connection string with options
+const store2 = new MongoDBStore({
+  id: 'mongodb-storage-02',
+  uri: 'mongodb+srv://user:password@cluster.mongodb.net',
+  dbName: 'mastra_storage',
+  options: {
+    retryWrites: true,
+    maxPoolSize: 10,
+    serverSelectionTimeoutMS: 5000,
+    socketTimeoutMS: 45000,
+  },
+})
+
+// With custom indexes
+const store3 = new MongoDBStore({
+  id: 'mongodb-storage-03',
+  uri: 'mongodb+srv://user:password@cluster.mongodb.net',
+  dbName: 'mastra_storage',
+  indexes: [
+    { collection: 'mastra_threads', keys: { 'metadata.type': 1 } },
+    { collection: 'mastra_messages', keys: { 'metadata.status': 1 }, options: { sparse: true } },
+  ],
+})
+
+// For CI/CD with explicit initialization
+const store4 = new MongoDBStore({
+  id: 'mongodb-storage-04',
+  uri: 'mongodb+srv://user:password@cluster.mongodb.net',
+  dbName: 'mastra_storage',
+  disableInit: true, // Disable auto-init
+})
+await store4.init() // Call init explicitly
+```
+
+## Additional notes
+
+### Collection Management
+
+The storage implementation handles collection creation and management automatically. It creates the following collections:
+
+- `mastra_workflow_snapshot`: Stores workflow state and execution data
+- `mastra_evals`: Stores evaluation results and metadata
+- `mastra_threads`: Stores conversation threads
+- `mastra_messages`: Stores individual messages
+- `mastra_traces`: Stores telemetry and tracing data
+- `mastra_scorers`: Stores scoring and evaluation data
+- `mastra_resources`: Stores resource working memory data
+- `mastra_notifications`: Stores notification inbox records and delivery metadata
+
+`MongoDBStore` exposes notification storage through `getStore('notifications')`.
+
+### Initialization
+
+When you pass storage to the Mastra class, `init()` is called automatically before any storage operation:
+
+```typescript
+import { Mastra } from '@mastra/core'
+import { MongoDBStore } from '@mastra/mongodb'
+
+const storage = new MongoDBStore({
+  id: 'mongodb-storage',
+  uri: process.env.MONGODB_URI,
+  dbName: process.env.MONGODB_DB_NAME,
+})
+
+const mastra = new Mastra({
+  storage, // init() is called automatically
+})
+```
+
+If you're using storage directly without Mastra, you must call `init()` explicitly to create the collections:
+
+```typescript
+import { MongoDBStore } from '@mastra/mongodb'
+
+const storage = new MongoDBStore({
+  id: 'mongodb-storage',
+  uri: process.env.MONGODB_URI,
+  dbName: process.env.MONGODB_DB_NAME,
+})
+
+// Required when using storage directly
+await storage.init()
+
+// Access domain-specific stores via getStore()
+const memoryStore = await storage.getStore('memory')
+const thread = await memoryStore?.getThreadById({ threadId: '...' })
+```
+
+:::warning
+If `init()` isn't called, collections won't be created and storage operations will fail silently or throw errors.
+:::
+
+### Connection Management
+
+The `close()` method closes the MongoDB client connection. Call this when shutting down your application:
+
+```typescript
+import { MongoDBStore } from '@mastra/mongodb'
+
+const storage = new MongoDBStore({
+  id: 'mongodb-storage',
+  uri: process.env.MONGODB_URI,
+  dbName: process.env.MONGODB_DB_NAME,
+})
+
+// Use storage...
+
+// Clean up on shutdown
+await storage.close()
+```
+
+## Vector search capabilities
+
+MongoDB storage includes built-in vector search capabilities for AI applications. For detailed vector operations including index creation, upserting embeddings, similarity search, and metadata filtering, see the [MongoDB vector reference](/reference/vectors/mongodb).
+
+## Usage example
+
+### Adding memory to an agent
+
+To add MongoDB memory to an agent use the `Memory` class and create a new `storage` key using `MongoDBStore`. The configuration supports both local and remote MongoDB instances.
+
+```typescript title="src/mastra/agents/example-mongodb-agent.ts"
+import { Memory } from '@mastra/memory'
+import { Agent } from '@mastra/core/agent'
+import { MongoDBStore } from '@mastra/mongodb'
+
+export const mongodbAgent = new Agent({
+  id: 'mongodb-agent',
+  name: 'mongodb-agent',
+  instructions:
+    'You are an AI agent with the ability to automatically recall memories from previous interactions.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  memory: new Memory({
+    storage: new MongoDBStore({
+      id: 'mongodb-storage',
+      uri: process.env.MONGODB_URI!,
+      dbName: process.env.MONGODB_DB_NAME!,
+    }),
+    options: {
+      generateTitle: true,
+    },
+  }),
+})
+```
+
+### Using the agent
+
+Use `memoryOptions` to scope recall for this request. Set `lastMessages: 5` to limit recency-based recall, and use `semanticRecall` to fetch the `topK: 3` most relevant messages, including `messageRange: 2` neighboring messages for context around each match.
+
+```typescript title="src/test-mongodb-agent.ts"
+import 'dotenv/config'
+
+import { mastra } from './mastra'
+
+const threadId = '123'
+const resourceId = 'user-456'
+
+const agent = mastra.getAgent('mongodbAgent')
+
+const message = await agent.stream('My name is Mastra', {
+  memory: {
+    thread: threadId,
+    resource: resourceId,
+  },
+})
+
+await message.textStream.pipeTo(new WritableStream())
+
+const stream = await agent.stream("What's my name?", {
+  memory: {
+    thread: threadId,
+    resource: resourceId,
+  },
+  memoryOptions: {
+    lastMessages: 5,
+    semanticRecall: {
+      topK: 3,
+      messageRange: 2,
+    },
+  },
+})
+
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk)
+}
+```

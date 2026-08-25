@@ -21,6 +21,7 @@ import { createTool } from '../tools/tool';
 
 import { chatModule, getChatModule } from './chat-lazy';
 import { resolveSlackTopLevelThreadId } from './compat/slack';
+import { ChannelSessionRejectedError } from './errors';
 
 import { formatArgsSummary, formatToolApproved, formatToolDenied, stripToolPrefix } from './formatting';
 import {
@@ -255,6 +256,7 @@ export class AgentChannels {
   protected async dispatchInboundMessage(args: {
     signalContents: AgentSignalContents;
     attributes: Record<string, string | undefined>;
+    signalMetadata: Record<string, unknown>;
     providerOptions: MastraProviderMetadata;
     requestContext: RequestContext;
     /** The mapped Mastra thread for the chat thread this message arrived on. */
@@ -263,12 +265,21 @@ export class AgentChannels {
     /** Set when the adapter can't render approval buttons, to avoid runs parking forever. */
     autoResumeSuspendedTools: true | undefined;
   }): Promise<void> {
-    const { signalContents, attributes, providerOptions, requestContext, memory, autoResumeSuspendedTools } = args;
+    const {
+      signalContents,
+      attributes,
+      signalMetadata,
+      providerOptions,
+      requestContext,
+      memory,
+      autoResumeSuspendedTools,
+    } = args;
 
     const result = this.agent.sendMessage(
       {
         contents: signalContents,
         attributes,
+        ...(Object.keys(signalMetadata).length > 0 ? { metadata: signalMetadata } : {}),
         providerOptions,
       },
       {
@@ -394,11 +405,11 @@ export class AgentChannels {
             'Channels require storage to be configured on the Mastra instance. Configure a storage provider like LibSQLStore.',
           );
         }
-        this.stateAdapter = new MastraStateAdapter(memoryStore);
+        this.stateAdapter = new MastraStateAdapter(memoryStore, () => this.getOwnerId());
         this.log('info', 'Using MastraStateAdapter (subscriptions persist across restarts)');
       }
 
-      const { Chat } = await getChatModule();
+      const { Chat, Message: ChatMessage, ThreadImpl } = await getChatModule();
       const chat = new Chat({
         adapters: this.adapters,
         state: this.stateAdapter,
@@ -413,7 +424,7 @@ export class AgentChannels {
       });
 
       // Register handlers with optional overrides
-      const { onDirectMessage, onMention, onSubscribedMessage } = this.handlerOverrides;
+      const { onDirectMessage, onMention, onSubscribedMessage, onSlashCommand } = this.handlerOverrides;
 
       // Per-message dispatch scope. The request context and the handler context
       // MUST be built per message, never once at initialize() time: a custom
@@ -421,12 +432,13 @@ export class AgentChannels {
       // shared instance would leak that tenant into the next message's run.
       const beginMessage = () => {
         const requestContext = new RequestContext();
+        const signalMetadata: Record<string, unknown> = {};
         const defaultHandler = (chatThread: Thread, message: Message) =>
-          this.handleChatMessage(chatThread, message, mastra, requestContext);
+          this.handleChatMessage(chatThread, message, mastra, requestContext, signalMetadata);
         // Context handed to custom handlers so they can reach the resolved Mastra
         // instance without being injected with an external accessor, and
         // contribute to the request context the run will dispatch with.
-        const handlerContext: ChannelHandlerContext = { mastra, requestContext };
+        const handlerContext: ChannelHandlerContext = { mastra, requestContext, signalMetadata };
         return { defaultHandler, handlerContext };
       };
 
@@ -457,6 +469,44 @@ export class AgentChannels {
             return onSubscribedMessage(thread, message, defaultHandler, handlerContext);
           }
           return defaultHandler(thread, message);
+        });
+      }
+
+      if (onSlashCommand !== false) {
+        chat.onSlashCommand(event => {
+          const { defaultHandler: handleMessage, handlerContext } = beginMessage();
+          const defaultHandler = async () => {
+            const text = `${event.command} ${event.text}`.trim();
+            const threadId = event.channel.id;
+            const message = new ChatMessage({
+              attachments: [],
+              author: event.user,
+              formatted: {
+                type: 'root',
+                children: [{ type: 'paragraph', children: [{ type: 'text', value: text }] }],
+              },
+              id: event.triggerId ?? crypto.randomUUID(),
+              metadata: { dateSent: new Date(), edited: false },
+              raw: event.raw,
+              text,
+              threadId,
+            });
+            const thread = new ThreadImpl({
+              adapter: event.adapter,
+              channelId: event.channel.id,
+              channelVisibility: event.channel.channelVisibility,
+              currentMessage: message,
+              id: threadId,
+              isDM: event.channel.isDM,
+              stateAdapter: this.stateAdapter,
+            });
+            return handleMessage(thread, message);
+          };
+
+          if (typeof onSlashCommand === 'function') {
+            return onSlashCommand(event, defaultHandler, handlerContext);
+          }
+          return defaultHandler();
         });
       }
 
@@ -664,6 +714,13 @@ export class AgentChannels {
           const isStaleApproval = err instanceof Error && err.message.includes('No snapshot found');
           if (isStaleApproval) {
             this.log('info', `Ignoring stale tool approval action (runId already consumed)`);
+            return;
+          }
+          // The resolver also runs on approval continuations, so a refusal
+          // here means this clicker isn't allowed to act — same silence as the
+          // inbound path (see handleChatMessage).
+          if (err instanceof ChannelSessionRejectedError) {
+            this.log('info', 'Session resolver refused the tool approval action', { reason: err.message });
             return;
           }
           this.log('error', 'Error handling tool approval action', err);
@@ -1002,11 +1059,24 @@ export class AgentChannels {
     message: Message,
     mastra: Mastra,
     requestContext: RequestContext,
+    signalMetadata: Record<string, unknown>,
   ): Promise<void> {
     try {
-      await this.processChatMessage(chatThread, message, mastra, requestContext);
+      await this.processChatMessage(chatThread, message, mastra, requestContext, signalMetadata);
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
+      // A refused request is not a malfunction: the host decided this sender
+      // gets nothing. Log it and stop — posting would echo the host's
+      // authorization message into the chat thread and confirm the bot is
+      // present to a sender who was just turned away.
+      if (err instanceof ChannelSessionRejectedError) {
+        this.log('info', `[${chatThread.adapter.name}] Session resolver refused the message`, {
+          messageId: message.id,
+          authorId: message.author?.userId,
+          reason: error.message,
+        });
+        return;
+      }
       this.log('error', `[${chatThread.adapter.name}] Error handling message`, {
         messageId: message.id,
         authorId: message.author?.userId,
@@ -1029,8 +1099,23 @@ export class AgentChannels {
     message: Message,
     mastra: Mastra,
     requestContext: RequestContext,
+    signalMetadata: Record<string, unknown> = {},
   ): Promise<void> {
     const platform = chatThread.adapter.name;
+
+    // Some adapters lift platform side-channel events (read receipts, delivery
+    // acks) into inbound messages carrying no text and no attachments. Running
+    // the agent on nothing still produces a reply, which produces another
+    // receipt, which wakes the agent again — a self-sustaining loop. There is
+    // nothing to answer here, so drop it before any thread, memory, or run
+    // work happens. Custom handlers run ahead of this and still see the
+    // message if they want it.
+    if (this.isContentlessMessage(message)) {
+      this.log('debug', `[${platform}] Skipping message with no text and no attachments`, {
+        messageId: message.id,
+      });
+      return;
+    }
 
     // Map to a Mastra thread for memory/history.
     // chatThread.id encodes channel + threadTs, so it's stable per conversation:
@@ -1242,6 +1327,7 @@ export class AgentChannels {
     await this.dispatchInboundMessage({
       signalContents,
       attributes,
+      signalMetadata,
       providerOptions,
       requestContext,
       thread: mastraThread,
@@ -1251,6 +1337,14 @@ export class AgentChannels {
       },
       autoResumeSuspendedTools: canRenderApprovalButtons ? undefined : true,
     });
+  }
+
+  /** A message with neither text nor attachments gives the agent nothing to run on. */
+  private isContentlessMessage(message: Message): boolean {
+    if (message.attachments?.length) return false;
+    if (message.text?.trim()) return false;
+    const richText = message.formatted ? chatModule().stringifyMarkdown(message.formatted).trim() : '';
+    return !richText;
   }
 
   /**
@@ -1344,6 +1438,7 @@ export class AgentChannels {
       wrapStream: stream => this.withTypingStatus(stream, chatThread, platform, adapterConfig, typingGate),
       typingGate,
       formatError: adapterConfig?.formatError,
+      textFormat: adapterConfig?.textFormat,
       approvalContext,
     };
   }
@@ -1418,6 +1513,11 @@ export class AgentChannels {
    * on `chat.stopStream`, so a status set during streaming would stick after
    * the run ends. The static driver leaves the gate `false` so typing works
    * normally in cards/hidden modes.
+   *
+   * When the run's stream ends, an empty status is sent to clear any status
+   * this run set, so runs that end without posting a message (e.g. terminated
+   * by `stopWhen` on a tool call, or aborted) don't leave a stale status
+   * pinned to the thread.
    */
   private async *withTypingStatus(
     stream: AsyncIterable<AgentChunkType<any>>,
@@ -1435,35 +1535,54 @@ export class AgentChannels {
           : defaultTypingStatus;
 
     let currentTypingStatus: string | undefined;
+    let statusSent = false;
 
-    for await (const chunk of stream) {
-      if (typingStatusFn && !typingGate.active) {
-        let result: ReturnType<TypingStatusFn>;
-        try {
-          const ctx: TypingStatusContext = {
-            platform,
-            threadId: chatThread.id,
-            currentStatus: currentTypingStatus,
-            channelTools: this.channelToolNames,
-          };
-          result = typingStatusFn(chunk, ctx);
-        } catch (e) {
-          this.logger?.debug('[CHANNEL] typingStatus function threw (continuing)', { error: e });
-          result = undefined;
+    try {
+      for await (const chunk of stream) {
+        if (typingStatusFn && !typingGate.active) {
+          let result: ReturnType<TypingStatusFn>;
+          try {
+            const ctx: TypingStatusContext = {
+              platform,
+              threadId: chatThread.id,
+              currentStatus: currentTypingStatus,
+              channelTools: this.channelToolNames,
+            };
+            result = typingStatusFn(chunk, ctx);
+          } catch (e) {
+            this.logger?.debug('[CHANNEL] typingStatus function threw (continuing)', { error: e });
+            result = undefined;
+          }
+          if (typeof result === 'string' && result.length > 0 && result !== currentTypingStatus) {
+            currentTypingStatus = result;
+            statusSent = true;
+            chatThread.startTyping(result).catch(e => {
+              this.logger?.debug('[CHANNEL] Typing indicator failed (best-effort)', { error: e });
+            });
+          }
         }
-        if (typeof result === 'string' && result.length > 0 && result !== currentTypingStatus) {
-          currentTypingStatus = result;
-          chatThread.startTyping(result).catch(e => {
-            this.logger?.debug('[CHANNEL] Typing indicator failed (best-effort)', { error: e });
-          });
+        // Reset the dedup state on per-step run boundaries so the next step can
+        // re-emit its first status even if it matches the previous step's last
+        // status.
+        if (chunk.type === 'finish' || chunk.type === 'error' || chunk.type === 'abort') {
+          currentTypingStatus = undefined;
         }
+        yield chunk;
       }
-      // Reset the dedup state on run boundaries so the next run can re-emit
-      // its first status even if it matches the previous run's last status.
-      if (chunk.type === 'finish' || chunk.type === 'error' || chunk.type === 'abort') {
-        currentTypingStatus = undefined;
+    } finally {
+      // End of the run's stream (the session queue closed on the terminal
+      // step-finish / error / abort, or the driver stopped consuming). Slack's
+      // `assistant.threads.setStatus` only auto-clears on `chat.postMessage`,
+      // so a run that set a status but never posted a message would leave it
+      // pinned on the thread indefinitely. Send an empty status to clear it —
+      // a no-op when a post already cleared it. Skip the clear while the
+      // streaming gate is active: the in-flight streaming post clears the
+      // status when it completes.
+      if (statusSent && !typingGate.active) {
+        chatThread.startTyping('').catch(e => {
+          this.logger?.debug('[CHANNEL] Typing clear failed (best-effort)', { error: e });
+        });
       }
-      yield chunk;
     }
   }
 
@@ -1494,18 +1613,59 @@ export class AgentChannels {
       );
     }
 
-    const metadata = {
+    const legacyMetadata = {
       channel_platform: platform,
       channel_externalThreadId: externalThreadId,
       channel_externalChannelId: channelId,
     };
 
-    const { threads } = await memoryStore.listThreads({
+    const ownerId = this.getOwnerId();
+    if (ownerId === null) {
+      // No owner bound yet - scoping is impossible; behave exactly as before
+      // and never stamp a null owner id.
+      const { threads } = await memoryStore.listThreads({
+        filter: { metadata: legacyMetadata },
+        perPage: 1,
+      });
+      return { thread: threads[0], memoryStore, metadata: legacyMetadata };
+    }
+
+    const metadata = { ...legacyMetadata, channel_ownerId: ownerId };
+
+    // Primary lookup: threads already scoped to this agent.
+    const { threads: scoped } = await memoryStore.listThreads({
       filter: { metadata },
       perPage: 1,
     });
+    if (scoped[0]) return { thread: scoped[0], memoryStore, metadata };
 
-    return { thread: threads[0], memoryStore, metadata };
+    // Legacy fallback: pre-upgrade threads carry no channel_ownerId. Metadata
+    // filters match subsets, so this query also returns threads claimed by
+    // OTHER agents - post-filter to unclaimed rows only, oldest first so
+    // adoption deterministically picks the original thread. If a conversation
+    // somehow accumulates more than 10 candidate rows, an unclaimed one past
+    // the page could be missed and a fresh thread created - acceptable
+    // degradation.
+    const { threads: candidates } = await memoryStore.listThreads({
+      filter: { metadata: legacyMetadata },
+      perPage: 10,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+    });
+    const unclaimed = candidates.find(candidate => {
+      const candidateMeta = (candidate.metadata ?? {}) as Record<string, unknown>;
+      return !('channel_ownerId' in candidateMeta);
+    });
+    if (unclaimed) {
+      // Lazily adopt the legacy thread: the first agent to touch it claims it
+      // by stamping its own id, preserving all existing metadata.
+      const claimed = await memoryStore.patchThread({
+        id: unclaimed.id,
+        metadata: { ...((unclaimed.metadata ?? {}) as Record<string, unknown>), channel_ownerId: ownerId },
+      });
+      return { thread: claimed, memoryStore, metadata };
+    }
+
+    return { thread: undefined, memoryStore, metadata };
   }
 
   /**

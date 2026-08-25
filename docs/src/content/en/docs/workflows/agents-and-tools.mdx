@@ -128,7 +128,7 @@ export const testWorkflow = createWorkflow({})
   .commit()
 ```
 
-`.agent()` records a declarative entry in the workflow graph rather than an opaque step, so workflows built this way can be persisted as [stored workflows](/docs/workflows/stored-workflows). Visit [Workflow.agent()](/reference/workflows/workflow-methods/agent) for all parameters.
+`.agent()` records a declarative entry in the workflow graph rather than an opaque step, so workflows built this way can be persisted as [dynamic workflows](/docs/workflows/dynamic-workflows). Visit [Workflow.agent()](/reference/workflows/workflow-methods/agent) for all parameters.
 
 ## Using tools in workflows
 
@@ -189,9 +189,9 @@ import { testTool } from '../tools/test-tool'
 export const testWorkflow = createWorkflow({}).then(step1).tool(testTool).commit()
 ```
 
-Like `.agent()`, `.tool()` records a declarative entry, so the workflow can be persisted as a [stored workflow](/docs/workflows/stored-workflows). Visit [Workflow.tool()](/reference/workflows/workflow-methods/tool) for all parameters.
+Like `.agent()`, `.tool()` records a declarative entry, so the workflow can be persisted as a [dynamic workflow](/docs/workflows/dynamic-workflows). Visit [Workflow.tool()](/reference/workflows/workflow-methods/tool) for all parameters.
 
 ## Related
 
 - [Using Agents](/docs/agents/overview)
-- [MCP Overview](/docs/mcp/overview)
+- [MCP Overview](/docs/connections/mcp)

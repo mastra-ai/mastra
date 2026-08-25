@@ -1,6 +1,10 @@
 import { createHash } from 'node:crypto';
 
+import { resolveRequestThinkingLevel } from '@mastra/code-sdk/agents/model';
+import type { ThinkingLevel } from '@mastra/code-sdk/providers/openai-codex';
+import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { MastraDBMessage, MessageList } from '@mastra/core/agent/message-list';
+import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import type {
   ComputeStateSignalArgs,
   ComputeStateSignalResult,
@@ -11,13 +15,15 @@ import type {
 import type { FactoryRunBindingRecord, WorkItemsStorage, WorkItemRow } from '../storage/domains/work-items/base.js';
 import { getFactorySessionCoordinates } from './binding-context.js';
 import { resolveFactoryToolRule } from './resolve.js';
+import { workItemSource } from './transition-service.js';
 import type { FactoryTransitionService } from './transition-service.js';
-import { FACTORY_RULE_STAGES } from './types.js';
+import { factoryRuleStage } from './types.js';
 import type {
   FactoryCommitDecision,
   FactoryRuleBoard,
   FactoryRuleDecision,
   FactoryRuleJsonValue,
+  FactoryRuleStage,
   FactoryRules,
   FactoryToolResultRuleContext,
 } from './types.js';
@@ -27,7 +33,15 @@ const STATE_ID = 'factory-phase';
 const RULE_TIMEOUT_MS = 5_000;
 const TRANSCRIPT_PAGE_SIZE = 50;
 const MAX_LINKED_ITEMS = 5;
-const PHASE_LABELS: Record<(typeof FACTORY_RULE_STAGES)[number], string> = {
+function ruleStage(item: WorkItemRow | null | undefined): FactoryRuleStage | undefined {
+  return item ? factoryRuleStage(item.stages) : undefined;
+}
+
+function itemInRuleStage(item: WorkItemRow | null | undefined): item is WorkItemRow {
+  return ruleStage(item) !== undefined;
+}
+
+const PHASE_LABELS: Record<FactoryRuleStage, string> = {
   intake: 'Intake',
   triage: 'Investigating',
   planning: 'Planning',
@@ -58,24 +72,37 @@ type CompletedToolResult = {
   value: FactoryRuleJsonValue;
 };
 
-type PhaseSnapshotValue = {
-  bindingId?: string;
-  itemId?: string;
-  revision?: number;
-  stage?: string;
-  role?: string;
-  board?: FactoryRuleBoard;
-  ruleSetVersion?: string;
-  status: 'active' | 'none';
+type RuntimeSnapshot = {
+  modelId: string;
+  thinkingLevel: ThinkingLevel;
 };
 
-function workItemSource(item: WorkItemRow) {
-  if (!item.externalSource) return 'manual' as const;
-  if (item.externalSource.integrationId === 'linear') return 'linear-issue' as const;
-  // See transition-service: non-GitHub, non-Linear provenance (Slack threads)
-  // is a plain work item, not a GitHub issue.
-  if (item.externalSource.integrationId !== 'github') return 'manual' as const;
-  return item.externalSource.type === 'pull-request' ? ('github-pr' as const) : ('github-issue' as const);
+type ActivePhaseSnapshotBase = {
+  bindingId: string;
+  itemId: string;
+  revision: number;
+  stage: FactoryRuleStage;
+  role: string;
+  ruleSetVersion: string;
+  status: 'active';
+};
+
+type ActivePhaseSnapshotValue =
+  | (ActivePhaseSnapshotBase & { board: 'work' })
+  | (ActivePhaseSnapshotBase & { board: 'review' } & RuntimeSnapshot);
+
+type PhaseSnapshotValue = ActivePhaseSnapshotValue | { bindingId?: string; status: 'none' };
+
+function reviewRuntimeFromRequestContext(requestContext: ComputeStateSignalArgs['requestContext']): RuntimeSnapshot {
+  if (!requestContext || typeof requestContext.get !== 'function') {
+    throw new Error('Factory review phase requires a controller request context.');
+  }
+  const context = requestContext.get<'controller', AgentControllerRequestContext<MastraCodeState>>('controller');
+  const modelId = context?.session?.modelId.trim();
+  if (!modelId) {
+    throw new Error('Factory review phase requires a selected session model.');
+  }
+  return { modelId, thinkingLevel: resolveRequestThinkingLevel(context) };
 }
 
 function workItemSourceKey(item: WorkItemRow): string | null {
@@ -162,7 +189,7 @@ function currentCompletedToolMessage(
   return undefined;
 }
 
-function phaseCacheKey(value: Omit<PhaseSnapshotValue, 'status'>, linked: WorkItemRow[]): string {
+function phaseCacheKey(value: ActivePhaseSnapshotValue, linked: WorkItemRow[]): string {
   return createHash('sha256')
     .update(
       JSON.stringify({
@@ -261,7 +288,8 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     }
 
     const item = await this.options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
-    if (!item || item.stages.length !== 1 || !FACTORY_RULE_STAGES.includes(item.stages[0] as never)) return;
+    const stage = ruleStage(item);
+    if (!item || !stage) return;
     const allItems = await this.options.storage.list({
       orgId: binding.orgId,
       factoryProjectId: binding.factoryProjectId,
@@ -270,28 +298,33 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       .filter(candidate => candidate.parentWorkItemId === item.id || item.parentWorkItemId === candidate.id)
       .slice(0, MAX_LINKED_ITEMS);
     const board = boardForItem(item);
-    const stage = item.stages[0]!;
-    const value: PhaseSnapshotValue = {
+    const baseValue: ActivePhaseSnapshotBase = {
       status: 'active',
       bindingId: binding.id,
       itemId: item.id,
       revision: item.revision,
       stage,
       role: binding.role,
-      board,
       ruleSetVersion: this.options.rules.version,
     };
+    const value: ActivePhaseSnapshotValue =
+      board === 'review'
+        ? { ...baseValue, board, ...reviewRuntimeFromRequestContext(args.requestContext) }
+        : { ...baseValue, board };
     const cacheKey = phaseCacheKey(value, linked);
     if (hasBase && (args.tracking?.currentCacheKey ?? args.lastSnapshot?.metadata?.state?.cacheKey) === cacheKey)
       return;
 
     const linkedText = linked.length
-      ? `\nLinked items: ${linked.map(candidate => `${workItemSource(candidate)} ${candidate.title}`).join('; ')}`
+      ? `\nLinked items: ${linked.map(candidate => `${workItemSource(candidate.externalSource)} ${candidate.title}`).join('; ')}`
       : '';
     const snapshotContents =
-      `Factory ${board} phase: ${PHASE_LABELS[stage as keyof typeof PHASE_LABELS]} (${escapeText(stage)})\n` +
+      `Factory ${board} phase: ${PHASE_LABELS[stage]} (${escapeText(stage)})\n` +
       `Work item: ${escapeText(item.title)} (${item.id})\n` +
       `Role: ${escapeText(binding.role)}\nRevision: ${item.revision}\nRules: ${escapeText(this.options.rules.version)}\n` +
+      (value.board === 'review'
+        ? `Runtime: model=${escapeText(value.modelId)}, reasoning-setting=${escapeText(value.thinkingLevel)}\n`
+        : '') +
       `Use factory_transition_work_item with expectedRevision ${item.revision} to request a phase change.${escapeText(linkedText)}`;
     const isDelta = hasBase && prior?.status === 'active';
     return {
@@ -302,7 +335,14 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       contents: isDelta ? `Factory phase update:\n${snapshotContents}` : snapshotContents,
       value: { phase: value },
       ...(isDelta ? { delta: { phase: value } } : {}),
-      attributes: { status: 'active', board, stage, role: binding.role, revision: item.revision },
+      attributes: {
+        status: 'active',
+        board,
+        stage,
+        role: binding.role,
+        revision: item.revision,
+        ...(value.board === 'review' ? { modelId: value.modelId, thinkingLevel: value.thinkingLevel } : {}),
+      },
       metadata: { value: { phase: value } },
     };
   }
@@ -316,6 +356,11 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
   async reconcileBinding(binding: FactoryRunBindingRecord): Promise<void> {
     const reader = this.options.messageReader;
     if (!reader || binding.status !== 'active') return;
+    // One keyed read up front: a binding whose item is gone or no longer in a
+    // single rule stage would ingest nothing, so skip the cursor and message
+    // reads entirely instead of paying them on every walk.
+    const item = await this.options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
+    if (!itemInRuleStage(item)) return;
     const cursor = await this.options.storage.getToolResultCursor(binding.orgId, binding.factoryProjectId, binding.id);
     let page = 0;
     while (true) {
@@ -327,7 +372,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
         ...(cursor ? { filter: { dateRange: { start: cursor.lastMessageCreatedAt } } } : {}),
         orderBy: { field: 'createdAt', direction: 'ASC' },
       });
-      await this.ingestMessages(binding, result.messages);
+      await this.ingestMessages(binding, result.messages, undefined, item);
       const last = result.messages.at(-1);
       if (last) {
         await this.options.storage.advanceToolResultCursor({
@@ -348,9 +393,10 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     binding: FactoryRunBindingRecord,
     messages: MastraDBMessage[],
     toolCallIds?: ReadonlySet<string>,
+    preloadedItem?: WorkItemRow,
   ): Promise<void> {
-    const item = await this.options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
-    if (!item || item.stages.length !== 1 || !FACTORY_RULE_STAGES.includes(item.stages[0] as never)) return;
+    const item = preloadedItem ?? (await this.options.storage.get({ orgId: binding.orgId, id: binding.workItemId }));
+    if (!itemInRuleStage(item)) return;
     for (const message of messages) {
       for (const toolResult of completedToolResults(message)) {
         if (toolCallIds && !toolCallIds.has(toolResult.toolCallId)) continue;
@@ -402,12 +448,13 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       ruleSetVersion: this.options.rules.version,
       item: {
         id: item.id,
-        source: workItemSource(item),
+        source: workItemSource(item.externalSource),
         sourceKey: workItemSourceKey(item),
         parentWorkItemId: item.parentWorkItemId,
         title: item.title,
         url: item.externalSource?.url ?? null,
         stages: item.stages,
+        metadata: item.metadata,
       },
       board,
       itemRevision: item.revision,

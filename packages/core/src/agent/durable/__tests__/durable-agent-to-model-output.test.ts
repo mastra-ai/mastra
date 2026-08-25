@@ -129,6 +129,53 @@ describe('DurableAgent toModelOutput parity', () => {
     expect(callArg).toBeDefined();
   });
 
+  it('computes toModelOutput before non-enumerable execution metadata crosses the durable boundary', async () => {
+    const metadataSymbol = Symbol.for('test.durable.tool.metadata');
+    const toModelOutputSpy = vi.fn((result: Record<PropertyKey, unknown>) => ({
+      type: 'text' as const,
+      value: result[metadataSymbol] as string,
+    }));
+
+    const testTool = createTool({
+      id: 'metadata-tool',
+      description: 'A tool with invocation-scoped model content',
+      inputSchema: z.object({ query: z.string() }),
+      outputSchema: z.object({ data: z.string() }),
+      execute: async () => ({ data: 'structured value' }),
+      onOutput: async ({ output }) => {
+        Object.defineProperty(output, metadataSymbol, {
+          value: 'model-facing content',
+          enumerable: false,
+        });
+      },
+      toModelOutput: toModelOutputSpy,
+    });
+
+    const prompts: any[] = [];
+    const model = createToolCallingModel('metadata-tool', { query: 'test' }, prompt => prompts.push(prompt));
+    const baseAgent = new Agent({
+      name: 'metadata-agent',
+      instructions: 'You are a test agent.',
+      model,
+      tools: { 'metadata-tool': testTool },
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    new Mastra({
+      agents: { 'metadata-agent': durableAgent as any },
+      storage: new InMemoryStore(),
+    });
+
+    const result = await durableAgent.stream('Use the metadata tool');
+    for await (const _chunk of result.fullStream) {
+      // drain
+    }
+
+    expect(toModelOutputSpy).toHaveBeenCalledTimes(1);
+    expect(toModelOutputSpy.mock.calls[0][0][metadataSymbol]).toBe('model-facing content');
+    expect(JSON.stringify(prompts[1])).toContain('model-facing content');
+  });
+
   it('normalizes image-url to media type in toModelOutput', async () => {
     const toModelOutputSpy = vi.fn(() => ({
       type: 'content',

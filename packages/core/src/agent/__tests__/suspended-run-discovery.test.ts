@@ -14,6 +14,7 @@ import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import type { WorkflowRunState } from '../../workflows/types';
 import { Agent } from '../agent';
+import { DurableStepIds } from '../durable/constants';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from './mock-model';
 
 const mockFindUser = vi.fn().mockImplementation(async (data: { name: string }) => {
@@ -288,6 +289,29 @@ describe('suspended-run discovery', () => {
       const scoped = await agent.listSuspendedRuns({ threadId: 'thread-1', resourceId: 'resource-1' });
       expect(scoped.runs.map(run => run.runId)).toEqual([runId]);
       expect(scoped.total).toBe(1);
+    }, 30000);
+
+    it('pushes the resourceId filter down to the storage query for both workflow names (#21844)', async () => {
+      const storage = new InMemoryStore();
+      const { agent } = createSuspendedSetup({ storage });
+      await suspendRun(agent, 'thread-1', 'resource-1');
+
+      const workflowsStore = (await storage.getStore('workflows'))!;
+      const listSpy = vi.spyOn(workflowsStore, 'listWorkflowRuns');
+
+      await agent.listSuspendedRuns({ resourceId: 'resource-1' });
+
+      expect(listSpy).toHaveBeenCalledTimes(2);
+      expect(listSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ workflowName: 'agentic-loop', status: 'suspended', resourceId: 'resource-1' }),
+      );
+      expect(listSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          workflowName: DurableStepIds.AGENTIC_LOOP,
+          status: 'suspended',
+          resourceId: 'resource-1',
+        }),
+      );
     }, 30000);
 
     it('paginates with perPage/page while keeping total accurate', async () => {
@@ -1015,6 +1039,89 @@ describe('suspended-run discovery', () => {
           approved: true,
         }),
       ).rejects.toThrow('storage outage');
+    }, 30000);
+  });
+
+  describe('durable-agentic-loop snapshots', () => {
+    /**
+     * Durable/evented agents persist their agentic-loop snapshot under
+     * `durable-agentic-loop` rather than `agentic-loop`. Rather than standing up
+     * a full evented agent, these tests move a suspended snapshot to the durable
+     * key and delete the legacy row, which is exactly the storage shape a
+     * `createEventedAgent()` run leaves behind.
+     */
+    async function relocateSnapshotToDurableName(storage: InMemoryStore, runId: string, resourceId: string) {
+      const workflowsStore = (await storage.getStore('workflows'))!;
+      const run = await workflowsStore.getWorkflowRunById({ runId, workflowName: 'agentic-loop' });
+      expect(run).not.toBeNull();
+
+      await workflowsStore.persistWorkflowSnapshot({
+        workflowName: DurableStepIds.AGENTIC_LOOP,
+        runId,
+        resourceId,
+        snapshot: run!.snapshot as WorkflowRunState,
+      });
+      await workflowsStore.deleteWorkflowRunById({ runId, workflowName: 'agentic-loop' });
+    }
+
+    it('discovers a suspended run persisted under the durable workflow name', async () => {
+      const storage = new InMemoryStore();
+      const { agent } = createSuspendedSetup({ storage });
+      const { runId, toolCallId } = await suspendRun(agent, 'thread-1', 'resource-1');
+      await relocateSnapshotToDurableName(storage, runId, 'resource-1');
+
+      const { agent: restartedAgent } = createSuspendedSetup({ storage, toolCallOnFirstCall: false });
+      const { runs } = await restartedAgent.listSuspendedRuns({ threadId: 'thread-1', resourceId: 'resource-1' });
+
+      expect(runs).toEqual([
+        expect.objectContaining({
+          runId,
+          toolCalls: [expect.objectContaining({ toolCallId })],
+        }),
+      ]);
+    }, 30000);
+
+    /**
+     * Durable rows written before the resourceId column was populated (pre
+     * #21844 write-side fix) have a NULL column value and carry the resource
+     * only inside the snapshot. Since the resourceId filter is now pushed
+     * down to storage, such legacy rows are excluded from resource-scoped
+     * listings — but an unscoped listing must still surface them via the
+     * in-process snapshot fallback.
+     */
+    it('legacy durable rows without a resourceId column are still found by unscoped listing', async () => {
+      const storage = new InMemoryStore();
+      const { agent } = createSuspendedSetup({ storage });
+      const { runId, toolCallId } = await suspendRun(agent, 'thread-1', 'resource-1');
+
+      // Relocate WITHOUT a resourceId — the storage shape real durable runs
+      // left behind before createRun() started passing it.
+      const workflowsStore = (await storage.getStore('workflows'))!;
+      const run = await workflowsStore.getWorkflowRunById({ runId, workflowName: 'agentic-loop' });
+      expect(run).not.toBeNull();
+      await workflowsStore.persistWorkflowSnapshot({
+        workflowName: DurableStepIds.AGENTIC_LOOP,
+        runId,
+        snapshot: run!.snapshot as WorkflowRunState,
+      });
+      await workflowsStore.deleteWorkflowRunById({ runId, workflowName: 'agentic-loop' });
+
+      const { agent: restartedAgent } = createSuspendedSetup({ storage, toolCallOnFirstCall: false });
+
+      // Resource-scoped listing relies on the storage column, which is NULL.
+      const scoped = await restartedAgent.listSuspendedRuns({ resourceId: 'resource-1' });
+      expect(scoped.runs).toHaveLength(0);
+
+      // Unscoped listing still discovers the run and resolves the resource
+      // from the snapshot's memory info.
+      const unscoped = await restartedAgent.listSuspendedRuns();
+      expect(unscoped.runs).toEqual([
+        expect.objectContaining({
+          runId,
+          resourceId: 'resource-1',
+          toolCalls: [expect.objectContaining({ toolCallId })],
+        }),
+      ]);
     }, 30000);
   });
 });

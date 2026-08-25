@@ -4,7 +4,7 @@
  * mounted with a centered spinner in the main slot only — clicking around the
  * sidebar must never blank the whole shell (the old early-return behavior).
  */
-import type { AgentControllerThreadInfo } from '@mastra/client-js';
+import type { AgentControllerThreadInfo, MastraDBMessage } from '@mastra/client-js';
 import { screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -13,6 +13,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { server } from '../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/ui/render';
 import { createAppRoutes } from '../../router';
+import { assistantOnlyThreadMessages, threadRailMessagesWithEcho } from './fixtures/thread-rail';
 
 const FACTORY_ID = 'fp-1';
 const REPO_ID = 'ghp-1';
@@ -51,9 +52,11 @@ function deferred() {
 function stubThreadRoute({
   initialThreadId = SESSION_ID,
   threads = [],
+  messages = [],
 }: {
   initialThreadId?: string;
   threads?: AgentControllerThreadInfo[];
+  messages?: MastraDBMessage[];
 } = {}) {
   const sessionGate = deferred();
   const messagesGate = deferred();
@@ -63,6 +66,9 @@ function stubThreadRoute({
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/config/model-packs`, () =>
+      HttpResponse.json({ packs: [], activePackId: null, sessionPackId: null }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
       HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
@@ -132,7 +138,7 @@ function stubThreadRoute({
     http.get(`${AC}/sessions/:resourceId/threads`, () => HttpResponse.json({ threads })),
     http.get(`${AC}/sessions/:resourceId/threads/:threadId/messages`, async () => {
       await messagesGate.promise;
-      return HttpResponse.json({ messages: [] });
+      return HttpResponse.json({ messages });
     }),
     http.get(`${AC}/modes`, () => HttpResponse.json({ modes: [] })),
     // Right workspace-files panel, which appears once workspacePath resolves.
@@ -179,23 +185,81 @@ describe('ThreadPage loading shell', () => {
     sessionGate.resolve();
 
     const header = await screen.findByRole('region', { name: 'Factory session' });
-    expect(await screen.findByLabelText('Loading messages')).toBeInTheDocument();
+    // The messages-loading window is now covered by the session-prepare step
+    // loader (with "Loading messages" as its active tail step) rather than
+    // the old skeleton bars — keeps the composer's spinning ring meaningful
+    // across the whole preparing window.
+    expect(await screen.findByRole('status', { name: 'Preparing session' })).toBeInTheDocument();
     expect(within(header).getByRole('button', { name: 'Workspace files' })).toBeInTheDocument();
 
     messagesGate.resolve();
-    await waitFor(() => expect(screen.queryByLabelText('Loading messages')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole('status', { name: 'Preparing session' })).not.toBeInTheDocument());
     expect(screen.getByRole('region', { name: 'Factory session' })).toBeInTheDocument();
   });
 
-  it('synchronizes the route while thread messages are still loading', async () => {
+  it('reveals loaded history without briefly rendering the empty thread state', async () => {
+    const { sessionGate, messagesGate } = stubThreadRoute({ messages: assistantOnlyThreadMessages });
+    renderThreadRoute();
+    sessionGate.resolve();
+    await screen.findByRole('status', { name: 'Preparing session' });
+
+    let renderedEmptyState = false;
+    const observer = new MutationObserver(records => {
+      renderedEmptyState ||= records.some(record =>
+        Array.from(record.addedNodes).some(node => node.textContent?.includes('What can I help you build?')),
+      );
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    messagesGate.resolve();
+    await screen.findByText('There are no user turns in this thread.');
+    observer.disconnect();
+
+    expect(renderedEmptyState).toBe(false);
+  });
+
+  it('reveals the complete loaded transcript when preparation finishes', async () => {
+    const { sessionGate, messagesGate } = stubThreadRoute({ messages: threadRailMessagesWithEcho });
+    renderThreadRoute();
+    sessionGate.resolve();
+    await screen.findByRole('status', { name: 'Preparing session' });
+
+    messagesGate.resolve();
+    await screen.findByText('Run the focused checks');
+
+    expect(screen.getByText('Review the implementation plan')).toBeInTheDocument();
+    expect(document.body).toHaveTextContent('The implementation is ready to review.');
+    expect(screen.queryByRole('status', { name: 'Preparing session' })).not.toBeInTheDocument();
+  });
+
+  it('waits for sandbox readiness before synchronizing an existing route thread', async () => {
     const { sessionGate, onSwitchThread } = stubThreadRoute({
       initialThreadId: 'thread-1',
       threads: [{ id: 'thread-1' }, { id: ROUTE_THREAD_ID }],
     });
+    let resolveEnsureStarted = () => {};
+    const ensureStarted = new Promise<void>(resolve => {
+      resolveEnsureStarted = resolve;
+    });
+    let resolveEnsure = () => {};
+    const ensureReady = new Promise<void>(resolve => {
+      resolveEnsure = resolve;
+    });
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/ensure`, async () => {
+        resolveEnsureStarted();
+        await ensureReady;
+        return HttpResponse.json({ ok: true });
+      }),
+    );
     renderThreadRoute(`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${ROUTE_THREAD_ID}`);
     sessionGate.resolve();
 
-    expect(await screen.findByLabelText('Loading messages')).toBeInTheDocument();
+    expect(await screen.findByRole('status', { name: 'Preparing session' })).toBeInTheDocument();
+    await ensureStarted;
+    expect(onSwitchThread).not.toHaveBeenCalled();
+
+    resolveEnsure();
     await waitFor(() => expect(onSwitchThread).toHaveBeenCalledWith(ROUTE_THREAD_ID));
   });
 });

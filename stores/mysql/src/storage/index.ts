@@ -11,6 +11,7 @@ import { ChannelsMySQL } from './domains/channels';
 import { DatasetsMySQL } from './domains/datasets';
 import { ExperimentsMySQL } from './domains/experiments';
 import { FavoritesMySQL } from './domains/favorites';
+import { KnowledgeMySQL } from './domains/knowledge';
 import { MCPClientsMySQL } from './domains/mcp-clients';
 import { MCPServersMySQL } from './domains/mcp-servers';
 import { MemoryMySQL } from './domains/memory';
@@ -35,6 +36,7 @@ export {
   DatasetsMySQL,
   ExperimentsMySQL,
   FavoritesMySQL,
+  KnowledgeMySQL,
   MCPClientsMySQL,
   MCPServersMySQL,
   MemoryMySQL,
@@ -192,6 +194,7 @@ function parseConnectionString(
 
 export class MySQLStore extends MastraCompositeStore {
   private pool: Pool;
+  private operations: StoreOperationsMySQL;
 
   stores: StorageDomains;
 
@@ -202,6 +205,7 @@ export class MySQLStore extends MastraCompositeStore {
     this.pool = pool;
 
     const operations = new StoreOperationsMySQL({ pool: this.pool, database });
+    this.operations = operations;
 
     const memory = new MemoryMySQL({
       pool: this.pool,
@@ -209,6 +213,7 @@ export class MySQLStore extends MastraCompositeStore {
       skipDefaultIndexes: config.skipDefaultIndexes,
       indexes: config.indexes,
     });
+    const knowledge = new KnowledgeMySQL({ pool: this.pool, operations });
     const workflows = new WorkflowsMySQL({
       operations,
       pool: this.pool,
@@ -319,6 +324,7 @@ export class MySQLStore extends MastraCompositeStore {
 
     this.stores = {
       memory,
+      knowledge,
       workflows,
       scores,
       observability,
@@ -345,6 +351,11 @@ export class MySQLStore extends MastraCompositeStore {
     try {
       const connection = await this.pool.getConnection();
       connection.release();
+      // Load the init-scoped catalog snapshot so domain inits answer their
+      // existence checks locally instead of probing the server per object.
+      // A failed or empty load (no default database) simply leaves today's
+      // per-probe behavior in place.
+      await this.operations.loadInitSchemaSnapshot();
       await super.init();
     } catch (error) {
       throw new MastraError(
@@ -355,6 +366,10 @@ export class MySQLStore extends MastraCompositeStore {
         },
         error,
       );
+    } finally {
+      // Init-scoped by design: cleared on every exit path so runtime callers
+      // keep querying the live catalog (never a process-global cache).
+      this.operations.clearInitSchemaSnapshot();
     }
   }
 
@@ -368,6 +383,7 @@ export class MySQLStore extends MastraCompositeStore {
  */
 const ALL_DOMAINS = [
   MemoryMySQL,
+  KnowledgeMySQL,
   ObservabilityMySQL,
   ScoresMySQL,
   ScorerDefinitionsMySQL,

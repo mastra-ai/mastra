@@ -1,8 +1,7 @@
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import type { RequestContext } from '@mastra/core/request-context';
 
-import type { FactoryAuthUser } from '../auth.js';
-import { getFactoryAuthOrgId } from '../auth.js';
+import { getFactoryAuthOrgId, getFactoryAuthUserFromContext } from '../auth.js';
 import type {
   FactoryRunBindingAddress,
   FactoryRunBindingRecord,
@@ -12,6 +11,7 @@ import type {
 
 interface FactorySessionState {
   factoryProjectId?: string;
+  factoryOrgId?: string;
   projectRepositoryId?: string;
   untrustedCheckout?: boolean;
   baseRef?: string;
@@ -42,7 +42,7 @@ export function getFactorySessionCoordinates(
 export function getFactorySessionAddress(requestContext: RequestContext | undefined): FactoryRunBindingAddress | null {
   const coordinates = getFactorySessionCoordinates(requestContext);
   if (!coordinates || !requestContext || typeof requestContext.get !== 'function') return null;
-  const user = requestContext.get('user') as FactoryAuthUser | undefined;
+  const user = getFactoryAuthUserFromContext(requestContext);
   const orgId = getFactoryAuthOrgId(user);
   if (!orgId) return null;
   return { orgId, ...coordinates };
@@ -75,7 +75,7 @@ export async function resolveFactorySessionAddress(options: {
   if (!requestContext || typeof requestContext.get !== 'function') return null;
   const context = requestContext.get('controller') as FactorySessionControllerContext | undefined;
   if (!context?.threadId || !context.resourceId) return null;
-  const user = requestContext.get('user') as FactoryAuthUser | undefined;
+  const user = getFactoryAuthUserFromContext(requestContext);
   const orgId = getFactoryAuthOrgId(user);
   if (!orgId) return null;
 
@@ -108,7 +108,9 @@ async function healRecoveredSessionState(options: {
   sessions?: FactorySessionSourceLookup;
 }): Promise<void> {
   const { binding } = options;
-  const updates: FactorySessionState = { factoryProjectId: binding.factoryProjectId };
+  // `factoryOrgId` mirrors the start coordinator's seed: the binding row holds
+  // the authoritative org id, so crash-recovered sessions heal it for free.
+  const updates: FactorySessionState = { factoryProjectId: binding.factoryProjectId, factoryOrgId: binding.orgId };
   // Security posture first, from the binding row alone (no I/O): review-bound
   // sessions run against attacker-writable checkouts, so `untrustedCheckout`
   // must survive even if the enrichment lookups below fail transiently.

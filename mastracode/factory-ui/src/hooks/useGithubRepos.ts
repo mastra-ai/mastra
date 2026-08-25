@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
@@ -10,5 +10,7 @@ export function useGithubReposQuery(query: string | undefined, enabled: boolean)
     queryKey: queryKeys.githubRepos(query),
     queryFn: () => listGithubRepos(baseUrl, query),
     enabled,
+    // Typing keeps the previous matches on screen instead of flashing skeletons per keystroke.
+    placeholderData: keepPreviousData,
   });
 }

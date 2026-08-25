@@ -1,3 +1,4 @@
+import { workItemBranch } from '@mastra/factory/work-item-branch';
 import type { FactoryRunInvocation, FactoryRunPhase } from '../../../hooks/useStartFactoryRun';
 import { NEEDS_APPROVAL_LABEL, githubNumberForItem, hasLabel, metadataLabels } from './boardItems';
 import type { WorkItem } from './services/workItems';
@@ -46,14 +47,16 @@ export function guidedPrompt(base: string, instructions: string): string {
   return `${base}\n\nGuidance for this run: ${instructions}`;
 }
 
-/** Investigate (understand → Planning) + Build (implement → Building) runs for an issue. */
-export function issueRunActions(ref: string, extra?: { context?: string }): RunAction[] {
+/** Investigate an issue, then Build it when needed. */
+export function issueRunActions(ref: string, extra?: { context?: string; triage?: boolean }): RunAction[] {
   const context = extra?.context ? `\n\n${extra.context}` : '';
+  const role = extra?.triage ? 'triage' : 'plan';
+  const stage = extra?.triage ? 'triage' : 'planning';
   return [
     {
       label: 'Investigate',
-      role: 'plan',
-      stage: 'planning',
+      role,
+      stage,
       invocation: {
         type: 'skill',
         skillName: 'factory-triage',
@@ -113,15 +116,15 @@ export function itemRunSpec(item: WorkItem): ItemRunSpec | undefined {
     const needsApproval = hasLabel(metadataLabels(meta), NEEDS_APPROVAL_LABEL);
     const ref = `GitHub issue #${githubNumber}${item.url ? ` (${item.url})` : ''}`;
     return {
-      branch: `factory/issue-${githubNumber}`,
+      branch: workItemBranch(item),
       threadTitle: needsApproval ? `Triage #${githubNumber}: ${item.title}` : `Issue #${githubNumber}: ${item.title}`,
-      actions: needsApproval ? [approvalRunAction(ref, githubNumber)] : issueRunActions(ref),
+      actions: needsApproval ? [approvalRunAction(ref, githubNumber)] : issueRunActions(ref, { triage: true }),
     };
   }
   if (item.source === 'linear-issue' && typeof meta.identifier === 'string') {
     const ref = `Linear issue ${meta.identifier}${item.url ? ` (${item.url})` : ''}`;
     return {
-      branch: `factory/linear-${meta.identifier.toLowerCase()}`,
+      branch: workItemBranch(item),
       threadTitle: `${meta.identifier}: ${item.title}`,
       actions: issueRunActions(ref, { context: LINEAR_FETCH_HINT }),
     };
@@ -131,7 +134,7 @@ export function itemRunSpec(item: WorkItem): ItemRunSpec | undefined {
     const headBranch = typeof meta.headBranch === 'string' ? ` Expected head branch: ${meta.headBranch}.` : '';
     const checkout = `Check out the PR in this worktree first with \`gh pr checkout ${githubNumber}\`.${headBranch}`;
     return {
-      branch: `factory/pr-${githubNumber}`,
+      branch: workItemBranch(item),
       threadTitle: `PR #${githubNumber}: ${item.title}`,
       actions: [reviewRunAction(ref, checkout)],
     };
@@ -142,11 +145,11 @@ export function itemRunSpec(item: WorkItem): ItemRunSpec | undefined {
 /**
  * Branch + thread title for a card's session. Prefers the run spec (shared
  * with agent runs so the title click and a later run converge on one
- * worktree); manual/metadata-poor cards fall back to an id-derived branch so
- * every card's title can open a session.
+ * worktree); the branch grammar itself is shared with the server's autonomous
+ * runs (`workItemBranch`), so every card resolves to a session branch.
  */
 export function itemSessionSpec(item: WorkItem): { branch: string; threadTitle: string } {
   const spec = itemRunSpec(item);
   if (spec) return { branch: spec.branch, threadTitle: spec.threadTitle };
-  return { branch: `factory/item-${item.id}`, threadTitle: item.title };
+  return { branch: workItemBranch(item), threadTitle: item.title };
 }

@@ -1,5 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
+import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { DataList } from '@mastra/playground-ui/components/DataList';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
@@ -12,7 +13,12 @@ import type { ReactNode } from 'react';
 
 import { useApiConfig } from '../../../../api/config';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
-import { useIntakeConfigQuery, useSaveIntakeConfigMutation } from '../../../../hooks/useIntakeConfig';
+import {
+  useIntakeBindingsQuery,
+  useIntakeConfigQuery,
+  useSaveIntakeBindingMutation,
+  useSaveIntakeConfigMutation,
+} from '../../../../hooks/useIntakeConfig';
 import { useLinearProjectsQuery, useLinearStatusQuery } from '../../../../hooks/useLinearData';
 import { connectLinear, isLinearReauthError } from '../../factory/services/linear';
 import type { LinearProject } from '../../factory/services/linear';
@@ -139,6 +145,75 @@ function SourcePickerSection({
   );
 }
 
+const UNROUTED = '__unrouted__';
+
+/**
+ * Routing for the selected Linear projects. A Linear project feeds exactly one
+ * Factory; until it is routed its issues are not picked up by any board.
+ */
+function LinearRouting({
+  sourceIds,
+  projects,
+  factories,
+}: {
+  sourceIds: string[];
+  projects: LinearProject[];
+  factories: { id: string; name: string }[];
+}) {
+  const bindingsQuery = useIntakeBindingsQuery();
+  const saveBinding = useSaveIntakeBindingMutation();
+  const bindings = bindingsQuery.data ?? [];
+  const busy = saveBinding.isPending;
+
+  const route = (sourceId: string, value: string) => {
+    saveBinding.mutate(
+      { integrationId: 'linear', sourceId, factoryProjectId: value === UNROUTED ? null : value },
+      {
+        onSuccess: () => toast.success('Linear routing updated'),
+        onError: err => toast.error(err instanceof Error ? err.message : 'Failed to save Linear routing'),
+      },
+    );
+  };
+
+  return (
+    <div className="flex flex-col">
+      {sourceIds.map(sourceId => {
+        const name = projects.find(project => project.id === sourceId)?.name ?? sourceId;
+        const factoryProjectId = bindings.find(
+          binding => binding.integrationId === 'linear' && binding.sourceId === sourceId,
+        )?.factoryProjectId;
+        return (
+          <SettingsRow
+            key={sourceId}
+            label={name}
+            hint={factoryProjectId ? undefined : "Not routed — this project's issues won't be picked up."}
+          >
+            <Select
+              value={factoryProjectId ?? UNROUTED}
+              disabled={busy || factories.length === 0}
+              onValueChange={value => route(sourceId, value)}
+            >
+              <SelectTrigger variant="outline" size="sm" aria-label={`Factory for ${name}`} className="w-auto">
+                <Txt as="span" variant="ui-sm">
+                  {factories.find(factory => factory.id === factoryProjectId)?.name ?? 'Not routed'}
+                </Txt>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={UNROUTED}>Not routed</SelectItem>
+                {factories.map(factory => (
+                  <SelectItem key={factory.id} value={factory.id}>
+                    {factory.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </SettingsRow>
+        );
+      })}
+    </div>
+  );
+}
+
 const INTAKE_INTRO =
   'Which sources feed issues into Intake, for your whole account. Code access is set under Repositories.';
 
@@ -235,7 +310,7 @@ export function IntakeSection() {
         </SettingsRow>
 
         {!linearConnected ? (
-          <div className="flex items-center gap-3 px-4 py-3">
+          <div className="flex flex-col items-start gap-2 px-4 py-3 lg:flex-row lg:items-center lg:gap-3">
             <Txt as="span" variant="ui-sm" className="text-icon3">
               {linearStatus?.enabled === false
                 ? 'Linear is not configured on this server.'
@@ -249,7 +324,7 @@ export function IntakeSection() {
           </div>
         ) : config.linear.enabled && isLinearReauthError(linearProjectsQuery.error) ? (
           // Expired token still reports connected; offer OAuth again.
-          <div className="flex items-center gap-3 px-4 py-3">
+          <div className="flex flex-col items-start gap-2 px-4 py-3 lg:flex-row lg:items-center lg:gap-3">
             <Txt as="span" variant="ui-sm" className="text-icon3">
               Linear authorization expired. Reconnect to keep syncing issues.
             </Txt>
@@ -287,6 +362,13 @@ export function IntakeSection() {
                     />
                   ))}
                 </SourcePickerGroup>
+              )}
+              {(config.linear.sourceIds?.length ?? 0) > 0 && (
+                <LinearRouting
+                  sourceIds={config.linear.sourceIds ?? []}
+                  projects={linearProjectsQuery.data ?? []}
+                  factories={factoriesQuery.data ?? []}
+                />
               )}
             </div>
           )

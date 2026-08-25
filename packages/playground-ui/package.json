@@ -1,7 +1,7 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "48.0.0-alpha.2",
+  "version": "51.1.0-alpha.10",
   "description": "Mastra Playground components",
   "sideEffects": [
     "**/*.css"
@@ -64,6 +64,16 @@
         "default": "./dist/primitives/*.cjs.js"
       }
     },
+    "./keyboard/*": {
+      "import": {
+        "types": "./dist/keyboard/*.d.ts",
+        "default": "./dist/keyboard/*.es.js"
+      },
+      "require": {
+        "types": "./dist/keyboard/*.d.ts",
+        "default": "./dist/keyboard/*.cjs.js"
+      }
+    },
     "./resize/*": {
       "import": {
         "types": "./dist/resize/*.d.ts",
@@ -106,8 +116,9 @@
   },
   "scripts": {
     "build": "vite build",
-    "dev": "vite build --watch",
+    "dev": "vite build && vite build --watch --mode development",
     "test": "vitest",
+    "test:mutate": "stryker run --mutate",
     "typecheck": "tsc",
     "lint": "oxlint . && eslint .",
     "lint:fix": "oxlint --fix . && eslint --fix .",
@@ -149,6 +160,7 @@
     "react-resizable-panels": "^4.7.3",
     "recharts": "^3.8.0",
     "remark-gfm": "^4.0.1",
+    "remend": "^1.3.0",
     "shiki": "^1.29.2",
     "sonner": "^2.0.7",
     "use-debounce": "^10.1.0",
@@ -175,6 +187,8 @@
     "@storybook/addon-docs": "^10.4.1",
     "@storybook/addon-mcp": "^0.6.0",
     "@storybook/react-vite": "^10.4.1",
+    "@stryker-mutator/core": "catalog:",
+    "@stryker-mutator/vitest-runner": "catalog:",
     "@tailwindcss/postcss": "^4.3.3",
     "@tailwindcss/typography": "^0.5.19",
     "@tailwindcss/vite": "4.3.3",

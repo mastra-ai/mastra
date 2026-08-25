@@ -1,4 +1,5 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import type { ReactNode } from 'react';
 import { useParams } from 'react-router';
@@ -15,7 +16,7 @@ interface FactoryPageShellProps {
 }
 
 /**
- * Shared frame for the Factory pages (Board, Metrics, Rules, Audit): the standard
+ * Shared frame for the Factory pages (Overview, Board, Rules, Audit): the standard
  * app layout (sidebar + mobile header) around a titled content column. Any
  * server-backed Factory renders its pages — including one with zero linked
  * repositories (the pages show connect prompts). Local folder factories get an
@@ -53,11 +54,14 @@ export function DocumentFactoryPageShell(props: FactoryPageShellProps) {
   return <FactoryPageShellFrame {...props} Layout={PageLayout} />;
 }
 
-/** Factory page with nested scroll regions constrained to the viewport. */
-export function FactoryPageShell({ children }: FactoryPageShellProps) {
+/**
+ * Factory page with nested scroll regions constrained to the viewport. `bleed`
+ * hands the page gutter to the content so a scroll region can run edge-to-edge.
+ */
+export function FactoryPageShell({ children, bleed = false }: FactoryPageShellProps & { bleed?: boolean }) {
   return (
     <FactoryPageShellFrame Layout={ViewportLayout}>
-      {factory => <div className="flex min-h-0 flex-1 flex-col p-5">{children(factory)}</div>}
+      {factory => <div className={cn('flex min-h-0 flex-1 flex-col', !bleed && 'p-5')}>{children(factory)}</div>}
     </FactoryPageShellFrame>
   );
 }

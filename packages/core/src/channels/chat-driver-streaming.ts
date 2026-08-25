@@ -65,6 +65,12 @@ export interface StreamingDriverArgs {
   typingGate: { active: boolean };
   /** Optional adapter-supplied formatter for `error` chunks; defaults to a plain prefix. */
   formatError?: (error: Error) => unknown;
+  /**
+   * Dialect for the final reply text on the buffered fallback path.
+   * `'markdown'` (the absent-value default) posts `{ markdown }`; `'plain'`
+   * posts the bare string. The native streaming path is always markdown.
+   */
+  textFormat?: 'markdown' | 'plain';
 }
 
 interface StreamingSession {
@@ -95,6 +101,7 @@ export async function runStreamingDriver({
   takePendingApproval,
   typingGate,
   formatError,
+  textFormat,
 }: StreamingDriverArgs): Promise<void> {
   const platform = adapter.name;
 
@@ -117,6 +124,7 @@ export async function runStreamingDriver({
   // and a plain `let` would get narrowed to its initial `null` between
   // iterations of the for-await loop).
   const sessionRef: { current: StreamingSession | null } = { current: null };
+  const pendingInitialText: string[] = [];
 
   // Tracks OM cycles currently in `'in_progress'` so we can flush them as
   // `'complete'` before closing the session. OM buffering runs async in the
@@ -197,7 +205,7 @@ export async function runStreamingDriver({
         const cleaned = fallback.replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
         if (cleaned) {
           try {
-            await chatThread.post(cleaned);
+            await chatThread.post(textFormat === 'plain' ? cleaned : { markdown: cleaned });
           } catch (postErr) {
             logger?.debug('[CHANNEL] buffered fallback also failed', { error: postErr });
           }
@@ -232,7 +240,10 @@ export async function runStreamingDriver({
 
   const closeSession = async () => {
     const s = sessionRef.current;
-    if (!s) return;
+    if (!s) {
+      pendingInitialText.length = 0;
+      return;
+    }
     // OM buffering is background work that often finishes after the session
     // closes. The chat-SDK plan widget flips any still-`in_progress` task to
     // an error icon at stream end, so optimistically mark pending OM tasks
@@ -259,6 +270,10 @@ export async function runStreamingDriver({
    */
   const pushToSession = (piece: string | StreamChunk) => {
     if (!sessionRef.current) sessionRef.current = openSession();
+    for (const pendingPiece of pendingInitialText) {
+      sessionRef.current.push(pendingPiece);
+    }
+    pendingInitialText.length = 0;
     sessionRef.current.push(piece);
   };
 
@@ -282,6 +297,16 @@ export async function runStreamingDriver({
    * chunk reopen a fresh session. Used for `'cards'`/`'text'` tool events
    * and `ToolDisplayFn` `{ kind: 'post' }` returns.
    */
+  /**
+   * Skip blank tool posts so a fn that intentionally returns "" or an empty
+   * `{ markdown }` doesn't post or edit in an empty platform message.
+   * Mirrors the static driver's guard in `renderToolEvent`.
+   */
+  const isBlankToolMessage = (message: PostableMessage): boolean => {
+    if (typeof message === 'string') return message.length === 0;
+    return 'markdown' in message && message.markdown.trim().length === 0;
+  };
+
   const postOutOfBand = async (message: PostableMessage): Promise<string | undefined> => {
     await closeSession();
     try {
@@ -316,7 +341,8 @@ export async function runStreamingDriver({
         return { posted: false };
       }
       // kind === 'post'
-      const id = result.message != null ? await postOutOfBand(result.message) : undefined;
+      const id =
+        result.message != null && !isBlankToolMessage(result.message) ? await postOutOfBand(result.message) : undefined;
       return { posted: true, messageId: id };
     }
     if (rendersToolsInPlan || toolDisplay === 'hidden') {
@@ -422,6 +448,10 @@ export async function runStreamingDriver({
     if (chunk.type === 'text-delta') {
       const piece = chunk.payload.text;
       if (!piece) continue;
+      if (!sessionRef.current && !piece.replace(/[\u200B-\u200D\uFEFF]/g, '').trim()) {
+        pendingInitialText.push(piece);
+        continue;
+      }
       pushToSession(piece);
       continue;
     }
@@ -454,7 +484,6 @@ export async function runStreamingDriver({
     }
 
     if (chunk.type === 'finish') {
-      await closeSession();
       tracker.reset();
       continue;
     }
@@ -578,7 +607,8 @@ export async function runStreamingDriver({
             pushToolDisplayResult(result);
             continue;
           }
-          if (result.message != null) await editOrPost(messageId, result.message);
+          if (result.message != null && !isBlankToolMessage(result.message))
+            await editOrPost(messageId, result.message);
           continue;
         }
         const message = renderBuiltInToolEvent(
@@ -650,7 +680,8 @@ export async function runStreamingDriver({
             pushToolDisplayResult(result);
             continue;
           }
-          if (result.message != null) await editOrPost(messageId, result.message);
+          if (result.message != null && !isBlankToolMessage(result.message))
+            await editOrPost(messageId, result.message);
           continue;
         }
         const message = renderBuiltInToolEvent(

@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import type { Server as HttpServer } from 'node:http';
 import * as https from 'node:https';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -8,7 +9,7 @@ import { swaggerUI } from '@hono/swagger-ui';
 import type { Mastra } from '@mastra/core/mastra';
 import type { ApiRoute, CorsOptions } from '@mastra/core/server';
 import { Tool } from '@mastra/core/tools';
-import { MastraServer, setupBrowserStream } from '@mastra/hono';
+import { MastraServer, setupBrowserStream, skipIfFrameworkPublic } from '@mastra/hono';
 import type { HonoBindings, HonoVariables } from '@mastra/hono';
 import { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import { findMatchingCustomRoute } from '@mastra/server/auth';
@@ -22,7 +23,12 @@ import { describeRoute } from 'hono-openapi';
 import type { DescribeRouteOptions } from 'hono-openapi';
 import { escapeStudioHtmlValue, injectStudioHtmlConfig, normalizeStudioBase } from '../build/utils';
 import { agentLearningProxyHandler } from './handlers/agent-learning';
-import { handleClientsRefresh, handleTriggerClientsRefresh, isHotReloadDisabled } from './handlers/client';
+import {
+  closeRefreshStreams,
+  handleClientsRefresh,
+  handleTriggerClientsRefresh,
+  isHotReloadDisabled,
+} from './handlers/client';
 import { errorHandler } from './handlers/error';
 import { healthHandler } from './handlers/health';
 import { restartAllActiveWorkflowRunsHandler } from './handlers/restart-active-runs';
@@ -53,7 +59,13 @@ type Variables = HonoVariables & {
   clients: Set<{ controller: ReadableStreamDefaultController }>;
 };
 
-type ApiRouteMiddleware = Extract<Exclude<ApiRoute['middleware'], undefined>, Function>;
+type SchemaApiRoute = Extract<ApiRoute, { readonly _mastraSchemaRoute: true }>;
+type HonoApiRoute = Exclude<ApiRoute, SchemaApiRoute>;
+type ApiRouteMiddleware = Extract<Exclude<HonoApiRoute['middleware'], undefined>, Function>;
+
+function isSchemaApiRoute(route: ApiRoute): route is SchemaApiRoute {
+  return '_mastraSchemaRoute' in route && route._mastraSchemaRoute === true;
+}
 
 const DEFAULT_CORS_ALLOW_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'];
 const DEFAULT_CORS_ALLOW_HEADERS = [
@@ -88,7 +100,7 @@ function getCorsConfig(serverCors: CorsOptions | false | undefined, credentialsD
 
 function getRouteCorsConfig(apiRoutes: ApiRoute[] | undefined, pathname: string, method: string) {
   const route = findMatchingCustomRoute(pathname, method, apiRoutes)?.route;
-  return route?.cors;
+  return route && !isSchemaApiRoute(route) ? route.cors : undefined;
 }
 
 export function getToolExports(tools: Record<string, Function>[]) {
@@ -140,7 +152,11 @@ export async function createHonoServer(
   // Pre-process routes: bake hono-openapi describeRoute into route middleware
   // so the adapter handles it as normal middleware without needing to know about hono-openapi
   const processedRoutes: ApiRoute[] | undefined = routes?.map(route => {
-    if ('openapi' in route && route.openapi) {
+    if (isSchemaApiRoute(route)) {
+      return route;
+    }
+
+    if (route.openapi) {
       const existingMiddleware = route.middleware
         ? Array.isArray(route.middleware)
           ? route.middleware
@@ -207,7 +223,10 @@ export async function createHonoServer(
 
   if (serverMiddleware && serverMiddleware.length > 0) {
     for (const m of serverMiddleware) {
-      app.use(m.path, m.handler);
+      // Wrap with skipIfFrameworkPublic so user middleware cannot 401 routes
+      // the framework declared public via `requiresAuth: false`
+      // (e.g. Studio sign-in endpoints like /api/auth/capabilities).
+      app.use(m.path, skipIfFrameworkPublic(m.handler));
     }
   }
 
@@ -323,7 +342,10 @@ export async function createHonoServer(
     });
 
     for (const middleware of middlewares) {
-      app.use(middleware.path, middleware.handler as unknown as HonoMiddlewareHandler);
+      // Wrap with skipIfFrameworkPublic so user middleware cannot 401 routes
+      // the framework declared public via `requiresAuth: false`
+      // (e.g. Studio sign-in endpoints like /api/auth/capabilities).
+      app.use(middleware.path, skipIfFrameworkPublic(middleware.handler as unknown as HonoMiddlewareHandler));
     }
   }
 
@@ -550,6 +572,13 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
   const injectWebSocket = (app as any).injectWebSocket;
   const serverOptions = mastra.getServer();
   const apiPrefix = serverOptions?.apiPrefix ?? '/api';
+  const drainTimeoutMs = serverOptions?.drainTimeout ?? 5000;
+  if (
+    serverOptions?.handleShutdownSignals !== false &&
+    (!Number.isFinite(drainTimeoutMs) || drainTimeoutMs < 0 || drainTimeoutMs > 2_147_483_647)
+  ) {
+    throw new RangeError('server.drainTimeout must be a finite number between 0 and 2147483647 milliseconds');
+  }
 
   const key =
     serverOptions?.https?.key ??
@@ -625,44 +654,94 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
     .then(({ syncFeatureUsageTelemetry }) => syncFeatureUsageTelemetry(mastra))
     .catch(() => {});
 
-  // Graceful shutdown so storage backends release resources (e.g. DuckDB's
-  // native file lock) before the process exits. On `mastra dev` hot reloads
-  // the old process is sent SIGINT; without this the lock can linger and the
-  // restarted process fails with "Conflicting lock is held".
-  const SHUTDOWN_TIMEOUT_MS = 5000;
-  let shuttingDown = false;
-  const shutdown = async (signal: NodeJS.Signals) => {
-    if (shuttingDown) {
-      return;
-    }
-    shuttingDown = true;
-    const logger = mastra.getLogger();
-    logger.info('Shutting down Mastra server', { signal });
-    server.close();
-    // Feature-detect for older @mastra/core versions without shutdown().
-    const lifecycle = mastra as unknown as { shutdown?: () => Promise<void> };
-    if (typeof lifecycle.shutdown === 'function') {
-      // Bound the wait so a hanging shutdown can't block process exit.
+  // Graceful shutdown so in-flight requests drain and storage backends release
+  // resources (e.g. DuckDB's native file lock) before the process exits. On
+  // `mastra dev` hot reloads the old process is sent SIGINT; without this the
+  // lock can linger and the restarted process fails with "Conflicting lock is
+  // held". The drain window is configurable via `server.drainTimeout` so
+  // rolling deploys can let long-running agent turns finish.
+  if (serverOptions?.handleShutdownSignals !== false) {
+    // Core teardown keeps its historic 5s bound regardless of the drain
+    // window: it must always run (e.g. DuckDB's file lock release), but a
+    // hanging shutdown can't be allowed to block process exit.
+    const CORE_SHUTDOWN_TIMEOUT_MS = 5000;
+    const timedOut = Symbol('shutdown-timeout');
+    const race = async (work: Promise<unknown>, ms: number): Promise<unknown> => {
       let timeout: ReturnType<typeof setTimeout> | undefined;
-      const timedOut = Symbol('shutdown-timeout');
       const timeoutPromise = new Promise<typeof timedOut>(resolve => {
-        timeout = setTimeout(() => resolve(timedOut), SHUTDOWN_TIMEOUT_MS);
+        timeout = setTimeout(() => resolve(timedOut), ms);
       });
       try {
-        const result = await Promise.race([lifecycle.shutdown(), timeoutPromise]);
-        if (result === timedOut) {
-          logger.warn('Mastra shutdown timed out; forcing exit', { timeoutMs: SHUTDOWN_TIMEOUT_MS });
-        }
-      } catch (error) {
-        logger.error('Error during Mastra shutdown', { error });
+        return await Promise.race([work, timeoutPromise]);
       } finally {
         clearTimeout(timeout);
       }
-    }
-    process.exit(0);
-  };
-  process.once('SIGINT', () => void shutdown('SIGINT'));
-  process.once('SIGTERM', () => void shutdown('SIGTERM'));
+    };
+    let shuttingDown = false;
+    const shutdown = async (signal: NodeJS.Signals) => {
+      if (shuttingDown) {
+        return void process.exit(1);
+      }
+      shuttingDown = true;
+      const logger = mastra.getLogger();
+      logger.info('Shutting down Mastra server', { signal });
+      try {
+        // Phase 1: stop accepting new connections and wait for in-flight
+        // requests (including active streams) to finish, bounded by the drain
+        // window. Studio's hot-reload SSE streams never end on their own, so
+        // close them first; idle keep-alive sockets would also hold the close
+        // callback open, so close those explicitly (feature-detected —
+        // available on Node http(s) servers since 18.2). Draining before core
+        // teardown prevents storage being closed underneath in-flight
+        // requests.
+        const drained = new Promise<void>(resolve => {
+          server.close(() => resolve());
+        });
+        closeRefreshStreams();
+        const closeIdleConnections = () => (server as Partial<HttpServer>).closeIdleConnections?.();
+        closeIdleConnections();
+        // A keep-alive socket that goes idle only after its in-flight response
+        // finishes is not caught by the initial sweep above — the client keeps
+        // it open and the drain would stall until the full timeout. Sweep
+        // periodically so the server exits as soon as work actually finishes.
+        const idleSweep = setInterval(closeIdleConnections, 100);
+        idleSweep.unref?.();
+        try {
+          if ((await race(drained, drainTimeoutMs)) === timedOut) {
+            logger.warn('Mastra server drain timed out; closing remaining HTTP connections', {
+              timeoutMs: drainTimeoutMs,
+            });
+            // Node does not include upgraded protocols such as WebSocket here;
+            // those sockets are terminated when the process exits below.
+            (server as Partial<HttpServer>).closeAllConnections?.();
+          }
+        } finally {
+          clearInterval(idleSweep);
+        }
+      } catch (error) {
+        logger.error('Error while draining Mastra server', { error });
+      }
+
+      // Phase 2: always tear down core (workers, durable runs, storage), even
+      // if draining failed or timed out. Feature-detect for older @mastra/core
+      // versions without shutdown().
+      try {
+        const lifecycle = mastra as unknown as { shutdown?: () => Promise<void> };
+        if (typeof lifecycle.shutdown === 'function') {
+          if ((await race(lifecycle.shutdown(), CORE_SHUTDOWN_TIMEOUT_MS)) === timedOut) {
+            logger.warn('Mastra shutdown timed out; forcing exit', { timeoutMs: CORE_SHUTDOWN_TIMEOUT_MS });
+          }
+        }
+      } catch (error) {
+        logger.error('Error during Mastra shutdown', { error });
+      }
+      process.exit(0);
+    };
+    // Keep both listeners active so any second shutdown signal can force an
+    // immediate exit, regardless of whether it matches the first signal.
+    process.on('SIGINT', () => void shutdown('SIGINT'));
+    process.on('SIGTERM', () => void shutdown('SIGTERM'));
+  }
 
   return server;
 }

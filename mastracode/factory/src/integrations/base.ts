@@ -28,7 +28,9 @@ import type { Intake } from '../capabilities/intake.js';
 import type { VersionControl } from '../capabilities/version-control.js';
 import type { RouteAuth } from '../routes/route.js';
 import type { FactoryRules } from '../rules/types.js';
+import type { BaseCheckpointTriggers } from '../sandbox/base-checkpoint-triggers.js';
 import type { SandboxFleet } from '../sandbox/fleet.js';
+import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
 import type { StateSigner } from '../state-signing.js';
 import type { AuditEventRow } from '../storage/domains/audit/base.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
@@ -74,6 +76,13 @@ export interface IntegrationContext {
    */
   fleet: SandboxFleet;
   /**
+   * Base-checkpoint trigger surface — present when the factory constructed a
+   * builder (fleet enabled + a source-control owner registered). Integrations
+   * feed webhook events and reconcile sweeps into it so connected repos keep
+   * a warm base checkpoint.
+   */
+  baseCheckpoints?: BaseCheckpointTriggers;
+  /**
    * Root factory storage backend and source of the `appDbConfigured`
    * diagnostic. Absent when the host runs without an application database.
    */
@@ -87,6 +96,8 @@ export interface IntegrationContext {
    * every integration's OAuth flow signs and verifies with the same secret.
    */
   stateSigner?: StateSigner;
+  /** Shared source-control session retirement lifecycle used by integration routes. */
+  sessionRetirement?: SessionRetirementCoordinator;
   /** Persistence handles pre-scoped to this integration's stable id. */
   storage: {
     generic: IntegrationStorageHandle;

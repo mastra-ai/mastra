@@ -7,6 +7,7 @@
     "anthropic/claude-opus-5",
     "anthropic/claude-sonnet-4-6",
     "anthropic/claude-sonnet-5",
+    "deepseek/deepseek-v4-flash-vision-exp",
     "gemini/gemini-2.5-flash",
     "gemini/gemini-2.5-flash-lite",
     "gemini/gemini-2.5-pro",
@@ -15,6 +16,7 @@
     "gemini/gemini-3.5-flash",
     "gemini/gemini-3.5-flash-lite",
     "gemini/gemini-3.6-flash",
+    "gemini/gemini-3.7-flash",
     "minimax/minimax-m3",
     "moonshot/kimi-k2.5",
     "moonshot/kimi-k2.6",
@@ -36,6 +38,7 @@
     "qwen/qwen3.8-max",
     "x-ai/grok-4.3",
     "x-ai/grok-4.5",
+    "x-ai/grok-4.6",
     "x-ai/grok-build-0.1",
     "xiaomi/mimo-v2.5"
   ],
@@ -43,6 +46,7 @@
     "anthropic/claude-haiku-4-5",
     "anthropic/claude-sonnet-4-6",
     "deepseek/deepseek-v4-flash",
+    "deepseek/deepseek-v4-flash-vision-exp",
     "deepseek/deepseek-v4-pro",
     "gemini/gemini-2.5-flash",
     "gemini/gemini-2.5-flash-lite",
@@ -52,6 +56,7 @@
     "gemini/gemini-3.5-flash",
     "gemini/gemini-3.5-flash-lite",
     "gemini/gemini-3.6-flash",
+    "gemini/gemini-3.7-flash",
     "minimax/minimax-m2.7",
     "minimax/minimax-m3",
     "moonshot/kimi-k2.6",
@@ -63,9 +68,9 @@
     "qwen/qwen3.7-plus",
     "qwen/qwen3.8-max",
     "tencent/hy3",
-    "tencent/hy3-preview",
     "x-ai/grok-4.3",
     "x-ai/grok-4.5",
+    "x-ai/grok-4.6",
     "x-ai/grok-build-0.1",
     "xiaomi/mimo-v2.5",
     "xiaomi/mimo-v2.5-pro",
@@ -73,7 +78,8 @@
     "z-ai/glm-5",
     "z-ai/glm-5-turbo",
     "z-ai/glm-5.1",
-    "z-ai/glm-5.2"
+    "z-ai/glm-5.2",
+    "z-ai/glm-5.3"
   ],
   "structuredOutput": [
     "anthropic/claude-fable-5",
@@ -84,6 +90,7 @@
     "anthropic/claude-sonnet-4-6",
     "anthropic/claude-sonnet-5",
     "deepseek/deepseek-v4-flash",
+    "deepseek/deepseek-v4-flash-vision-exp",
     "deepseek/deepseek-v4-pro",
     "gemini/gemini-2.5-flash",
     "gemini/gemini-2.5-flash-lite",
@@ -93,6 +100,7 @@
     "gemini/gemini-3.5-flash",
     "gemini/gemini-3.5-flash-lite",
     "gemini/gemini-3.6-flash",
+    "gemini/gemini-3.7-flash",
     "minimax/minimax-m2.7",
     "minimax/minimax-m3",
     "moonshot/kimi-k2.5",
@@ -115,9 +123,9 @@
     "qwen/qwen3.7-plus",
     "qwen/qwen3.8-max",
     "tencent/hy3",
-    "tencent/hy3-preview",
     "x-ai/grok-4.3",
     "x-ai/grok-4.5",
+    "x-ai/grok-4.6",
     "x-ai/grok-build-0.1",
     "xiaomi/mimo-v2.5",
     "xiaomi/mimo-v2.5-pro",
@@ -125,6 +133,7 @@
     "z-ai/glm-5",
     "z-ai/glm-5-turbo",
     "z-ai/glm-5.1",
-    "z-ai/glm-5.2"
+    "z-ai/glm-5.2",
+    "z-ai/glm-5.3"
   ]
 }

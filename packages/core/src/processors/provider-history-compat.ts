@@ -221,9 +221,161 @@ export function isMaybeAnthropic(
   return matchesProviderPrefix(model, 'anthropic');
 }
 
+type ProviderFamily = 'anthropic' | 'openai' | 'google';
+
+function getModelProviderFamily(model: unknown): ProviderFamily | undefined {
+  if (matchesProviderPrefix(model, 'anthropic')) return 'anthropic';
+  if (matchesProviderPrefix(model, 'openai') || matchesProviderPrefix(model, 'azure')) return 'openai';
+  if (matchesProviderPrefix(model, 'google') || matchesProviderPrefix(model, 'vertex')) return 'google';
+  return undefined;
+}
+
+function getPartProviderFamily(part: { providerOptions?: unknown }): ProviderFamily | undefined {
+  if (!part.providerOptions || typeof part.providerOptions !== 'object') return undefined;
+  const providers = Object.keys(part.providerOptions);
+  if (providers.some(provider => provider === 'anthropic')) return 'anthropic';
+  if (providers.some(provider => provider === 'openai' || provider === 'azure')) return 'openai';
+  if (providers.some(provider => provider === 'google' || provider === 'vertex')) return 'google';
+  return undefined;
+}
+
+/**
+ * Provider-executed tools are provider-owned continuation state. A foreign
+ * provider cannot resolve their IDs, so remove the call and paired result from
+ * the outbound prompt while leaving persisted history untouched.
+ */
+export const stripForeignProviderExecutedTools: CompatRule = {
+  name: 'strip-foreign-provider-executed-tools',
+  applyToPrompt({ prompt, model }) {
+    const destinationProvider = getModelProviderFamily(model);
+    if (!destinationProvider) return undefined;
+
+    const foreignToolCallIds = new Set<string>();
+    for (const message of prompt) {
+      if (message.role !== 'assistant' || !Array.isArray(message.content)) continue;
+      for (const part of message.content) {
+        if (part.type !== 'tool-call' || !part.providerExecuted) continue;
+        const sourceProvider = getPartProviderFamily(part);
+        if (sourceProvider && sourceProvider !== destinationProvider) {
+          foreignToolCallIds.add(part.toolCallId);
+        }
+      }
+    }
+
+    if (foreignToolCallIds.size === 0) return undefined;
+
+    const rewritten: LanguageModelV2Prompt = [];
+    for (const message of prompt) {
+      if (message.role === 'assistant') {
+        const content = message.content.filter(
+          part => part.type !== 'tool-call' || !foreignToolCallIds.has(part.toolCallId),
+        );
+        if (content.length > 0) rewritten.push({ ...message, content });
+        continue;
+      }
+
+      if (message.role === 'tool') {
+        const content = message.content.filter(part => !foreignToolCallIds.has(part.toolCallId));
+        if (content.length > 0) rewritten.push({ ...message, content });
+        continue;
+      }
+
+      rewritten.push(message);
+    }
+    return rewritten;
+  },
+};
+
+const CLAUDE_VERSION_PATTERN = /claude-(?:(?:opus|sonnet|haiku)-)?(\d+)(?:[.-](\d+))?/i;
+
+function supportsAssistantPrefill(modelId: string): boolean | undefined {
+  const match = CLAUDE_VERSION_PATTERN.exec(modelId);
+  if (!match) return undefined;
+
+  const major = Number(match[1]);
+  const minor = Number(match[2] ?? 0);
+  return major < 4 || (major === 4 && minor < 6);
+}
+
+/**
+ * Detects Anthropic models that removed assistant-message prefill support.
+ * Claude 4.6 and later reject assistant-prefill requests, while earlier
+ * models retain support. Unknown Anthropic model versions are matched
+ * conservatively so a new model cannot silently bypass compatibility guards.
+ */
+export function isMaybeAnthropicWithoutAssistantPrefill(model: unknown): boolean {
+  if (typeof model === 'function') return true;
+
+  if (Array.isArray(model)) {
+    return model.some(entry => isMaybeAnthropicWithoutAssistantPrefill((entry as { model?: unknown }).model ?? entry));
+  }
+
+  if (!isMaybeAnthropic(model)) return false;
+
+  const modelId =
+    typeof model === 'string'
+      ? model
+      : model && typeof model === 'object' && typeof (model as { modelId?: unknown }).modelId === 'string'
+        ? (model as { modelId: string }).modelId
+        : undefined;
+
+  if (!modelId) return true;
+  return supportsAssistantPrefill(modelId) !== true;
+}
+
+export function isMaybeAzure(
+  model:
+    | string
+    | { provider?: string; modelId?: string }
+    | ((...args: any[]) => any)
+    | { model: any; enabled?: boolean }[]
+    | unknown,
+): boolean {
+  if (Array.isArray(model)) {
+    return model.some(entry => isMaybeAzure((entry as { model?: unknown }).model ?? entry));
+  }
+
+  if (model && typeof model === 'object') {
+    const { provider, modelId } = model as { provider?: unknown; modelId?: unknown };
+    if (typeof provider === 'string' && /^(?:azure|azure-openai)(?:\.[a-z0-9_-]+)?$/i.test(provider)) {
+      return true;
+    }
+
+    return (
+      typeof modelId === 'string' &&
+      (matchesProviderPrefix(modelId, 'azure') || matchesProviderPrefix(modelId, 'azure-openai'))
+    );
+  }
+
+  return matchesProviderPrefix(model, 'azure') || matchesProviderPrefix(model, 'azure-openai');
+}
+
+/**
+ * Returns the index of the trailing assistant message whose thinking blocks
+ * Anthropic verifies byte-for-byte: the last message when it is an assistant
+ * message, or the assistant message that only has tool messages after it (an
+ * active tool-use continuation). Returns `-1` when no such message exists —
+ * e.g. when the prompt ends with a fresh user turn, in which case Anthropic
+ * ignores thinking blocks on earlier assistant messages.
+ */
+function getProtectedAssistantIndex(prompt: LanguageModelV2Prompt): number {
+  for (let i = prompt.length - 1; i >= 0; i--) {
+    const role = prompt[i]!.role;
+    if (role === 'assistant') return i;
+    if (role !== 'tool') return -1;
+  }
+  return -1;
+}
+
 /**
  * Returns a copy of the prompt with selected `reasoning` parts stripped from
  * assistant messages. Returns `undefined` if no changes were necessary.
+ *
+ * `skipIndex` excludes one message from stripping — used to protect the
+ * trailing assistant message of an active tool-use continuation, which
+ * Anthropic requires to be replayed unmodified ("`thinking` or
+ * `redacted_thinking` blocks in the latest assistant message cannot be
+ * modified").
  */
 function stripReasoningFromPrompt(
   prompt: LanguageModelV2Prompt,
@@ -233,9 +385,11 @@ function stripReasoningFromPrompt(
       { type: 'reasoning' }
     >,
   ) => boolean = () => true,
+  skipIndex = -1,
 ): LanguageModelV2Prompt | undefined {
   let mutated = false;
-  const next: LanguageModelV2Prompt = prompt.map(message => {
+  const next: LanguageModelV2Prompt = prompt.map((message, index) => {
+    if (index === skipIndex) return message;
     if (message.role !== 'assistant') return message;
     if (typeof message.content === 'string') return message;
     if (!Array.isArray(message.content)) return message;
@@ -255,6 +409,28 @@ function isAnthropicReasoningPart(part: { providerOptions?: unknown; providerMet
   if (providerMetadata && typeof providerMetadata === 'object' && 'anthropic' in providerMetadata) return true;
 
   return false;
+}
+
+function getProviderMetadataForProvider(metadata: unknown, provider: string): Record<string, unknown> | undefined {
+  if (!metadata || typeof metadata !== 'object') return undefined;
+  const value = (metadata as Record<string, unknown>)[provider];
+  return value && typeof value === 'object' ? (value as Record<string, unknown>) : undefined;
+}
+
+function hasAnthropicSignatureWithoutText(part: {
+  text?: unknown;
+  providerOptions?: unknown;
+  providerMetadata?: unknown;
+}): boolean {
+  const anthropic =
+    getProviderMetadataForProvider(part.providerOptions, 'anthropic') ??
+    getProviderMetadataForProvider(part.providerMetadata, 'anthropic');
+
+  return (
+    typeof anthropic?.signature === 'string' &&
+    anthropic.signature.length > 0 &&
+    (typeof part.text !== 'string' || part.text.length === 0)
+  );
 }
 
 /**
@@ -292,6 +468,20 @@ export const cerebrasStripReasoningContent: CompatRule = {
 };
 
 /**
+ * Legacy records could contain Anthropic signed thinking metadata with an
+ * empty reasoning text. Anthropic signs the exact thinking text, so forwarding
+ * that mismatched pair is worse than dropping the invalid block at the provider
+ * boundary.
+ */
+export const anthropicStripEmptySignedReasoningContent: CompatRule = {
+  name: 'anthropic-strip-empty-signed-reasoning-content',
+  applyToPrompt({ prompt, model }) {
+    if (!isMaybeAnthropic(model)) return undefined;
+    return stripReasoningFromPrompt(prompt, hasAnthropicSignatureWithoutText, getProtectedAssistantIndex(prompt));
+  },
+};
+
+/**
  * Anthropic accepts its own thinking/reasoning history, but rejects reasoning
  * parts emitted by other providers. Strip only foreign reasoning parts at the
  * Anthropic provider boundary so persisted history remains intact and native
@@ -301,7 +491,58 @@ export const anthropicStripForeignReasoningContent: CompatRule = {
   name: 'anthropic-strip-foreign-reasoning-content',
   applyToPrompt({ prompt, model }) {
     if (!isMaybeAnthropic(model)) return undefined;
-    return stripReasoningFromPrompt(prompt, part => !isAnthropicReasoningPart(part));
+    return stripReasoningFromPrompt(
+      prompt,
+      part => !isAnthropicReasoningPart(part),
+      getProtectedAssistantIndex(prompt),
+    );
+  },
+};
+
+const SYSTEM_REMINDER_OPEN_TAG = /<system-reminder(?=\s|\/?>)([^>]*)>/g;
+const SYSTEM_REMINDER_CLOSE_TAG = /<\/system-reminder>/g;
+
+function rewriteSystemReminderTags(text: string): string {
+  return text
+    .replace(SYSTEM_REMINDER_OPEN_TAG, '<memory-context$1>')
+    .replace(SYSTEM_REMINDER_CLOSE_TAG, '</memory-context>');
+}
+
+/**
+ * Azure OpenAI's content moderation can classify `<system-reminder>` wrappers
+ * in user messages as prompt injection. Rename the wrapper at the provider
+ * boundary while leaving persisted history and other providers unchanged.
+ */
+export const azureSystemReminderTransform: CompatRule = {
+  name: 'azure-system-reminder-transform',
+  applyToPrompt({ prompt, model }) {
+    if (!isMaybeAzure(model)) return undefined;
+
+    let mutated = false;
+    const next: LanguageModelV2Prompt = prompt.map(message => {
+      if (message.role === 'system') {
+        const content = rewriteSystemReminderTags(message.content);
+        if (content === message.content) return message;
+        mutated = true;
+        return { ...message, content };
+      }
+
+      if (message.role !== 'user') return message;
+
+      let messageMutated = false;
+      const content = message.content.map(part => {
+        if (part.type !== 'text') return part;
+        const text = rewriteSystemReminderTags(part.text);
+        if (text === part.text) return part;
+        mutated = true;
+        messageMutated = true;
+        return { ...part, text };
+      });
+
+      return messageMutated ? { ...message, content } : message;
+    });
+
+    return mutated ? next : undefined;
   },
 };
 
@@ -314,9 +555,12 @@ export const anthropicStripForeignReasoningContent: CompatRule = {
  * `ProviderHistoryCompat` constructor.
  */
 export const DEFAULT_COMPAT_RULES: CompatRule[] = [
+  stripForeignProviderExecutedTools,
   anthropicToolIdFormat,
   cerebrasStripReasoningContent,
+  anthropicStripEmptySignedReasoningContent,
   anthropicStripForeignReasoningContent,
+  azureSystemReminderTransform,
 ];
 
 // ---------------------------------------------------------------------------
@@ -340,6 +584,10 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
  *   that serializes them as `reasoning_content` (a field Cerebras's API
  *   rejects). Preemptive; runs in `processLLMRequest` so the persisted
  *   message list keeps the reasoning trace.
+ * - **anthropic-strip-empty-signed-reasoning-content** — strips legacy
+ *   Anthropic signed reasoning blocks whose text was already lost before
+ *   replay, preventing an empty thinking block with a non-empty signature from
+ *   reaching Anthropic.
  * - **anthropic-strip-foreign-reasoning-content** — strips non-Anthropic
  *   `reasoning` parts from assistant messages in the outbound prompt when the
  *   resolved model is Anthropic. Anthropic-native reasoning parts are kept.

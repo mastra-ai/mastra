@@ -9,7 +9,7 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 # OtelExporter
 
-Sends traces and logs to any OpenTelemetry-compatible observability platform. Traces use the standardized GenAI semantic conventions; logs carry their original severity and message body and are correlated to traces via both the OTEL log record's native trace context and `mastra.traceId` / `mastra.spanId` attributes.
+Sends traces and logs to any OpenTelemetry-compatible observability platform. Traces use the standardized GenAI semantic conventions. Logs carry their original severity and message body and are correlated to traces via both the OTEL log record's native trace context and `mastra.traceId` / `mastra.spanId` attributes.
 
 ## Constructor
 
@@ -379,6 +379,6 @@ While the OpenTelemetry specification supports native array attributes, many bac
 
 ## Related
 
-- [OtelExporter Guide](/docs/observability/integrations/exporters/otel): Setup guide with provider configurations
-- [OtelBridge](/docs/observability/integrations/bridges/otel): For bidirectional OTEL context integration
+- [OtelExporter Guide](/integrations/observability/opentelemetry#exporter): Setup guide with provider configurations
+- [OtelBridge](/integrations/observability/opentelemetry#bridge): For bidirectional OTEL context integration
 - [Tracing Overview](/docs/observability/tracing/overview): General tracing concepts

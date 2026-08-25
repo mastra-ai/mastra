@@ -10,6 +10,7 @@ import type { RequestContext } from '../request-context';
 import type { GoalEvaluationPayload } from '../stream/types';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../tools/payload-transform';
 import type { Session, SessionMachinery } from './session';
+import { ABORTED_BY_USER_REASON } from './session';
 import {
   addOptionalUsageField,
   describeNonSuccessFinishReason,
@@ -44,6 +45,8 @@ type StreamIgnoredChunk =
   | StreamPayloadChunk<'redacted-reasoning'>
   | StreamPayloadChunk<'source'>
   | StreamPayloadChunk<'file'>
+  | StreamPayloadChunk<'reasoning-file'>
+  | StreamPayloadChunk<'custom'>
   | StreamPayloadChunk<'raw'>
   | StreamPayloadChunk<'step-start'>
   | StreamPayloadChunk<'tool-output'>
@@ -95,7 +98,8 @@ type StreamChunk =
   | StreamDataChunk<'data-om-thread-update'>
   | StreamDataChunk<'data-mastracode-tool-progress'>
   | StreamDataChunk<'data-sandbox-stdout'>
-  | StreamDataChunk<'data-sandbox-stderr'>;
+  | StreamDataChunk<'data-sandbox-stderr'>
+  | StreamDataChunk<'data-sandbox-exit'>;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -224,6 +228,8 @@ type StreamState = {
   textContentById: Map<string, { index: number; text: string }>;
   thinkingContentById: Map<string, { index: number; text: string }>;
   toolPartById: Map<string, number>;
+  /** Response ids offered by `step-start` — an id binds to at most one display message. */
+  offeredResponseIds: Set<string>;
   /**
    * Set when a stream ends on a non-success finish reason (e.g. `content-filter`,
    * `error`, `length`). Carries the user-facing message so the run finalizes
@@ -248,15 +254,10 @@ type StreamState = {
 export class SessionRunEngine {
   readonly #session: Session;
   readonly #machinery: SessionMachinery;
-  #requestContext?: RequestContext;
 
   constructor(session: Session, machinery: SessionMachinery) {
     this.#session = session;
     this.#machinery = machinery;
-  }
-
-  setRequestContext(requestContext?: RequestContext): void {
-    if (requestContext) this.#requestContext = requestContext;
   }
 
   private createEmptyAssistantMessage(): MastraDBMessage {
@@ -297,16 +298,6 @@ export class SessionRunEngine {
     return state.currentMessage.content.parts.length > 0;
   }
 
-  /**
-   * Snapshot a message for emission. The engine mutates parts in place
-   * (text/reasoning deltas, tool-invocation upgrades) and `setStopReason` /
-   * `setErrorMessage` mutate `content.metadata`, so emitted snapshots must
-   * deep-clone the content or later mutations rewrite earlier snapshots.
-   */
-  private cloneMessage(message: MastraDBMessage): MastraDBMessage {
-    return { ...message, content: structuredClone(message.content) };
-  }
-
   private setStopReason(message: MastraDBMessage, stopReason: string, force = false): void {
     message.content.metadata ??= {};
     const metadata = message.content.metadata;
@@ -340,6 +331,7 @@ export class SessionRunEngine {
       textContentById: new Map<string, { index: number; text: string }>(),
       thinkingContentById: new Map<string, { index: number; text: string }>(),
       toolPartById: new Map<string, number>(),
+      offeredResponseIds: new Set<string>(),
     };
   }
 
@@ -393,7 +385,7 @@ export class SessionRunEngine {
       isError,
       ...(providerMetadata ? { providerMetadata } : {}),
     });
-    this.#session.emit({ type: 'message_update', message: this.cloneMessage(state.currentMessage) });
+    this.#session.emit({ type: 'message_update', message: state.currentMessage });
   }
 
   private abortForOmFailure({ operationType, stage, error }: { operationType: string; stage: string; error: string }) {
@@ -405,7 +397,8 @@ export class SessionRunEngine {
   }
 
   /**
-   * Process a stream response (shared between sendMessage and tool approval).
+   * Process a stream response. Production runs stream through
+   * `processSubscribedThreadStream`; only tests call this entry directly.
    */
   async processStream(
     response: { fullStream: AsyncIterable<StreamChunk> },
@@ -466,16 +459,15 @@ export class SessionRunEngine {
       this.#session.emit({ type: 'error', error: new Error(state.terminalError) });
     }
 
-    this.#session.emit({
-      type: 'agent_end',
-      reason: error
+    await this.#session.finishAgentRun(
+      error
         ? 'error'
         : result.suspended
           ? 'suspended'
           : aborted || this.#session.run.isAbortRequested()
             ? 'aborted'
             : 'complete',
-    });
+    );
 
     this.#session.run.reset();
     await this.#session.drainFollowUpQueue();
@@ -483,6 +475,13 @@ export class SessionRunEngine {
     return result;
   }
 
+  /**
+   * Mutates and emits one live accumulated message throughout the assistant turn.
+   * Consumers that require a point-in-time value must copy or serialize at their
+   * ownership boundary. Do not restore producer-side per-delta snapshots: even
+   * selective snapshots retain growing historical text and allocate message/part
+   * shells for every token.
+   */
   async processStreamChunk(
     state: StreamState,
     chunk: StreamChunk,
@@ -493,11 +492,28 @@ export class SessionRunEngine {
     }
 
     switch (chunk.type) {
+      case 'step-start': {
+        // Adopt the loop's response message id so the streamed turn and its
+        // persisted copy share one identity (clients dedupe by id). The loop
+        // mints a new id only when it seals one persisted response and opens
+        // the next, so every id after the first marks that boundary — rotate
+        // with it, or the persisted tail comes back as a duplicate on reload.
+        // An emitted id never changes, and an id binds to one message only.
+        const messageId = getString(getPayload(chunk).messageId);
+        if (!messageId || state.offeredResponseIds.has(messageId)) break;
+        if (state.offeredResponseIds.size > 0) this.finishCurrentMessageAndRotate(state);
+        state.offeredResponseIds.add(messageId);
+        if (!this.hasCurrentMessageContent(state)) {
+          state.currentMessage.id = messageId;
+        }
+        break;
+      }
+
       case 'text-start': {
         const textIndex = state.currentMessage.content.parts.length;
         state.currentMessage.content.parts.push({ type: 'text', text: '' });
         state.textContentById.set(getString(getPayload(chunk).id) ?? '', { index: textIndex, text: '' });
-        this.#session.emit({ type: 'message_start', message: this.cloneMessage(state.currentMessage) });
+        this.#session.emit({ type: 'message_start', message: state.currentMessage });
         break;
       }
 
@@ -509,7 +525,7 @@ export class SessionRunEngine {
           if (textContent && textContent.type === 'text') {
             textContent.text = textState.text;
           }
-          this.#session.emit({ type: 'message_update', message: this.cloneMessage(state.currentMessage) });
+          this.#session.emit({ type: 'message_update', message: state.currentMessage });
         }
         break;
       }
@@ -518,7 +534,7 @@ export class SessionRunEngine {
         const thinkingIndex = state.currentMessage.content.parts.length;
         state.currentMessage.content.parts.push({ type: 'reasoning', reasoning: '', details: [] });
         state.thinkingContentById.set(getString(getPayload(chunk).id) ?? '', { index: thinkingIndex, text: '' });
-        this.#session.emit({ type: 'message_update', message: this.cloneMessage(state.currentMessage) });
+        this.#session.emit({ type: 'message_update', message: state.currentMessage });
         break;
       }
 
@@ -531,7 +547,7 @@ export class SessionRunEngine {
             thinkingContent.reasoning = thinkingState.text;
             thinkingContent.details = [{ type: 'text', text: thinkingState.text }];
           }
-          this.#session.emit({ type: 'message_update', message: this.cloneMessage(state.currentMessage) });
+          this.#session.emit({ type: 'message_update', message: state.currentMessage });
         }
         break;
       }
@@ -589,7 +605,7 @@ export class SessionRunEngine {
           toolName,
           args,
         });
-        this.#session.emit({ type: 'message_update', message: this.cloneMessage(state.currentMessage) });
+        this.#session.emit({ type: 'message_update', message: state.currentMessage });
         break;
       }
 
@@ -648,8 +664,8 @@ export class SessionRunEngine {
           state.currentMessage.content.parts.push({ type: 'tool-invocation', toolInvocation });
         }
 
-        this.#session.emit({ type: 'tool_end', toolCallId, result: reason, isError: false });
-        this.#session.emit({ type: 'message_update', message: this.cloneMessage(state.currentMessage) });
+        this.#session.emit({ type: 'tool_end', toolCallId, result: reason, isError: false, denied: true });
+        this.#session.emit({ type: 'message_update', message: state.currentMessage });
         break;
       }
 
@@ -679,7 +695,14 @@ export class SessionRunEngine {
         const approval = await approvalPromise;
         this.#session.approval.clearToolName();
 
-        if (approval.decision === 'approve') {
+        // `session.abort()` releases a parked gate as a decline and defers the
+        // stream/signal teardown to us, so the decline can still be driven
+        // through the (live) agent run and persist an `output-denied` result.
+        // Once it lands we finish the teardown, which stops the run rather than
+        // letting the model continue past the denied call.
+        const deferredAbort = this.#session.run.isAbortRequested();
+
+        if (!deferredAbort && approval.decision === 'approve') {
           await this.#session.approveToolCall({
             toolCallId,
             requestContext: approval.requestContext ?? requestContext,
@@ -688,8 +711,20 @@ export class SessionRunEngine {
           await this.#session.declineToolCall({
             toolCallId,
             requestContext: approval.requestContext ?? requestContext,
-            declineContext: approval.declineContext,
+            declineContext: deferredAbort
+              ? { reason: ABORTED_BY_USER_REASON, message: ABORTED_BY_USER_REASON }
+              : approval.declineContext,
           });
+        }
+
+        if (deferredAbort) {
+          // The denial chunk the agent emits for this decline can never reach
+          // us: we are blocking the consumer loop that would read it, and the
+          // teardown below ends the loop. Settle the call locally so the
+          // display state shows the denied result instead of a call stuck
+          // mid-flight.
+          this.settleToolCallAsDenied(state, { toolCallId, toolName, args: toolArgs });
+          this.#session.completeDeferredAbort();
         }
         break;
       }
@@ -766,6 +801,16 @@ export class SessionRunEngine {
             stepUsage,
             'cacheCreationInputTokens',
             getUsageNumber(usageRecord, 'cacheCreationInputTokens'),
+          );
+          addOptionalUsageField(
+            stepUsage,
+            'cacheCreationInputTokens5m',
+            getUsageNumber(usageRecord, 'cacheCreationInputTokens5m'),
+          );
+          addOptionalUsageField(
+            stepUsage,
+            'cacheCreationInputTokens1h',
+            getUsageNumber(usageRecord, 'cacheCreationInputTokens1h'),
           );
           if (usageRecord.raw !== undefined) {
             stepUsage.raw = usageRecord.raw;
@@ -1092,10 +1137,54 @@ export class SessionRunEngine {
         }
         break;
       }
+      case 'data-sandbox-exit': {
+        const d = getDataRecord(chunk);
+        const toolCallId = getString(d?.toolCallId);
+        const exitCode = getOptionalNumber(d?.exitCode);
+        if (toolCallId && exitCode !== undefined) {
+          this.#session.emit({
+            type: 'command_exit',
+            toolCallId,
+            exitCode,
+            success: getBoolean(d?.success, exitCode === 0),
+          });
+        }
+        break;
+      }
 
       default:
         break;
     }
+  }
+
+  /**
+   * Mark a tool call as denied on the in-flight assistant message and notify
+   * subscribers, mirroring what the `tool-output-denied` chunk would do. Used
+   * when the run is torn down before that chunk can be consumed (abort while a
+   * tool-approval gate is parked).
+   */
+  private settleToolCallAsDenied(
+    state: StreamState,
+    { toolCallId, toolName, args }: { toolCallId: string; toolName: string; args: unknown },
+  ): void {
+    const toolInvocation: MastraToolInvocationPart['toolInvocation'] = {
+      state: 'output-denied',
+      toolCallId,
+      toolName,
+      args,
+      approval: { id: toolCallId, approved: false, reason: ABORTED_BY_USER_REASON },
+    };
+
+    const toolIndex = state.toolPartById.get(toolCallId);
+    const existing = toolIndex !== undefined ? state.currentMessage.content.parts[toolIndex] : undefined;
+    if (existing && existing.type === 'tool-invocation') {
+      existing.toolInvocation = Object.assign(existing.toolInvocation, toolInvocation);
+    } else {
+      state.currentMessage.content.parts.push({ type: 'tool-invocation', toolInvocation });
+    }
+
+    this.#session.emit({ type: 'tool_end', toolCallId, result: ABORTED_BY_USER_REASON, isError: false, denied: true });
+    this.#session.emit({ type: 'message_update', message: state.currentMessage });
   }
 
   private finishStreamState(state: StreamState): { message: MastraDBMessage; suspended?: boolean } {
@@ -1123,17 +1212,17 @@ export class SessionRunEngine {
         : aborted || this.#session.run.isAbortRequested()
           ? 'aborted'
           : 'complete';
-    this.#session.emit({ type: 'agent_end', reason });
+    await this.#session.finishAgentRun(reason);
     this.#session.run.reset();
     await this.#session.drainFollowUpQueue();
   }
 
   private async handleSubscribedStreamError(error: unknown): Promise<void> {
     if (error instanceof Error && error.name === 'AbortError') {
-      this.#session.emit({ type: 'agent_end', reason: 'aborted' });
+      await this.#session.finishAgentRun('aborted');
     } else {
       this.#session.emit({ type: 'error', error: getErrorFromUnknown(error) });
-      this.#session.emit({ type: 'agent_end', reason: 'error' });
+      await this.#session.finishAgentRun('error');
     }
     this.#session.stream.detach();
     this.#session.run.reset();
@@ -1142,6 +1231,7 @@ export class SessionRunEngine {
 
   async processSubscribedThreadStream(subscription: AgentThreadSubscription<StreamChunk>): Promise<void> {
     let currentRun: StreamState | undefined;
+    let requestContext!: RequestContext;
     let bailed = false;
 
     const consume = async (): Promise<void> => {
@@ -1153,11 +1243,13 @@ export class SessionRunEngine {
         }
 
         if (!currentRun) {
+          const runId = ('runId' in chunk ? chunk.runId : undefined) ?? subscription.activeRunId();
           currentRun = this.createStreamState();
           this.#session.run.nextOperation();
           this.#session.run.ensureAbortController();
-          this.#session.run.setRunId({ runId: subscription.activeRunId() ?? ('runId' in chunk ? chunk.runId : null) });
+          this.#session.run.setRunId({ runId });
           this.#session.run.setTraceId({ traceId: null });
+          requestContext = await this.#machinery.buildRequestContext(subscription.__getCurrentRunRequestContext?.());
           this.#session.emit({ type: 'agent_start' });
         }
 
@@ -1166,7 +1258,6 @@ export class SessionRunEngine {
         }
 
         try {
-          const requestContext = await this.#machinery.buildRequestContext(this.#requestContext);
           const streamResult = await this.processStreamChunk(currentRun, chunk, requestContext);
           if (
             streamResult ||

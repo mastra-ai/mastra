@@ -6,7 +6,8 @@ import type { PubSub } from '../../../../events/pubsub';
 import type { Mastra } from '../../../../mastra';
 import type { MastraMemory } from '../../../../memory/memory';
 import type { MemoryConfig } from '../../../../memory/types';
-import type { ExportedSpan, SpanType } from '../../../../observability';
+import { EntityType, SpanType } from '../../../../observability';
+import type { ExportedSpan } from '../../../../observability';
 import type { ProcessorState } from '../../../../processors';
 import { ProcessorRunner } from '../../../../processors/runner';
 import type { ChunkType } from '../../../../stream/types';
@@ -18,8 +19,9 @@ import { createStep } from '../../../../workflows/workflow';
 import { stopGoalActivity } from '../../../goal';
 import type { MessageList } from '../../../message-list';
 import type { SaveQueueManager } from '../../../save-queue';
+import { resolveDeclineReason } from '../../../tool-approval';
 import { DurableStepIds } from '../../constants';
-import { globalRunRegistry } from '../../run-registry';
+import { globalRunRegistry, markRunActive } from '../../run-registry';
 import { emitSuspendedEvent, emitChunkEvent } from '../../stream-adapter';
 import type {
   DurableToolCallInput,
@@ -30,6 +32,7 @@ import type {
 import { applyToolPayloadTransformToChunk } from '../../utils/apply-tool-payload-transform';
 import { rebuildRunToolsFromMastra, resolveTool, toolRequiresApproval } from '../../utils/resolve-runtime';
 import { serializeError } from '../../utils/serialize-state';
+import { normalizeModelOutput } from './normalize-model-output';
 
 /**
  * Input schema for the durable tool call step.
@@ -52,6 +55,7 @@ const durableToolCallInputSchema = z.object({
  */
 const durableToolCallOutputSchema = durableToolCallInputSchema.extend({
   result: z.any().optional(),
+  modelOutputComputed: z.boolean().optional(),
   error: z
     .object({
       name: z.string(),
@@ -249,6 +253,12 @@ export function createDurableToolCallStep() {
         resumeDataFromArgs = resumeDataFromInput;
       }
       const resumeData = resumeDataFromArgs ?? workflowResumeData;
+      const approvalDecision =
+        workflowResumeData != null &&
+        typeof workflowResumeData === 'object' &&
+        typeof (workflowResumeData as Record<string, unknown>).approved === 'boolean'
+          ? (workflowResumeData as { approved: boolean; reason?: string })
+          : undefined;
 
       // Get context from init data (the parent workflow input)
       const initData = getInitData<{
@@ -382,6 +392,7 @@ export function createDurableToolCallStep() {
           state: state as any,
           options: agentOptions,
           requestContextEntries: initData.requestContextEntries,
+          requestContext,
           logger,
         });
         if (rebuilt) {
@@ -622,11 +633,18 @@ export function createDurableToolCallStep() {
         await doFlush();
       };
 
-      if (requiresApproval && !resumeData) {
+      const suspendedForApproval =
+        suspendData != null &&
+        typeof suspendData === 'object' &&
+        (suspendData as { type?: unknown }).type === 'approval';
+      const approvalGated = suspendedForApproval || (requiresApproval && suspendData === undefined);
+
+      if (approvalGated && !approvalDecision) {
         const resumeSchema = JSON.stringify({
           type: 'object',
           properties: {
             approved: { type: 'boolean' },
+            reason: { type: 'string' },
           },
           required: ['approved'],
         });
@@ -678,21 +696,14 @@ export function createDurableToolCallStep() {
         );
       }
 
-      // Check if resuming from approval — only when the tool actually requires
-      // approval.  Without the `requiresApproval` guard, generic resume data that
-      // happens to contain an `approved` field (e.g. from context.agent.suspend())
-      // would be misinterpreted as an approval response.
-      if (
-        requiresApproval &&
-        resumeData &&
-        typeof resumeData === 'object' &&
-        resumeData !== null &&
-        'approved' in resumeData
-      ) {
+      // Check if resuming from approval. Without the `approvalGated` guard,
+      // generic resume data that happens to contain an `approved` field (e.g. from
+      // context.agent.suspend()) would be misinterpreted as an approval response.
+      if (approvalGated && approvalDecision) {
         // Remove approval metadata since we're resuming (either approved or declined)
         await removeToolMetadata('approval');
 
-        if (!(resumeData as { approved: boolean }).approved) {
+        if (!approvalDecision.approved) {
           // Return the approval decision (not a `result` string) so it persists as
           // `state: 'output-denied'` with `approval`. The denial reason carries the
           // existing string so downstream consumers/UI keep the same message.
@@ -701,7 +712,7 @@ export function createDurableToolCallStep() {
           const approval = {
             id: toolCallId,
             approved: false as const,
-            reason: 'Tool call was not approved by the user',
+            reason: resolveDeclineReason(approvalDecision),
           };
           if (pubsub) {
             try {
@@ -744,22 +755,13 @@ export function createDurableToolCallStep() {
       // When an approval-gated tool is approved on resume, tag the resolved output with the
       // approval decision so it round-trips through persistence as `approval: { approved: true }`.
       const approvalGrant =
-        requiresApproval &&
-        resumeData &&
-        typeof resumeData === 'object' &&
-        resumeData !== null &&
-        (resumeData as { approved?: boolean }).approved === true
+        approvalGated && approvalDecision?.approved === true
           ? ({ approval: { id: toolCallId, approved: true as const } } as const)
           : undefined;
 
-      // Check if resuming from in-execution suspension
-      // Pass resumeData through to the tool so it can continue from where it left off.
-      // For approval-gated tools, only an object with an `approved` field is an
-      // approval decision; any other defined resume data is forwarded from an
-      // in-execution suspension.
-      const isResumingFromSuspension =
-        resumeData !== undefined &&
-        !(requiresApproval && typeof resumeData === 'object' && resumeData !== null && 'approved' in resumeData);
+      // Check if resuming from in-execution suspension. Once the approval gate has
+      // resolved, all later resume data belongs to the tool's own suspension schema.
+      const isResumingFromSuspension = resumeData !== undefined && !approvalGated;
 
       // Remove suspension metadata when resuming from an in-execution (non-approval-decision) suspension.
       // `isResumingFromSuspension` already excludes the approval-decision case above.
@@ -848,6 +850,7 @@ export function createDurableToolCallStep() {
         messages: [],
         workspace,
         requestContext,
+        mcp: registryEntry?.mcp,
         tracingContext: toolTracingContext,
         // Use the actor supplied for this workflow segment. A resumed segment
         // must never recover the initial actor from serialized agent options.
@@ -892,6 +895,7 @@ export function createDurableToolCallStep() {
               type: 'object',
               properties: {
                 approved: { type: 'boolean' },
+                reason: { type: 'string' },
               },
               required: ['approved'],
             });
@@ -1279,7 +1283,13 @@ export function createDurableToolCallStep() {
       }
 
       try {
-        const result = await tool.execute(cleanedArgs, toolOptions);
+        const releaseRunActivity = markRunActive(runId);
+        let result: unknown;
+        try {
+          result = await tool.execute(cleanedArgs, toolOptions);
+        } finally {
+          releaseRunActivity();
+        }
 
         // Fire onOutput lifecycle hook after successful execution (matches non-durable path).
         if (tool && 'onOutput' in tool && typeof (tool as any).onOutput === 'function') {
@@ -1291,6 +1301,44 @@ export function createDurableToolCallStep() {
             });
           } catch (hookError) {
             logger?.error?.('Error calling onOutput', hookError);
+          }
+        }
+
+        // Compute model-facing output while invocation-scoped execution metadata is still available.
+        // Durable step outputs are serialized before the LLM mapping step, which strips symbols and
+        // other non-JSON side channels used by tools such as MCP structured-output tools.
+        let providerMetadata = typedInput.providerMetadata;
+        let modelOutputComputed: boolean | undefined;
+        const mappingTool = globalRunRegistry.get(runId)?.tools?.[toolName] ?? tool;
+        const toModelOutput = mappingTool.toModelOutput;
+        if (toModelOutput) {
+          modelOutputComputed = true;
+          const mappingSpan = stepSpan?.createChildSpan({
+            type: SpanType.MAPPING,
+            name: `tool output mapping: '${toolName}'`,
+            entityType: EntityType.TOOL,
+            entityId: toolName,
+            entityName: toolName,
+            input: result,
+            attributes: {
+              mappingType: 'toModelOutput',
+              toolCallId,
+            },
+          });
+          try {
+            const modelOutput = normalizeModelOutput(await toModelOutput(result));
+            mappingSpan?.end({ output: modelOutput });
+
+            if (modelOutput != null) {
+              const existingMastra = (providerMetadata as any)?.mastra;
+              providerMetadata = {
+                ...providerMetadata,
+                mastra: { ...existingMastra, modelOutput },
+              };
+            }
+          } catch (mappingError) {
+            mappingSpan?.error({ error: mappingError as Error, endSpan: true });
+            logger?.warn?.(`[DurableAgent] toModelOutput failed for tool "${toolName}": ${mappingError}`);
           }
         }
 
@@ -1335,7 +1383,9 @@ export function createDurableToolCallStep() {
 
         return {
           ...typedInput,
+          providerMetadata,
           result,
+          modelOutputComputed,
           ...(approvalGrant ?? {}),
         };
       } catch (error) {

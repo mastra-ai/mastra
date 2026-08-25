@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DirectExecWebSocket, DirectExecWebSocketFactory } from './direct-exec.js';
 import { PlatformSandbox, type SandboxAddressRegistry } from './sandbox.js';
 
@@ -21,6 +21,18 @@ function leaseResponse(overrides: { jwt?: string; expiresAt?: string | null } = 
     // Explicit key check so `expiresAt: null` isn't collapsed to the default
     // by nullish coalescing (which treats null and undefined the same).
     expiresAt: 'expiresAt' in overrides ? overrides.expiresAt : '2030-01-01T00:00:00.000Z',
+  });
+}
+
+function e2bLeaseResponse() {
+  return json({
+    provider: 'e2b',
+    sandboxId: 'sbx_1',
+    providerResourceId: 'e2b_sbx_1',
+    jwt: 'envd-access-token',
+    wsEndpoint: 'https://49983-e2b-sbx-1.e2b.app',
+    subprotocol: 'e2b-access-token',
+    expiresAt: '2030-01-01T00:00:00.000Z',
   });
 }
 
@@ -82,6 +94,10 @@ class FakeSocket implements DirectExecWebSocket {
 }
 
 describe('PlatformSandbox', () => {
+  beforeEach(() => {
+    vi.stubEnv('SANDBOX_PROVIDER', 'railway');
+  });
+
   afterEach(() => {
     vi.unstubAllEnvs();
   });
@@ -107,11 +123,11 @@ describe('PlatformSandbox', () => {
 
     expect(result).toMatchObject({ success: true, exitCode: 0, stdout: 'ok', stderr: '', command: 'echo ok' });
     // Provision request first.
-    expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox');
+    expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v1/railway/projects/proj_123/sandbox');
     expect(await (fetchMock.mock.calls[0]![1].body as string)).toContain('env_123');
     // Then the exec-lease mint — no /exec HTTP hit.
     expect(String(fetchMock.mock.calls[1]![0])).toBe(
-      'https://proxy.test/v1/projects/proj_123/sandbox/sbx_1/exec-lease',
+      'https://proxy.test/v1/railway/projects/proj_123/sandbox/sbx_1/exec-lease',
     );
     expect(fetchMock).toHaveBeenCalledTimes(2);
     // Exec ran over the direct WS with the lease's endpoint + subprotocols.
@@ -121,6 +137,149 @@ describe('PlatformSandbox', () => {
     // init_exec frame carries command + cwd + env.
     const init = JSON.parse(sockets[0]!.sent[0]!) as { data: Record<string, unknown> };
     expect(init.data).toEqual({ command: 'echo ok', cwd: '/workspace', env: { A: '1' } });
+  });
+
+  it('setEnv after construction reaches subsequent exec frames', async () => {
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+      .mockResolvedValueOnce(leaseResponse());
+    const { factory, sockets } = fakeExecSocket({ exitCode: 0, stdout: 'ok' });
+
+    const sandbox = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      fetch: fetchMock,
+      webSocketFactory: factory,
+    });
+
+    await sandbox._start();
+    sandbox.setEnv(env => ({ ...env, GH_TOKEN: 'tok_1' }));
+    const result = await sandbox.executeCommand('echo', ['ok'], { env: { A: '1' } });
+
+    expect(result).toMatchObject({ success: true, exitCode: 0 });
+    const init = JSON.parse(sockets[0]!.sent[0]!) as { data: Record<string, unknown> };
+    expect(init.data).toEqual({ command: 'echo ok', env: { GH_TOKEN: 'tok_1', A: '1' } });
+  });
+
+  it('uses E2B direct exec for E2B leases instead of the Railway WebSocket protocol', async () => {
+    vi.stubEnv('SANDBOX_PROVIDER', 'e2b');
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+      .mockResolvedValueOnce(e2bLeaseResponse());
+    const e2bExecRunner = vi.fn().mockResolvedValue({
+      exitCode: 0,
+      stdout: 'ok',
+      stderr: '',
+      truncated: false,
+      timedOut: false,
+      opened: true,
+    });
+    const webSocketFactory = vi.fn(() => {
+      throw new Error('Railway WebSocket transport should not be used for E2B');
+    });
+    const sandbox = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      fetch: fetchMock,
+      e2bExecRunner,
+      webSocketFactory,
+    });
+
+    await sandbox._start();
+    const result = await sandbox.executeCommand('echo', ['ok'], { cwd: '/workspace', env: { A: '1' } });
+
+    expect(result).toMatchObject({ success: true, exitCode: 0, stdout: 'ok' });
+    expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v1/e2b/projects/proj_123/sandbox');
+    expect(String(fetchMock.mock.calls[1]![0])).toBe(
+      'https://proxy.test/v1/e2b/projects/proj_123/sandbox/sbx_1/exec-lease',
+    );
+    expect(e2bExecRunner).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: 'e2b',
+        sandboxId: 'sbx_1',
+        jwt: 'envd-access-token',
+        wsEndpoint: 'https://49983-e2b-sbx-1.e2b.app',
+      }),
+      expect.objectContaining({ command: 'echo ok', cwd: '/workspace', env: { A: '1' } }),
+    );
+    expect(webSocketFactory).not.toHaveBeenCalled();
+  });
+
+  it('restores E2B clones from the concrete snapshot id', async () => {
+    vi.stubEnv('SANDBOX_PROVIDER', 'e2b');
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi.fn().mockResolvedValueOnce(json({ id: 'sbx_clone' }));
+    const parent = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      fetch: fetchMock,
+    });
+
+    const clone = parent.clone({ checkpointName: 'snap_123' });
+    await clone._start();
+
+    const body = JSON.parse(fetchMock.mock.calls[0]![1].body as string);
+    expect(body).toMatchObject({ id: 'snap_123', seedCheckpointName: 'snap_123' });
+  });
+
+  it('captures E2B checkpoints even without a caller-supplied recovery id', async () => {
+    vi.stubEnv('SANDBOX_PROVIDER', 'e2b');
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ id: 'sbx_1' }))
+      .mockResolvedValueOnce(json({ checkpointName: 'snap_123', status: 'captured' }));
+    const sandbox = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      fetch: fetchMock,
+    });
+
+    await sandbox._start();
+    await expect(sandbox.captureCheckpoint()).resolves.toEqual({ status: 'captured', checkpointName: 'snap_123' });
+
+    expect(String(fetchMock.mock.calls[1]![0])).toBe(
+      'https://proxy.test/v1/e2b/projects/proj_123/sandbox/sbx_1/checkpoint',
+    );
+    const body = JSON.parse(fetchMock.mock.calls[1]![1].body as string);
+    expect(body.id).toMatch(/^platform-sandbox-/);
+  });
+
+  it('deletes E2B checkpoints created with an automatic recovery id on destroy', async () => {
+    vi.stubEnv('SANDBOX_PROVIDER', 'e2b');
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ id: 'sbx_1' }))
+      .mockResolvedValueOnce(json({ checkpointName: 'snap_123', status: 'captured' }))
+      .mockResolvedValueOnce(json({ status: 'deleted' }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    const sandbox = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      fetch: fetchMock,
+    });
+
+    await sandbox._start();
+    await sandbox.captureCheckpoint();
+    const captureBody = JSON.parse(fetchMock.mock.calls[1]![1].body as string);
+    await sandbox.destroy();
+
+    expect(String(fetchMock.mock.calls[2]![0])).toBe(
+      'https://proxy.test/v1/e2b/projects/proj_123/sandbox/sbx_1/checkpoint',
+    );
+    expect(fetchMock.mock.calls[2]![1].method).toBe('DELETE');
+    expect(JSON.parse(fetchMock.mock.calls[2]![1].body as string)).toEqual({ id: captureBody.id });
+    expect(String(fetchMock.mock.calls[3]![0])).toBe('https://proxy.test/v1/e2b/projects/proj_123/sandbox/sbx_1');
   });
 
   it('does not send a template field on the create wire body', async () => {
@@ -181,7 +340,7 @@ describe('PlatformSandbox', () => {
       await started;
 
       expect(fetchMock).toHaveBeenCalledTimes(2);
-      expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox');
+      expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/railway/projects/proj_123/sandbox');
     } finally {
       vi.useRealTimers();
     }
@@ -252,10 +411,41 @@ describe('PlatformSandbox', () => {
     await sandbox.executeCommand('pwd');
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox/sbx_existing');
-    expect(String(fetchMock.mock.calls[1]![0])).toBe(
-      'https://proxy.test/v1/projects/proj_123/sandbox/sbx_existing/exec-lease',
+    expect(String(fetchMock.mock.calls[0]![0])).toBe(
+      'https://proxy.test/v1/railway/projects/proj_123/sandbox/sbx_existing',
     );
+    expect(String(fetchMock.mock.calls[1]![0])).toBe(
+      'https://proxy.test/v1/railway/projects/proj_123/sandbox/sbx_existing/exec-lease',
+    );
+  });
+
+  it("reports outcome 'connected' on reattach and 'created' on fresh provision", async () => {
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    vi.stubEnv('MASTRA_ENVIRONMENT_ID', 'env_from_process');
+
+    const reattachFetch = vi
+      .fn()
+      .mockResolvedValueOnce(json({ id: 'sbx_existing', createdAt: '2026-06-26T00:00:00.000Z' }));
+    const reattached = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      sandboxId: 'sbx_existing',
+      fetch: reattachFetch,
+    });
+    await expect(reattached._start()).resolves.toEqual({ outcome: 'connected' });
+
+    // A 404 on the reattach GET falls through to POST /sandbox — a fresh VM.
+    const recreateFetch = vi
+      .fn()
+      .mockResolvedValueOnce(json({ error: { message: 'Sandbox not found', type: 'not_found' } }, { status: 404 }))
+      .mockResolvedValueOnce(json({ id: 'sbx_recreated', createdAt: '2026-06-26T00:00:00.000Z' }));
+    const recreated = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      sandboxId: 'sbx_stale',
+      fetch: recreateFetch,
+    });
+    await expect(recreated._start()).resolves.toEqual({ outcome: 'created' });
   });
 
   it('creates a fresh sandbox when the reattached sandbox no longer exists', async () => {
@@ -278,14 +468,16 @@ describe('PlatformSandbox', () => {
     await sandbox._start();
     await sandbox.executeCommand('pwd');
 
-    expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox/sbx_stale');
-    expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox');
+    expect(String(fetchMock.mock.calls[0]![0])).toBe(
+      'https://proxy.test/v1/railway/projects/proj_123/sandbox/sbx_stale',
+    );
+    expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/railway/projects/proj_123/sandbox');
     expect(JSON.parse(fetchMock.mock.calls[1]![1].body as string)).toMatchObject({
       id: sandbox.id,
       environmentId: 'env_from_process',
     });
     expect(String(fetchMock.mock.calls[2]![0])).toBe(
-      'https://proxy.test/v1/projects/proj_123/sandbox/sbx_recreated/exec-lease',
+      'https://proxy.test/v1/railway/projects/proj_123/sandbox/sbx_recreated/exec-lease',
     );
   });
 
@@ -312,9 +504,9 @@ describe('PlatformSandbox', () => {
     await sandbox._start();
     await sandbox.executeCommand('pwd');
 
-    expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox');
+    expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/railway/projects/proj_123/sandbox');
     expect(String(fetchMock.mock.calls[2]![0])).toBe(
-      'https://proxy.test/v1/projects/proj_123/sandbox/sbx_recreated/exec-lease',
+      'https://proxy.test/v1/railway/projects/proj_123/sandbox/sbx_recreated/exec-lease',
     );
   });
 
@@ -363,7 +555,7 @@ describe('PlatformSandbox', () => {
 
     // DELETE was aimed at sbx_1.
     expect(fetchMock.mock.calls[1]![1].method).toBe('DELETE');
-    expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox/sbx_1');
+    expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/railway/projects/proj_123/sandbox/sbx_1');
 
     // getInfo() falls back to the local, no-remote branch because _sandboxId is cleared.
     // (Previously it would GET /sandbox/sbx_1 — a dead resource.)
@@ -482,7 +674,7 @@ describe('PlatformSandbox', () => {
       // Second exec re-minted because expiry - margin < now.
       expect(fetchMock).toHaveBeenCalledTimes(3);
       expect(String(fetchMock.mock.calls[2]![0])).toBe(
-        'https://proxy.test/v1/projects/proj_123/sandbox/sbx_1/exec-lease',
+        'https://proxy.test/v1/railway/projects/proj_123/sandbox/sbx_1/exec-lease',
       );
       // Each socket opened with the JWT that was current at that moment.
       expect(sockets[0]!.subprotocols[1]).toBe('jwt.old');
@@ -540,7 +732,7 @@ describe('PlatformSandbox', () => {
       // Provision + failed mint only — no /exec request.
       expect(fetchMock).toHaveBeenCalledTimes(2);
       expect(String(fetchMock.mock.calls[1]![0])).toBe(
-        'https://proxy.test/v1/projects/proj_123/sandbox/sbx_1/exec-lease',
+        'https://proxy.test/v1/railway/projects/proj_123/sandbox/sbx_1/exec-lease',
       );
     });
 
@@ -577,6 +769,9 @@ describe('PlatformSandbox', () => {
       // triggers a fresh ensureRunning + provision cycle instead of picking
       // up the stale id.
       expect((sandbox as unknown as { _sandboxId: unknown })._sandboxId).toBeUndefined();
+      // Status must reset too: the next `ensureRunning()` re-runs the full
+      // start lifecycle (acquisition + onStart hook), not just a new lease.
+      expect(sandbox.status).toBe('stopped');
     });
 
     it('propagates non-410 errors from the exec-lease mint instead of falling back silently', async () => {
@@ -645,10 +840,10 @@ describe('PlatformSandbox', () => {
       // Fetch sequence: provision, first lease, second lease. No /exec call.
       expect(fetchMock).toHaveBeenCalledTimes(3);
       expect(String(fetchMock.mock.calls[1]![0])).toBe(
-        'https://proxy.test/v1/projects/proj_123/sandbox/sbx_1/exec-lease',
+        'https://proxy.test/v1/railway/projects/proj_123/sandbox/sbx_1/exec-lease',
       );
       expect(String(fetchMock.mock.calls[2]![0])).toBe(
-        'https://proxy.test/v1/projects/proj_123/sandbox/sbx_1/exec-lease',
+        'https://proxy.test/v1/railway/projects/proj_123/sandbox/sbx_1/exec-lease',
       );
       // Two WS attempts: the failed one and the successful retry, each with
       // a distinct JWT proving the cached lease was dropped between them.
@@ -967,7 +1162,7 @@ describe('PlatformSandbox', () => {
       // Provision + exactly one shared mint (no duplicate) — proves coalescing.
       expect(fetchMock).toHaveBeenCalledTimes(2);
       expect(String(fetchMock.mock.calls[1]![0])).toBe(
-        'https://proxy.test/v1/projects/proj_123/sandbox/sbx_1/exec-lease',
+        'https://proxy.test/v1/railway/projects/proj_123/sandbox/sbx_1/exec-lease',
       );
     });
   });
@@ -1034,9 +1229,7 @@ describe('PlatformSandbox', () => {
       const fetchMock = vi.fn().mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }));
       const { factory: wsFactory, sockets } = fakeExecSocket({ exitCode: 0, stdout: 'ok' });
       const priv = streamingPrivateNetFetch();
-      const { registry } = fakeAddressRegistry({
-        sbx_1: 'http://[fd12:752d:16f5:1:d000:41:e7de:188c]:47000',
-      });
+      const { registry } = fakeAddressRegistry();
 
       const sandbox = new PlatformSandbox({
         accessToken: 'sk_test',
@@ -1049,6 +1242,9 @@ describe('PlatformSandbox', () => {
       });
 
       await sandbox._start();
+      // start() without instanceUrl evicts leftover addresses. Seed after
+      // start so this test covers the private-net exec path itself.
+      registry.set('sbx_1', 'http://[fd12:752d:16f5:1:d000:41:e7de:188c]:47000');
       const execPromise = sandbox.executeCommand('echo', ['ok'], { cwd: '/workspace', env: { A: '1' } });
       priv.push('{"type":"stdout","data":"ok"}\n');
       priv.push('{"type":"exit","code":0}\n');
@@ -1140,7 +1336,7 @@ describe('PlatformSandbox', () => {
       const privFetch: typeof globalThis.fetch = async () => {
         throw new Error('connect ECONNREFUSED');
       };
-      const { registry, deletes, entries } = fakeAddressRegistry({ sbx_1: 'http://[fd00::1]:47000' });
+      const { registry, deletes, entries } = fakeAddressRegistry();
 
       const sandbox = new PlatformSandbox({
         accessToken: 'sk_test',
@@ -1153,6 +1349,8 @@ describe('PlatformSandbox', () => {
       });
 
       await sandbox._start();
+      registry.set('sbx_1', 'http://[fd00::1]:47000');
+      const deletesAfterStart = deletes.length;
       const result = await sandbox.executeCommand('pwd');
 
       // Fallback served the exec cleanly — no error surfaced to the caller.
@@ -1163,7 +1361,7 @@ describe('PlatformSandbox', () => {
       // start() has to re-read `instanceUrl` from the workspace-proxy
       // response before subsequent execs will trust the private-net path
       // again.
-      expect(deletes).toEqual(['sbx_1']);
+      expect(deletes.slice(deletesAfterStart)).toEqual(['sbx_1']);
       expect(entries.has('sbx_1')).toBe(false);
     });
 
@@ -1180,7 +1378,7 @@ describe('PlatformSandbox', () => {
         privCalls++;
         throw new Error('connect ECONNREFUSED');
       };
-      const { registry } = fakeAddressRegistry({ sbx_1: 'http://[fd00::1]:47000' });
+      const { registry } = fakeAddressRegistry();
 
       const sandbox = new PlatformSandbox({
         accessToken: 'sk_test',
@@ -1193,6 +1391,7 @@ describe('PlatformSandbox', () => {
       });
 
       await sandbox._start();
+      registry.set('sbx_1', 'http://[fd00::1]:47000');
       await sandbox.executeCommand('one');
       await sandbox.executeCommand('two');
 
@@ -1227,7 +1426,7 @@ describe('PlatformSandbox', () => {
         });
         return new Response(stream, { status: 200 });
       };
-      const { registry, deletes } = fakeAddressRegistry({ sbx_1: 'http://[fd00::1]:47000' });
+      const { registry, deletes } = fakeAddressRegistry();
 
       const sandbox = new PlatformSandbox({
         accessToken: 'sk_test',
@@ -1240,6 +1439,8 @@ describe('PlatformSandbox', () => {
       });
 
       await sandbox._start();
+      registry.set('sbx_1', 'http://[fd00::1]:47000');
+      const deletesAfterStart = deletes.length;
       // First exec: 500 → fall back to lease. Registry entry preserved.
       const first = await sandbox.executeCommand('one');
       expect(first.stdout).toBe('ok');
@@ -1249,7 +1450,7 @@ describe('PlatformSandbox', () => {
 
       // Both private-net attempts happened; the 500 did not evict the entry.
       expect(privCallCount).toBe(2);
-      expect(deletes).toEqual([]);
+      expect(deletes.slice(deletesAfterStart)).toEqual([]);
     });
 
     it('clone looks up its own sandboxId in the shared registry, not the parent address', async () => {
@@ -1293,7 +1494,7 @@ describe('PlatformSandbox', () => {
       vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
       const fetchMock = vi.fn().mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }));
       const priv = streamingPrivateNetFetch();
-      const { registry } = fakeAddressRegistry({ sbx_1: 'http://[fd00::1]:47000' });
+      const { registry } = fakeAddressRegistry();
 
       const sandbox = new PlatformSandbox({
         accessToken: 'sk_test',
@@ -1304,6 +1505,7 @@ describe('PlatformSandbox', () => {
         addressRegistry: registry,
       });
       await sandbox._start();
+      registry.set('sbx_1', 'http://[fd00::1]:47000');
       const execPromise = sandbox.executeCommand('x');
       priv.push('{"type":"exit","code":0}\n');
       priv.end();
@@ -1322,7 +1524,7 @@ describe('PlatformSandbox', () => {
         .fn()
         .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
         .mockResolvedValueOnce(new Response(null, { status: 204 }));
-      const { registry, deletes, entries } = fakeAddressRegistry({ sbx_1: 'http://[fd00::1]:47000' });
+      const { registry, deletes, entries } = fakeAddressRegistry();
 
       const sandbox = new PlatformSandbox({
         accessToken: 'sk_test',
@@ -1333,9 +1535,11 @@ describe('PlatformSandbox', () => {
       });
 
       await sandbox._start();
+      registry.set('sbx_1', 'http://[fd00::1]:47000');
+      const deletesAfterStart = deletes.length;
       await sandbox.destroy();
 
-      expect(deletes).toEqual(['sbx_1']);
+      expect(deletes.slice(deletesAfterStart)).toEqual(['sbx_1']);
       expect(entries.has('sbx_1')).toBe(false);
     });
 
@@ -1350,7 +1554,7 @@ describe('PlatformSandbox', () => {
       vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
       const fetchMock = vi.fn().mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }));
       const { factory: wsFactory, sockets } = fakeExecSocket({ exitCode: 0, stdout: 'lease-ran-it' });
-      const { registry, deletes, entries } = fakeAddressRegistry({ sbx_1: 'http://[fd12::1]:47000' });
+      const { registry, deletes, entries } = fakeAddressRegistry();
 
       // A private-net fetch that respects the AbortSignal — never resolves
       // on its own, only rejects when the transport's own timer fires.
@@ -1376,6 +1580,8 @@ describe('PlatformSandbox', () => {
         addressRegistry: registry,
       });
       await sandbox._start();
+      registry.set('sbx_1', 'http://[fd12::1]:47000');
+      const deletesAfterStart = deletes.length;
 
       const result = await sandbox.executeCommand('rm -rf /nope');
 
@@ -1389,11 +1595,11 @@ describe('PlatformSandbox', () => {
       expect(fetchMock.mock.calls).toHaveLength(1);
       // Address is still evicted so the next exec doesn't dial into the
       // same hang — but the timed-out RESULT went back to the caller.
-      expect(deletes).toEqual(['sbx_1']);
+      expect(deletes.slice(deletesAfterStart)).toEqual(['sbx_1']);
       expect(entries.has('sbx_1')).toBe(false);
     });
 
-    it('populates the registry from the create response instanceUrl field on a fresh provision', async () => {
+    it('populates the registry after the sidecar /health probe succeeds on fresh provision', async () => {
       vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
       const fetchMock = vi.fn().mockResolvedValueOnce(
         json({
@@ -1402,6 +1608,8 @@ describe('PlatformSandbox', () => {
           instanceUrl: 'http://[fd12:752d:16f5:1:d000:41:e7de:188c]:47000',
         }),
       );
+      // Sidecar health probe succeeds immediately.
+      const privateNetFetch = vi.fn().mockResolvedValue(new Response('ok', { status: 200 }));
       const { registry, sets, entries } = fakeAddressRegistry();
 
       const sandbox = new PlatformSandbox({
@@ -1409,19 +1617,27 @@ describe('PlatformSandbox', () => {
         projectId: 'proj_123',
         environmentId: 'env_123',
         fetch: fetchMock,
+        privateNetFetch,
         addressRegistry: registry,
       });
       await sandbox._start();
 
-      // The one `set` came from the create response — no discovery exec,
-      // no side channel. Field copy, that's it.
+      // Registry is NOT populated immediately — the fire-and-forget probe
+      // runs asynchronously. Wait for the probe to resolve.
+      await vi.waitFor(() => expect(sets.length).toBeGreaterThan(0));
+
       expect(sets).toEqual([
         { sandboxId: 'sbx_fresh', instanceUrl: 'http://[fd12:752d:16f5:1:d000:41:e7de:188c]:47000' },
       ]);
       expect(entries.get('sbx_fresh')).toBe('http://[fd12:752d:16f5:1:d000:41:e7de:188c]:47000');
+      // The probe called /health on the sidecar.
+      expect(privateNetFetch).toHaveBeenCalledWith(
+        'http://[fd12:752d:16f5:1:d000:41:e7de:188c]:47000/health',
+        expect.objectContaining({ method: 'GET' }),
+      );
     });
 
-    it('populates the registry from the reattach GET response instanceUrl on session recovery', async () => {
+    it('populates the registry after the sidecar /health probe succeeds on session recovery', async () => {
       vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
       // Reattach path: GET /sandbox/:id succeeds with the proxy-cached
       // instanceUrl for a live sandbox. No POST /sandbox is issued.
@@ -1432,6 +1648,8 @@ describe('PlatformSandbox', () => {
           instanceUrl: 'http://[fd12::abcd]:47000',
         }),
       );
+      // Sidecar health probe succeeds immediately.
+      const privateNetFetch = vi.fn().mockResolvedValue(new Response('ok', { status: 200 }));
       const { registry, sets } = fakeAddressRegistry();
 
       const sandbox = new PlatformSandbox({
@@ -1439,14 +1657,20 @@ describe('PlatformSandbox', () => {
         projectId: 'proj_123',
         sandboxId: 'sbx_existing',
         fetch: fetchMock,
+        privateNetFetch,
         addressRegistry: registry,
       });
       await sandbox._start();
 
-      // Only the reattach GET fired — proxy's cached instanceUrl went
-      // straight into the registry with no extra round-trip.
+      // Wait for the fire-and-forget probe to resolve.
+      await vi.waitFor(() => expect(sets.length).toBeGreaterThan(0));
+
+      // Only the reattach GET fired — proxy's cached instanceUrl went into
+      // the registry after the sidecar health probe succeeded.
       expect(fetchMock).toHaveBeenCalledTimes(1);
-      expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox/sbx_existing');
+      expect(String(fetchMock.mock.calls[0]![0])).toBe(
+        'https://proxy.test/v1/railway/projects/proj_123/sandbox/sbx_existing',
+      );
       expect(sets).toEqual([{ sandboxId: 'sbx_existing', instanceUrl: 'http://[fd12::abcd]:47000' }]);
     });
 
@@ -1478,14 +1702,14 @@ describe('PlatformSandbox', () => {
       expect(entries.size).toBe(0);
       expect(result.success).toBe(true);
       expect(String(fetchMock.mock.calls[1]![0])).toBe(
-        'https://proxy.test/v1/projects/proj_123/sandbox/sbx_1/exec-lease',
+        'https://proxy.test/v1/railway/projects/proj_123/sandbox/sbx_1/exec-lease',
       );
     });
 
     it('leaves the registry untouched when the create response has instanceUrl: null', async () => {
       // The proxy explicitly returns `null` when its discovery exec failed
       // during Sandbox.create(); this must be treated the same as an absent
-      // field — leave the registry alone, exec via lease.
+      // field — leave an empty registry empty, exec via lease.
       vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
       const fetchMock = vi
         .fn()
@@ -1501,6 +1725,31 @@ describe('PlatformSandbox', () => {
       });
       await sandbox._start();
 
+      expect(sets).toEqual([]);
+    });
+
+    it('evicts a stale registry entry when the create response has instanceUrl: null', async () => {
+      // Reattach after a previous start can leave a leftover URL. A later
+      // start with no address must drop that entry so execs do not dial it.
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z', instanceUrl: null }));
+      const { registry, sets, deletes, entries } = fakeAddressRegistry({
+        sbx_1: 'http://[fd12::1]:47000',
+      });
+
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+        addressRegistry: registry,
+      });
+      await sandbox._start();
+
+      expect(deletes).toEqual(['sbx_1']);
+      expect(entries.size).toBe(0);
       expect(sets).toEqual([]);
     });
 
@@ -1523,7 +1772,7 @@ describe('PlatformSandbox', () => {
         // no addressRegistry
       });
 
-      await expect(sandbox._start()).resolves.toBeUndefined();
+      await expect(sandbox._start()).resolves.toEqual({ outcome: 'created' });
       expect(fetchMock).toHaveBeenCalledTimes(1);
     });
 
@@ -1543,16 +1792,21 @@ describe('PlatformSandbox', () => {
           instanceUrl: 'http://[fd12::1]:47000',
         }),
       );
-      const { registry } = fakeAddressRegistry();
+      // Sidecar probe succeeds immediately.
+      const privateNetFetch = vi.fn().mockResolvedValue(new Response('ok', { status: 200 }));
+      const { registry, sets } = fakeAddressRegistry();
 
       const sandbox = new PlatformSandbox({
         accessToken: 'sk_test',
         projectId: 'proj_123',
         environmentId: 'env_123',
         fetch: fetchMock,
+        privateNetFetch,
         addressRegistry: registry,
       });
       await sandbox._start();
+      // Wait for the fire-and-forget probe to populate the registry.
+      await vi.waitFor(() => expect(sets.length).toBeGreaterThan(0));
 
       const info = await sandbox.getInfo();
 
@@ -1588,7 +1842,7 @@ describe('PlatformSandbox', () => {
       await sandbox.getInfo();
 
       expect(fetchMock).toHaveBeenCalledTimes(2);
-      expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox/sbx_1');
+      expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/railway/projects/proj_123/sandbox/sbx_1');
     });
 
     it('getInfo() falls through to the proxy when no addressRegistry is configured at all', async () => {
@@ -1617,7 +1871,7 @@ describe('PlatformSandbox', () => {
       await sandbox.getInfo();
 
       expect(fetchMock).toHaveBeenCalledTimes(2);
-      expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox/sbx_1');
+      expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/railway/projects/proj_123/sandbox/sbx_1');
     });
 
     it('getInfo() falls through to the proxy after the registry entry has been evicted', async () => {
@@ -1652,7 +1906,447 @@ describe('PlatformSandbox', () => {
 
       await sandbox.getInfo();
       expect(fetchMock).toHaveBeenCalledTimes(2);
-      expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox/sbx_1');
+      expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/railway/projects/proj_123/sandbox/sbx_1');
+    });
+
+    describe('sidecar probe', () => {
+      // Fake-timer tests below must not leak fake timers into later tests
+      // when an assertion fails before their trailing vi.useRealTimers().
+      afterEach(() => {
+        vi.useRealTimers();
+      });
+
+      it('retries the /health probe until it succeeds', async () => {
+        vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+        const fetchMock = vi.fn().mockResolvedValueOnce(
+          json({
+            id: 'sbx_probe',
+            createdAt: '2026-06-26T00:00:00.000Z',
+            instanceUrl: 'http://[fd12::1]:47000',
+          }),
+        );
+        // Sidecar returns 503 twice, then 200.
+        const privateNetFetch = vi
+          .fn()
+          .mockRejectedValueOnce(new Error('ECONNREFUSED'))
+          .mockResolvedValueOnce(new Response('', { status: 503 }))
+          .mockResolvedValueOnce(new Response('ok', { status: 200 }));
+        const { registry, sets } = fakeAddressRegistry();
+
+        const sandbox = new PlatformSandbox({
+          accessToken: 'sk_test',
+          projectId: 'proj_123',
+          environmentId: 'env_123',
+          fetch: fetchMock,
+          privateNetFetch,
+          addressRegistry: registry,
+        });
+        await sandbox._start();
+
+        // Wait for the probe to succeed after retries.
+        await vi.waitFor(() => expect(sets.length).toBeGreaterThan(0));
+
+        expect(sets).toEqual([{ sandboxId: 'sbx_probe', instanceUrl: 'http://[fd12::1]:47000' }]);
+        // Three /health attempts: connection refused, 503, 200.
+        expect(privateNetFetch).toHaveBeenCalledTimes(3);
+      });
+
+      it('logs one probe-ok line with duration and attempt count on first 200', async () => {
+        vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+        const fetchMock = vi.fn().mockResolvedValueOnce(
+          json({
+            id: 'sbx_probe_log',
+            createdAt: '2026-06-26T00:00:00.000Z',
+            instanceUrl: 'http://[fd12::1]:47000',
+          }),
+        );
+        const privateNetFetch = vi
+          .fn()
+          .mockRejectedValueOnce(new Error('ECONNREFUSED'))
+          .mockResolvedValueOnce(new Response('ok', { status: 200 }));
+        const { registry, sets } = fakeAddressRegistry();
+
+        const sandbox = new PlatformSandbox({
+          accessToken: 'sk_test',
+          projectId: 'proj_123',
+          environmentId: 'env_123',
+          sessionId: 'sess_42',
+          fetch: fetchMock,
+          privateNetFetch,
+          addressRegistry: registry,
+        });
+        const loggerInfoSpy = vi.spyOn((sandbox as any).logger, 'info');
+        await sandbox._start();
+        await vi.waitFor(() => expect(sets.length).toBeGreaterThan(0));
+
+        expect(loggerInfoSpy).toHaveBeenCalledWith(
+          'platform-workspace probe ok',
+          expect.objectContaining({
+            sandboxId: 'sbx_probe_log',
+            sessionId: 'sess_42',
+            probeDurationMs: expect.any(Number),
+            attempts: 2,
+          }),
+        );
+      });
+
+      it('leaves the registry empty when the probe times out', async () => {
+        vi.useFakeTimers();
+        vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+        const fetchMock = vi.fn().mockResolvedValueOnce(
+          json({
+            id: 'sbx_timeout',
+            createdAt: '2026-06-26T00:00:00.000Z',
+            instanceUrl: 'http://[fd12::1]:47000',
+          }),
+        );
+        // Sidecar never responds with 200.
+        const privateNetFetch = vi.fn().mockRejectedValue(new Error('ECONNREFUSED'));
+        const { registry, sets, entries } = fakeAddressRegistry();
+
+        const sandbox = new PlatformSandbox({
+          accessToken: 'sk_test',
+          projectId: 'proj_123',
+          environmentId: 'env_123',
+          sessionId: 'sess_42',
+          fetch: fetchMock,
+          privateNetFetch,
+          addressRegistry: registry,
+        });
+        const loggerWarnSpy = vi.spyOn((sandbox as any).logger, 'warn');
+        await sandbox._start();
+
+        // Advance past the probe timeout (30s).
+        await vi.advanceTimersByTimeAsync(35_000);
+
+        // Registry was never populated.
+        expect(sets).toEqual([]);
+        expect(entries.size).toBe(0);
+        // Timeout is logged once, with enough context to join back to the session.
+        expect(loggerWarnSpy).toHaveBeenCalledWith(
+          'platform-workspace probe timed out',
+          expect.objectContaining({
+            sandboxId: 'sbx_timeout',
+            sessionId: 'sess_42',
+            timeoutMs: 30_000,
+            attempts: expect.any(Number),
+          }),
+        );
+        vi.useRealTimers();
+      });
+
+      it('restarts a timed-out probe on the next exec instead of pinning the lease path', async () => {
+        vi.useFakeTimers();
+        vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+        const fetchMock = vi.fn().mockResolvedValueOnce(
+          json({
+            id: 'sbx_reprobe',
+            createdAt: '2026-06-26T00:00:00.000Z',
+            instanceUrl: 'http://[fd12::1]:47000',
+          }),
+        );
+        // Sidecar is down for the entire first probe window…
+        const privateNetFetch = vi.fn().mockRejectedValue(new Error('ECONNREFUSED'));
+        const { registry, sets } = fakeAddressRegistry();
+
+        const sandbox = new PlatformSandbox({
+          accessToken: 'sk_test',
+          projectId: 'proj_123',
+          environmentId: 'env_123',
+          sessionId: 'sess_42',
+          fetch: fetchMock,
+          privateNetFetch,
+          addressRegistry: registry,
+        });
+        await sandbox._start();
+        await vi.advanceTimersByTimeAsync(35_000);
+        expect(sets).toEqual([]);
+
+        // …then recovers. The next exec's transport wait restarts the probe
+        // and the registry gets populated instead of leasing forever.
+        privateNetFetch.mockResolvedValue(json({ ok: true }));
+        const wait = (sandbox as any)._awaitTransportReady();
+        await vi.advanceTimersByTimeAsync(1_000);
+        await wait;
+        expect(sets).toEqual([{ sandboxId: 'sbx_reprobe', instanceUrl: 'http://[fd12::1]:47000' }]);
+        vi.useRealTimers();
+      });
+
+      it('does not block start() while the probe is running', async () => {
+        vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+        const fetchMock = vi.fn().mockResolvedValueOnce(
+          json({
+            id: 'sbx_nonblock',
+            createdAt: '2026-06-26T00:00:00.000Z',
+            instanceUrl: 'http://[fd12::1]:47000',
+          }),
+        );
+        // Sidecar probe takes a while to respond.
+        let resolveProbe: (value: Response) => void;
+        const probePromise = new Promise<Response>(r => {
+          resolveProbe = r;
+        });
+        const privateNetFetch = vi.fn().mockReturnValue(probePromise);
+        const { registry, sets } = fakeAddressRegistry();
+
+        const sandbox = new PlatformSandbox({
+          accessToken: 'sk_test',
+          projectId: 'proj_123',
+          environmentId: 'env_123',
+          fetch: fetchMock,
+          privateNetFetch,
+          addressRegistry: registry,
+        });
+
+        // start() resolves immediately — does not wait for probe.
+        await sandbox._start();
+        expect(sandbox.status).toBe('running');
+        expect(sets).toEqual([]); // Registry not yet populated.
+
+        // Now resolve the probe.
+        resolveProbe!(new Response('ok', { status: 200 }));
+        await vi.waitFor(() => expect(sets.length).toBeGreaterThan(0));
+        expect(sets).toEqual([{ sandboxId: 'sbx_nonblock', instanceUrl: 'http://[fd12::1]:47000' }]);
+      });
+
+      it('clears a stale registry entry before starting the probe', async () => {
+        // On reattach, the registry may have the old sandbox's address. The
+        // entry should be deleted immediately so execs fall back to lease
+        // during the probe window rather than dialing the stale address.
+        vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+        const fetchMock = vi.fn().mockResolvedValueOnce(
+          json({
+            id: 'sbx_stale',
+            createdAt: '2026-06-26T00:00:00.000Z',
+            instanceUrl: 'http://[fd12::2]:47000', // new address
+          }),
+        );
+        // Probe hangs — we just want to verify the delete happens before it.
+        const privateNetFetch = vi.fn().mockReturnValue(new Promise(() => {}));
+        // Seed the registry with a stale entry for the same sandbox id.
+        const { registry, sets, deletes, entries } = fakeAddressRegistry({
+          sbx_stale: 'http://[fd12::1]:47000', // old address
+        });
+
+        const sandbox = new PlatformSandbox({
+          accessToken: 'sk_test',
+          projectId: 'proj_123',
+          environmentId: 'env_123',
+          fetch: fetchMock,
+          privateNetFetch,
+          addressRegistry: registry,
+        });
+
+        await sandbox._start();
+
+        // Stale entry was deleted before probe started.
+        expect(deletes).toEqual(['sbx_stale']);
+        // Registry is now empty (probe hasn't resolved yet).
+        expect(entries.size).toBe(0);
+        expect(sets).toEqual([]);
+      });
+
+      it('does not re-populate registry when teardown races the probe', async () => {
+        // Regression test: if destroy() runs while the probe is pending, the
+        // probe should NOT re-populate the registry when it eventually resolves.
+        // Otherwise we'd have a leaked registry entry pointing to a deleted VM.
+        vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+        const fetchMock = vi
+          .fn()
+          // create sandbox
+          .mockResolvedValueOnce(
+            json({
+              id: 'sbx_race',
+              createdAt: '2026-06-26T00:00:00.000Z',
+              instanceUrl: 'http://[fd12::1]:47000',
+            }),
+          )
+          // destroy sandbox
+          .mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+        // Probe hangs until we resolve it manually.
+        let resolveProbe: (value: Response) => void;
+        const probePromise = new Promise<Response>(r => {
+          resolveProbe = r;
+        });
+        const privateNetFetch = vi.fn().mockReturnValue(probePromise);
+        const { registry, sets, deletes } = fakeAddressRegistry();
+
+        const sandbox = new PlatformSandbox({
+          accessToken: 'sk_test',
+          projectId: 'proj_123',
+          environmentId: 'env_123',
+          fetch: fetchMock,
+          privateNetFetch,
+          addressRegistry: registry,
+        });
+
+        // Start the sandbox — probe is now in-flight but hasn't resolved.
+        await sandbox._start();
+        expect(sets).toEqual([]);
+
+        // Destroy while probe is pending. Two deletes: one from start()
+        // (clearing any stale entry before probe) and one from destroy().
+        await sandbox.destroy();
+        expect(deletes).toEqual(['sbx_race', 'sbx_race']);
+
+        // Now resolve the probe with 200. The probe should detect the
+        // generation mismatch and NOT call set().
+        resolveProbe!(new Response('ok', { status: 200 }));
+
+        // Give any pending microtasks a chance to run.
+        await new Promise(r => setTimeout(r, 50));
+
+        // Registry should still be empty — no stale entry for the destroyed sandbox.
+        expect(sets).toEqual([]);
+      });
+    });
+
+    describe('transport warmup coalescing', () => {
+      it('execs wait for the probe before proceeding', async () => {
+        // When an exec arrives during the sidecar boot window, it should wait
+        // for the probe rather than immediately racing to the lease path.
+        vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+        const fetchMock = vi.fn().mockResolvedValueOnce(
+          json({
+            id: 'sbx_coalesce',
+            createdAt: '2026-06-26T00:00:00.000Z',
+            instanceUrl: 'http://[fd12::1]:47000',
+          }),
+        );
+
+        // Manual control over probe resolution.
+        let resolveProbe: (value: Response) => void;
+        const probePromise = new Promise<Response>(r => {
+          resolveProbe = r;
+        });
+        let probeCallCount = 0;
+
+        // Streaming mock for exec calls (NDJSON format expected by sidecar).
+        const priv = streamingPrivateNetFetch();
+
+        // Intercept both /health (probe) and /exec calls.
+        const privateNetFetch = vi.fn().mockImplementation((url: string) => {
+          if (url.includes('/health')) {
+            probeCallCount++;
+            return probePromise;
+          }
+          // For /exec, delegate to streaming mock.
+          return priv.fetch(url, undefined);
+        });
+
+        const { registry } = fakeAddressRegistry();
+
+        const sandbox = new PlatformSandbox({
+          accessToken: 'sk_test',
+          projectId: 'proj_123',
+          environmentId: 'env_123',
+          fetch: fetchMock,
+          privateNetFetch,
+          addressRegistry: registry,
+        });
+
+        await sandbox._start();
+
+        // Verify probe was started.
+        expect(probeCallCount).toBe(1);
+
+        // Fire an exec while probe is pending.
+        const execPromise = sandbox.executeCommand('echo 1');
+
+        // Give it a moment to start waiting.
+        await new Promise(r => setTimeout(r, 10));
+
+        // No /exec calls yet — exec is waiting on probe.
+        expect(priv.calls.length).toBe(0);
+
+        // Resolve the probe — sidecar is ready.
+        resolveProbe!(new Response('ok', { status: 200 }));
+
+        // Give exec a moment to proceed after probe resolves.
+        await new Promise(r => setTimeout(r, 10));
+
+        // Now the exec should have called /exec.
+        expect(priv.calls.length).toBe(1);
+        expect(priv.calls[0]!.url).toContain('/exec');
+
+        // Push NDJSON frames to complete the exec.
+        priv.push('{"type":"stdout","data":"hello\\n"}\n');
+        priv.push('{"type":"exit","code":0}\n');
+        priv.end();
+
+        // Exec should complete via private-net.
+        const result = await execPromise;
+        expect(result.success).toBe(true);
+        expect(result.stdout).toBe('hello\n');
+
+        // Verify no lease was minted (no /exec-lease calls to the workspace proxy).
+        const execLeaseCalls = fetchMock.mock.calls.filter((c: unknown[]) => String(c[0]).includes('/exec-lease'));
+        expect(execLeaseCalls).toHaveLength(0);
+      });
+
+      it('proceeds to lease after transport ready timeout', async () => {
+        // If the sidecar probe takes too long, execs should proceed to the
+        // lease path after TRANSPORT_READY_WAIT_MS rather than blocking forever.
+        vi.useFakeTimers();
+        vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+        const fetchMock = vi
+          .fn()
+          // create sandbox
+          .mockResolvedValueOnce(
+            json({
+              id: 'sbx_timeout',
+              createdAt: '2026-06-26T00:00:00.000Z',
+              instanceUrl: 'http://[fd12::1]:47000',
+            }),
+          )
+          // exec-lease
+          .mockResolvedValueOnce(
+            json({
+              provider: 'railway',
+              sandboxId: 'sbx_timeout',
+              providerResourceId: 'prov_1',
+              jwt: 'jwt_test',
+              wsEndpoint: 'wss://test.railway.app/exec',
+              subprotocol: 'railway-exec-v1',
+              expiresAt: null,
+            }),
+          );
+        // Probe never resolves (simulates slow/unresponsive sidecar).
+        const privateNetFetch = vi.fn().mockReturnValue(new Promise(() => {}));
+        const { registry } = fakeAddressRegistry();
+        const { factory: wsFactory, sockets } = fakeExecSocket({ exitCode: 0, stdout: 'ok' });
+
+        const sandbox = new PlatformSandbox({
+          accessToken: 'sk_test',
+          projectId: 'proj_123',
+          environmentId: 'env_123',
+          fetch: fetchMock,
+          privateNetFetch,
+          addressRegistry: registry,
+          webSocketFactory: wsFactory,
+        });
+
+        await sandbox._start();
+
+        // Fire an exec — it will wait for transport ready.
+        const execPromise = sandbox.executeCommand('echo test');
+
+        // Advance past the transport ready timeout (5s).
+        await vi.advanceTimersByTimeAsync(6_000);
+
+        // Exec should complete via lease.
+        const result = await execPromise;
+        expect(result.success).toBe(true);
+
+        // Verify a lease was minted (exec-lease call made).
+        const execLeaseCalls = fetchMock.mock.calls.filter((c: unknown[]) => String(c[0]).includes('/exec-lease'));
+        expect(execLeaseCalls.length).toBeGreaterThan(0);
+        // WebSocket was used.
+        expect(sockets.length).toBeGreaterThan(0);
+
+        vi.useRealTimers();
+      });
     });
   });
 
@@ -1691,6 +2385,7 @@ describe('PlatformSandbox', () => {
       const template = new PlatformSandbox({
         accessToken: 'sk_test',
         projectId: 'proj_123',
+        actingUserId: 'external-user-42',
         environmentId: 'env_123',
         idleTimeoutMinutes: 30,
         networkIsolation: 'PRIVATE',
@@ -1704,7 +2399,8 @@ describe('PlatformSandbox', () => {
       });
       await child._start();
 
-      expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox');
+      expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v1/railway/projects/proj_123/sandbox');
+      expect((fetchMock.mock.calls[0]![1].headers as Headers).get('x-acting-user-id')).toBe('external-user-42');
       const body = JSON.parse(fetchMock.mock.calls[0]![1].body as string);
       expect(body).toMatchObject({
         environmentId: 'env_123',
@@ -1712,6 +2408,26 @@ describe('PlatformSandbox', () => {
         networkIsolation: 'PRIVATE',
         env: { GITHUB_TOKEN: 'ghs_abc' },
       });
+    });
+
+    it('inherits session/thread correlation ids so clone requests carry the headers', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi.fn().mockResolvedValueOnce(json({ id: 'sbx_child', createdAt: '2026-06-26T00:00:00.000Z' }));
+      const template = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        sessionId: 'sess_42',
+        threadId: 'thread_7',
+        fetch: fetchMock,
+      });
+
+      const child = template.clone({ id: 'mc-project-1' });
+      await child._start();
+
+      const headers = fetchMock.mock.calls[0]![1].headers as Headers;
+      expect(headers.get('x-mastra-session-id')).toBe('sess_42');
+      expect(headers.get('x-mastra-thread-id')).toBe('thread_7');
     });
 
     it('reattaches to a provider sandbox when sandboxId is passed', async () => {
@@ -1733,9 +2449,11 @@ describe('PlatformSandbox', () => {
       await child._start();
       await child.executeCommand!('echo hello');
 
-      expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox/sbx_existing');
+      expect(String(fetchMock.mock.calls[0]![0])).toBe(
+        'https://proxy.test/v1/railway/projects/proj_123/sandbox/sbx_existing',
+      );
       expect(String(fetchMock.mock.calls[1]![0])).toBe(
-        'https://proxy.test/v1/projects/proj_123/sandbox/sbx_existing/exec-lease',
+        'https://proxy.test/v1/railway/projects/proj_123/sandbox/sbx_existing/exec-lease',
       );
       const createCalls = fetchMock.mock.calls.filter(call => {
         const url = String(call[0]);
@@ -1788,6 +2506,23 @@ describe('PlatformSandbox', () => {
       expect(child.id).toBe('mastra-recovery-session-42');
     });
 
+    it('forwards seedCheckpointName separately from the primary recovery key', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi.fn().mockResolvedValueOnce(json({ id: 'sbx_child', createdAt: '2026-06-26T00:00:00.000Z' }));
+      const template = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+      });
+
+      const child = template.clone({ checkpointName: 'session-42', seedCheckpointName: 'repo-base' });
+      await child._start();
+
+      const body = JSON.parse(fetchMock.mock.calls[0]![1].body as string);
+      expect(body).toMatchObject({ id: 'session-42', seedCheckpointName: 'repo-base' });
+    });
+
     it('prefers an explicit id over checkpointName when both are passed to clone', async () => {
       vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
       const fetchMock = vi.fn().mockResolvedValueOnce(json({ id: 'sbx_child', createdAt: '2026-06-26T00:00:00.000Z' }));
@@ -1803,6 +2538,63 @@ describe('PlatformSandbox', () => {
 
       const body = JSON.parse(fetchMock.mock.calls[0]![1].body as string);
       expect(body.id).toBe('explicit-id');
+    });
+  });
+
+  describe('boot timing log', () => {
+    it('logs one start-complete summary on fresh provision', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_timing', createdAt: '2026-06-26T00:00:00.000Z' }));
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        sessionId: 'sess_42',
+        fetch: fetchMock,
+      });
+      const loggerInfoSpy = vi.spyOn((sandbox as any).logger, 'info');
+
+      await sandbox._start();
+
+      expect(loggerInfoSpy).toHaveBeenCalledWith(
+        'platform-workspace start complete',
+        expect.objectContaining({
+          sandboxId: 'sbx_timing',
+          sessionId: 'sess_42',
+          mode: 'provision',
+          totalMs: expect.any(Number),
+          requestMs: expect.any(Number),
+        }),
+      );
+    });
+
+    it('logs one start-complete summary on reattach', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_reattach', createdAt: '2026-06-26T00:00:00.000Z' }));
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        sandboxId: 'sbx_reattach',
+        fetch: fetchMock,
+      });
+      const loggerInfoSpy = vi.spyOn((sandbox as any).logger, 'info');
+
+      await sandbox._start();
+
+      expect(loggerInfoSpy).toHaveBeenCalledWith(
+        'platform-workspace start complete',
+        expect.objectContaining({
+          sandboxId: 'sbx_reattach',
+          mode: 'reattach',
+          totalMs: expect.any(Number),
+          requestMs: expect.any(Number),
+        }),
+      );
     });
   });
 
@@ -1838,7 +2630,7 @@ describe('PlatformSandbox', () => {
       // — stop() must not release the recovery checkpoint.
       expect(fetchMock).toHaveBeenCalledTimes(2);
       expect(fetchMock.mock.calls[1]![1].method).toBe('DELETE');
-      expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox/sbx_1');
+      expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/railway/projects/proj_123/sandbox/sbx_1');
     });
 
     it('destroy() releases the checkpoint (DELETE /sandbox/:id/checkpoint) and then the VM', async () => {
@@ -1868,10 +2660,10 @@ describe('PlatformSandbox', () => {
       // the checkpoint delete fails after the VM is already gone.
       expect(fetchMock).toHaveBeenCalledTimes(3);
       expect(String(fetchMock.mock.calls[1]![0])).toBe(
-        'https://proxy.test/v1/projects/proj_123/sandbox/sbx_1/checkpoint',
+        'https://proxy.test/v1/railway/projects/proj_123/sandbox/sbx_1/checkpoint',
       );
       expect(fetchMock.mock.calls[1]![1].method).toBe('DELETE');
-      expect(String(fetchMock.mock.calls[2]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox/sbx_1');
+      expect(String(fetchMock.mock.calls[2]![0])).toBe('https://proxy.test/v1/railway/projects/proj_123/sandbox/sbx_1');
       expect(fetchMock.mock.calls[2]![1].method).toBe('DELETE');
     });
 
@@ -1922,7 +2714,7 @@ describe('PlatformSandbox', () => {
 
       // Only create + VM DELETE — no /checkpoint call.
       expect(fetchMock).toHaveBeenCalledTimes(2);
-      expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox/sbx_1');
+      expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/railway/projects/proj_123/sandbox/sbx_1');
     });
 
     it('destroy() continues to VM teardown when the checkpoint DELETE 404s (idempotent)', async () => {
@@ -1950,7 +2742,7 @@ describe('PlatformSandbox', () => {
       await sandbox.destroy();
 
       expect(fetchMock).toHaveBeenCalledTimes(3);
-      expect(String(fetchMock.mock.calls[2]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox/sbx_1');
+      expect(String(fetchMock.mock.calls[2]![0])).toBe('https://proxy.test/v1/railway/projects/proj_123/sandbox/sbx_1');
     });
 
     it('destroy() continues to VM teardown when the checkpoint DELETE fails with 5xx (best-effort)', async () => {
@@ -1978,7 +2770,7 @@ describe('PlatformSandbox', () => {
       await sandbox.destroy();
 
       expect(fetchMock).toHaveBeenCalledTimes(3);
-      expect(String(fetchMock.mock.calls[2]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox/sbx_1');
+      expect(String(fetchMock.mock.calls[2]![0])).toBe('https://proxy.test/v1/railway/projects/proj_123/sandbox/sbx_1');
     });
 
     it('destroy() is a no-op when the sandbox was never started (idempotent)', async () => {
@@ -2038,7 +2830,7 @@ describe('PlatformSandbox', () => {
       // Now the VM DELETE has fired, but no checkpoint DELETE (this is
       // stop(), not destroy()).
       expect(fetchMock).toHaveBeenCalledTimes(3);
-      expect(String(fetchMock.mock.calls[2]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox/sbx_1');
+      expect(String(fetchMock.mock.calls[2]![0])).toBe('https://proxy.test/v1/railway/projects/proj_123/sandbox/sbx_1');
       expect(fetchMock.mock.calls[2]![1].method).toBe('DELETE');
     });
 
@@ -2071,11 +2863,32 @@ describe('PlatformSandbox', () => {
       await sandbox.stop();
 
       expect(fetchMock).toHaveBeenCalledTimes(3);
-      expect(String(fetchMock.mock.calls[2]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox/sbx_1');
+      expect(String(fetchMock.mock.calls[2]![0])).toBe('https://proxy.test/v1/railway/projects/proj_123/sandbox/sbx_1');
     });
   });
 
   describe('captureCheckpoint (public, on-demand)', () => {
+    it('delegates snapshot to captureCheckpoint', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi.fn().mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }));
+      const sandbox = new PlatformSandbox({
+        id: 'mc-session-42',
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+      });
+      await sandbox._start();
+      const captureCheckpoint = vi.spyOn(sandbox, 'captureCheckpoint').mockResolvedValue({
+        status: 'captured',
+        checkpointName: 'mastra-checkpoint-abc123',
+      });
+
+      await expect(sandbox.snapshot()).resolves.toBeUndefined();
+
+      expect(captureCheckpoint).toHaveBeenCalledOnce();
+    });
+
     it('POSTs to /checkpoint with the recovery key and returns the captured name', async () => {
       vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
       const fetchMock = vi
@@ -2096,7 +2909,7 @@ describe('PlatformSandbox', () => {
 
       expect(result).toEqual({ status: 'captured', checkpointName: 'mastra-checkpoint-abc123' });
       expect(String(fetchMock.mock.calls[1]![0])).toBe(
-        'https://proxy.test/v1/projects/proj_123/sandbox/sbx_1/checkpoint',
+        'https://proxy.test/v1/railway/projects/proj_123/sandbox/sbx_1/checkpoint',
       );
       expect(fetchMock.mock.calls[1]![1].method).toBe('POST');
       // The recovery key on the body must be the caller-supplied id, since
@@ -2237,7 +3050,7 @@ describe('PlatformSandbox', () => {
       // not the reattach branch (GET /sandbox/sbx_1) — proving _sandboxId
       // was cleared.
       await sandbox._start();
-      expect(String(fetchMock.mock.calls[2]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox');
+      expect(String(fetchMock.mock.calls[2]![0])).toBe('https://proxy.test/v1/railway/projects/proj_123/sandbox');
       expect(fetchMock.mock.calls[2]![1].method).toBe('POST');
     });
 
@@ -2353,7 +3166,7 @@ describe('PlatformSandbox', () => {
       // missing — the second caller slipped through the null check while
       // the first was awaiting the network.
       expect(fetchMock).toHaveBeenCalledTimes(1);
-      expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox');
+      expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v1/railway/projects/proj_123/sandbox');
       expect(fetchMock.mock.calls[0]![1].method).toBe('POST');
     });
 
@@ -2383,7 +3196,9 @@ describe('PlatformSandbox', () => {
       // One GET, not two. Reattach is on the same coalescing path as fresh
       // provision — the whole start() body runs under one in-flight guard.
       expect(fetchMock).toHaveBeenCalledTimes(1);
-      expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox/sbx_existing');
+      expect(String(fetchMock.mock.calls[0]![0])).toBe(
+        'https://proxy.test/v1/railway/projects/proj_123/sandbox/sbx_existing',
+      );
       // Reattach uses default method (GET), not POST.
       expect(fetchMock.mock.calls[0]![1]?.method).toBeUndefined();
     });
@@ -2448,11 +3263,11 @@ describe('PlatformSandbox', () => {
     it('clears the in-flight slot on success so a second concurrent batch does not reuse the settled promise', async () => {
       vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
       // First batch: two concurrent starts share one POST /sandbox.
-      // Second batch (after the first settles): the sandbox instance is
-      // reused for a fresh coalescing round — the parent MastraSandbox
-      // `_start()` idempotency check normally short-circuits on
-      // `status === 'running'`, so we drive `start()` directly to observe
-      // the wrapper's own behavior in isolation.
+      // Second batch (after the first settles and the sandbox is no longer
+      // running): the same instance gets a fresh coalescing round. The base
+      // MastraSandbox wrapper short-circuits while `status === 'running'`,
+      // so we mark the sandbox stopped between batches — what matters is
+      // that the settled first-batch promise is not reused.
       let releaseFirst!: (value: Response) => void;
       const firstHeld = new Promise<Response>(resolve => {
         releaseFirst = resolve;
@@ -2486,12 +3301,13 @@ describe('PlatformSandbox', () => {
       // resolve immediately without a network call (fetch mock stays at
       // 1). What we want is the slot cleared, so this batch takes the
       // reattach GET path and coalesces onto that single call.
+      sandbox.status = 'stopped';
       const secondA = sandbox.start();
       const secondB = sandbox.start();
       releaseSecond(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }));
       await Promise.all([secondA, secondB]);
       expect(fetchMock).toHaveBeenCalledTimes(2);
-      expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox/sbx_1');
+      expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/railway/projects/proj_123/sandbox/sbx_1');
     });
   });
 });

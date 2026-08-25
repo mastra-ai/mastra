@@ -2,6 +2,7 @@ import type { GetAgentResponse } from '@mastra/client-js';
 import {
   DataList as EntityList,
   DataListSkeleton as EntityListSkeleton,
+  useDataListKeyboard,
 } from '@mastra/playground-ui/components/DataList';
 import { TextAndIcon } from '@mastra/playground-ui/components/Text';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
@@ -24,13 +25,14 @@ const agentsListColumns = 'minmax(12rem,20rem) minmax(16rem,30rem) auto auto aut
 
 export function AgentsList({ agents, isLoading, hasSearch }: AgentsListProps) {
   const { paths, Link } = useLinkComponent();
+  const { containerRef, getRowProps } = useDataListKeyboard({ count: agents.length });
 
   if (isLoading) {
     return <EntityListSkeleton columns={agentsListColumns} />;
   }
 
   return (
-    <EntityList columns={agentsListColumns}>
+    <EntityList columns={agentsListColumns} scrollRef={containerRef}>
       <EntityList.Top>
         <EntityList.TopCell>Name</EntityList.TopCell>
         <EntityList.TopCell>Purpose</EntityList.TopCell>
@@ -57,13 +59,13 @@ export function AgentsList({ agents, isLoading, hasSearch }: AgentsListProps) {
 
       {agents.length === 0 && hasSearch ? <EntityList.NoMatch message="No Agents match your search" /> : null}
 
-      {agents.map(agent => {
+      {agents.map((agent, index) => {
         const instructions = extractPrompt(agent.instructions).replace(/\s+/g, ' ').trim();
         const purpose = instructions || 'No instructions provided.';
 
         return (
           <EntityList.RowWrapper key={agent.id}>
-            <EntityList.RowLink colEnd={3} to={paths.agentLink(agent.id)} LinkComponent={Link}>
+            <EntityList.RowLink colEnd={3} to={paths.agentLink(agent.id)} LinkComponent={Link} {...getRowProps(index)}>
               <EntityList.Cell className="text-neutral4 min-w-0 overflow-visible text-left">
                 <span
                   title={agent.name}
