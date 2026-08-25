@@ -1,4 +1,5 @@
 import type { MastraSandbox, SandboxStartHook, WorkspaceSandbox } from '@mastra/core/workspace';
+import type { RepositoryAccess } from '../capabilities/version-control.js';
 import { deriveLocalWorkdir, remoteWorkdirFromHome } from './workdir.js';
 
 /**
@@ -11,16 +12,24 @@ export interface FactorySandboxContext {
   sessionId: string;
   /** owner/name of the repository, when the session is repo-backed. */
   repoFullName?: string;
-  /** Configured repo setup command, when present — for template keying. */
+  /**
+   * Configured repo setup command, when present. Part of a repo template's
+   * identity: a different setup command produces a different template.
+   */
   setupCommand?: string;
   /**
-   * Mints a fresh short-lived GitHub App installation token for the
-   * session's repository. Providers may use it for authenticated work that
-   * runs outside the VM — e.g. resolving a private repo's head or cloning it
-   * during a template build. Always a fresh mint per call (installation
+   * Resolves the session repository's clone URL and a fresh short-lived
+   * credential for it. Providers use it for authenticated work that runs
+   * outside the VM — resolving a private repo's head, or cloning it during
+   * a template build. The credential is minted per call (installation
    * tokens expire in ~1h); never an org PAT.
+   *
+   * `undefined` when the session has no repository, which is how a provider
+   * knows to build no repo template. The key is always present so that
+   * passing the whole context to a provider helper keeps working when this
+   * field changes, instead of silently resolving to "no repository".
    */
-  getGithubToken?: () => Promise<string>;
+  getRepositoryAccess: (() => Promise<RepositoryAccess>) | undefined;
   /** Opaque acting-user subject for provider attribution. */
   actingUserId?: string;
 }

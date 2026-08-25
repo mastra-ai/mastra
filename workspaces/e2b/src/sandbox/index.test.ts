@@ -17,9 +17,23 @@ import { createSandboxLifecycleTests, createMountOperationsTests } from '@intern
 import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
 
 import { createRepoTemplate } from '../utils/repo-template';
+import type { RepoTemplateOptions } from '../utils/repo-template';
 import { createDefaultMountableTemplate } from '../utils/template';
 import type { NamedTemplateSpec } from '../utils/template';
 import { E2BSandbox } from './index';
+
+/** Access to a public repo: a clone URL and no credential. */
+const repoAccess = (cloneUrl: string) => async () => ({ cloneUrl });
+
+/**
+ * Resolve a repo template to its named form. Repo templates are always
+ * deferred, and the ladder under test is identical once a spec resolves.
+ */
+async function resolveRepoTemplate(options: RepoTemplateOptions): Promise<NamedTemplateSpec> {
+  const spec = createRepoTemplate(options);
+  if (!spec) throw new Error('expected a repo template spec');
+  return await spec.resolveSpec();
+}
 
 // Use vi.hoisted to define the mock before vi.mock is hoisted
 const { mockSandbox, createMockSandboxApi, resetMockDefaults, createMockCommandHandle } = vi.hoisted(() => {
@@ -223,7 +237,7 @@ describe('E2BSandbox', () => {
 
       const sandbox = new E2BSandbox({
         id: 'resume-only',
-        template: createRepoTemplate({ repoFullName: 'octocat/hello' }),
+        template: createRepoTemplate({ getRepositoryAccess: repoAccess('https://github.com/octocat/hello.git') }),
       });
       const result = await sandbox.start();
 
@@ -242,34 +256,35 @@ describe('E2BSandbox', () => {
 
       const sandbox = new E2BSandbox({
         id: 'deferred-1',
-        template: createRepoTemplate({ repoFullName: 'octocat/hello', resolveHead: async () => head }),
+        template: createRepoTemplate({
+          getRepositoryAccess: repoAccess('https://github.com/octocat/hello.git'),
+          resolveHead: async () => head,
+        }),
       });
       const result = await sandbox.start();
 
       expect(result?.outcome).toBe('created');
       expect((Sandbox.create as any).mock.calls[0]![0]).toBe(
-        repoTemplateAlias({ repoFullName: 'octocat/hello', sha: head }),
+        repoTemplateAlias({ cloneUrl: 'https://github.com/octocat/hello.git', sha: head }),
       );
     });
   });
 
   describe('Named template fallback ladder', () => {
-    // A pinned sha keeps the spec in its plain named form — the ladder under
-    // test is identical for a deferred spec once it resolves.
     const namedSpec = () =>
-      createRepoTemplate({
-        repoFullName: 'octocat/hello',
+      resolveRepoTemplate({
+        getRepositoryAccess: repoAccess('https://github.com/octocat/hello.git'),
         setupCommand: 'pnpm install',
         sha: 'a'.repeat(40),
-      }) as NamedTemplateSpec;
+      });
 
     it('boots from the stale current build and rebuilds the missing sha ref in the background', async () => {
       const { Sandbox, Template } = await import('e2b');
-      const spec = createRepoTemplate({
-        repoFullName: 'octocat/stale-first',
+      const spec = await resolveRepoTemplate({
+        getRepositoryAccess: repoAccess('https://github.com/octocat/stale-first.git'),
         setupCommand: 'pnpm install',
         sha: 'b'.repeat(40),
-      }) as NamedTemplateSpec;
+      });
       // The exact sha tag doesn't exist yet, but a previous build does.
       (Template.exists as any).mockImplementation(async (ref: string) => ref === spec.staleRef);
 
@@ -289,11 +304,11 @@ describe('E2BSandbox', () => {
 
     it('dedupes background rebuild triggers for the same ref', async () => {
       const { Template } = await import('e2b');
-      const spec = createRepoTemplate({
-        repoFullName: 'octocat/stale-dedupe',
+      const spec = await resolveRepoTemplate({
+        getRepositoryAccess: repoAccess('https://github.com/octocat/stale-dedupe.git'),
         setupCommand: 'pnpm install',
         sha: 'c'.repeat(40),
-      }) as NamedTemplateSpec;
+      });
       (Template.exists as any).mockImplementation(async (ref: string) => ref === spec.staleRef);
 
       await new E2BSandbox({ id: 'stale-2a', template: spec }).start();
@@ -309,7 +324,7 @@ describe('E2BSandbox', () => {
         .mockRejectedValueOnce(new Error('BuildError: clone failed'))
         .mockResolvedValueOnce({ templateId: 'fallback-template-id' });
 
-      const sandbox = new E2BSandbox({ id: 'ladder-1', template: namedSpec() });
+      const sandbox = new E2BSandbox({ id: 'ladder-1', template: await namedSpec() });
       const result = await sandbox.start();
 
       expect(result?.outcome).toBe('created');
@@ -318,7 +333,7 @@ describe('E2BSandbox', () => {
 
     it('retries on the fallback when creating from a registered-but-broken alias 404s', async () => {
       const { Sandbox, Template } = await import('e2b');
-      const spec = namedSpec();
+      const spec = await namedSpec();
       // E2B keeps a FAILED build's alias visible to Template.exists.
       (Template.exists as any).mockResolvedValue(true);
       (Sandbox.create as any)
@@ -338,7 +353,7 @@ describe('E2BSandbox', () => {
 
     it('lands on the default mountable template when the repo ref is broken', async () => {
       const { Sandbox, Template } = await import('e2b');
-      const spec = namedSpec();
+      const spec = await namedSpec();
       (Template.exists as any).mockResolvedValue(true);
       (Sandbox.create as any)
         .mockRejectedValueOnce(new Error('404: template not found'))
@@ -369,7 +384,7 @@ describe('E2BSandbox', () => {
 
     it('force-rebuilds a registered-but-broken default alias as terminal recovery', async () => {
       const { Sandbox, Template } = await import('e2b');
-      const spec = namedSpec();
+      const spec = await namedSpec();
       // Both the repo ref and the default alias are registered (failed
       // builds) and 404 on create; the terminal recovery force-rebuilds the
       // default and succeeds.
@@ -392,7 +407,7 @@ describe('E2BSandbox', () => {
 
     it('a raw TemplateBuilder fallback whose build fails still reaches the default template', async () => {
       const { Sandbox, Template } = await import('e2b');
-      const spec = namedSpec();
+      const spec = await namedSpec();
       const builderFallback = { ...spec, fallbackTemplate: { runCmd: () => ({}) } as never };
       (Template.exists as any).mockResolvedValue(false);
       (Template.build as any)
@@ -412,7 +427,7 @@ describe('E2BSandbox', () => {
       (Template.exists as any).mockResolvedValue(true);
       (Sandbox.create as any).mockRejectedValue(new Error('401: unauthorized'));
 
-      const sandbox = new E2BSandbox({ id: 'ladder-4', template: namedSpec() });
+      const sandbox = new E2BSandbox({ id: 'ladder-4', template: await namedSpec() });
 
       await expect(sandbox.start()).rejects.toThrow(/unauthorized/);
       expect(Sandbox.create as any).toHaveBeenCalledTimes(1);

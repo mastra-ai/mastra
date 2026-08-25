@@ -334,8 +334,8 @@ export const factory = new MastraFactory({
       return new PlatformSandbox({
         id: ctx.sessionId,
         accessToken: platformSandboxToken,
-        ...(ctx.actingUserId ? { actingUserId: ctx.actingUserId } : {}),
-        ...(addressRegistry ? { addressRegistry } : {}),
+        actingUserId: ctx.actingUserId,
+        addressRegistry,
         ...(ctx.repoFullName
           ? {
               template: createPlatformRepoTemplate({
@@ -351,15 +351,9 @@ export const factory = new MastraFactory({
       console.info(`[sandbox] session ${ctx.sessionId} -> e2b sandbox`);
       return new E2BSandbox({
         id: ctx.sessionId,
-        ...(ctx.repoFullName
-          ? {
-              template: createE2BRepoTemplate({
-                repoFullName: ctx.repoFullName,
-                ...(ctx.setupCommand ? { setupCommand: ctx.setupCommand } : {}),
-                ...(ctx.getGithubToken ? { getAuthToken: ctx.getGithubToken } : {}),
-              }),
-            }
-          : {}),
+        // Undefined for a session with no repository, which is how the
+        // sandbox asks for the provider's default template.
+        template: createE2BRepoTemplate(ctx),
       });
     }
 

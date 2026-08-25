@@ -337,11 +337,20 @@ import { E2BSandbox, createRepoTemplate } from '@mastra/e2b'
 const sandbox = new E2BSandbox({
   id: sessionId,
   template: createRepoTemplate({
-    repoFullName: 'octocat/hello-world',
+    getRepositoryAccess: async () => ({
+      cloneUrl: 'https://github.com/octocat/hello-world.git',
+    }),
     setupCommand: 'pnpm install',
   }),
 })
 ```
+
+`getRepositoryAccess` supplies the clone URL and, for private repositories, a
+credential. It's the only source of the clone URL, so what gets cloned and
+what the template is identified by can't drift apart. When it's `undefined`,
+`createRepoTemplate` returns `undefined` — which is how a session with no
+repository asks for the provider's default template without a conditional at
+the call site.
 
 There is exactly one template per repository and setup command: the template
 name carries the repo slug plus a short hash of the inputs, and the commit
@@ -376,7 +385,9 @@ reports `{ ref, action, sha }`:
 import { refreshRepoTemplate } from '@mastra/e2b'
 
 const result = await refreshRepoTemplate({
-  repoFullName: 'octocat/hello-world',
+  getRepositoryAccess: async () => ({
+    cloneUrl: 'https://github.com/octocat/hello-world.git',
+  }),
   setupCommand: 'pnpm install',
 })
 // { ref: 'mastra-repo-octocat-hello-world-…:sha-…', action: 'built' | 'reused', sha: '…' }
@@ -399,19 +410,29 @@ Failure handling is designed so a broken template never wedges a session:
   named ref fails, the cached resolution is dropped and creation retries
   down the fallback ladder.
 
-Private repositories build warm templates through `getAuthToken`: a callback
-that mints a fresh, short-lived credential (such as a GitHub App
-installation token) per template resolution. The token authenticates the
-head lookup and the build's clone through an in-shell `http.extraheader` —
-it enters the template definition's environment (visible to build steps but
-not persisted into runtime sandbox environments) and never touches the image
-filesystem, so no captured layer can contain it. Only pass short-lived
-credentials here — the value stays in the template definition until the next
-rebuild, so its expiry is what bounds the exposure. Note that the cloned
-repository contents become part of a team-visible template image. Without
-`getAuthToken` the clone is tokenless: public repositories build fine, and a
-private repository's build degrades to the fallback, where the session's own
-runtime setup (with runtime-injected auth) does the clone.
+Private repositories build warm templates when `getRepositoryAccess` returns
+an `authorization` alongside the clone URL — a fresh, short-lived credential
+(such as a GitHub App installation token) minted per template resolution.
+The credential authenticates the head lookup and the build's clone through
+an in-shell `http.extraheader` — it enters the template definition's
+environment (visible to build steps but not persisted into runtime sandbox
+environments) and never touches the image filesystem, so no captured layer
+can contain it. It's also exposed to the setup command as `GH_TOKEN`, so a
+command that shells out to `gh` or authenticated https behaves the same in
+the build as it does in a session.
+
+Only pass short-lived credentials — the value stays in the template
+definition until the next rebuild, so its expiry is what bounds the
+exposure. Note that the cloned repository contents become part of a
+team-visible template image. When the access call returns no credential the
+clone is tokenless: public repositories build fine, and a private
+repository's build degrades to the fallback, where the session's own runtime
+setup (with runtime-injected auth) does the clone.
+
+Setup commands that need their own credentials — a registry token, a private
+index URL — take them through `buildEnv`, which accepts a record or an async
+resolver. Those values are part of the template's identity, so changing one
+produces a new template.
 
 `repoTemplateAlias` computes the tagged ref for a spec without building
 anything — useful for pruning old sha tags with the E2B CLI.
@@ -421,9 +442,9 @@ anything — useful for pruning old sha tags with the E2B CLI.
 Hosts that construct one sandbox per session, such as Mastra Factory's
 `sandbox` config, combine the pieces above in a small callback: sandbox
 identity is the session id (id-keyed getOrCreate — the sandbox pauses on
-E2B's idle timeout and resumes by id), the repo template comes from
-`createRepoTemplate`, and the host's `onStart` setup hook runs inside the
-start lifecycle.
+E2B's idle timeout and resumes by id), and the repo template comes from
+`createRepoTemplate`. The host's session context carries everything the
+template needs, so it can be passed straight through:
 
 ```typescript
 import { MastraFactory } from '@mastra/factory'
@@ -433,20 +454,14 @@ new MastraFactory({
   sandbox: ctx =>
     new E2BSandbox({
       id: ctx.sessionId,
-      ...(ctx.repoFullName
-        ? {
-            template: createRepoTemplate({
-              repoFullName: ctx.repoFullName,
-              // Short-lived installation token so private repos build warm
-              // templates too.
-              getAuthToken: ctx.getGithubToken,
-            }),
-          }
-        : {}),
-      onStart: ctx.onStart,
+      // Undefined for a session with no repository.
+      template: createRepoTemplate(ctx),
     }),
 })
 ```
+
+Factory attaches its own session setup to the sandbox it gets back, so the
+callback doesn't wire up a start hook.
 
 ## Using with Code Mode
 

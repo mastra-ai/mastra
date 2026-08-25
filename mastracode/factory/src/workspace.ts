@@ -359,10 +359,12 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         const sandbox = createSessionSandboxInstance({
           sessionId: session.id,
           repoFullName,
-          ...(projectRepository.setupCommand ? { setupCommand: projectRepository.setupCommand } : {}),
-          // Deferred call — `getRepositoryToken` is declared below and only
-          // dereferenced when a provider mints (template build time).
-          getGithubToken: () => getRepositoryToken(),
+          // Stored nullable; the context speaks `undefined` for absent.
+          setupCommand: projectRepository.setupCommand ?? undefined,
+          // Deferred call — only dereferenced when a provider needs the repo
+          // outside the VM (template build time).
+          getRepositoryAccess: () =>
+            github.versionControl.getRepositoryAccess({ orgId: session.orgId, repositoryId: repository.id }),
           actingUserId: userId,
         });
         // Attached inside the construction closure, so exactly once per

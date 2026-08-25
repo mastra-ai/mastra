@@ -2,4 +2,33 @@
 '@mastra/e2b': minor
 ---
 
-Added `createRepoTemplate` and `repoTemplateAlias`: repository template specs that clone a repo and run its setup command at template build time, so sandboxes start with a warm checkout. There is exactly one template per repository and setup command — the template name carries the repo slug plus a short input hash, and the commit sha rides as a docker-style tag (`mastra-repo-<owner>-<repo>-<hash>:sha-<sha>`). Without an explicit `sha`, the spec pins itself to the repository's current default-branch head at resolution time (`git ls-remote` right before the template lookup; overridable via `resolveHead`); a moved head rebuilds the same template in place under a new tag, and an unresolvable head degrades to the stable `current` tag. Only a template's very first build ever blocks a sandbox start: every successful build also moves a `current` tag, and when the head moves the next sandbox boots immediately from the previous build while the fresh sha ref builds in the background (runtime setup fast-forwards the checkout). `refreshRepoTemplate` exposes the same resolution standalone so template warming can be driven externally — call it from a cron or a merge-to-main event handler. Private repositories build warm templates through `getAuthToken` — a per-resolution minter of a short-lived credential (e.g. a GitHub App installation token) that authenticates the head lookup and the build's clone via an in-shell `http.extraheader`; the token enters the template definition's environment (not persisted into runtime sandbox environments) and never touches the image filesystem. Without auth, clones are tokenless and private repos degrade to the fallback plus a runtime cold clone. Clones land in the build user's home directory (`$HOME/<repo>` by default, overridable via `workdir`) — build steps and runtime commands both run as the sandbox user in its home, so no root directory prep is needed. A failed build falls back to the default mountable template, and creating from a broken ref retries down the fallback ladder instead of wedging the session. Successful named builds resolve to their tag-qualified ref rather than the raw build id (raw ids resolve the never-assigned `default` tag and would 404). `TemplateSpec` gains a deferred form (`DeferredNamedTemplateSpec`) whose ref and build steps are computed at resolution time.
+**Added repository templates, so sandboxes start with a warm checkout**
+
+`createRepoTemplate()` builds an E2B template with the repository already cloned and its setup command already run. Sessions then start from a prepared image instead of paying a cold clone and install.
+
+```ts
+new E2BSandbox({
+  id: sessionId,
+  template: createRepoTemplate({
+    getRepositoryAccess: async () => ({
+      cloneUrl: 'https://github.com/acme/widgets.git',
+      authorization: { scheme: 'bearer', token: await mintInstallationToken() },
+    }),
+    setupCommand: 'pnpm install',
+  }),
+});
+```
+
+`getRepositoryAccess` supplies the clone URL and, for private repositories, a short-lived credential. It returns `undefined` from `createRepoTemplate()` when the accessor is absent, so a session with no repository needs no conditional at the call site. The credential authenticates the head lookup and the build's clone through an in-shell auth header, reaching the template definition's environment but never the image filesystem, and it's also exposed to the setup command as `GH_TOKEN` so a command that works in a session works during the build.
+
+**Only the first build ever blocks a start**
+
+There's one template per repository, setup command, and workdir, with the commit sha as a tag (`mastra-repo-<owner>-<repo>-<hash>:sha-<sha>`). Without an explicit `sha` the template pins itself to the repository's current default-branch head at resolution time. When the head moves, the next sandbox boots immediately from the previous build while the new sha builds in the background, and runtime setup fast-forwards the checkout. A failed build falls back to the default template plus a runtime clone, so a broken build never wedges a session.
+
+**Added `buildEnv` for setup commands that need credentials**
+
+Registry tokens, private index URLs, and anything else the setup command needs at build time. Accepts a record or an async resolver. Values are part of the template's identity, so changing one produces a new template.
+
+**Added `refreshRepoTemplate()` for warming templates ahead of time**
+
+The same resolution the lazy start path performs, exposed standalone and awaited, so a cron or a merge-to-main handler can build the template before anyone opens a session.
