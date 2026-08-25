@@ -300,9 +300,146 @@ describe('Supervisor Pattern Integration Tests', () => {
       expect(onDelegationComplete).toHaveBeenCalledWith(
         expect.objectContaining({
           primitiveType: 'agent',
-          result: expect.objectContaining({ text: 'Here is the final report.' }),
+          result: expect.objectContaining({ text: 'Here is the final report.', finishReason: 'stop' }),
         }),
       );
+    });
+
+    it('should expose finishReason and subAgentToolResults on the onDelegationComplete result (generate)', async () => {
+      let capturedContext: DelegationCompleteContext | undefined;
+      const weatherTool = createTool({
+        id: 'get-weather',
+        description: 'Get the weather',
+        inputSchema: z.object({ city: z.string() }),
+        execute: async ({ city }) => ({ temperature: 20, city }),
+      });
+
+      const subAgent = new Agent({
+        id: 'tool-sub-agent',
+        name: 'tool-sub-agent',
+        description: 'Sub-agent with a tool',
+        instructions: 'You use tools.',
+        model: makeSubAgentModelWithTool('get-weather', { city: 'Paris' }),
+        tools: { 'get-weather': weatherTool },
+      });
+
+      const supervisorAgent = new Agent({
+        id: 'supervisor',
+        name: 'supervisor',
+        instructions: 'You orchestrate sub-agents.',
+        model: makeSupervisorModel('toolSubAgent', 'check the weather'),
+        agents: { toolSubAgent: subAgent },
+        memory: new MockMemory(),
+      });
+
+      await supervisorAgent.generate('Check the weather', {
+        maxSteps: 3,
+        delegation: {
+          onDelegationComplete: ctx => {
+            capturedContext = ctx;
+          },
+        },
+      });
+
+      expect(capturedContext).toBeDefined();
+      // finishReason is now surfaced so hooks can distinguish real completion from truncation
+      expect(capturedContext!.result.finishReason).toBe('stop');
+      // subAgentToolResults is typed — no cast required to access it
+      expect(capturedContext!.result.subAgentToolResults).toEqual([
+        expect.objectContaining({
+          toolName: 'get-weather',
+          toolCallId: 'sub-call-1',
+          result: { temperature: 20, city: 'Paris' },
+        }),
+      ]);
+    });
+
+    it('should expose finishReason on the onDelegationComplete result (stream)', async () => {
+      let capturedContext: DelegationCompleteContext | undefined;
+
+      const subAgent = new Agent({
+        id: 'stream-sub-agent',
+        name: 'stream-sub-agent',
+        description: 'A streaming sub-agent',
+        instructions: 'You respond with text.',
+        model: new MockLanguageModelV2({
+          doStream: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'Streamed sub-agent answer' },
+              { type: 'text-end', id: 'text-1' },
+              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 } },
+            ]),
+          }),
+        }),
+      });
+
+      let supervisorCallCount = 0;
+      const supervisorModel = new MockLanguageModelV2({
+        doStream: async () => {
+          supervisorCallCount++;
+          if (supervisorCallCount === 1) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: convertArrayToReadableStream([
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+                {
+                  type: 'tool-call',
+                  toolCallId: 'supervisor-call-1',
+                  toolName: 'agent-streamSubAgent',
+                  input: JSON.stringify({ prompt: 'answer this' }),
+                },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                },
+              ]),
+            };
+          }
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'Done' },
+              { type: 'text-end', id: 'text-1' },
+              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+            ]),
+          };
+        },
+      });
+
+      const supervisorAgent = new Agent({
+        id: 'stream-supervisor',
+        name: 'stream-supervisor',
+        instructions: 'You orchestrate sub-agents.',
+        model: supervisorModel,
+        agents: { streamSubAgent: subAgent },
+        memory: new MockMemory(),
+      });
+
+      const stream = await supervisorAgent.stream('Answer this', {
+        maxSteps: 3,
+        delegation: {
+          onDelegationComplete: ctx => {
+            capturedContext = ctx;
+          },
+        },
+      });
+      await stream.consumeStream();
+
+      expect(capturedContext).toBeDefined();
+      expect(capturedContext!.result.text).toBe('Streamed sub-agent answer');
+      expect(capturedContext!.result.finishReason).toBe('stop');
     });
 
     it('should let onDelegationComplete replace the tool result the parent sees in the same run', async () => {
