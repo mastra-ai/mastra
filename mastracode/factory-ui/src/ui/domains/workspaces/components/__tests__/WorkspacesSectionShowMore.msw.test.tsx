@@ -13,25 +13,27 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
-import type { FactoryUserSession } from '../../services/github';
+import type { FactoryUserSession } from '../../services/user-sessions';
 import { WorkspacesSection } from '../WorkspacesSection';
 
 const projectRepositoryId = 'ghp-1';
 
 function reviewSession(index: number): FactoryUserSession {
+  const createdAt = `2026-07-23T00:00:${String(index).padStart(2, '0')}.000Z`;
   return {
     id: `row-${index}`,
     sessionId: `sess-${index}`,
     projectRepositoryId,
     orgId: 'org-1',
     userId: 'user-1',
+    visibility: 'org' as const,
     branch: `factory/pr-${20000 + index}`,
     baseBranch: 'main',
     sandboxId: null,
     sandboxWorkdir: null,
     materializedAt: null,
-    createdAt: '2026-07-23T00:00:00.000Z',
-    updatedAt: `2026-07-23T00:00:${String(index).padStart(2, '0')}.000Z`,
+    createdAt,
+    updatedAt: createdAt,
   };
 }
 
@@ -81,7 +83,6 @@ describe('Workspaces sidebar show more', () => {
     renderSection();
 
     const group = await screen.findByRole('region', { name: 'Review Sessions' });
-    // Latest 5 by updatedAt are visible; the oldest 3 are collapsed.
     expect(await within(group).findAllByRole('button', { name: /^factory\/pr-200\d+$/ })).toHaveLength(5);
     expect(within(group).queryByRole('button', { name: 'factory/pr-20001' })).not.toBeInTheDocument();
 

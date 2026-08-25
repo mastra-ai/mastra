@@ -97,7 +97,7 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
                 <span className="min-w-0 flex-1">
                   <span className="text-ui-md text-icon6 flex items-center gap-1.5">
                     <GithubIcon className="text-icon5 size-3.5 shrink-0" />
-                    <span className="truncate">{repo.slug}</span>
+                    <span className="min-w-0 truncate">{repo.slug}</span>
                     <Badge size="sm" variant="success">
                       Linked
                     </Badge>
@@ -138,7 +138,7 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
                   <span className="min-w-0 flex-1">
                     <span className="text-ui-md text-icon5 flex items-center gap-1.5">
                       <FolderIcon size={14} className="text-icon3 shrink-0" />
-                      <span className="truncate">{repo.fullName}</span>
+                      <span className="min-w-0 truncate">{repo.fullName}</span>
                     </span>
                     <span className="text-ui-sm text-icon3 block truncate">
                       {repo.private ? 'private' : 'public'} · {repo.defaultBranch}

@@ -1,7 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import type { ReactNode } from 'react';
-import { createContext, useContext } from 'react';
+import { useContext } from 'react';
 import { useParams } from 'react-router';
 
 import { useApiConfig } from '../../../../api/config';
@@ -16,29 +16,12 @@ import { ChatCommandsProvider } from './ChatCommandsProvider';
 import { ChatModelsProvider } from './ChatModelsProvider';
 import { ChatModesProvider } from './ChatModesProvider';
 import { ChatSessionContext } from './ChatSessionContext';
+import { ChatThreadMessagesContext } from './ChatThreadMessagesContext';
+import type { ChatThreadMessagesApi } from './ChatThreadMessagesContext';
 import { ChatTranscriptProvider } from './ChatTranscriptProvider';
+import { useChatMessagePreparation } from './useChatMessagePreparation';
 import { SessionPrepareSteps } from '../components/SessionPrepareSteps';
 import { useChatSessionContext } from './useChatSessionContext';
-
-interface ChatThreadMessagesApi {
-  threadId?: string;
-  isPending: boolean;
-  error: unknown;
-}
-
-const ChatThreadMessagesContext = createContext<ChatThreadMessagesApi | null>(null);
-
-/**
- * True while the initial thread-messages fetch is in flight for the current
- * threadId. Returns false outside a `ChatSessionBoundary` (e.g. draft
- * composer routes with no thread), which keeps preparing-aware consumers
- * from treating "no boundary" as "still loading".
- */
-export function useChatMessagesInitializing(): boolean {
-  const value = useContext(ChatThreadMessagesContext);
-  if (!value) return false;
-  return Boolean(value.threadId) && value.isPending;
-}
 
 /** Stable project/API configuration for chat shell consumers such as the sidebar. */
 export function ChatSessionConfigProvider({
@@ -68,8 +51,14 @@ export function ChatSessionConfigProvider({
   // happen when the caller actually enters a session. Every factory route mounts
   // this provider (the chat shell is the router layout), so an ungated /ensure
   // here provisioned a sandbox just for visiting the board, metrics or settings.
+  // In-session it runs as a background warm-up only — nothing below blocks on it.
   const inSession = Boolean(userScoped ? threadId : sessionId);
-  const ensureQuery = useEnsureMaterializedSandbox(inSession ? repository?.projectRepositoryId : undefined);
+  // Warm-up also waits for session metadata: before `storedSession` resolves
+  // the `repository` fallback is the factory's first repository, which in a
+  // multi-repository factory could warm the wrong workspace.
+  const ensureQuery = useEnsureMaterializedSandbox(
+    inSession && storedSession ? repository?.projectRepositoryId : undefined,
+  );
   const resolvingSession = inSession && sessionQuery.isPending;
   // Sessions and their threads are provisioned with the session's own id as the
   // memory resourceId and no scope (see FactoryStartCoordinator.prepare and
@@ -90,10 +79,17 @@ export function ChatSessionConfigProvider({
   const resourceOverride = userScoped
     ? null
     : new URLSearchParams(typeof window === 'undefined' ? '' : window.location.search).get('resourceId');
-  const sandboxReady = resourceOverride
-    ? Boolean(resourceOverride)
-    : ensureQuery.isSuccess && Boolean(storedSession) && !resolvingSession;
-  const sessionError = ensureQuery.error ?? undefined;
+  // `sandboxReady` — session metadata resolved; safe to run mutations. It does
+  // NOT wait on `/ensure`: the server materializes sandboxes lazily on first
+  // use (and revives dead ones), so the `/ensure` call above is only a
+  // background warm-up that usually wins the race against the first command.
+  const sandboxReady = resourceOverride ? Boolean(resourceOverride) : Boolean(storedSession) && !resolvingSession;
+  // A denied or missing session (404 from the session query) is fatal and must
+  // surface the error state, not the eternal preparing loader. A failed warm-up
+  // is surfaced non-fatally (banner + retry) — the run path no longer depends
+  // on `/ensure` — so the two errors are kept apart.
+  const sessionError = sessionQuery.error ?? undefined;
+  const warmupError = ensureQuery.error ?? undefined;
   // `resourceReady` — safe to address the agent-controller session by
   // `resourceId` for reads/streaming as soon as server-side session metadata
   // resolves. Does NOT wait on `/ensure` — the agent-controller endpoints are
@@ -102,17 +98,22 @@ export function ChatSessionConfigProvider({
   const resourceReady = userScoped
     ? Boolean(storedSession) && !resolvingSession
     : Boolean(resourceOverride) || (Boolean(storedSession) && !resolvingSession);
-  // `sandboxPreparing` — true only when we're actively inside a session and
-  // awaiting `/ensure`. Distinct from `!sandboxReady`, which is also false
-  // outside any session.
-  const sandboxPreparing = inSession && !sandboxReady && !sessionError;
+  // `sandboxPreparing` — true only while session metadata is still resolving
+  // for an in-session mount. Distinct from `!sandboxReady`, which is also
+  // false outside any session. Track the pending query (not `!sandboxReady`)
+  // so a denied/missing session cannot keep the preparing loader up forever.
+  const sandboxPreparing = resolvingSession && !resourceOverride;
   const sandboxProgressQuery = useEnsureProgress(inSession ? repository?.projectRepositoryId : undefined);
-  const sandboxProgress = sandboxPreparing ? sandboxProgressQuery.data : undefined;
+  // Warm-up progress is informational only — it never blocks the chat UI.
+  const sandboxWarming = inSession && !resourceOverride && ensureQuery.isPending;
+  const sandboxProgress = sandboxWarming ? sandboxProgressQuery.data : undefined;
   // Outside a session the factory resource is addressable straight away (its id
-  // is the factory project id); inside one we keep the original ordering and
-  // wait for the workspace so resource reads follow materialization.
+  // is the factory project id); inside one it becomes addressable as soon as
+  // session metadata resolves — same as `resourceReady`.
   const resourceAddressable =
-    userScoped || !inSession ? Boolean(resourceId) : Boolean(resourceOverride) || ensureQuery.isSuccess;
+    userScoped || !inSession
+      ? Boolean(resourceId)
+      : Boolean(resourceOverride) || (Boolean(storedSession) && !resolvingSession);
   const resourceEnabled = !isUserDraft && resourceAddressable;
   const value = {
     resourceId: resourceOverride ?? resourceId ?? '',
@@ -123,9 +124,17 @@ export function ChatSessionConfigProvider({
     resourceReady,
     sandboxPreparing,
     sandboxProgress,
+    sandboxWarming,
     resourceEnabled,
     sessionError,
-    retrySession: sessionError ? () => void ensureQuery.refetch() : undefined,
+    warmupError,
+    retrySession:
+      sessionError || warmupError
+        ? () => {
+            if (ensureQuery.isError) void ensureQuery.refetch();
+            if (sessionQuery.isError) void sessionQuery.refetch();
+          }
+        : undefined,
     projectPath,
     sessionThreadId: storedSession?.sessionId,
     workspacePending: storedSession !== undefined && !storedSession.materializedAt,
@@ -183,58 +192,85 @@ export function ChatSessionBoundary({
     );
   }
 
+  // Above the transcript so the favicon and the stepper read one pending state.
   return (
-    <ChatTranscriptProvider
-      // No `isPending` segment: remounting on the pending -> ready flip would drop
-      // the live SSE listener. Results merge into the reducer instead.
-      key={`${resourceId}:${threadId ?? 'draft'}`}
-      threadId={threadId}
-      initialMessages={messagesQuery.data}
-      hasMoreHistory={messagesQuery.hasMore}
-      isLoadingMoreHistory={messagesQuery.isLoadingMore}
-      loadMoreHistory={messagesQuery.loadMore}
-    >
-      <ChatModesProvider>
-        <ChatModelsProvider>
-          <ChatCommandsProvider>
-            <ChatThreadMessagesContext.Provider value={messages}>{children}</ChatThreadMessagesContext.Provider>
-          </ChatCommandsProvider>
-        </ChatModelsProvider>
-      </ChatModesProvider>
-    </ChatTranscriptProvider>
+    <ChatThreadMessagesContext.Provider value={messages}>
+      <ChatTranscriptProvider
+        // No `isPending` segment: remounting on the pending -> ready flip would drop
+        // the live SSE listener. Results merge into the reducer instead.
+        key={`${resourceId}:${threadId ?? 'draft'}`}
+        threadId={threadId}
+        initialMessages={messagesQuery.data}
+        hasMoreHistory={messagesQuery.hasMore}
+        isLoadingMoreHistory={messagesQuery.isLoadingMore}
+        loadMoreHistory={messagesQuery.loadMore}
+      >
+        <ChatModesProvider>
+          <ChatModelsProvider>
+            <ChatCommandsProvider>{children}</ChatCommandsProvider>
+          </ChatModelsProvider>
+        </ChatModesProvider>
+      </ChatTranscriptProvider>
+    </ChatThreadMessagesContext.Provider>
   );
 }
 
 /** Limits delayed thread-history feedback to the transcript content region. */
-export function ChatMessageBoundary({ children }: { children: ReactNode }) {
+export function ChatMessageBoundary({
+  children,
+  showPreparation = true,
+}: {
+  children: ReactNode;
+  showPreparation?: boolean;
+}) {
   const value = useContext(ChatThreadMessagesContext);
   if (!value) throw new Error('ChatMessageBoundary must be used within a ChatSessionBoundary');
-  const { sessionError, sandboxPreparing } = useChatSessionContext();
+  const { sessionError, warmupError } = useChatSessionContext();
+  const { historyInitializing, preparing } = useChatMessagePreparation();
 
-  // A failed workspace preparation keeps the session disabled — surface the
-  // real failure instead of an eternal skeleton or a partial-state loader.
-  if (sessionError) return <ChatMessageFeedback />;
+  if (sessionError) return <ChatMessageFeedback error={sessionError} source="session" />;
+  const warmupBanner = warmupError ? <ChatMessageFeedback error={warmupError} source="warmup" /> : null;
 
-  // Any pre-transcript wait — sandbox provisioning OR the initial thread
-  // messages fetch — is shown as the step loader. Splitting these into two
-  // different loaders would flicker between them on cold visits where the
-  // ensure resolves fast but the messages fetch is still in flight; keeping
-  // them under one loader keeps the composer's spinning ring continuously
-  // meaningful through the whole preparing window.
-  const messagesInitializing = Boolean(value.threadId) && value.isPending;
-  if (sandboxPreparing || messagesInitializing) return <SessionPrepareSteps />;
+  if (preparing) {
+    return (
+      <>
+        {warmupBanner}
+        {showPreparation && <SessionPrepareSteps historyInitializing={historyInitializing} />}
+      </>
+    );
+  }
 
-  if (value.threadId && value.error) return <ChatMessageFallback {...value} />;
+  if (value.threadId && value.error) {
+    return (
+      <>
+        {warmupBanner}
+        <ChatMessageFallback {...value} />
+      </>
+    );
+  }
 
-  return children;
+  return (
+    <>
+      {warmupBanner}
+      {children}
+    </>
+  );
 }
 
-function ChatMessageFeedback() {
-  const { sessionError, retrySession } = useChatSessionContext();
-  if (!sessionError) return null;
+function ChatMessageFeedback({ error, source }: { error: Error; source: 'session' | 'warmup' }) {
+  const { retrySession } = useChatSessionContext();
+  // The server intentionally returns the same 404 for a missing session and a
+  // private one owned by someone else, so the message covers both — but only
+  // for the session lookup itself. A warm-up (`/ensure`) 404 describes a
+  // missing repository or workspace, so it keeps its actual error details.
+  const notFound = source === 'session' && (error as { status?: number }).status === 404;
   return (
     <div className="flex flex-col items-stretch gap-4">
-      <Notice variant="destructive">Failed to prepare the workspace: {sessionError.message}</Notice>
+      <Notice variant="destructive">
+        {notFound
+          ? 'This session was not found or is private to another user.'
+          : `Failed to prepare the workspace: ${error.message}`}
+      </Notice>
       {retrySession && (
         <div>
           <Button variant="default" onClick={retrySession}>

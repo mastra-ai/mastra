@@ -81,9 +81,11 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
   _internal,
   logger,
   agentId,
+  agentVersionId,
   mastra,
   requireToolApproval: requireToolApprovalFromFactory,
   actor,
+  mcp,
 }: OuterLLMRun<Tools, OUTPUT>) {
   return createStep({
     id: 'toolCallStep',
@@ -551,14 +553,18 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           (suspendData as { requireToolApproval?: unknown }).requireToolApproval &&
           !isDelegatedApproval,
         );
-        const isApprovalResume =
-          resumeData != null && typeof resumeData === 'object' && 'approved' in (resumeData as Record<string, unknown>);
-        // Gate the resume branch on either a live policy or a prior outer approval suspend.
-        // Without this, `declineToolCall` falls through to `execute` when the policy was
-        // lost (#20470). Do not key only on `approved` in resumeData — generic tool
-        // resumes can carry that field for unrelated reasons (same guard as durable).
+        const approvalDecision =
+          workflowResumeData != null &&
+          typeof workflowResumeData === 'object' &&
+          typeof (workflowResumeData as Record<string, unknown>).approved === 'boolean'
+            ? (workflowResumeData as { approved: boolean; reason?: string })
+            : undefined;
+        // Gate a fresh call or a prior outer approval suspend. Once an approved tool
+        // suspends during execution for its own resume data, do not require approval again.
+        // Approval decisions must come from the workflow resume boundary; model-authored
+        // resumeData is untrusted and cannot grant or decline consent.
         const approvalGated =
-          !isDelegatedApproval && (toolRequiresApproval || (suspendedForApproval && isApprovalResume));
+          !isDelegatedApproval && (suspendedForApproval || (toolRequiresApproval && suspendData === undefined));
 
         // Schema for tool call approval - used for both streaming and metadata
         const approvalSchema = toStandardSchema(
@@ -576,7 +582,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         );
 
         if (approvalGated) {
-          if (!resumeData) {
+          if (!approvalDecision) {
             await stopGoalActivity({
               agentId,
               runId,
@@ -624,6 +630,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 },
                 __streamState: streamState.serialize(),
                 __agentId: agentId,
+                ...(agentVersionId ? { __agentVersionId: agentVersionId } : {}),
               },
               {
                 resumeLabel: inputData.toolCallId,
@@ -633,7 +640,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             // Remove approval metadata since we're resuming (either approved or declined)
             await removeToolMetadata({ toolCallId: inputData.toolCallId, toolName: inputData.toolName }, 'approval');
 
-            if (!resumeData.approved) {
+            if (!approvalDecision.approved) {
               // Return the approval decision (not a `result` string) so it persists as
               // `state: 'output-denied'` with `approval`. The denial reason carries the
               // caller-supplied reason when one was provided, otherwise the default string
@@ -642,7 +649,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 approval: {
                   id: inputData.toolCallId,
                   approved: false,
-                  reason: resolveDeclineReason(resumeData),
+                  reason: resolveDeclineReason(approvalDecision),
                 },
                 ...inputData,
               };
@@ -654,7 +661,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         // approval decision so it round-trips through persistence as `approval: { approved: true }`.
         // Use `approvalGated` (not only the live policy) so approve-after-policy-loss still tags.
         const approvalGrant =
-          approvalGated && resumeData && (resumeData as { approved?: boolean }).approved === true
+          approvalGated && approvalDecision?.approved === true
             ? ({ approval: { id: inputData.toolCallId, approved: true as const } } as const)
             : undefined;
 
@@ -688,6 +695,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           // Forward requestContext so tools receive values set by the workflow step
           requestContext,
           actor,
+          mcp,
           // Let tools that read thread history mid-stream (e.g. forked subagents
           // cloning the parent thread) drain the save queue so the store reflects
           // the latest user/assistant messages before they read.
@@ -772,6 +780,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   },
                   __streamState: streamState.serialize(),
                   __agentId: agentId,
+                  ...(agentVersionId ? { __agentVersionId: agentVersionId } : {}),
                   // Persist the inner suspended run id in the workflow snapshot, partitioned per
                   // tool call (resumeLabel = toolCallId). Persisted message metadata exposes the
                   // same id as delegatedRunId for cold reloads, while the snapshot remains the
@@ -821,6 +830,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   toolCallSuspended: suspendPayload,
                   __streamState: streamState.serialize(),
                   __agentId: agentId,
+                  ...(agentVersionId ? { __agentVersionId: agentVersionId } : {}),
                   toolCallId: inputData.toolCallId,
                   toolName: inputData.toolName,
                   resumeLabel: options?.resumeLabel,
@@ -838,7 +848,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         //if resuming a subAgent or workflow tool, we want to find the runId from when it got suspended.
         // Also look up the runId when the LLM provided resumeData in args (isResumeToolCall)
         // but omitted suspendedToolRunId — without it, workflow tools start a fresh run and re-suspend.
-        const needsRunIdLookup = resumeDataToPassToToolOptions && (isAgentTool || isWorkflowTool);
+        // Nullish, not truthy, for the same reason as the cleanup gate below: a delegated tool can
+        // be resumed with `false` / `0` / `''`, and skipping the lookup there would start a fresh
+        // sub-run (and the cleanup below would drop the entry that could still recover the id).
+        const needsRunIdLookup = resumeDataToPassToToolOptions != null && (isAgentTool || isWorkflowTool);
         if (needsRunIdLookup) {
           // Primary source: the per-iteration workflow suspend payload, which carries the
           // suspended run id partitioned per tool call (resumeLabel = toolCallId). This is
@@ -903,7 +916,21 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           }
         }
 
-        if (!toolRequiresApproval && isResumeToolCall) {
+        // Clear the suspension entry for BOTH resume conventions: `resumeData` embedded in the
+        // LLM's re-emitted args (autoResumeSuspendedTools) and the workflow-level resumeData that
+        // `agent.resumeStream(resumeData, { runId, toolCallId })` delivers. `isResumeToolCall` only
+        // covers the former — it stays args-specific because the runId lookup above depends on
+        // that narrower meaning.
+        // Nullish, not truthy: `false` / `0` / `''` are valid resume payloads for a tool whose
+        // resumeSchema is a primitive (e.g. a boolean decline), and they must clear the entry too.
+        //
+        // Keyed on `approvalGated`, not the live `toolRequiresApproval`, for the same reason as
+        // `approvalGrant` above: on an approve-after-policy-loss resume the live policy is gone
+        // while the suspension was an approval one, which cleans up its own metadata in the
+        // branch above. Using the live policy here would run the generic suspension cleanup on
+        // top of it, and `removeToolMetadata`'s toolCallId -> toolName fallback could then drop a
+        // concurrently suspended sibling that shares this tool name.
+        if (!approvalGated && resumeData != null) {
           await removeToolMetadata({ toolCallId: inputData.toolCallId, toolName: inputData.toolName }, 'suspension');
         }
 

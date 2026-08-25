@@ -497,6 +497,11 @@ export interface WorkflowOptions {
   tracingPolicy?: TracingPolicy;
   validateInputs?: boolean;
   /**
+   * Whether workflow step lifecycle events are emitted. Defaults to true.
+   * Internal workflows may disable these events when no consumer observes them.
+   */
+  emitStepEvents?: boolean;
+  /**
    * When true, nested runs created by execute() share the parent's pubsub
    * instance instead of creating an isolated one. Used by durable agent
    * workflows so inner step events reach the outer subscriber.
@@ -506,6 +511,16 @@ export interface WorkflowOptions {
     stepResults: Record<string, StepResult<any, any, any, any>>;
     workflowStatus: WorkflowRunStatus;
   }) => boolean;
+
+  /**
+   * Acknowledges that `resume()` calls for this workflow cannot be de-duplicated
+   * via the persisted resume claim (for example because `shouldPersistSnapshot`
+   * excludes the `running` status), and suppresses the per-resume warning.
+   *
+   * Set by internal workflows that intentionally trade resume de-duplication
+   * for reduced snapshot writes and serialize their own resumes.
+   */
+  allowUnclaimedResumes?: boolean;
 
   /**
    * Transforms the run snapshot immediately before it is persisted.

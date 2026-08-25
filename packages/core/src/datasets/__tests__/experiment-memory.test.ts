@@ -6,9 +6,10 @@
  * executor forwarded the resourceId without any thread.
  *
  * The executor now injects a distinct per-item thread (mirroring the
- * multi-turn evals runner precedent) whenever a resourceId is present, no
- * threadId is supplied, and the agent has its own memory. These tests use a
- * real Agent + MockMemory + real Dataset.startExperiment — the pre-existing
+ * multi-turn evals runner precedent) whenever no threadId is supplied and the
+ * agent has its own memory. When the caller also omits resourceId, each item
+ * receives an isolated experiment-owned resource. These tests use a real
+ * Agent + MockMemory + real Dataset.startExperiment — the pre-existing
  * experiment tests mock the agent, which is why the bug went unnoticed.
  */
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
@@ -195,8 +196,46 @@ describe('experiment executor memory-thread injection (#20663)', () => {
     }
   });
 
-  it('SC2a: no resourceId in context — run succeeds memory-less, no threads created', async () => {
+  it('SC2a: no memory identifiers — run uses an isolated experiment-owned resource per item', async () => {
     const { agent, memory } = createMemoryAgent(createV2Model());
+    const generateSpy = vi.spyOn(agent, 'generate');
+    const { ds, itemIds } = await setupDataset(agent);
+
+    const summary = await ds.startExperiment({
+      targetType: 'agent',
+      targetId: 'memory-agent',
+    });
+
+    expect(summary.failedCount).toBe(0);
+    expect(summary.succeededCount).toBe(ITEM_INPUTS.length);
+
+    const { threads } = await memory.listThreads({ filter: {} });
+    expect(threads).toHaveLength(ITEM_INPUTS.length);
+    expect(new Set(threads.map(thread => thread.id)).size).toBe(ITEM_INPUTS.length);
+    expect(new Set(threads.map(thread => thread.resourceId)).size).toBe(ITEM_INPUTS.length);
+    for (const thread of threads) {
+      expect(thread.resourceId).toBe(`dataset-experiment:${summary.experimentId}:thread:${thread.id}`);
+      expect(thread.metadata).toMatchObject({
+        experimentId: summary.experimentId,
+        experimentItemId: expect.any(String),
+      });
+    }
+    const taggedItemIds = threads.map(thread => (thread.metadata as Record<string, unknown>).experimentItemId);
+    expect(new Set(taggedItemIds)).toEqual(new Set(itemIds));
+
+    for (const call of generateSpy.mock.calls) {
+      const options = (call as unknown[])[1] as {
+        memory?: { thread?: { id?: string }; resource?: string };
+      };
+      expect(options.memory?.thread?.id).toBeDefined();
+      expect(options.memory?.resource).toBe(
+        `dataset-experiment:${summary.experimentId}:thread:${options.memory?.thread?.id}`,
+      );
+    }
+  });
+
+  it('SC2a (legacy): no memory identifiers — legacy agent runs with isolated resources', async () => {
+    const { agent, memory } = createMemoryAgent(createV1Model());
     const { ds } = await setupDataset(agent);
 
     const summary = await ds.startExperiment({
@@ -208,7 +247,11 @@ describe('experiment executor memory-thread injection (#20663)', () => {
     expect(summary.succeededCount).toBe(ITEM_INPUTS.length);
 
     const { threads } = await memory.listThreads({ filter: {} });
-    expect(threads).toHaveLength(0);
+    expect(threads).toHaveLength(ITEM_INPUTS.length);
+    expect(new Set(threads.map(thread => thread.resourceId)).size).toBe(ITEM_INPUTS.length);
+    for (const thread of threads) {
+      expect(thread.resourceId).toBe(`dataset-experiment:${summary.experimentId}:thread:${thread.id}`);
+    }
   });
 
   it('SC2b: memory-less agent + resourceId — no memory option is injected, run succeeds unchanged', async () => {

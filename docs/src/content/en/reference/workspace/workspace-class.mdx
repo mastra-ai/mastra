@@ -52,14 +52,14 @@ const workspace = new Workspace({
     name: 'filesystem',
     type: 'WorkspaceFilesystem | WorkspaceFilesystemResolver',
     description:
-      'Filesystem provider instance, or a resolver function that receives `requestContext` and returns a filesystem per request. See [multi-tenant filesystems](/docs/workspace/filesystem#multi-tenant-filesystems).',
+      'Filesystem provider instance, or a resolver function that receives `requestContext` and returns a filesystem per request. See [filesystems per user or thread](/docs/sandbox/filesystem#filesystems-per-user-or-thread).',
     isOptional: true,
   },
   {
     name: 'sandbox',
     type: 'WorkspaceSandbox | WorkspaceSandboxResolver',
     description:
-      'Sandbox provider instance, or a resolver function that receives `requestContext` and returns a sandbox per request. See [multi-tenant sandboxes](/docs/workspace/sandbox#multi-tenant-sandboxes).',
+      'Sandbox provider instance, or a resolver function that receives `requestContext` and returns a sandbox per request. See [sandboxes per user or thread](/docs/sandbox/overview#sandboxes-per-user-or-thread).',
     isOptional: true,
   },
   {
@@ -94,7 +94,7 @@ const workspace = new Workspace({
     name: 'embedder',
     type: 'Embedder',
     description:
-      'Function that turns text into vectors. Required when `vectorStore` is set. Accepts either a single-text function `(text: string) => Promise<number[]>` or a batch-capable function `(texts: string[]) => Promise<number[][]>` that has a `batch: true` property and an optional `maxBatchSize`. See [Batch embedding](/docs/workspace/search#batch-embedding).',
+      'Function that turns text into vectors. Required when `vectorStore` is set. Accepts either a single-text function `(text: string) => Promise<number[]>` or a batch-capable function `(texts: string[]) => Promise<number[][]>` that has a `batch: true` property and an optional `maxBatchSize`. See [Batch embedding](/docs/sandbox/search#batch-embedding).',
     isOptional: true,
   },
   {
@@ -282,7 +282,7 @@ const workspace = new Workspace({
 })
 ```
 
-See [Filesystem tools](/docs/workspace/filesystem#using-mounts), [Sandbox tools](/docs/workspace/sandbox#using-the-sandbox), [LSP inspection](/docs/workspace/lsp#tool-name-remapping), and [Search tools](/docs/workspace/search#agent-tools) for capability-specific configuration.
+See [Filesystem tools](/docs/sandbox/filesystem#using-mounts), [Sandbox tools](/docs/sandbox/overview#using-the-sandbox), [LSP inspection](/docs/sandbox/lsp#tool-name-remapping), and [Search tools](/docs/sandbox/search#agent-tools) for capability-specific configuration.
 
 ### Tool name remapping
 
@@ -425,6 +425,18 @@ Initialization performs:
 - Starts the sandbox provider (creates working directory, sets up isolation if configured)
 - Indexes files from `autoIndexPaths` for search
 
+#### `stop()`
+
+Stop the workspace's live resources without destroying them.
+
+```typescript
+await workspace.stop()
+```
+
+`stop()` shuts down language servers and closes the browser, then stops the sandbox provider. Remote sandbox providers suspend or pause the sandbox so it can resume later. `LocalSandbox` kills its background processes and unmounts filesystems. Stopping isn't a teardown. The filesystem, search index, and skills keep working, and the next sandbox operation starts the sandbox again.
+
+`mastra.shutdown()` calls `stop()` for registered workspaces, so a process restart suspends remote sandboxes instead of deleting them. To fully tear a workspace down, call `destroy()` or `mastra.removeWorkspace(id, { destroy: true })` explicitly.
+
 #### `destroy()`
 
 Destroy the workspace and clean up resources.
@@ -435,7 +447,7 @@ await workspace.destroy()
 
 `destroy()` closes workspace-owned resources in order: language servers, browsers, sandbox providers, and filesystem providers. It also clears cached sandbox references.
 
-Call `destroy()` when your application is done with a workspace. `mastra.shutdown()` calls it for registered workspaces during shutdown. To remove a workspace from the Mastra registry, use [`mastra.removeWorkspace()`](/reference/core/removeWorkspace).
+Call `destroy()` when your application is done with a workspace and its sandbox. To remove a workspace from the Mastra registry, use [`mastra.removeWorkspace()`](/reference/core/removeWorkspace).
 
 `LocalFilesystem.destroy()` doesn't delete files on disk. Resolver-backed filesystem and sandbox providers are owned by your application and must be cleaned up by your application.
 
@@ -725,7 +737,7 @@ Added when a filesystem is configured:
 | `mastra_workspace_mkdir` | Create a directory. Creates parent directories automatically if they don't exist. |
 | `mastra_workspace_grep` | Search file contents using regex patterns. Supports glob filtering, context lines, and case-insensitive search. |
 
-With a static filesystem, write tools (`write_file`, `edit_file`, `delete`, `mkdir`) are excluded when the filesystem is in read-only mode. With a [runtime-defined filesystem](/docs/workspace/filesystem#multi-tenant-filesystems), write tools are always included and read-only is enforced at runtime.
+With a static filesystem, write tools (`write_file`, `edit_file`, `delete`, `mkdir`) are excluded when the filesystem is in read-only mode. With a [runtime-defined filesystem](/docs/sandbox/filesystem#filesystems-per-user-or-thread), write tools are always included and read-only is enforced at runtime.
 
 The `read_file` tool accepts `mediaTypes` and `maxMediaBytes` options to control which mime types are surfaced to the model as native media parts and how large those files can be:
 
@@ -774,7 +786,7 @@ Added when a sandbox is configured:
 | `mastra_workspace_get_process_output` | Get stdout, stderr, and status of a background process by PID. Accepts `tail` to limit output lines and `wait: true` to block until exit. Only available when the sandbox has a process manager. |
 | `mastra_workspace_kill_process` | Kill a background process by PID. Returns the last 50 lines of output. Only available when the sandbox has a process manager. |
 
-With a static sandbox, capability checks (`executeCommand`, `processes`) decide which tool variants are exposed. With a [runtime-defined sandbox](/docs/workspace/sandbox#multi-tenant-sandboxes), all sandbox tools are registered and the runtime throws a clear error if the resolved sandbox doesn't implement a requested capability.
+With a static sandbox, capability checks (`executeCommand`, `processes`) decide which tool variants are exposed. With a [runtime-defined sandbox](/docs/sandbox/overview#sandboxes-per-user-or-thread), all sandbox tools are registered and the runtime throws a clear error if the resolved sandbox doesn't implement a requested capability.
 
 The `execute_command` tool accepts a `backgroundProcesses` option for lifecycle callbacks on background processes:
 
@@ -822,7 +834,7 @@ The `execute_command` tool accepts a `backgroundProcesses` option for lifecycle 
 ]}
 />
 
-See [Background processes](/docs/workspace/sandbox#background-processes) for callback examples.
+See [Background processes](/docs/sandbox/overview#background-processes) for callback examples.
 
 ### Search tools
 
@@ -845,4 +857,4 @@ Added when skills are configured:
 | `skill_search` | Search across skill content. Accepts an optional list of skill names to filter and a `topK` parameter. |
 | `skill_read` | Read a specific file (reference, script, or asset) from a skill directory. |
 
-When multiple skills share the same name, `list()` returns all of them. `get()` with a name applies tie-breaking (local > managed > external). If two skills share the same name and source type, `get()` throws an error. Pass a skill's full path to `get()` to bypass tie-breaking. See [Skills with the same name](/docs/workspace/skills#same-named-skills) for details.
+When multiple skills share the same name, `list()` returns all of them. `get()` with a name applies tie-breaking (local > managed > external). If two skills share the same name and source type, `get()` throws an error. Pass a skill's full path to `get()` to bypass tie-breaking. See [Skills with the same name](/docs/sandbox/skills#same-named-skills) for details.

@@ -13,7 +13,13 @@ import { resolveModelConfig } from '../llm';
 import type { IMastraLogger } from '../logger';
 import type { MastraMemory } from '../memory/memory';
 import { parseMemoryRequestContext } from '../memory/types';
-import { EntityType, SpanType, createObservabilityContext, resolveObservabilityContext } from '../observability';
+import {
+  EntityType,
+  InternalSpans,
+  SpanType,
+  createObservabilityContext,
+  resolveObservabilityContext,
+} from '../observability';
 import type { ObservabilityContext, Span } from '../observability';
 import type { TracingContext } from '../observability/types';
 import type { RequestContext } from '../request-context';
@@ -21,6 +27,7 @@ import type { ChunkType } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { LanguageModelUsage, ProviderMetadata } from '../stream/types';
 import { isProcessorWorkflow } from './is-processor-workflow';
+import { isMaybeAnthropicWithoutAssistantPrefill } from './provider-history-compat';
 import { createProcessorSendSignal } from './send-signal';
 import {
   summarizeActiveToolsForSpan,
@@ -31,7 +38,7 @@ import {
 } from './span-payload';
 import type { ProcessorStepOutput } from './step-schema';
 import { REPROCESS_PART_KEY } from './stream-reprocess';
-import { isMaybeClaude46, TrailingAssistantGuard } from './trailing-assistant-guard';
+import { TrailingAssistantGuard } from './trailing-assistant-guard';
 import type {
   CachedLLMStepChunk,
   CachedLLMStepResponse,
@@ -65,6 +72,28 @@ async function invokeOnViolation(processor: Processor, error: TripWire): Promise
   } catch {
     // onViolation errors are silently caught
   }
+}
+
+function getProcessableResponseMessages(messageList: MessageList): MastraDBMessage[] {
+  const liveMessages = messageList.get.response.db();
+  const persistedMessages = messageList.getPersisted.response.db();
+
+  if (persistedMessages.length === 0) {
+    return [...liveMessages];
+  }
+  if (liveMessages.length === 0) {
+    return [...persistedMessages];
+  }
+
+  const messagesById = new Map(persistedMessages.map(message => [message.id, message]));
+  for (const message of liveMessages) {
+    messagesById.set(message.id, message);
+  }
+
+  return messageList.get.all
+    .db()
+    .filter(message => messagesById.has(message.id))
+    .map(message => messagesById.get(message.id)!);
 }
 
 /**
@@ -385,12 +414,7 @@ export class ProcessorRunner {
     };
 
     const stateId = processor.stateId ?? processor.id;
-    const beforeAddStateSignal = rotateResponseMessageId
-      ? () => {
-          messageList.markResponseMessageBoundary();
-          rotateResponseMessageId();
-        }
-      : undefined;
+    const beforeAddStateSignal = rotateResponseMessageId;
     const trackingById = getStateSignalsMetadata(thread.metadata);
     const tracking = trackingById[stateId];
     const { activeStateSignals, contextWindow, lastSnapshot, deltasSinceSnapshot } = await resolveStateSignalHistory({
@@ -518,8 +542,24 @@ export class ProcessorRunner {
     writer?: ProcessorStreamWriter,
     abortSignal?: AbortSignal,
   ): Promise<ProcessorStepOutput> {
+    // The stream phase runs the whole workflow once per streamed chunk, with the full
+    // accumulated `streamParts` as input. Persisting a snapshot (and tracing a public
+    // span) for every one of those transient runs makes a stream of n chunks cost O(n²)
+    // in storage writes and serialized payload (#19605). Internal processor workflows
+    // built by the agent already opt out via their workflow options (#17344); a
+    // user-supplied processor workflow keeps the persisting defaults, so the opt-out is
+    // applied per run here — leaving the same workflow's standalone runs untouched.
+    const isPerChunkPhase = input.phase === 'outputStream';
+
     // Create a run and start the workflow
-    const run = await workflow.createRun();
+    const run = await workflow.createRun(
+      isPerChunkPhase
+        ? {
+            shouldPersistSnapshot: () => false,
+            tracingPolicy: { internal: InternalSpans.WORKFLOW },
+          }
+        : undefined,
+    );
     const result = await run.start({
       // Cast to allow processorStates/abortSignal - passed through to workflow processor steps
       // but not part of the official ProcessorStepOutput schema
@@ -605,8 +645,7 @@ export class ProcessorRunner {
     result?: OutputResult,
   ): Promise<MessageList> {
     for (const [index, processorOrWorkflow] of this.outputProcessors.entries()) {
-      const allNewMessages = messageList.get.response.db();
-      let processableMessages: MastraDBMessage[] = [...allNewMessages];
+      let processableMessages = getProcessableResponseMessages(messageList);
       const idsBeforeProcessing = processableMessages.map((m: MastraDBMessage) => m.id);
       const check = messageList.makeMessageSourceChecker();
 
@@ -705,7 +744,7 @@ export class ProcessorRunner {
             });
           }
           if (mutations.length > 0) {
-            processableMessages = processResult.get.response.db();
+            processableMessages = getProcessableResponseMessages(processResult);
           }
         } else {
           if (processResult) {
@@ -1366,9 +1405,9 @@ export class ProcessorRunner {
       retryCount: args.retryCount ?? 0,
     };
 
-    // Append the trailing assistant guard when the resolved model is Claude 4.6
+    // Append the trailing assistant guard when the resolved model does not support assistant prefill
     const processors =
-      stepInput.model && isMaybeClaude46(stepInput.model)
+      stepInput.model && isMaybeAnthropicWithoutAssistantPrefill(stepInput.model)
         ? [...this.inputProcessors, new TrailingAssistantGuard()]
         : this.inputProcessors;
 
@@ -1555,12 +1594,7 @@ export class ProcessorRunner {
               memoryConfig: memoryContext?.memoryConfig,
               messageList,
               defaultId: processor.stateId ?? processor.id,
-              beforeAddSignal: rotateResponseMessageId
-                ? () => {
-                    messageList.markResponseMessageBoundary();
-                    rotateResponseMessageId();
-                  }
-                : undefined,
+              beforeAddSignal: rotateResponseMessageId,
               writeSignal: signal => writer?.custom(signal.toDataPart()),
             });
             return result.skipped ? result : result.signal;
@@ -2417,8 +2451,14 @@ export class ProcessorRunner {
       messageList.removeByIds(deletedIds);
     }
 
+    const currentById = new Map(messageList.get.all.db().map(message => [message.id, message]));
+
     // Re-add messages with correct sources
     for (const message of messages) {
+      if (currentById.get(message.id) === message) {
+        continue;
+      }
+
       messageList.removeByIds([message.id]);
       if (message.role === 'system') {
         const systemText =

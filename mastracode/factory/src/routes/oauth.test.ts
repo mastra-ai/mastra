@@ -56,7 +56,11 @@ let seed: FactoryStorageTestSeed;
 
 function buildApp(
   user: { workosId: string; organizationId?: string } | null,
-  opts?: { noCredentials?: boolean; enabled?: boolean },
+  opts?: {
+    noCredentials?: boolean;
+    enabled?: boolean;
+    isOrganizationAdmin?: (organizationId: string, userId: string) => Promise<boolean>;
+  },
 ) {
   const app = new Hono();
   app.use('*', async (c, next) => {
@@ -66,7 +70,7 @@ function buildApp(
   mountApiRoutes(
     app as any,
     new OAuthRoutes({
-      auth: fakeRouteAuth({ enabled: opts?.enabled }),
+      auth: fakeRouteAuth({ enabled: opts?.enabled, isOrganizationAdmin: opts?.isOrganizationAdmin }),
       authStorage,
       modelCredentials: opts?.noCredentials ? undefined : seed.credentials,
     }).routes(),
@@ -325,6 +329,91 @@ describe('session cancel and sign-out', () => {
     expect(await seed.credentials.getCredential({ orgId: 'org1', userId: 'user-b' }, 'anthropic')).toBeDefined();
     expect(await seed.credentials.getCredential({ orgId: 'org1' }, 'anthropic')).toBeDefined();
     expect(authStorage.remove).not.toHaveBeenCalled();
+  });
+});
+
+// ── Org-scoped sign-in ───────────────────────────────────────────────────
+
+describe('org-scoped sign-in', () => {
+  it('complete stores an org-scoped credential when the flow was started with scope org', async () => {
+    const app = buildApp(userA);
+    const { sessionId } = await (
+      await post(app, '/web/config/providers/anthropic/oauth/start', { scope: 'org' })
+    ).json();
+
+    const res = await post(app, '/web/config/providers/anthropic/oauth/complete', { sessionId, code: 'c' });
+    expect(res.status).toBe(200);
+
+    // Written to the org row, not the caller's user row.
+    expect(await seed.credentials.getCredential(TENANT_A, 'anthropic')).toBeUndefined();
+    expect(await seed.credentials.getCredential({ orgId: 'org1' }, 'anthropic')).toMatchObject({
+      type: 'oauth',
+      access: 'a-1',
+    });
+    // Visible to other org members through resolution.
+    expect(await seed.credentials.resolveCredential('org1', 'user-b', 'anthropic')).toBeDefined();
+  });
+
+  it('device-code poll stores an org-scoped credential when started with scope org', async () => {
+    const app = buildApp(userA);
+    const { sessionId } = await (await post(app, '/web/config/providers/openai/oauth/start', { scope: 'org' })).json();
+    pollCodexDeviceLogin.mockResolvedValue({ status: 'complete', credentials: CODEX_CREDS });
+    await makePollable(sessionId);
+
+    const res = await post(app, '/web/config/providers/openai/oauth/poll', { sessionId });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ status: 'complete' });
+
+    expect(await seed.credentials.getCredential(TENANT_A, 'openai-codex')).toBeUndefined();
+    expect(await seed.credentials.getCredential({ orgId: 'org1' }, 'openai-codex')).toMatchObject({ type: 'oauth' });
+  });
+
+  it('403s complete when admin access was revoked after the org-scoped flow started', async () => {
+    const { sessionId } = await (
+      await post(buildApp(userA), '/web/config/providers/anthropic/oauth/start', { scope: 'org' })
+    ).json();
+
+    // Admin at start, revoked before completion.
+    const revoked = buildApp(userA, { isOrganizationAdmin: async () => false });
+    const res = await post(revoked, '/web/config/providers/anthropic/oauth/complete', { sessionId, code: 'c' });
+    expect(res.status).toBe(403);
+    expect(await seed.credentials.getCredential({ orgId: 'org1' }, 'anthropic')).toBeUndefined();
+  });
+
+  it('403s device-code poll when admin access was revoked after the org-scoped flow started', async () => {
+    const { sessionId } = await (
+      await post(buildApp(userA), '/web/config/providers/openai/oauth/start', { scope: 'org' })
+    ).json();
+    pollCodexDeviceLogin.mockResolvedValue({ status: 'complete', credentials: CODEX_CREDS });
+    await makePollable(sessionId);
+
+    const revoked = buildApp(userA, { isOrganizationAdmin: async () => false });
+    const res = await post(revoked, '/web/config/providers/openai/oauth/poll', { sessionId });
+    expect(res.status).toBe(403);
+    expect(await seed.credentials.getCredential({ orgId: 'org1' }, 'openai-codex')).toBeUndefined();
+  });
+
+  it('403s a non-admin starting an org-scoped flow', async () => {
+    const app = buildApp(userA, { isOrganizationAdmin: async () => false });
+    const res = await post(app, '/web/config/providers/anthropic/oauth/start', { scope: 'org' });
+    expect(res.status).toBe(403);
+  });
+
+  it('sign-out with scope=org removes the shared org credential (admin only)', async () => {
+    await seed.credentials.setCredential({ orgId: 'org1' }, 'anthropic', { type: 'oauth', ...ANTHROPIC_CREDS });
+    await seed.credentials.setCredential(TENANT_A, 'anthropic', { type: 'oauth', ...ANTHROPIC_CREDS });
+
+    const forbidden = await buildApp(userA, { isOrganizationAdmin: async () => false }).request(
+      '/web/config/providers/anthropic/oauth?scope=org',
+      { method: 'DELETE' },
+    );
+    expect(forbidden.status).toBe(403);
+
+    const res = await buildApp(userA).request('/web/config/providers/anthropic/oauth?scope=org', { method: 'DELETE' });
+    expect(res.status).toBe(200);
+    expect(await seed.credentials.getCredential({ orgId: 'org1' }, 'anthropic')).toBeUndefined();
+    // Personal credential untouched.
+    expect(await seed.credentials.getCredential(TENANT_A, 'anthropic')).toBeDefined();
   });
 });
 

@@ -1,0 +1,361 @@
+---
+title: "Search and indexing"
+description: Index filesystem or application content for BM25 keyword search, vector semantic search, or hybrid mode.
+packages:
+  - "@mastra/core"
+---
+
+# Search and indexing
+
+Search gives agents a fast way to find relevant content without reading every file. It works with [direct filesystem access](/docs/sandbox/filesystem#direct-filesystem-access) and [`mounts`](/docs/sandbox/filesystem#mounts), but stores searchable content in a separate index.
+
+Queries read that index, not the live filesystem. This separation also lets you index content from databases, APIs, or other application sources.
+
+## Quickstart
+
+Enable BM25 keyword search, add a document to the index, and search it:
+
+```typescript title="src/mastra/workspaces.ts"
+import { LocalFilesystem, Workspace } from '@mastra/core/workspace'
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  bm25: true,
+})
+
+await workspace.index('/docs/guide.md', 'Reset passwords from the account settings page.')
+
+const results = await workspace.search('password reset')
+
+for (const result of results) {
+  console.log(`${result.id}: ${result.score}`)
+  console.log(result.content)
+}
+```
+
+The first argument to `workspace.index()` is the document ID returned in search results. It looks like a file path in this example, but `index()` doesn't read or create that file.
+
+Configuring search also gives agents search and indexing tools. See [Agent tools](#agent-tools) to control them.
+
+## Choose a search mode
+
+Mastra supports three search modes:
+
+| Mode | Best for | Example queries |
+| - | - | - |
+| `bm25` | Exact terms, technical queries, and code | "useState hook", "404 error", "config.yaml" |
+| `vector` | Concepts and natural-language questions | "how to handle user authentication" |
+| `hybrid` | A mix of exact and conceptual queries | Most agent search use cases |
+
+If you don't pass a mode to `workspace.search()`, Mastra uses hybrid search when both BM25 and vector search are configured. Otherwise, it uses the configured mode.
+
+### BM25 keyword search
+
+BM25 scores documents by term frequency and document length. It needs no external service or embedding model. Pass `bm25: true` to use the defaults shown in the quickstart.
+
+To tune term-frequency saturation and document-length normalization, pass `k1` and `b`:
+
+```typescript title="src/mastra/workspaces.ts"
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  bm25: {
+    k1: 1.5,
+    b: 0.75,
+  },
+})
+```
+
+### Vector search
+
+Vector search uses embeddings to find semantically similar content. Configure a vector store and a function that embeds one string at a time:
+
+```typescript title="src/mastra/workspaces.ts"
+import { openai } from '@ai-sdk/openai'
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
+import { PineconeVector } from '@mastra/pinecone'
+import { embed } from 'ai'
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  vectorStore: new PineconeVector({
+    id: 'workspace-search',
+    apiKey: process.env.PINECONE_API_KEY!,
+  }),
+  embedder: async (text: string) => {
+    const { embedding } = await embed({
+      model: openai.embedding('__AI_SDK_OPENAI_EMBEDDING_MODEL__'),
+      value: text,
+    })
+    return embedding
+  },
+})
+```
+
+#### Batch embedding
+
+A single-text embedder makes a separate provider call for each document. For large indexes, use a provider's batch API to embed several documents in one call.
+
+A batch embedder must:
+
+- Accept an array of strings.
+- Return one embedding per string, in the same order.
+- Have a `batch: true` property so Mastra can detect it at runtime.
+- Optionally set `maxBatchSize` to the largest array the provider accepts.
+
+Mastra splits larger indexing sets according to `maxBatchSize` and can process the resulting groups concurrently. Set this value to the provider's documented limit:
+
+| Provider | Maximum inputs |
+| - | - |
+| OpenAI | 2048 |
+| Cohere | 96 |
+| Voyage | 128 |
+
+If you omit `maxBatchSize`, Mastra uses its internal batch size.
+
+Replace the single-text embedder with a batch embedder:
+
+```typescript title="src/mastra/workspaces.ts"
+import { openai } from '@ai-sdk/openai'
+import { LocalFilesystem, Workspace } from '@mastra/core/workspace'
+import { PineconeVector } from '@mastra/pinecone'
+import { embedMany } from 'ai'
+
+const model = openai.embedding('__AI_SDK_OPENAI_EMBEDDING_MODEL__')
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  vectorStore: new PineconeVector({
+    id: 'workspace-search',
+    apiKey: process.env.PINECONE_API_KEY!,
+  }),
+  embedder: Object.assign(
+    async (texts: string[]) => {
+      const { embeddings } = await embedMany({ model, values: texts })
+      return embeddings
+    },
+    { batch: true as const, maxBatchSize: 2048 },
+  ),
+})
+```
+
+`Object.assign()` adds `batch` and `maxBatchSize` as properties on the function. Mastra reads them as metadata and doesn't pass them to the provider. Single-text embedders with the `(text: string) => Promise<number[]>` signature remain supported.
+
+### Hybrid search
+
+Configure both BM25 and vector search to combine keyword and semantic results:
+
+```typescript title="src/mastra/workspaces.ts"
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  bm25: true,
+  vectorStore: pineconeVector,
+  embedder: embedderFn,
+})
+```
+
+### Custom index name
+
+The vector index name defaults to a sanitized version of the workspace ID followed by `_search`. Set `searchIndexName` when you need a stable or shared name:
+
+```typescript title="src/mastra/workspaces.ts"
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  vectorStore: pineconeVector,
+  embedder: embedderFn,
+  // highlight-next-line
+  searchIndexName: 'my_workspace_vectors',
+})
+```
+
+The name must start with a letter or `_`, contain only letters, numbers, or `_`, and contain at most 63 characters.
+
+## Index content
+
+Use `workspace.index()` to add supplied text to the search index. Mastra tokenizes the content for BM25 search and generates an embedding when vector search is configured.
+
+The document ID doesn't need to exist in the filesystem. Add metadata when results need filtering or more context:
+
+```typescript
+await workspace.index('/docs/guide.md', 'Content of the guide...')
+
+await workspace.index('/docs/api.md', apiDocContent, {
+  metadata: {
+    category: 'api',
+    version: '2.0',
+  },
+})
+```
+
+Manual indexing works well for database records and API responses, or when you need to preprocess, chunk, or annotate content yourself.
+
+### Keep files and the index in sync
+
+Filesystem and index mutations are independent. Writing, editing, or deleting a file doesn't update its indexed content, and `workspace.index()` doesn't read or change a file.
+
+To write a file and make it searchable, perform both operations:
+
+```typescript
+const path = 'notes/launch.md'
+const content = '# Launch notes\n\nShip the new dashboard on Friday.'
+const filesystem = workspace.filesystem
+
+if (!filesystem) {
+  throw new Error('This operation requires a static filesystem')
+}
+
+await filesystem.writeFile(path, content)
+await workspace.index(path, content)
+```
+
+After editing a file, index its complete updated content again. Deleting a file leaves its indexed document in place, and Mastra doesn't currently expose a public method for removing one indexed document. Use the `grep` file tool instead when an agent must search the current filesystem state without maintaining a separate index.
+
+## Search content
+
+Use `workspace.search()` to return documents ranked by relevance:
+
+```typescript
+const results = await workspace.search('authentication flow', {
+  topK: 10,
+  mode: 'hybrid',
+  vectorWeight: 0.5,
+})
+```
+
+| Option | Description |
+| - | - |
+| `topK` | Maximum number of results. Direct API calls default to 10. The agent search tool defaults to 5. |
+| `mode` | Search mode: `'bm25'`, `'vector'`, or `'hybrid'`. Defaults to the best available mode for the workspace configuration. |
+| `minScore` | Removes results below this score. The scale depends on the mode, vector provider, and indexed content. |
+| `vectorWeight` | In hybrid mode, the weight given to vector scores. `0` gives vector scores zero weight, `1` gives BM25 scores zero weight, and `0.5` weights both equally. |
+| `filter` | Vector-store metadata filter used by vector retrieval. In hybrid mode, it doesn't filter BM25-only results. The syntax depends on the configured vector store. |
+
+Each result contains the matching content and its score:
+
+```typescript
+interface SearchResult {
+  id: string
+  content: string
+  score: number
+  lineRange?: {
+    start: number
+    end: number
+  }
+  metadata?: Record<string, unknown>
+  scoreDetails?: {
+    vector?: number
+    bm25?: number
+  }
+}
+```
+
+Score scales aren't interchangeable:
+
+- Standalone BM25 search returns raw BM25 scores, which aren't limited to 0 through 1.
+- Vector score meaning depends on the configured vector store.
+- Hybrid search min-max normalizes BM25 for its weighted calculation but uses the vector provider's score unchanged. The combined score isn't clamped to 0 through 1.
+- `scoreDetails` keeps the raw component scores, including the unnormalized BM25 score.
+- Tune `minScore` for the active mode, vector provider, and indexed content instead of reusing one threshold across indexes.
+
+## Agent tools
+
+When search is configured, agents receive `mastra_workspace_search` and `mastra_workspace_index`. Configure them independently with `WORKSPACE_TOOLS.SEARCH`.
+
+Disable indexing when an agent should search existing content without changing the index:
+
+```typescript title="src/mastra/workspaces.ts"
+import { LocalFilesystem, Workspace, WORKSPACE_TOOLS } from '@mastra/core/workspace'
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  bm25: true,
+  tools: {
+    [WORKSPACE_TOOLS.SEARCH.INDEX]: {
+      enabled: false,
+    },
+  },
+})
+```
+
+The index tool accepts the same supplied `path`, `content`, and optional metadata as `workspace.index()`. Because it can trigger embedding calls and vector-store writes, require approval when agents shouldn't mutate the index without review:
+
+```typescript title="src/mastra/workspaces.ts"
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  bm25: true,
+  tools: {
+    [WORKSPACE_TOOLS.SEARCH.INDEX]: {
+      requireApproval: true,
+    },
+  },
+})
+```
+
+`requireReadBeforeWrite` applies to filesystem write tools, not index mutations. Mastra also excludes the index tool when a static filesystem is read-only, even though indexing doesn't write to that filesystem.
+
+See the [search tool reference](/reference/workspace/workspace-class#search-tools) for the complete tool list and the [tool configuration reference](/reference/workspace/workspace-class#tool-configuration) for shared settings.
+
+## Auto-indexing
+
+Use `autoIndexPaths` to build an index from static filesystem content during application startup.
+
+:::warning
+
+`autoIndexPaths` runs as part of `workspace.init()`. Passing the workspace to `new Mastra({ workspace })` registers it but doesn't initialize it or build the index. Call and await `workspace.init()` unless another runtime, such as `AgentController`, owns workspace initialization.
+
+```typescript
+await workspace.init()
+```
+
+When your application owns initialization, call it once during startup before serving requests.
+
+:::
+
+In a normal Mastra application, construct `Mastra` first so its logger is available to the workspace. Then initialize the workspace at module startup:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { LocalFilesystem, Workspace } from '@mastra/core/workspace'
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  bm25: true,
+  autoIndexPaths: ['docs', 'support/faq'],
+})
+
+export const mastra = new Mastra({ workspace })
+
+await workspace.init()
+```
+
+Top-level `await` keeps module startup pending until initialization finishes. When `init()` resolves, Mastra has attempted to read and index every matching file.
+
+Each `autoIndexPaths` entry can be a file, directory, or glob pattern. Recursive directory and glob traversal is limited to ten levels:
+
+```typescript title="src/mastra/index.ts"
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  bm25: true,
+  autoIndexPaths: ['docs/**/*.md', 'support/**/*.txt'],
+})
+
+export const mastra = new Mastra({ workspace })
+
+await workspace.init()
+```
+
+Auto-indexing supports a static `filesystem` or `mounts`. Include mount prefixes in paths, such as `/docs/**/*.md`. It doesn't support a filesystem resolver because no provider has been selected when the workspace initializes. Index resolver-backed content manually instead.
+
+Initialization performs one scan and doesn't watch for later changes. It splits large files into chunks before indexing them and generates embeddings in vector mode.
+
+Keep the configured paths narrow and avoid dependency or output directories. Don't include binary file trees. Use a batch embedder for large vector indexes.
+
+Calling `workspace.init()` again scans the paths again and clears the process-local BM25 index before rebuilding it. Don't call it from an agent call, tool, workflow step, or request handler.
+
+A persistent vector index behaves differently. Auto-indexing replaces the files it reads but can retain documents for files removed before a later scan. Use a stable workspace `id` or `searchIndexName` when vectors must survive process restarts, and plan cleanup around the vector store's persistence behavior.
+
+## Related
+
+- [Sandboxes](/docs/sandbox/overview)
+- [Filesystem](/docs/sandbox/filesystem)
+- [Retrieval-Augmented Generation overview](/reference/rag/overview)
+- [Workspace configuration reference](/reference/workspace/workspace-class)

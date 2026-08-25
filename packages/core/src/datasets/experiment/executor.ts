@@ -240,26 +240,23 @@ async function executeAgent(
   // Pass experimentId as tracing metadata so it appears on the AGENT_RUN span
   const tracingOptions = experimentId ? { metadata: { experimentId } } : undefined;
 
-  // A memory-enabled agent given a resourceId (e.g. via MASTRA_RESOURCE_ID_KEY set by
-  // auth middleware or the Studio "Run Experiment" field) but no threadId would throw
-  // AGENT_MEMORY_MISSING_RESOURCE_ID downstream — the runner owns no conversation, so
-  // it injects a fresh thread per item, mirroring the multi-turn evals precedent
-  // (runAgentTurns). When an explicit MASTRA_THREAD_ID_KEY is present we decline to
-  // inject and let the context key resolve downstream; memory-less agents are left
-  // untouched. Truthiness (not null-ness) checks match the downstream `||` resolution
-  // in prepare-memory-step: an empty-string resourceId skipped memory before this fix
-  // and must keep doing so.
+  // Memory-enabled experiment runs need a thread even when the caller provides no
+  // memory identifiers. Use the caller's resource when present; otherwise isolate
+  // every item under an experiment-owned resource so resource-scoped memory cannot
+  // leak context between concurrently evaluated items. Explicit empty/null resource
+  // values retain their previous opt-out behavior, and explicit threads still win.
   const contextResourceId = requestContext?.[MASTRA_RESOURCE_ID_KEY];
   const shouldInjectThread =
-    Boolean(contextResourceId) &&
+    (Boolean(contextResourceId) || contextResourceId === undefined) &&
     !requestContext?.[MASTRA_THREAD_ID_KEY] &&
     typeof agent.hasOwnMemory === 'function' &&
     agent.hasOwnMemory();
-  const memoryOption = shouldInjectThread
+  const injectedThreadId = shouldInjectThread ? randomUUID() : undefined;
+  const memoryOption = injectedThreadId
     ? {
         memory: {
           thread: {
-            id: randomUUID(),
+            id: injectedThreadId,
             // Tag experimentId (and the item id when known) so a large run's threads
             // map back to their items without matching transcripts.
             ...(experimentId || item.id
@@ -271,7 +268,9 @@ async function executeAgent(
                 }
               : {}),
           },
-          resource: String(contextResourceId),
+          resource: contextResourceId
+            ? String(contextResourceId)
+            : `dataset-experiment:${experimentId ?? randomUUID()}:thread:${injectedThreadId}`,
           // Suppress title generation: these threads are runner bookkeeping, so an
           // extra title LLM call per item (and per retry) is pure waste (precedent:
           // ephemeral subagent-delegation threads, issue #18738). lastMessages is

@@ -12,6 +12,7 @@ import { useAgentVersions, useAgentVersion } from '@/domains/agents/hooks/use-ag
 import { useStoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { mapAgentResponseToDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
 import type { AgentDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
+import { getEditorOwnership } from '@/domains/agents/utils/editor-ownership';
 import { useEditorSource } from '@/domains/configuration/hooks/use-editor-source';
 import { useMemory } from '@/domains/memory/hooks/use-memory';
 import { useMastraPlatform } from '@/lib/mastra-platform/hooks/use-mastra-platform';
@@ -40,7 +41,7 @@ function AgentPlayground() {
 
   const isCodeAgentOverride = codeAgent?.source === 'code';
   const isCodeSourceAgent = isCodeAgentOverride && editorSource === 'code';
-  const isCodeAgentEditable = !isCodeAgentOverride || codeAgent?.editor !== false;
+  const isCodeAgentEditable = !getEditorOwnership(isCodeAgentOverride, codeAgent?.editor).isFullyLocked;
   const showCodeModeActions = isCodeSourceAgent && isCodeAgentEditable;
   const canOpenPr = showCodeModeActions && isMastraPlatform && !!mastraPlatformApiEndpoint && !!mastraPlatformProjectId;
   const openPrTitle = canOpenPr ? 'Open a pull request for these JSON changes' : undefined;

@@ -186,15 +186,38 @@ PowerShell passthrough uses `-EncodedCommand` and preserves native command exit 
 
 ## MCP servers
 
-Mastra Code can connect to external [MCP](https://mastra.ai/docs/mcp/overview) servers and make their tools available to the agent. Configure servers in JSON files:
+Mastra Code can connect to external [MCP](https://mastra.ai/docs/connections/mcp) servers and make their tools available to the agent. Configure servers in JSON files:
 
 | Priority | Path | Scope |
 | - | - | - |
 | Highest | `.mastracode/mcp.json` | Project |
+| | `.mcp.json` | Project root |
 | | `~/.mastracode/mcp.json` | Global |
-| Lowest | `.claude/settings.local.json` | Project (Claude Code compatible) |
+| | `.claude/settings.local.json` | Project (Claude Code compatible) |
+| | `$CODEX_HOME/config.toml` | Global (Codex CLI, opt-in) |
+| Lowest | `~/.claude.json` | Global (Claude Code, opt-in) |
 
-Project config overrides global config by server name. Claude Code settings are the lowest priority fallback.
+Project config overrides global config by server name. Servers that Mastra Code reads from another coding agent are the lowest priority fallback.
+
+### Reuse servers from Claude Code and Codex
+
+Mastra Code can read the MCP servers you already configured globally in Claude Code and Codex CLI, so you do not have to copy them into `~/.mastracode/mcp.json`. Both sources are off by default. Turn them on in global `settings.json` with the `mcp` block:
+
+```json title="settings.json"
+{
+  "mcp": {
+    "claudeCodeGlobal": true,
+    "codexGlobal": true
+  }
+}
+```
+
+| Setting | Default | Reads |
+| - | - | - |
+| `claudeCodeGlobal` | `false` | `mcpServers` in `~/.claude.json` |
+| `codexGlobal` | `false` | `mcp_servers` in `$CODEX_HOME/config.toml`, or `~/.codex/config.toml` when `CODEX_HOME` is unset |
+
+Mastra Code only reads these files and never writes to them. It reads the top-level `mcpServers` block in `~/.claude.json`, so servers scoped to a project under `projects` are ignored. From Codex it reads `command`, `args`, and `env` for stdio servers, and `url`, `http_headers`, and `bearer_token_env_var` for remote servers. It skips Codex servers set to `enabled = false` along with Codex settings that Mastra Code does not support, such as approval and timeout options. A missing or unreadable file is not an error, and any entry Mastra Code cannot use is skipped silently. Set `MASTRACODE_DISABLE_MCP` to turn off every MCP source, including these.
 
 ### MCP config format
 
@@ -455,7 +478,7 @@ Review my current git diff. Look for bugs, security issues,
 and violations of the project's coding standards.
 ```
 
-The filename (or directory structure) determines the command name. For example, `git/commit.md` becomes `/git:commit`.
+The filename (or directory structure) determines the command name. For example, `git/commit.md` becomes `/git:commit`. Mastra Code scans nested command directories but ignores directories named `node_modules`.
 
 Commands support variables like `$ARGUMENTS` for positional args, `@filename` for file content injection, and `!command` for shell command output.
 
@@ -609,6 +632,7 @@ Running `/theme` with no arguments shows the current theme. The choice is persis
 | `MASTRACODE_SHELL` | Direct TUI `!` shell executable override |
 | `MASTRACODE_SHELL_MODE` | Direct TUI `!` shell mode (`default`, `path`, or `login`) |
 | `MASTRACODE_DISPATCH_MAX_IN_FLIGHT` | Maximum concurrent Factory background dispatches per replica; invalid or unset values use the default |
+| `PARALLEL_API_KEY` | Enable Parallel-powered web search and extract tools (selectable as the default web provider in `/settings`) |
 | `TAVILY_API_KEY` | Enable Tavily-powered web search and extract tools |
 
 ## Resource ID override

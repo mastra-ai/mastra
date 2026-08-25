@@ -62,7 +62,12 @@ export function ActivityLine() {
   if (!busy || !awaitingFirstOutput(transcript.entries)) return null;
 
   return (
-    <Txt as="p" variant="ui-sm" aria-hidden className="text-icon3 px-1.5 py-1">
+    <Txt
+      as="p"
+      variant="ui-sm"
+      aria-hidden
+      className="text-icon3 motion-safe:animate-in fade-in-0 slide-in-from-bottom-1 px-1.5 py-1"
+    >
       <Shimmer>Thinking</Shimmer>
     </Txt>
   );

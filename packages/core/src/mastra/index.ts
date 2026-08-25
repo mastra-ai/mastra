@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Agent } from '../agent';
 import { createDurableAgent } from '../agent/durable/create-durable-agent';
+import { getActiveDurableAgentWorkflowExecutions } from '../agent/durable/run-registry';
 import { agentThreadStreamRuntime } from '../agent/thread-stream-runtime';
 import type { DurableAgentLike } from '../agent/types';
 import { isDurableAgentLike } from '../agent/types';
@@ -19,6 +20,7 @@ import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { MastraScorer } from '../evals';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
+import { isRunLocalTopic } from '../events/topics';
 import type { Event, EventCallback } from '../events/types';
 import type { Harness } from '../harness';
 import { AvailableHooks, deregisterHook, registerHook } from '../hooks';
@@ -83,7 +85,7 @@ import {
   toJsonSchemaOrUndefined,
 } from '../workflows/dynamic';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
-import { computeNextFireAt } from '../workflows/scheduler';
+import { computeNextFireAt, computeScheduleDefinitionHash } from '../workflows/scheduler';
 import type { WorkflowScheduleConfig, SchedulerConfig, Scheduler } from '../workflows/scheduler';
 import type { AnyWorkspace, RegisteredWorkspace, Workspace } from '../workspace';
 import {
@@ -801,10 +803,13 @@ export class Mastra<
     [topic: string]: ((event: Event) => Promise<void> | void)[];
   } = {};
   #internalMastraWorkflows: Record<string, AnyWorkflow> = {};
-  // Tracks registration timestamps for run-scoped internal workflows so a lazy
+  // Tracks last-activity timestamps for run-scoped internal workflows so a lazy
   // TTL sweep can evict entries from abandoned suspended runs that were never
-  // resumed. Unscoped (singleton) entries are not tracked — they live forever.
-  #runScopedWorkflowTimestamps: Map<string, { registeredAt: number; runId: string }> = new Map();
+  // resumed. The timestamp is refreshed every time the run resolves its own
+  // registration, so the TTL bounds *idle* time rather than total run duration —
+  // a run that legitimately executes for hours is never swept out from under
+  // itself. Unscoped (singleton) entries are not tracked — they live forever.
+  #runScopedWorkflowTimestamps: Map<string, { lastActivityAt: number; runId: string }> = new Map();
   // Per-run bag of non-serializable runtime state (SaveQueueManager,
   // BackgroundTaskManager, MessageList, abort controllers, dynamic tool sets…)
   // shared across step factories within a single run. Never persisted, never
@@ -814,8 +819,8 @@ export class Mastra<
   // last unregisters. See `./run-scope.ts`.
   #runScopes: Map<string, RunScope> = new Map();
   #runScopeRefcounts: Map<string, number> = new Map();
-  // Run-scoped internal workflows older than this TTL (ms) are evicted during the
-  // lazy sweep that runs on each new registration. Reads the shared
+  // Run-scoped internal workflows idle for longer than this TTL (ms) are evicted
+  // during the lazy sweep that runs on each new registration. Reads the shared
   // `MASTRA_SUSPENDED_RUN_TTL_MS` so this registry and the agent thread-stream
   // runtime expire a suspended run's state on one bound; production keeps the 30
   // minute default.
@@ -895,7 +900,7 @@ export class Mastra<
                 if (isOwnedHere) {
                   return target.publish(topic, event, { localOnly: true });
                 }
-              } else if (topic.startsWith('workflow.events.v2.')) {
+              } else if (isRunLocalTopic(topic)) {
                 // Per-run watch stream events. Only the publishing process
                 // consumes these (execution-engine subscribes per-run). No
                 // cross-instance fan-out needed.
@@ -1906,8 +1911,12 @@ export class Mastra<
     // have their old rows cleaned up.
     const declaredIdsByWorkflow = new Map<string, Set<string>>();
     const workflows = this.#workflows as Record<string, AnyWorkflow> | undefined;
+    // `#workflows` is keyed by registration key, which may differ from
+    // `workflow.id` — index by id for the definition-hash lookup below.
+    const workflowsById = new Map<string, AnyWorkflow>();
     for (const workflow of Object.values(workflows ?? {})) {
       declaredIdsByWorkflow.set(workflow.id, new Set());
+      workflowsById.set(workflow.id, workflow);
     }
     for (const { workflowId, scheduleId } of declared) {
       if (!declaredIdsByWorkflow.has(workflowId)) declaredIdsByWorkflow.set(workflowId, new Set());
@@ -1925,6 +1934,12 @@ export class Mastra<
           initialState: cfg.initialState,
           requestContext: cfg.requestContext,
         };
+        // Stamp the current build's step-graph hash so the scheduler can
+        // refuse to claim this row from an instance whose local workflow
+        // definition differs (stale-build fencing, #19169). `targetsEqual`
+        // below picks up hash changes and rewrites the row on redeploy.
+        const definitionHash = computeScheduleDefinitionHash(workflowsById.get(workflowId)?.serializedStepGraph);
+        if (definitionHash) target.definitionHash = definitionHash;
 
         if (!existing) {
           await schedulesStore.createSchedule({
@@ -2236,10 +2251,17 @@ export class Mastra<
       throw error;
     }
 
-    return editor.agent.applyStoredOverrides(
+    const resolved = (await editor.agent.applyStoredOverrides(
       agent,
       'versionId' in version ? version : { status: version.status ?? 'published' },
-    ) as Promise<TAgent>;
+    )) as TAgent;
+
+    // Mark forks so Agent#execute doesn't try to re-resolve the version and recurse
+    if (resolved !== agent) {
+      resolved.__markStoredVersionApplied();
+    }
+
+    return resolved;
   }
 
   /**
@@ -3370,6 +3392,7 @@ export class Mastra<
    *   *different* run's instance via an id scan.
    */
   __registerInternalWorkflow(workflow: AnyWorkflow, runId?: string) {
+    workflow.__markInternal();
     workflow.__registerMastra(this);
     workflow.__registerPrimitives({
       logger: this.getLogger(),
@@ -3378,7 +3401,7 @@ export class Mastra<
       const key = `${workflow.id}:${runId}`;
       const isNewRegistration = !this.#internalMastraWorkflows[key];
       this.#internalMastraWorkflows[key] = workflow;
-      this.#runScopedWorkflowTimestamps.set(key, { registeredAt: Date.now(), runId });
+      this.#runScopedWorkflowTimestamps.set(key, { lastActivityAt: Date.now(), runId });
       // Pair the registration with a runScope. Multiple workflows can share a
       // runId (parent + nested); we refcount so the scope outlives the first
       // unregister and dies with the last.
@@ -3459,13 +3482,53 @@ export class Mastra<
     }
   }
 
+  /**
+   * Whether this process consumes workflow-execution events itself, i.e.
+   * whether a `workflow.start` published here would be handled here.
+   *
+   * True when a local OrchestrationWorker is pulling the `workflows` topic,
+   * or when a push-only pubsub has `handleWorkflowEvent` wired directly
+   * (`#wirePushWorkflowSubscription`).
+   *
+   * The scheduler uses this to keep a scheduled fire on the instance that
+   * claimed it (#19169). Scheduler and execution workers start through
+   * separate paths (`#startSchedulingWorkers` / `#startExecutionWorkers`),
+   * so a scheduler-only process is a supported topology and must keep
+   * publishing to the shared topic instead of stranding the fire locally.
+   *
+   * @internal
+   */
+  __hasLocalWorkflowExecution(): boolean {
+    if (this.#pushSubscription) return true;
+    const orchestration = this.#workers.find(w => w.name === 'orchestration');
+    return !!orchestration?.isRunning;
+  }
+
   __hasInternalWorkflow(id: string, runId?: string): boolean {
     if (runId) {
       // Only the exact run-scoped entry or the genuinely-unscoped slot — never
       // another run's `${id}:${otherRunId}` registration.
-      return !!this.#internalMastraWorkflows[`${id}:${runId}`] || !!this.#internalMastraWorkflows[id];
+      if (this.#internalMastraWorkflows[`${id}:${runId}`]) {
+        this.#touchRunScopedWorkflow(id, runId);
+        return true;
+      }
+      return !!this.#internalMastraWorkflows[id];
     }
     return !!this.#internalMastraWorkflows[id];
+  }
+
+  /**
+   * Mark a run-scoped registration as active so the lazy TTL sweep measures
+   * idle time rather than total run duration. Only refreshes an entry that
+   * already exists at the exact `${id}:${runId}` key — resolving the bare
+   * unscoped `${id}` slot says nothing about a run's liveness, and this must
+   * never create an entry.
+   */
+  #touchRunScopedWorkflow(id: string, runId: string) {
+    const entry = this.#runScopedWorkflowTimestamps.get(`${id}:${runId}`);
+    if (entry) {
+      entry.lastActivityAt = Date.now();
+    }
   }
 
   /**
@@ -3506,9 +3569,17 @@ export class Mastra<
   }
 
   __getInternalWorkflow(id: string, runId?: string): AnyWorkflow {
-    const workflow = runId
-      ? (this.#internalMastraWorkflows[`${id}:${runId}`] ?? this.#internalMastraWorkflows[id])
-      : this.#internalMastraWorkflows[id];
+    let workflow: AnyWorkflow | undefined;
+    if (runId) {
+      workflow = this.#internalMastraWorkflows[`${id}:${runId}`];
+      if (workflow) {
+        this.#touchRunScopedWorkflow(id, runId);
+      } else {
+        workflow = this.#internalMastraWorkflows[id];
+      }
+    } else {
+      workflow = this.#internalMastraWorkflows[id];
+    }
     if (!workflow) {
       throw new MastraError({
         id: 'MASTRA_GET_INTERNAL_WORKFLOW_BY_ID_NOT_FOUND',
@@ -3546,15 +3617,23 @@ export class Mastra<
   }
 
   /**
-   * Lazily evict run-scoped internal workflow entries that have exceeded
-   * {@link Mastra.INTERNAL_WORKFLOW_TTL_MS}. Called on every new run-scoped
-   * registration so cleanup is proportional to activity — zero overhead when
-   * the system is idle.
+   * Lazily evict run-scoped internal workflow entries that have been *idle*
+   * longer than {@link Mastra.INTERNAL_WORKFLOW_TTL_MS}. Called on every new
+   * run-scoped registration so cleanup is proportional to activity — zero
+   * overhead when the system is idle.
+   *
+   * Idleness, not age: every lookup a run makes against its own registration
+   * refreshes `lastActivityAt` (see `#touchRunScopedWorkflow`), so a run that
+   * executes for longer than the TTL is never evicted mid-flight. Only a run
+   * that has stopped touching its registration — suspended and never resumed,
+   * or abandoned — ages out. This matches how the agent thread-stream runtime
+   * treats the shared `MASTRA_SUSPENDED_RUN_TTL_MS` bound, which only expires
+   * records that are actually parked.
    */
   #sweepStaleRunScopedWorkflows() {
     const now = Date.now();
     for (const [key, entry] of this.#runScopedWorkflowTimestamps) {
-      if (now - entry.registeredAt > Mastra.INTERNAL_WORKFLOW_TTL_MS) {
+      if (now - entry.lastActivityAt > Mastra.INTERNAL_WORKFLOW_TTL_MS) {
         delete this.#internalMastraWorkflows[key];
         this.#runScopedWorkflowTimestamps.delete(key);
         // Release the matching scope using the runId we stored at registration
@@ -3564,10 +3643,10 @@ export class Mastra<
         // Surface the eviction so operators can investigate long-suspended
         // runs that never resumed. The refcounted lifecycle in
         // `__createRunScope`/`__releaseRunScope` covers the happy path; this
-        // branch only fires when a registration was abandoned past the TTL.
+        // branch only fires when a registration went idle past the TTL.
         this.#logger.warn('Evicted stale run-scoped workflow after TTL expired', {
           runId: entry.runId,
-          ageMs: now - entry.registeredAt,
+          idleMs: now - entry.lastActivityAt,
           ttlMs: Mastra.INTERNAL_WORKFLOW_TTL_MS,
         });
       }
@@ -6499,13 +6578,34 @@ export class Mastra<
     // SchedulerWorker is stopped as part of stopWorkers().
     await this.stopWorkers();
 
+    // Durable workflows may still be persisting their next terminal or suspended
+    // snapshot. Keep storage and other shared resources alive until they settle.
+    const durableExecutionResults = await Promise.allSettled(getActiveDurableAgentWorkflowExecutions(this));
+    durableExecutionResults.forEach(result => {
+      if (result.status === 'rejected') {
+        this.#logger?.error('Durable agent execution failed during shutdown', {
+          error: result.reason,
+        });
+      }
+    });
+
+    // Stop — don't destroy — registered workspaces. Remote sandboxes
+    // suspend/pause and stay resumable across process restarts, and
+    // LocalSandbox.stop() kills its background processes, so nothing leaks.
+    // Callers that want a full teardown destroy workspaces explicitly via
+    // removeWorkspace(id, { destroy: true }) or workspace.destroy().
     const workspaceIds = Object.keys(this.#workspaces);
     const teardownResults = await Promise.allSettled(
-      workspaceIds.map(id => this.removeWorkspace(id, { destroy: true })),
+      workspaceIds.map(async id => {
+        const entry = this.#workspaces[id];
+        if (!entry) return;
+        await entry.workspace.stop();
+        await this.removeWorkspace(id);
+      }),
     );
     teardownResults.forEach((result, index) => {
       if (result.status === 'rejected') {
-        this.#logger?.error('Failed to destroy workspace during shutdown', {
+        this.#logger?.error('Failed to tear down workspace during shutdown', {
           workspaceId: workspaceIds[index],
           error: result.reason,
         });

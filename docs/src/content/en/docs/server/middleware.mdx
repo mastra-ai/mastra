@@ -16,6 +16,22 @@ A middleware receives the [Hono](https://hono.dev) `Context` (`c`) and a `next`
 function. If it returns a `Response` the request is short-circuited. Calling
 `next()` continues processing the next middleware or route handler.
 
+:::note
+
+Middleware handlers use Hono's signature, so they run on Hono-based serving
+paths: `mastra dev` and `mastra build`, the
+[Hono adapter](/reference/server/hono-adapter), and adapters built on it such as
+`@mastra/next` and `@mastra/tanstack-start`. Adapters for other frameworks
+(Express, Fastify, Koa) can't run Hono handlers and log a warning at startup
+when middleware is configured. Register middleware through the framework's own
+API there instead.
+
+User middleware never runs on routes declared public with
+`requiresAuth: false`, so it can't block endpoints the framework needs to keep
+reachable, such as the Studio sign-in routes.
+
+:::
+
 ```typescript
 import { Mastra } from '@mastra/core'
 

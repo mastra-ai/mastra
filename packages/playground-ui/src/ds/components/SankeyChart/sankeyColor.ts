@@ -30,9 +30,8 @@ export function nodeColorVivid(hue: number) {
 }
 
 export function buildSankeyHueMap(names: string[]) {
-  const entries = [...new Set(names)]
-    .map(name => ({ name, hue: hashHue(name) }))
-    .sort((left, right) => left.hue - right.hue || left.name.localeCompare(right.name));
+  // Not pre-sorted: the relaxation loop below re-sorts on every iteration.
+  const entries = [...new Set(names)].map(name => ({ name, hue: hashHue(name) }));
 
   for (let pass = 0; pass < 3; pass += 1) {
     for (let iteration = 0; iteration < entries.length * 8; iteration += 1) {

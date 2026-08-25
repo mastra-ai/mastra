@@ -4,29 +4,30 @@ import type { BoardCandidate } from '../boardCandidates';
 import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 
-/**
- * Scrolls the board to its first populated lane once, on first paint. A
- * pointer or wheel gesture claims the scroll position for the user and the
- * board never repositions itself again for that board.
- */
+// Positions the board once: at its first populated lane, or at the deeplinked card.
+// A pointer or wheel gesture claims the position for the user.
 export function useBoardScroll({
   boardKey,
   settled,
   stages,
   workItems,
   candidates,
+  targetItemId,
+  targetReady,
 }: {
   boardKey: string;
   settled: boolean;
   stages: ReadonlyArray<{ id: BoardStageId }>;
   workItems: readonly WorkItem[];
   candidates: readonly BoardCandidate[];
+  targetItemId: string | undefined;
+  targetReady: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const laneRefs = useRef(new Map<BoardStageId, HTMLElement>());
   const autoPositionedRef = useRef<string | undefined>(undefined);
   const userPositionedRef = useRef<string | undefined>(undefined);
-
+  const targetPositionedRef = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (!settled || autoPositionedRef.current === boardKey || userPositionedRef.current === boardKey) return;
 
@@ -44,6 +45,16 @@ export function useBoardScroll({
 
   return {
     containerRef,
+    // The card hands its own control over as it mounts, whenever that is.
+    registerCard: (itemId: string) => (element: HTMLElement | null) => {
+      if (element === null || !targetReady || itemId !== targetItemId) return;
+      const targetKey = `${boardKey}:${itemId}`;
+      if (targetPositionedRef.current === targetKey) return;
+      targetPositionedRef.current = targetKey;
+      userPositionedRef.current = boardKey;
+      element.scrollIntoView?.({ behavior: 'auto', block: 'center', inline: 'center' });
+      element.focus({ preventScroll: true });
+    },
     registerLane: (stage: BoardStageId) => (element: HTMLElement | null) => {
       if (element) laneRefs.current.set(stage, element);
       else laneRefs.current.delete(stage);

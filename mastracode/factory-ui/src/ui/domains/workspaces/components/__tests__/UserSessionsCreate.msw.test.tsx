@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { queryKeys } from '../../../../../api/keys';
-import type { FactoryUserSession } from '../../services/github';
+import type { FactoryUserSession } from '../../services/user-sessions';
 import { UserSessionsSection } from '../UserSessionsSection';
 
 const projectRepositoryId = 'ghp-1';
@@ -21,6 +21,7 @@ function userSession(overrides: Partial<FactoryUserSession> = {}): FactoryUserSe
     projectRepositoryId,
     orgId: 'org-1',
     userId: 'user-1',
+    visibility: 'org' as const,
     branch: 'user/session-1',
     baseBranch: 'main',
     sandboxId: null,

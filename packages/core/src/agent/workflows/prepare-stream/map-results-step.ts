@@ -10,10 +10,12 @@ import { StructuredOutputProcessor } from '../../../processors';
 import type { RequestContext } from '../../../request-context';
 import type { Step } from '../../../workflows/step';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
+import type { MessageList } from '../../message-list';
 import type { SaveQueueManager } from '../../save-queue';
 import { getModelOutputForTripwire } from '../../trip-wire';
 import type { AgentMethodType } from '../../types';
 import { isSupportedLanguageModel } from '../../utils';
+import { fireClientToolOutputHooks } from './client-tool-output-hooks';
 import type { PrepareStreamRunScope } from './run-scope';
 import {
   CONVERTED_TOOLS_KEY,
@@ -35,6 +37,7 @@ interface MapResultsStepOptions<OUTPUT = undefined> {
   memoryConfig?: MemoryConfigInternal;
   agentSpan?: Span<SpanType.AGENT_RUN>;
   agentId: string;
+  agentVersionId?: string;
   methodType: AgentMethodType;
   saveQueueManager?: SaveQueueManager;
   runScope: PrepareStreamRunScope<OUTPUT>;
@@ -51,6 +54,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
   memoryConfig,
   agentSpan,
   agentId,
+  agentVersionId,
   methodType,
   saveQueueManager,
   runScope,
@@ -76,6 +80,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
     const result = {
       ...options,
       agentId,
+      agentVersionId,
       tools: convertedTools,
       runId,
       temperature: options.modelSettings?.temperature,
@@ -168,6 +173,18 @@ export function createMapResultsStep<OUTPUT = undefined>({
       }
     }
 
+    // Client-executed tool results arrive as trailing tool-role input messages on
+    // a follow-up request (the browser ran the tool and re-invoked the agent).
+    // The tool already resolved on the client, so fire `onOutput` for matching
+    // execute-less tools. This runs after the tripwire check on purpose: a
+    // request rejected by input processors must not trigger hook side effects.
+    await fireClientToolOutputHooks({
+      messages: options.messages,
+      tools: convertedTools,
+      abortSignal: options.abortSignal,
+      logger: capabilities.logger,
+    });
+
     // Resolve output processors - overrides replace user-configured but auto-derived (memory) are kept
     let effectiveOutputProcessors = capabilities.outputProcessors
       ? typeof capabilities.outputProcessors === 'function'
@@ -230,8 +247,10 @@ export function createMapResultsStep<OUTPUT = undefined>({
     const loopOptions = {
       methodType: modelMethodType,
       agentId,
+      agentVersionId,
       requestContext: result.requestContext!,
       actor: options.actor,
+      mcp: options.mcp,
       ...createObservabilityContext({ currentSpan: agentSpan }),
       runId,
       toolChoice: result.toolChoice,
@@ -306,27 +325,22 @@ export function createMapResultsStep<OUTPUT = undefined>({
             return;
           }
 
-          if (payload.finishReason === 'aborted') {
-            agentSpan?.end({
-              output: {
-                status: 'aborted',
-                reason: 'abort',
-              },
-            });
-            return;
-          }
+          const aborted = payload.finishReason === 'aborted' || options.abortSignal?.aborted === true;
 
-          // Skip memory persistence when the abort signal has fired.
-          // The LLM response may have continued after the caller disconnected,
-          // and we should not persist a partial or full response for an aborted request.
-          const aborted = options.abortSignal?.aborted;
+          if (aborted) {
+            if (payload.finishReason === 'aborted') {
+              agentSpan?.end({ output: { status: 'aborted', reason: 'abort' } });
+              // The aborted finish payload is synthetic; the caller already received onAbort.
+              return;
+            }
 
-          if (!aborted) {
+            agentSpan?.end();
+          } else {
             try {
               const outputText =
                 options.structuredOutput?.schema && payload.object != null
                   ? JSON.stringify(payload.object)
-                  : (payload.text ?? '');
+                  : payload.text || '';
 
               await capabilities.executeOnFinish({
                 result: payload,
@@ -340,7 +354,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
                 agentSpan: agentSpan,
                 runId,
                 messageList,
-                threadExists: memoryData.threadExists,
+                threadExists: memoryData.threadExists || threadCreatedByStep,
                 structuredOutput: !!options.structuredOutput?.schema,
                 overrideScorers: options.scorers,
                 onTitleGenerated: options.memory?.onTitleGenerated,
@@ -367,8 +381,6 @@ export function createMapResultsStep<OUTPUT = undefined>({
 
               agentSpan?.error({ error: spanError, endSpan: true });
             }
-          } else {
-            agentSpan?.end();
           }
 
           await options?.onFinish?.({

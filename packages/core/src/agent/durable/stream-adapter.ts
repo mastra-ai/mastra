@@ -416,7 +416,10 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           // so the separate ABORT event never fires.
           if (onAbort && (data.stepResult?.reason as string) === 'abort') {
             try {
-              await onAbort({ steps: (data.output?.steps ?? []) as unknown[] });
+              await onAbort({
+                steps: (data.output?.steps ?? []) as unknown[],
+                text: (data.output?.text ?? '') as string,
+              });
             } catch (callbackError) {
               logError(`[DurableAgentStream] onAbort (from FINISH) callback error:`, callbackError);
             }
@@ -540,14 +543,16 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     start(ctrl) {
       controller = ctrl;
 
-      // Subscribe to pubsub with replay support for resumable streams
-      // If offset is specified, use indexed replay for efficiency
-      // Otherwise use full replay
+      // Subscribe to pubsub with replay support for resumable streams.
+      // Use indexed replay when supported. Transports without numeric offsets
+      // must live-tail so resume/recovery does not replay pre-resume events.
       const topic = AGENT_STREAM_TOPIC(runId);
       const subscribePromise =
-        offset !== undefined
-          ? pubsub.subscribeFromOffset(topic, offset, handleEvent)
-          : pubsub.subscribeWithReplay(topic, handleEvent);
+        offset === undefined
+          ? pubsub.subscribeWithReplay(topic, handleEvent)
+          : pubsub.supportsOffsets
+            ? pubsub.subscribeFromOffset(topic, offset, handleEvent)
+            : pubsub.subscribe(topic, handleEvent, { startFrom: 'latest' });
 
       subscribePromise
         .then(() => {

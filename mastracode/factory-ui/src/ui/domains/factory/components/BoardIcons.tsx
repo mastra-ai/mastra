@@ -2,7 +2,17 @@ import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { LinearIcon } from '@mastra/playground-ui/icons/LinearIcon';
 import { SlackIcon } from '@mastra/playground-ui/icons/SlackIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { CheckCircle2, CircleDot, CircleX, GitPullRequest } from 'lucide-react';
+import {
+  CheckCircle2,
+  CircleDot,
+  CircleX,
+  ClipboardCheck,
+  Eye,
+  GitPullRequest,
+  Hammer,
+  Play,
+  Search,
+} from 'lucide-react';
 import type { ComponentType, SVGProps } from 'react';
 
 import type { WorkItemSource } from '../services/workItems';
@@ -21,6 +31,19 @@ const SOURCE_ICONS: Record<WorkItemSource, { icon: ComponentType<SVGProps<SVGSVG
 export function SourceIcon({ source, className }: { source: WorkItemSource; className?: string }) {
   const { icon: Icon, className: sourceClassName } = SOURCE_ICONS[source];
   return <Icon data-source={source} className={cn('size-4 shrink-0', sourceClassName, className)} aria-hidden />;
+}
+
+/** Icon for each known run-action label; `Play` is the fallback for anything else. */
+const ACTION_ICONS: Record<string, ComponentType> = {
+  Investigate: Search,
+  Build: Hammer,
+  'Prepare approval': ClipboardCheck,
+  Review: Eye,
+};
+
+export function actionIcon(label: string) {
+  const Icon = ACTION_ICONS[label] ?? Play;
+  return <Icon aria-hidden />;
 }
 
 const STAGE_ICON_SOURCES: Partial<Record<BoardStageId, string>> = {

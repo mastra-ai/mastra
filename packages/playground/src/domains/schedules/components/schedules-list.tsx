@@ -1,5 +1,5 @@
 import type { ScheduleResponse } from '@mastra/client-js';
-import { DataList, DataListSkeleton } from '@mastra/playground-ui/components/DataList';
+import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { useMemo } from 'react';
 import { formatScheduleTimestamp, formatRelativeTime } from '../utils/format';
 import { ScheduleStatusText } from './schedule-status-badge';
@@ -25,12 +25,14 @@ export function SchedulesList({ schedules, isLoading, search = '' }: SchedulesLi
     );
   }, [schedules, search]);
 
+  const { containerRef, getRowProps } = useDataListKeyboard({ count: filtered.length });
+
   if (isLoading) {
     return <DataListSkeleton columns={COLUMNS} />;
   }
 
   return (
-    <DataList columns={COLUMNS} variant="striped" className="min-w-0">
+    <DataList columns={COLUMNS} variant="striped" className="min-w-0" scrollRef={containerRef}>
       <DataList.Top>
         <DataList.TopCell>Target</DataList.TopCell>
         <DataList.TopCell>Schedule ID</DataList.TopCell>
@@ -43,8 +45,8 @@ export function SchedulesList({ schedules, isLoading, search = '' }: SchedulesLi
       {filtered.length === 0 && search ? <DataList.NoMatch message="No schedules match your search" /> : null}
       {filtered.length === 0 && !search ? <DataList.NoMatch message="No schedules configured" /> : null}
 
-      {filtered.map(s => (
-        <DataList.RowLink key={s.id} to={paths.scheduleLink(s.id)} LinkComponent={Link}>
+      {filtered.map((s, index) => (
+        <DataList.RowLink key={s.id} to={paths.scheduleLink(s.id)} LinkComponent={Link} {...getRowProps(index)}>
           <DataList.NameCell>{s.workflowId ?? s.agentId}</DataList.NameCell>
           <DataList.Cell height="compact" className="min-w-0">
             <span className="text-ui-smd text-neutral3 block truncate font-mono" title={s.id}>

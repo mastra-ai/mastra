@@ -195,6 +195,10 @@ export interface InputTokenDetails {
   cacheRead?: number;
   /** Tokens written to cache (cache creation - Anthropic only) */
   cacheWrite?: number;
+  /** Tokens written to Anthropic's 5-minute ephemeral cache */
+  cacheWrite5m?: number;
+  /** Tokens written to Anthropic's 1-hour ephemeral cache */
+  cacheWrite1h?: number;
   /** Audio input tokens */
   audio?: number;
   /** Image input tokens (includes PDF pages) */

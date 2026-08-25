@@ -1,13 +1,11 @@
-import type { AgentControllerEvent, AgentControllerOMProgress, MastraDBMessage } from '@mastra/client-js';
-import { useReducer, useRef } from 'react';
+import type { AgentControllerEvent, AgentControllerSessionState, MastraDBMessage } from '@mastra/client-js';
+import { useReducer } from 'react';
 
-import { createInitialTranscript, transcriptReducer } from '../services/transcript';
-import type { OutgoingFile, TranscriptState, UsageSnapshot } from '../services/transcript';
+import { createInitialTranscript, createLocalMessageId, transcriptReducer } from '../services/transcript';
+import type { OutgoingFile } from '../services/transcript';
 
-export interface SessionStateSnapshot {
-  omProgress?: AgentControllerOMProgress;
-  tokenUsage?: UsageSnapshot;
-}
+/** What the session-state route hydrates the status line with before the first event lands. */
+export type SessionStateSnapshot = Pick<AgentControllerSessionState, 'omProgress' | 'tokenUsage'>;
 
 export function useAgentControllerTranscript({
   initialThreadId,
@@ -26,8 +24,10 @@ export function useAgentControllerTranscript({
       usage: initialState?.tokenUsage,
     }),
   );
-  const transcriptRef = useRef<TranscriptState>(transcript);
-  transcriptRef.current = transcript;
+  const [initialHistoryReady, markInitialHistoryReady] = useReducer(
+    () => true,
+    !initialThreadId || initialMessages !== undefined,
+  );
 
   const reset = (threadId?: string, state?: SessionStateSnapshot) => {
     dispatch({
@@ -43,7 +43,13 @@ export function useAgentControllerTranscript({
   };
 
   const localUser = (text: string, steer?: boolean, files?: OutgoingFile[]) => {
-    dispatch({ type: 'localUser', text, steer, files });
+    const id = createLocalMessageId();
+    dispatch({ type: 'localUser', id, text, steer, files });
+    return id;
+  };
+
+  const failLocalUser = (id: string) => {
+    dispatch({ type: 'failLocalUser', id });
   };
 
   const resolvePrompt = (id: string) => {
@@ -60,14 +66,16 @@ export function useAgentControllerTranscript({
 
   const mergeWindow = (messages: MastraDBMessage[]) => {
     dispatch({ type: 'mergeWindow', messages });
+    markInitialHistoryReady();
   };
 
   return {
     transcript,
-    transcriptRef,
+    initialHistoryReady,
     reset,
     onEvent,
     localUser,
+    failLocalUser,
     resolvePrompt,
     clearPending,
     pushNotice,

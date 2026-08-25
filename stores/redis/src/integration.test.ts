@@ -143,6 +143,16 @@ describe('RedisServerCache Integration', () => {
       const after = await shortTtlCache.get('expiring-key');
       expect(after).toBeNull();
     });
+
+    it('should apply TTL to keys written via increment', async () => {
+      await cache.increment('counter');
+
+      // Bare INCR would leave the key with no expiry (-1); increment must
+      // stamp the configured TTL like every other write in this class.
+      const ttl = await redis.ttl('test:counter');
+      expect(ttl).toBeGreaterThan(0);
+      expect(ttl).toBeLessThanOrEqual(60);
+    });
   });
 });
 

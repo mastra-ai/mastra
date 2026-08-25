@@ -9,7 +9,7 @@ packages:
 
 **Added in:** `@mastra/core@1.22.0`
 
-Channels connect agents to messaging platforms. Configure them via the `channels` property on the `Agent` constructor. The object you pass is a `ChannelConfig`. See the [Channels overview](/docs/capabilities/channels) for concepts and platform setup instructions.
+Channels connect agents to messaging platforms. Configure them via the `channels` property on the `Agent` constructor. The object you pass is a `ChannelConfig`. See the [Channels overview](/docs/channels) for concepts and platform setup instructions.
 
 ## Usage example
 
@@ -321,7 +321,9 @@ const agent = new Agent({
 Pass a function to `typingStatus` to customize the status copy. The function is
 called once per stream chunk; return a string to set the status, or `false` /
 `null` / `undefined` to leave the current status unchanged. Return values are
-de-duplicated so the platform only sees a call when the status changes.
+de-duplicated so the platform only sees a call when the status changes. When
+the run ends, any status it set is cleared automatically so runs that finish
+without posting a message don't leave a stale status on the thread.
 
 `defaultTypingStatus` is exported from `@mastra/core/channels` so you can
 fall back to the built-in defaults for chunks you don't handle.
@@ -599,6 +601,6 @@ type InlineLinkEntry =
 
 ## Related
 
-- [Channels overview](/docs/capabilities/channels): Concepts, quickstart, and platform setup
+- [Channels overview](/docs/channels): Concepts, quickstart, and platform setup
 - [Agent class](/reference/agents/agent): Constructor parameters and methods
 - [Chat SDK adapters](https://chat-sdk.dev/adapters): Adapter configuration and platform setup

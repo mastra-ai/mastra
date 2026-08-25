@@ -73,6 +73,19 @@ describe('inputToMastraDBMessage', () => {
     expect(() => inputToMastraDBMessage(message, 'memory', makeContext())).not.toThrow();
   });
 
+  it('accepts memory-sourced messages from another thread and preserves their threadId', () => {
+    // Resource-scoped observational memory loads context via listMessagesByResourceId(),
+    // which returns messages from every thread of the resource. Those arrive tagged
+    // `memory` while carrying their originating threadId, so the guard must exempt them —
+    // and the original threadId must survive so the message is not re-homed onto the
+    // current thread. See https://github.com/mastra-ai/mastra/issues/15367.
+    const message = makeMessage({ id: 'cross-thread-msg', threadId: 'other-thread' });
+
+    const converted = inputToMastraDBMessage(message, 'memory', makeContext());
+
+    expect(converted.threadId).toBe('other-thread');
+  });
+
   it('still rejects non-memory messages with a mismatched resourceId', () => {
     const message = makeMessage({ resourceId: 'someone-else' });
 
@@ -83,5 +96,39 @@ describe('inputToMastraDBMessage', () => {
     const message = makeMessage({ threadId: 'other-thread' });
 
     expect(() => inputToMastraDBMessage(message, 'user', makeContext())).toThrow(/wrong threadId/);
+  });
+
+  it('compacts malformed memory message parts before recovering tool arguments', () => {
+    const textPart = { type: 'text' as const, text: 'hello' };
+    const toolPart = {
+      type: 'tool-invocation' as const,
+      toolInvocation: {
+        state: 'call' as const,
+        toolCallId: 'call-1',
+        toolName: 'search',
+        args: { query: 'weather' },
+      },
+    };
+    const message = makeMessage({
+      content: {
+        format: 2,
+        parts: [undefined, null, textPart, toolPart] as never,
+        toolInvocations: [
+          {
+            state: 'call',
+            toolCallId: 'call-1',
+            toolName: 'search',
+            args: {},
+          },
+        ],
+      },
+    });
+
+    const converted = inputToMastraDBMessage(message, 'memory', makeContext());
+
+    expect(converted.content.parts).toEqual([textPart, toolPart]);
+    expect(converted.content.parts).not.toContain(undefined);
+    expect(converted.content.parts).not.toContain(null);
+    expect(converted.content.toolInvocations?.[0]?.args).toEqual({ query: 'weather' });
   });
 });

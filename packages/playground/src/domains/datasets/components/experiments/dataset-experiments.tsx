@@ -26,12 +26,12 @@ export function DatasetExperiments({
 }: DatasetExperimentsProps) {
   const [selectedExperimentIds, setSelectedExperimentIds] = useState<string[]>([]);
   const [isSelectionActive, setIsSelectionActive] = useState(false);
-  const { navigate } = useLinkComponent();
+  const { navigate, paths } = useLinkComponent();
 
   // Derive unique target IDs from all (unfiltered) experiments for the filter dropdown
   const targetIds = useMemo(() => {
     const source = allExperiments ?? experiments;
-    return [...new Set(source.map(e => e.targetId))];
+    return [...new Set(source.map(e => e.targetId).filter((id): id is string => id !== null))];
   }, [allExperiments, experiments]);
 
   // Toggle experiment selection for comparison (max 2)
@@ -62,7 +62,7 @@ export function DatasetExperiments({
   };
 
   const handleRowClick = (experimentId: string) => {
-    navigate(`/datasets/${datasetId}/experiments/${experimentId}`);
+    navigate(paths.experimentLink(experimentId));
   };
 
   if (isLoading) {
@@ -71,7 +71,7 @@ export function DatasetExperiments({
 
   return (
     <Columns>
-      <Column>
+      <Column className="gap-4">
         <DatasetExperimentsToolbar
           hasExperiments={experiments.length > 0 || Object.values(filters).some(Boolean)}
           onCompareClick={() => setIsSelectionActive(true)}

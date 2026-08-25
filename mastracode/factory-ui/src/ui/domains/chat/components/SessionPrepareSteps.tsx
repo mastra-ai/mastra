@@ -2,7 +2,7 @@ import { ProcessStepListItem } from '@mastra/playground-ui/components/Steps';
 import type { ProcessStep } from '@mastra/playground-ui/components/Steps';
 
 import type { PrepareProgress } from '../../workspaces/services/github';
-import { useChatMessagesInitializing } from '../context/ChatSessionProvider';
+import { useChatMessagesInitializing } from '../context/useChatMessagesInitializing';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 
 const GROUPS = [
@@ -41,29 +41,48 @@ function getStepStatus(index: number, activeIndex: number): StepStatus {
   return 'pending';
 }
 
-function getActiveGroup(observedGroup: GroupId | undefined, loadingMessages: boolean): GroupId {
-  if (loadingMessages) return 'starting-session';
-  return observedGroup ?? 'preparing-sandbox';
+function getActiveGroup(options: {
+  observedGroup: GroupId | undefined;
+  sandboxWarming: boolean;
+  startingSession: boolean;
+}): GroupId {
+  // Sandbox progress wins because history loads in parallel with warm-up.
+  if (options.observedGroup) return options.observedGroup;
+  if (options.sandboxWarming) return 'preparing-sandbox';
+  if (options.startingSession) return 'starting-session';
+  return 'preparing-sandbox';
 }
 
-function getStepDescription(status: StepStatus, loadingMessages: boolean, activeDescription: string): string {
-  if (status !== 'running') return '';
+function getActiveDescription(observedPhase: PrepareProgress['phase'] | undefined, loadingMessages: boolean) {
+  if (observedPhase && observedPhase !== 'done') return PHASE_DESCRIPTION[observedPhase];
   if (loadingMessages) return 'Loading messages…';
-  return activeDescription;
+  return 'Starting…';
 }
 
-export function SessionPrepareSteps() {
-  const { sandboxPreparing, sandboxProgress } = useChatSessionContext();
+export function SessionPrepareSteps({
+  finishing = false,
+  historyInitializing = false,
+}: {
+  finishing?: boolean;
+  historyInitializing?: boolean;
+}) {
+  const { sandboxPreparing, sandboxProgress, sandboxWarming } = useChatSessionContext();
   const messagesInitializing = useChatMessagesInitializing();
 
   const observedPhase = sandboxProgress?.phase;
   const observedGroup = observedPhase ? PHASE_TO_GROUP[observedPhase] : undefined;
-  const activeDescription = observedPhase ? PHASE_DESCRIPTION[observedPhase] : 'Starting…';
 
   const loadingMessages = !sandboxPreparing && messagesInitializing;
+  const startingSession = loadingMessages || (!sandboxPreparing && historyInitializing);
 
-  const activeGroup = getActiveGroup(observedGroup, loadingMessages);
-  const activeIndex = GROUPS.findIndex(group => group.id === activeGroup);
+  const activeDescription = getActiveDescription(observedPhase, loadingMessages);
+
+  const activeGroup = getActiveGroup({
+    observedGroup,
+    sandboxWarming: sandboxWarming === true,
+    startingSession,
+  });
+  const activeIndex = finishing ? GROUPS.length : GROUPS.findIndex(group => group.id === activeGroup);
 
   const items: Array<{ step: ProcessStep; position: number }> = GROUPS.map((group, index) => {
     const status = getStepStatus(index, activeIndex);
@@ -75,7 +94,7 @@ export function SessionPrepareSteps() {
         title: group.title,
         status,
         isActive: status === 'running',
-        description: getStepDescription(status, loadingMessages, activeDescription),
+        description: status === 'running' ? activeDescription : '',
       },
     };
   });

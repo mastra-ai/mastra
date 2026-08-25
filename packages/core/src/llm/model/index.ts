@@ -1,4 +1,5 @@
 export * from './model';
+export type { ModelTimeoutSettings, MastraModelSettings, ModelConfigModelSettings } from './model-settings';
 export { ModelRouterLanguageModel } from './router';
 export {
   type ModelRouterModelId,

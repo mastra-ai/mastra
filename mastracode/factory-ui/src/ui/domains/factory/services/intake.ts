@@ -33,6 +33,13 @@ function normalizeIntakeConfig(raw: Partial<Record<string, IntakeSelection>> | n
   };
 }
 
+/** Enable sync and pick `id`; returns the same object when nothing changes. */
+export function selectIntakeSource(selection: IntakeSelection, id: string): IntakeSelection {
+  if (selection.sourceIds === null) return { enabled: true, sourceIds: [id] };
+  if (!selection.sourceIds.includes(id)) return { enabled: true, sourceIds: [...selection.sourceIds, id] };
+  return selection.enabled ? selection : { ...selection, enabled: true };
+}
+
 async function requestIntakeConfig(baseUrl: string, init?: RequestInit): Promise<IntakeConfig> {
   const res = await fetch(`${baseUrl}/web/intake/config`, {
     headers: { Accept: 'application/json', ...(init?.body ? { 'content-type': 'application/json' } : {}) },
@@ -62,4 +69,45 @@ export async function fetchIntakeConfig(baseUrl: string): Promise<IntakeConfig> 
 /** Save the caller's intake config; resolves to the persisted config. */
 export async function saveIntakeConfig(baseUrl: string, config: IntakeConfig): Promise<IntakeConfig> {
   return requestIntakeConfig(baseUrl, { method: 'PUT', body: JSON.stringify(config) });
+}
+
+/** Routing of one intake source to the Factory project its items land in. */
+export interface IntakeSourceBinding {
+  integrationId: string;
+  sourceId: string;
+  factoryProjectId: string;
+}
+
+async function requestIntakeBindings(baseUrl: string, init?: RequestInit): Promise<IntakeSourceBinding[]> {
+  const res = await fetch(`${baseUrl}/web/intake/bindings`, {
+    headers: { Accept: 'application/json', ...(init?.body ? { 'content-type': 'application/json' } : {}) },
+    credentials: 'include',
+    ...init,
+  });
+  if (!res.ok) {
+    let message = `Request failed (${res.status})`;
+    try {
+      const body = (await res.json()) as { error?: string; message?: string };
+      if (body.message) message = body.message;
+      else if (body.error) message = body.error;
+    } catch {
+      /* ignore non-JSON */
+    }
+    throw new Error(message);
+  }
+  const { bindings } = (await res.json()) as { bindings?: IntakeSourceBinding[] };
+  return bindings ?? [];
+}
+
+/** Read every intake source binding in the caller's organization. */
+export async function fetchIntakeBindings(baseUrl: string): Promise<IntakeSourceBinding[]> {
+  return requestIntakeBindings(baseUrl);
+}
+
+/** Route one source to a Factory project, or clear it with `factoryProjectId: null`. */
+export async function saveIntakeBinding(
+  baseUrl: string,
+  binding: { integrationId: string; sourceId: string; factoryProjectId: string | null },
+): Promise<IntakeSourceBinding[]> {
+  return requestIntakeBindings(baseUrl, { method: 'PUT', body: JSON.stringify(binding) });
 }

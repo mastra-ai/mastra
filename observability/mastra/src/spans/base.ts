@@ -20,6 +20,7 @@ import type {
 } from '@mastra/core/observability';
 
 import { ModelSpanTracker } from '../model-tracing';
+import { isPlainRecord, mergeMetadata as mergeSpanMetadata } from './metadata';
 import { deepClean, mergeSerializationOptions } from './serialization';
 import type { DeepCleanOptions } from './serialization';
 
@@ -210,7 +211,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     // getMetricsContext() (which structuredClone it), and non-filtered
     // child spans inherit it via options.parent?.metadata.
     this.metadata = deepClean(
-      options.parent?.metadata || options.metadata ? { ...options.parent?.metadata, ...options.metadata } : undefined,
+      this.prepareSpanMetadata(mergeSpanMetadata(options.parent?.metadata, options.metadata)),
       this.deepCleanOptions,
     );
 
@@ -247,9 +248,46 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     if (this.isEvent) {
       // Event spans don't have endTime or input.
       // Event spans are immediately emitted by the BaseObservability class via the end() event.
-      this.output = deepClean(options.output, this.deepCleanOptions);
+      this.output = deepClean(this.prepareSpanOutput(options.output), this.deepCleanOptions);
     } else {
       this.input = deepClean(options.input, this.deepCleanOptions);
+    }
+  }
+
+  protected prepareSpanOutput<T>(value: T): T {
+    if (!isPlainRecord(value)) {
+      return value;
+    }
+
+    if (this.type !== SpanType.MODEL_STEP && this.type !== SpanType.MODEL_INFERENCE) {
+      return value;
+    }
+
+    try {
+      const prepared = { ...value };
+      delete prepared.steps;
+      return prepared as T;
+    } catch {
+      return value;
+    }
+  }
+
+  protected prepareSpanMetadata<T>(value: T): T {
+    if (!isPlainRecord(value)) {
+      return value;
+    }
+
+    if (this.type !== SpanType.MODEL_STEP) {
+      return value;
+    }
+
+    try {
+      const prepared = { ...value };
+      delete prepared.providerMetadata;
+      delete prepared.experimental_providerMetadata;
+      return prepared as T;
+    } catch {
+      return value;
     }
   }
 

@@ -8,7 +8,7 @@ import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../
 import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
 import type { PullRequestSubscription } from '../../../factory/services/githubSubscriptions';
 import type { WorkItemSessionRef } from '../../../factory/services/workItems';
-import type { FactoryUserSession } from '../../services/github';
+import type { FactoryUserSession } from '../../services/user-sessions';
 import { WorkspacesSection } from '../WorkspacesSection';
 
 const factoryProjectId = 'factory-project-1';
@@ -21,12 +21,13 @@ const workSession: FactoryUserSession = {
   projectRepositoryId,
   orgId: 'org-1',
   userId: 'user-1',
+  visibility: 'org' as const,
   title: 'Implement loader',
   branch: 'factory/issue-24',
   baseBranch: 'main',
   sandboxId: null,
   sandboxWorkdir: null,
-  materializedAt: null,
+  materializedAt: '2026-07-20T00:00:00.000Z',
   createdAt: '2026-07-20T00:00:00.000Z',
   updatedAt: '2026-07-20T00:00:00.000Z',
 };

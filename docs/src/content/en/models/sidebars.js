@@ -40,6 +40,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'gateways/merge-gateway',
+          label: 'Merge Gateway',
+        },
+        {
+          type: 'doc',
           id: 'gateways/neon',
           label: 'Neon',
         },
@@ -121,6 +126,16 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/agentrouter',
+          label: 'AgentRouter',
+        },
+        {
+          type: 'doc',
+          id: 'providers/agnes',
+          label: 'Agnes AI',
+        },
+        {
+          type: 'doc',
           id: 'providers/ai-router',
           label: 'AI-ROUTER',
         },
@@ -181,8 +196,18 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/amd',
+          label: 'AMD',
+        },
+        {
+          type: 'doc',
           id: 'providers/anyapi',
           label: 'AnyAPI',
+        },
+        {
+          type: 'doc',
+          id: 'providers/arcee',
+          label: 'Arcee',
         },
         {
           type: 'doc',
@@ -316,6 +341,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/llmgateway',
+          label: 'DevPass (LLM Gateway)',
+        },
+        {
+          type: 'doc',
           id: 'providers/digitalocean',
           label: 'DigitalOcean',
         },
@@ -328,6 +358,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/ebcloud',
           label: 'EBCloud',
+        },
+        {
+          type: 'doc',
+          id: 'providers/echo',
+          label: 'Echo',
         },
         {
           type: 'doc',
@@ -446,6 +481,16 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/iteracompute',
+          label: 'IteraCompute',
+        },
+        {
+          type: 'doc',
+          id: 'providers/jalapeno',
+          label: 'Jalapeno Cloud',
+        },
+        {
+          type: 'doc',
           id: 'providers/jiekou',
           label: 'Jiekou.AI',
         },
@@ -466,6 +511,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/kosmik',
+          label: 'Kosmik Compute',
+        },
+        {
+          type: 'doc',
           id: 'providers/kuae-cloud-coding-plan',
           label: 'KUAE Cloud Coding Plan',
         },
@@ -481,7 +531,7 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/llmgateway',
+          id: 'providers/llmgateway-providers',
           label: 'LLM Gateway',
         },
         {
@@ -513,11 +563,6 @@ const sidebars = {
           type: 'doc',
           id: 'providers/meganova',
           label: 'Meganova',
-        },
-        {
-          type: 'doc',
-          id: 'providers/merge-gateway',
-          label: 'Merge Gateway',
         },
         {
           type: 'doc',
@@ -606,6 +651,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/neosmith',
+          label: 'NeoSmith',
+        },
+        {
+          type: 'doc',
           id: 'providers/neuralwatt',
           label: 'Neuralwatt',
         },
@@ -648,6 +698,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/opencode',
           label: 'OpenCode Zen',
+        },
+        {
+          type: 'doc',
+          id: 'providers/opper',
+          label: 'Opper',
         },
         {
           type: 'doc',
@@ -701,6 +756,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/qvac',
+          label: 'QVAC',
+        },
+        {
+          type: 'doc',
           id: 'providers/regolo-ai',
           label: 'Regolo AI',
         },
@@ -713,6 +773,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/routing-run',
           label: 'routing.run',
+        },
+        {
+          type: 'doc',
+          id: 'providers/runinfra',
+          label: 'RunInfra',
         },
         {
           type: 'doc',
@@ -731,7 +796,12 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/scx',
+          id: 'providers/scnet-token-plan',
+          label: 'SCNet Token Plan',
+        },
+        {
+          type: 'doc',
+          id: 'providers/scx-ai',
           label: 'SCX.ai',
         },
         {
@@ -753,6 +823,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/stackit',
           label: 'STACKIT',
+        },
+        {
+          type: 'doc',
+          id: 'providers/standardcompute',
+          label: 'Standard Compute',
         },
         {
           type: 'doc',

@@ -17,6 +17,8 @@ import type { RouteObject } from 'react-router';
 import Chat from './domains/chat/Chat';
 import { RootGuards } from './domains/auth/components/RootGuards';
 import { AuditPage } from './pages/AuditPage';
+import { AttentionPage } from './pages/AttentionPage';
+import { KnowledgePage } from './pages/KnowledgePage';
 import { ReviewBoardPage, WorkBoardPage } from './pages/BoardPage';
 import { CreateFactoryPage } from './pages/CreateFactoryPage';
 import { NewPage } from './pages/NewPage';
@@ -29,8 +31,10 @@ import { SignInPage } from './pages/SignInPage';
 import { ThreadPage } from './pages/ThreadPage';
 
 import { useFactoriesQuery } from '../hooks/useFactories';
+import { useServerFeatures } from '../hooks/useServerFeatures';
 import { FactoryLayout } from './domains/workspaces/components/FactoryLayout';
-import { hasPendingCreateFlow } from './domains/workspaces/hooks/useCreateFactoryFlow';
+import { pendingCreateFlowFactoryId } from './domains/workspaces/hooks/useCreateFactoryFlow';
+import { createFactoryPath } from './domains/workspaces/services/factoryPaths';
 import { hasResumableFactoryOnboarding } from './domains/workspaces/services/onboardingFlow';
 
 function RootLanding() {
@@ -39,10 +43,11 @@ function RootLanding() {
   // FactoryLayout bouncing an unknown factoryId here).
   const { state, search } = useLocation();
 
-  // OAuth callbacks land on `/?github=connected` etc. When a create-factory
-  // flow is mid-way, resume the wizard (with the search intact) instead of
-  // landing on the first factory's home.
-  if (hasPendingCreateFlow()) return <Navigate to={`/factories/create${search}`} replace />;
+  // OAuth callbacks land on `/?github=connected` etc. A mid-way create-factory
+  // flow knows the Factory it was opened from, so it resumes there (with the
+  // search intact) without waiting on any query.
+  const createFlowFactoryId = pendingCreateFlowFactoryId();
+  if (createFlowFactoryId) return <Navigate to={`${createFactoryPath(createFlowFactoryId)}${search}`} replace />;
 
   if (isPending || !factories) return null;
 
@@ -50,7 +55,7 @@ function RootLanding() {
   // Empty list is bounced to /onboarding by OnboardingGuard before we render.
   if (!firstFactory) return null;
 
-  // Same for onboarding once its factory exists (created on repo pick): the
+  // Onboarding does the same once its factory exists (created on repo pick): the
   // GitHub/Linear round-trips must resume the wizard, not land on the factory.
   if (hasResumableFactoryOnboarding(factories)) return <Navigate to={`/onboarding${search}`} replace />;
 
@@ -110,6 +115,15 @@ function ConnectionsRedirect() {
   return <Navigate to={`/factories/${firstFactory.id}/settings/connections`} replace />;
 }
 
+function KnowledgeRoute() {
+  const { factoryId } = useParams<{ factoryId: string }>();
+  const features = useServerFeatures();
+
+  if (features.isPending || !factoryId) return null;
+  if (!features.data?.knowledge) return <Navigate to={`/factories/${factoryId}/overview`} replace />;
+  return <KnowledgePage />;
+}
+
 export function createAppRoutes(): RouteObject[] {
   // NOTE: route paths must not (case-insensitively) match a file at the Vite
   // root (src/ui), or dev deep-links serve the module source instead of
@@ -121,9 +135,6 @@ export function createAppRoutes(): RouteObject[] {
       children: [
         { index: true, element: <RootLanding /> },
         { path: 'onboarding', element: <OnboardingPage /> },
-        // Full-screen wizard, outside the factory shell — no factory context
-        // or Chat session needed.
-        { path: 'factories/create', element: <CreateFactoryPage /> },
         {
           path: 'factories/:factoryId',
           element: <FactoryLayout />,
@@ -154,12 +165,15 @@ export function createAppRoutes(): RouteObject[] {
               element: <Chat />,
               children: [
                 { path: 'new', element: <NewPage /> },
+                { path: 'new-factory', element: <CreateFactoryPage /> },
                 { path: 'work', element: <WorkBoardPage /> },
                 { path: 'review', element: <ReviewBoardPage /> },
                 { path: 'overview', element: <OverviewPage /> },
+                { path: 'attention', element: <AttentionPage /> },
                 { path: 'metrics', element: <MetricsRedirect /> },
                 { path: 'rules', element: <RulesPage /> },
                 { path: 'audit', element: <AuditPage /> },
+                { path: 'knowledge', element: <KnowledgeRoute /> },
                 {
                   path: 'settings',
                   children: [

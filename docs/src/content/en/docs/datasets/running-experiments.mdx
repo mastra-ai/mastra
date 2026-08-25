@@ -45,6 +45,8 @@ console.log(summary.failedCount) // number of items that failed
 
 You can also run experiments in [Studio](/docs/studio/overview). After you've added a dataset item, open it and select **Run Experiment** and configure the target, scorers, and options.
 
+To configure scorers for one item, edit the item and enable **Override dataset scorers**. Select one or more scorers, or leave the selection empty to run no scorers for that item.
+
 After running an experiment, the **Experiments** tab shows all runs for that dataset (with status, counts, and timestamps). Select an experiment to see per-item results, scores, and execution traces.
 
 In the **Experiments** tab, select **Compare** and choose two or more experiments to compare their scores and results side by side.
@@ -161,6 +163,50 @@ for (const item of summary.results) {
 
 Visit the [Scorers overview](/docs/evals/overview) for details on available and custom scorers.
 
+## Select scorers per item
+
+Add registered scorer IDs to a dataset item to override the scorers attached to its dataset:
+
+```typescript title="src/mastra/datasets/items.ts"
+await dataset.addItem({
+  input: 'Translate "hello" to French.',
+  scorerIds: ['accuracy', 'fluency'],
+})
+```
+
+An experiment uses exactly one scorer source for each item, in this order:
+
+1. The experiment's `scorers` option, when provided
+1. The item's `scorerIds` field, when provided
+1. The dataset's `scorerIds` field
+1. No scorers
+
+Mastra doesn't merge these sources. An explicit empty array at the run or item level selects no scorers and prevents fallback to the next source. An empty categorized run-level configuration has the same effect. Duplicate item or dataset IDs run once, in the order of their first occurrence.
+
+The following updates switch between an explicit empty override and dataset inheritance:
+
+```typescript title="src/mastra/datasets/items.ts"
+// Run no scorers for this item
+await dataset.updateItem({
+  itemId: 'translation-item-id',
+  scorerIds: [],
+})
+
+// Remove the item override and inherit the dataset's scorers
+await dataset.updateItem({
+  itemId: 'translation-item-id',
+  scorerIds: null,
+})
+```
+
+Omitting `scorerIds` from an update preserves its current value. Each item version stores its scorer ID list, including an empty list. Scorer definitions aren't copied into the item version and continue to use their existing registry or Editor behavior.
+
+Mastra resolves each item's scorer IDs before running its target. It checks registered scorers first, then asks the Editor to hydrate a stored scorer. A stale item-level ID produces the `EXPERIMENT_ITEM_SCORER_NOT_FOUND` code for that item. Mastra skips target execution without retrying that item, while the rest of the experiment continues.
+
+A missing ID in the selected run-level or dataset-level source fails experiment setup. Mastra doesn't resolve IDs from lower-priority sources that the precedence rules ignore.
+
+Workflow step scorers are available only through a run-level categorized `scorers` configuration. Item-level IDs apply to the flat agent, workflow, and trajectory scorer dispatch.
+
 ## Control persistence per run
 
 Use `persistence` to skip storage writes for a specific run. Experiment records and score records can be disabled independently:
@@ -220,7 +266,7 @@ The exported event types are `ExperimentEvent`, `ExperimentRunStartedEvent`, `Ex
 
 ## Lifecycle hooks
 
-Use lifecycle hooks to prepare state before a target runs and clean it up afterwards. This is useful when an item can't be evaluated against an empty environment. A run might need a fixture file copied into the agent's workspace, or a sandbox provisioned before the agent can touch it.
+Use lifecycle hooks to prepare state before a target runs and clean it up afterward. This is useful when an item can't be evaluated against an empty environment. A run might need a fixture file copied into the agent's workspace, or a sandbox provisioned before the agent can touch it.
 
 Hooks run at two levels. `beforeAll` and `afterAll` run once per experiment, and `beforeEach` and `afterEach` run once per item:
 
@@ -395,6 +441,91 @@ while (experiment.status === 'pending' || experiment.status === 'running') {
 
 console.log(experiment.status) // 'completed' | 'failed'
 ```
+
+## Caller-driven experiments
+
+`startExperiment()` puts Mastra in charge of the whole run. If a durable orchestrator (for example Temporal, Airflow, or a custom worker fleet) owns the loop instead, create the experiment first and drive it yourself in one of these shapes:
+
+- **Caller drives the loop, Mastra runs each item.** Create the experiment with a target, then call [`runExperimentItem()`](/reference/datasets/runExperimentItem) once per item. Mastra executes the target and runs the scorers, then persists the result.
+- **Caller runs everything.** Create the experiment without a target, execute and score items on your own infrastructure, and ingest each result with [`submitExperimentResult()`](/reference/datasets/submitExperimentResult).
+
+Both shapes finish with [`finalizeExperiment()`](/reference/datasets/finalizeExperiment), and both write to the same tables as native runs, so Studio views, comparisons, and review summaries work unchanged.
+
+### Run items server-side
+
+Create the experiment with [`createExperiment()`](/reference/datasets/createExperiment), passing the target and scorers. Pass your own `id` (for example a workflow run id) to make creation idempotent: retrying the call with the same id returns the existing experiment instead of failing.
+
+```typescript title="src/mastra/experiments/caller-driven.ts"
+const dataset = await mastra.datasets.get({ id: 'translation-dataset-id' })
+
+const { experimentId, totalItems, datasetVersion } = await dataset.createExperiment({
+  id: 'temporal-wf-run-42', // optional: reuse your workflow run id for idempotent creates
+  targetType: 'agent',
+  targetId: 'translation-agent',
+  scorers: ['accuracy'],
+})
+```
+
+Then run each item from your orchestrator. Mastra resolves the item at the pinned dataset version and executes the target with the resolved scorers. The result upserts keyed by `(experimentId, itemId, attempt)`, so a retried activity converges on a single row:
+
+```typescript
+const { result, scores } = await dataset.runExperimentItem({
+  experimentId,
+  itemId: 'item-1',
+})
+```
+
+Retries and timeouts belong to your orchestrator: each `runExperimentItem` call executes the item exactly once. Scorers resolve with the same precedence as native runs: experiment `scorers` win over item `scorerIds`, which win over dataset `scorerIds`.
+
+### Ingest external results
+
+If your workers execute and score items themselves, create the experiment without a target:
+
+```typescript title="src/mastra/experiments/ingestion.ts"
+const { experimentId } = await dataset.createExperiment({
+  id: 'temporal-wf-run-42',
+  name: 'external-eval',
+})
+```
+
+Submit one result per item with [`submitExperimentResult()`](/reference/datasets/submitExperimentResult). Submissions are upserts keyed by `(experimentId, itemId, attempt)`, so a retried worker converges on a single row instead of duplicating results:
+
+```typescript
+await dataset.submitExperimentResult({
+  experimentId,
+  itemId: 'item-1',
+  output: { translation: 'Hola' },
+  scores: [{ scorerId: 'accuracy', score: 0.92, reason: 'Faithful translation' }],
+})
+```
+
+`input` and `groundTruth` default to the dataset item's values at the experiment's pinned dataset version. Inline `scores` are persisted to the scores store under the experiment, so they show up in comparisons alongside native scorer runs. Experiments created with a target reject `submitExperimentResult` so two writers can't race on the same rows.
+
+### Finalize
+
+When all items are done, call [`finalizeExperiment()`](/reference/datasets/finalizeExperiment). Mastra computes `succeededCount`, `failedCount`, and `skippedCount` from the persisted rows, so your workers never track completion bookkeeping. Finalization is idempotent. Calling it again returns the stored record:
+
+```typescript
+const experiment = await dataset.finalizeExperiment({ experimentId })
+
+console.log(experiment.status) // 'completed'
+console.log(experiment.succeededCount) // items with at least one attempt that didn't error
+console.log(experiment.failedCount) // items where every attempt errored
+console.log(experiment.skippedCount) // items never submitted
+```
+
+The same lifecycle is available over HTTP (`POST /api/datasets/:datasetId/experiments` with `start: false`, `POST .../experiments/:experimentId/items/:itemId/run`, `POST .../experiments/:experimentId/results`, `POST .../experiments/:experimentId/finalize`, see [Server routes](/reference/server/routes#datasets-and-experiments)) and through `@mastra/client-js` (see the [Datasets API](/reference/client-js/datasets)).
+
+### Retry and idempotency contract
+
+Caller-driven calls are designed to be retried aggressively (for example by a Temporal retry policy). The exact guarantees:
+
+- **Create is idempotent on `id`.** Calling `createExperiment` again with the same caller-supplied `id` returns the existing experiment. Reusing an `id` that belongs to another dataset or an experiment with a different target fails with `EXPERIMENT_ID_CONFLICT` (HTTP `409`).
+- **Results upsert on `(experimentId, itemId, attempt)`.** Re-submitting the same key updates the existing row, and the last write wins for all mutable fields. A retried worker never creates duplicates.
+- **`attempt` separates deliberate trials from retries.** Retries of the same run should reuse the same `attempt` (default `0`) so they converge. To record repeated trials of an item as separate rows, submit with `attempt: 0`, `attempt: 1`, and so on.
+- **The dataset version is pinned at creation.** Submissions are validated against the items visible at that version, so editing or deleting items afterward doesn't affect an in-flight experiment. Submitting an `itemId` that isn't visible at the pinned version fails with `404`.
+- **Finalize is idempotent and terminal.** Finalizing an already-completed experiment returns the stored record without recomputing. After finalization, further submissions are rejected with `EXPERIMENT_ALREADY_FINALIZED` (HTTP `409`).
+- **Counts are server-computed and per-item.** At finalize time Mastra rolls attempts up per item: `succeededCount` (at least one attempt without an error), `failedCount` (every attempt errored), `skippedCount` (never submitted). `succeededCount + failedCount + skippedCount === totalItems` always holds, and callers keep no completion bookkeeping. Attempt-level rows remain available via `listExperimentResults`.
 
 ## Configuration options
 

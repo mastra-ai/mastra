@@ -7,6 +7,7 @@
     "anthropic/claude-opus-5",
     "anthropic/claude-sonnet-4-6",
     "anthropic/claude-sonnet-5",
+    "deepseek/deepseek-v4-flash-vision-exp",
     "gemini/gemini-2.5-flash",
     "gemini/gemini-2.5-flash-lite",
     "gemini/gemini-2.5-pro",
@@ -15,6 +16,7 @@
     "gemini/gemini-3.5-flash",
     "gemini/gemini-3.5-flash-lite",
     "gemini/gemini-3.6-flash",
+    "gemini/gemini-3.7-flash",
     "minimax/minimax-m3",
     "moonshot/kimi-k2.5",
     "moonshot/kimi-k2.6",
@@ -44,6 +46,7 @@
     "anthropic/claude-haiku-4-5",
     "anthropic/claude-sonnet-4-6",
     "deepseek/deepseek-v4-flash",
+    "deepseek/deepseek-v4-flash-vision-exp",
     "deepseek/deepseek-v4-pro",
     "gemini/gemini-2.5-flash",
     "gemini/gemini-2.5-flash-lite",
@@ -53,6 +56,7 @@
     "gemini/gemini-3.5-flash",
     "gemini/gemini-3.5-flash-lite",
     "gemini/gemini-3.6-flash",
+    "gemini/gemini-3.7-flash",
     "minimax/minimax-m2.7",
     "minimax/minimax-m3",
     "moonshot/kimi-k2.6",
@@ -74,7 +78,8 @@
     "z-ai/glm-5",
     "z-ai/glm-5-turbo",
     "z-ai/glm-5.1",
-    "z-ai/glm-5.2"
+    "z-ai/glm-5.2",
+    "z-ai/glm-5.3"
   ],
   "structuredOutput": [
     "anthropic/claude-fable-5",
@@ -85,6 +90,7 @@
     "anthropic/claude-sonnet-4-6",
     "anthropic/claude-sonnet-5",
     "deepseek/deepseek-v4-flash",
+    "deepseek/deepseek-v4-flash-vision-exp",
     "deepseek/deepseek-v4-pro",
     "gemini/gemini-2.5-flash",
     "gemini/gemini-2.5-flash-lite",
@@ -94,6 +100,7 @@
     "gemini/gemini-3.5-flash",
     "gemini/gemini-3.5-flash-lite",
     "gemini/gemini-3.6-flash",
+    "gemini/gemini-3.7-flash",
     "minimax/minimax-m2.7",
     "minimax/minimax-m3",
     "moonshot/kimi-k2.5",
@@ -126,6 +133,7 @@
     "z-ai/glm-5",
     "z-ai/glm-5-turbo",
     "z-ai/glm-5.1",
-    "z-ai/glm-5.2"
+    "z-ai/glm-5.2",
+    "z-ai/glm-5.3"
   ]
 }

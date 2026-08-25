@@ -1,0 +1,74 @@
+---
+title: Turso Storage
+sidebar_label: Turso Storage
+description: Store Mastra data in a local Turso Database file.
+packages:
+  - "@mastra/turso"
+---
+
+# Turso Storage
+
+Use `@mastra/turso` to store Mastra agents, workflows, memory, and other storage domains in a local [Turso Database](https://github.com/tursodatabase/turso) file.
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/turso
+```
+
+## Usage
+
+```typescript
+import { Mastra } from '@mastra/core/mastra'
+import { TursoStore } from '@mastra/turso'
+
+export const mastra = new Mastra({
+  storage: new TursoStore({
+    id: 'local-storage',
+    path: './mastra.db',
+  }),
+})
+```
+
+## Constructor options
+
+- `id` (required): Unique identifier for the storage instance.
+- `path` (required unless `client` is provided): Path to the local database file.
+- `client`: A compatible SQLite client to use instead of creating a native Turso client.
+- `readonly`: Opens the database in read-only mode.
+- `fileMustExist`: Requires the database file to exist before opening it.
+- `timeout`: Connection timeout in milliseconds.
+- `defaultQueryTimeout`: Default query timeout in milliseconds.
+- `tracing`: Native driver tracing level: `info`, `debug`, or `trace`.
+- `experimental`: Native Turso Database experimental features to enable.
+- `maxRetries`: Maximum number of retries for retryable writes.
+- `initialBackoffMs`: Initial retry delay in milliseconds.
+- `disableInit`: Disables automatic storage initialization.
+- `retention`: Retention policies for supported storage domains.
+
+## Platform support
+
+The native driver supports macOS on arm64, Windows on x64, and glibc-based Linux on x64 and arm64. Use `getTursoDatabaseSupport()` when your application needs to choose a fallback on unsupported systems.
+
+```typescript
+import { getTursoDatabaseSupport } from '@mastra/turso'
+
+const support = getTursoDatabaseSupport()
+if (!support.supported) {
+  console.warn(support.reason)
+}
+```
+
+## Experimental features
+
+Experimental Turso Database features are disabled by default. Enable only the features your application requires.
+
+```typescript
+const storage = new TursoStore({
+  id: 'multiprocess-storage',
+  path: './mastra.db',
+  experimental: ['multiprocess_wal'],
+})
+```
+
+`@mastra/turso` provides local-file Mastra storage. It doesn't connect to remote libSQL databases and doesn't include a vector store.

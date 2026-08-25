@@ -24,12 +24,16 @@ import type { MastraAuthMode } from '../constants';
 import { formatZodError } from '../handlers/error';
 export { isZodError, type ZodErrorLike } from '../handlers/error';
 import { normalizeRoutePath } from '../utils';
+import type { SetMcpRequestAuth } from './mcp-auth';
 import { generateOpenAPIDocument, convertCustomRoutesToOpenAPIPaths } from './openapi-utils';
 import type { ServerRoute } from './routes';
 import { SERVER_ROUTES, getEffectivePermission } from './routes';
 import { getBuiltInRouteFGAConfig } from './routes/fga-manifest';
 
 export * from './routes';
+export { applyMcpRequestAuth, buildMcpAuthInfoFromRequestContext } from './mcp-auth';
+export type { McpAuthInfo, SetMcpRequestAuth } from './mcp-auth';
+export { convertCustomRoutesToOpenAPIPaths } from './openapi-utils';
 export { redactStreamChunk } from './redact';
 export { serializeStreamChunk, type SerializedStreamChunk } from './serialize';
 export {
@@ -108,6 +112,15 @@ export interface MCPOptions {
    * Custom session ID generator function.
    */
   sessionIdGenerator?: () => string;
+  /**
+   * Sets `req.auth` before the MCP transport reads it, which is what surfaces as
+   * `extra.authInfo` inside tool and agent execution.
+   *
+   * When omitted, the principal resolved by `server.auth` is bridged
+   * automatically. Provide this hook when your own middleware performs the
+   * verification and you want full control over the resulting `AuthInfo`.
+   */
+  setRequestAuth?: SetMcpRequestAuth;
 }
 
 /**
@@ -780,8 +793,6 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       pattern: `${prefix}${r.path}`,
     }));
 
-    const customAuthConfig = this.customRouteAuthConfig;
-
     return (path: string, method: string): boolean => {
       const upperMethod = method.toUpperCase();
 
@@ -791,7 +802,11 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
         }
       }
 
-      return isCustomRoutePublic(path, upperMethod, customAuthConfig);
+      // Read `customRouteAuthConfig` at request time, not at matcher build
+      // time: adapters constructed without an explicit map only populate it
+      // later, in registerCustomApiRoutes(), after the context middleware has
+      // already built this matcher.
+      return isCustomRoutePublic(path, upperMethod, this.customRouteAuthConfig);
     };
   }
 
@@ -806,6 +821,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
   async init() {
     this.registerContextMiddleware();
     this.registerAuthMiddleware();
+    this.registerUserMiddleware();
     this.registerHttpLoggingMiddleware();
     await this.validateEELicense();
     await this.validateAgentBuilderLicense();
@@ -925,6 +941,31 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       routes: routeList,
       count: missingRoutes.length,
     });
+  }
+
+  /**
+   * Register user-provided middleware from the Mastra config (`server.middleware`)
+   * and from `mastra.setServerMiddleware()`. Called by init() between
+   * registerAuthMiddleware() and registerHttpLoggingMiddleware().
+   *
+   * Mastra middleware handlers use Hono's `(c, next)` signature, so only
+   * Hono-based adapters can run them. Those adapters override this method and
+   * MUST wrap each handler with `skipIfFrameworkPublic` (exported by
+   * `@mastra/hono`) so user middleware cannot block framework-public routes.
+   * The default implementation warns when middleware is configured so the
+   * config is not silently ignored on adapters that cannot honor it.
+   */
+  registerUserMiddleware(): void {
+    const instanceMiddleware = this.mastra.getServerMiddleware?.() ?? [];
+    const configMiddleware = this.mastra.getServer()?.middleware;
+    const hasConfigMiddleware = Array.isArray(configMiddleware) ? configMiddleware.length > 0 : !!configMiddleware;
+    if (instanceMiddleware.length === 0 && !hasConfigMiddleware) return;
+
+    this.mastra
+      .getLogger()
+      ?.warn(
+        'Mastra server middleware (`server.middleware` or `setServerMiddleware()`) is configured, but this server adapter cannot run Hono middleware handlers. The configured middleware will not run — register middleware through your server framework instead.',
+      );
   }
 
   /**

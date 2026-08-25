@@ -15,7 +15,7 @@ import type { CallToolResult } from '@modelcontextprotocol/server';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 
-import { InternalMastraMCPClient } from './client.js';
+import { InternalMastraMCPClient, getMcpCallToolContent, getMcpCallToolMeta } from './client.js';
 
 describe('InternalMastraMCPClient - server instructions', () => {
   afterEach(() => {
@@ -965,6 +965,79 @@ describe('MastraMCPClient - outputSchema with structuredContent', () => {
     });
   });
 
+  it('should preserve result _meta (with serverId stamped into ui) on structured results', async () => {
+    const sdkClient = (client as any).client as Client;
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'ui_tool',
+          description: 'Returns an MCP App resource',
+          inputSchema: { type: 'object' as const, properties: {} },
+          outputSchema: {
+            type: 'object' as const,
+            properties: { count: { type: 'number' } },
+          },
+        },
+      ],
+    });
+
+    const structured = { count: 2 };
+    const content = [{ type: 'text', text: 'Found 2 items' }];
+
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      structuredContent: structured,
+      content,
+      _meta: { ui: { resourceUri: 'ui://ui_tool/app.html' }, traceId: 'trace-9' },
+      isError: false,
+    });
+
+    const tools = await client.tools();
+    const result = await tools['ui_tool'].execute?.({});
+
+    // execute() return shape is unchanged: enumerable keys are only the structured output
+    expect(result).toEqual(structured);
+    expect(Object.keys(result)).toEqual(['count']);
+    expect(JSON.stringify(result)).toBe(JSON.stringify(structured));
+
+    // Hidden channels expose the rest of the CallToolResult envelope
+    expect(getMcpCallToolContent(result)).toEqual(content);
+    expect(getMcpCallToolMeta(result)).toEqual({
+      ui: { resourceUri: 'ui://ui_tool/app.html', serverId: 'structured-content-test-client' },
+      traceId: 'trace-9',
+    });
+  });
+
+  it('should return undefined from getMcpCallToolMeta when the result has no _meta', async () => {
+    const sdkClient = (client as any).client as Client;
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'plain_tool',
+          description: 'No _meta',
+          inputSchema: { type: 'object' as const, properties: {} },
+          outputSchema: {
+            type: 'object' as const,
+            properties: { count: { type: 'number' } },
+          },
+        },
+      ],
+    });
+
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      structuredContent: { count: 0 },
+      content: [{ type: 'text', text: 'none' }],
+      isError: false,
+    });
+
+    const tools = await client.tools();
+    const result = await tools['plain_tool'].execute?.({});
+
+    expect(getMcpCallToolMeta(result)).toBeUndefined();
+    expect(getMcpCallToolContent(result)).toEqual([{ type: 'text', text: 'none' }]);
+  });
+
   it('should use JSON content text in toModelOutput when the server mirrors structuredContent in content', async () => {
     const sdkClient = (client as any).client as Client;
 
@@ -1058,7 +1131,7 @@ describe('MastraMCPClient - outputSchema with structuredContent', () => {
     });
   });
 
-  it('should return authored content text in toModelOutput when structuredContent is a scalar', async () => {
+  it('should use scalar structuredContent as JSON model output', async () => {
     const sdkClient = (client as any).client as Client;
 
     vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
@@ -1089,12 +1162,12 @@ describe('MastraMCPClient - outputSchema with structuredContent', () => {
 
     expect(result).toBe(0);
     expect(tool.toModelOutput?.(result)).toEqual({
-      type: 'text',
-      value: 'count is zero',
+      type: 'json',
+      value: 0,
     });
   });
 
-  it('should return authored content text in toModelOutput when structuredContent is null', async () => {
+  it('should use null structuredContent as JSON model output', async () => {
     const sdkClient = (client as any).client as Client;
 
     vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
@@ -1125,12 +1198,12 @@ describe('MastraMCPClient - outputSchema with structuredContent', () => {
 
     expect(result).toBeNull();
     expect(tool.toModelOutput?.(result)).toEqual({
-      type: 'text',
-      value: 'no data available',
+      type: 'json',
+      value: null,
     });
   });
 
-  it('should map authored content to the matching scalar invocation when the same value is returned twice', async () => {
+  it('should not retain authored content from an earlier equal scalar result', async () => {
     const sdkClient = (client as any).client as Client;
 
     vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
@@ -1169,11 +1242,11 @@ describe('MastraMCPClient - outputSchema with structuredContent', () => {
 
     expect(first).toBe(0);
     expect(second).toBe(0);
-    expect(tool.toModelOutput?.(first)).toEqual({ type: 'text', value: 'first zero' });
-    expect(tool.toModelOutput?.(second)).toEqual({ type: 'text', value: 'second zero' });
+    expect(tool.toModelOutput?.(second)).toEqual({ type: 'json', value: 0 });
+    expect(tool.toModelOutput?.(first)).toEqual({ type: 'json', value: 0 });
   });
 
-  it('should preserve invocation order when concurrent scalar calls resolve out of order', async () => {
+  it('should keep concurrent equal scalar results as JSON when calls resolve out of order', async () => {
     const sdkClient = (client as any).client as Client;
 
     vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
@@ -1213,8 +1286,8 @@ describe('MastraMCPClient - outputSchema with structuredContent', () => {
       tool.execute?.({ query: 'second' }),
     ]);
 
-    expect(tool.toModelOutput?.(first)).toEqual({ type: 'text', value: 'first zero' });
-    expect(tool.toModelOutput?.(second)).toEqual({ type: 'text', value: 'second zero' });
+    expect(tool.toModelOutput?.(second)).toEqual({ type: 'json', value: 0 });
+    expect(tool.toModelOutput?.(first)).toEqual({ type: 'json', value: 0 });
   });
 });
 

@@ -3,7 +3,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { MastraCompositeStore } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
 import { fastembed } from '@mastra/fastembed';
-import { Memory } from '@mastra/memory';
+import { Memory, Subconscious } from '@mastra/memory';
 import { DEFAULT_OM_MODEL_ID, DEFAULT_OBS_THRESHOLD, DEFAULT_REF_THRESHOLD } from '../constants.js';
 import type { MastraCodeState } from '../schema.js';
 import { getOmScope } from '../utils/project.js';
@@ -81,7 +81,30 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
   let cachedMemoryKey: string | null = null;
 
   return ({ requestContext }: { requestContext: RequestContext }) => {
-    const state = getAgentControllerState(requestContext);
+    const controller = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
+    const state = controller?.getState() as MastraCodeState | undefined;
+    const subconsciousEnabled = Boolean(vector) && process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1';
+    const factoryProjectId = state?.factoryProjectId;
+    const isFactory = typeof factoryProjectId === 'string' && factoryProjectId.trim().length > 0;
+
+    if (subconsciousEnabled) {
+      // Factory seeds the authoritative org id into session state; prefer it.
+      // The session owner is a USER id — mapping it into organizationId is only
+      // the legacy fallback for clients (TUI/studio) that never set factoryOrgId.
+      const factoryOrgId = state?.factoryOrgId;
+      const ownerId = controller?.session.ownerId;
+      if (typeof factoryOrgId === 'string' && factoryOrgId.trim()) {
+        requestContext.set('organizationId', factoryOrgId);
+      } else if (ownerId) {
+        requestContext.set('organizationId', ownerId);
+      }
+      // Factory runs share one knowledge graph per project: anchor the
+      // subconscious knowledge scope's resource rung on the project id.
+      if (isFactory) {
+        requestContext.set('knowledgeResourceId', factoryProjectId);
+      }
+    }
+
     const omScope = state?.omScope ?? getOmScope(state?.projectPath);
 
     const obsThreshold = state?.observationThreshold ?? DEFAULT_OBS_THRESHOLD;
@@ -90,7 +113,9 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
 
     const observerPreviousObservationTokens = 1000;
     const observeAttachments = state?.observeAttachments;
-    const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}:${caveman ? 1 : 0}:${observeAttachments}`;
+    // Factory sessions get a factory-only Subconscious config, so the cache key
+    // carries a factory presence bit to keep the two configs from cross-serving.
+    const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}:${caveman ? 1 : 0}:${observeAttachments}:${isFactory ? 1 : 0}:${subconsciousEnabled ? 1 : 0}`;
     if (cachedMemory && cachedMemoryKey === cacheKey) {
       return cachedMemory;
     }
@@ -108,10 +133,30 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
       vector: vector || false,
       embedder: vector ? fastembed.small : undefined,
       options: {
+        // The factory sidebar shows a session the moment it exists, so it needs a
+        // name on the first turn. The TUI names its threads from OM's `threadTitle`
+        // as they grow and would only pay for an extra call here.
+        ...(isFactory ? { generateTitle: { model: getObserverModel } } : {}),
         observationalMemory: {
           enabled: true,
           temporalMarkers: true,
           retrieval: vector ? { vector: true } : true,
+          experimental_subconscious: subconsciousEnabled
+            ? new Subconscious({
+                defaultScope: 'resource',
+                maxScope: 'resource',
+                // Capture-time pinning is a factory-only opinion; every other
+                // client keeps plain curator-maintained pins.
+                pins: isFactory ? { capturePinning: true } : true,
+                // Factory sessions run the curator every 3 observation runs;
+                // other clients leave the cadence trigger dormant.
+                ...(isFactory ? { curationCadence: 3 } : {}),
+                // Real curation over a factory worklist needs tool room: the
+                // default 5-step budget exhausts mid-batch and the curator never
+                // reaches its cursor acknowledgment (observed live 2026-08-13).
+                ...(isFactory ? { maxSteps: 25 } : {}),
+              })
+            : undefined,
           scope: omScope,
           activateAfterIdle: 'auto',
           activateOnProviderChange: true,

@@ -45,6 +45,8 @@ type StreamIgnoredChunk =
   | StreamPayloadChunk<'redacted-reasoning'>
   | StreamPayloadChunk<'source'>
   | StreamPayloadChunk<'file'>
+  | StreamPayloadChunk<'reasoning-file'>
+  | StreamPayloadChunk<'custom'>
   | StreamPayloadChunk<'raw'>
   | StreamPayloadChunk<'step-start'>
   | StreamPayloadChunk<'tool-output'>
@@ -296,22 +298,6 @@ export class SessionRunEngine {
     return state.currentMessage.content.parts.length > 0;
   }
 
-  /**
-   * Snapshot a message for emission. The engine mutates parts in place
-   * (text/reasoning deltas, tool-invocation upgrades) and `setStopReason` /
-   * `setErrorMessage` mutate `content.metadata`, so emitted snapshots must
-   * deep-clone the content or later mutations rewrite earlier snapshots.
-   *
-   * With no subscribers there is no earlier snapshot to protect, and the only
-   * remaining consumer is the display state, which already aliases the live
-   * message on `message_end`. Skipping the clone there drops a full
-   * `structuredClone` of the message per streamed delta.
-   */
-  private cloneMessage(message: MastraDBMessage): MastraDBMessage {
-    if (!this.#session.hasListeners()) return message;
-    return { ...message, content: structuredClone(message.content) };
-  }
-
   private setStopReason(message: MastraDBMessage, stopReason: string, force = false): void {
     message.content.metadata ??= {};
     const metadata = message.content.metadata;
@@ -399,7 +385,7 @@ export class SessionRunEngine {
       isError,
       ...(providerMetadata ? { providerMetadata } : {}),
     });
-    this.#session.emit({ type: 'message_update', message: this.cloneMessage(state.currentMessage) });
+    this.#session.emit({ type: 'message_update', message: state.currentMessage });
   }
 
   private abortForOmFailure({ operationType, stage, error }: { operationType: string; stage: string; error: string }) {
@@ -489,6 +475,13 @@ export class SessionRunEngine {
     return result;
   }
 
+  /**
+   * Mutates and emits one live accumulated message throughout the assistant turn.
+   * Consumers that require a point-in-time value must copy or serialize at their
+   * ownership boundary. Do not restore producer-side per-delta snapshots: even
+   * selective snapshots retain growing historical text and allocate message/part
+   * shells for every token.
+   */
   async processStreamChunk(
     state: StreamState,
     chunk: StreamChunk,
@@ -501,12 +494,14 @@ export class SessionRunEngine {
     switch (chunk.type) {
       case 'step-start': {
         // Adopt the loop's response message id so the streamed turn and its
-        // persisted copy share one identity (clients dedupe by id). An id is
-        // consumed on first offer and binds only while the message is still
-        // empty — an emitted id must never change, and a re-offered id must
-        // never attach to a later message.
+        // persisted copy share one identity (clients dedupe by id). The loop
+        // mints a new id only when it seals one persisted response and opens
+        // the next, so every id after the first marks that boundary — rotate
+        // with it, or the persisted tail comes back as a duplicate on reload.
+        // An emitted id never changes, and an id binds to one message only.
         const messageId = getString(getPayload(chunk).messageId);
         if (!messageId || state.offeredResponseIds.has(messageId)) break;
+        if (state.offeredResponseIds.size > 0) this.finishCurrentMessageAndRotate(state);
         state.offeredResponseIds.add(messageId);
         if (!this.hasCurrentMessageContent(state)) {
           state.currentMessage.id = messageId;
@@ -518,7 +513,7 @@ export class SessionRunEngine {
         const textIndex = state.currentMessage.content.parts.length;
         state.currentMessage.content.parts.push({ type: 'text', text: '' });
         state.textContentById.set(getString(getPayload(chunk).id) ?? '', { index: textIndex, text: '' });
-        this.#session.emit({ type: 'message_start', message: this.cloneMessage(state.currentMessage) });
+        this.#session.emit({ type: 'message_start', message: state.currentMessage });
         break;
       }
 
@@ -530,7 +525,7 @@ export class SessionRunEngine {
           if (textContent && textContent.type === 'text') {
             textContent.text = textState.text;
           }
-          this.#session.emit({ type: 'message_update', message: this.cloneMessage(state.currentMessage) });
+          this.#session.emit({ type: 'message_update', message: state.currentMessage });
         }
         break;
       }
@@ -539,7 +534,7 @@ export class SessionRunEngine {
         const thinkingIndex = state.currentMessage.content.parts.length;
         state.currentMessage.content.parts.push({ type: 'reasoning', reasoning: '', details: [] });
         state.thinkingContentById.set(getString(getPayload(chunk).id) ?? '', { index: thinkingIndex, text: '' });
-        this.#session.emit({ type: 'message_update', message: this.cloneMessage(state.currentMessage) });
+        this.#session.emit({ type: 'message_update', message: state.currentMessage });
         break;
       }
 
@@ -552,7 +547,7 @@ export class SessionRunEngine {
             thinkingContent.reasoning = thinkingState.text;
             thinkingContent.details = [{ type: 'text', text: thinkingState.text }];
           }
-          this.#session.emit({ type: 'message_update', message: this.cloneMessage(state.currentMessage) });
+          this.#session.emit({ type: 'message_update', message: state.currentMessage });
         }
         break;
       }
@@ -610,7 +605,7 @@ export class SessionRunEngine {
           toolName,
           args,
         });
-        this.#session.emit({ type: 'message_update', message: this.cloneMessage(state.currentMessage) });
+        this.#session.emit({ type: 'message_update', message: state.currentMessage });
         break;
       }
 
@@ -669,8 +664,8 @@ export class SessionRunEngine {
           state.currentMessage.content.parts.push({ type: 'tool-invocation', toolInvocation });
         }
 
-        this.#session.emit({ type: 'tool_end', toolCallId, result: reason, isError: false });
-        this.#session.emit({ type: 'message_update', message: this.cloneMessage(state.currentMessage) });
+        this.#session.emit({ type: 'tool_end', toolCallId, result: reason, isError: false, denied: true });
+        this.#session.emit({ type: 'message_update', message: state.currentMessage });
         break;
       }
 
@@ -806,6 +801,16 @@ export class SessionRunEngine {
             stepUsage,
             'cacheCreationInputTokens',
             getUsageNumber(usageRecord, 'cacheCreationInputTokens'),
+          );
+          addOptionalUsageField(
+            stepUsage,
+            'cacheCreationInputTokens5m',
+            getUsageNumber(usageRecord, 'cacheCreationInputTokens5m'),
+          );
+          addOptionalUsageField(
+            stepUsage,
+            'cacheCreationInputTokens1h',
+            getUsageNumber(usageRecord, 'cacheCreationInputTokens1h'),
           );
           if (usageRecord.raw !== undefined) {
             stepUsage.raw = usageRecord.raw;
@@ -1178,8 +1183,8 @@ export class SessionRunEngine {
       state.currentMessage.content.parts.push({ type: 'tool-invocation', toolInvocation });
     }
 
-    this.#session.emit({ type: 'tool_end', toolCallId, result: ABORTED_BY_USER_REASON, isError: false });
-    this.#session.emit({ type: 'message_update', message: this.cloneMessage(state.currentMessage) });
+    this.#session.emit({ type: 'tool_end', toolCallId, result: ABORTED_BY_USER_REASON, isError: false, denied: true });
+    this.#session.emit({ type: 'message_update', message: state.currentMessage });
   }
 
   private finishStreamState(state: StreamState): { message: MastraDBMessage; suspended?: boolean } {

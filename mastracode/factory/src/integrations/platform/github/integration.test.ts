@@ -1066,13 +1066,16 @@ describe('PlatformGithubIntegration', () => {
     });
   });
 
-  it('defaults the Platform base URL and requires MASTRA_PLATFORM_SECRET_KEY', () => {
+  it('defaults the Platform base URL and requires a platform credential', () => {
     vi.stubEnv('MASTRA_SHARED_API_URL', '');
     expect(new PlatformGithubIntegration().diagnostics()).toMatchObject({ endpointHost: 'platform.mastra.ai' });
 
     vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', '');
-    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'legacy-token');
-    expect(() => new PlatformGithubIntegration()).toThrow(/MASTRA_PLATFORM_SECRET_KEY/);
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'injected-token');
+    expect(() => new PlatformGithubIntegration()).not.toThrow();
+
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', '');
+    expect(() => new PlatformGithubIntegration()).toThrow(/MASTRA_PLATFORM_ACCESS_TOKEN/);
   });
 
   it('exposes an explicitly configured GitHub App slug to webhook rules', () => {
@@ -1109,11 +1112,20 @@ describe('PlatformGithubIntegration', () => {
     });
   });
 
-  it('keeps the reconciliation worker alive when polling is disabled', () => {
+  it('keeps the reconciliation worker alive when polling is disabled', async () => {
     vi.stubEnv('MASTRA_PLATFORM_GITHUB_POLLING_ENABLED', 'false');
+    const seed = await createPlatformStorageForTests();
     const integration = createIntegration();
+    const context = {
+      controller: {},
+      storage: {
+        generic: seed.integrations.forIntegration('github'),
+        sourceControl: seed.sourceControl.forIntegration('github'),
+      },
+    } as unknown as IntegrationContext;
+    integration.versionControl.initialize({ storage: context.storage.sourceControl });
 
-    const workers = integration.workers({ controller: {}, storage: { generic: {} } } as unknown as IntegrationContext);
+    const workers = integration.workers(context);
     expect(workers).toHaveLength(1);
     expect(integration.diagnostics()).toMatchObject({
       polling: { enabled: false },
@@ -1124,13 +1136,22 @@ describe('PlatformGithubIntegration', () => {
     });
   });
 
-  it('allows issue reconciliation to override a disabled legacy reconcile switch', () => {
+  it('allows issue reconciliation to override a disabled legacy reconcile switch', async () => {
     vi.stubEnv('MASTRA_PLATFORM_GITHUB_POLLING_ENABLED', 'false');
     vi.stubEnv('MASTRA_PLATFORM_GITHUB_RECONCILE_ENABLED', 'false');
     vi.stubEnv('MASTRACODE_PLATFORM_GITHUB_ISSUE_RECONCILE_ENABLED', 'true');
+    const seed = await createPlatformStorageForTests();
     const integration = createIntegration();
+    const context = {
+      controller: {},
+      storage: {
+        generic: seed.integrations.forIntegration('github'),
+        sourceControl: seed.sourceControl.forIntegration('github'),
+      },
+    } as unknown as IntegrationContext;
+    integration.versionControl.initialize({ storage: context.storage.sourceControl });
 
-    const workers = integration.workers({ controller: {}, storage: { generic: {} } } as unknown as IntegrationContext);
+    const workers = integration.workers(context);
     expect(workers).toHaveLength(1);
     expect(integration.diagnostics()).toMatchObject({
       reconcile: {

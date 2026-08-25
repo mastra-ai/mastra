@@ -1,6 +1,6 @@
 import type { DatasetExperiment } from '@mastra/client-js';
 import { Chip } from '@mastra/playground-ui/components/Chip';
-import { DataList } from '@mastra/playground-ui/components/DataList';
+import { DataList, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -43,6 +43,8 @@ export function DatasetExperimentsList({
   onRowClick,
   onToggleSelection,
 }: DatasetExperimentsListProps) {
+  const { containerRef, getRowProps } = useDataListKeyboard({ count: experiments.length });
+
   if (experiments.length === 0) {
     return <EmptyDatasetExperimentsList />;
   }
@@ -52,7 +54,7 @@ export function DatasetExperimentsList({
     .join(' ');
 
   return (
-    <DataList columns={gridColumns}>
+    <DataList columns={gridColumns} scrollRef={containerRef}>
       <DataList.Top hasLeadingCell={isSelectionActive}>
         {isSelectionActive && <DataList.TopCell>&nbsp;</DataList.TopCell>}
         {isSelectionActive ? (
@@ -66,7 +68,7 @@ export function DatasetExperimentsList({
         )}
       </DataList.Top>
 
-      {experiments.map(experiment => {
+      {experiments.map((experiment, index) => {
         const isSelected = selectedExperimentIds.includes(experiment.id);
         const createdAtDate = new Date(experiment.createdAt);
 
@@ -93,9 +95,9 @@ export function DatasetExperimentsList({
                 </Tooltip>
               )}
             </DataList.Cell>
-            <DataList.Cell height="compact">{experiment.targetType}</DataList.Cell>
+            <DataList.Cell height="compact">{experiment.targetType ?? 'external'}</DataList.Cell>
             <DataList.Cell height="compact" className="min-w-0">
-              <span className="block truncate">{experiment.targetId}</span>
+              <span className="block truncate">{experiment.targetId ?? '—'}</span>
             </DataList.Cell>
             <DataList.Cell height="compact">
               <Tooltip>
@@ -122,7 +124,7 @@ export function DatasetExperimentsList({
 
         if (!isSelectionActive) {
           return (
-            <DataList.RowButton key={experiment.id} onClick={handleRowClick}>
+            <DataList.RowButton key={experiment.id} onClick={handleRowClick} {...getRowProps(index)}>
               {rowCells}
             </DataList.RowButton>
           );
@@ -135,7 +137,13 @@ export function DatasetExperimentsList({
               onToggle={() => onToggleSelection(experiment.id)}
               aria-label={`Select experiment ${experiment.id}`}
             />
-            <DataList.RowButton flushLeft colStart={2} featured={isSelected} onClick={handleRowClick}>
+            <DataList.RowButton
+              flushLeft
+              colStart={2}
+              featured={isSelected}
+              onClick={handleRowClick}
+              {...getRowProps(index)}
+            >
               {rowCells}
             </DataList.RowButton>
           </DataList.RowWrapper>

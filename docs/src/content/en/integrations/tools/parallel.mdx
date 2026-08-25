@@ -1,0 +1,423 @@
+---
+title: 'Parallel | Tools'
+description: 'API reference for @mastra/parallel, which provides Parallel Search and Extract tools for Mastra agents.'
+packages:
+  - '@mastra/parallel'
+---
+
+# Parallel
+
+The `@mastra/parallel` package exposes [Parallel Search](https://docs.parallel.ai/search/search-quickstart) and [Extract](https://docs.parallel.ai/search/extract-quickstart) as Mastra-compatible tools. Each factory returns a tool created with [`createTool()`](/reference/tools/create-tool) and a typed Zod input and output schema.
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/parallel parallel-web zod
+```
+
+Set `PARALLEL_API_KEY` in your environment. You can also pass an API key directly to any factory.
+
+## Quick start
+
+Use `createParallelTools()` to create both tools with shared client configuration:
+
+```typescript title="src/mastra/tools/index.ts"
+import { createParallelTools } from '@mastra/parallel'
+
+export const parallelTools = createParallelTools()
+// Or pass an explicit API key:
+// export const parallelTools = createParallelTools({ apiKey: 'parallel-api-key' })
+```
+
+The returned object contains `parallelSearch` and `parallelExtract`.
+
+Create either tool separately when an agent doesn't need both:
+
+```typescript title="src/mastra/tools/index.ts"
+import { createParallelExtractTool, createParallelSearchTool } from '@mastra/parallel'
+
+export const searchTool = createParallelSearchTool()
+export const extractTool = createParallelExtractTool({ apiKey: 'parallel-api-key' })
+```
+
+The client isn't initialized until the tool executes. A missing API key therefore fails at execution time with a configuration error.
+
+## Configuration
+
+All factories accept `ParallelClientOptions`, an alias of `ClientOptions` from the official `parallel-web` client:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'apiKey',
+    type: 'string',
+    description: 'Parallel API key. Falls back to the `PARALLEL_API_KEY` environment variable.',
+    isOptional: true,
+  },
+  {
+    name: 'baseURL',
+    type: 'string',
+    description: 'Override the Parallel API base URL. The client also reads `PARALLEL_BASE_URL`.',
+    isOptional: true,
+  },
+  {
+    name: 'timeout',
+    type: 'number',
+    description: 'Timeout in milliseconds for one request attempt.',
+    isOptional: true,
+  },
+  {
+    name: 'fetch',
+    type: 'Fetch',
+    description: 'Custom `fetch` implementation.',
+    isOptional: true,
+  },
+  {
+    name: 'fetchOptions',
+    type: 'RequestInit',
+    description: 'Additional options passed to each `fetch` call.',
+    isOptional: true,
+  },
+  {
+    name: 'maxRetries',
+    type: 'number',
+    description: 'Maximum retries for temporary failures.',
+    isOptional: true,
+    defaultValue: '2',
+  },
+  {
+    name: 'defaultHeaders',
+    type: 'HeadersLike',
+    description: 'Headers included with every request.',
+    isOptional: true,
+  },
+  {
+    name: 'defaultQuery',
+    type: 'Record<string, string | undefined>',
+    description: 'Query parameters included with every request.',
+    isOptional: true,
+  },
+  {
+    name: 'logLevel',
+    type: 'LogLevel',
+    description: 'Client log level. Falls back to `PARALLEL_LOG`, then `warn`.',
+    isOptional: true,
+  },
+  {
+    name: 'logger',
+    type: 'Logger',
+    description: 'Client logger implementation.',
+    isOptional: true,
+  },
+]}
+/>
+
+The package also exports `getParallelClient()` for applications that need the configured official client directly.
+
+## `createParallelSearchTool()`
+
+Creates the `parallel-search` tool. Search returns ranked URLs and excerpts focused on the supplied queries and objective.
+
+```typescript
+import { createParallelSearchTool } from '@mastra/parallel'
+
+const searchTool = createParallelSearchTool()
+```
+
+### Search input
+
+<PropertiesTable
+  content={[
+  {
+    name: 'searchQueries',
+    type: 'string[]',
+    description: 'One or more concise keyword queries. Parallel recommends 2-3 queries of 3-6 words each.',
+  },
+  {
+    name: 'objective',
+    type: 'string',
+    description: 'Self-contained description of the goal driving the search.',
+    isOptional: true,
+  },
+  {
+    name: 'mode',
+    type: "'turbo' | 'fast' | 'basic' | 'advanced'",
+    description: 'Search mode.',
+    isOptional: true,
+    defaultValue: "'advanced'",
+  },
+  {
+    name: 'clientModel',
+    type: 'string',
+    description: 'Model that will consume the results. Parallel uses it to tailor response defaults.',
+    isOptional: true,
+  },
+  {
+    name: 'maxResults',
+    type: 'number',
+    description: 'Maximum number of results to return.',
+    isOptional: true,
+  },
+  {
+    name: 'excerptMaxCharsPerResult',
+    type: 'number',
+    description: 'Maximum excerpt characters for each result.',
+    isOptional: true,
+  },
+  {
+    name: 'maxCharsTotal',
+    type: 'number',
+    description: 'Maximum excerpt characters across all results.',
+    isOptional: true,
+  },
+  {
+    name: 'location',
+    type: 'string',
+    description: 'ISO 3166-1 alpha-2 country code for geo-targeted results.',
+    isOptional: true,
+  },
+  {
+    name: 'includeDomains',
+    type: 'string[]',
+    description:
+      'Only return results from these domains. Include and exclude lists can contain at most 200 domains combined.',
+    isOptional: true,
+  },
+  {
+    name: 'excludeDomains',
+    type: 'string[]',
+    description:
+      'Exclude results from these domains. Include and exclude lists can contain at most 200 domains combined.',
+    isOptional: true,
+  },
+  {
+    name: 'afterDate',
+    type: 'string',
+    description: 'Only return content published on or after this `YYYY-MM-DD` date.',
+    isOptional: true,
+  },
+  {
+    name: 'fetchPolicy',
+    type: 'FetchPolicy',
+    description: 'Controls live fetching and cached-content fallback.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'FetchPolicy',
+        parameters: [
+          {
+            name: 'maxAgeSeconds',
+            type: 'number',
+            description: 'Maximum cached-content age before a live fetch. The minimum is 600 seconds.',
+            isOptional: true,
+          },
+          { name: 'timeoutSeconds', type: 'number', description: 'Timeout for a live fetch.', isOptional: true },
+          {
+            name: 'disableCacheFallback',
+            type: 'boolean',
+            description: 'Return an error instead of older cached content when a live fetch fails.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'sessionId',
+    type: 'string',
+    description: 'Session identifier shared across related Search and Extract calls.',
+    isOptional: true,
+  },
+]}
+/>
+
+### Search output
+
+Search returns `searchId`, `sessionId`, and `results`. Optional `usage` and `warnings` arrays preserve metadata from Parallel.
+
+<PropertiesTable
+  content={[
+  { name: 'searchId', type: 'string', description: 'Parallel Search request ID.' },
+  { name: 'sessionId', type: 'string', description: 'Session ID returned by Parallel.' },
+  {
+    name: 'results',
+    type: 'SearchResult[]',
+    description: 'Results ordered by decreasing relevance.',
+    properties: [
+      {
+        type: 'SearchResult',
+        parameters: [
+          { name: 'url', type: 'string', description: 'Result URL.' },
+          { name: 'title', type: 'string', description: 'Page title.', isOptional: true },
+          { name: 'publishDate', type: 'string', description: 'Page publication date.', isOptional: true },
+          { name: 'excerpts', type: 'string[]', description: 'Relevant Markdown excerpts.' },
+        ],
+      },
+    ],
+  },
+  { name: 'usage', type: 'UsageItem[]', description: 'SKU names and counts for the request.', isOptional: true },
+  {
+    name: 'warnings',
+    type: 'Warning[]',
+    description: 'Validation or request warnings from Parallel.',
+    isOptional: true,
+  },
+]}
+/>
+
+## `createParallelExtractTool()`
+
+Creates the `parallel-extract` tool. Extract returns relevant excerpts or full content for up to 20 public URLs and reports per-URL failures separately.
+
+```typescript
+import { createParallelExtractTool } from '@mastra/parallel'
+
+const extractTool = createParallelExtractTool()
+```
+
+### Extract input
+
+<PropertiesTable
+  content={[
+  { name: 'urls', type: 'string[]', description: 'One to 20 URLs to extract.' },
+  { name: 'objective', type: 'string', description: 'Information to focus on while extracting.', isOptional: true },
+  {
+    name: 'searchQueries',
+    type: 'string[]',
+    description: 'Keyword queries used with the objective to focus excerpts.',
+    isOptional: true,
+  },
+  {
+    name: 'clientModel',
+    type: 'string',
+    description: 'Model that will consume the results. Parallel uses it to tailor response defaults.',
+    isOptional: true,
+  },
+  {
+    name: 'excerptMaxCharsPerResult',
+    type: 'number',
+    description: 'Maximum excerpt characters for each URL.',
+    isOptional: true,
+  },
+  {
+    name: 'fullContent',
+    type: 'boolean | number',
+    description: 'Return full page content. Pass a number to cap characters for each URL.',
+    isOptional: true,
+  },
+  {
+    name: 'maxCharsTotal',
+    type: 'number',
+    description: 'Maximum excerpt characters across all results.',
+    isOptional: true,
+  },
+  {
+    name: 'fetchPolicy',
+    type: 'FetchPolicy',
+    description: 'Controls live fetching and cached-content fallback.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'FetchPolicy',
+        parameters: [
+          {
+            name: 'maxAgeSeconds',
+            type: 'number',
+            description: 'Maximum cached-content age before a live fetch. The minimum is 600 seconds.',
+            isOptional: true,
+          },
+          { name: 'timeoutSeconds', type: 'number', description: 'Timeout for a live fetch.', isOptional: true },
+          {
+            name: 'disableCacheFallback',
+            type: 'boolean',
+            description: 'Return an error instead of older cached content when a live fetch fails.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'sessionId',
+    type: 'string',
+    description: 'Session identifier shared across related Search and Extract calls.',
+    isOptional: true,
+  },
+]}
+/>
+
+### Extract output
+
+<PropertiesTable
+  content={[
+  { name: 'extractId', type: 'string', description: 'Parallel Extract request ID.' },
+  { name: 'sessionId', type: 'string', description: 'Session ID returned by Parallel.' },
+  {
+    name: 'results',
+    type: 'ExtractResult[]',
+    description: 'Successful URL results.',
+    properties: [
+      {
+        type: 'ExtractResult',
+        parameters: [
+          { name: 'url', type: 'string', description: 'Extracted URL.' },
+          { name: 'title', type: 'string', description: 'Page title.', isOptional: true },
+          { name: 'publishDate', type: 'string', description: 'Page publication date.', isOptional: true },
+          { name: 'excerpts', type: 'string[]', description: 'Relevant Markdown excerpts.' },
+          {
+            name: 'fullContent',
+            type: 'string',
+            description: 'Full Markdown content when requested.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'errors',
+    type: 'ExtractError[]',
+    description: "Requested URLs that weren't returned as results.",
+    properties: [
+      {
+        type: 'ExtractError',
+        parameters: [
+          { name: 'url', type: 'string', description: 'URL that failed.' },
+          { name: 'errorType', type: 'string', description: 'Parallel error type.' },
+          { name: 'httpStatusCode', type: 'number', description: 'HTTP status code when available.', isOptional: true },
+          { name: 'content', type: 'string', description: 'Response content when available.', isOptional: true },
+        ],
+      },
+    ],
+  },
+  { name: 'usage', type: 'UsageItem[]', description: 'SKU names and counts for the request.', isOptional: true },
+  {
+    name: 'warnings',
+    type: 'Warning[]',
+    description: 'Validation or request warnings from Parallel.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Use the tools with an agent
+
+```typescript title="src/mastra/agents/research-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { createParallelTools } from '@mastra/parallel'
+
+export const researchAgent = new Agent({
+  id: 'research-agent',
+  name: 'Research Agent',
+  model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+  instructions:
+    'Search the web for current sources, then extract relevant content from the best pages.',
+  tools: createParallelTools(),
+})
+```
+
+## Related
+
+- [Parallel Search documentation](https://docs.parallel.ai/search/search-quickstart)
+- [Parallel Extract documentation](https://docs.parallel.ai/search/extract-quickstart)
+- [`createTool()` reference](/reference/tools/create-tool)

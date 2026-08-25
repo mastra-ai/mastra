@@ -15,6 +15,7 @@ import {
   FileInputIcon,
   FileOutputIcon,
   History,
+  ListChecksIcon,
   Pencil,
   RouteIcon,
   TagIcon,
@@ -24,6 +25,7 @@ import {
 import { useEffect, useState } from 'react';
 import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
 import { EditModeContent } from '../dataset-detail/dataset-item-form';
+import { CompareWithList } from './compare-with-list';
 import { useLinkComponent } from '@/lib/framework';
 
 /** Schema validation error from API */
@@ -74,6 +76,8 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
   const [metadataValue, setMetadataValue] = useState('');
   const [trajectoryValue, setTrajectoryValue] = useState('');
   const [toolMocksValue, setToolMocksValue] = useState('');
+  const [scorerOverrideEnabled, setScorerOverrideEnabled] = useState(item.scorerIds !== undefined);
+  const [selectedScorerIds, setSelectedScorerIds] = useState(item.scorerIds ?? []);
   const [requestContextValue, setRequestContextValue] = useState('');
 
   // Validation error state
@@ -90,6 +94,8 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
       setMetadataValue(item.metadata ? JSON.stringify(item.metadata, null, 2) : '');
       setTrajectoryValue(item.expectedTrajectory ? JSON.stringify(item.expectedTrajectory, null, 2) : '');
       setToolMocksValue(item.toolMocks?.length ? JSON.stringify(item.toolMocks, null, 2) : '');
+      setScorerOverrideEnabled(item.scorerIds !== undefined);
+      setSelectedScorerIds(item.scorerIds ?? []);
       setRequestContextValue(item.requestContext ? JSON.stringify(item.requestContext, null, 2) : '');
       setIsEditing(false); // Exit edit mode on item change
       setShowDeleteConfirm(false); // Reset delete state on item change
@@ -178,8 +184,15 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
       }
     }
 
+    let scorerIds: string[] | null | undefined;
+    if (scorerOverrideEnabled) {
+      scorerIds = selectedScorerIds;
+    } else if (item.scorerIds !== undefined) {
+      scorerIds = null;
+    }
+
     try {
-      await updateItem.mutateAsync({
+      const updatedItem = await updateItem.mutateAsync({
         datasetId,
         itemId: item.id,
         input: parsedInput,
@@ -187,10 +200,13 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
         metadata: parsedMetadata,
         expectedTrajectory: parsedTrajectory,
         toolMocks: parsedToolMocks,
+        scorerIds,
         requestContext: parsedRequestContext,
       });
 
       toast.success('Item updated successfully');
+      setScorerOverrideEnabled(updatedItem.scorerIds !== undefined);
+      setSelectedScorerIds(updatedItem.scorerIds ?? []);
       setIsEditing(false);
       setValidationErrors(null);
     } catch (error) {
@@ -211,6 +227,8 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
     setMetadataValue(item.metadata ? JSON.stringify(item.metadata, null, 2) : '');
     setTrajectoryValue(item.expectedTrajectory ? JSON.stringify(item.expectedTrajectory, null, 2) : '');
     setToolMocksValue(item.toolMocks?.length ? JSON.stringify(item.toolMocks, null, 2) : '');
+    setScorerOverrideEnabled(item.scorerIds !== undefined);
+    setSelectedScorerIds(item.scorerIds ?? []);
     setRequestContextValue(item.requestContext ? JSON.stringify(item.requestContext, null, 2) : '');
     setIsEditing(false);
     setValidationErrors(null);
@@ -307,6 +325,10 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
               setTrajectoryValue={setTrajectoryValue}
               toolMocksValue={toolMocksValue}
               setToolMocksValue={setToolMocksValue}
+              scorerOverrideEnabled={scorerOverrideEnabled}
+              setScorerOverrideEnabled={setScorerOverrideEnabled}
+              selectedScorerIds={selectedScorerIds}
+              setSelectedScorerIds={setSelectedScorerIds}
               requestContextValue={requestContextValue}
               setRequestContextValue={setRequestContextValue}
               validationErrors={validationErrors}
@@ -363,6 +385,13 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
                   icon={<WrenchIcon />}
                   codeStr={JSON.stringify(item.toolMocks ?? [], null, 2)}
                 />
+                <DataPanel.CodeSection
+                  title="Scorers"
+                  icon={<ListChecksIcon />}
+                  codeStr={
+                    item.scorerIds === undefined ? 'Inherited from dataset' : JSON.stringify(item.scorerIds, null, 2)
+                  }
+                />
                 {item.requestContext != null && (
                   <DataPanel.CodeSection
                     title="Request Context"
@@ -376,6 +405,8 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
                   codeStr={JSON.stringify(item.metadata ?? null, null, 2)}
                 />
               </div>
+
+              <CompareWithList datasetId={datasetId} currentItemId={item.id} />
             </>
           )}
         </DataPanel.Content>

@@ -1,5 +1,5 @@
 import type { FeedbackRecord, ListFeedbackResponse } from '@mastra/core/storage';
-import { DataList, DataListSkeleton } from '@mastra/playground-ui/components/DataList';
+import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { format } from 'date-fns';
 import { useState } from 'react';
 import { FeedbackDialog } from './feedback-dialog';
@@ -43,6 +43,7 @@ function formatComment(fb: FeedbackRecord): string {
 export function SpanFeedbackList({ feedbackData, isLoadingFeedbackData, onPageChange }: SpanFeedbackListProps) {
   const [dialogIsOpen, setDialogIsOpen] = useState(false);
   const [selectedFeedback, setSelectedFeedback] = useState<FeedbackRecord | undefined>();
+  const { containerRef, getRowProps } = useDataListKeyboard({ count: feedbackData?.feedback?.length ?? 0 });
 
   if (isLoadingFeedbackData) {
     return <DataListSkeleton columns={gridColumns} />;
@@ -65,7 +66,7 @@ export function SpanFeedbackList({ feedbackData, isLoadingFeedbackData, onPageCh
 
   return (
     <>
-      <DataList columns={gridColumns}>
+      <DataList columns={gridColumns} scrollRef={containerRef}>
         <DataList.Top>
           {feedbackListColumns.map(col => (
             <DataList.TopCell key={col.label}>{col.label}</DataList.TopCell>
@@ -79,7 +80,11 @@ export function SpanFeedbackList({ feedbackData, isLoadingFeedbackData, onPageCh
             const ts = new Date(fb.timestamp);
             const source = fb.feedbackUserId || fb.feedbackSource || 'unknown';
             return (
-              <DataList.RowButton key={`${fb.traceId}-${index}`} onClick={() => handleOnFeedback(index)}>
+              <DataList.RowButton
+                key={`${fb.traceId}-${index}`}
+                onClick={() => handleOnFeedback(index)}
+                {...getRowProps(index)}
+              >
                 <DataList.Cell height="compact">{source}</DataList.Cell>
                 <DataList.DateCell timestamp={ts} />
                 <DataList.Cell height="compact">{format(ts, 'h:mm:ss aaa')}</DataList.Cell>
