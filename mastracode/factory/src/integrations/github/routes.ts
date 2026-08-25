@@ -21,7 +21,8 @@ import { UniqueViolationError } from '@mastra/core/storage';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { Context } from 'hono';
 import type { RouteAuth } from '../../routes/route.js';
-import type { MaterializationSandbox } from '../../sandbox/materialization.js';
+import { requireExec } from '../../sandbox/materialization.js';
+import type { ExecutableSandbox } from '../../sandbox/materialization.js';
 import type { MastraFactorySandboxConfig } from '../../sandbox/session-sandbox.js';
 import { peekSessionSandbox } from '../../sandbox/session-sandbox.js';
 import { sanitizeSegment } from '../../sandbox/workdir.js';
@@ -1577,6 +1578,6 @@ async function resolveSessionWorkspace(
   return {
     session,
     workdir: entry.workdir,
-    sandbox: entry.sandbox as unknown as MaterializationSandbox,
+    sandbox: requireExec(entry.sandbox),
   };
 }

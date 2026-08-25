@@ -13,7 +13,7 @@
  * and `gh pr create`. Workdir layout lives in `../sandbox/workdir`.
  */
 
-import type { MaterializationSandbox, SandboxCommandResult } from '../../sandbox/materialization.js';
+import type { ExecutableSandbox, SandboxCommandResult } from '../../sandbox/materialization.js';
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
 import { timedPhase } from '../../timing.js';
 
@@ -78,7 +78,7 @@ const SH_RETRY_DELAY_MS = 2000;
  * command as a whole.
  */
 export async function sh(
-  sandbox: MaterializationSandbox,
+  sandbox: ExecutableSandbox,
   script: string,
   options: ShOptions = {},
 ): Promise<SandboxCommandResult> {
@@ -99,7 +99,7 @@ export async function sh(
 
 /** Single `sh -c` execution attempt, bounded by the hang guard. */
 async function shOnce(
-  sandbox: MaterializationSandbox,
+  sandbox: ExecutableSandbox,
   script: string,
   options: ShOptions,
 ): Promise<SandboxCommandResult> {
@@ -155,7 +155,7 @@ function isTransientGitFailure(result: SandboxCommandResult): boolean {
  * behind — a half-written clone directory blocks the next `git clone` outright.
  */
 async function gitTransfer(
-  sandbox: MaterializationSandbox,
+  sandbox: ExecutableSandbox,
   script: string,
   options: ShOptions & { beforeRetry?: (attempt: number) => Promise<void> } = {},
 ): Promise<SandboxCommandResult> {
@@ -218,7 +218,7 @@ export interface MaterializeRepoOptions {
   /** Repo metadata from the org-owned project row. */
   repoInfo: RepoMaterializeInfo;
   /** The live sandbox to run git inside. */
-  sandbox: MaterializationSandbox;
+  sandbox: ExecutableSandbox;
   /** A freshly minted, short-lived installation access token. */
   token: string;
   storage: MaterializationStore;
@@ -362,7 +362,7 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
 
 /** Check out a session's branch inside its isolated repository clone. */
 export async function checkoutSessionBranch(
-  sandbox: MaterializationSandbox,
+  sandbox: ExecutableSandbox,
   workdir: string,
   options: { branch: string; baseBranch: string; token: string; repoFullName: string },
 ): Promise<void> {
@@ -370,7 +370,7 @@ export async function checkoutSessionBranch(
 }
 
 async function checkoutSessionBranchImpl(
-  sandbox: MaterializationSandbox,
+  sandbox: ExecutableSandbox,
   workdir: string,
   {
     branch,
@@ -480,7 +480,7 @@ function isBlockedByLocalWork(result: SandboxCommandResult): boolean {
  * remote (or no git dir at all) falls back to the clone path.
  */
 export async function hasExistingCheckout(
-  sandbox: MaterializationSandbox,
+  sandbox: ExecutableSandbox,
   workdir: string,
   repoFullName: string,
 ): Promise<boolean> {
@@ -492,7 +492,7 @@ export async function hasExistingCheckout(
 }
 
 /** Probed without `git -C` so a missing workdir returns false instead of throwing. */
-async function hasGitDir(sandbox: MaterializationSandbox, workdir: string): Promise<boolean> {
+async function hasGitDir(sandbox: ExecutableSandbox, workdir: string): Promise<boolean> {
   const probe = await sh(sandbox, `test -d ${shellQuote(`${workdir}/.git`)}`).catch(() => null);
   return probe?.exitCode === 0;
 }
@@ -507,7 +507,7 @@ async function hasGitDir(sandbox: MaterializationSandbox, workdir: string): Prom
  * masks the primary failure.
  */
 async function scrubRemote(
-  sandbox: MaterializationSandbox,
+  sandbox: ExecutableSandbox,
   workdir: string,
   repoFullName: string,
   tokenInRemote: boolean,
@@ -535,7 +535,7 @@ async function scrubRemote(
  * carrying the leaked-token warning in its message.
  */
 async function scrubbedFailure(
-  sandbox: MaterializationSandbox,
+  sandbox: ExecutableSandbox,
   workdir: string,
   repoFullName: string,
   tokenInRemote: boolean,
@@ -658,7 +658,7 @@ export function resolveGitIdentity(identity: GitIdentity): { name: string; email
  * the sandbox so commits are authored correctly. Values are shell-quoted.
  */
 export async function configureGitIdentity(
-  sandbox: MaterializationSandbox,
+  sandbox: ExecutableSandbox,
   workdir: string,
   identity: GitIdentity,
 ): Promise<void> {
@@ -686,7 +686,7 @@ export async function configureGitIdentity(
  * scrub to best-effort.
  */
 export async function withInstallToken<T>(
-  sandbox: MaterializationSandbox,
+  sandbox: ExecutableSandbox,
   workdir: string,
   repoFullName: string,
   token: string,
@@ -725,7 +725,7 @@ export async function withInstallToken<T>(
  * classified into actionable errors.
  */
 export async function pushBranch(
-  sandbox: MaterializationSandbox,
+  sandbox: ExecutableSandbox,
   workdir: string,
   branch: string,
   token: string,
@@ -760,7 +760,7 @@ export interface CommitResult {
  * @param identity authorship identity for the commit
  */
 export async function commitAll(
-  sandbox: MaterializationSandbox,
+  sandbox: ExecutableSandbox,
   workdir: string,
   message: string,
   identity: GitIdentity,
@@ -828,7 +828,7 @@ export class SetupCommandError extends Error {
  * @param command  the org-configured setup shell command
  */
 async function runLifecycleCommand(
-  sandbox: MaterializationSandbox,
+  sandbox: ExecutableSandbox,
   workdir: string,
   command: string,
   options: { phase: 'setup' | 'teardown'; timeoutMs?: number },
@@ -848,7 +848,7 @@ async function runLifecycleCommand(
 }
 
 export async function runSetupCommand(
-  sandbox: MaterializationSandbox,
+  sandbox: ExecutableSandbox,
   workdir: string,
   command: string,
 ): Promise<void> {
@@ -862,7 +862,7 @@ export async function runSetupCommand(
  * scrub, pooling/destruction, cache invalidation, and row deletion.
  */
 export async function runTeardownCommand(
-  sandbox: MaterializationSandbox,
+  sandbox: ExecutableSandbox,
   workdir: string,
   command: string,
   options: { timeoutMs?: number } = {},
@@ -896,7 +896,7 @@ export interface CreatePullRequestResult {
  * a missing `gh` never blocks clone/open. Surfaces an actionable error naming
  * the sandbox template requirement.
  */
-async function assertGhAvailable(sandbox: MaterializationSandbox): Promise<void> {
+async function assertGhAvailable(sandbox: ExecutableSandbox): Promise<void> {
   const version = await sh(sandbox, 'gh --version');
   if (version.exitCode !== 0) {
     throw new MaterializeError(
@@ -922,7 +922,7 @@ function parsePullRequestUrl(stdout: string): string | undefined {
  * @param workdir the worktree (or repo) path the PR head branch is checked out in
  */
 export async function createPullRequest(
-  sandbox: MaterializationSandbox,
+  sandbox: ExecutableSandbox,
   workdir: string,
   { token, base, head, title, body }: CreatePullRequestArgs,
 ): Promise<CreatePullRequestResult> {

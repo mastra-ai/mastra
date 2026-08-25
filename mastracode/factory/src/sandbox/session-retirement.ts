@@ -6,7 +6,7 @@ import type {
   SourceControlStorageHandle,
 } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
-import type { MaterializationSandbox } from './materialization.js';
+import { requireExec } from './materialization.js';
 import { peekSessionSandbox } from './session-sandbox.js';
 
 type WarningLogger = (message: string, details: Record<string, unknown>) => void;
@@ -147,12 +147,9 @@ export class SessionRetirementCoordinator {
     // nothing was set up, so there is nothing for a teardown command to undo.
     if (projectRepository?.teardownCommand && entry.workdir) {
       try {
-        await runTeardownCommand(
-          entry.sandbox as unknown as MaterializationSandbox,
-          entry.workdir,
-          projectRepository.teardownCommand,
-          { timeoutMs: DEFAULT_COMMAND_TIMEOUT_MS },
-        );
+        await runTeardownCommand(requireExec(entry.sandbox), entry.workdir, projectRepository.teardownCommand, {
+          timeoutMs: DEFAULT_COMMAND_TIMEOUT_MS,
+        });
       } catch (error) {
         this.#warn('Factory teardown command failed', {
           orgId: session.orgId,

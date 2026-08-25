@@ -8,7 +8,13 @@ import { DEFAULT_CONFIG_DIR } from '@mastra/code-sdk/constants';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import { LocalSkillSource, Workspace } from '@mastra/core/workspace';
-import type { SandboxStartHook, SkillSource, SkillSourceEntry, SkillSourceStat } from '@mastra/core/workspace';
+import type {
+  SandboxStartHook,
+  SkillSource,
+  SkillSourceEntry,
+  SkillSourceStat,
+  WorkspaceSandbox,
+} from '@mastra/core/workspace';
 import { getFactoryAuthUserFromContext, getFactoryAuthUserId } from './auth.js';
 import type { MastraFactorySandboxConfig } from './factory.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
@@ -23,7 +29,8 @@ import {
 } from './integrations/github/sandbox.js';
 import { registerGithubPatKind, registerGithubTokenInjector } from './integrations/github/token-refresh.js';
 import { getFactorySessionAddress } from './rules/binding-context.js';
-import type { MaterializationSandbox } from './sandbox/materialization.js';
+import { requireExec } from './sandbox/materialization.js';
+import type { ExecutableSandbox } from './sandbox/materialization.js';
 import {
   createSessionSetupHook,
   evictSessionSandbox,
@@ -227,7 +234,11 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     generation: number;
     tokenReplacementPending: boolean;
   };
-  type SessionSandbox = MaterializationSandbox;
+  // The session setup path runs commands and installs credentials, so it
+  // needs `executeCommand` (required by `ExecutableSandbox`) plus core's
+  // optional `setEnv`, which stays optional here because the token-refresh
+  // path checks for it and reports its absence.
+  type SessionSandbox = ExecutableSandbox & { setEnv?: WorkspaceSandbox['setEnv'] };
   const githubTokenInjectors = new Map<string, GithubTokenRegistration>();
   const githubTokenReconciliations = new Map<string, Promise<void>>();
   // Workspace identity cache: concurrent resolutions of the same session must
@@ -315,10 +326,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       if (workspaceRegistry.generation(session.sessionId) !== workspaceGeneration) {
         throw retiredError();
       }
-      // Core's `WorkspaceSandbox` type does not declare the command/env
-      // surface every real provider implements; the helpers type against
-      // the structural `MaterializationSandbox` instead.
-      const target = args.sandbox as unknown as SessionSandbox;
+      const target: SessionSandbox = requireExec(args.sandbox);
       // The `gh` CLI needs a PAT when the org configured one (installation
       // tokens 403 on integration-restricted endpoints); git clone/checkout
       // keep using the minted installation token. Resolved per start so the
@@ -584,7 +592,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     // and dead-VM self-healing, and the composed `onStart` hook runs the repo
     // setup + credential install inside that lifecycle. Metadata-only
     // resolutions (thread-list polling) construct but never start.
-    const sessionSandbox = sessionEntry.sandbox as unknown as SessionSandbox;
+    const sessionSandbox: SessionSandbox = requireExec(sessionEntry.sandbox);
 
     const filesystem = new SandboxFilesystem({
       id: `sandbox-fs:${workspaceId}`,

@@ -1,4 +1,4 @@
-import type { WorkspaceSandbox } from '@mastra/core/workspace';
+import type { ExecuteCommandOptions, WorkspaceSandbox } from '@mastra/core/workspace';
 
 /** Result of one command executed inside a sandbox. */
 export interface SandboxCommandResult {
@@ -8,34 +8,37 @@ export interface SandboxCommandResult {
 }
 
 /**
- * Minimal live-sandbox surface the materialization helpers need: an id, a way
- * to start it, and command execution.
+ * A sandbox that can run commands.
+ *
+ * `executeCommand` is optional on `WorkspaceSandbox` because some providers
+ * only offer a filesystem. Every git and materialization helper here needs it,
+ * so this type promotes it to required and is derived from core rather than
+ * restated, which keeps the two from drifting apart.
  */
-export interface MaterializationSandbox {
-  readonly id: string;
-  /** Human-readable provider name, forwarded from the underlying sandbox. */
-  readonly name?: string;
-  /** Provider type discriminator, forwarded from the underlying sandbox. */
-  readonly provider?: string;
-  /** Sandbox usage instructions surfaced in tool descriptions. */
-  getInstructions?(opts?: { requestContext?: unknown }): string;
-  /** Long-running process capability, when the provider supports it. */
-  readonly processes?: WorkspaceSandbox['processes'];
-  /** Mount capability, when the provider supports it. */
-  readonly mounts?: WorkspaceSandbox['mounts'];
-  start(): Promise<void>;
-  getInfo(): Promise<{ metadata?: Record<string, unknown> }>;
-  executeCommand(
-    command: string,
-    args?: string[],
-    options?: { timeout?: number; env?: Record<string, string | undefined> },
-  ): Promise<SandboxCommandResult>;
+export type ExecutableSandbox = Pick<WorkspaceSandbox, 'id'> & {
   /**
-   * Update the sandbox's runtime environment for future commands. Mirrors
-   * core's optional `WorkspaceSandbox.setEnv`, which every `MastraSandbox`
-   * provides.
+   * Runs a command. The options are core's, but the result is only the part
+   * these helpers read: core's `CommandResult` also carries `success` and
+   * `executionTimeMs`, and asking for them would reject test doubles that
+   * report exactly what the helpers consume.
    */
-  setEnv?: WorkspaceSandbox['setEnv'];
-  /** Tear down the underlying VM. Optional: providers without it are no-ops. */
-  stop?(): Promise<void>;
+  executeCommand(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<SandboxCommandResult>;
+};
+
+/**
+ * Narrow a sandbox to one that can run commands, or fail saying which
+ * capability is missing.
+ *
+ * Callers hold a `WorkspaceSandbox`, whose `executeCommand` is optional.
+ * Optional-chaining past it would hand every caller `undefined` where it
+ * expects an exit code, turning a misconfigured provider into a git command
+ * that silently did nothing.
+ */
+export function requireExec(sandbox: WorkspaceSandbox): ExecutableSandbox {
+  if (typeof sandbox.executeCommand !== 'function') {
+    throw new Error(
+      `Sandbox provider '${sandbox.provider}' does not support executeCommand, which is required to run git and filesystem operations in a session.`,
+    );
+  }
+  return sandbox as ExecutableSandbox;
 }
