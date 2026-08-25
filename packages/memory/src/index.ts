@@ -65,6 +65,7 @@ import type {
 } from './processors/observational-memory/summarize';
 import { TokenCounter } from './processors/observational-memory/token-counter';
 import { WorkingMemoryExtractor } from './processors/observational-memory/working-memory-extractor';
+import { filterSystemReminderMessages } from './system-reminders';
 import { recallTool } from './tools/om-tools';
 import { createWorkingMemoryTool, deepMergeWorkingMemory } from './tools/working-memory';
 
@@ -149,15 +150,13 @@ type NormalizedObservationalMemoryConfig = MemoryObservationalMemoryOptions & {
  * published memory build during ESM instantiation before user code runs.
  *
  * Until v2 can tighten the peer contract, keep these copies manually in sync
- * with packages/core/src/memory/working-memory-utils.ts,
- * packages/core/src/memory/system-reminders.ts, and
+ * with packages/core/src/memory/working-memory-utils.ts and
  * packages/core/src/agent/signals.ts. Those source files also carry
- * compatibility notes that point back here.
+ * compatibility notes that point back here. The system-reminder copy lives in
+ * ./system-reminders.ts so leaf modules can share it without import cycles.
  */
 const WORKING_MEMORY_START_TAG = '<working_memory>';
 const WORKING_MEMORY_END_TAG = '</working_memory>';
-const LEGACY_SYSTEM_REMINDER_METADATA_KEY = 'dynamicAgentsMdReminder';
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
@@ -214,43 +213,6 @@ export function extractWorkingMemoryContent(text: string): string | null {
   if (end === -1) return null;
 
   return text.substring(contentStart, end);
-}
-
-function isSystemReminderMessage(message: MastraDBMessage): boolean {
-  if (!isRecord(message.content)) {
-    return false;
-  }
-
-  const metadata = message.content.metadata;
-  if (message.role === 'signal') {
-    return (
-      isRecord(metadata) &&
-      isRecord(metadata.signal) &&
-      (metadata.signal.type === 'system-reminder' || metadata.signal.type === 'reactive')
-    );
-  }
-
-  if (message.role !== 'user') {
-    return false;
-  }
-
-  if (isRecord(metadata) && (isRecord(metadata.systemReminder) || LEGACY_SYSTEM_REMINDER_METADATA_KEY in metadata)) {
-    return true;
-  }
-
-  const firstTextPart = message.content.parts.find(part => part.type === 'text');
-  return typeof firstTextPart?.text === 'string' && firstTextPart.text.startsWith('<system-reminder');
-}
-
-function filterSystemReminderMessages(
-  messages: MastraDBMessage[],
-  includeSystemReminders?: boolean,
-): MastraDBMessage[] {
-  if (includeSystemReminders) {
-    return messages;
-  }
-
-  return messages.filter(message => !isSystemReminderMessage(message));
 }
 
 // Local copy for compatibility with core versions that predate this export. Keep in sync with
