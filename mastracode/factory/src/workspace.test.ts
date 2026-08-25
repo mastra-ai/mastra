@@ -366,7 +366,9 @@ describe('getFactoryWorkspace', () => {
     expect(triage).toContain('Plan fix');
     expect(triage).toContain('Await approval');
     expect(triage).toContain('No transition / refresh');
-    expect(triage).toContain('Keep the issue in its current initial stage until manually moved to planning.');
+    expect(triage).toContain(
+      'This records the classification without advancing; stop until a maintainer moves the card',
+    );
     const labelReconciliationIndex = handoff.indexOf(
       'After a GitHub comment is posted or updated, reconcile the labels',
     );

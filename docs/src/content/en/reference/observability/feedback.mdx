@@ -68,6 +68,8 @@ await mastra.observability.addFeedback?.({
 ]}
 />
 
+Without `correlationContext`, the method looks up `traceId` in configured observability storage. If the trace or requested span isn't found, Mastra logs a warning and drops the feedback event. Configure `MastraStorageExporter` when adding feedback by ID after execution, including when `MastraPlatformExporter` handles remote export.
+
 ### `createFeedback(args)`
 
 Creates one feedback record through the observability storage domain. Storage-level calls write directly to the store, so include `timestamp`.
@@ -519,6 +521,8 @@ Use `FeedbackFilter` in `listFeedback()` and OLAP query `filters`.
 />
 
 ## HTTP routes
+
+These routes belong to a Mastra runtime and use its configured observability storage. They're separate from the [unversioned Mastra Platform feedback query API](/docs/mastra-platform/api#observability-feedback-query-api), which doesn't provide a feedback creation route.
 
 | Method | Path | Purpose | Permission |
 | - | - | - | - |

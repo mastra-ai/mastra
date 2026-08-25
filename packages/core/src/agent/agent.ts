@@ -5295,18 +5295,19 @@ export class Agent<
               const injectSupervisorMemory = Boolean(resourceId && threadId && !resolvedHasOwnMemoryConfig);
               const subAgentMemoryOption = injectSupervisorMemory
                 ? {
-                    // A resumed delegation must continue on the thread the suspended run
-                    // persisted, not a freshly generated one. Omitting `thread` here lets
-                    // resumeStream/resumeGenerate backfill it from the run snapshot's
-                    // memory info (the cast covers the required `thread` field for that
-                    // resume-only case). Passing the fresh `subAgentThreadId` instead makes
-                    // the resumed run tag new messages (e.g. writer.custom() data-* frames)
-                    // with a thread that doesn't match the snapshot-restored messageList,
-                    // which throws on persistence and drops the frames from the stream.
-                    // See issue #22217.
+                    // A resumed delegation must continue on the thread/resource pair the
+                    // suspended run persisted, not freshly generated ones. Omitting both
+                    // here lets resumeStream/resumeGenerate backfill them from the run
+                    // snapshot's memory info (the cast covers the required `thread` field
+                    // for that resume-only case). Passing the fresh `subAgentThreadId`
+                    // makes the resumed run tag new messages (e.g. writer.custom() data-*
+                    // frames) with a thread that doesn't match the snapshot-restored
+                    // messageList, which throws on persistence and drops the frames from
+                    // the stream (issue #22217). Passing the fresh `subAgentResourceId`
+                    // alongside the snapshot-backfilled thread trips thread-ownership
+                    // validation, since the thread belongs to the original run's resource.
                     memory: {
-                      resource: subAgentResourceId,
-                      ...(shouldResumeSubAgent ? {} : { thread: subAgentThreadId }),
+                      ...(shouldResumeSubAgent ? {} : { resource: subAgentResourceId, thread: subAgentThreadId }),
                       options: {
                         lastMessages: false as const,
                         // Title generation is a top-level thread concern. Ephemeral subagent
@@ -5402,6 +5403,11 @@ export class Agent<
                 // original ID) by the run that suspended; a fresh copy would duplicate it.
                 const resumedGenerateThreadId = shouldResumeSubAgent ? agentResponseMessages[0]?.threadId : undefined;
                 const effectiveGenerateThreadId = resumedGenerateThreadId ?? subAgentThreadId;
+                // Same for the resource: the restored thread belongs to the suspended run's
+                // resource, so persisting or reporting the fresh ID would trip thread
+                // ownership again (or mislabel the transcript).
+                const effectiveGenerateResourceId =
+                  (shouldResumeSubAgent ? agentResponseMessages[0]?.resourceId : undefined) ?? subAgentResourceId;
                 fullSubAgentMessages = shouldResumeSubAgent
                   ? agentResponseMessages
                   : [subAgentUserMessage, ...agentResponseMessages];
@@ -5411,7 +5417,7 @@ export class Agent<
                 if (memory) {
                   try {
                     await memory.createThread({
-                      resourceId: subAgentResourceId,
+                      resourceId: effectiveGenerateResourceId,
                       threadId: effectiveGenerateThreadId,
                     });
 
@@ -5436,8 +5442,9 @@ export class Agent<
 
                 result = {
                   text: generateResult.text,
+                  finishReason: generateResult.finishReason,
                   subAgentThreadId: effectiveGenerateThreadId,
-                  subAgentResourceId,
+                  subAgentResourceId: effectiveGenerateResourceId,
                   subAgentToolResults,
                   usage: generateResult.usage,
                 };
@@ -5535,6 +5542,11 @@ export class Agent<
                 // original ID) by the run that suspended; a fresh copy would duplicate it.
                 const resumedStreamThreadId = shouldResumeSubAgent ? agentResponseMessages[0]?.threadId : undefined;
                 const effectiveStreamThreadId = resumedStreamThreadId ?? subAgentThreadId;
+                // Same for the resource: the restored thread belongs to the suspended run's
+                // resource, so persisting or reporting the fresh ID would trip thread
+                // ownership again (or mislabel the transcript).
+                const effectiveStreamResourceId =
+                  (shouldResumeSubAgent ? agentResponseMessages[0]?.resourceId : undefined) ?? subAgentResourceId;
                 fullSubAgentMessages = shouldResumeSubAgent
                   ? agentResponseMessages
                   : [subAgentUserMessage, ...agentResponseMessages];
@@ -5544,7 +5556,7 @@ export class Agent<
                 if (streamMemory) {
                   try {
                     await streamMemory.createThread({
-                      resourceId: subAgentResourceId,
+                      resourceId: effectiveStreamResourceId,
                       threadId: effectiveStreamThreadId,
                     });
 
@@ -5571,11 +5583,13 @@ export class Agent<
                 // Use streamResult.text (a delayed promise) which resolves to the
                 // output-processor-modified text, rather than the raw accumulated text-deltas.
                 const processedText = await streamResult.text;
+                const subAgentFinishReason = await streamResult.finishReason;
                 const subAgentUsage = await streamResult.usage;
                 result = {
                   text: processedText,
+                  finishReason: subAgentFinishReason,
                   subAgentThreadId: effectiveStreamThreadId,
-                  subAgentResourceId,
+                  subAgentResourceId: effectiveStreamResourceId,
                   subAgentToolResults,
                   usage: subAgentUsage,
                 };

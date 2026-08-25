@@ -213,14 +213,25 @@ describe('durable delegated approval persisted runId', () => {
   ) => {
     const types: string[] = [];
     let finalText = '';
+    const delegationResults: any[] = [];
     for await (const chunk of resumed.fullStream) {
       types.push(chunk.type);
       if (chunk.type === 'text-delta') finalText += chunk.payload?.text ?? '';
+      if (chunk.type === 'tool-result' && chunk.payload?.result?.subAgentThreadId) {
+        delegationResults.push(chunk.payload.result);
+      }
     }
     const label = `resumed chunks: ${types.join(', ')}`;
     // The suspended inner run resumes: no tool errors, no re-delegation, and no
     // duplicate approval request.
     expect(types, label).not.toContain('tool-error');
+    // The delegation result reports the identity restored from the suspended
+    // run's snapshot: both the thread and its owning resource must be present
+    // (a fresh resource ID paired with the snapshot thread fails ownership).
+    for (const result of delegationResults) {
+      expect(result.subAgentThreadId).toBeDefined();
+      expect(result.subAgentResourceId).toBeDefined();
+    }
     expect(types, label).not.toContain('error');
     expect(types, label).not.toContain('tool-call-approval');
     expect(
