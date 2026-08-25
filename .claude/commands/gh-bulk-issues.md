@@ -1,1 +1,1 @@
-/Users/abhiramaiyer/.mastracode/web/sandboxes/mastra-ai/mastra/.mastracode/commands/gh-bulk-issues.md
+../../.mastracode/commands/gh-bulk-issues.md

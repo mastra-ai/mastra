@@ -1,1 +1,1 @@
-/Users/abhiramaiyer/.mastracode/web/sandboxes/mastra-ai/mastra/.mastracode/commands/critique-pr.md
+../../.mastracode/commands/critique-pr.md

@@ -1,1 +1,1 @@
-/Users/abhiramaiyer/.mastracode/web/sandboxes/mastra-ai/mastra/.mastracode/commands/ralph-plan.md
+../../.mastracode/commands/ralph-plan.md

@@ -1,1 +1,1 @@
-/Users/abhiramaiyer/.mastracode/web/sandboxes/mastra-ai/mastra/.claude/skills/mastra-docs/references/INFORMATION_ARCHITECTURE.md
+../../.claude/skills/mastra-docs/references/INFORMATION_ARCHITECTURE.md

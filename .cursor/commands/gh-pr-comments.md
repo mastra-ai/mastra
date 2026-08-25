@@ -1,1 +1,1 @@
-/Users/abhiramaiyer/.mastracode/web/sandboxes/mastra-ai/mastra/.mastracode/commands/gh-pr-comments.md
+../../.mastracode/commands/gh-pr-comments.md

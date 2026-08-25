@@ -1,1 +1,1 @@
-/Users/abhiramaiyer/.mastracode/web/sandboxes/mastra-ai/mastra/.claude/skills/mastra-docs/references/COMPONENTS.md
+../../.claude/skills/mastra-docs/references/COMPONENTS.md
