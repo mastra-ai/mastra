@@ -169,6 +169,16 @@ export interface DaytonaSandboxOptions extends Omit<MastraSandboxOptions, 'proce
    * change. Daytona defines and enforces the policy; this option selects it.
    */
   domainAllowList?: string;
+  /**
+   * Daytona Secrets to expose inside the sandbox, mapping environment variable
+   * names to Daytona Secret names (e.g. `{ GITHUB_TOKEN: 'github-token' }`).
+   *
+   * The environment variable holds an opaque placeholder; Daytona's egress
+   * proxy substitutes the real value into HTTPS request headers toward the
+   * Secret's allowed hosts, so the raw value never enters the sandbox.
+   * Secrets are created at the organization level (Daytona dashboard or SDK).
+   */
+  secrets?: Record<string, string>;
 }
 
 // =============================================================================
@@ -267,6 +277,7 @@ export class DaytonaSandbox extends MastraSandbox {
   private readonly networkBlockAll?: boolean;
   private readonly networkAllowList?: string;
   private readonly domainAllowList?: string;
+  private readonly secrets?: Record<string, string>;
   private readonly connectionOpts: { apiKey?: string; apiUrl?: string; target?: string };
   private readonly _constructorOptions: DaytonaSandboxOptions;
 
@@ -297,6 +308,7 @@ export class DaytonaSandbox extends MastraSandbox {
     this.networkBlockAll = options.networkBlockAll;
     this.networkAllowList = options.networkAllowList;
     this.domainAllowList = options.domainAllowList;
+    this.secrets = options.secrets;
 
     this.connectionOpts = {
       ...(options.apiKey !== undefined && { apiKey: options.apiKey }),
@@ -414,6 +426,7 @@ export class DaytonaSandbox extends MastraSandbox {
       networkBlockAll: this.networkBlockAll,
       networkAllowList: this.networkAllowList,
       domainAllowList: this.domainAllowList,
+      secrets: this.secrets,
     });
 
     // Snapshot takes precedence. Image alone (with optional resources) triggers image-based creation.
