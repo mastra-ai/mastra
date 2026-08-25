@@ -78,6 +78,7 @@ function nodeFromDocument(row: Document): KnowledgeNode {
     name: String(row.name),
     kind: String(row.kind),
     content: row.content == null ? undefined : String(row.content),
+    description: row.description == null ? undefined : String(row.description),
     scope: cloneScope(row.scope),
     version: Number(row.version),
     mergedInto: row.mergedInto ?? undefined,
@@ -184,6 +185,7 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
         name: input.name.trim(),
         kind: input.kind,
         content: input.content,
+        description: input.description,
         scope,
         version: 1,
         createdAt: now,
@@ -267,6 +269,7 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
       const scope = input.scope ? canonicalizeKnowledgeScope(input.scope) : existing.scope;
       const name = input.name?.trim() ?? existing.name;
       const content = input.content ?? existing.content;
+      const description = input.description ?? existing.description;
       const now = new Date();
       const result = await (
         await this.#nodes()
@@ -278,6 +281,7 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
             canonicalName: canonicalName(name),
             kind: input.kind ?? existing.kind,
             content: content ?? null,
+            description: description ?? null,
             scope,
             scopeKey: knowledgeScopeKey(scope),
             updatedAt: now,
@@ -351,10 +355,30 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
         if (scope)
           await this.#outbox(mention.sourceType, mention.sourceId, 'upsert', createKnowledgeUlid(), scope, session);
       }
+      // Merge matrix: target's description wins; a target without one adopts the source's
+      // (don't discard the only synopsis available); both absent stays absent.
+      let mergedTarget = target;
+      if (!target.description && source.description) {
+        const adoptedAt = new Date();
+        await (
+          await this.#nodes()
+        ).updateOne(
+          { id: target.id, type: 'node' },
+          { $set: { description: source.description, updatedAt: adoptedAt }, $inc: { version: 1 } },
+          sessionOptions(session),
+        );
+        mergedTarget = {
+          ...target,
+          description: source.description,
+          version: target.version + 1,
+          updatedAt: adoptedAt,
+        };
+        await this.#activity('node-updated', 'node', target.id, target.scope, undefined, session);
+      }
       await this.#activity('node-merged', 'node', source.id, source.scope, undefined, session);
       await this.#outbox('node', source.id, 'delete', input.sourceVersion + 1, source.scope, session);
-      await this.#outbox('node', target.id, 'upsert', createKnowledgeUlid(), target.scope, session);
-      return target;
+      await this.#outbox('node', target.id, 'upsert', createKnowledgeUlid(), mergedTarget.scope, session);
+      return mergedTarget;
     });
   }
 
@@ -509,7 +533,7 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
       .find({
         mergedInto: null,
         scopeKey: { $in: visibleScopeKeys(scope) },
-        $or: [{ name: regex }, { kind: regex }, { content: regex }],
+        $or: [{ name: regex }, { kind: regex }, { content: regex }, { description: regex }],
       })
       .sort({ updatedAt: -1 })
       .limit(limit)
@@ -519,7 +543,8 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
       id: row.id,
       recordId: row.id,
       name: row.name,
-      text: row.content ? `${row.name}\n${row.content}` : row.name,
+      // Description joins the snippet only when present so description-less results stay byte-identical.
+      text: [row.name, ...(row.description ? [row.description] : []), ...(row.content ? [row.content] : [])].join('\n'),
       scope: cloneScope(row.scope),
     }));
     if (results.length < limit) {

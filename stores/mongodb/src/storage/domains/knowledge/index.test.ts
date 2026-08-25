@@ -14,6 +14,35 @@ const connector = resolveMongoDBConfig({
 const createStore = () => new KnowledgeMongoDB({ connector });
 createKnowledgeStorageTests(createStore);
 
+describe('MongoDB knowledge legacy documents', () => {
+  it('reads documents written without the description field as undefined', async () => {
+    const store = createStore();
+    await store.init();
+    await store.dangerouslyClearAll();
+    const nodes = await connector.getCollection('mastra_knowledge_nodes');
+    const legacyId = `legacy-${Date.now()}`;
+    const now = new Date();
+    await nodes.insertOne({
+      id: legacyId,
+      type: 'node',
+      name: `Legacy ${legacyId}`,
+      canonicalName: `legacy ${legacyId}`,
+      kind: 'task',
+      content: 'legacy body',
+      scope: ['org:legacy-upgrade'],
+      scopeKey: 'org:legacy-upgrade',
+      version: 1,
+      mergedInto: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const legacy = await store.getNode(legacyId);
+    expect(legacy?.description).toBeUndefined();
+    expect(legacy?.content).toBe('legacy body');
+  });
+});
+
 describe('MongoDB knowledge concurrency and indexes', () => {
   it('creates required uniqueness and claim indexes idempotently', async () => {
     const store = createStore();
