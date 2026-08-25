@@ -30,6 +30,12 @@ export function githubNumberForItem(item: Pick<WorkItem, 'source' | 'metadata'>)
   return itemNumber;
 }
 
+/** The human issue key a Linear card carries (`ENG-123`), when it has one. */
+export function linearIdentifierForItem(item: Pick<WorkItem, 'source' | 'metadata'>): string | undefined {
+  if (item.source !== 'linear-issue' || typeof item.metadata.identifier !== 'string') return;
+  return item.metadata.identifier;
+}
+
 export type PullRequestStatus = 'draft' | 'open' | 'closed' | 'merged';
 
 export const PULL_REQUEST_STATUS_LABELS: Record<PullRequestStatus, string> = {
@@ -69,10 +75,19 @@ export function workItemMeta(item: WorkItem): string {
   const age = relativeTime(item.createdAt);
   const githubNumber = githubNumberForItem(item);
   if (githubNumber !== undefined) return `#${githubNumber}${author ? ` · ${author}` : ''} · ${age}`;
-  if (item.source === 'linear-issue' && typeof item.metadata.identifier === 'string') {
-    return `${item.metadata.identifier}${author ? ` · ${author}` : ''} · ${age}`;
-  }
+  const linearIdentifier = linearIdentifierForItem(item);
+  if (linearIdentifier !== undefined) return `${linearIdentifier}${author ? ` · ${author}` : ''} · ${age}`;
   return `${SOURCE_LABELS[item.source]} · ${age}`;
+}
+
+/** Free-text card match over what names it on the board: its title and its issue key. */
+export function cardMatchesSearch(card: Pick<WorkItem, 'source' | 'metadata' | 'title'>, query: string): boolean {
+  const needle = query.trim().toLowerCase();
+  if (needle === '') return true;
+  const number = githubNumberForItem(card);
+  const identifier = linearIdentifierForItem(card);
+  const named = [card.title, number === undefined ? '' : `#${number}`, identifier ?? ''];
+  return named.some(text => text.toLowerCase().includes(needle));
 }
 
 /**

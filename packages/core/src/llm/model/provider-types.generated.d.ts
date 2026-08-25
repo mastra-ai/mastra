@@ -154,6 +154,7 @@ export type ProviderModelsMap = {
     'umans-kimi-k3',
     'umans-qwen3.6-35b-a3b',
   ];
+  readonly iteracompute: readonly ['iteracompute/qwen3.8-27b'];
   readonly 'cloudflare-workers-ai': readonly [
     '@cf/aisingapore/gemma-sea-lion-v4-27b-it',
     '@cf/deepseek-ai/deepseek-r1-distill-qwen-32b',
@@ -1176,13 +1177,7 @@ export type ProviderModelsMap = {
     'Qwen3.5-397B-A17B',
   ];
   readonly 'abliteration-ai': readonly ['abliterated-model', 'abliterated-model-large'];
-  readonly deepseek: readonly [
-    'deepseek-chat',
-    'deepseek-reasoner',
-    'deepseek-v4-flash',
-    'deepseek-v4-flash-vision-exp',
-    'deepseek-v4-pro',
-  ];
+  readonly deepseek: readonly ['deepseek-v4-flash', 'deepseek-v4-flash-vision-exp', 'deepseek-v4-pro'];
   readonly greenpt: readonly [
     'deepseek-v4-flash-0731',
     'devstral-2-123b-instruct-2512',
@@ -1745,7 +1740,9 @@ export type ProviderModelsMap = {
     'minimax/minimax-m2.1',
     'minimax/minimax-m2.5',
     'minimax/minimax-m2.7',
+    'minimax/minimax-m2.7:free',
     'minimax/minimax-m3',
+    'minimax/minimax-m3:free',
     'mistralai/codestral-2508',
     'mistralai/devstral-2512',
     'mistralai/ministral-14b-2512',
@@ -2009,6 +2006,7 @@ export type ProviderModelsMap = {
     'lucidquery-nexus-coder',
   ];
   readonly blueclaw: readonly ['Qwen/Qwen3.6-35B-A3B-FP8', 'Qwen3.6-27B'];
+  readonly standardcompute: readonly ['standardcompute'];
   readonly auriko: readonly [
     'claude-opus-4-6',
     'claude-opus-4-7',
@@ -2214,6 +2212,7 @@ export type ProviderModelsMap = {
     'glm-5-turbo',
     'glm-5.1',
     'glm-5.2',
+    'glm-5.3',
     'glm-5v-turbo',
   ];
   readonly 'routing-run': readonly [
@@ -2954,6 +2953,7 @@ export type ProviderModelsMap = {
     'deepseek-v4-pro',
     'gemini-3.1-flash-lite-preview',
     'gemini-3.1-pro-preview',
+    'gemini-3.7-flash',
     'glm-5.2',
     'glm-5.3',
     'gpt-5-mini',
@@ -3452,6 +3452,12 @@ export type ProviderModelsMap = {
     'qwen3.6-plus',
     'qwen3.7-max',
     'qwen3.7-plus',
+  ];
+  readonly neosmith: readonly [
+    'neosmith.intelligent-basic',
+    'neosmith.intelligent-maestro',
+    'neosmith.intelligent-pro',
+    'neosmith.neolite',
   ];
   readonly 'stepfun-ai-step-plan': readonly ['step-3.5-flash', 'step-3.5-flash-2603', 'step-3.7-flash'];
   readonly fastrouter: readonly [
@@ -4950,6 +4956,7 @@ export type ProviderModelsMap = {
     'cline-pass/deepseek-v4-flash',
     'cline-pass/deepseek-v4-pro',
     'cline-pass/glm-5.2',
+    'cline-pass/glm-5.3',
     'cline-pass/kimi-k2.6',
     'cline-pass/kimi-k2.7-code',
     'cline-pass/kimi-k3',
@@ -4958,6 +4965,7 @@ export type ProviderModelsMap = {
     'cline-pass/minimax-m3',
     'cline-pass/qwen3.7-max',
     'cline-pass/qwen3.7-plus',
+    'cline-pass/qwen3.8-max',
   ];
   readonly empiriolabs: readonly [
     'deepseek-v3-2',
@@ -5129,6 +5137,7 @@ export type ProviderModelsMap = {
     'alibaba/wan-v2.6-t2v',
     'alibaba/wan-v2.7-r2v',
     'alibaba/wan-v2.7-t2v',
+    'alibaba/wan-v3.0-video',
     'amazon/nova-2-lite',
     'amazon/nova-lite',
     'amazon/nova-micro',
@@ -5257,8 +5266,10 @@ export type ProviderModelsMap = {
     'minimax/minimax-m2.5',
     'minimax/minimax-m2.5-highspeed',
     'minimax/minimax-m2.7',
+    'minimax/minimax-m2.7-free',
     'minimax/minimax-m2.7-highspeed',
     'minimax/minimax-m3',
+    'minimax/minimax-m3-free',
     'mistral/codestral',
     'mistral/codestral-embed',
     'mistral/devstral-2',
@@ -5287,7 +5298,6 @@ export type ProviderModelsMap = {
     'nvidia/nemotron-3-super-120b-a12b',
     'nvidia/nemotron-3-ultra-550b-a55b',
     'nvidia/nemotron-3.5-lightning',
-    'nvidia/nemotron-3.5-lightning-free',
     'nvidia/nemotron-nano-12b-v2-vl',
     'nvidia/nemotron-nano-9b-v2',
     'openai/gpt-3.5-turbo',
@@ -5343,6 +5353,7 @@ export type ProviderModelsMap = {
     'openai/gpt-image-2',
     'openai/gpt-oss-120b',
     'openai/gpt-oss-20b',
+    'openai/gpt-oss-safeguard-120b',
     'openai/gpt-oss-safeguard-20b',
     'openai/gpt-realtime-1.5',
     'openai/gpt-realtime-2',
@@ -5498,7 +5509,6 @@ export type ProviderModelsMap = {
     'deepinfra/thinkingmachines/Inkling-Small',
     'deepinfra/zai-org/GLM-4.7-Flash',
     'deepseek/deepseek-chat',
-    'deepseek/deepseek-reasoner',
     'deepseek/deepseek-v4-flash',
     'deepseek/deepseek-v4-flash-vision-exp',
     'deepseek/deepseek-v4-pro',
@@ -6035,6 +6045,7 @@ export type ProviderModelsMap = {
     'deepseek-ai/DeepSeek-V4-Pro-0813',
     'nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16',
   ];
+  readonly agnes: readonly ['agnes-2.0-flash', 'agnes-2.5-flash'];
   readonly 'alibaba-token-plan-cn': readonly [
     'MiniMax-M2.5',
     'deepseek-v3.2',
@@ -6242,7 +6253,9 @@ export type ProviderModelsMap = {
     'minimax/minimax-m2.1',
     'minimax/minimax-m2.5',
     'minimax/minimax-m2.7',
+    'minimax/minimax-m2.7:free',
     'minimax/minimax-m3',
+    'minimax/minimax-m3:free',
     'mistralai/codestral-2508',
     'mistralai/devstral-2512',
     'mistralai/ministral-14b-2512',
@@ -6641,6 +6654,7 @@ export type ProviderModelsMap = {
     'deepseek-ai/DeepSeek-V4-Pro',
     'google/gemma-4-31B-it',
     'ibm-granite/granite-4.1-8b',
+    'ibm-granite/granite-4.2-8b',
     'meta-llama/Llama-3.1-70B-Instruct',
     'meta-llama/Llama-3.1-8B-Instruct',
     'meta-llama/Llama-3.3-70B-Instruct',
@@ -6917,6 +6931,7 @@ export type ProviderModelsMap = {
     'openrouter/mistralai/ministral-8b-2512',
     'openrouter/mistralai/mistral-large-2512',
     'openrouter/mistralai/mistral-medium-3',
+    'openrouter/mistralai/mistral-medium-3-5',
     'openrouter/mistralai/mistral-medium-3.1',
     'openrouter/mistralai/mistral-nemo',
     'openrouter/mistralai/mistral-small-24b-instruct-2501',

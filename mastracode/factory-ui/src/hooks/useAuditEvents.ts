@@ -28,7 +28,11 @@ export function useAuditEvents(
   });
 }
 
-export function useCompleteAuditEvents(
+// The route cannot filter by actor, so an unbounded read replays the project's whole history on every mount.
+// A card older than the window keeps the creator its own metadata carries.
+const MAX_ACTIVITY_PAGES = 3;
+
+export function useRecentAuditEvents(
   factoryProjectId: string | undefined,
   group: string,
   limit: number,
@@ -41,28 +45,24 @@ export function useCompleteAuditEvents(
         const events: AuditEventPage['events'] = [];
         const actors: AuditEventPage['actors'] = {};
         let before: string | undefined;
-        const seenCursors = new Set<string>();
 
-        do {
+        for (let fetched = 0; fetched < MAX_ACTIVITY_PAGES; fetched += 1) {
           signal.throwIfAborted();
           const page = await fetchAuditEvents(baseUrl, factoryProjectId, { actorIds, before, limit, signal });
           events.push(...page.events);
           for (const [actorId, actor] of Object.entries(page.actors)) actors[actorId] ??= actor;
 
-          const nextCursor = page.nextCursor;
-          if (nextCursor && (nextCursor === before || seenCursors.has(nextCursor))) {
-            throw new Error('Audit pagination cursor did not advance');
-          }
-          if (nextCursor) seenCursors.add(nextCursor);
-          before = nextCursor;
-        } while (before);
+          if (page.nextCursor === undefined) break;
+          if (page.nextCursor === before) throw new Error('Audit pagination cursor did not advance');
+          before = page.nextCursor;
+        }
 
         return { events, actors };
       }
     : skipToken;
 
   return useQuery({
-    queryKey: queryKeys.factoryAudit(factoryProjectId, `${group}:complete`, actorKey),
+    queryKey: queryKeys.factoryAudit(factoryProjectId, `${group}:recent`, actorKey),
     queryFn,
     staleTime: 15_000,
   });

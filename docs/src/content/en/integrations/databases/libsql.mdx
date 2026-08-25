@@ -80,6 +80,18 @@ storage: new LibSQLStore({
 In-memory storage resets when the process changes. Only suitable for development.
 :::
 
+Embedded replica synced with a remote primary (for example Turso):
+
+```typescript
+storage: new LibSQLStore({
+  id: 'libsql-storage',
+  url: 'file:./replica.db',
+  syncUrl: 'libsql://your-db-name.aws-ap-northeast-1.turso.io',
+  authToken: process.env.TURSO_AUTH_TOKEN,
+  syncInterval: 60,
+})
+```
+
 ## Options
 
 <PropertiesTable
@@ -95,6 +107,19 @@ In-memory storage resets when the process changes. Only suitable for development
     name: 'authToken',
     type: 'string',
     description: 'Authentication token for remote libSQL databases.',
+    isOptional: true,
+  },
+  {
+    name: 'syncUrl',
+    type: 'string',
+    description:
+      'URL of the remote primary database to sync from, enabling an embedded replica. Requires a local `file:` url.',
+    isOptional: true,
+  },
+  {
+    name: 'syncInterval',
+    type: 'number',
+    description: 'Interval in seconds for automatic sync with the remote primary. Only applies when `syncUrl` is set.',
     isOptional: true,
   },
 ]}

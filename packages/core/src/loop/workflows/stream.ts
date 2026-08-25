@@ -66,20 +66,29 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
           ) => {
             const emittedMessageId = writerOptions?.messageId ?? responseMessageId;
             if (data.type.startsWith('data-') && emittedMessageId && !data.transient) {
-              messageList.add(
-                {
-                  id: emittedMessageId,
-                  role: 'assistant',
-                  content: {
-                    format: 2,
-                    parts: [{ type: data.type as `data-${string}`, data: data.data }],
+              // Persistence failures must not drop the frame from the stream —
+              // delivery to the client takes priority over saving to memory.
+              try {
+                messageList.add(
+                  {
+                    id: emittedMessageId,
+                    role: 'assistant',
+                    content: {
+                      format: 2,
+                      parts: [{ type: data.type as `data-${string}`, data: data.data }],
+                    },
+                    createdAt: new Date(),
+                    threadId: _internal?.threadId,
+                    resourceId: _internal?.resourceId,
                   },
-                  createdAt: new Date(),
-                  threadId: _internal?.threadId,
-                  resourceId: _internal?.resourceId,
-                },
-                'response',
-              );
+                  'response',
+                );
+              } catch (persistError) {
+                rest.logger?.warn('Failed to persist data chunk to message list; streaming it anyway', {
+                  chunkType: data.type,
+                  error: persistError,
+                });
+              }
             }
             safeEnqueue(controller, data as ChunkType<OUTPUT>);
           },
@@ -152,7 +161,16 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
               threadId: _internal?.threadId,
               resourceId: _internal?.resourceId,
             };
-            messageList.add(message, 'response');
+            // Persistence failures must not drop the frame from the stream —
+            // delivery to the client takes priority over saving to memory.
+            try {
+              messageList.add(message, 'response');
+            } catch (persistError) {
+              rest.logger?.warn('Failed to persist data chunk to message list; streaming it anyway', {
+                chunkType: processedChunk.type,
+                error: persistError,
+              });
+            }
           }
 
           safeEnqueue(controller, processedChunk);

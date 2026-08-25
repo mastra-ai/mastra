@@ -73,6 +73,10 @@ createWorkflowTestSuite({
   // Provide access to storage for tests that need to spy on storage operations
   getStorage: () => sharedStorage,
 
+  // The evented processor deletes snapshot rows for non-paused terminal
+  // statuses the workflow declined to persist (#22209).
+  deletesDeclinedTerminalSnapshots: true,
+
   // Register every test workflow with a single long-lived Mastra (with its event
   // workers running) so tests that call `workflow.createRun()` directly work.
   registerWorkflows: async registry => {
@@ -410,6 +414,104 @@ describe('Workflow (Evented Engine Specific)', () => {
     } finally {
       await mastra.stopWorkers();
     }
+  });
+
+  describe('terminal snapshot cleanup (issue #22209)', () => {
+    const makeStep = (id: string, execute: () => Promise<any>) =>
+      createStep({
+        id,
+        execute,
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.string() }),
+      });
+
+    /** Persist in-flight statuses, decline terminal ones — the durable agentic-loop pattern. */
+    const declineTerminals = ({ workflowStatus }: { workflowStatus: string }) =>
+      ['pending', 'paused', 'suspended', 'running', 'waiting'].includes(workflowStatus);
+
+    const readRow = async (workflowName: string, runId: string) => {
+      const workflowsStore = await testStorage.getStore('workflows');
+      return workflowsStore?.getWorkflowRunById({ runId, workflowName });
+    };
+
+    it('deletes the snapshot row when the workflow declines to persist a success terminal', async () => {
+      const workflow = createWorkflow({
+        id: 'decline-terminal-success-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.string() }),
+        options: { validateInputs: false, shouldPersistSnapshot: declineTerminals },
+      });
+      workflow.then(makeStep('ok-step', async () => ({ value: 'done' }))).commit();
+
+      // Control: identical workflow with default persistence keeps its terminal row.
+      const controlWorkflow = createWorkflow({
+        id: 'default-persist-success-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.string() }),
+        options: { validateInputs: false },
+      });
+      controlWorkflow.then(makeStep('ok-step-control', async () => ({ value: 'done' }))).commit();
+
+      const mastra = new Mastra({
+        workflows: {
+          'decline-terminal-success-workflow': workflow,
+          'default-persist-success-workflow': controlWorkflow,
+        },
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startWorkers();
+
+      try {
+        const run = await workflow.createRun();
+        const result = await run.start({ inputData: {} });
+        expect(result.status).toBe('success');
+        // Terminal runs the workflow declined to persist can never be resumed —
+        // the earlier 'running'/'pending' row must be deleted, not left behind
+        // looking byte-identical to an orphaned run.
+        expect(await readRow('decline-terminal-success-workflow', run.runId)).toBeNull();
+
+        const controlRun = await controlWorkflow.createRun();
+        const controlResult = await controlRun.start({ inputData: {} });
+        expect(controlResult.status).toBe('success');
+        const controlRow = await readRow('default-persist-success-workflow', controlRun.runId);
+        expect((controlRow?.snapshot as any)?.status).toBe('success');
+      } finally {
+        await mastra.stopWorkers();
+      }
+    });
+
+    it('deletes the snapshot row when the workflow declines to persist a failed terminal', async () => {
+      const workflow = createWorkflow({
+        id: 'decline-terminal-failed-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.string() }),
+        options: { validateInputs: false, shouldPersistSnapshot: declineTerminals },
+      });
+      workflow
+        .then(
+          makeStep('boom-step', async () => {
+            throw new Error('boom');
+          }),
+        )
+        .commit();
+
+      const mastra = new Mastra({
+        workflows: { 'decline-terminal-failed-workflow': workflow },
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startWorkers();
+
+      try {
+        const run = await workflow.createRun();
+        const result = await run.start({ inputData: {} });
+        expect(result.status).toBe('failed');
+        expect(await readRow('decline-terminal-failed-workflow', run.runId)).toBeNull();
+      } finally {
+        await mastra.stopWorkers();
+      }
+    });
   });
 
   it('should create a processor step for state signal only processors', () => {

@@ -1513,6 +1513,11 @@ export class AgentChannels {
    * on `chat.stopStream`, so a status set during streaming would stick after
    * the run ends. The static driver leaves the gate `false` so typing works
    * normally in cards/hidden modes.
+   *
+   * When the run's stream ends, an empty status is sent to clear any status
+   * this run set, so runs that end without posting a message (e.g. terminated
+   * by `stopWhen` on a tool call, or aborted) don't leave a stale status
+   * pinned to the thread.
    */
   private async *withTypingStatus(
     stream: AsyncIterable<AgentChunkType<any>>,
@@ -1530,35 +1535,54 @@ export class AgentChannels {
           : defaultTypingStatus;
 
     let currentTypingStatus: string | undefined;
+    let statusSent = false;
 
-    for await (const chunk of stream) {
-      if (typingStatusFn && !typingGate.active) {
-        let result: ReturnType<TypingStatusFn>;
-        try {
-          const ctx: TypingStatusContext = {
-            platform,
-            threadId: chatThread.id,
-            currentStatus: currentTypingStatus,
-            channelTools: this.channelToolNames,
-          };
-          result = typingStatusFn(chunk, ctx);
-        } catch (e) {
-          this.logger?.debug('[CHANNEL] typingStatus function threw (continuing)', { error: e });
-          result = undefined;
+    try {
+      for await (const chunk of stream) {
+        if (typingStatusFn && !typingGate.active) {
+          let result: ReturnType<TypingStatusFn>;
+          try {
+            const ctx: TypingStatusContext = {
+              platform,
+              threadId: chatThread.id,
+              currentStatus: currentTypingStatus,
+              channelTools: this.channelToolNames,
+            };
+            result = typingStatusFn(chunk, ctx);
+          } catch (e) {
+            this.logger?.debug('[CHANNEL] typingStatus function threw (continuing)', { error: e });
+            result = undefined;
+          }
+          if (typeof result === 'string' && result.length > 0 && result !== currentTypingStatus) {
+            currentTypingStatus = result;
+            statusSent = true;
+            chatThread.startTyping(result).catch(e => {
+              this.logger?.debug('[CHANNEL] Typing indicator failed (best-effort)', { error: e });
+            });
+          }
         }
-        if (typeof result === 'string' && result.length > 0 && result !== currentTypingStatus) {
-          currentTypingStatus = result;
-          chatThread.startTyping(result).catch(e => {
-            this.logger?.debug('[CHANNEL] Typing indicator failed (best-effort)', { error: e });
-          });
+        // Reset the dedup state on per-step run boundaries so the next step can
+        // re-emit its first status even if it matches the previous step's last
+        // status.
+        if (chunk.type === 'finish' || chunk.type === 'error' || chunk.type === 'abort') {
+          currentTypingStatus = undefined;
         }
+        yield chunk;
       }
-      // Reset the dedup state on run boundaries so the next run can re-emit
-      // its first status even if it matches the previous run's last status.
-      if (chunk.type === 'finish' || chunk.type === 'error' || chunk.type === 'abort') {
-        currentTypingStatus = undefined;
+    } finally {
+      // End of the run's stream (the session queue closed on the terminal
+      // step-finish / error / abort, or the driver stopped consuming). Slack's
+      // `assistant.threads.setStatus` only auto-clears on `chat.postMessage`,
+      // so a run that set a status but never posted a message would leave it
+      // pinned on the thread indefinitely. Send an empty status to clear it —
+      // a no-op when a post already cleared it. Skip the clear while the
+      // streaming gate is active: the in-flight streaming post clears the
+      // status when it completes.
+      if (statusSent && !typingGate.active) {
+        chatThread.startTyping('').catch(e => {
+          this.logger?.debug('[CHANNEL] Typing clear failed (best-effort)', { error: e });
+        });
       }
-      yield chunk;
     }
   }
 

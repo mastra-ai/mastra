@@ -12,7 +12,7 @@ import { TextAndIcon } from '@mastra/playground-ui/components/Text';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { ArrowLeft, GitCompareIcon, History, DiffIcon, ColumnsIcon } from 'lucide-react';
 import { Fragment, useState } from 'react';
-import { useParams, useSearchParams, Link } from 'react-router';
+import { useParams, useNavigate, Link } from 'react-router';
 import { DatasetItemHeader, DatasetItemContent } from '@/domains/datasets';
 import { useDatasetItem, useDatasetItems } from '@/domains/datasets/hooks/use-dataset-items';
 import { useDataset } from '@/domains/datasets/hooks/use-datasets';
@@ -33,11 +33,15 @@ function itemToText(item: DatasetItem): string {
 }
 
 function DatasetItemsComparePage() {
-  const { datasetId } = useParams<{ datasetId: string }>();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const itemIds = searchParams.get('items')?.split(',').filter(Boolean) ?? [];
+  const { datasetId, itemId, secondItemId } = useParams<{
+    datasetId: string;
+    itemId: string;
+    secondItemId: string;
+  }>();
+  const navigate = useNavigate();
+  const itemIds = [itemId, secondItemId].filter((id): id is string => Boolean(id));
   const { data: dataset, error } = useDataset(datasetId ?? '');
-  const { Link: FrameworkLink } = useLinkComponent();
+  const { Link: FrameworkLink, paths } = useLinkComponent();
   const [isDiffView, setIsDiffView] = useState<boolean>(false);
 
   const { data: itemA } = useDatasetItem(datasetId ?? '', itemIds[0] ?? '');
@@ -135,7 +139,7 @@ function DatasetItemsComparePage() {
                   onItemChange={(newItemId: string) => {
                     const newIds = [...itemIds];
                     newIds[idx] = newItemId;
-                    setSearchParams({ items: newIds.join(',') });
+                    void navigate(paths.datasetItemCompareLink(datasetId, newIds[0]!, newIds[1]!));
                   }}
                 />
                 {idx == 0 && <div className={cn('bg-surface5 w-[3px] shrink-0 mx-[1.5vw]')}></div>}

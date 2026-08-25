@@ -1,7 +1,7 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
-import { DataList } from '@mastra/playground-ui/components/DataList';
+import { DataList, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import {
   Dialog,
   DialogContent,
@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Label } from '@mastra/playground-ui/components/Label';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
@@ -21,6 +22,7 @@ import { useMastraClient } from '@mastra/react';
 import {
   CheckCircle,
   ChevronDown,
+  ClipboardCheck,
   FilterIcon,
   GaugeIcon,
   Sparkles,
@@ -441,6 +443,8 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
 
   const gridColumns = 'auto minmax(15rem,1fr) 10rem 8rem 6rem 6rem';
 
+  const { containerRef, getRowProps } = useDataListKeyboard({ count: displayItems.length });
+
   if (isLoadingReview) {
     return (
       <div className="flex flex-1 items-center justify-center">
@@ -572,13 +576,13 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
       <div
         className={cn('grid w-full h-full grid-cols-1 gap-4 overflow-y-auto', featuredItem && 'grid-cols-[1fr_1fr]')}
       >
-        <div className="grid w-full content-start gap-8 overflow-y-auto">
+        <div className="grid w-full content-start gap-4 overflow-y-auto">
           <div className="flex w-full flex-wrap items-center justify-between gap-4 gap-x-6">
             {/* Filters (left) */}
             <div className="flex items-center gap-3">
               <DropdownMenu>
                 <DropdownMenu.Trigger asChild>
-                  <Button variant="outline" size="md">
+                  <Button>
                     <FilterIcon />
                     Filter
                     {activeFilterCount > 0 && (
@@ -683,8 +687,6 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
 
               {activeFilterCount > 0 && (
                 <Button
-                  variant="outline"
-                  size="md"
                   onClick={() => {
                     setActiveTagFilter(null);
                     setShowCompleted(false);
@@ -752,20 +754,19 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
               <Spinner className="h-6 w-6" />
             </div>
           ) : displayItems.length === 0 ? (
-            <div className="flex flex-1 items-center justify-center">
-              <div className="px-8 text-center">
-                <Txt variant="ui-sm" className="text-neutral3 block">
-                  {showCompleted ? 'No completed reviews yet' : 'No items to review'}
-                </Txt>
-                <Txt variant="ui-xs" className="text-neutral3 mt-2 block">
-                  {showCompleted
+            <div className="flex h-full items-center justify-center py-12">
+              <EmptyState
+                iconSlot={<ClipboardCheck className="text-neutral3 h-8 w-8" />}
+                titleSlot={showCompleted ? 'No completed reviews yet' : 'No items to review'}
+                descriptionSlot={
+                  showCompleted
                     ? 'Items marked as complete will appear here for auditing.'
-                    : 'When experiment results are flagged for review, they will appear here.'}
-                </Txt>
-              </div>
+                    : 'When experiment results are flagged for review, they will appear here.'
+                }
+              />
             </div>
           ) : (
-            <DataList columns={gridColumns} className="min-w-0">
+            <DataList columns={gridColumns} className="min-w-0" scrollRef={containerRef}>
               <DataList.Top hasLeadingCell>
                 {!showCompleted ? (
                   <DataList.TopSelectCell
@@ -785,7 +786,7 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
                 </DataList.TopCells>
               </DataList.Top>
 
-              {displayItems.map(item => {
+              {displayItems.map((item, index) => {
                 const scoreEntries = item.scores ? Object.entries(item.scores) : [];
                 const isFeatured = featuredItemId === item.id;
 
@@ -885,6 +886,7 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
                       colStart={2}
                       featured={isFeatured}
                       onClick={() => handleRowClick(item.id)}
+                      {...getRowProps(index)}
                     >
                       {rowCells}
                     </DataList.RowButton>
