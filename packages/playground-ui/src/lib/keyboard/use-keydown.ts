@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useState, type RefObject } from 'react';
+import { useEffect, useEffectEvent, useRef, useState, type RefObject } from 'react';
 
 export type UseKeydownArgs = {
   [keySet: string]: () => void;
@@ -70,10 +70,12 @@ export const useKeydown = (opts: UseKeydownArgs, options: UseKeydownOptions = {}
     }
   });
 
-  const hasTarget = Boolean(options.target);
+  const targetRef = useRef(options.target);
+  targetRef.current = options.target;
 
   useEffect(() => {
-    const element: HTMLElement | Window | null = hasTarget ? (options.target?.current ?? null) : window;
+    const target = targetRef.current;
+    const element: HTMLElement | Window | null = target ? (target.current ?? null) : window;
     if (!element) return;
 
     const handleKeyDown = (event: Event) => {
@@ -82,7 +84,7 @@ export const useKeydown = (opts: UseKeydownArgs, options: UseKeydownOptions = {}
 
     element.addEventListener('keydown', handleKeyDown);
     return () => element.removeEventListener('keydown', handleKeyDown);
-  });
+  }, []);
 };
 
 export type UseTableKeydownArgs = {
