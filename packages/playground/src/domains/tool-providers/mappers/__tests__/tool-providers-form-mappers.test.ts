@@ -155,6 +155,14 @@ describe('extractFormToolProviders', () => {
     });
   });
 
+  it('carries a stored description onto the form value', () => {
+    const form = extractFormToolProviders({
+      composio: { tools: { GMAIL_SEND: { toolkit: 'gmail', description: 'Send mail' } }, connections: {} },
+    });
+
+    expect(form?.composio.tools.GMAIL_SEND).toEqual({ toolkit: 'gmail', description: 'Send mail' });
+  });
+
   it('omits a description the stored tool does not carry', () => {
     const form = extractFormToolProviders({
       composio: { tools: { GMAIL_SEND: { toolkit: 'gmail' } }, connections: {} },

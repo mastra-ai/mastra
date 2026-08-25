@@ -117,8 +117,14 @@ export const useAllConnections = (options?: UseAllConnectionsOptions) => {
   // Pending/failed rows don't count — this keeps the card hint in sync with the
   // toolkit row control, which also treats only active connections as usable.
   const hasConnection = useCallback(
-    (providerId: string, toolkit: string) =>
-      (connectionsByKey.get(`${providerId}:${toolkit}`) ?? []).some(connection => connection.status === 'active'),
+    (providerId: string, toolkit: string) => {
+      // An unfetched pair has no connections, and any stand-in row the fallback
+      // could carry would still fail the `status === 'active'` test, so the
+      // fallback's contents cannot change the answer.
+      // Stryker disable next-line ArrayDeclaration
+      const connections = connectionsByKey.get(`${providerId}:${toolkit}`) ?? [];
+      return connections.some(connection => connection.status === 'active');
+    },
     [connectionsByKey],
   );
 

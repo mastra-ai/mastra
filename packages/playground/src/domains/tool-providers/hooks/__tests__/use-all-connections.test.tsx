@@ -189,6 +189,40 @@ describe('useAllConnections — the reads it issues', () => {
     expect(queryClient.getQueryData(['tool-integration-connections-all', 'composio', 'gmail'])).toBeUndefined();
   });
 
+  it('files an unscoped read under the author-free key', async () => {
+    server.use(...baseHandlers([{ connectionId: 'conn_a', status: 'active' }]));
+
+    const { wrapper, queryClient } = makeWrapper();
+    const { result } = renderHook(() => useAllConnections(), { wrapper });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    // The mirror of the self-scoped case above: an unscoped read is filed under
+    // the same prefix with no author segment, so the two never share a cache.
+    expect(queryClient.getQueryData(['tool-integration-connections-all', 'composio', 'gmail'])).toBeDefined();
+    expect(
+      queryClient.getQueryData(['tool-integration-connections-all', 'composio', 'gmail', 'tester']),
+    ).toBeUndefined();
+  });
+
+  it('reads connections for exactly the pairs its providers expose', async () => {
+    const seen: Array<string> = [];
+    server.use(
+      http.get(`${BASE_URL}/api/tool-providers/:providerId/connections`, ({ params, request }) => {
+        seen.push(`${params.providerId}:${new URL(request.url).searchParams.get('toolkit')}`);
+        return HttpResponse.json({ items: [] });
+      }),
+      ...baseHandlers([]),
+    );
+
+    const { wrapper } = makeWrapper();
+    const { result } = renderHook(() => useAllConnections({ scopeToSelf: true }), { wrapper });
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    // One read per real pair and nothing else — no placeholder row sneaks into
+    // the fan-out and fires a request for a provider that does not exist.
+    expect(seen).toEqual(['composio:gmail']);
+  });
+
   it('reports itself loading until every fan-out read has landed', async () => {
     server.use(...baseHandlers([{ connectionId: 'conn_a', status: 'active' }]));
 
@@ -311,11 +345,46 @@ describe('useAllConnections — what it reports while the fan-out is in flight',
       http.get(`${BASE_URL}/api/tool-providers/composio/connections`, () => HttpResponse.json({ items: [] })),
     );
 
-    const { wrapper } = makeWrapper();
+    const { wrapper, queryClient } = makeWrapper();
     const { result } = renderHook(() => useAllConnections({ scopeToSelf: true }), { wrapper });
 
-    await waitFor(() => expect(result.current.isLoading).toBe(true));
+    // Wait until the current user and the provider list have both landed — the
+    // toolkits query only exists once the providers do — so the toolkits read
+    // is the only thing left that can hold the hook in a loading state.
+    await waitFor(() => {
+      expect(queryClient.getQueryState(['auth', 'me'])?.status).toBe('success');
+      expect(queryClient.getQueryState(['tool-integration-services', 'composio'])?.fetchStatus).toBe('fetching');
+    });
+    expect(result.current.isLoading).toBe(true);
+
     releaseToolkits();
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+  });
+
+  it('stays loading while the current user is still being resolved', async () => {
+    let releaseUser: () => void = () => {};
+    const userInFlight = new Promise<void>(resolve => {
+      releaseUser = resolve;
+    });
+    server.use(
+      http.get(`${BASE_URL}/api/auth/me`, async () => {
+        await userInFlight;
+        return HttpResponse.json({ id: 'tester', permissions: [] });
+      }),
+      ...baseHandlers([{ connectionId: 'conn_a', status: 'active' }]),
+    );
+
+    const { wrapper, queryClient } = makeWrapper();
+    const { result } = renderHook(() => useAllConnections({ scopeToSelf: true }), { wrapper });
+
+    // Providers and toolkits have both landed, and the per-pair reads are gated
+    // shut until the caller is known, so the user lookup is the only thing left.
+    await waitFor(() =>
+      expect(queryClient.getQueryState(['tool-integration-services', 'composio'])?.status).toBe('success'),
+    );
+    expect(result.current.isLoading).toBe(true);
+
+    releaseUser();
     await waitFor(() => expect(result.current.isLoading).toBe(false));
   });
 
@@ -338,12 +407,19 @@ describe('useAllConnections — what it reports while the fan-out is in flight',
       }),
     );
 
-    const { wrapper } = makeWrapper();
+    const { wrapper, queryClient } = makeWrapper();
     const { result } = renderHook(() => useAllConnections({ scopeToSelf: true }), { wrapper });
 
-    // The provider and toolkit reads have both landed by now, so any remaining
-    // loading is the per-pair connection read.
-    await waitFor(() => expect(result.current.getConnections('composio', 'gmail')).toEqual([]));
+    // The user, provider and toolkit reads have all landed by now — the pair
+    // read only starts once the caller is known — so the connection read is the
+    // only thing that can still hold the hook loading.
+    await waitFor(() => {
+      expect(queryClient.getQueryState(['auth', 'me'])?.status).toBe('success');
+      expect(
+        queryClient.getQueryState(['tool-integration-connections-all', 'composio', 'gmail', 'tester'])?.fetchStatus,
+      ).toBe('fetching');
+    });
+    expect(result.current.getConnections('composio', 'gmail')).toEqual([]);
     expect(result.current.isLoading).toBe(true);
 
     releaseConnections();

@@ -91,10 +91,6 @@ om-reflector-fixture.json
 .worktrees/
 
 # Stryker mutation testing sandboxes and reports
-.stryker-tmp/
-.stryker-tmp-sweep/
-.stryker-sweep.json
+.stryker-tmp*/
+.stryker-*.json
 **/reports/mutation/
-
-.stryker-tmp-verify/
-.stryker-verify.json

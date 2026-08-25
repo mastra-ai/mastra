@@ -119,6 +119,26 @@ describe('flattenWorkflowTree', () => {
       expect(childRow.kind === 'workflow' && childRow.nestedIds).toEqual([]);
     });
   });
+  describe('when a workflow nests itself', () => {
+    it('drops the self reference so an expanded root renders nothing below it', () => {
+      const selfNesting = {
+        ...workflowsFixture.loopA,
+        name: 'self-loop',
+        steps: { 'self-loop': workflowsFixture.loopA.steps!['loop-b'] },
+        allSteps: { 'self-loop': workflowsFixture.loopA.allSteps!['loop-b'] },
+      };
+      const registry = { selfLoop: selfNesting };
+      const root: WorkflowListEntry = { ...selfNesting, id: 'selfLoop' };
+
+      // The root counts as its own ancestor from the very first row, so the
+      // guard catches the shortest possible cycle rather than recursing once.
+      const rows = flattenWorkflowTree([root], registry, new Set(['selfLoop']));
+
+      expect(rows).toHaveLength(1);
+      expect(rows[0].kind === 'workflow' && rows[0].nestedIds).toEqual([]);
+    });
+  });
+
   describe('when a workflow record is missing its pieces', () => {
     it('reports no nested ids for a workflow with no steps', () => {
       expect(getDirectNestedWorkflowIds({ allSteps: {} } as never)).toEqual([]);
