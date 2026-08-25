@@ -17,6 +17,7 @@ import type {
   AgentConnectResult,
   AgentConnectionDeltaOp,
   AgentConnectionListResult,
+  AgentDisconnectResult,
   AgentPeerView,
   AgentSignalPriority,
   AgentSignalSendResult,
@@ -72,6 +73,20 @@ const connectResultSchema = z.object({
       peer: peerSchema.optional(),
       presence: z.string().optional(),
       displayStatus: z.string().optional(),
+    }),
+  ),
+  isError: z.boolean().optional(),
+});
+
+const disconnectResultSchema = z.object({
+  content: z.string(),
+  connected: z.array(savedPeerSchema),
+  disconnectedIds: z.array(z.string()),
+  alreadyDisconnectedIds: z.array(z.string()),
+  changed: z.array(
+    z.object({
+      op: z.string(),
+      id: z.string(),
     }),
   ),
   isError: z.boolean().optional(),
@@ -141,77 +156,116 @@ Each peer has an explicit durable relationship, current advertisement presence, 
 
   const agentConnectTool = createTool({
     id: 'agent_connect',
-    description: `Connect or disconnect peer MastraCode agents by stable id.
+    description: `Save freshly discovered peer MastraCode agents by stable id.
 
-Use agent_connections_list first, then pass peer ids from that result. Connected agents are persisted per thread and surfaced through connected-agent state signals.`,
+Use agent_connections_list first, then pass [discovered] peer ids from that result. Saved agents are persisted per thread and surfaced through connected-agent state signals.`,
     inputSchema: z.object({
-      ids: z.array(z.string().min(1)).min(1).describe('Peer ids returned by agent_connections_list.'),
-      action: z
-        .enum(['connect', 'disconnect'])
-        .default('connect')
-        .describe('Whether to connect or disconnect the peers.'),
+      ids: z.array(z.string().min(1)).min(1).describe('Discovered peer ids returned by agent_connections_list.'),
     }),
     outputSchema: connectResultSchema,
-    execute: async ({ ids, action = 'connect' }, context): Promise<AgentConnectResult> => {
+    execute: async ({ ids }, context): Promise<AgentConnectResult> => {
       const agentContext = context as AgentConnectionContext;
       try {
-        if (!isMemoryBacked(agentContext.agent)) {
-          return noMemoryConnectResult();
-        }
+        if (!isMemoryBacked(agentContext.agent)) return noMemoryConnectResult();
         const current = await readAgentConnections(agentContext);
         const registryContext = { ...agentContext, runtimeAgent: options.getAgent?.() };
         const byId = new Map(current.map(peer => [peer.id, peer]));
         const changed: AgentConnectionDeltaOp[] = [];
         const now = Date.now();
 
-        if (action === 'disconnect') {
-          for (const id of ids) {
-            if (byId.delete(id)) changed.push({ op: 'disconnect', id });
-          }
-        } else {
-          for (const id of ids) {
-            const peer = await registry.findDiscoveredPeer(registryContext, id);
-            if (!peer) return errorConnectResult(`Unknown or unadvertised agent peer id: ${id}`, current, changed);
-            const connectedAt = byId.get(peer.id)?.connectedAt ?? now;
-            const connectedPeer: ConnectedAgentPeer = {
-              id: peer.id,
-              agentId: peer.agentId,
-              resourceId: peer.resourceId,
-              threadId: peer.threadId,
-              label: peer.label,
-              title: peer.title,
-              mode: peer.mode,
-              pid: peer.pid,
+        for (const id of ids) {
+          const peer = await registry.findDiscoveredPeer(registryContext, id);
+          if (!peer) return errorConnectResult(`Unknown or unadvertised agent peer id: ${id}`, current, changed);
+          const connectedAt = byId.get(peer.id)?.connectedAt ?? now;
+          const connectedPeer: ConnectedAgentPeer = {
+            id: peer.id,
+            agentId: peer.agentId,
+            resourceId: peer.resourceId,
+            threadId: peer.threadId,
+            label: peer.label,
+            title: peer.title,
+            mode: peer.mode,
+            pid: peer.pid,
+            connectedAt,
+            lastSeenAt: peer.lastSeenAt ?? now,
+          };
+          byId.set(peer.id, connectedPeer);
+          changed.push({
+            op: 'connect',
+            id: peer.id,
+            peer: {
+              ...peer,
+              relationship: 'saved',
+              displayStatus: 'connected',
+              canAttemptSend: true,
               connectedAt,
-              lastSeenAt: peer.lastSeenAt ?? now,
-            };
-            byId.set(peer.id, connectedPeer);
-            changed.push({
-              op: 'connect',
-              id: peer.id,
-              peer: {
-                ...peer,
-                relationship: 'saved',
-                displayStatus: 'connected',
-                canAttemptSend: true,
-                connectedAt,
-              },
-            });
-          }
+            },
+          });
         }
 
         const connected = [...byId.values()].sort((a, b) => a.id.localeCompare(b.id));
         await writeAgentConnections(agentContext, connected);
         return {
-          content: formatConnectResult(action, changed, connected),
+          content: formatConnectResult(changed, connected),
           connected,
           changed,
           isError: false,
         };
       } catch (error) {
         return {
-          content: `Failed to update agent connections: ${errorMessage(error)}`,
+          content: `Failed to connect agent peers: ${errorMessage(error)}`,
           connected: [],
+          changed: [],
+          isError: true,
+        };
+      }
+    },
+  });
+
+  const agentDisconnectTool = createTool({
+    id: 'agent_disconnect',
+    description: `Remove saved peer relationships from this thread by stable id.
+
+The peer does not need to be currently advertised. Disconnecting is idempotent and does not alter remote threads, runs, notifications, or prior signal history.`,
+    inputSchema: z.object({
+      ids: z.array(z.string().min(1)).min(1).describe('Saved peer ids to disconnect from this thread.'),
+    }),
+    outputSchema: disconnectResultSchema,
+    execute: async ({ ids }, context): Promise<AgentDisconnectResult> => {
+      const agentContext = context as AgentConnectionContext;
+      try {
+        if (!isMemoryBacked(agentContext.agent)) return noMemoryDisconnectResult();
+        const current = await readAgentConnections(agentContext);
+        const byId = new Map(current.map(peer => [peer.id, peer]));
+        const disconnectedIds: string[] = [];
+        const alreadyDisconnectedIds: string[] = [];
+        const changed: AgentConnectionDeltaOp[] = [];
+
+        for (const id of ids) {
+          if (byId.delete(id)) {
+            disconnectedIds.push(id);
+            changed.push({ op: 'disconnect', id });
+          } else {
+            alreadyDisconnectedIds.push(id);
+          }
+        }
+
+        const connected = [...byId.values()].sort((a, b) => a.id.localeCompare(b.id));
+        if (disconnectedIds.length > 0) await writeAgentConnections(agentContext, connected);
+        return {
+          content: formatDisconnectResult(disconnectedIds, alreadyDisconnectedIds, connected),
+          connected,
+          disconnectedIds,
+          alreadyDisconnectedIds,
+          changed,
+          isError: false,
+        };
+      } catch (error) {
+        return {
+          content: `Failed to disconnect agent peers: ${errorMessage(error)}`,
+          connected: [],
+          disconnectedIds: [],
+          alreadyDisconnectedIds: [],
           changed: [],
           isError: true,
         };
@@ -223,7 +277,7 @@ Use agent_connections_list first, then pass peer ids from that result. Connected
     id: 'agent_signal_send',
     description: `Send a prioritized notification signal to a connected peer agent.
 
-The target must already be connected and currently available. Use expectsReply to declare whether the peer should send one signal back to this thread. Reuse messageId when retrying the same logical send, and set replyTo to the request messageId when replying. Use priority to indicate urgency: low, medium, high, or urgent.`,
+The target must already be saved and freshly advertise the same exact thread endpoint at send time. Use expectsReply to declare whether the peer should send one signal back to this thread. Reuse messageId when retrying the same logical send, and set replyTo to the request messageId when replying. Use priority to indicate urgency: low, medium, high, or urgent.`,
     inputSchema: z.object({
       targetId: z.string().min(1).describe('Connected peer id.'),
       summary: z.string().min(1).describe('Short summary to deliver to the peer.'),
@@ -387,6 +441,7 @@ The target must already be connected and currently available. Use expectsReply t
   return {
     agent_connections_list: agentConnectionsListTool,
     agent_connect: agentConnectTool,
+    agent_disconnect: agentDisconnectTool,
     agent_signal_send: agentSignalSendTool,
   };
 }
@@ -397,6 +452,17 @@ function noMemoryListResult(): AgentConnectionListResult {
 
 function noMemoryConnectResult(): AgentConnectResult {
   return { content: 'Agent connections require a memory-backed thread.', connected: [], changed: [], isError: true };
+}
+
+function noMemoryDisconnectResult(): AgentDisconnectResult {
+  return {
+    content: 'Agent connections require a memory-backed thread.',
+    connected: [],
+    disconnectedIds: [],
+    alreadyDisconnectedIds: [],
+    changed: [],
+    isError: true,
+  };
 }
 
 function errorConnectResult(
@@ -416,14 +482,24 @@ function formatPeerList(peers: Awaited<ReturnType<AgentConnectionRegistry['listP
   return `Agent peers:\n${lines.join('\n')}\nSaved: ${savedCount}`;
 }
 
-function formatConnectResult(
-  action: 'connect' | 'disconnect',
-  changed: AgentConnectionDeltaOp[],
+function formatConnectResult(changed: AgentConnectionDeltaOp[], connected: ConnectedAgentPeer[]): string {
+  if (changed.length === 0) return `Connected 0 agents. Saved agents: ${connected.length}`;
+  return `Connected ${changed.length} agent${changed.length === 1 ? '' : 's'}: ${changed.map(change => change.id).join(', ')}. Saved agents: ${connected.length}`;
+}
+
+function formatDisconnectResult(
+  disconnectedIds: string[],
+  alreadyDisconnectedIds: string[],
   connected: ConnectedAgentPeer[],
 ): string {
-  const verb = action === 'connect' ? 'Connected' : 'Disconnected';
-  if (changed.length === 0) return `${verb} 0 agents. Connected agents: ${connected.length}`;
-  return `${verb} ${changed.length} agent${changed.length === 1 ? '' : 's'}: ${changed.map(change => change.id).join(', ')}. Connected agents: ${connected.length}`;
+  const parts = [
+    `Disconnected ${disconnectedIds.length} agent${disconnectedIds.length === 1 ? '' : 's'}${disconnectedIds.length > 0 ? `: ${disconnectedIds.join(', ')}` : ''}.`,
+  ];
+  if (alreadyDisconnectedIds.length > 0) {
+    parts.push(`Already disconnected: ${alreadyDisconnectedIds.join(', ')}.`);
+  }
+  parts.push(`Saved agents: ${connected.length}`);
+  return parts.join(' ');
 }
 
 function formatSignalResult({

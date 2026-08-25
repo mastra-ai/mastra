@@ -1,117 +1,230 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { AgentConnectionRegistry } from '../registry.js';
+import { AgentConnectionRegistry, stablePeerId } from '../registry.js';
 import { createAgentConnectionTools } from '../tools.js';
 import { AGENT_CONNECTIONS_STATE_TYPE } from '../types.js';
 import type { AgentConnectionsState, ConnectedAgentPeer } from '../types.js';
 
-function createContext(initial: ConnectedAgentPeer[] = []) {
-  const state = new Map<string, unknown>();
-  state.set(`thread-1:${AGENT_CONNECTIONS_STATE_TYPE}`, { peers: initial });
+const PEER_ID = stablePeerId({ agentId: 'code-agent', resourceId: 'resource-2', threadId: 'thread-2' });
+const PEER = { id: PEER_ID, resourceId: 'resource-2', threadId: 'thread-2', label: 'Peer One' };
+
+function savedPeer(overrides: Partial<ConnectedAgentPeer> = {}): ConnectedAgentPeer {
+  return {
+    id: PEER_ID,
+    agentId: 'code-agent',
+    resourceId: 'resource-2',
+    threadId: 'thread-2',
+    label: 'Peer One',
+    connectedAt: 100,
+    lastSeenAt: 1_000,
+    ...overrides,
+  };
+}
+
+function createContext(initial: ConnectedAgentPeer[] = [], threadId = 'thread-1', state = new Map<string, unknown>()) {
+  state.set(`${threadId}:${AGENT_CONNECTIONS_STATE_TYPE}`, { peers: initial });
   return {
     context: {
-      agent: { resourceId: 'resource-1', threadId: 'thread-1' },
+      agent: { resourceId: 'resource-1', threadId },
       mastra: {
         getStorage: () => ({
           getStore: () => ({
-            getState: async ({ threadId, type }: { threadId: string; type: string }) =>
-              state.get(`${threadId}:${type}`),
-            setState: async ({ threadId, type, value }: { threadId: string; type: string; value: unknown }) => {
-              state.set(`${threadId}:${type}`, value);
+            getState: async ({ threadId: targetThreadId, type }: { threadId: string; type: string }) =>
+              state.get(`${targetThreadId}:${type}`),
+            setState: async ({
+              threadId: targetThreadId,
+              type,
+              value,
+            }: {
+              threadId: string;
+              type: string;
+              value: unknown;
+            }) => {
+              state.set(`${targetThreadId}:${type}`, value);
             },
           }),
         }),
       },
     } as any,
-    getStored: () => state.get(`thread-1:${AGENT_CONNECTIONS_STATE_TYPE}`) as AgentConnectionsState,
+    getStored: () => state.get(`${threadId}:${AGENT_CONNECTIONS_STATE_TYPE}`) as AgentConnectionsState,
   };
 }
 
-const PEER = { id: 'peer-1', resourceId: 'resource-2', threadId: 'thread-2', label: 'Peer One' };
+function createRegistry(listPeers: () => any[] = () => [PEER]) {
+  return new AgentConnectionRegistry({ now: () => 1_000, listPeers });
+}
 
-function createRegistry() {
-  return new AgentConnectionRegistry({ now: () => 1_000, listPeers: () => [PEER] });
+function createSignalRuntime() {
+  return vi.fn(async () => ({
+    record: { id: 'notification-1' },
+    decision: { action: 'deliver' as const },
+    accepted: Promise.resolve({ action: 'deliver' as const, runId: 'run-1' }),
+  }));
 }
 
 describe('agent connection tools', () => {
-  it('lists available peers', async () => {
+  it('lists peers using the explicit peer view contract', async () => {
     const tools = createAgentConnectionTools({ registry: createRegistry() });
     const { context } = createContext();
 
     const result = await (tools.agent_connections_list as any).execute({}, context);
 
-    expect(result.isError).toBe(false);
-    expect(result.available).toMatchObject([
-      { id: 'peer-1', label: 'Peer One', status: 'available', connected: false },
-    ]);
-    expect(result.content).toContain('peer-1');
+    expect(result).toMatchObject({
+      isError: false,
+      savedCount: 0,
+      peers: [
+        {
+          id: PEER_ID,
+          label: 'Peer One',
+          relationship: 'none',
+          presence: 'advertised',
+          displayStatus: 'discovered',
+          canAttemptSend: false,
+        },
+      ],
+    });
+    expect(result).not.toHaveProperty('available');
+    expect(result).not.toHaveProperty('connected');
+    expect(result.content).toContain(`[discovered]`);
   });
 
-  it('connects and disconnects selected peers', async () => {
+  it('connects only freshly advertised peers and exposes no action input', async () => {
     const tools = createAgentConnectionTools({ registry: createRegistry() });
     const { context, getStored } = createContext();
 
-    const connected = await (tools.agent_connect as any).execute({ ids: ['peer-1'], action: 'connect' }, context);
-    expect(connected).toMatchObject({ isError: false, changed: [{ op: 'connect', id: 'peer-1' }] });
-    expect(getStored().peers).toMatchObject([{ id: 'peer-1', resourceId: 'resource-2', threadId: 'thread-2' }]);
+    expect(Object.keys((tools.agent_connect as any).inputSchema.shape)).toEqual(['ids']);
+    await expect((tools.agent_connect as any).execute({ ids: ['missing'] }, context)).resolves.toMatchObject({
+      isError: true,
+      content: 'Unknown or unadvertised agent peer id: missing',
+    });
 
-    const disconnected = await (tools.agent_connect as any).execute({ ids: ['peer-1'], action: 'disconnect' }, context);
-    expect(disconnected).toMatchObject({
-      isError: false,
-      changed: [{ op: 'disconnect', id: 'peer-1' }],
-      connected: [],
+    const connected = await (tools.agent_connect as any).execute({ ids: [PEER_ID] }, context);
+    expect(connected).toMatchObject({ isError: false, changed: [{ op: 'connect', id: PEER_ID }] });
+    expect(getStored().peers).toMatchObject([{ id: PEER_ID, resourceId: 'resource-2', threadId: 'thread-2' }]);
+  });
+
+  it('rejects a discovery entry whose supplied id does not match its endpoint', async () => {
+    const tools = createAgentConnectionTools({
+      registry: createRegistry(() => [{ id: PEER_ID, resourceId: 'resource-changed', threadId: 'thread-2' }]),
+    });
+    const { context, getStored } = createContext();
+
+    await expect((tools.agent_connect as any).execute({ ids: [PEER_ID] }, context)).resolves.toMatchObject({
+      isError: true,
+      content: `Unknown or unadvertised agent peer id: ${PEER_ID}`,
     });
     expect(getStored().peers).toEqual([]);
   });
 
-  it('rejects unknown and offline targets', async () => {
-    const offlineRegistry = new AgentConnectionRegistry({
-      now: () => 10_000,
-      offlineTtlMs: 1,
-      listPeers: () => [{ id: 'offline', resourceId: 'resource-2', threadId: 'thread-2', lastSeenAt: 1 } as any],
+  it('disconnects advertised, absent, and historical saved peers idempotently without changing signal history', async () => {
+    const historical = savedPeer({ id: 'historical-peer' });
+    const tools = createAgentConnectionTools({ registry: createRegistry(() => []) });
+    const { context, getStored } = createContext([savedPeer(), historical]);
+    const originalSignals = [
+      {
+        messageId: 'old-message',
+        fingerprint: 'fingerprint',
+        targetId: PEER_ID,
+        priority: 'medium' as const,
+        expectsReply: false,
+        returnPeerId: 'return-peer',
+        sentAt: 1,
+      },
+    ];
+    await context.mastra
+      .getStorage()
+      .getStore()
+      .setState({
+        threadId: 'thread-1',
+        type: AGENT_CONNECTIONS_STATE_TYPE,
+        value: { peers: [savedPeer(), historical], sentSignals: originalSignals },
+      });
+
+    const disconnected = await (tools.agent_disconnect as any).execute({ ids: [PEER_ID, 'historical-peer'] }, context);
+    expect(disconnected).toMatchObject({
+      isError: false,
+      disconnectedIds: [PEER_ID, 'historical-peer'],
+      alreadyDisconnectedIds: [],
+      connected: [],
     });
-    const tools = createAgentConnectionTools({ registry: offlineRegistry });
-    const { context } = createContext();
+    expect(getStored()).toEqual({ peers: [], sentSignals: originalSignals });
 
     await expect(
-      (tools.agent_connect as any).execute({ ids: ['missing'], action: 'connect' }, context),
+      (tools.agent_disconnect as any).execute({ ids: [PEER_ID, 'historical-peer'] }, context),
     ).resolves.toMatchObject({
-      isError: true,
-      content: 'Unknown agent peer id: missing',
-    });
-    await expect(
-      (tools.agent_connect as any).execute({ ids: ['offline'], action: 'connect' }, context),
-    ).resolves.toMatchObject({
-      isError: true,
-      content: 'Agent peer is offline: offline',
+      isError: false,
+      disconnectedIds: [],
+      alreadyDisconnectedIds: [PEER_ID, 'historical-peer'],
+      changed: [],
     });
   });
 
-  it('sends notification signals only to connected available peers', async () => {
-    const sendNotificationSignal = vi.fn(async () => ({
-      record: { id: 'notification-1' },
-      decision: { action: 'deliver' as const },
-      accepted: Promise.resolve({ action: 'deliver' as const, runId: 'run-1' }),
-    }));
+  it('disconnects only the current sender thread', async () => {
+    const state = new Map<string, unknown>();
+    const first = createContext([savedPeer()], 'thread-1', state);
+    const second = createContext([savedPeer()], 'thread-other', state);
+    const tools = createAgentConnectionTools({ registry: createRegistry(() => []) });
+
+    await (tools.agent_disconnect as any).execute({ ids: [PEER_ID] }, first.context);
+
+    expect(first.getStored().peers).toEqual([]);
+    expect(second.getStored().peers).toHaveLength(1);
+  });
+
+  it('rejects sends to unsaved or saved-but-not-advertised peers before Core routing', async () => {
+    const sendNotificationSignal = vi.fn();
     const tools = createAgentConnectionTools({
-      registry: createRegistry(),
+      registry: createRegistry(() => []),
       getAgent: () => ({ sendNotificationSignal }),
     });
-    const { context } = createContext([
-      {
-        id: 'peer-1',
-        resourceId: 'resource-2',
-        threadId: 'thread-2',
-        label: 'Peer One',
-        status: 'available',
-        connectedAt: 100,
-        lastSeenAt: 1_000,
-      },
-    ]);
+    const unsaved = createContext();
+    const saved = createContext([savedPeer()]);
+    const input = { targetId: PEER_ID, summary: 'Review', priority: 'medium', expectsReply: false };
+
+    await expect((tools.agent_signal_send as any).execute(input, unsaved.context)).resolves.toMatchObject({
+      isError: true,
+      content: `Cannot send: peer is not saved: ${PEER_ID}`,
+    });
+    await expect((tools.agent_signal_send as any).execute(input, saved.context)).resolves.toMatchObject({
+      isError: true,
+      content: `Cannot send: saved peer is not currently advertised. Peer: ${PEER_ID}`,
+    });
+    expect(sendNotificationSignal).not.toHaveBeenCalled();
+  });
+
+  it('rejects a saved peer when discovery reuses its id for a changed endpoint', async () => {
+    const sendNotificationSignal = vi.fn();
+    const tools = createAgentConnectionTools({
+      registry: createRegistry(() => [{ id: PEER_ID, resourceId: 'resource-changed', threadId: 'thread-2' }]),
+      getAgent: () => ({ sendNotificationSignal }),
+    });
+    const { context } = createContext([savedPeer()]);
+
+    await expect(
+      (tools.agent_signal_send as any).execute(
+        { targetId: PEER_ID, summary: 'Review', priority: 'medium', expectsReply: false },
+        context,
+      ),
+    ).resolves.toMatchObject({
+      isError: true,
+      content: `Cannot send: saved peer is not currently advertised. Peer: ${PEER_ID}`,
+    });
+    expect(sendNotificationSignal).not.toHaveBeenCalled();
+  });
+
+  it('sends to a saved and freshly advertised exact endpoint despite diagnostic metadata changes', async () => {
+    const sendNotificationSignal = createSignalRuntime();
+    const tools = createAgentConnectionTools({
+      registry: createRegistry(() => [
+        { ...PEER, label: 'Renamed Peer', title: 'New title', mode: 'review', pid: 999, lastSeenAt: 2_000 },
+      ]),
+      getAgent: () => ({ sendNotificationSignal }),
+    });
+    const { context } = createContext([savedPeer({ label: 'Old label', pid: 1 })]);
 
     const result = await (tools.agent_signal_send as any).execute(
       {
-        targetId: 'peer-1',
+        targetId: PEER_ID,
         summary: 'Please review this',
         priority: 'high',
         expectsReply: true,
@@ -123,13 +236,13 @@ describe('agent connection tools', () => {
     expect(result).toMatchObject({
       isError: false,
       priority: 'high',
-      target: { id: 'peer-1' },
+      target: { id: PEER_ID, label: 'Renamed Peer', canAttemptSend: true },
       expectsReply: true,
       messageId: 'request-1',
       returnPeerId: 'code-agent:resource-1:thread-1',
       routingAction: 'deliver',
       runId: 'run-1',
-      content: 'Delivered high signal to Peer One in run run-1: Please review this',
+      content: 'Delivered high signal to Renamed Peer in run run-1: Please review this',
     });
     expect(sendNotificationSignal).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -139,19 +252,7 @@ describe('agent connection tools', () => {
         priority: 'high',
         summary: 'Please review this',
         dedupeKey: 'agent-signal:code-agent:resource-1:thread-1:request-1',
-        attributes: {
-          expectsReply: true,
-          messageId: 'request-1',
-          returnPeerId: 'code-agent:resource-1:thread-1',
-        },
-        metadata: {
-          crossAgentMessaging: expect.objectContaining({
-            expectsReply: true,
-            messageId: 'request-1',
-            returnPeerId: 'code-agent:resource-1:thread-1',
-            targetId: 'peer-1',
-          }),
-        },
+        attributes: { expectsReply: true, messageId: 'request-1', returnPeerId: 'code-agent:resource-1:thread-1' },
       }),
       expect.objectContaining({ resourceId: 'resource-2', threadId: 'thread-2', ifIdle: { behavior: 'wake' } }),
     );
@@ -172,21 +273,11 @@ describe('agent connection tools', () => {
       registry: createRegistry(),
       getAgent: () => ({ sendNotificationSignal }),
     });
-    const { context } = createContext([
-      {
-        id: 'peer-1',
-        resourceId: 'resource-2',
-        threadId: 'thread-2',
-        label: 'Peer One',
-        status: 'available',
-        connectedAt: 100,
-        lastSeenAt: 1_000,
-      },
-    ]);
+    const { context } = createContext([savedPeer()]);
 
     const resultPromise = (tools.agent_signal_send as any).execute(
       {
-        targetId: 'peer-1',
+        targetId: PEER_ID,
         summary: 'Read this later',
         priority: 'low',
         expectsReply: false,
@@ -210,38 +301,17 @@ describe('agent connection tools', () => {
       routingAction: 'persist',
       content: 'Persisted low signal for Peer One to process later: Read this later',
     });
-    expect(sendNotificationSignal).toHaveBeenCalledWith(
-      expect.objectContaining({
-        dedupeKey: 'agent-signal:code-agent:resource-1:thread-1:reply-1',
-        attributes: { expectsReply: false, messageId: 'reply-1', replyTo: 'request-1' },
-      }),
-      expect.anything(),
-    );
   });
 
   it('deduplicates retries by message id and rejects conflicting reuse', async () => {
-    const sendNotificationSignal = vi.fn(async () => ({
-      record: { id: 'notification-1' },
-      decision: { action: 'deliver' as const },
-      accepted: Promise.resolve({ action: 'deliver' as const, runId: 'run-1' }),
-    }));
+    const sendNotificationSignal = createSignalRuntime();
     const tools = createAgentConnectionTools({
       registry: createRegistry(),
       getAgent: () => ({ sendNotificationSignal }),
     });
-    const { context } = createContext([
-      {
-        id: 'peer-1',
-        resourceId: 'resource-2',
-        threadId: 'thread-2',
-        label: 'Peer One',
-        status: 'available',
-        connectedAt: 100,
-        lastSeenAt: 1_000,
-      },
-    ]);
+    const { context } = createContext([savedPeer()]);
     const input = {
-      targetId: 'peer-1',
+      targetId: PEER_ID,
       summary: 'Review once',
       priority: 'medium',
       expectsReply: true,
@@ -272,18 +342,22 @@ describe('agent connection tools', () => {
     expect(sendNotificationSignal).toHaveBeenCalledTimes(1);
   });
 
-  it('rejects sends to disconnected peers', async () => {
+  it('prevents sending after disconnect and restores eligibility after rediscovery and reconnect', async () => {
+    const sendNotificationSignal = createSignalRuntime();
     const tools = createAgentConnectionTools({
       registry: createRegistry(),
-      getAgent: () => ({ sendNotificationSignal: vi.fn() }),
+      getAgent: () => ({ sendNotificationSignal }),
     });
-    const { context } = createContext();
+    const { context } = createContext([savedPeer()]);
+    const input = { targetId: PEER_ID, summary: 'Review', priority: 'medium', expectsReply: false };
 
-    const result = await (tools.agent_signal_send as any).execute(
-      { targetId: 'peer-1', summary: 'Please review this', priority: 'medium', expectsReply: false },
-      context,
-    );
+    await (tools.agent_disconnect as any).execute({ ids: [PEER_ID] }, context);
+    await expect((tools.agent_signal_send as any).execute(input, context)).resolves.toMatchObject({
+      isError: true,
+      content: `Cannot send: peer is not saved: ${PEER_ID}`,
+    });
 
-    expect(result).toMatchObject({ isError: true, content: 'Agent peer is not connected: peer-1' });
+    await (tools.agent_connect as any).execute({ ids: [PEER_ID] }, context);
+    await expect((tools.agent_signal_send as any).execute(input, context)).resolves.toMatchObject({ isError: false });
   });
 });

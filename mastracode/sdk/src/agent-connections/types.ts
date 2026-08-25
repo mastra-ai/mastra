@@ -84,6 +84,15 @@ export interface AgentConnectResult {
   isError?: boolean;
 }
 
+export interface AgentDisconnectResult {
+  content: string;
+  connected: ConnectedAgentPeer[];
+  disconnectedIds: string[];
+  alreadyDisconnectedIds: string[];
+  changed: AgentConnectionDeltaOp[];
+  isError?: boolean;
+}
+
 export interface AgentSignalSendResult {
   content: string;
   target?: AgentPeerView;

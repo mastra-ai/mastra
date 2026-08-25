@@ -41,6 +41,7 @@ export const MC_TOOLS = {
   // Agent connections
   AGENT_CONNECTIONS_LIST: 'agent_connections_list',
   AGENT_CONNECT: 'agent_connect',
+  AGENT_DISCONNECT: 'agent_disconnect',
   AGENT_SIGNAL_SEND: 'agent_signal_send',
 } as const;
 
